@@ -20,35 +20,37 @@
             {{ getType(inputItem) }}
           </span>
         </div>
-        <button
-          *ngIf="isShowMultiBtn(inputItem)"
-          nz-button
-          class="flex !w-[96px] justify-center ml-2"
-          nzSize="small"
-          [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
-          (click)="addMultiFile(i)"
-        >
-          <span class="flex items-center gap-[4px]">
-            <nz-icon nzType="plus" nzTheme="outline" />
-            {{ 'add' | i18nextEager }}
-          </span>
-        </button>
-        <button
-          *ngIf="inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length"
-          nz-button
-          nzSize="small"
-          class="flex !w-[96px] justify-center ml-2"
-          nzDanger
-          [disabled]="isUploading"
-          nz-popconfirm
-          [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
-          (nzOnConfirm)="clearMultiFiles(inputItem)"
-        >
-          <span class="flex items-center gap-[4px]">
-            <nz-icon nzType="clear" nzTheme="outline" />
-            {{ 'clear_uploaded_files' | i18nextEager }}
-          </span>
-        </button>
+        <div class="flex gap-[8px]">
+          <button
+            *ngIf="isShowMultiBtn(inputItem)"
+            nz-button
+            class="flex !w-[96px] justify-center"
+            nzSize="small"
+            [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
+            (click)="addMultiFile(i)"
+          >
+            <span class="flex items-center gap-[4px]">
+              <nz-icon nzType="plus" nzTheme="outline" />
+              {{ 'add' | i18nextEager }}
+            </span>
+          </button>
+          <button
+            *ngIf="inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length"
+            nz-button
+            nzSize="small"
+            class="flex !w-[96px] justify-center"
+            nzDanger
+            [disabled]="isUploading"
+            nz-popconfirm
+            [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+            (nzOnConfirm)="clearMultiFiles(inputItem)"
+          >
+            <span class="flex items-center gap-[4px]">
+              <nz-icon nzType="clear" nzTheme="outline" />
+              {{ 'clear_uploaded_files' | i18nextEager }}
+            </span>
+          </button>
+        </div>
       </nz-form-label>
       <nz-form-control>
         <!-- string类型的输入参数 -->
