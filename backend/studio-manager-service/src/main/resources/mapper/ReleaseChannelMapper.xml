@@ -21,7 +21,7 @@
         <result column="status" jdbcType="VARCHAR" property="status" />
         <result column="detail" jdbcType="VARCHAR" property="detail"/>
         <result column="visibility_scope" jdbcType="VARCHAR" property="visibilityScope"/>
-        <result column="call_count" jdbcType="BIGINT" property="callCount"/>
+        <result column="call_count" jdbcType="INTEGER" property="callCount"/>
         <result column="creator" jdbcType="VARCHAR" property="creator"/>
         <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
         <result column="app_sub_type" jdbcType="VARCHAR" property="subType" />
@@ -56,7 +56,7 @@
         #{versionId,jdbcType=VARCHAR}, #{versionName,jdbcType=VARCHAR}, #{channelType,jdbcType=VARCHAR}, #{entryPoint,jdbcType=VARCHAR},
         #{qrCode,jdbcType=VARCHAR}, #{shortCode,jdbcType=VARCHAR}, #{metadata,jdbcType=VARCHAR},
         #{status,jdbcType=VARCHAR}, #{detail,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR},
-        #{creatorId,jdbcType=VARCHAR}, #{releasedOn,jdbcType=VARCHAR}, #{visibilityScope,jdbcType=VARCHAR}, #{callCount,jdbcType=BIGINT}, #{subType,jdbcType=VARCHAR})
+        #{creatorId,jdbcType=VARCHAR}, #{releasedOn,jdbcType=VARCHAR}, #{visibilityScope,jdbcType=VARCHAR}, #{callCount,jdbcType=INTEGER}, #{subType,jdbcType=VARCHAR})
     </insert>
     <select id="selectByPrimaryKey" parameterType="map" resultMap="BaseResultMap">
         select
