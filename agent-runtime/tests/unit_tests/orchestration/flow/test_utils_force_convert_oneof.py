@@ -108,7 +108,7 @@ class TestForceConvertOneOfObjectNull:
 
     @staticmethod
     def test_mcp_arguments_empty_string():
-        """MCP arguments=""（空字符串）-> 尝试 object 解析失败后走 null 返回 None"""
+        """MCP arguments=""（空字符串）-> object 尝试失败后走 null 返回 None，无残留错误"""
         inputs = {"query": "hello", "arguments": ""}
         definition = [
             {"id": "query", "type": "string"},
@@ -122,8 +122,9 @@ class TestForceConvertOneOfObjectNull:
         ]
         result, errors = force_convert(inputs, definition)
         assert result["arguments"] is None
-        # object 转换失败会产生 error，但 null 子类型成功处理了空字符串
-        # errors 中可能有 object 的报错，这是预期行为（oneOf 逐个尝试）
+        # 关键断言：object 分支失败的错误不能残留在 errors 中
+        # 修复前 errors 包含 "Incorrect type for key: arguments, expected: object"
+        assert errors == []
 
 
 class TestForceConvertOneOfStringNull:
