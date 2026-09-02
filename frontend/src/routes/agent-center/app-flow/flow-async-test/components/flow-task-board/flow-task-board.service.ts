@@ -119,6 +119,11 @@ export class FlowTaskBoardService {
           isShowInputParams: true,
           inputList: inputList
         });
+      } else {
+        // 非PENDING（COMPLETED/FAILED等）+ content 是合法 {"inputs":...} JSON：按原文展示，与 catch 路径一致
+        lastChat.showAnswer.push({
+          text: history.content
+        });
       }
     } catch (e) {
       // content为普通字符串
