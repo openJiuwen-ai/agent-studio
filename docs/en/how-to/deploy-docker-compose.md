@@ -179,7 +179,7 @@ Auto-executes: get images (pull or load) → initialize infrastructure (MySQL/Re
 
 > The `all` command gets images first then starts, suitable for **first deployment**. For subsequent updates use `update`, for restart use `restart`.
 
-> 💡 Default deployment does not include a log aggregation stack. For centralized log querying in Grafana, see "[Section 7: Observability (Log Aggregation)](#7-observability-log-aggregation)".
+> 💡 Default deployment does not include a log aggregation stack. For centralized log querying in Grafana, see "[Section 8: Observability (Log Aggregation)](#8-observability-log-aggregation)".
 
 ### Step 4: Verify
 
@@ -253,7 +253,7 @@ bash deploy.sh status      # View service status
 bash deploy.sh logs [svc]  # View logs
 bash deploy.sh clean all   # Full cleanup (⚠️ data irrecoverable)
 
-# Observability / log aggregation (optional, see Section 7)
+# Observability / log aggregation (optional, see Section 8)
 bash deploy.sh logging              # L1 single-machine log stack (victoria-logs+vector+grafana, local)
 bash deploy.sh logging-remote       # L2: application node remote vector (push to monitor node)
 bash deploy.sh monitor              # L2: monitor node log stack (victoria-logs+grafana+gateway)
@@ -261,7 +261,56 @@ bash deploy.sh monitor              # L2: monitor node log stack (victoria-logs+
 
 ---
 
-## 7. Observability (Log Aggregation)
+## 7. API Documentation (Swagger UI)
+
+The platform provides a unified environment variable `API_DOCS_ENABLED` to control API documentation for both the management and runtime services.
+
+| Service | Tech Stack | Documentation Coverage |
+|---------|-----------|----------------------|
+| studio-manager | springdoc-openapi | All 49 Controllers' management API endpoints |
+| studio-runtime | FastAPI built-in OpenAPI 3 | All 28 runtime API endpoints |
+
+> **Disabled by default**: API documentation is not enabled by default. Set `API_DOCS_ENABLED=true` to enable as needed.
+
+### Enable
+
+Edit `.env` and add or modify:
+
+```bash
+API_DOCS_ENABLED=true
+```
+
+Restart services to take effect:
+
+```bash
+bash deploy.sh restart
+```
+
+### Access URLs
+
+| Page | URL |
+|------|-----|
+| Manager Swagger UI (interactive) | `http://<MANAGER_IP>:31111/swagger-ui.html` |
+| Manager OpenAPI JSON (import to Postman) | `http://<MANAGER_IP>:31111/v3/api-docs` |
+| Manager — Agent Management group | `http://<MANAGER_IP>:31111/v3/api-docs/agent-management` |
+| Manager — Prompt Engineering group | `http://<MANAGER_IP>:31111/v3/api-docs/prompt-engineering` |
+| Runtime Swagger UI (interactive) | `http://<RUNTIME_IP>:31014/runtime/docs` |
+| Runtime ReDoc (read-only) | `http://<RUNTIME_IP>:31014/runtime/redoc` |
+| Runtime OpenAPI JSON | `http://<RUNTIME_IP>:31014/runtime/openapi.json` |
+
+### Disable
+
+```bash
+# In .env, change back to false or remove the line (default is false)
+API_DOCS_ENABLED=false
+bash deploy.sh restart
+```
+
+> When no longer needed, set `API_DOCS_ENABLED` back to `false` (default).
+
+---
+
+## 8. Observability (Log Aggregation)
 
 > ⚠️ **Scope**: This section's solution only applies to Docker Compose deployment. For K8s deployment, use log collection DaemonSet and centralized log storage.
 
@@ -322,7 +371,7 @@ Full architecture diagrams, LogsQL examples, troubleshooting, and evolution path
 
 ---
 
-## 8. FAQ
+## 9. FAQ
 
 ### Q1: Database Connection Failure
 

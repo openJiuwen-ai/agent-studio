@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,9 +25,11 @@ public class AgentSkillDetail implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("skill_id")
+    @Schema(description = "技能ID", example = "skill_001")
     private String skillId = null;
 
     @JsonProperty("skill_version")
+    @Schema(description = "技能版本", example = "v1.0.0")
     private String skillVersion = null;
 
     public String getSkillId() {

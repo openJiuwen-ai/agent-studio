@@ -220,6 +220,9 @@ services:
       jackson_max_string_length: ${JACKSON_MAX_STRING_LENGTH:-50000000}
       # 引用未发布插件：默认关闭，置 true 时允许引用未发布的插件
       plugin_publish_choice: ${PLUGIN_PUBLISH_CHOICE:-false}
+      # API文档（Swagger UI）开关：默认关闭，置 true 时开启（仅建议开发/测试环境）
+      # 同时控制 manager 端 springdoc 和 runtime 端 FastAPI 文档
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
     depends_on:
       mysql:
         condition: service_healthy
@@ -332,6 +335,8 @@ services:
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
+      # API 文档开关（与 manager 共用同一环境变量）
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
     depends_on:
       redis:
         condition: service_healthy

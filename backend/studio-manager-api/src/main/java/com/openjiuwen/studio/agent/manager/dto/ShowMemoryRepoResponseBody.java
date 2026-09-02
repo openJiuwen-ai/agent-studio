@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,50 +30,63 @@ public class ShowMemoryRepoResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("memory_repo_id")
+    @Schema(description = "记忆库ID", example = "repo-123456")
     @Length(min = 1, max = 64)
     private String memoryRepoId = null;
 
     @JsonProperty("name")
+    @Schema(description = "记忆库名称", example = "我的记忆库")
     @Length(min = 1, max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "记忆库描述", example = "用于存储对话记忆")
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "记忆库图标URL", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("long_term_memory_strategies")
+    @Schema(description = "长期记忆策略列表", example = "[]")
     @Valid
     @Size(max = 200)
     private List<LongTermMemoryStrategy> longTermMemoryStrategies = null;
 
     @JsonProperty("created_user_id")
+    @Schema(description = "创建者用户ID", example = "user-123")
     @Length(max = 100)
     private String createdUserId = null;
 
     @JsonProperty("created_user_name")
+    @Schema(description = "创建者用户名", example = "张三")
     @Length(max = 100)
     private String createdUserName = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00Z")
     private Date createTime = null;
 
     @JsonProperty("last_update_user_id")
+    @Schema(description = "最后更新者用户ID", example = "user-456")
     @Length(max = 100)
     private String lastUpdateUserId = null;
 
     @JsonProperty("last_update_user_name")
+    @Schema(description = "最后更新者用户名", example = "李四")
     @Length(max = 100)
     private String lastUpdateUserName = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2026-01-02T00:00:00Z")
     private Date updateTime = null;
 
     @JsonProperty("conversation_round")
+    @Schema(description = "对话轮次", example = "10")
     private Integer conversationRound = null;
 
     @JsonProperty("time_span")
+    @Schema(description = "时间跨度（天）", example = "30")
     private Integer timeSpan = null;
 
     public String getMemoryRepoId() {

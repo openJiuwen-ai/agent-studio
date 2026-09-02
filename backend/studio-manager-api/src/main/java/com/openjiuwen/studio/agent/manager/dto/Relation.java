@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,64 +26,82 @@ public class Relation implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("relation_id")
+    @Schema(description = "关联关系ID", example = "rel001")
     @Length(max = 64)
     private String relationId = null;
 
     @JsonProperty("app_id")
+    @Schema(description = "应用ID", example = "app001")
     @Length(max = 64)
     private String appId = null;
 
     @JsonProperty("app_version")
+    @Schema(description = "应用版本", example = "1.0.0")
     private String appVersion = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "agent")
     @Length(max = 32)
     private String appType = null;
 
     @JsonProperty("latest_version_app_sub_type")
+    @Schema(description = "最新版本应用子类型", example = "workflow")
     @Length(max = 32)
     private String latestVersionAppSubType = null;
 
     @JsonProperty("app_name")
+    @Schema(description = "应用名称", example = "天气助手")
     @Length(max = 64)
     private String appName = null;
 
     @JsonProperty("is_controller")
+    @Schema(description = "是否为控制器", example = "false")
     private Boolean isController = null;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res001")
     @Length(max = 64)
     private String resourceId = null;
 
     @JsonProperty("resource_version")
+    @Schema(description = "资源版本", example = "1.0.0")
     private String resourceVersion = null;
 
     @JsonProperty("resource_version_name")
+    @Schema(description = "资源版本名称", example = "v1.0.0")
     private String resourceVersionName = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "plugin")
     @Length(max = 32)
     private String resourceType = null;
 
     @JsonProperty("resource_name")
+    @Schema(description = "资源名称", example = "天气查询插件")
     private String resourceName = null;
 
     @JsonProperty("valid")
+    @Schema(description = "是否有效", example = "true")
     private Boolean valid = null;
 
     @JsonProperty("resource_latest_version")
+    @Schema(description = "资源最新版本", example = "2.0.0")
     private String resourceLatestVersion = null;
 
     @JsonProperty("resource_latest_version_name")
+    @Schema(description = "资源最新版本名称", example = "v2.0.0")
     private String resourceLatestVersionName = null;
 
     @JsonProperty("app_workspace_name")
+    @Schema(description = "应用工作空间名称", example = "default")
     private String appWorkspaceName = null;
 
     @JsonProperty("app_workspace_id")
+    @Schema(description = "应用工作空间ID", example = "ws001")
     private String appWorkspaceId = null;
 
     @JsonProperty("reference_type")
+    @Schema(description = "引用类型", example = "direct")
     private String referenceType = null;
 
     public String getRelationId() {

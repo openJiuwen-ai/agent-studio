@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,18 +22,23 @@ public class VariableVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("key")
+    @Schema(description = "键", example = "示例文本")
     private String key = null;
 
     @JsonProperty("value")
+    @Schema(description = "值", example = "示例文本")
     private String value = null;
 
     @JsonProperty("pe_task_id")
+    @Schema(description = "PE任务标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String peTaskId = null;
 
     public String getId() {

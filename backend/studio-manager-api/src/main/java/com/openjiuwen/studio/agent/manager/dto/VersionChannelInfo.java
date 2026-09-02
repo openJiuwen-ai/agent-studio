@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -27,54 +28,70 @@ public class VersionChannelInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "通道ID", example = "channel-001", required = true)
     @NotBlank
     private String id = null;
 
     @JsonProperty("app_id")
+    @Schema(description = "应用ID", example = "app-001")
     private String appId = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "web")
     private String appType = null;
 
     @JsonProperty("sub_type")
+    @Schema(description = "子类型", example = "default")
     private String subType = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0", required = true)
     @NotBlank
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "1.0.0")
     private String versionName = null;
 
     @JsonProperty("channel_type")
+    @Schema(description = "通道类型", example = "production")
     private String channelType = null;
 
     @JsonProperty("entry_point")
+    @Schema(description = "入口地址", example = "https://example.com/entry")
     private String entryPoint = null;
 
     @JsonProperty("qr_code")
+    @Schema(description = "二维码", example = "https://example.com/qr.png")
     private String qrCode = null;
 
     @JsonProperty("short_code")
+    @Schema(description = "短链接码", example = "abc123")
     private String shortCode = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     private Object metadata = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "published")
     private String status = null;
 
     @JsonProperty("release_time")
+    @Schema(description = "发布时间", example = "2024-01-01T00:00:00.000+08:00")
     private Date releaseTime = null;
 
     @JsonProperty("url")
+    @Schema(description = "访问地址", example = "https://example.com")
     private String url = null;
 
     @JsonProperty("visibility_scope")
+    @Schema(description = "可见范围", example = "public")
     private String visibilityScope = null;
 
     @JsonProperty("call_count")
+    @Schema(description = "调用次数", example = "1000")
     private Integer callCount = null;
 
     public String getId() {

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,23 +26,29 @@ public class DataProcessTool implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "工具名称", example = "text_splitter")
     private String name = null;
 
     @JsonProperty("title")
+    @Schema(description = "工具标题", example = "文本分割器")
     private String title = null;
 
     @JsonProperty("description")
+    @Schema(description = "工具描述", example = "将长文本按规则切分为小块")
     private String description = null;
 
     @JsonProperty("task_operators")
+    @Schema(description = "任务操作符", example = "{\"operator\":\"split\"}")
     @Valid
     private DataProcessToolTaskOperators taskOperators = null;
 
     @JsonProperty("inputSchema")
+    @Schema(description = "输入Schema", example = "{\"type\":\"object\"}")
     @Valid
     private Object inputSchema = null;
 
     @JsonProperty("outputSchema")
+    @Schema(description = "输出Schema", example = "{\"type\":\"array\"}")
     @Valid
     private Object outputSchema = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,19 +26,24 @@ public class ControllerParamIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "参数名称", example = "param-1")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "参数描述", example = "参数描述")
     private String description = null;
 
     @JsonProperty("default")
+    @Schema(description = "默认值", example = "default-value")
     @Valid
     private Object _default = null;
 
     @JsonProperty("type")
+    @Schema(description = "参数类型", example = "string")
     private String type = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = null;
 
     public String getName() {

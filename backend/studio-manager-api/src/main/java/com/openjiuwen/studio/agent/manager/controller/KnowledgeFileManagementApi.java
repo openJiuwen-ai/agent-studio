@@ -78,7 +78,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "批量删除文件请求体", required = true) @Valid @RequestBody
         BatchDeleteKnowledgeFilesRequestBody body);
 
@@ -101,7 +101,7 @@ import java.util.List;
         @PathVariable("knowledge_repo_id") String knowledgeRepoId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "文件id", required = true, schema = @Schema())
         @PathVariable("file_id") String fileId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建知识库切片请求体", required = true) @Valid @RequestBody FileChunkReq body);
 
@@ -125,7 +125,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除知识文件的切片", nickname = "deleteFileChunk", notes = "删除知识文件的切片",
@@ -151,7 +151,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "切片id", required = true, schema = @Schema())
         @PathVariable("chunk_id") String chunkId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "根据AccessKey下载文档", nickname = "downloadFileByAccessKey",
@@ -215,7 +215,7 @@ import java.util.List;
         @PathVariable("project_id") String projectId, @Size(min = 1, max = 100)
         @Parameter(in = ParameterIn.PATH, description = "图片id（accessKey）", required = true, schema = @Schema())
         @PathVariable("image_id") String imageId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema()) @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId);
 
     @ApiOperation(value = "获知识文件的切片列表", nickname = "listFileChunks", notes = "获取知识文档的切片列表",
@@ -328,7 +328,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "切片id", required = true, schema = @Schema())
         @PathVariable("chunk_id") String chunkId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "修改知识库切片请求体", required = true) @Valid @RequestBody FileChunkReq body);
 
@@ -353,7 +353,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "文件id", required = true, schema = @Schema())
         @PathVariable("file_id") String fileId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "更新文档元信息的请求体", required = true) @Valid @RequestBody
         UpdateFileMetaInfoReq body);
 
@@ -371,14 +371,14 @@ import java.util.List;
         produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<UploadKnowledgeFileResponseBody> uploadKnowledgeFile(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @Parameter(description = "file detail") @Valid @RequestPart(value = "file", required = true) MultipartFile file,
-        @Size(max = 20) @ApiParam(value = "文档标签列表") @Valid @RequestParam(value = "tags", required = false)
+        @Size(max = 20) @Parameter(in = ParameterIn.QUERY, description = "文档标签列表", required = false, schema = @Schema()) @ApiParam(value = "文档标签列表") @Valid @RequestParam(value = "tags", required = false)
         List<@Length(min = 0, max = 100) String> tags);
 
 }

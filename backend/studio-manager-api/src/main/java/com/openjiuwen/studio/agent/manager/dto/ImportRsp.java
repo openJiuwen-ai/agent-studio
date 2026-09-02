@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.ImportRes;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,54 +30,67 @@ public class ImportRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("succeed_len")
+    @Schema(description = "成功导入数量", example = "10")
     private Integer succeedLen = 0;
 
     @JsonProperty("count")
+    @Schema(description = "总数量", example = "15")
     private Integer count = 0;
 
     @JsonProperty("succeed_ids")
+    @Schema(description = "成功的ID列表", example = "[\"id1\",\"id2\"]")
     @Valid
     @Size()
     private List<@Length() String> succeedIds = null;
 
     @JsonProperty("failed_len")
+    @Schema(description = "失败数量", example = "5")
     private Integer failedLen = 0;
 
     @JsonProperty("imported_len")
+    @Schema(description = "已导入数量", example = "8")
     private Integer importedLen = 0;
 
     @JsonProperty("updated_len")
+    @Schema(description = "已更新数量", example = "2")
     private Integer updatedLen = 0;
 
     @JsonProperty("skipped_len")
+    @Schema(description = "已跳过数量", example = "0")
     private Integer skippedLen = 0;
 
     @JsonProperty("failed_ids")
+    @Schema(description = "失败的ID列表", example = "[\"id3\"]")
     @Valid
     @Size()
     private List<@Length() String> failedIds = null;
 
     @JsonProperty("skipped_ids")
+    @Schema(description = "跳过的ID列表", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> skippedIds = null;
 
     @JsonProperty("inner_plugins_msg")
+    @Schema(description = "内部插件消息列表", example = "[]")
     @Valid
     @Size()
     private List<ExtraMsg> innerPluginsMsg = null;
 
     @JsonProperty("auth_plugins_msg")
+    @Schema(description = "授权插件消息列表", example = "[]")
     @Valid
     @Size()
     private List<ExtraMsg> authPluginsMsg = null;
 
     @JsonProperty("auth_mcps_msg")
+    @Schema(description = "授权MCP消息列表", example = "[]")
     @Valid
     @Size()
     private List<ExtraMsg> authMcpsMsg = null;
 
     @JsonProperty("import_list")
+    @Schema(description = "导入列表", example = "[]")
     @Valid
     @Size()
     private List<ImportRes> importList = null;

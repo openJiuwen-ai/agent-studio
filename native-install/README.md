@@ -95,4 +95,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 
 - **依赖版本/源**：改 `versions.env`（填 SHA256 后强校验）。
 - **端口/口令**：改包内 `.env`。
+- **API 文档（Swagger UI）**：`.env` 中设 `API_DOCS_ENABLED=true` 开启，同时启用管理面文档（`http://127.0.0.1:31111/swagger-ui.html`）和运行面文档（`http://127.0.0.1:31014/runtime/docs`）。默认关闭，按需开启。
 - **JVM 堆**：`start.sh/.ps1` 按宿主内存 ×0.6 自动计算，可手改。

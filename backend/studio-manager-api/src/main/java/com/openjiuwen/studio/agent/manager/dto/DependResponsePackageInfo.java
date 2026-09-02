@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
@@ -26,44 +27,57 @@ public class DependResponsePackageInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "依赖包ID", example = "pkg-123")
     private String id = null;
 
     @JsonProperty("dep_id")
+    @Schema(description = "依赖ID", example = "dep-123")
     private String depId = null;
 
     @JsonProperty("owner")
+    @Schema(description = "依赖包所有者", example = "openjiuwen")
     private String owner = null;
 
     @JsonProperty("runtime")
+    @Schema(description = "运行时环境", example = "python3.9")
     private String runtime = null;
 
     @JsonProperty("link")
+    @Schema(description = "下载链接", example = "https://example.com/package.zip")
     private String link = null;
 
     @JsonProperty("size")
+    @Schema(description = "依赖包大小", example = "1024")
     @Length(max = 32)
     private String size = null;
 
     @JsonProperty("name")
+    @Schema(description = "依赖包名称", example = "my-package")
     @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9_\\\\.\\\\-]{0,95}[a-zA-Z0-9]$")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "依赖包描述", example = "这是一个依赖包")
     private String description = null;
 
     @JsonProperty("file_name")
+    @Schema(description = "文件名", example = "package-1.0.0.zip")
     private String fileName = null;
 
     @JsonProperty("version")
+    @Schema(description = "版本号", example = "1")
     private Integer version = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v-123")
     private String versionId = null;
 
     @JsonProperty("scope")
+    @Schema(description = "作用范围", example = "public")
     private ScopeEnum scope = ScopeEnum.ALL;
 
     @JsonProperty("valid")
+    @Schema(description = "是否有效", example = "1")
     private Integer valid = null;
 
     public String getId() {

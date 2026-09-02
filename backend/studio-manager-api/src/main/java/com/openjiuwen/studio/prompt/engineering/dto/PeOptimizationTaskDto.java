@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,24 +34,29 @@ public class PeOptimizationTaskDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String taskId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,32}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     @NotBlank
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述", required = true)
     @NotBlank
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "text")
     private String type = null;
 
     @JsonProperty("prompt_ids")
+    @Schema(description = "提示词ID列表", example = "", required = true)
     @Valid
     @NotNull
     @Size(max = 9)
@@ -59,19 +65,23 @@ public class PeOptimizationTaskDto implements Serializable {
         = new ArrayList<String>();
 
     @JsonProperty("test_set_id")
+    @Schema(description = "测试集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String testSetId = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "")
     @Valid
     private ModelConfig modelConfig = null;
 
     @JsonProperty("assistant_config")
+    @Schema(description = "助手配置", example = "")
     @Valid
     private ModelConfig assistantConfig = null;
 
     @JsonProperty("num_iter")
+    @Schema(description = "迭代次数", example = "3", required = true)
     @NotNull
     @Range(min = 1L, max = 5L)
     private Integer numIter = 3;

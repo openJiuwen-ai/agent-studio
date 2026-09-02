@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -24,11 +26,13 @@ public class NotifyReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域名", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @Length(min = 2, max = 64)
     private String domainId = null;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @Length(max = 64)
     private String taskId = null;

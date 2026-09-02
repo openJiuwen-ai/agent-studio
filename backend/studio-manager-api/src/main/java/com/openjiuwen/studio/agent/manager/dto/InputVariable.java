@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,22 +28,27 @@ public class InputVariable implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("variable_key")
+    @Schema(description = "入参变量键名", example = "user_name")
     @Pattern(regexp = "^[^\\^]*$")
     @Length(max = 100)
     private String variableKey = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = false;
 
     @JsonProperty("description")
+    @Schema(description = "变量描述", example = "用户名称")
     @Length(max = 200)
     private String description = null;
 
     @JsonProperty("default_value")
+    @Schema(description = "变量默认值", example = "张三")
     @Valid
     private Object defaultValue = null;
 
     @JsonProperty("input_type")
+    @Schema(description = "入参类型，可选值：string、integer、number、boolean", example = "string")
     @Pattern(regexp = "^(string|integer|number|boolean)$")
     @Length(max = 100)
     private String inputType = null;

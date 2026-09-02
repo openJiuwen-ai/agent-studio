@@ -851,17 +851,25 @@ prr:
   is-soft-delete: ${soft_delete:true}
   soft-delete-ttl-days: ${soft_delete_ttl_days:730}
 
-# 关闭 API文档核心接口,关闭 SwaggerUI 页面访问
+# API文档配置（springdoc-openapi），默认关闭，本地开发设 API_DOCS_ENABLED=true 开启
 springdoc:
   api-docs:
-    enabled: false
+    enabled: ${API_DOCS_ENABLED:false}
+    path: /v3/api-docs
   swagger-ui:
-    enabled: false
+    enabled: ${API_DOCS_ENABLED:false}
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+    doc-expansion: none
+    default-models-expand-depth: 1
+    default-model-expand-depth: 1
+  default-flat-param-object: true
 # 鉴权配置
 auth:
   path:
     # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
-    excluded: ${auth_path_excluded:/v1/health, /health}
+    excluded: ${auth_path_excluded:/v1/health, /health, /v3/api-docs/**, /swagger-ui/**, /swagger-ui.html}
   sso:
     # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
     validate-url: ${auth_sso_validate_url:}

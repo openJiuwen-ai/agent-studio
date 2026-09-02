@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,38 +29,47 @@ public class McpServerReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "MCP服务ID", example = "mcp_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "MCP服务名称", example = "天气查询服务")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "MCP服务英文名称", example = "weather_service")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String nameEn = null;
 
     @JsonProperty("desc")
+    @Schema(description = "MCP服务描述", example = "提供天气信息查询服务")
     @Length(max = 1000)
     private String desc = null;
 
     @JsonProperty("icon")
+    @Schema(description = "MCP服务图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见性", example = "private")
     @Length(max = 32)
     private String visibility = null;
 
     @JsonProperty("url")
+    @Schema(description = "MCP服务URL", example = "https://mcp.example.com/api")
     @Length(max = 256)
     private String url = null;
 
     @JsonProperty("auth")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo auth = null;
 
     @JsonProperty("is_template")
+    @Schema(description = "是否为模板", example = "false")
     private Boolean isTemplate = false;
 
     public String getId() {

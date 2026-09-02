@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
@@ -29,17 +30,21 @@ public class PromptEvaluationResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("test_num")
+    @Schema(description = "测试数量", example = "1")
     private Integer testNum = null;
 
     @JsonProperty("variables")
+    @Schema(description = "变量", example = "")
     @Valid
     private List<VariableVo> variables = null;
 
     @JsonProperty("expect_result")
+    @Schema(description = "expect结果", example = "示例文本")
     @Length(max = 512)
     private String expectResult = null;
 
     @JsonProperty("prompt_result_list")
+    @Schema(description = "提示词结果列表", example = "", required = true)
     @Valid
     @NotNull
     private List<PeEvaluationResultVo> promptResultList = new ArrayList<PeEvaluationResultVo>();

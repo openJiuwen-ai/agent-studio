@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,62 +33,76 @@ public class PePromptDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,18}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     @NotBlank
     @Length(max = 255)
     private String name = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4", required = true)
     @NotBlank
     @Length(max = 128)
     private String model = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "", required = true)
     @Valid
     @NotNull
     private ModelConfig modelConfig = null;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String taskId = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "PLAYGROUND", required = true)
     @NotBlank
     private String source = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "1", required = true)
     @NotNull
     private Integer type = null;
 
     @JsonProperty("question")
+    @Schema(description = "问题", example = "示例问题", required = true)
     @NotBlank
     private String question = null;
 
     @JsonProperty("answer")
+    @Schema(description = "答案", example = "示例答案")
     private String answer = null;
 
     @JsonProperty("variables")
+    @Schema(description = "变量", example = "")
     @Valid
     @Size(max = 20)
     private List<VariableDto> variables = null;
 
     @JsonProperty("manual_score")
+    @Schema(description = "人工评分", example = "4", required = true)
     @NotNull
     @Range(min = 0L, max = 5L)
     private Integer manualScore = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "2024-01-01T00:00:00.000Z")
     private String updater = null;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String fileId = null;
 
     public String getId() {

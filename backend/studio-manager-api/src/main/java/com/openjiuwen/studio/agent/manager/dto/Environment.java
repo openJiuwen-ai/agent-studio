@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,48 +25,63 @@ public class Environment implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "环境ID", example = "env-001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "环境名称", example = "生产环境")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "环境描述", example = "生产部署环境")
     private String description = null;
 
     @JsonProperty("isDefault")
+    @Schema(description = "是否为默认环境", example = "true")
     private Boolean isDefault = null;
 
     @JsonProperty("envVariable")
+    @Schema(description = "环境变量", example = "KEY=value")
     private String envVariable = null;
 
     @JsonProperty("vpcName")
+    @Schema(description = "VPC名称", example = "vpc-001")
     private String vpcName = null;
 
     @JsonProperty("subnetName")
+    @Schema(description = "子网名称", example = "subnet-001")
     private String subnetName = null;
 
     @JsonProperty("vpcCidr")
+    @Schema(description = "VPC CIDR", example = "192.168.0.0/16")
     private String vpcCidr = null;
 
     @JsonProperty("subnetCidr")
+    @Schema(description = "子网 CIDR", example = "192.168.1.0/24")
     private String subnetCidr = null;
 
     @JsonProperty("vpcEp")
+    @Schema(description = "VPC终端节点", example = "vpce-001")
     private String vpcEp = null;
 
     @JsonProperty("statusReason")
+    @Schema(description = "状态原因", example = "正常")
     private String statusReason = null;
 
     @JsonProperty("eip")
+    @Schema(description = "弹性公网IP", example = "10.0.0.1")
     private String eip = null;
 
     @JsonProperty("status")
+    @Schema(description = "环境状态", example = "available")
     private String status = null;
 
     @JsonProperty("createdOn")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdOn = null;
 
     @JsonProperty("updatedOn")
+    @Schema(description = "更新时间", example = "1700000000000")
     private Long updatedOn = null;
 
     public String getId() {

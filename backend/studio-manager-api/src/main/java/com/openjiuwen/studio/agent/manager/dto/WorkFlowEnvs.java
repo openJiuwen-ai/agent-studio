@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,6 +29,7 @@ public class WorkFlowEnvs implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("variables")
+    @Schema(description = "变量列表", example = "[]")
     @Valid
     @Size(max = 300)
     private List<WorkFlowEnv> variables = null;

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,12 +26,15 @@ public class KnowledgeBaseObsConfigResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "ID", example = "example-id-123")
     private String id = null;
 
     @JsonProperty("obs_bucket_name")
+    @Schema(description = "OBS桶名称", example = "示例名称")
     private String obsBucketName = null;
 
     @JsonProperty("obs_input_directory")
+    @Schema(description = "输入", example = "示例字符串")
     private String obsInputDirectory = null;
 
     public String getId() {

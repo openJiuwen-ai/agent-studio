@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,12 +26,15 @@ public class QueryWorkspaceQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("scope")
+    @Schema(description = "scope", example = "示例字符串")
     private String scope = "user";
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "example-type")
     private String type = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "示例字符串")
     private String source = null;
 
     public String getScope() {

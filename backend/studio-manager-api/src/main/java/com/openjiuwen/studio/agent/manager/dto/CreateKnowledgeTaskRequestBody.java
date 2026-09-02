@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -32,10 +34,12 @@ public class CreateKnowledgeTaskRequestBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("task_type")
+    @Schema(description = "任务类型", example = "STRING", required = true)
     @NotNull
     private TaskTypeEnum taskType = null;
 
     @JsonProperty("file_ids")
+    @Schema(description = "文件", example = "[]")
     @Valid
     @Size(min = 1, max = 1000)
     private List<@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Length(min = 1, max = 64) String> fileIds = null;

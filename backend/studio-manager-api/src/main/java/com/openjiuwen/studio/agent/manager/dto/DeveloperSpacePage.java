@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,12 +26,15 @@ public class DeveloperSpacePage implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("next_marker")
+    @Schema(description = "下一页", example = "示例字符串")
     private String nextMarker = null;
 
     @JsonProperty("previous_marker")
+    @Schema(description = "上一页", example = "示例字符串")
     private String previousMarker = null;
 
     @JsonProperty("current_count")
+    @Schema(description = "数量", example = "10")
     private Integer currentCount = null;
 
     public String getNextMarker() {

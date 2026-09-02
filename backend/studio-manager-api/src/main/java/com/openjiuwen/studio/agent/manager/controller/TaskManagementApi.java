@@ -58,7 +58,9 @@ public interface TaskManagementApi {
         @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
         @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId);
 
     @ApiOperation(value = "提交异步工作流任务", nickname = "createTask", notes = "", response = TaskRsp.class,
@@ -74,8 +76,12 @@ public interface TaskManagementApi {
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
-        @Size(max = 64) @ApiParam(value = "版本号") @RequestParam(value = "version", required = false) String version,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Size(max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "版本号", required = false, schema = @Schema())
+        @ApiParam(value = "版本号") @RequestParam(value = "version", required = false) String version,
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId,
         @NotNull @ApiParam(value = "创建文件请求体", required = true) @Valid @RequestBody CreateTaskReq body);
 
@@ -94,7 +100,9 @@ public interface TaskManagementApi {
         @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
         @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId);
 
     @ApiOperation(value = "查看任务列表", nickname = "listTask", notes = "", response = TaskListRsp.class,
@@ -127,7 +135,9 @@ public interface TaskManagementApi {
         @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
         @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId,
         @NotNull @ApiParam(value = "创建文件请求体", required = true) @Valid @RequestBody ModifyTaskReq body);
 
@@ -146,7 +156,9 @@ public interface TaskManagementApi {
         @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
         @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId,
         @NotNull @ApiParam(value = "创建文件请求体", required = true) @Valid @RequestBody ResumeTaskReq body);
 

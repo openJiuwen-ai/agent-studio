@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,24 +22,31 @@ public class Datapoints implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("unit")
+    @Schema(description = "单位", example = "ms")
     private String unit = null;
 
     @JsonProperty("average")
+    @Schema(description = "平均值", example = "12.5")
     private Double average = null;
 
     @JsonProperty("max")
+    @Schema(description = "最大值", example = "100.0")
     private Double max = null;
 
     @JsonProperty("min")
+    @Schema(description = "最小值", example = "0.0")
     private Double min = null;
 
     @JsonProperty("sum")
+    @Schema(description = "总和", example = "250.0")
     private Double sum = null;
 
     @JsonProperty("variance")
+    @Schema(description = "方差", example = "3.2")
     private Double variance = null;
 
     @JsonProperty("timestamp")
+    @Schema(description = "时间戳", example = "1714521600000")
     private Long timestamp = null;
 
     public String getUnit() {

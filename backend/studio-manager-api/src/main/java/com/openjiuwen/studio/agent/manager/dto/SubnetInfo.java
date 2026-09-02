@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class SubnetInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "子网ID", example = "subnet-001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "子网名称", example = "subnet-name")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "子网描述")
     private String description = null;
 
     @JsonProperty("cidr")
+    @Schema(description = "CIDR网段", example = "192.168.0.0/24")
     private String cidr = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "ACTIVE")
     private String status = null;
 
     public String getId() {

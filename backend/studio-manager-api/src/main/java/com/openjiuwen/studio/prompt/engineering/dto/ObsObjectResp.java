@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -25,6 +26,7 @@ public class ObsObjectResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("obs_object_map")
+    @Schema(description = "OBS对象Map", example = "")
     @Valid
     private Map<String, List<ObsResp>> obsObjectMap = null;
 

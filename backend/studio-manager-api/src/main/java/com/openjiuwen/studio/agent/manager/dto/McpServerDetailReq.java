@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,47 +27,59 @@ public class McpServerDetailReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "MCP服务ID", example = "mcp_001")
     @Pattern(regexp = "^[a-zA-Z0-9-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("serverCode")
+    @Schema(description = "服务编码", example = "my_mcp_server")
     @Pattern(regexp = "^(?!_)(?!-)(?!\\d)[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]{2,64}$")
     private String serverCode = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "我的MCP服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "英文名称", example = "My Mcp Server")
     @Pattern(regexp = "^[a-zA-Z0-9\\s.,!?;:'\"()_（）-]{2,64}$")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "这是一个MCP服务")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "英文描述", example = "This is an MCP server")
     @Length(max = 2048)
     private String descriptionEn = null;
 
     @JsonProperty("url")
+    @Schema(description = "服务地址", example = "https://example.com/mcp")
     @Pattern(regexp = "(http|https)://[a-zA-Z0-9-.]+(:[0-9]+)?(/\\S*)?")
     private String url = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "sse")
     private String type = null;
 
     @JsonProperty("deploy_type")
+    @Schema(description = "部署类型", example = "remote")
     private String deployType = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务配置", example = "{}")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！*%# \\s]*$")
     private String serverConfig = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具列表", example = "[]")
     private String tools = null;
 
     public String getId() {

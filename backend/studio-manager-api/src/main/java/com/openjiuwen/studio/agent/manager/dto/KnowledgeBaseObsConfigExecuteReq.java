@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -26,6 +28,7 @@ public class KnowledgeBaseObsConfigExecuteReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("action")
+    @Schema(description = "操作", example = "STRING")
     private ActionEnum action = null;
 
     public ActionEnum getAction() {

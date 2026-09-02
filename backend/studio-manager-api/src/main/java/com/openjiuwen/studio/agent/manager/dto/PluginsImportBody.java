@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.core.io.Resource;
@@ -24,10 +26,12 @@ public class PluginsImportBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file")
+    @Schema(description = "文件", example = "file-content", required = true)
     @NotBlank
     private Resource file = null;
 
     @JsonProperty("import_ids")
+    @Schema(description = "导入", example = "example-id-123")
     private String importIds = null;
 
     public Resource getFile() {

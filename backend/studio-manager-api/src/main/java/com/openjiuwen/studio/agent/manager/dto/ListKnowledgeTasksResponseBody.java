@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -26,26 +27,32 @@ public class ListKnowledgeTasksResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("total")
+    @Schema(description = "任务总数", example = "100")
     @Range(min = 0L, max = 65535L)
     private Integer total = null;
 
     @JsonProperty("fail_count")
+    @Schema(description = "失败数量", example = "5")
     @Range(min = 0L, max = 65535L)
     private Integer failCount = null;
 
     @JsonProperty("success_count")
+    @Schema(description = "成功数量", example = "90")
     @Range(min = 0L, max = 65535L)
     private Integer successCount = null;
 
     @JsonProperty("running_count")
+    @Schema(description = "运行中数量", example = "3")
     @Range(min = 0L, max = 65535L)
     private Integer runningCount = null;
 
     @JsonProperty("pending_count")
+    @Schema(description = "等待中数量", example = "2")
     @Range(min = 0L, max = 65535L)
     private Integer pendingCount = null;
 
     @JsonProperty("tasks")
+    @Schema(description = "任务列表", example = "[{\"id\":\"task-001\"}]")
     @Valid
     @Size(max = 65535)
     private List<KnowledgeTaskInfo> tasks = null;

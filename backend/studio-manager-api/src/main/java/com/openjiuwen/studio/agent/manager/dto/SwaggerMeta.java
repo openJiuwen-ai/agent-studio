@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -27,20 +28,24 @@ public class SwaggerMeta implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("root_key")
+    @Schema(description = "根键", example = "root")
     @Length(max = 64)
     private String rootKey = null;
 
     @JsonProperty("origin_list_meta")
+    @Schema(description = "原始列表元数据", example = "[\"item1\"]")
     @Valid
     @Size()
     private List<Object> originListMeta = null;
 
     @JsonProperty("origin_map_meta")
+    @Schema(description = "原始映射元数据", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> originMapMeta = null;
 
     @JsonProperty("origin_xml_meta")
+    @Schema(description = "原始XML元数据", example = "<root></root>")
     private String originXmlMeta = null;
 
     public String getRootKey() {

@@ -20,6 +20,8 @@ import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,12 +34,14 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import java.sql.SQLException;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 
 /**
  * Global exception handler class
  */
 @ControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class ExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ExceptionHandler.class);
 
@@ -63,14 +67,13 @@ public class ExceptionHandler {
     @org.springframework.web.bind.annotation.ExceptionHandler(BindException.class)
     @ResponseBody
     public ResponseEntity<Map<String, String>> handlePeException(BindException exception) {
-        String errMessage = null;
         BindingResult bindingResult = exception.getBindingResult();
-        for (FieldError fieldError : bindingResult.getFieldErrors()) {
-            errMessage = fieldError.getField() + " " + fieldError.getDefaultMessage();
-        }
-        log.error("throw MethodArgumentNotValidException: ", errMessage);
+        String errMessage = bindingResult.getFieldErrors().stream()
+            .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+            .collect(Collectors.joining("; "));
+        log.error("throw BindException: {}", errMessage);
         AgentStudioException peException = new AgentStudioException(StudioError.ARGUMENT_VALID_ERROR);
-        return ResponseModel.failed(String.valueOf(peException.getErrorCode()), peException.getMessage());
+        return ResponseModel.failed(String.valueOf(peException.getErrorCode()), errMessage);
     }
 
     /**

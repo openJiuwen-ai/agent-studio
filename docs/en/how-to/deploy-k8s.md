@@ -263,7 +263,57 @@ kubectl rollout history deployment/studio-manager
 
 ---
 
-## 8. FAQ
+## 8. API Documentation (Swagger UI)
+
+The platform provides a unified environment variable `API_DOCS_ENABLED` to control API documentation for both the management and runtime services.
+
+| Service | Tech Stack | Documentation Coverage |
+|---------|-----------|----------------------|
+| studio-manager | springdoc-openapi | All 49 Controllers' management API endpoints |
+| studio-runtime | FastAPI built-in OpenAPI 3 | All 28 runtime API endpoints |
+
+> **Disabled by default**: API documentation is not enabled by default. Set `API_DOCS_ENABLED=true` to enable as needed.
+
+### Enable
+
+Edit `deploy/k8s/studio-manager.yaml` and `deploy/k8s/studio-runtime.yaml`, uncomment and set to true in the env section:
+
+```yaml
+- name: API_DOCS_ENABLED
+  value: 'true'
+```
+
+Restart Pods to take effect:
+
+```bash
+kubectl rollout restart deployment/studio-manager deployment/studio-runtime
+```
+
+### Access URLs
+
+| Page | URL |
+|------|-----|
+| Manager Swagger UI (interactive) | `http://<MANAGER_IP>:31111/swagger-ui.html` |
+| Manager OpenAPI JSON (import to Postman) | `http://<MANAGER_IP>:31111/v3/api-docs` |
+| Manager — Agent Management group | `http://<MANAGER_IP>:31111/v3/api-docs/agent-management` |
+| Manager — Prompt Engineering group | `http://<MANAGER_IP>:31111/v3/api-docs/prompt-engineering` |
+| Runtime Swagger UI (interactive) | `http://<RUNTIME_IP>:31014/runtime/docs` |
+| Runtime ReDoc (read-only) | `http://<RUNTIME_IP>:31014/runtime/redoc` |
+| Runtime OpenAPI JSON | `http://<RUNTIME_IP>:31014/runtime/openapi.json` |
+
+### Disable
+
+```yaml
+# Change back to false or re-comment the lines
+- name: API_DOCS_ENABLED
+  value: 'false'
+```
+
+> When no longer needed, set `API_DOCS_ENABLED` back to `false` (default).
+
+---
+
+## 9. FAQ
 
 ### Q1: Pod Status is CrashLoopBackOff
 

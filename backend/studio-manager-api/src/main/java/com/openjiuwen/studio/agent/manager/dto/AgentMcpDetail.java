@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,9 +25,11 @@ public class AgentMcpDetail implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("mcp_id")
+    @Schema(description = "MCP服务ID", example = "mcp_001")
     private String mcpId = null;
 
     @JsonProperty("mcp_param")
+    @Schema(description = "MCP参数", example = "{\"key\":\"value\"}")
     private String mcpParam = null;
 
     public String getMcpId() {

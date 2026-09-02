@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
@@ -34,51 +35,68 @@ import java.io.Serializable;
 public class KnowledgeBaseListItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    @Schema(description = "知识库ID", example = "kb-001")
     @Length(max = 64)
     private String knowledgeBaseId = null;
 
+    @Schema(description = "知识库图标", example = "data:image/png;base64,...")
     @Length(max = 1024000)
     private String icon = null;
 
+    @Schema(description = "知识库类型，share-共享，exclusive-专享", example = "share")
     private RepoTypeEnum repoType = null;
 
+    @Schema(description = "知识库来源类型，internal-默认，external-第三方知识库", example = "internal")
     private TypeEnum type = null;
 
+    @Schema(description = "工作空间ID", example = "ws-001")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(max = 64)
     private String workspaceId = null;
 
+    @Schema(description = "知识库可见范围，SELF/GLOBAL/ALL/PARTIAL", example = "SELF")
     private ShareScopeEnum shareScope = null;
 
+    @Schema(description = "外部知识库来源信息", example = "{}")
     @Valid
     private ExternalKnowledgeBaseSource source = null;
 
+    @Schema(description = "知识库名称", example = "产品知识库")
     @Length(max = 64)
     private String name = null;
 
+    @Schema(description = "知识库描述", example = "存储产品相关文档和FAQ")
     @Length(max = 100)
     private String description = null;
 
+    @Schema(description = "知识库状态，OPEN-启用，CLOSE-停用", example = "OPEN")
     private StatusEnum status = null;
 
+    @Schema(description = "创建者用户ID", example = "user-001")
     @Length(max = 100)
     private String createdUserId = null;
 
+    @Schema(description = "创建者用户名", example = "张三")
     @Length(max = 100)
     private String createdUserName = null;
 
+    @Schema(description = "创建时间（毫秒时间戳）", example = "1717200000000")
     @Range(min = 0L, max = 253402214400000L)
     private Long createTime = null;
 
+    @Schema(description = "最后更新者用户ID", example = "user-002")
     @Length(max = 100)
     private String lastUpdateUserId = null;
 
+    @Schema(description = "最后更新者用户名", example = "李四")
     @Length(max = 100)
     private String lastUpdateUserName = null;
 
+    @Schema(description = "更新时间（毫秒时间戳）", example = "1717286400000")
     @Range(min = 0L, max = 253402214400000L)
     private Long updateTime = null;
 
+    @Schema(description = "知识库连接ID", example = "conn-001")
     @Length(max = 64)
     private String knowledgeBaseConnectionId = null;
 

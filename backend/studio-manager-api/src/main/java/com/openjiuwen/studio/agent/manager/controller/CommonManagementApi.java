@@ -50,6 +50,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
         @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
@@ -67,7 +68,9 @@ import java.util.List;
         method = RequestMethod.GET)
     ResponseEntity<Object> systemSettings(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
-    @PathVariable("project_id") String projectId, @NotNull @Size(max = 64) @ApiParam(value = "服务名。", required = true)
+    @PathVariable("project_id") String projectId, @NotNull @Size(max = 64)
+    @Parameter(in = ParameterIn.QUERY, description = "服务名。", required = true, schema = @Schema())
+    @ApiParam(value = "服务名。", required = true)
     @RequestParam(value = "service", required = true) String service);
 
     @ApiOperation(value = "上传头像", nickname = "uploadAvatar",

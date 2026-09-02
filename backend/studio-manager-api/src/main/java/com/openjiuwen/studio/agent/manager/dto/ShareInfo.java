@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,48 +29,63 @@ public class ShareInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "resource-001")
     private String resourceId = null;
 
     @JsonProperty("resource_name")
+    @Schema(description = "资源名称", example = "我的应用")
     private String resourceName = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "app")
     private String resourceType = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     private String workspaceId = null;
 
     @JsonProperty("trace_id")
+    @Schema(description = "链路追踪ID", example = "trace-001")
     private String traceId = null;
 
     @JsonProperty("version_list")
+    @Schema(description = "版本列表", example = "v1.0,v2.0")
     private String versionList = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-001")
     private String projectId = null;
 
     @JsonProperty("tenant_id")
+    @Schema(description = "租户ID", example = "tenant-001")
     private String tenantId = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user-001")
     private String creatorId = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000+08:00")
     private Date createTime = null;
 
     @JsonProperty("updater_id")
+    @Schema(description = "更新者ID", example = "user-002")
     private String updaterId = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "李四")
     private String updater = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2024-01-02T00:00:00.000+08:00")
     private Date updateTime = null;
 
     @JsonProperty("shareScopeEntityList")
+    @Schema(description = "共享范围实体列表", example = "[]")
     @Valid
     @Size()
     private List<ShareScopeEntity> shareScopeEntityList = null;

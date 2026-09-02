@@ -77,9 +77,9 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @NotNull @ApiParam(value = "MCP来源", required = true) @RequestParam(value = "resource", required = true)
+        @NotNull @Parameter(in = ParameterIn.QUERY, description = "MCP来源", required = true, schema = @Schema()) @ApiParam(value = "MCP来源", required = true) @RequestParam(value = "resource", required = true)
         String resource, @NotNull @ApiParam(value = "批量部署请求参数", required = true) @Valid @RequestBody
         McpServiceBatchDeployReq body);
 
@@ -99,7 +99,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建服务参数", required = true) @Valid @RequestBody McpServerDetailReq body);
 
@@ -119,11 +119,11 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @ApiParam(value = "检索语言") @RequestParam(value = "language", required = false) String language,
+        @Parameter(in = ParameterIn.QUERY, description = "检索语言", required = false, schema = @Schema()) @ApiParam(value = "检索语言") @RequestParam(value = "language", required = false) String language,
         @Pattern(regexp = "[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-\\(\\)]*") @Size(max = 255)
-        @ApiParam(value = "数据节点名称") @RequestParam(value = "name", required = false) String name,
+        @Parameter(in = ParameterIn.QUERY, description = "数据节点名称", required = false, schema = @Schema()) @ApiParam(value = "数据节点名称") @RequestParam(value = "name", required = false) String name,
         @NotNull @ApiParam(value = "page_info", required = true) @Valid @RequestBody PageInfoV2 body);
 
     @ApiOperation(value = "删除MCP服务", nickname = "deleteService", notes = "删除MCP服务", response = String.class,
@@ -142,7 +142,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "项目空间id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -163,7 +163,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "服务id", required = true, schema = @Schema())
         @PathVariable("id") String id,
@@ -202,14 +202,14 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @ApiParam(value = "检索语言") @RequestParam(value = "language", required = false) String language,
-        @Size(max = 255) @ApiParam(value = "服务名称") @RequestParam(value = "name", required = false) String name,
-        @ApiParam(value = "部署状态") @RequestParam(value = "fc_instance_status", required = false)
-        String fcInstanceStatus, @ApiParam(value = "MCP节点类型", allowableValues = "DataAcquisition, DataProcess")
+        @Parameter(in = ParameterIn.QUERY, description = "检索语言", required = false, schema = @Schema()) @ApiParam(value = "检索语言") @RequestParam(value = "language", required = false) String language,
+        @Size(max = 255) @Parameter(in = ParameterIn.QUERY, description = "服务名称", required = false, schema = @Schema()) @ApiParam(value = "服务名称") @RequestParam(value = "name", required = false) String name,
+        @Parameter(in = ParameterIn.QUERY, description = "部署状态", required = false, schema = @Schema()) @ApiParam(value = "部署状态") @RequestParam(value = "fc_instance_status", required = false)
+        String fcInstanceStatus, @Parameter(in = ParameterIn.QUERY, description = "MCP节点类型", required = false, schema = @Schema()) @ApiParam(value = "MCP节点类型", allowableValues = "DataAcquisition, DataProcess")
         @RequestParam(value = "node_type", required = false) String nodeType,
-        @ApiParam(value = "MCP节点可见性", allowableValues = "global, workspace")
+        @Parameter(in = ParameterIn.QUERY, description = "MCP节点可见性", required = false, schema = @Schema()) @ApiParam(value = "MCP节点可见性", allowableValues = "global, workspace")
         @RequestParam(value = "visibility", required = false) String visibility,
         @NotNull @ApiParam(value = "page_info", required = true) @Valid @RequestBody PageInfoV2 body);
 
@@ -229,7 +229,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "查询MCP服务列表", nickname = "listServicesWithRuntimeInfo", notes = "查询MCP服务列表",
@@ -249,11 +249,11 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @ApiParam(value = "检索语言") @RequestParam(value = "language", required = false) String language,
+        @Parameter(in = ParameterIn.QUERY, description = "检索语言", required = false, schema = @Schema()) @ApiParam(value = "检索语言") @RequestParam(value = "language", required = false) String language,
         @Pattern(regexp = "[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-\\(\\)]*") @Size(max = 255)
-        @ApiParam(value = "服务名称") @RequestParam(value = "name", required = false) String name,
+        @Parameter(in = ParameterIn.QUERY, description = "服务名称", required = false, schema = @Schema()) @ApiParam(value = "服务名称") @RequestParam(value = "name", required = false) String name,
         @NotNull @ApiParam(value = "page_info", required = true) @Valid @RequestBody PageInfoV2 body);
 
     @ApiOperation(value = "MCP服务评分", nickname = "mcpServerRating", notes = "MCP服务评分", response = Boolean.class,
@@ -272,7 +272,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "mcpServerRatingReq", required = true) @Valid @RequestBody McpServerRatingReq body);
 
@@ -294,7 +294,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "查询MCP服务调用量折线图", nickname = "mcpServicesCesLineChart",
@@ -333,7 +333,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "服务id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -355,7 +355,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody IdListRequest body);
 
     @ApiOperation(value = "查询MCP服务成功率折线图", nickname = "mcpServicesCesSuccessRateLineChart",
@@ -394,7 +394,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "服务id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -416,7 +416,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "服务id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -437,7 +437,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "mcpServiceModifyReq", required = true) @Valid @RequestBody
         McpServiceModifyReq body);
 
@@ -458,9 +458,9 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @NotNull @ApiParam(value = "", required = true) @Valid @RequestParam(value = "ids", required = true)
+        @NotNull @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true) @Valid @RequestParam(value = "ids", required = true)
         List<String> ids);
 
     @ApiOperation(value = "查询MCP服务详情", nickname = "queryServerDetail", notes = "查询MCP服务详情",
@@ -479,7 +479,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "服务id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -500,7 +500,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "项目空间id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -522,7 +522,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "项目空间id", required = true, schema = @Schema())
         @PathVariable("id") String id);
@@ -543,7 +543,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody McpServiceToolsTestReq body);
 
@@ -564,7 +564,7 @@ import java.util.Map;
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("id") String id, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "工具鉴权方式，分为用户级、服务级和IAM方式", required = true) @Valid @RequestBody
         AuthInfo body);

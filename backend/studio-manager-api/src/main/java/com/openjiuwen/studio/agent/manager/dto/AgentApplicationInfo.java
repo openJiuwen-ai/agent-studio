@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,30 +25,39 @@ public class AgentApplicationInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "应用ID", example = "app_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "应用名称", example = "智能客服")
     private String name = null;
 
     @JsonProperty("icon")
+    @Schema(description = "应用图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("description")
+    @Schema(description = "应用描述", example = "智能客服助手")
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "应用类型", example = "chat")
     private String type = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     private String workspaceId = null;
 
     @JsonProperty("workspace_name")
+    @Schema(description = "工作空间名称", example = "我的工作空间")
     private String workspaceName = null;
 
     @JsonProperty("updated_at")
+    @Schema(description = "更新时间", example = "2026-01-01T00:00:00Z")
     private String updatedAt = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白", example = "您好，有什么可以帮助您？")
     private String prologue = null;
 
     public String getId() {

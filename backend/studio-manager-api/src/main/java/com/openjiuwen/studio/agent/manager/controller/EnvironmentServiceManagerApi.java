@@ -86,6 +86,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "环境ID", required = true, schema = @Schema())
         @PathVariable("environment_id") String environmentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody EnvironmentVariables body);
@@ -128,6 +129,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "环境变量ID", required = true, schema = @Schema())
         @PathVariable("env_variable_id") String envVariableId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
@@ -145,6 +147,7 @@ import java.util.List;
         produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ValidationVariablesImport> environmentVariableImportFileValidation(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
@@ -170,6 +173,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "导出参数设置", required = true) @Valid @RequestBody
         EnvironmentVariablesExport body);
@@ -188,6 +192,7 @@ import java.util.List;
         produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<Boolean> importEnvironmentVariable(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
@@ -343,6 +348,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "vpc id", required = true, schema = @Schema())
         @ApiParam(value = "vpc id", required = true) @RequestParam(value = "vpc_id", required = true) String vpcId);
 
     @ApiOperation(value = "查询环境变量", nickname = "showEnvironmentVariables", notes = "查询环境变量",
@@ -363,6 +369,7 @@ import java.util.List;
         @Parameter(in = ParameterIn.PATH, description = "环境ID", required = true, schema = @Schema())
         @PathVariable("environment_id") String environmentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 

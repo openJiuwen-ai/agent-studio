@@ -391,7 +391,11 @@ async def _execute_workflow_run(
 
 
 @app_run_app.post(
-    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}"
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}",
+    summary="工作流对话",
+    description="通过 workflow_id 和 conversation_id 发起工作流对话（流式响应）。"
+                "设置请求头 stream=false 可切换为非流式响应。"
+                "version=latest 时使用最新发布版本的 IR。",
 )
 async def run_workflow_app(
     body: WorkflowAppRunRequest,
@@ -518,7 +522,12 @@ async def _execute_agent_run(
 
 
 @app_run_app.post(
-    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}"
+    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}",
+    summary="智能体对话（单智能体/多智能体）",
+    description="通过 agent_id 和 conversation_id 发起智能体对话。"
+                "支持单智能体（ReAct）和多智能体（Controller），由 IR 文件的 mode 字段自动决定执行模式。"
+                "设置请求头 stream=false 可切换为非流式响应。"
+                "version=latest 时使用最新发布版本的 IR。",
 )
 async def run_agent_app(
     body: AgentAppRunRequest,
@@ -603,7 +612,9 @@ async def _execute_node_run(
 
 
 @app_run_app.post(
-    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/node_execute/{node_id}"
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/node_execute/{node_id}",
+    summary="工作流单节点执行",
+    description="对指定工作流中的单个节点进行独立调试执行，使用开发版 IR（无 version）。",
 )
 async def run_node_execute(
     body: NodeExecuteRequest,

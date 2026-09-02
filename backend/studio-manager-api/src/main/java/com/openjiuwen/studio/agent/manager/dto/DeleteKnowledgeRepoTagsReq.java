@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,6 +26,7 @@ public class DeleteKnowledgeRepoTagsReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tag_name")
+    @Schema(description = "标签名称", example = "示例名称")
     private String tagName = null;
 
     public String getTagName() {

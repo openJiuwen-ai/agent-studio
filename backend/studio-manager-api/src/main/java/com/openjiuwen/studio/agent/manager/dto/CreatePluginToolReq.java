@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -29,66 +30,83 @@ public class CreatePluginToolReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("plugin_id")
+    @Schema(description = "插件ID", example = "my-plugin-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String pluginId = null;
 
     @JsonProperty("tool_display_name")
+    @Schema(description = "工具显示名称", example = "weather_tool")
     @Pattern(regexp = "^[a-zA-Z0-9_]{2,64}$")
     private String toolDisplayName = null;
 
     @JsonProperty("tool_chinese_name")
+    @Schema(description = "工具中文名称", example = "天气查询工具", required = true)
     @NotBlank
     @Length(min = 1, max = 64)
     private String toolChineseName = null;
 
     @JsonProperty("tool_desc")
+    @Schema(description = "工具描述", example = "查询指定城市的天气信息")
     @Length(min = 1, max = 600)
     private String toolDesc = null;
 
     @JsonProperty("call_mode")
+    @Schema(description = "调用模式", example = "sync")
     private String callMode = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-weather")
     private String icon = null;
 
     @JsonProperty("request_info")
+    @Schema(description = "请求信息", example = "请求配置信息")
     @Valid
     private RequestInfo requestInfo = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "认证配置信息")
     @Valid
     private AuthInfo authInfo = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见性", example = "private")
     @Length(max = 32)
     private String visibility = null;
 
     @JsonProperty("intf_type")
+    @Schema(description = "接口类型", example = "REST")
     private String intfType = null;
 
     @JsonProperty("input_schema")
+    @Schema(description = "输入参数Schema", example = "输入参数JSON Schema")
     @Length(max = 200000)
     private String inputSchema = null;
 
     @JsonProperty("is_input_list")
+    @Schema(description = "是否为输入列表", example = "false")
     private Boolean isInputList = false;
 
     @JsonProperty("output_schema")
+    @Schema(description = "输出参数Schema", example = "输出参数JSON Schema")
     @Length(max = 200000)
     private String outputSchema = null;
 
     @JsonProperty("is_output_list")
+    @Schema(description = "是否为输出列表", example = "false")
     private Boolean isOutputList = false;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "元数据信息")
     @Length(max = 4096)
     private String metadata = null;
 
     @JsonProperty("auth_required")
+    @Schema(description = "是否需要认证", example = "false")
     private Boolean authRequired = false;
 
     @JsonProperty("test_status")
+    @Schema(description = "测试状态", example = "passed")
     private String testStatus = null;
 
     public String getPluginId() {

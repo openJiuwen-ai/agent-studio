@@ -13,6 +13,9 @@ import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -39,9 +42,13 @@ import org.springframework.web.bind.annotation.RequestParam;
     @RequestMapping(value = "/v1/open/developer/agent-manager/agents/exist/published", produces = {"application/json"},
         method = RequestMethod.GET)
     ResponseEntity<Boolean> existPublishedAgent(
-        @NotNull @Size(min = 1, max = 256) @ApiParam(value = "账号id", required = true)
+        @NotNull @Size(min = 1, max = 256)
+        @Parameter(in = ParameterIn.QUERY, description = "账号id", required = true, schema = @Schema())
+        @ApiParam(value = "账号id", required = true)
         @RequestParam(value = "domainId", required = true) String domainId,
-        @NotNull @ApiParam(value = "发布时间", required = true) @RequestParam(value = "publishedDate", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "发布时间", required = true, schema = @Schema())
+        @ApiParam(value = "发布时间", required = true) @RequestParam(value = "publishedDate", required = true)
         Long publishedDate);
 
     @ApiOperation(value = "获取agent列表", nickname = "listDeveloperAgents", notes = "获取agent列表",

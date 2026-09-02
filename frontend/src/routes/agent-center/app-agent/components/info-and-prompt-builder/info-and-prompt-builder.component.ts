@@ -183,6 +183,7 @@ export class InfoAndPromptBuilderComponent implements OnInit {
     this.groupFormControl = fb.group({
       name: new FormControl("", [
         Validators.required,
+        Validators.maxLength(64),
         CommonValidation.wfNameVerify(
           this.i18n.transform("variable_validator5")
         )

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,12 +25,15 @@ public class VoiceInteraction implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("language")
+    @Schema(description = "语音识别语言代码，如 zh-CN、en-US", example = "zh-CN")
     private String language = null;
 
     @JsonProperty("timbre")
+    @Schema(description = "语音合成音色名称", example = "female-default")
     private String timbre = null;
 
     @JsonProperty("domain")
+    @Schema(description = "语音交互领域标识", example = "general")
     private String domain = null;
 
     public String getLanguage() {

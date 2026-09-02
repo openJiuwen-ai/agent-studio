@@ -73,7 +73,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "创建工具请求体", required = true) @Valid @RequestBody
         BatchCreatePluginToolReq body);
 
@@ -93,7 +93,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建插件请求体", required = true) @Valid @RequestBody CreatePluginToolReq body);
 
@@ -113,7 +113,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建工具请求体", required = true) @Valid @RequestBody CreatePluginToolReq body);
 
@@ -133,11 +133,11 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id。", required = true, schema = @Schema()) @ApiParam(value = "项目空间id。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "插件ID。", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
-        @NotNull @ApiParam(value = "工具ID。", required = true) @RequestParam(value = "tool_id", required = true)
+        @NotNull @Parameter(in = ParameterIn.QUERY, description = "工具ID。", required = true, schema = @Schema()) @ApiParam(value = "工具ID。", required = true) @RequestParam(value = "tool_id", required = true)
         String toolId);
 
     @ApiOperation(value = "删除一个插件", nickname = "deletePlugin",
@@ -159,7 +159,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "根据工具id和版本id进行版本还原", nickname = "updatePluginVersionByVersionId",
@@ -183,7 +183,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "插件版本id", required = true, schema = @Schema())
         @PathVariable("version_id") String versionId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除一个工具版本定义", nickname = "deletePluginVersion", notes = "删除一个工具版本定义",
@@ -206,7 +206,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除一个工具", nickname = "deleteTool",
@@ -226,12 +226,12 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "插件id", required = true) @RequestParam(value = "plugin_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "插件id", required = true, schema = @Schema()) @ApiParam(value = "插件id", required = true) @RequestParam(value = "plugin_id", required = true)
         String pluginId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "导出插件", nickname = "exportplugins", notes = "导出插件", response = Resource.class,
@@ -250,7 +250,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "导出参数设置", required = true) @Valid @RequestBody ExportParams body);
 
@@ -289,7 +289,7 @@ import org.springframework.web.multipart.MultipartFile;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/plugins/import", produces = {"application/json"},
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ImportRsp> importplugins(@NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
@@ -315,9 +315,9 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("domain_id") String domainId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "预置插件ID", required = true) @RequestParam(value = "plugin_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "预置插件ID", required = true, schema = @Schema()) @ApiParam(value = "预置插件ID", required = true) @RequestParam(value = "plugin_id", required = true)
         String pluginId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "查询工具版本列表", nickname = "listPluginVersions", notes = "查询工具版本列表",
@@ -338,7 +338,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取插件列表", nickname = "listPlugins", notes = "获取插件列表",
@@ -391,7 +391,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
@@ -413,7 +413,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
@@ -435,7 +435,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ParsePluginReq body);
 
     @ApiOperation(value = "发布一个工具版本", nickname = "releasePluginVersion", notes = "发布一个工具版本",
@@ -452,7 +452,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "版本创建信息") @Valid @RequestBody(required = false) CreateVersionReq body);
 
@@ -474,7 +474,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "更新插件鉴权信息", nickname = "updatePluginAuthInfo",
@@ -494,7 +494,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "插件id", required = true, schema = @Schema())
         @PathVariable("plugin_id") String pluginId,

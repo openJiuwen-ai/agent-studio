@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -22,43 +23,55 @@ public class ErrorEvent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node_001")
     @Length(max = 128)
     private String nodeId = null;
 
     @JsonProperty("node_type")
+    @Schema(description = "节点类型", example = "llm")
     @Length(max = 32)
     private String nodeType = null;
 
     @JsonProperty("node_name")
+    @Schema(description = "节点名称", example = "LLM节点")
     @Length(max = 64)
     private String nodeName = null;
 
     @JsonProperty("code")
+    @Schema(description = "错误码", example = "500")
     private String code = null;
 
     @JsonProperty("message")
+    @Schema(description = "错误消息", example = "内部错误")
     private String message = null;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String workflowId = null;
 
     @JsonProperty("workflow_name")
+    @Schema(description = "工作流名称", example = "我的工作流")
     private String workflowName = null;
 
     @JsonProperty("parent_workflow_id")
+    @Schema(description = "父工作流ID", example = "wf_parent_001")
     @Length(max = 32)
     private String parentWorkflowId = null;
 
     @JsonProperty("error_msg")
+    @Schema(description = "错误信息", example = "执行失败")
     private String errorMsg = null;
 
     @JsonProperty("error_reason")
+    @Schema(description = "错误原因", example = "网络超时")
     private String errorReason = null;
 
     @JsonProperty("error_suggestion")
+    @Schema(description = "错误建议", example = "请重试")
     private String errorSuggestion = null;
 
     @JsonProperty("error_code")
+    @Schema(description = "错误代码", example = "ERR_TIMEOUT")
     private String errorCode = null;
 
     public String getNodeId() {

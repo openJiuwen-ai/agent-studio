@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.Pattern;
 
@@ -23,40 +24,51 @@ public class ProviderAuthConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("metadata_id")
+    @Schema(description = "元数据ID", example = "meta_001")
     private String metadataId = null;
 
     @JsonProperty("auth_type")
+    @Schema(description = "认证类型", example = "API_KEY")
     private String authType = null;
 
     @JsonProperty("auth_id")
+    @Schema(description = "认证ID", example = "auth_001")
     private String authId = null;
 
     @JsonProperty("model_names")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\/:|\\ -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String modelNames = null;
 
     @JsonProperty("provider_id")
+    @Schema(description = "供应商ID", example = "provider_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String providerId = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     private String authInfo = null;
 
     @JsonProperty("auth_url")
+    @Schema(description = "认证URL", example = "https://example.com/auth")
     private String authUrl = null;
 
     @JsonProperty("is_record")
+    @Schema(description = "是否记录", example = "true")
     private Boolean isRecord = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域ID", example = "domain_001")
     private String domainId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String workspaceId = null;
 

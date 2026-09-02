@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -24,10 +26,12 @@ public class WorkflowBranch implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "ID", example = "example-id-123")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("boolExpression")
+    @Schema(description = "boolexpression", example = "{}")
     @Valid
     private WorkflowBranchBoolExpression boolExpression = null;
 

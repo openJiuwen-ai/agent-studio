@@ -263,7 +263,57 @@ kubectl rollout history deployment/studio-manager
 
 ---
 
-## 八、常见问题
+## 八、API 文档（Swagger UI）
+
+平台提供统一的环境变量 `API_DOCS_ENABLED` 控制管理面和运行面的 API 文档开关。
+
+| 服务 | 技术栈 | 文档覆盖 |
+|------|--------|---------|
+| studio-manager | springdoc-openapi | 49 个 Controller 的全部管理面接口 |
+| studio-runtime | FastAPI 原生 OpenAPI 3 | 28 个运行面接口 |
+
+> **默认关闭**：API 文档默认不开启，按需设置 `API_DOCS_ENABLED=true` 即可开启。
+
+### 开启方式
+
+编辑 `deploy/k8s/studio-manager.yaml` 和 `deploy/k8s/studio-runtime.yaml`，在 env 段取消注释并设为 true：
+
+```yaml
+- name: API_DOCS_ENABLED
+  value: 'true'
+```
+
+重启 Pod 生效：
+
+```bash
+kubectl rollout restart deployment/studio-manager deployment/studio-runtime
+```
+
+### 访问地址
+
+| 页面 | 地址 |
+|------|------|
+| 管理面 Swagger UI（可交互调试） | `http://<MANAGER_IP>:31111/swagger-ui.html` |
+| 管理面 OpenAPI JSON（可导入 Postman） | `http://<MANAGER_IP>:31111/v3/api-docs` |
+| 管理面 — 智能体管理分组 | `http://<MANAGER_IP>:31111/v3/api-docs/agent-management` |
+| 管理面 — 提示词工程分组 | `http://<MANAGER_IP>:31111/v3/api-docs/prompt-engineering` |
+| 运行面 Swagger UI（可交互调试） | `http://<RUNTIME_IP>:31014/runtime/docs` |
+| 运行面 ReDoc（只读文档） | `http://<RUNTIME_IP>:31014/runtime/redoc` |
+| 运行面 OpenAPI JSON | `http://<RUNTIME_IP>:31014/runtime/openapi.json` |
+
+### 关闭
+
+```yaml
+# 改回 false 或重新注释掉
+- name: API_DOCS_ENABLED
+  value: 'false'
+```
+
+> 不再需要时建议将 `API_DOCS_ENABLED` 改回 `false`（默认值）。
+
+---
+
+## 九、常见问题
 
 ### Q1: Pod 状态为 CrashLoopBackOff
 

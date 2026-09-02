@@ -46,7 +46,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.GET)
     ResponseEntity<ResourceUsageDetails> resourceUsageDetails(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-    @PathVariable("project_id") String projectId, @NotNull @Size(max = 64) @ApiParam(value = "", required = true)
+    @PathVariable("project_id") String projectId, @NotNull @Size(max = 64)
+    @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+    @ApiParam(value = "", required = true)
     @RequestParam(value = "resourceType", required = true) String resourceType);
 
 }

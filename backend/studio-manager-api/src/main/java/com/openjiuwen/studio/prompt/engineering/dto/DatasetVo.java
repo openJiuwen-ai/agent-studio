@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -25,24 +26,31 @@ public class DatasetVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("dataset_id")
+    @Schema(description = "数据集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String datasetId = null;
 
     @JsonProperty("dataset_name")
+    @Schema(description = "数据集名称", example = "示例名称")
     private String datasetName = null;
 
     @JsonProperty("dataset_type")
+    @Schema(description = "数据集类型", example = "TEXT")
     private String datasetType = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String projectId = null;
 
     @JsonProperty("obs_path")
+    @Schema(description = "OBS路径", example = "obs://bucket/path")
     private String obsPath = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private Date createTime = null;
 
     public String getDatasetId() {

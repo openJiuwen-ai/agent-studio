@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -25,19 +26,23 @@ public class CreateDatasetReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("dataset_name")
+    @Schema(description = "数据集名称", example = "示例名称", required = true)
     @Pattern(regexp = "(^$)|^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,30}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     @NotBlank
     private String datasetName = null;
 
     @JsonProperty("dataset_type")
+    @Schema(description = "数据集类型", example = "TEXT", required = true)
     @NotBlank
     private String datasetType = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("obs_path")
+    @Schema(description = "OBS路径", example = "obs://bucket/path", required = true)
     @NotBlank
     private String obsPath = null;
 

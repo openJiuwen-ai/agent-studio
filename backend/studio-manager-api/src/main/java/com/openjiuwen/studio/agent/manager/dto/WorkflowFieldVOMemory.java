@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -24,23 +25,29 @@ public class WorkflowFieldVOMemory implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "字段名称", example = "userMemory", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("aging_level")
+    @Schema(description = "老化级别", example = "short_term")
     private String agingLevel = null;
 
     @JsonProperty("storage_method")
+    @Schema(description = "存储方式", example = "kv")
     private String storageMethod = null;
 
     @JsonProperty("default_value")
+    @Schema(description = "默认值", example = "null")
     @Valid
     private Object defaultValue = null;
 
     @JsonProperty("description")
+    @Schema(description = "字段描述", example = "用户对话记忆字段")
     private String description = null;
 
     @JsonProperty("value")
+    @Schema(description = "字段值", example = "{\"type\":\"literal\",\"content\":\"hello\"}")
     @Valid
     private WorkflowFieldVOValue value = null;
 

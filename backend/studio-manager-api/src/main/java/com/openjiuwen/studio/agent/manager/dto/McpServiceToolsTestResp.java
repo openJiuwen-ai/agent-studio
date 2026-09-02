@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,9 +29,11 @@ public class McpServiceToolsTestResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("isError")
+    @Schema(description = "is错误", example = "true")
     private Boolean isError = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "[]")
     @Valid
     @Size()
     private List<Object> content = null;

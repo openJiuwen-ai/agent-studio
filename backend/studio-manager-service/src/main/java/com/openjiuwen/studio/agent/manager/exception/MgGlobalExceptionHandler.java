@@ -40,6 +40,7 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -103,20 +104,24 @@ public class MgGlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
-        String errMessage = null;
-
-        // 获取校验异常参数
         BindingResult bindingResult = exception.getBindingResult();
-        for (FieldError fieldError : bindingResult.getFieldErrors()) {
-            errMessage = fieldError.getField() + fieldError.getDefaultMessage();
-        }
-        log.error("throw MethodArgumentNotValidException", exception);
+
+        String errMessage = bindingResult.getFieldErrors().stream()
+            .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+            .collect(Collectors.joining("; "));
+
+        List<ErrorDetail> details = bindingResult.getFieldErrors().stream()
+            .map(fe -> new ErrorDetail().setErrorMsg(fe.getField() + ": " + fe.getDefaultMessage()))
+            .collect(Collectors.toList());
+
+        log.error("throw MethodArgumentNotValidException: {}", errMessage);
         StudioError errorInfo = StudioError.METHOD_ARGUMENT_NOT_VALID;
-        String code = "openjiuwen." + errorInfo.getModule().getSubCode() + errorInfo.getCode();
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(code)
-            .setErrorMsg(errMessage).setErrorReason(i18nUtil.getMessage(errorInfo)).setErrorSuggestion(i18nUtil.getSuggestion(errorInfo));
-        return new ResponseEntity<>(errorRsp,
-            ResponseModel.num2HttpStatus(Integer.toString(exception.getStatusCode().value())));
+        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(errMessage)
+            .setErrorReason(i18nUtil.getMessage(errorInfo))
+            .setErrorSuggestion(i18nUtil.getSuggestion(errorInfo))
+            .setDetails(details);
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -125,21 +130,27 @@ public class MgGlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleConstraintViolationException(ConstraintViolationException exception) {
-        StringBuilder errMsg = new StringBuilder();
-        for (ConstraintViolation<?> violation : exception.getConstraintViolations()) {
-            String paramName = violation.getPropertyPath().toString();
-            if (paramName.contains(".")) {
-                paramName = paramName.substring(paramName.lastIndexOf('.') + 1);
-            }
-            errMsg.append(paramName).append(violation.getMessage()).append("; ");
-        }
+        List<ErrorDetail> details = exception.getConstraintViolations().stream()
+            .map(violation -> {
+                String paramName = violation.getPropertyPath().toString();
+                if (paramName.contains(".")) {
+                    paramName = paramName.substring(paramName.lastIndexOf('.') + 1);
+                }
+                return new ErrorDetail().setErrorMsg(paramName + ": " + violation.getMessage());
+            })
+            .collect(Collectors.toList());
+
+        String errMsg = details.stream()
+            .map(ErrorDetail::getErrorMsg)
+            .collect(Collectors.joining("; "));
+
         log.error("throw ConstraintViolationException: {}", errMsg);
         StudioError errorInfo = StudioError.METHOD_ARGUMENT_NOT_VALID;
-        String code = "openjiuwen." + errorInfo.getModule().getSubCode() + errorInfo.getCode();
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(code)
-            .setErrorMsg(errMsg.toString())
+        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(errMsg)
             .setErrorReason(i18nUtil.getMessage(errorInfo))
-            .setErrorSuggestion(i18nUtil.getSuggestion(errorInfo));
+            .setErrorSuggestion(i18nUtil.getSuggestion(errorInfo))
+            .setDetails(details);
         return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 

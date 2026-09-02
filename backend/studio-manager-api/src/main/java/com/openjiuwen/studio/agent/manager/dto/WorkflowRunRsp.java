@@ -9,6 +9,7 @@ import com.openjiuwen.studio.agent.common.dto.agent.NodeRunInfo;
 
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -34,35 +35,43 @@ public class WorkflowRunRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("session_id")
+    @Schema(description = "会话ID", example = "session_001")
     private String sessionId = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出结果", example = "{}", required = true)
     @Valid
     @NotNull
     @Size()
     private Map<String, Object> outputs = new HashMap<String, Object>();
 
     @JsonProperty("error_message")
+    @Schema(description = "错误信息", example = "执行失败")
     @Length(max = 4096)
     private String errorMessage = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> metadata = null;
 
     @JsonProperty("status")
+    @Schema(description = "执行状态", example = "SUCCESS")
     @Valid
     private Status status = null;
 
     @JsonProperty("start_time")
+    @Schema(description = "开始时间", example = "1700000000000", required = true)
     @NotNull
     private Long startTime = null;
 
     @JsonProperty("end_time")
+    @Schema(description = "结束时间", example = "1700000001000")
     private Long endTime = null;
 
     @JsonProperty("node_info")
+    @Schema(description = "节点运行信息", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,19 +26,24 @@ public class SkillReference implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("skill_id")
+    @Schema(description = "技能ID", example = "skill_001")
     private String skillId = null;
 
     @JsonProperty("skill_name")
+    @Schema(description = "技能名称", example = "天气查询")
     private String skillName = null;
 
     @JsonProperty("description")
+    @Schema(description = "技能描述", example = "查询指定城市的天气信息")
     @Length(min = 1, max = 1024)
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "技能图标", example = "icon_url")
     private String icon = null;
 
     @JsonProperty("last_version_id")
+    @Schema(description = "最新版本ID", example = "v1.0.0")
     private String lastVersionId = null;
 
     public String getSkillId() {

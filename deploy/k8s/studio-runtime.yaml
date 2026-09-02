@@ -145,6 +145,9 @@ spec:
             - name: MEMORY_LLM_API_KEY
               value: ''
             # ======== [选填] 其他配置 ========
+            # API 文档（Swagger UI / OpenAPI JSON），默认 false 关闭，本地开发设 true 开启
+            # - name: API_DOCS_ENABLED
+            #   value: 'false'
             # Uvicorn worker 数量，未设置时默认 1
             - name: GUNICORN_WORK_NUM
               value: '1'

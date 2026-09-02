@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,63 +29,82 @@ public class McpServiceToolsEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "MCP服务ID", example = "mcp-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "天气查询服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "WeatherService")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供天气查询功能")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "Weather query service")
     private String descriptionEn = null;
 
     @JsonProperty("fcInstanceUrl")
+    @Schema(description = "函数计算实例URL", example = "https://example.com/fc-instance")
     private String fcInstanceUrl = null;
 
     @JsonProperty("fcInstanceStatus")
+    @Schema(description = "函数计算实例状态", example = "RUNNING")
     private String fcInstanceStatus = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-url")
     private String icon = null;
 
     @JsonProperty("uniqueCode")
+    @Schema(description = "唯一编码", example = "UNIQUE_001")
     private String uniqueCode = null;
 
     @JsonProperty("projectId")
+    @Schema(description = "项目ID", example = "project-001")
     private String projectId = null;
 
     @JsonProperty("workspaceId")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     private String workspaceId = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具列表", example = "[]")
     @Valid
     @Size()
     private List<McpServiceToolEntity> tools = null;
 
     @JsonProperty("deployType")
+    @Schema(description = "部署类型", example = "FC")
     private String deployType = null;
 
     @JsonProperty("createdByUserId")
+    @Schema(description = "创建者用户ID", example = "user-001")
     private String createdByUserId = null;
 
     @JsonProperty("tenant_id")
+    @Schema(description = "租户ID", example = "tenant-001")
     private String tenantId = null;
 
     @JsonProperty("last_updated_by_user_id")
+    @Schema(description = "最后更新者用户ID", example = "user-002")
     private String lastUpdatedByUserId = null;
 
     @JsonProperty("deleted")
+    @Schema(description = "是否删除", example = "false")
     private Boolean deleted = false;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "1700000001000")
     private Long lastUpdatedDate = null;
 
     public String getId() {

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -30,49 +31,61 @@ public class MemoryRepoListItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("memory_repo_id")
+    @Schema(description = "记忆库ID", example = "mem_001")
     @Length(max = 64)
     private String memoryRepoId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("name")
+    @Schema(description = "记忆库名称", example = "我的记忆库")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "用于存储用户记忆")
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("long_term_memory_strategies")
+    @Schema(description = "长期记忆策略列表", example = "[]")
     @Valid
     @Size(max = 200)
     private List<LongTermMemoryStrategy> longTermMemoryStrategies = null;
 
     @JsonProperty("created_user_id")
+    @Schema(description = "创建者用户ID", example = "user_001")
     @Length(max = 100)
     private String createdUserId = null;
 
     @JsonProperty("created_user_name")
+    @Schema(description = "创建者用户名", example = "张三")
     @Length(max = 100)
     private String createdUserName = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00Z")
     private Date createTime = null;
 
     @JsonProperty("last_update_user_id")
+    @Schema(description = "最后更新者用户ID", example = "user_002")
     @Length(max = 100)
     private String lastUpdateUserId = null;
 
     @JsonProperty("last_update_user_name")
+    @Schema(description = "最后更新者用户名", example = "李四")
     @Length(max = 100)
     private String lastUpdateUserName = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2024-01-02T00:00:00Z")
     private Date updateTime = null;
 
     public String getMemoryRepoId() {

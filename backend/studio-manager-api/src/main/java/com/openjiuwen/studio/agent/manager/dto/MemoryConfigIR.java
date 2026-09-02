@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -25,18 +26,22 @@ public class MemoryConfigIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("memory_repo_id")
+    @Schema(description = "记忆库ID", example = "memory-repo-001")
     private String memoryRepoId = null;
 
     @JsonProperty("extract_config")
+    @Schema(description = "提取触发配置", example = "{\"max_chat_turn\":10,\"time_window\":3600}")
     private ExtractConfig extractConfig = null;
 
     @JsonProperty("strategies")
+    @Schema(description = "长期记忆策略列表", example = "[{\"type\":\"summary\"}]")
     private List<LongTermMemoryStrategy> strategies = null;
 
     /**
      * 是否启用 LLM 节点的记忆注入。绑定记忆库时应置 true。
      */
     @JsonProperty("enable")
+    @Schema(description = "是否启用记忆注入", example = "true")
     private Boolean enable = null;
 
     public String getMemoryRepoId() {
@@ -121,9 +126,11 @@ public class MemoryConfigIR implements Serializable {
         private static final long serialVersionUID = 1L;
 
         @JsonProperty("max_chat_turn")
+        @Schema(description = "最大对话轮次", example = "10")
         private Integer maxChatTurn = null;
 
         @JsonProperty("time_window")
+        @Schema(description = "时间窗口（秒）", example = "3600")
         private Integer timeWindow = null;
 
         public Integer getMaxChatTurn() {

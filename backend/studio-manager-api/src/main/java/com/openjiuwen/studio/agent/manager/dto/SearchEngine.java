@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,18 +26,22 @@ public class SearchEngine implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "搜索引擎ID", example = "engine_001")
     @Length(max = 1000)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "搜索引擎名称", example = "Google")
     @Length(max = 500)
     private String name = null;
 
     @JsonProperty("url")
+    @Schema(description = "搜索引擎URL", example = "https://www.google.com")
     @Length(max = 1000)
     private String url = null;
 
     @JsonProperty("extension")
+    @Schema(description = "搜索引擎扩展配置", example = "search_ext")
     @Length(max = 1000)
     private String extension = null;
 

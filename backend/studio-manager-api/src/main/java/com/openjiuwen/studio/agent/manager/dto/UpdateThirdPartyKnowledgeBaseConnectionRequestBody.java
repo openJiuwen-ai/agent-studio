@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openjiuwen.studio.agent.common.annotation.ValidKnowledgeBaseName;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,18 +30,22 @@ public class UpdateThirdPartyKnowledgeBaseConnectionRequestBody implements Seria
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "知识库名称", example = "我的知识库")
     @ValidKnowledgeBaseName
     @Length(max = 50)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "知识库描述", example = "这是一个第三方知识库")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "知识库图标", example = "icon-default")
     private String icon = null;
 
     @JsonProperty("params")
+    @Schema(description = "连接参数列表", example = "[]")
     @Valid
     @Size()
     private List<ConnectionParamInfo> params = null;

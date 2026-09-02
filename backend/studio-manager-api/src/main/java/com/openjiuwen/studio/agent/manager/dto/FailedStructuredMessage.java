@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,25 +30,31 @@ public class FailedStructuredMessage implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "消息ID", example = "msg-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "消息名称", example = "用户问候消息")
     private String name = null;
 
     @JsonProperty("category")
+    @Schema(description = "消息分类", example = "greeting")
     @Length(max = 64)
     private String category = null;
 
     @JsonProperty("content")
+    @Schema(description = "消息内容", example = "{\"text\":\"你好\"}")
     @Valid
     @Size()
     private Map<String, Object> content = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "消息可见性", example = "public")
     private String visibility = null;
 
     @JsonProperty("reason")
+    @Schema(description = "导入失败原因", example = "字段格式不正确")
     private String reason = null;
 
     public String getId() {

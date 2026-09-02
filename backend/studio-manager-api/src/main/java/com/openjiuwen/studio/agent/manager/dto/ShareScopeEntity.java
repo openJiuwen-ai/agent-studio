@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,21 +22,27 @@ public class ShareScopeEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "共享范围ID", example = "scope-001")
     private String id = null;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res-001")
     private String resourceId = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "workflow")
     private String resourceType = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws-001")
     private String workspaceId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj-001")
     private String projectId = null;
 
     @JsonProperty("tenant_id")
+    @Schema(description = "租户ID", example = "tenant-001")
     private String tenantId = null;
 
     public String getId() {

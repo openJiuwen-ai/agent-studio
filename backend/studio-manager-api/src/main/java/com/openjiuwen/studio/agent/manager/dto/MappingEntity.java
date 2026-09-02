@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -25,60 +26,79 @@ public class MappingEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("mapping_id")
+    @Schema(description = "映射ID", example = "map-001")
     private String mappingId = null;
 
     @JsonProperty("app_id")
+    @Schema(description = "应用ID", example = "app-001")
     private String appId = null;
 
     @JsonProperty("app_version")
+    @Schema(description = "应用版本", example = "1.0.0")
     private String appVersion = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "agent")
     private String appType = null;
 
     @JsonProperty("app_name")
+    @Schema(description = "应用名称", example = "智能助手")
     private String appName = null;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res-001")
     private String resourceId = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "tool")
     private String resourceType = null;
 
     @JsonProperty("resource_name")
+    @Schema(description = "资源名称", example = "搜索工具")
     private String resourceName = null;
 
     @JsonProperty("resource_version")
+    @Schema(description = "资源版本", example = "2.0.0")
     private String resourceVersion = null;
 
     @JsonProperty("resource_desc")
+    @Schema(description = "资源描述", example = "用于搜索的工具资源")
     private String resourceDesc = null;
 
     @JsonProperty("valid")
+    @Schema(description = "是否有效", example = "true")
     private Boolean valid = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date createdOn = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2026-01-02T00:00:00.000+08:00")
     private Date updatedOn = null;
 
     @JsonProperty("app_name_zh")
+    @Schema(description = "应用中文名称", example = "智能助手")
     private String appNameZh = null;
 
     @JsonProperty("reference_type")
+    @Schema(description = "引用类型", example = "direct")
     private String referenceType = null;
 
     @JsonProperty("app_workspace_id")
+    @Schema(description = "应用所属工作空间ID", example = "ws-app-001")
     private String appWorkspaceId = null;
 
     @JsonProperty("resource_workspace_id")
+    @Schema(description = "资源所属工作空间ID", example = "ws-res-001")
     private String resourceWorkspaceId = null;
 
     @JsonProperty("extends")
+    @Schema(description = "扩展信息", example = "ext-data")
     private String _extends = null;
 
     @JsonProperty("sub_type")
+    @Schema(description = "子类型", example = "chat")
     private String subType = null;
 
     public String getMappingId() {

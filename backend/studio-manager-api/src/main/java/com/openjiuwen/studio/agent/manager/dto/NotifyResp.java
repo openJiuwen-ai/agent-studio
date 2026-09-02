@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -22,22 +23,27 @@ public class NotifyResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("res_code")
+    @Schema(description = "响应码", example = "0")
     @Length(max = 64)
     private String resCode = null;
 
     @JsonProperty("res_msg")
+    @Schema(description = "响应消息", example = "success")
     @Length(max = 64)
     private String resMsg = null;
 
     @JsonProperty("result")
+    @Schema(description = "结果", example = "success")
     @Length(max = 64)
     private String result = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "success")
     @Length(max = 64)
     private String status = null;
 
     @JsonProperty("module_name")
+    @Schema(description = "模块名称", example = "module-1")
     @Length(max = 64)
     private String moduleName = null;
 

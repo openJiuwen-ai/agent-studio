@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,20 +28,25 @@ public class ListAppRelationsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("version")
+    @Schema(description = "版本号", example = "1.0.0")
     @Length(max = 64)
     private String version = null;
 
     @JsonProperty("showlatest")
+    @Schema(description = "是否展示最新版本", example = "true")
     private Boolean showlatest = null;
 
     @JsonProperty("resourceType")
+    @Schema(description = "资源类型", example = "plugin")
     @Length(max = 20)
     private String resourceType = null;
 
     @JsonProperty("nestedCheck")
+    @Schema(description = "是否嵌套检查", example = "false")
     private Boolean nestedCheck = false;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)

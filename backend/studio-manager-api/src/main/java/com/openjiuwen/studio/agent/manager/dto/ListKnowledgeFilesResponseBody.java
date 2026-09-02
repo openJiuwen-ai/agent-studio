@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,10 +30,12 @@ public class ListKnowledgeFilesResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10")
     @Range(min = 0L, max = 65535L)
     private Integer count = null;
 
     @JsonProperty("file_info_list")
+    @Schema(description = "文件", example = "[]")
     @Valid
     @Size(max = 1000)
     private List<FileInfo> fileInfoList = null;

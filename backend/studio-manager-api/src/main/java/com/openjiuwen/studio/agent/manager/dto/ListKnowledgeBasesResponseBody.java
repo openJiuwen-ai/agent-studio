@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -26,10 +28,12 @@ public class ListKnowledgeBasesResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("total")
+    @Schema(description = "总数", example = "1")
     @Range(min = 0L, max = 10000L)
     private Long total = null;
 
     @JsonProperty("items")
+    @Schema(description = "items", example = "[]")
     @Valid
     @Size(max = 200)
     private List<KnowledgeBaseListItem> items = null;

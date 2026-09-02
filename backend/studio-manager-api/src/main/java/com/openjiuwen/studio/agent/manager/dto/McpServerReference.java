@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,29 +29,37 @@ public class McpServerReference implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("mcp_server_id")
+    @Schema(description = "MCP服务ID", example = "mcp_server_001")
     private String mcpServerId = null;
 
     @JsonProperty("mcp_server_name")
+    @Schema(description = "MCP服务名称", example = "文件检索服务")
     private String mcpServerName = null;
 
     @JsonProperty("mcp_server_icon")
+    @Schema(description = "MCP服务图标", example = "icon-url-001")
     private String mcpServerIcon = null;
 
     @JsonProperty("valid")
+    @Schema(description = "是否有效", example = "true")
     private Boolean valid = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述信息", example = "这是一个MCP服务")
     private String desc = null;
 
     @JsonProperty("mcp_choose_tools")
+    @Schema(description = "已选工具列表", example = "[\"tool1\",\"tool2\"]")
     @Valid
     @Size()
     private List<@Length() String> mcpChooseTools = null;
 
     @JsonProperty("tools_num")
+    @Schema(description = "工具数量", example = "5")
     private Integer toolsNum = null;
 
     @JsonProperty("mcp_parameter")
+    @Schema(description = "MCP参数", example = "{\"key\":\"value\"}")
     private String mcpParameter = null;
 
     public String getMcpServerId() {

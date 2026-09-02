@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,28 +26,36 @@ public class WorkflowReference implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String workflowId = null;
 
     @JsonProperty("workflow_name")
+    @Schema(description = "工作流名称", example = "审批流程")
     private String workflowName = null;
 
     @JsonProperty("code")
+    @Schema(description = "编码", example = "workflow_001")
     private String code = null;
 
     @JsonProperty("workflow_icon")
+    @Schema(description = "工作流图标", example = "icon.png")
     private String workflowIcon = null;
 
     @JsonProperty("workflow_parameter")
+    @Schema(description = "工作流参数", example = "{}")
     private String workflowParameter = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "这是一个工作流")
     @Length(min = 1, max = 256)
     private String desc = null;
 
     @JsonProperty("last_version_id")
+    @Schema(description = "最新版本ID", example = "v1")
     private String lastVersionId = null;
 
     @JsonProperty("last_version_name")
+    @Schema(description = "最新版本名称", example = "v1.0.0")
     private String lastVersionName = null;
 
     public String getWorkflowId() {

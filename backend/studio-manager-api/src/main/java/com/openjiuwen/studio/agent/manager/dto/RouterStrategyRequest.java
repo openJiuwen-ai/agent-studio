@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -28,28 +29,34 @@ public class RouterStrategyRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("strategy_name")
+    @Schema(description = "策略名称", example = "默认路由策略")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5a-zA-Z0-9_.:/|\\\\ -]{1,35}$")
     @Length(max = 64)
     private String strategyName = null;
 
     @JsonProperty("strategy_key")
+    @Schema(description = "策略唯一标识", example = "strategy-key-001")
     @Length(max = 128)
     private String strategyKey = null;
 
     @JsonProperty("strategy_description")
+    @Schema(description = "策略描述", example = "根据用户意图路由到不同模型服务")
     @Length(max = 4096)
     private String strategyDescription = null;
 
     @JsonProperty("model_service_list")
+    @Schema(description = "模型服务列表", example = "[{\"id\":\"service-001\"}]")
     @Valid
     @Size(max = 3)
     private List<ModelServiceRsp> modelServiceList = null;
 
     @JsonProperty("strategy_timeout")
+    @Schema(description = "策略超时时间（毫秒）", example = "5000")
     @Range(min = 1000L, max = 1000000L)
     private Integer strategyTimeout = null;
 
     @JsonProperty("strategy_retry_count")
+    @Schema(description = "策略重试次数", example = "3")
     @Range(min = 0L, max = 100L)
     private Integer strategyRetryCount = null;
 

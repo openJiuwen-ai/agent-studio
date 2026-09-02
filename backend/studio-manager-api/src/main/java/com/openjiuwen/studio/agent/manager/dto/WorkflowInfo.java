@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import com.openjiuwen.studio.agent.common.dto.TriggerConfig;
 import jakarta.validation.Valid;
@@ -30,106 +31,130 @@ public class WorkflowInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "workflow-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String workflowId = null;
 
     @JsonProperty("trace_id")
+    @Schema(description = "链路追踪ID", example = "trace-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String traceId = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "我的工作流")
     @Length(min = 2, max = 64)
     private String name = null;
 
     @JsonProperty("code")
+    @Schema(description = "工作流编码", example = "workflow-code-01")
     @Length(min = 2, max = 64)
     private String code = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "用于自动回复的工作流")
     @Length(min = 1, max = 1024)
     private String description = null;
 
     @JsonProperty("avatar")
+    @Schema(description = "工作流头像", example = "data:image/png;base64,iVBORw0KGgo=")
     @Length(max = 1024)
     private String avatar = null;
 
     @JsonProperty("status")
+    @Schema(description = "工作流状态", example = "1")
     @Range(min = -10L, max = 10L)
     private Integer status = null;
 
     @JsonProperty("trigger_list")
+    @Schema(description = "触发器列表", example = "[]")
     @Valid
     @Size(max = 100)
     private List<TriggerConfig> triggerList = null;
 
     @JsonProperty("workflow_details")
+    @Schema(description = "工作流详情", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> workflowDetails = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间（毫秒时间戳）", example = "1714521600000")
     @Range(max = 9999999999999L)
     private Long createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间（毫秒时间戳）", example = "1714608000000")
     @Range(max = 9999999999999L)
     private Long updateTime = null;
 
     @JsonProperty("publish_time")
+    @Schema(description = "发布时间（毫秒时间戳）", example = "1714694400000")
     @Range(max = 9999999999999L)
     private Long publishTime = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user001")
     @Length(max = 64)
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "user002")
     @Length(max = 64)
     private String updater = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "领域ID", example = "domain-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String domainId = null;
 
     @JsonProperty("dsl_path")
+    @Schema(description = "DSL文件路径", example = "/workflows/example.dsl")
     @Length(max = 256)
     private String dslPath = null;
 
     @JsonProperty("is_drag")
+    @Schema(description = "是否为拖拽创建", example = "false")
     private Boolean isDrag = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "creator-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String creatorId = null;
 
     @JsonProperty("type")
+    @Schema(description = "工作流类型", example = "chat")
     @Length(max = 32)
     private String type = null;
 
     @JsonProperty("ref_workflows")
+    @Schema(description = "引用的工作流列表", example = "[]")
     @Valid
     @Size(max = 1000)
     private List<WorkflowInfoRefWorkflows> refWorkflows = null;
 
     @JsonProperty("test_status")
+    @Schema(description = "测试状态", example = "1")
     @Range(max = 9L)
     private Integer testStatus = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否包含自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     public String getWorkflowId() {

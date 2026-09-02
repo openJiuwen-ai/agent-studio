@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,9 +27,11 @@ public class KnowledgeBaseConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("key")
+    @Schema(description = "密钥", example = "example-token-value")
     private String key = null;
 
     @JsonProperty("value")
+    @Schema(description = "值", example = "{}")
     @Valid
     private Object value = null;
 

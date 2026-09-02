@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,15 +25,19 @@ public class TaskOperator implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "操作ID", example = "op-001")
     private String id = null;
 
     @JsonProperty("type")
+    @Schema(description = "操作类型", example = "tool")
     private String type = null;
 
     @JsonProperty("title")
+    @Schema(description = "操作标题", example = "查询操作")
     private String title = null;
 
     @JsonProperty("description")
+    @Schema(description = "操作描述", example = "执行数据查询")
     private String description = null;
 
     public String getId() {

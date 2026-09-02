@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -31,42 +32,51 @@ public class PromptBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String taskId = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "PLAYGROUND", required = true)
     @Pattern(regexp = "PLAYGROUND|EXPERIMENT|CANDIDATE|HORIZONTAL|NO_SOURCE|PRESET")
     @NotBlank
     private String source = null;
 
     @JsonProperty("question")
+    @Schema(description = "问题", example = "示例问题", required = true)
     @NotBlank
     @Length(max = 10000)
     private String question = null;
 
     @JsonProperty("variables")
+    @Schema(description = "变量", example = "")
     @Valid
     @Size(max = 20)
     private List<VariableDto> variables = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4", required = true)
     @NotBlank
     @Length(max = 1000)
     private String model = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "", required = true)
     @Valid
     @NotNull
     private ModelConfig modelConfig = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "LLM")
     private String modelType = null;
 
     @JsonProperty("third_model_type")
+    @Schema(description = "第三方模型类型", example = "openai")
     private String thirdModelType = null;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String fileId = null;
 
     public String getTaskId() {

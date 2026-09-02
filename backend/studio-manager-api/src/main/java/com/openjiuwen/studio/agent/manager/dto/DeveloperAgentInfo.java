@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,33 +28,43 @@ public class DeveloperAgentInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "资产名称", example = "我的智能体")
     private String name = null;
 
     @JsonProperty("asset_id")
+    @Schema(description = "资产ID", example = "asset_001")
     private String assetId = null;
 
     @JsonProperty("asset_type_name")
+    @Schema(description = "资产类型名称", example = "agent")
     private String assetTypeName = null;
 
     @JsonProperty("asset_type_display_name")
+    @Schema(description = "资产类型展示名称", example = "智能体")
     private String assetTypeDisplayName = null;
 
     @JsonProperty("description")
+    @Schema(description = "资产描述", example = "这是一个智能助手")
     private String description = null;
 
     @JsonProperty("created_by")
+    @Schema(description = "创建者", example = "user001")
     private String createdBy = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1717200000000")
     private Long createTime = null;
 
     @JsonProperty("updated_by")
+    @Schema(description = "更新者", example = "user002")
     private String updatedBy = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "1717200000000")
     private Long updateTime = null;
 
     @JsonProperty("properties")
+    @Schema(description = "扩展属性", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> properties = null;

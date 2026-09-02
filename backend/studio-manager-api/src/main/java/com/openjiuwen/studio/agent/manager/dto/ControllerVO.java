@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -31,55 +32,68 @@ public class ControllerVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "控制器ID", example = "ctrl_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "控制器名称", example = "客服控制器", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "控制器描述", example = "处理客服交互的控制器")
     private String description = null;
 
     @JsonProperty("nodes")
+    @Schema(description = "节点列表", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()
     private List<ControllerNodeVO> nodes = new ArrayList<ControllerNodeVO>();
 
     @JsonProperty("edges")
+    @Schema(description = "边列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowEdgeVO> edges = null;
 
     @JsonProperty("layouts")
+    @Schema(description = "布局配置", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> layouts = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入字段列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> inputs = null;
 
     @JsonProperty("memory_config")
+    @Schema(description = "记忆配置", example = "{}")
     @Valid
     private AgentMemoryConfig memoryConfig = null;
 
     @JsonProperty("global_variables")
+    @Schema(description = "全局变量列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> globalVariables = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     private String workspaceId = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2026-09-01T12:00:00Z")
     private String updateTime = null;
 
     @JsonProperty("environment")
+    @Schema(description = "环境标识", example = "production")
     private String environment = null;
 
     public String getId() {

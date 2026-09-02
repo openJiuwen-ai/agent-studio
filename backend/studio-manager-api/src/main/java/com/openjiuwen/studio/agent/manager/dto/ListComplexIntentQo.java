@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,20 +29,24 @@ public class ListComplexIntentQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "分页偏移量", example = "0")
     @Range(min = 0L, max = 100000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "1000")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 1000;
 
     @JsonProperty("name")
+    @Schema(description = "意图名称", example = "用户咨询意图")
     @Pattern(regexp = "^.{0,64}$")
     @Length(max = 192)
     private String name = null;

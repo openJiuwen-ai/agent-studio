@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -26,18 +27,23 @@ public class KnowledgeBaseObsConfigExecuteRecord implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "记录ID", example = "record-001")
     private String id = null;
 
     @JsonProperty("status")
+    @Schema(description = "执行状态", example = "RUNNING")
     private StatusEnum status = null;
 
     @JsonProperty("start_time")
+    @Schema(description = "开始时间", example = "1700000000000")
     private Long startTime = null;
 
     @JsonProperty("end_time")
+    @Schema(description = "结束时间", example = "1700000001000")
     private Long endTime = null;
 
     @JsonProperty("log_detail")
+    @Schema(description = "日志详情", example = "执行成功")
     private String logDetail = null;
 
     public String getId() {

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
@@ -29,37 +30,46 @@ public class McpServiceModifyReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "svc_001")
     @Pattern(regexp = "^[a-zA-Z0-9-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "天气查询服务")
     @NotEmpty
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "Weather Service")
     @Pattern(regexp = "^[a-zA-Z0-9\\s.,!?;:'\"()_（）-]{2,64}$")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供天气查询功能")
     @Length(min = 1, max = 1024)
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "Provide weather query")
     @Length(min = 1, max = 2048)
     private String descriptionEn = null;
 
     @JsonProperty("icon")
+    @Schema(description = "服务图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务配置", example = "{\"port\":8080}")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！*%# \\s]*$")
     private String serverConfig = null;
 
     @JsonProperty("readme")
+    @Schema(description = "服务说明文档", example = "服务使用说明")
     private String readme = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo authInfo = null;
 

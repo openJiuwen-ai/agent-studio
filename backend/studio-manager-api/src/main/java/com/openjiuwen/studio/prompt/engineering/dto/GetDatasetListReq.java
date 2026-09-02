@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.Pattern;
 
@@ -25,18 +26,22 @@ public class GetDatasetListReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("dataset_name")
+    @Schema(description = "数据集名称", example = "示例名称")
     @Length(max = 32)
     private String datasetName = null;
 
     @JsonProperty("dataset_type")
+    @Schema(description = "数据集类型", example = "TEXT")
     @Pattern(regexp = "variable-data")
     private String datasetType = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 100L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "50")
     @Range(min = 10L, max = 100L)
     private Integer limit = 100;
 

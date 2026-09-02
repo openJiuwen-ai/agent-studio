@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -29,36 +30,43 @@ public class WorkflowComponent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "组件ID", example = "comp_001", required = true)
     @NotBlank
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "组件名称", example = "LLM节点", required = true)
     @NotBlank
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "组件类型", example = "llm", required = true)
     @NotBlank
     @Length(max = 64)
     private String type = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入配置列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowConfig> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出配置列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowConfig> outputs = null;
 
     @JsonProperty("configs")
+    @Schema(description = "组件配置列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowConfig> configs = null;
 
     @JsonProperty("condition")
+    @Schema(description = "组件条件配置", example = "{}")
     @Valid
     private WorkflowComponentCondition condition = null;
 

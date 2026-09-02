@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
@@ -27,6 +29,7 @@ public class PluginAuthUpdateReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("authInfo")
+    @Schema(description = "认证信息", example = "{}", required = true)
     @Valid
     @NotNull
     private AuthInfo authInfo = null;

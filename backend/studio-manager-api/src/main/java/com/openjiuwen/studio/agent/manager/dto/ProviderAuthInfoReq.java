@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -23,10 +25,12 @@ public class ProviderAuthInfoReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证", example = "示例字符串", required = true)
     @NotBlank
     private String authInfo = null;
 
     @JsonProperty("auth_type")
+    @Schema(description = "认证类型", example = "example-type", required = true)
     @NotBlank
     private String authType = null;
 

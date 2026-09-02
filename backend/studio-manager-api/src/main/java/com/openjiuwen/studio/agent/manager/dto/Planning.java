@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,9 +26,11 @@ public class Planning implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("max_step")
+    @Schema(description = "最大步数", example = "10")
     private Integer maxStep = 10;
 
     @JsonProperty("allow_replanning")
+    @Schema(description = "是否允许重新规划", example = "true")
     private Boolean allowReplanning = false;
 
     public Integer getMaxStep() {

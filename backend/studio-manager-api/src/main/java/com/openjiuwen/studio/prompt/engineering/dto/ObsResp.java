@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,15 +22,19 @@ public class ObsResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_name")
+    @Schema(description = "文件名称", example = "示例文本")
     private String fileName = null;
 
     @JsonProperty("file_type")
+    @Schema(description = "文件类型", example = "示例文本")
     private String fileType = null;
 
     @JsonProperty("content_length")
+    @Schema(description = "内容长度", example = "1700000000000")
     private Long contentLength = null;
 
     @JsonProperty("last_modified")
+    @Schema(description = "最后修改时间", example = "1700000000000")
     private Long lastModified = null;
 
     public String getFileName() {

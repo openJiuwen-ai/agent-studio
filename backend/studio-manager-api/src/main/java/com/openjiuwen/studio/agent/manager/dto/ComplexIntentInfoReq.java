@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -30,20 +31,24 @@ public class ComplexIntentInfoReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "意图包名称", example = "用户咨询意图", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$")
     @NotBlank
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "意图包描述", example = "处理用户咨询相关意图")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("id")
+    @Schema(description = "意图包ID", example = "intent_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("branches")
+    @Schema(description = "意图分支列表", example = "[]")
     @Valid
     @Size(max = 200)
     private List<ComplexIntentBranchInfoReq> branches = null;

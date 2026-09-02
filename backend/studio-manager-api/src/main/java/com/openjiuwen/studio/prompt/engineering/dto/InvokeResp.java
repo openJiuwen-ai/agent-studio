@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,21 +26,27 @@ public class InvokeResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("result")
+    @Schema(description = "结果", example = "示例文本")
     private String result = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4")
     private String model = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "LLM")
     private String modelType = null;
 
     @JsonProperty("token")
+    @Schema(description = "Token数量", example = "1024")
     private Integer token = null;
 
     @JsonProperty("time")
+    @Schema(description = "时间", example = "1.5")
     private Double time = null;
 
     @JsonProperty("file_info")
+    @Schema(description = "文件信息", example = "")
     @Valid
     private FileInfoVo fileInfo = null;
 

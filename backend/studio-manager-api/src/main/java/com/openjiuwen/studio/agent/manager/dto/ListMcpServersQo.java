@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.hibernate.validator.constraints.Range;
@@ -26,22 +27,27 @@ public class ListMcpServersQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 0L, max = 100L)
     private Integer limit = 10;
 
     @JsonProperty("name")
+    @Schema(description = "MCP服务名称", example = "mcp-server")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "stdio")
     @Length(max = 32)
     private String type = null;
 
     @JsonProperty("active_status")
+    @Schema(description = "激活状态", example = "active")
     @Length(max = 32)
     private String activeStatus = null;
 

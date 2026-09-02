@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,36 +27,44 @@ public class CreateFaqReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("question")
+    @Schema(description = "问题", example = "如何重置密码？", required = true)
     @NotBlank
     @Length(min = 1, max = 1000)
     private String question = null;
 
     @JsonProperty("answer")
+    @Schema(description = "答案", example = "请点击设置中的重置密码按钮。", required = true)
     @NotBlank
     @Length(min = 1, max = 10000)
     private String answer = null;
 
     @JsonProperty("question1")
+    @Schema(description = "相似问题1", example = "密码怎么重置？")
     @Length(max = 1000)
     private String question1 = null;
 
     @JsonProperty("question2")
+    @Schema(description = "相似问题2", example = "忘记密码怎么办？")
     @Length(max = 1000)
     private String question2 = null;
 
     @JsonProperty("question3")
+    @Schema(description = "相似问题3", example = "如何修改密码？")
     @Length(max = 1000)
     private String question3 = null;
 
     @JsonProperty("question4")
+    @Schema(description = "相似问题4", example = "密码如何找回？")
     @Length(max = 1000)
     private String question4 = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "账号管理")
     @Length(max = 255)
     private String category = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签", example = "密码,账号")
     @Length(max = 4096)
     private String tags = null;
 

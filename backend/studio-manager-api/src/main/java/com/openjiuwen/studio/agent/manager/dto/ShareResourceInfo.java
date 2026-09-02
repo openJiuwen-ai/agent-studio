@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
@@ -30,49 +31,61 @@ public class ShareResourceInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String resourceId = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "workflow")
     private ResourceTypeEnum resourceType = null;
 
     @JsonProperty("version_info_list")
+    @Schema(description = "版本信息列表", example = "[]")
     @Valid
     @Size(min = 1, max = 50)
     private List<ResourceVersionInfo> versionInfoList = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("workspace_name")
+    @Schema(description = "工作空间名称", example = "我的工作空间")
     @Length(max = 64)
     private String workspaceName = null;
 
     @JsonProperty("resource_name_ch")
+    @Schema(description = "资源中文名称", example = "我的工作流")
     @Length(max = 128)
     private String resourceNameCh = null;
 
     @JsonProperty("resource_name_en")
+    @Schema(description = "资源英文名称", example = "My Workflow")
     @Length(max = 128)
     private String resourceNameEn = null;
 
     @JsonProperty("resource_desc")
+    @Schema(description = "资源描述", example = "这是一个共享资源")
     @Length(max = 256)
     private String resourceDesc = null;
 
     @JsonProperty("resource_icon")
+    @Schema(description = "资源图标", example = "https://example.com/icon.png")
     private String resourceIcon = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "workflow")
     private String type = null;
 
     @JsonProperty("extend_attribute")
+    @Schema(description = "扩展属性", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> extendAttribute = null;

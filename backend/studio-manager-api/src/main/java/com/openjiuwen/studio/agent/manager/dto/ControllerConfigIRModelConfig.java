@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -23,20 +24,25 @@ public class ControllerConfigIRModelConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("modelName")
+    @Schema(description = "模型名称", example = "gpt-4")
     private String modelName = null;
 
     @JsonProperty("modelType")
+    @Schema(description = "模型类型", example = "llm")
     private String modelType = null;
 
     @JsonProperty("hyperParameters")
+    @Schema(description = "超参数配置", example = "{}")
     @Valid
     private ControllerConfigIRModelConfigHyperParameters hyperParameters = null;
 
     @JsonProperty("extension")
+    @Schema(description = "扩展信息", example = "{}")
     @Valid
     private Object extension = null;
 
     @JsonProperty("deploymentId")
+    @Schema(description = "部署ID", example = "dep-001")
     private String deploymentId = null;
 
     public String getModelName() {

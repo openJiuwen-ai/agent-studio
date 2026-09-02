@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,6 +23,7 @@ public class UpdateFileMetaInfoRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "example-id-123")
     private String fileId = null;
 
     public String getFileId() {

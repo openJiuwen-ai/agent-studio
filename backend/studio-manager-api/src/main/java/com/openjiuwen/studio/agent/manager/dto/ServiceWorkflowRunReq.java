@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import com.openjiuwen.studio.agent.common.dto.WorkflowEnvironment;
 import com.openjiuwen.studio.agent.common.dto.run.PluginConfig;
@@ -28,48 +29,59 @@ public class ServiceWorkflowRunReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> inputs = null;
 
     @JsonProperty("memory_inputs")
+    @Schema(description = "记忆输入参数", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> memoryInputs = null;
 
     @JsonProperty("globals")
+    @Schema(description = "全局变量", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> globals = null;
 
     @JsonProperty("environment")
+    @Schema(description = "运行环境", example = "{}")
     @Valid
     private WorkflowEnvironment environment = null;
 
     @JsonProperty("messages")
+    @Schema(description = "消息列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowMessage> messages = null;
 
     @JsonProperty("plugin_configs")
+    @Schema(description = "插件配置列表", example = "[]")
     @Valid
     @Size()
     private List<PluginConfig> pluginConfigs = null;
 
     @JsonProperty("version")
+    @Schema(description = "版本号", example = "1")
     private Long version = null;
 
     @JsonProperty("userId")
+    @Schema(description = "用户ID", example = "user_001")
     private String userId = null;
 
     @JsonProperty("conversation")
+    @Schema(description = "会话信息", example = "{}")
     @Valid
     private Conversation conversation = null;
 
     @JsonProperty("enable_history")
+    @Schema(description = "是否启用历史记录", example = "true")
     private Boolean enableHistory = true;
 
     @JsonProperty("long_term_memory")
+    @Schema(description = "长期记忆配置", example = "{}")
     @Valid
     private LongTermMemoryRuntime longTermMemory = null;
 

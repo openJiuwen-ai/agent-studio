@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.core.io.Resource;
@@ -24,10 +26,12 @@ public class AgentmanagerDependenciesBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file")
+    @Schema(description = "文件", example = "file-content", required = true)
     @NotBlank
     private Resource file = null;
 
     @JsonProperty("body")
+    @Schema(description = "请求体", example = "示例字符串", required = true)
     @NotBlank
     private String body = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,32 +28,41 @@ public class PromptEvalDataSetVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("workspaceId")
+    @Schema(description = "工作空间ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String workspaceId = null;
 
     @JsonProperty("projectId")
+    @Schema(description = "项目ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String projectId = null;
 
     @JsonProperty("boundTaskIds")
+    @Schema(description = "bound任务Ids", example = "")
     @Valid
     private List<@Length() String> boundTaskIds = null;
 
     @JsonProperty("items")
+    @Schema(description = "项列表", example = "")
     @Valid
     private List<PromptEvalDataItem> items = null;
 
     @JsonProperty("itemTotal")
+    @Schema(description = "项总数", example = "1")
     private Integer itemTotal = null;
 
     @JsonProperty("itemIndex")
+    @Schema(description = "项Index", example = "1")
     private Integer itemIndex = null;
 
     @JsonProperty("pageSize")
+    @Schema(description = "页大小", example = "1")
     private Integer pageSize = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "示例文本")
     private String message = null;
 
     public String getId() {

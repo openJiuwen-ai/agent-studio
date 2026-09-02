@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -27,31 +28,38 @@ public class WorkflowConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "参数类型", example = "string", required = true)
     @NotBlank
     @Length(max = 64)
     private String type = null;
 
     @JsonProperty("name")
+    @Schema(description = "参数名称", example = "temperature", required = true)
     @NotBlank
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "参数描述", example = "控制生成内容的随机性")
     @Length(max = 64)
     private String description = null;
 
     @JsonProperty("value")
+    @Schema(description = "参数值", example = "0.7")
     @Valid
     private Object value = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = null;
 
     @JsonProperty("front")
+    @Schema(description = "前端展示标识", example = "input")
     @Length(max = 64)
     private String front = null;
 
     @JsonProperty("hint")
+    @Schema(description = "提示信息", example = "请输入0-1之间的数值")
     @Length(max = 64)
     private String hint = null;
 

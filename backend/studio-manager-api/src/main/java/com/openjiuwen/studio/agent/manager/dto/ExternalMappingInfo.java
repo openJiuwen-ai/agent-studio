@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,19 +29,23 @@ public class ExternalMappingInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspaceId")
+    @Schema(description = "工作空间ID", example = "ws-001")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("mappingId")
+    @Schema(description = "映射ID", example = "map-001")
     @Length(max = 128)
     private String mappingId = null;
 
     @JsonProperty("extensionContent")
+    @Schema(description = "扩展内容列表", example = "[{\"key\":\"value\"}]")
     @Valid
     @Size()
     private List<Extension> extensionContent = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "external")
     private String source = null;
 
     public String getWorkspaceId() {

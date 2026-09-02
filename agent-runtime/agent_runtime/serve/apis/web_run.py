@@ -31,7 +31,11 @@ _release_service = AppRelease()
 
 
 @web_run_app.post(
-    "/v1/workflows/chat/{short_code}/conversations/{conversation_id}"
+    "/v1/workflows/chat/{short_code}/conversations/{conversation_id}",
+    summary="网页工作流对话",
+    description="通过 short_code 查询发布信息后复用工作流执行链。"
+                "先从 Redis 查询 release_web_rel_{short_code} 获取 ReleaseInfo，"
+                "再用其中的 appId/versionId/projectId 构造执行上下文。",
 )
 async def run_web_workflow(
     body: WorkflowAppRunRequest,
@@ -72,7 +76,13 @@ async def run_web_workflow(
     return await _execute_workflow_run(ctx, body, request)
 
 
-@web_run_app.post("/v1/agents/chat/{short_code}")
+@web_run_app.post(
+    "/v1/agents/chat/{short_code}",
+    summary="网页智能体对话",
+    description="通过 short_code 查询发布信息后复用智能体执行链。"
+                "conversation_id 为空时自动生成 UUID。"
+                "handler_type 由 IR 的 mode 决定（ReAct/Controller/PlanExecute）。",
+)
 async def run_web_agent(
     body: AgentAppRunRequest,
     request: Request,

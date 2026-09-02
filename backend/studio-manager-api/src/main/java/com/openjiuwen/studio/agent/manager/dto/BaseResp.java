@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -23,12 +25,15 @@ public class BaseResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "状态码", example = "200")
     private Integer code = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "操作成功")
     private String message = null;
 
     @JsonProperty("data")
+    @Schema(description = "数据", example = "{}")
     @Valid
     private Object data = null;
 

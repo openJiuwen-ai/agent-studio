@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -26,33 +27,41 @@ public class ComplexIntentRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("intent_id")
+    @Schema(description = "意图ID", example = "intent_001")
     @Length(max = 64)
     private String intentId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "我的意图")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "意图描述")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("branches_cnt")
+    @Schema(description = "分支数量", example = "3")
     private Integer branchesCnt = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     @Length(max = 1024)
     private String creatorId = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000+00:00")
     private Date createTime = null;
 
     public String getIntentId() {

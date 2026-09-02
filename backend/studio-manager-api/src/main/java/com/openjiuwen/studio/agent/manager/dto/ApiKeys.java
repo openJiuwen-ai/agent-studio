@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,15 +22,19 @@ public class ApiKeys implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("api_key_id")
+    @Schema(description = "API密钥ID", example = "key-001")
     private String apiKeyId = null;
 
     @JsonProperty("api_key_name")
+    @Schema(description = "API密钥名称", example = "测试密钥")
     private String apiKeyName = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "API密钥描述")
     private String description = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdDate = null;
 
     public String getApiKeyId() {

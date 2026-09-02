@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,15 +29,18 @@ public class ListDeveloperAgentsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("marker")
+    @Schema(description = "marker", example = "1")
     @Range(min = 0L, max = 10000L)
     private Integer marker = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 100;
 

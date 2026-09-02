@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.hibernate.validator.constraints.Range;
@@ -23,39 +24,49 @@ public class DefaultKnowledgeBaseConnectionListItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "连接ID", example = "conn_001")
     private String id = null;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "connector_001")
     private String connectorId = null;
 
     @JsonProperty("description")
+    @Schema(description = "连接描述", example = "知识库连接")
     private String description = null;
 
     @JsonProperty("domain_name")
+    @Schema(description = "域名", example = "example.com")
     @Length(max = 100)
     private String domainName = null;
 
     @JsonProperty("create_user_id")
+    @Schema(description = "创建用户ID", example = "user001")
     @Length(max = 100)
     private String createUserId = null;
 
     @JsonProperty("create_user_name")
+    @Schema(description = "创建用户名称", example = "张三")
     @Length(max = 100)
     private String createUserName = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1717200000000")
     @Range(min = 0L, max = 9223372036854775807L)
     private Long createTime = null;
 
     @JsonProperty("update_user_id")
+    @Schema(description = "更新用户ID", example = "user002")
     @Length(max = 100)
     private String updateUserId = null;
 
     @JsonProperty("update_user_name")
+    @Schema(description = "更新用户名称", example = "李四")
     @Length(max = 100)
     private String updateUserName = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "1717200000000")
     @Range(min = 0L, max = 9223372036854775807L)
     private Long updateTime = null;
 

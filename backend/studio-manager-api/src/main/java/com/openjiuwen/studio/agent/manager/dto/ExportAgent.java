@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class ExportAgent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("agent_id")
+    @Schema(description = "Agent ID", example = "example-id-123")
     private String agentId = null;
 
     @JsonProperty("agent_version")
+    @Schema(description = "Agent版本", example = "1.0.0")
     private String agentVersion = null;
 
     public String getAgentId() {

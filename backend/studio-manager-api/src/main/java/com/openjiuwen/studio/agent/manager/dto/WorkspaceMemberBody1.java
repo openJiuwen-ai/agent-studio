@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -27,6 +29,7 @@ public class WorkspaceMemberBody1 implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("members")
+    @Schema(description = "成员列表", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()

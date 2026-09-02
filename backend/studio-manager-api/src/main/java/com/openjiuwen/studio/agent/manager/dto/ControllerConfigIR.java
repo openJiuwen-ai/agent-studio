@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,54 +29,67 @@ public class ControllerConfigIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("intent_identification")
+    @Schema(description = "意图识别配置", example = "{}")
     @Valid
     private ControllerConfigIRIntentIdentification intentIdentification = null;
 
     @JsonProperty("mode")
+    @Schema(description = "控制器模式", example = "single")
     private String mode = null;
 
     @JsonProperty("specify_workflow_order")
+    @Schema(description = "是否指定工作流顺序", example = "true")
     private Boolean specifyWorkflowOrder = null;
 
     @JsonProperty("modelConfig")
+    @Schema(description = "模型配置", example = "{}")
     @Valid
     private ControllerConfigIRModelConfig modelConfig = null;
 
     @JsonProperty("workflows")
+    @Schema(description = "工作流列表", example = "[]")
     @Valid
     @Size()
     private List<ControllerWorkflowIR> workflows = null;
 
     @JsonProperty("agents")
+    @Schema(description = "智能体列表", example = "[]")
     @Valid
     @Size()
     private List<ControllerAgentIR> agents = null;
 
     @JsonProperty("maxIteration")
+    @Schema(description = "最大迭代次数", example = "10")
     private Integer maxIteration = null;
 
     @JsonProperty("global_intents")
+    @Schema(description = "全局意图列表", example = "[]")
     @Valid
     @Size()
     private List<ControllerConfigIRGlobalIntents> globalIntents = null;
 
     @JsonProperty("global_variables")
+    @Schema(description = "全局变量列表", example = "[]")
     @Valid
     @Size()
     private List<ControllerConfigIRGlobalVariables> globalVariables = null;
 
     @JsonProperty("sysPromptTemplate")
+    @Schema(description = "系统提示词模板", example = "你是一个智能助手")
     private String sysPromptTemplate = null;
 
     @JsonProperty("plugins")
+    @Schema(description = "插件列表", example = "[\"plugin1\"]")
     @Valid
     @Size()
     private List<@Length() String> plugins = null;
 
     @JsonProperty("chatHistoryMaxTurn")
+    @Schema(description = "聊天历史最大轮次", example = "20")
     private Integer chatHistoryMaxTurn = null;
 
     @JsonProperty("memory")
+    @Schema(description = "记忆配置", example = "{}")
     @Valid
     private MemoryConfigIR memory = null;
 

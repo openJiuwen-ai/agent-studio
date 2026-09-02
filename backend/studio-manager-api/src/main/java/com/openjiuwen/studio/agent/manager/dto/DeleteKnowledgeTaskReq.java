@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -28,6 +30,7 @@ public class DeleteKnowledgeTaskReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("task_ids")
+    @Schema(description = "任务", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()

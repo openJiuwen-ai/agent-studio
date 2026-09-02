@@ -179,7 +179,7 @@ bash deploy.sh all
 
 > `all` 命令会先获取镜像再启动，适合**首次部署**。后续更新使用 `update`，重启使用 `restart`。
 
-> 💡 默认部署不含日志聚合栈。如需在 Grafana 中集中查询日志，见「[七、可观测性（日志聚合）](#七可观测性日志聚合)」。
+> 💡 默认部署不含日志聚合栈。如需在 Grafana 中集中查询日志，见「[八、可观测性（日志聚合）](#八可观测性日志聚合)」。
 
 ### 步骤 4：验证
 
@@ -253,7 +253,7 @@ bash deploy.sh status      # 查看服务状态
 bash deploy.sh logs [svc]  # 查看日志
 bash deploy.sh clean all   # 完全清理（⚠️ 数据不可恢复）
 
-# 可观测性 / 日志聚合（可选，详见第七章）
+# 可观测性 / 日志聚合（可选，详见第八章）
 bash deploy.sh logging              # L1 单机日志栈（victoria-logs+vector+grafana，本机）
 bash deploy.sh logging-remote       # L2：应用节点远程 vector（push 到监控节点）
 bash deploy.sh monitor              # L2：监控节点日志栈（victoria-logs+grafana+gateway）
@@ -261,7 +261,56 @@ bash deploy.sh monitor              # L2：监控节点日志栈（victoria-logs
 
 ---
 
-## 七、可观测性（日志聚合）
+## 七、API 文档（Swagger UI）
+
+平台提供统一的环境变量 `API_DOCS_ENABLED` 控制管理面和运行面的 API 文档开关。
+
+| 服务 | 技术栈 | 文档覆盖 |
+|------|--------|---------|
+| studio-manager | springdoc-openapi | 49 个 Controller 的全部管理面接口 |
+| studio-runtime | FastAPI 原生 OpenAPI 3 | 28 个运行面接口 |
+
+> **默认关闭**：API 文档默认不开启，按需设置 `API_DOCS_ENABLED=true` 即可开启。
+
+### 开启方式
+
+编辑 `.env` 文件，添加或修改：
+
+```bash
+API_DOCS_ENABLED=true
+```
+
+重启服务生效：
+
+```bash
+bash deploy.sh restart
+```
+
+### 访问地址
+
+| 页面 | 地址 |
+|------|------|
+| 管理面 Swagger UI（可交互调试） | `http://<MANAGER_IP>:31111/swagger-ui.html` |
+| 管理面 OpenAPI JSON（可导入 Postman） | `http://<MANAGER_IP>:31111/v3/api-docs` |
+| 管理面 — 智能体管理分组 | `http://<MANAGER_IP>:31111/v3/api-docs/agent-management` |
+| 管理面 — 提示词工程分组 | `http://<MANAGER_IP>:31111/v3/api-docs/prompt-engineering` |
+| 运行面 Swagger UI（可交互调试） | `http://<RUNTIME_IP>:31014/runtime/docs` |
+| 运行面 ReDoc（只读文档） | `http://<RUNTIME_IP>:31014/runtime/redoc` |
+| 运行面 OpenAPI JSON | `http://<RUNTIME_IP>:31014/runtime/openapi.json` |
+
+### 关闭
+
+```bash
+# .env 中改回 false 或删除该行（默认即为 false）
+API_DOCS_ENABLED=false
+bash deploy.sh restart
+```
+
+> 不再需要时建议将 `API_DOCS_ENABLED` 改回 `false`（默认值）。
+
+---
+
+## 八、可观测性（日志聚合）
 
 > ⚠️ **适用范围**：本章方案只适用于 Docker Compose 部署。K8s 部署请使用日志采集 DaemonSet 和集中式日志存储。
 
@@ -322,7 +371,7 @@ bash deploy.sh logging-remote # 2) 再启动远程 vector（push 到监控节点
 
 ---
 
-## 八、常见问题
+## 九、常见问题
 
 ### Q1: 数据库连接失败
 

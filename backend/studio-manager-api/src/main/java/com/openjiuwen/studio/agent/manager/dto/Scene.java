@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,20 +28,25 @@ public class Scene implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "场景ID", example = "scene_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "场景名称", example = "客服场景")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "场景描述", example = "处理用户客服咨询的场景")
     private String description = null;
 
     @JsonProperty("guidelines")
+    @Schema(description = "场景指导原则列表", example = "[]")
     @Valid
     @Size()
     private List<Guideline> guidelines = null;
 
     @JsonProperty("relations")
+    @Schema(description = "指导原则间的关系列表", example = "[]")
     @Valid
     @Size()
     private List<RelationInGuideLine> relations = null;

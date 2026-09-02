@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,38 +29,47 @@ public class ComplexIntentBranchRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("branch_id")
+    @Schema(description = "分支ID", example = "branch_001")
     @Length(max = 64)
     private String branchId = null;
 
     @JsonProperty("intent_id")
+    @Schema(description = "意图ID", example = "intent_001")
     @Length(max = 64)
     private String intentId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("branch_index")
+    @Schema(description = "分支索引", example = "0")
     @Length(max = 64)
     private String branchIndex = null;
 
     @JsonProperty("name")
+    @Schema(description = "分支名称", example = "天气查询")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "分支描述", example = "查询天气信息")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     @Length(max = 1024)
     private String creatorId = null;
 
     @JsonProperty("examples")
+    @Schema(description = "示例列表", example = "[\"今天天气怎么样\"]")
     @Valid
     @Size()
     private List<@Length(max = 8096) String> examples = null;

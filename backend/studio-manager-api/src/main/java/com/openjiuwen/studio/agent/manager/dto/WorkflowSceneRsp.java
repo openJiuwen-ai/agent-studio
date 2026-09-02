@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,62 +33,76 @@ public class WorkflowSceneRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "智能客服", required = true)
     @NotBlank
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "智能客服场景应用", required = true)
     @NotBlank
     @Length(max = 128)
     private String desc = null;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "wf_001", required = true)
     @NotBlank
     private String workflowId = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签列表", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> tags = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "scene")
     private String type = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数列表", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()
     private List<WorkflowFrontParam> inputs = new ArrayList<WorkflowFrontParam>();
 
     @JsonProperty("outputs")
+    @Schema(description = "输出参数列表", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()
     private List<WorkflowFrontParam> outputs = new ArrayList<WorkflowFrontParam>();
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user_001")
     private String creator = null;
 
     @JsonProperty("publish_time")
+    @Schema(description = "发布时间", example = "2026-01-01T00:00:00Z", required = true)
     @NotNull
     private Date publishTime = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0", required = true)
     @NotBlank
     private String versionId = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白", example = "你好，请问有什么可以帮助您？")
     private String prologue = null;
 
     @JsonProperty("suggest_queries")
+    @Schema(description = "建议查询列表", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> suggestQueries = null;
 
     @JsonProperty("free_trial_quota")
+    @Schema(description = "免费试用额度")
     @Valid
     private FreeTrialQuota freeTrialQuota = null;
 

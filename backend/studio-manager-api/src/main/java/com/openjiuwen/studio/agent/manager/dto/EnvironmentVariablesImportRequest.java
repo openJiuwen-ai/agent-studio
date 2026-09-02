@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,10 +30,12 @@ public class EnvironmentVariablesImportRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("environment_id")
+    @Schema(description = "环境ID", example = "example-id-123")
     @Length(max = 100)
     private String environmentId = null;
 
     @JsonProperty("is_cover")
+    @Schema(description = "iscover", example = "[]")
     @Valid
     @Size()
     private List<@Length(max = 100) String> isCover = null;

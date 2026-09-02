@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -26,42 +27,53 @@ public class ParamExtractionWorkflow implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "参数提取工作流")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "用于提取参数的工作流")
     private String description = null;
 
     @JsonProperty("execution_timing")
+    @Schema(description = "执行时机", example = "BEFORE")
     private String executionTiming = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> outputs = null;
 
     @JsonProperty("memory")
+    @Schema(description = "记忆参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> memory = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0")
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "初始版本")
     private String versionName = null;
 
     @JsonProperty("type")
+    @Schema(description = "工作流类型", example = "PARAM_EXTRACTION")
     private String type = null;
 
     @JsonProperty("entry_condition")
+    @Schema(description = "入口条件", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> entryCondition = null;

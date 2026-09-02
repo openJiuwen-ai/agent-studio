@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,21 +25,27 @@ public class ModelProperties implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4")
     private String model = null;
 
     @JsonProperty("model_source")
+    @Schema(description = "模型来源", example = "示例文本")
     private String modelSource = null;
 
     @JsonProperty("url")
+    @Schema(description = "接口地址", example = "https://example.com")
     private String url = null;
 
     @JsonProperty("api_key")
+    @Schema(description = "API密钥", example = "sk-xxxxxxxxxxxxxxxx")
     private String apiKey = null;
 
     @JsonProperty("temperature")
+    @Schema(description = "温度参数", example = "0.0")
     private Double temperature = null;
 
     @JsonProperty("top_p")
+    @Schema(description = "Top-P参数", example = "1.0")
     private Double topP = null;
 
     public String getModel() {

@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -27,25 +28,32 @@ public class ExecConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Length(max = 128)
     private String model = null;
 
     @JsonProperty("exec_type")
+    @Schema(description = "执行类型", example = "model")
     private ExecTypeEnum execType = null;
 
     @JsonProperty("top_p")
+    @Schema(description = "Top-P参数", example = "1.0")
     private Double topP = 1.0d;
 
     @JsonProperty("temperature")
+    @Schema(description = "温度参数", example = "0.0")
     private Double temperature = 0.0d;
 
     @JsonProperty("max_tokens")
+    @Schema(description = "最大Token数", example = "1024")
     private Integer maxTokens = null;
 
     @JsonProperty("url")
+    @Schema(description = "接口地址", example = "https://example.com")
     private String url = null;
 
     @JsonProperty("api_key")
+    @Schema(description = "API密钥", example = "sk-xxxxxxxxxxxxxxxx")
     private String apiKey = null;
 
     public String getModel() {

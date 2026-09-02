@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import jakarta.validation.Valid;
@@ -29,74 +30,93 @@ public class ControllerInvokeInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("invoke_id")
+    @Schema(description = "调用ID", example = "invoke-001")
     @Length(max = 128)
     private String invokeId = null;
 
     @JsonProperty("parent_invoke_id")
+    @Schema(description = "父调用ID", example = "parent-invoke-001")
     @Length(max = 128)
     private String parentInvokeId = null;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node-001")
     @Length(max = 128)
     private String nodeId = null;
 
     @JsonProperty("node_name")
+    @Schema(description = "节点名称", example = "开始节点")
     @Length(max = 128)
     private String nodeName = null;
 
     @JsonProperty("node_type")
+    @Schema(description = "节点类型", example = "START")
     @Length(max = 32)
     private String nodeType = null;
 
     @JsonProperty("node_status")
+    @Schema(description = "节点状态", example = "RUNNING")
     private String nodeStatus = null;
 
     @JsonProperty("parent_node_id")
+    @Schema(description = "父节点ID", example = "parent-node-001")
     @Length(max = 128)
     private String parentNodeId = null;
 
     @JsonProperty("model_deployment_id")
+    @Schema(description = "模型部署ID", example = "deployment-001")
     private String modelDeploymentId = null;
 
     @JsonProperty("error_message")
+    @Schema(description = "错误信息", example = "调用失败")
     @Length(max = 4096)
     private String errorMessage = null;
 
     @JsonProperty("status")
+    @Schema(description = "调用状态", example = "{}")
     @Valid
     private ControllerInvokeInfoStatus status = null;
 
     @JsonProperty("messages")
+    @Schema(description = "消息列表", example = "[]")
     @Valid
     @Size()
     private List<com.openjiuwen.studio.agent.common.dto.agent.Message> messages = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数", example = "{}")
     @Valid
     private Object inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出结果", example = "{}")
     @Valid
     private Object outputs = null;
 
     @JsonProperty("start_time")
+    @Schema(description = "开始时间", example = "1700000000000")
     private Long startTime = null;
 
     @JsonProperty("end_time")
+    @Schema(description = "结束时间", example = "1700000001000")
     private Long endTime = null;
 
     @JsonProperty("application_id")
+    @Schema(description = "应用ID", example = "app-001")
     @Length(max = 128)
     private String applicationId = null;
 
     @JsonProperty("application_type")
+    @Schema(description = "应用类型", example = "AGENT")
     private ApplicationTypeEnum applicationType = null;
 
     @JsonProperty("parent_application_id")
+    @Schema(description = "父应用ID", example = "parent-app-001")
     @Length(max = 128)
     private String parentApplicationId = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> metadata = null;

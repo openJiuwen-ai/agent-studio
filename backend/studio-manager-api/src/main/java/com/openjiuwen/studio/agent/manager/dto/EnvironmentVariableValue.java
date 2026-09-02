@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -27,13 +29,16 @@ public class EnvironmentVariableValue implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "STRING")
     private TypeEnum type = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "内容示例")
     @Length(max = 2000)
     private String content = null;
 
     @JsonProperty("secret")
+    @Schema(description = "是否为密钥", example = "true")
     private Boolean secret = null;
 
     public TypeEnum getType() {

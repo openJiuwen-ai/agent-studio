@@ -94,6 +94,9 @@ spec:
             - name: agent_runtime_endpoint
               value: 'http://studio-runtime:31014'
             # ======== [选填] 功能开关 ========
+            # API 文档（Swagger UI / OpenAPI JSON），默认 false 关闭，本地开发设 true 开启
+            # - name: API_DOCS_ENABLED
+            #   value: 'false'
             - name: front_page_block_nodes
               value: 'Sql,DataQuery,Agent'
             - name: share_knowledge_enabled

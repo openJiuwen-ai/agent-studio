@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,28 +26,36 @@ public class WorkflowNodeConfigVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "节点ID", example = "node_001")
     private String id = null;
 
     @JsonProperty("intent")
+    @Schema(description = "意图配置", example = "{}")
     @Valid
     private WorkflowNodeConfigVOIntent intent = null;
 
     @JsonProperty("name")
+    @Schema(description = "节点名称", example = "意图识别")
     private String name = null;
 
     @JsonProperty("code")
+    @Schema(description = "节点编码", example = "intent_node")
     private String code = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0")
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "1.0.0")
     private String versionName = null;
 
     @JsonProperty("description")
+    @Schema(description = "节点描述", example = "意图识别节点")
     private String description = null;
 
     @JsonProperty("original_info")
+    @Schema(description = "原始信息", example = "{}")
     @Valid
     private WorkflowNodeConfigVOOriginalInfo originalInfo = null;
 

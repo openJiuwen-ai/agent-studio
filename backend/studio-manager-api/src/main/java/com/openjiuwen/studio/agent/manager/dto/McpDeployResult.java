@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
@@ -23,24 +24,31 @@ public class McpDeployResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("originId")
+    @Schema(description = "原始ID", example = "mcp-001")
     private String originId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "my-mcp-server")
     private String name = null;
 
     @JsonProperty("status")
+    @Schema(description = "部署状态", example = "SUCCESS")
     private StatusEnum status = null;
 
     @JsonProperty("id")
+    @Schema(description = "部署结果ID", example = "deploy-123456")
     private String id = null;
 
     @JsonProperty("message")
+    @Schema(description = "部署消息", example = "部署成功")
     private String message = null;
 
     @JsonProperty("errorCode")
+    @Schema(description = "错误码", example = "DEPLOY_FAILED")
     private String errorCode = null;
 
     @JsonProperty("errorMessage")
+    @Schema(description = "错误信息", example = "部署失败，请重试")
     private String errorMessage = null;
 
     public String getOriginId() {

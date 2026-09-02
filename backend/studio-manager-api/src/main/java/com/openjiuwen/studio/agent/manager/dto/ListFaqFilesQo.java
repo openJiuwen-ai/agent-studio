@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,29 +32,35 @@ public class ListFaqFilesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws-001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 10;
 
     @JsonProperty("ids")
+    @Schema(description = "文件ID列表", example = "[\"file-001\"]")
     @Valid
     @Size(min = 1, max = 1000)
     private List<@Length(min = 1, max = 64) String> ids = null;
 
     @JsonProperty("name")
+    @Schema(description = "文件名称", example = "faq.xlsx")
     @Length(max = 1024)
     private String name = null;
 
     @JsonProperty("status")
+    @Schema(description = "文件状态", example = "ready")
     @Length(max = 128)
     private String status = null;
 

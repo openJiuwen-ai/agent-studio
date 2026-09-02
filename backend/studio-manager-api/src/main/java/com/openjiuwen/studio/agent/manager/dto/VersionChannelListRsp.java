@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,12 +29,15 @@ public class VersionChannelListRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10")
     private Integer count = null;
 
     @JsonProperty("latest_version_id")
+    @Schema(description = "最新版本", example = "example-id-123")
     private String latestVersionId = null;
 
     @JsonProperty("channel_list")
+    @Schema(description = "渠道", example = "[]")
     @Valid
     @Size()
     private List<VersionChannelInfo> channelList = null;

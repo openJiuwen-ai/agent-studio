@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import jakarta.validation.Valid;
@@ -23,141 +24,182 @@ public class JiuwenEventData implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("memory")
+    @Schema(description = "记忆信息", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> memory = null;
 
     @JsonProperty("answer")
+    @Schema(description = "回答内容", example = "{}")
     @Valid
     private Object answer = null;
 
     @JsonProperty("origin_answer")
+    @Schema(description = "原始回答内容", example = "{}")
     @Valid
     private Object originAnswer = null;
 
     @JsonProperty("think")
+    @Schema(description = "思考过程", example = "正在思考中...")
     private String think = null;
 
     @JsonProperty("original_message")
+    @Schema(description = "原始消息", example = "用户输入的原始消息")
     private String originalMessage = null;
 
     @JsonProperty("card")
+    @Schema(description = "卡片内容", example = "{}")
     @Valid
     private Object card = null;
 
     @JsonProperty("card_code")
+    @Schema(description = "卡片代码", example = "card-001")
     private String cardCode = null;
 
     @JsonProperty("resource_url")
+    @Schema(description = "资源URL", example = "https://example.com/resource")
     private String resourceUrl = null;
 
     @JsonProperty("instance_id")
+    @Schema(description = "实例ID", example = "instance-001")
     private String instanceId = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1")
     private String versionId = null;
 
     @JsonProperty("code")
+    @Schema(description = "状态码", example = "200")
     private Integer code = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息内容", example = "操作成功")
     private String message = null;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node-001")
     private String nodeId = null;
 
     @JsonProperty("node_name")
+    @Schema(description = "节点名称", example = "开始节点")
     private String nodeName = null;
 
     @JsonProperty("node_type")
+    @Schema(description = "节点类型", example = "start")
     private String nodeType = null;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "workflow-001")
     private String workflowId = null;
 
     @JsonProperty("workflow_name")
+    @Schema(description = "工作流名称", example = "示例工作流")
     private String workflowName = null;
 
     @JsonProperty("parentNodeId")
+    @Schema(description = "父节点ID", example = "parent-node-001")
     private String parentNodeId = null;
 
     @JsonProperty("componentId")
+    @Schema(description = "组件ID", example = "component-001")
     private String componentId = null;
 
     @JsonProperty("traceId")
+    @Schema(description = "链路追踪ID", example = "trace-001")
     private String traceId = null;
 
     @JsonProperty("componentType")
+    @Schema(description = "组件类型", example = "llm")
     private String componentType = null;
 
     @JsonProperty("componentName")
+    @Schema(description = "组件名称", example = "大语言模型")
     private String componentName = null;
 
     @JsonProperty("agentId")
+    @Schema(description = "智能体ID", example = "agent-001")
     private String agentId = null;
 
     @JsonProperty("agentParentInvokeId")
+    @Schema(description = "智能体父调用ID", example = "parent-invoke-001")
     private String agentParentInvokeId = null;
 
     @JsonProperty("conversationId")
+    @Schema(description = "会话ID", example = "conversation-001")
     private String conversationId = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出参数", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> outputs = null;
 
     @JsonProperty("invokeId")
+    @Schema(description = "调用ID", example = "invoke-001")
     private String invokeId = null;
 
     @JsonProperty("parentInvokeId")
+    @Schema(description = "父调用ID", example = "parent-invoke-001")
     private String parentInvokeId = null;
 
     @JsonProperty("onInvokeData")
+    @Schema(description = "调用数据列表", example = "[]")
     @Valid
     @Size()
     private List<Map<String, Object>> onInvokeData = null;
 
     @JsonProperty("error")
+    @Schema(description = "错误信息", example = "{}")
     @Valid
     private JiuwenEventDataError error = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "running")
     private StatusEnum status = null;
 
     @JsonProperty("startTime")
+    @Schema(description = "开始时间", example = "2026-01-01T00:00:00Z")
     private String startTime = null;
 
     @JsonProperty("endTime")
+    @Schema(description = "结束时间", example = "2026-01-01T00:01:00Z")
     private String endTime = null;
 
     @JsonProperty("elapsedTime")
+    @Schema(description = "耗时", example = "1000")
     private String elapsedTime = null;
 
     @JsonProperty("metaData")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> metaData = null;
 
     @JsonProperty("pack")
+    @Schema(description = "打包数据", example = "{}")
     @Valid
     private Object pack = null;
 
     @JsonProperty("loopIndex")
+    @Schema(description = "循环索引", example = "0")
     private Integer loopIndex = null;
 
     @JsonProperty("loopNodeId")
+    @Schema(description = "循环节点ID", example = "loop-node-001")
     private String loopNodeId = null;
 
     @JsonProperty("enable_history")
+    @Schema(description = "是否启用历史记录", example = "true")
     private Boolean enableHistory = null;
 
     @JsonProperty("innerError")
+    @Schema(description = "内部错误信息", example = "{}")
     @Valid
     private JiuwenEventDataInnerError innerError = null;
 

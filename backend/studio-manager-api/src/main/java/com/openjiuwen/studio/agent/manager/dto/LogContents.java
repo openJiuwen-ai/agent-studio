@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -26,15 +27,19 @@ public class LogContents implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("content")
+    @Schema(description = "日志内容", example = "服务启动成功")
     private String content = null;
 
     @JsonProperty("line_num")
+    @Schema(description = "日志行号", example = "42")
     private String lineNum = null;
 
     @JsonProperty("createTime")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00Z")
     private String createTime = null;
 
     @JsonProperty("labels")
+    @Schema(description = "日志标签", example = "{\"level\":\"INFO\"}")
     @Valid
     @Size()
     private Map<@Length() String, @Length() String> labels = null;

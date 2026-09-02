@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -30,9 +32,11 @@ public class RebuildModelRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "STRING")
     private StatusEnum status = null;
 
     @JsonProperty("failed_models")
+    @Schema(description = "是否失败", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> failedModels = null;

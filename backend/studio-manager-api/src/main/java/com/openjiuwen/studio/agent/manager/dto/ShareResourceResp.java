@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -28,69 +29,86 @@ public class ShareResourceResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String resourceId = null;
 
     @JsonProperty("resource_name")
+    @Schema(description = "资源名称", example = "天气查询插件")
     @Length(max = 64)
     private String resourceName = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "plugin")
     private String resourceType = null;
 
     @JsonProperty("resource_description")
+    @Schema(description = "资源描述", example = "提供天气查询功能")
     private String resourceDescription = null;
 
     @JsonProperty("version_info_list")
+    @Schema(description = "版本信息列表", example = "版本信息列表")
     @Valid
     @Size(min = 1, max = 50)
     private List<ResourceVersionInfo> versionInfoList = null;
 
     @JsonProperty("resource_workspace_id")
+    @Schema(description = "资源工作空间ID", example = "ws001")
     private String resourceWorkspaceId = null;
 
     @JsonProperty("resource_workspace_name")
+    @Schema(description = "资源工作空间名称", example = "default")
     private String resourceWorkspaceName = null;
 
     @JsonProperty("workspace_list")
+    @Schema(description = "工作空间列表", example = "工作空间列表")
     @Valid
     @Size(min = 1, max = 100)
     private List<AuthWorkspaceInfo> workspaceList = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("tenant_id")
+    @Schema(description = "租户ID", example = "tenant001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String tenantId = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user001")
     private String creatorId = null;
 
     @JsonProperty("share_time")
+    @Schema(description = "分享时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date shareTime = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-plugin")
     private String icon = null;
 
     @JsonProperty("agent_inputs")
+    @Schema(description = "Agent输入参数", example = "Agent输入参数列表")
     @Valid
     @Size()
     private List<WorkflowFieldVO> agentInputs = null;
 
     @JsonProperty("workflow_inputs")
+    @Schema(description = "工作流输入参数", example = "工作流输入参数列表")
     @Valid
     @Size()
     private List<WorkflowFieldVO> workflowInputs = null;
 
     @JsonProperty("controller_inputs")
+    @Schema(description = "控制器输入参数", example = "控制器输入参数列表")
     @Valid
     @Size()
     private List<WorkflowFieldVO> controllerInputs = null;

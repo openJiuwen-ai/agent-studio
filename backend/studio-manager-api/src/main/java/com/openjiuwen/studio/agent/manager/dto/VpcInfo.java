@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class VpcInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "VPC ID", example = "vpc001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "VPC名称", example = "default-vpc")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "默认VPC")
     private String description = null;
 
     @JsonProperty("cidr")
+    @Schema(description = "CIDR网段", example = "192.168.0.0/16")
     private String cidr = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "available")
     private String status = null;
 
     public String getId() {

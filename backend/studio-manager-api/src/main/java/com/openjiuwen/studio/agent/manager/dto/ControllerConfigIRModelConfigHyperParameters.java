@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class ControllerConfigIRModelConfigHyperParameters implements Serializabl
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("temperature")
+    @Schema(description = "温度参数", example = "0.7")
     private Float temperature = null;
 
     @JsonProperty("top_p")
+    @Schema(description = "Top-P参数", example = "1.0")
     private Float topP = null;
 
     public Float getTemperature() {

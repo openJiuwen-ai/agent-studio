@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.hibernate.validator.constraints.Range;
@@ -26,31 +27,39 @@ public class ListAppsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("offset")
+    @Schema(description = "分页偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "5")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 5;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "my_agent")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("tag_id")
+    @Schema(description = "标签ID", example = "tag_001")
     @Length(max = 64)
     private String tagId = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "studio")
     private String source = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "agent")
     private String type = null;
 
     @JsonProperty("workflow_type")
+    @Schema(description = "工作流类型", example = "flow")
     private String workflowType = null;
 
     @JsonProperty("selected")
+    @Schema(description = "是否选中", example = "false")
     private Boolean selected = false;
 
     public Integer getOffset() {

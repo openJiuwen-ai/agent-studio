@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -26,6 +28,7 @@ public class ResourceDependencyResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("dependencies")
+    @Schema(description = "依赖列表", example = "[]")
     private List<ResourceDependency> dependencies = new ArrayList<ResourceDependency>();
 
     public List<ResourceDependency> getDependencies() {

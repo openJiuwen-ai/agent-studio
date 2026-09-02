@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,17 +27,21 @@ public class WorkflowRunStreamRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("event")
+    @Schema(description = "事件类型", example = "message")
     private String event = null;
 
     @JsonProperty("conversation_id")
+    @Schema(description = "会话ID", example = "conv-001")
     @Length(max = 32)
     private String conversationId = null;
 
     @JsonProperty("data")
+    @Schema(description = "响应数据", example = "{\"output\":\"result\"}")
     @Valid
     private Object data = null;
 
     @JsonProperty("createdTime")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdTime = null;
 
     public String getEvent() {

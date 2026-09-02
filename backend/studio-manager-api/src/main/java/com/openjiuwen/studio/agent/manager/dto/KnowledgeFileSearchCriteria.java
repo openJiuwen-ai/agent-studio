@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,15 +28,18 @@ public class KnowledgeFileSearchCriteria implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_name")
+    @Schema(description = "文件名称", example = "示例名称")
     @Length(max = 1024)
     private String fileName = null;
 
     @JsonProperty("file_type")
+    @Schema(description = "文件类型", example = "example-type")
     @Pattern(regexp = "^[a-zA-Z,]*$")
     @Length(max = 128)
     private String fileType = null;
 
     @JsonProperty("file_status")
+    @Schema(description = "文件", example = "active")
     @Length(max = 128)
     private String fileStatus = null;
 

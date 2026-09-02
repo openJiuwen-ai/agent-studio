@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,9 +22,11 @@ public class GetObsObjectReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("path")
+    @Schema(description = "路径", example = "示例文本")
     private String path = null;
 
     @JsonProperty("bucket")
+    @Schema(description = "桶", example = "示例文本")
     private String bucket = null;
 
     public String getPath() {

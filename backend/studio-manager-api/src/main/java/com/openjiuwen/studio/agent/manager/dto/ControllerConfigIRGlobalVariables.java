@@ -5,7 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -23,16 +23,20 @@ public class ControllerConfigIRGlobalVariables implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "全局变量名称", example = "var_name")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "全局变量描述", example = "变量描述信息")
     private String description = null;
 
     @JsonProperty("default")
+    @Schema(description = "默认值", example = "default_value")
     @Valid
     private Object _default = null;
 
     @JsonProperty("type")
+    @Schema(description = "变量类型", example = "string")
     private String type = null;
 
     public String getName() {

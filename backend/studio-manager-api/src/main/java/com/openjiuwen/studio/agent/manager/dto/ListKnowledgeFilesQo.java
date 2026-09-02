@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,29 +29,35 @@ public class ListKnowledgeFilesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws-001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 65534L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 10;
 
     @JsonProperty("name")
+    @Schema(description = "文件名称", example = "knowledge.pdf")
     @Length(max = 1024)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "文件类型", example = "pdf,docx")
     @Pattern(regexp = "^[a-zA-Z,]*$")
     @Length(max = 128)
     private String type = null;
 
     @JsonProperty("status")
+    @Schema(description = "文件状态", example = "ready")
     @Length(max = 128)
     private String status = null;
 

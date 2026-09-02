@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -30,10 +32,12 @@ public class McpCallToolReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("params")
+    @Schema(description = "参数", example = "示例字符串", required = true)
     @Valid
     @NotNull
     @Size()

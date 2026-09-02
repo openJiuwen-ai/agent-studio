@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -25,21 +26,27 @@ public class ProviderModelList implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "供应商ID", example = "provider-001")
     private String id = null;
 
     @JsonProperty("provider_name")
+    @Schema(description = "供应商名称", example = "华为云")
     private String providerName = null;
 
     @JsonProperty("logo")
+    @Schema(description = "供应商Logo", example = "https://example.com/logo.png")
     private String logo = null;
 
     @JsonProperty("source")
+    @Schema(description = "供应商来源", example = "huawei")
     private String source = null;
 
     @JsonProperty("type")
+    @Schema(description = "供应商类型", example = "cloud")
     private String type = null;
 
     @JsonProperty("models")
+    @Schema(description = "模型列表", example = "[{\"id\":\"model-001\"}]")
     @Valid
     @Size()
     private List<ModelServiceRsp> models = null;

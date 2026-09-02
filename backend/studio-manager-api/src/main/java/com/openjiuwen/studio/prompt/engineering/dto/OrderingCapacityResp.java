@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +27,7 @@ public class OrderingCapacityResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("ordering_capacities")
+    @Schema(description = "排序Capacities", example = "")
     @Valid
     private List<OrderingCapacityInfo> orderingCapacities = null;
 

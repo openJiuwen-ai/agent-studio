@@ -50,7 +50,9 @@ import org.springframework.web.bind.annotation.RequestParam;
     ResponseEntity<Integer> batchAddWorkspaceMember(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody WorkspaceMemberBody body);
 
@@ -66,7 +68,9 @@ import org.springframework.web.bind.annotation.RequestParam;
     ResponseEntity<Integer> batchDeleteWorkspaceMember(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "批量删除空间成员请求体。", required = true) @Valid @RequestBody
         DeleteWorkspaceMemberReq body);
 
@@ -80,7 +84,9 @@ import org.springframework.web.bind.annotation.RequestParam;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace/member", produces = {"application/json"},
         consumes = {"application/json"}, method = RequestMethod.PATCH)
     ResponseEntity<Integer> batchUpdateWorkspaceMemberRole(
-        @NotNull @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
@@ -95,7 +101,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.DELETE)
     ResponseEntity<CommonResponse> exitWorkspace(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "要退出的空间ID。", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "要退出的空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "要退出的空间ID。", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId);
 
     @ApiOperation(value = "", nickname = "queryIamUserList", notes = "获取IAM用户列表。",
@@ -108,7 +116,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.GET)
     ResponseEntity<GetWorkspaceMemberListRsp> queryIamUserList(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
             String workspaceId);
 
     @ApiOperation(value = "", nickname = "queryRoleList", notes = "获取团队空间下的角色列表。",
@@ -121,7 +131,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.GET)
     ResponseEntity<GetWorkspaceMemberRoleRsp> queryRoleList(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
             String workspaceId);
 
 
@@ -149,7 +161,9 @@ import org.springframework.web.bind.annotation.RequestParam;
     ResponseEntity<CommonResponse> transferWorkspaceOwnership(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody MemberOwnershipBody body);
 

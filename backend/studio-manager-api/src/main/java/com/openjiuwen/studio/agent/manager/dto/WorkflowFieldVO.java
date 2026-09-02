@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -30,51 +31,65 @@ public class WorkflowFieldVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "字段名称", example = "input_field", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("cn_name")
+    @Schema(description = "中文字段名称", example = "输入字段")
     private String cnName = null;
 
     @JsonProperty("type")
+    @Schema(description = "字段类型", example = "string", required = true)
     @NotBlank
     private String type = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "输入参数描述")
     private String description = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = null;
 
     @JsonProperty("source")
+    @Schema(description = "数据来源", example = "user")
     private SourceEnum source = SourceEnum.USER;
 
     @JsonProperty("schema")
+    @Schema(description = "Schema定义")
     @Valid
     private Object schema = null;
 
     @JsonProperty("aging_level")
+    @Schema(description = "老化级别", example = "session")
     private String agingLevel = null;
 
     @JsonProperty("storage_method")
+    @Schema(description = "存储方式", example = "memory")
     private String storageMethod = null;
 
     @JsonProperty("field_type")
+    @Schema(description = "字段类型", example = "input")
     private String fieldType = null;
 
     @JsonProperty("reflection")
+    @Schema(description = "是否反射", example = "false")
     private Boolean reflection = false;
 
     @JsonProperty("value")
+    @Schema(description = "字段值")
     @Valid
     private WorkflowFieldVOValue value = null;
 
     @JsonProperty("validator")
+    @Schema(description = "验证器列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVOValidator> validator = null;
 
     @JsonProperty("memory")
+    @Schema(description = "记忆列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldVOMemory> memory = null;

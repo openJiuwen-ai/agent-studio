@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Range;
@@ -26,14 +27,17 @@ public class ListEvalDataSetQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("pageNum")
+    @Schema(description = "页数量", example = "1")
     @Range(min = 1L)
     private Integer pageNum = 1;
 
     @JsonProperty("pageSize")
+    @Schema(description = "页大小", example = "1")
     @Range(min = 10L, max = 100L)
     private Integer pageSize = 20;
 

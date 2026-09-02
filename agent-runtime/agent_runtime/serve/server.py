@@ -288,7 +288,16 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
 
 def instance_app(config: dict | None = None):
     """instance FastAPI server"""
-    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)  # noqa: redefined-outer-name
+    _docs = settings.server.docs_enabled
+    app = FastAPI(
+        lifespan=lifespan,
+        docs_url="/runtime/docs" if _docs else None,
+        redoc_url="/runtime/redoc" if _docs else None,
+        openapi_url="/runtime/openapi.json" if _docs else None,
+        title="Agent Runtime API",
+        version="v1",
+        description="智能体运行时 API 文档（对话/推理/执行）",
+    )  # noqa: redefined-outer-name
     app.add_middleware(RequestContextMiddleware)
 
     for i in apps_map:

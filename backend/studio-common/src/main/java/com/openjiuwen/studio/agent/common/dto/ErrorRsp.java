@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.common.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -22,18 +23,23 @@ import java.util.Objects;
 @Validated
 public class ErrorRsp {
     @JsonProperty("error_code")
+    @Schema(description = "错误码", example = "400")
     private String errorCode = null;
 
     @JsonProperty("error_msg")
+    @Schema(description = "错误消息", example = "参数校验失败")
     private String errorMsg = null;
 
     @JsonProperty("error_reason")
+    @Schema(description = "错误原因", example = "name不能为空")
     private String errorReason = null;
 
     @JsonProperty("error_suggestion")
+    @Schema(description = "修复建议", example = "请提供name参数")
     private String errorSuggestion = null;
 
     @JsonProperty("details")
+    @Schema(description = "错误详情列表", example = "[]")
     @Valid
     @Size()
     private List<ErrorDetail> details = null;

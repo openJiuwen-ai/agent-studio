@@ -332,7 +332,7 @@ export interface IKnowledgeRetrievePolicy {
 export interface IUpdateSingleAgentConfig {
   data: Partial<ISingleAgentPutBodyNew>;
   successCb?: () => void;
-  failCb?: () => void;
+  failCb?: (error?: any) => void;
   finallyCb?: () => void;
 }
 

@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -30,10 +32,12 @@ public class BatchDeleteRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "1", required = true)
     @NotNull
     private Long count = null;
 
     @JsonProperty("ids")
+    @Schema(description = "ids", example = "[]")
     @Valid
     @Size(min = 1, max = 100)
     private List<@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Length(min = 1, max = 64) String> ids = null;

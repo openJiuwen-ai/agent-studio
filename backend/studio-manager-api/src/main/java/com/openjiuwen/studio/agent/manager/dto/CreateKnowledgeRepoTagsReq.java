@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,6 +28,7 @@ public class CreateKnowledgeRepoTagsReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     @Pattern(
         regexp = "^[a-zA-Z0-9\\u4e00-\\u9fa5][a-zA-Z0-9\\u4e00-\\u9fa5:\\-\\_/\\.?&=@#%+~!\\$'\\(\\),;\\*\\[\\]]{0,254}$")
     @Length(min = 1, max = 100)

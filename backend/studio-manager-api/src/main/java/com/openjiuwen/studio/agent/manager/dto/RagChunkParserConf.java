@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -31,21 +32,26 @@ public class RagChunkParserConf implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("chunk_method")
+    @Schema(description = "切片方法", example = "naive")
     private ChunkMethodEnum chunkMethod = ChunkMethodEnum.NAIVE;
 
     @JsonProperty("auto_keywords")
+    @Schema(description = "自动提取关键词数量", example = "3")
     @Range(min = 0L, max = 32L)
     private Integer autoKeywords = 0;
 
     @JsonProperty("auto_questions")
+    @Schema(description = "自动提取问题数量", example = "2")
     @Range(min = 0L, max = 10L)
     private Integer autoQuestions = 0;
 
     @JsonProperty("chunk_token_num")
+    @Schema(description = "切片Token数量", example = "512")
     @Range(min = 1L, max = 2048L)
     private Integer chunkTokenNum = 512;
 
     @JsonProperty("delimiter")
+    @Schema(description = "分隔符列表", example = "[\"\\n\\n\"]")
     @Valid
     @Size(min = 1, max = 100)
     private List<@Length(min = 1, max = 128) String> delimiter = null;

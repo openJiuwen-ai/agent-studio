@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,71 +32,87 @@ public class ModelServiceListQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("page_size")
+    @Schema(description = "每页数量", example = "5")
     @Range(min = 1L, max = 500L)
     private Integer pageSize = 5;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "1")
     @Range(min = 1L)
     private Integer pageNum = 1;
 
     @JsonProperty("provider_id")
+    @Schema(description = "提供商ID", example = "provider-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     @Length(max = 80)
     private String providerId = null;
 
     @JsonProperty("service_name")
+    @Schema(description = "服务名称", example = "gpt-service")
     @Length(max = 64)
     private String serviceName = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9:. _/|\\\\-]{1,64}$")
     @Length(max = 64)
     private String modelName = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "LLM")
     @Pattern(
         regexp = "(LLM|Text-Embedding|RERANK|TEXT-TO-IMAGE|IMAGE-TO-TEXT|AUDIO-TO-TEXT|TEXT-TO-AUDIO|TEXT-IMAGE-EMBEDDING)")
     private String modelType = null;
 
     @JsonProperty("publish_status")
+    @Schema(description = "发布状态", example = "online")
     @Pattern(regexp = "^(?:offline|online)?$")
     private String publishStatus = null;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "service-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     @Length(max = 80)
     private String id = null;
 
     @JsonProperty("context_length")
+    @Schema(description = "上下文长度列表", example = "[\"4096\",\"8192\"]")
     @Valid
     @Size(max = 10)
     private List<@Length(max = 16) String> contextLength = null;
 
     @JsonProperty("model_series")
+    @Schema(description = "模型系列列表", example = "[\"GPT\",\"Claude\"]")
     @Valid
     @Size(max = 10)
     private List<@Length(max = 16) String> modelSeries = null;
 
     @JsonProperty("model_types")
+    @Schema(description = "模型类型列表", example = "[\"LLM\",\"RERANK\"]")
     @Valid
     @Size(max = 10)
     private List<@Length(max = 64) String> modelTypes = null;
 
     @JsonProperty("is_support_deep_thinking")
+    @Schema(description = "是否支持深度思考", example = "true")
     private Boolean isSupportDeepThinking = null;
 
     @JsonProperty("is_support_function_call")
+    @Schema(description = "是否支持函数调用", example = "true")
     private Boolean isSupportFunctionCall = null;
 
     @JsonProperty("is_subscribed")
+    @Schema(description = "是否已订阅", example = "false")
     private Boolean isSubscribed = null;
 
     @JsonProperty("functioncall")
+    @Schema(description = "是否支持函数调用", example = "true")
     private Boolean functioncall = null;
 
     public String getWorkspaceId() {

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,34 +26,44 @@ public class McpServiceBatchDeployItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("third_id")
+    @Schema(description = "第三方ID", example = "third_001")
     @Length(max = 64)
     private String thirdId = null;
 
     @JsonProperty("third_version_id")
+    @Schema(description = "第三方版本ID", example = "ver_001")
     private String thirdVersionId = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "天气查询服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "Weather Service")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供天气查询功能")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "Provide weather query")
     private String descriptionEn = null;
 
     @JsonProperty("org_type")
+    @Schema(description = "组织类型", example = "enterprise")
     private String orgType = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务配置", example = "{\"port\":8080}")
     private String serverConfig = null;
 
     @JsonProperty("icon")
+    @Schema(description = "服务图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("readme")
+    @Schema(description = "服务说明文档", example = "服务使用说明")
     private String readme = null;
 
     public String getThirdId() {

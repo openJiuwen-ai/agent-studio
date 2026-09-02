@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -26,12 +28,15 @@ public class MemoryUserProfileTagInfoIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("updatePolicy")
+    @Schema(description = "更新policy", example = "STRING")
     private UpdatePolicyEnum updatePolicy = UpdatePolicyEnum.OVERWRITE;
 
     public String getName() {

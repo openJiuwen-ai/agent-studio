@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import com.openjiuwen.studio.agent.common.dto.WorkflowEnvironment;
 import jakarta.validation.Valid;
@@ -27,20 +28,24 @@ public class WorkflowRunReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数", example = "{\"query\":\"hello\"}")
     @Valid
     @Size()
     private Map<String, Object> inputs = null;
 
     @JsonProperty("globals")
+    @Schema(description = "全局参数", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> globals = null;
 
     @JsonProperty("environment")
+    @Schema(description = "运行环境", example = "{\"env\":\"prod\"}")
     @Valid
     private WorkflowEnvironment environment = null;
 
     @JsonProperty("messages")
+    @Schema(description = "消息列表", example = "[{\"role\":\"user\",\"content\":\"hello\"}]")
     @Valid
     @Size()
     private List<Message> messages = null;

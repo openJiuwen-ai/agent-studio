@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -26,43 +27,55 @@ public class PePromptTemplateVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("template_id")
+    @Schema(description = "模板ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String templateId = null;
 
     @JsonProperty("template_name")
+    @Schema(description = "模板名称", example = "示例名称")
     private String templateName = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     private String content = null;
 
     @JsonProperty("variables")
+    @Schema(description = "变量", example = "[{\"name\":\"var1\",\"type\":\"string\",\"value\":\"val1\"}]")
     private String variables = null;
 
     @JsonProperty("tag_list")
+    @Schema(description = "标签列表", example = "")
     @Valid
     @Size(max = 500)
     private List<TagVo> tagList = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private String createdOn = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private String updatedOn = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("industry")
+    @Schema(description = "行业信息", example = "")
     @Valid
     private IndustryVo industry = null;
 
     @JsonProperty("pt_type")
+    @Schema(description = "提示词类型", example = "text")
     @Pattern(regexp = "multi|text")
     private String ptType = null;
 
     @JsonProperty("is_share")
+    @Schema(description = "是否共享", example = "1")
     private Integer isShare = null;
 
     public String getTemplateId() {

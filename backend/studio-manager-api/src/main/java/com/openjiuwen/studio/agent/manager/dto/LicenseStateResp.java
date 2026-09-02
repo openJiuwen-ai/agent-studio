@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Range;
 import org.springframework.validation.annotation.Validated;
@@ -25,28 +26,36 @@ public class LicenseStateResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "状态码", example = "0")
     @Range(min = 0L, max = 10L)
     private Integer code = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "license有效")
     private String message = null;
 
     @JsonProperty("esn")
+    @Schema(description = "设备序列号", example = "ESN123456789")
     private String esn = null;
 
     @JsonProperty("expires_in")
+    @Schema(description = "过期时间（秒）", example = "31536000")
     private Long expiresIn = null;
 
     @JsonProperty("last_update")
+    @Schema(description = "最后更新时间戳", example = "1700000000")
     private Long lastUpdate = null;
 
     @JsonProperty("cpu")
+    @Schema(description = "CPU核数", example = "8.0")
     private Float cpu = null;
 
     @JsonProperty("bbom")
+    @Schema(description = "BOM标识", example = "1")
     private Long bbom = null;
 
     @JsonProperty("expiry_threshold_days")
+    @Schema(description = "过期阈值天数", example = "30")
     private Integer expiryThresholdDays = null;
 
     public Integer getCode() {

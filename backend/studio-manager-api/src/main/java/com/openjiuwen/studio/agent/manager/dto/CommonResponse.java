@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -27,14 +29,17 @@ public class CommonResponse implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "状态码", example = "200", required = true)
     @NotNull
     private Integer code = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "操作成功", required = true)
     @NotBlank
     private String message = null;
 
     @JsonProperty("data")
+    @Schema(description = "数据", example = "{}")
     @Valid
     private Object data = null;
 

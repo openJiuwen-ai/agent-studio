@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,27 +28,35 @@ public class ImportListInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "import_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "导入文件1")
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "file")
     private String type = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述信息", example = "这是导入文件的描述")
     private String description = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "true")
     private Boolean status = false;
 
     @JsonProperty("prohibited")
+    @Schema(description = "是否禁止", example = "false")
     private Boolean prohibited = false;
 
     @JsonProperty("import_description")
+    @Schema(description = "导入描述", example = "从配置文件导入")
     private String importDescription = null;
 
     @JsonProperty("dependencies")
+    @Schema(description = "依赖列表", example = "[{\"id\":\"dep_001\",\"name\":\"依赖1\"}]")
     @Valid
     @Size()
     private List<ImportListInfo> dependencies = null;

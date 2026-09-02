@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -30,10 +32,12 @@ public class WorkflowBranchConfigVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("logic")
+    @Schema(description = "logic", example = "STRING", required = true)
     @NotNull
     private LogicEnum logic = null;
 
     @JsonProperty("conditions")
+    @Schema(description = "conditions", example = "[]")
     @Valid
     @Size()
     private List<WorkflowBranchConfigVOConditions> conditions = null;
