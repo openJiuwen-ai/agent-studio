@@ -2703,6 +2703,9 @@ public class IrAdapterService {
      */
     private void setArguments(List<Map<String, Object>> argumentSettings, List<Map<String, Object>> argumentsList,
         Boolean isRoot, String resourceType, Map<String, String> refMap, String nestedName) {
+        if (argumentSettings == null || argumentSettings.isEmpty()) {
+            return;
+        }
         for (Map<String, Object> argumentSetting : argumentSettings) {
             // 参数名称
             String name = String.valueOf(argumentSetting.get("name"));
