@@ -26,8 +26,8 @@
               @if (item.progress === 'loading') {
                 <nz-icon nzType="loading" nzTheme="outline" class="!text-[16px]" />
               }
-              <span class="w-[calc(100%-44px)]" nz-tooltip [nzTooltipTitle]="item.name" nzTooltipPlacement="top">{{ item.name }}</span>
-              <nz-icon nzType="close" nzTheme="outline" (click)="removeFile(i)" />
+              <span class="w-[calc(100%-44px)] truncate" nz-tooltip [nzTooltipTitle]="item.name" nzTooltipPlacement="top">{{ item.name }}</span>
+              <nz-icon nzType="delete" nzTheme="outline" class="delete-file-icon !text-[16px]" (click)="removeFile(i)" />
             </div>
           }
         </div>
@@ -140,6 +140,7 @@
             <meta-inline-svg
               src="assets/agent-center/icons/attachment.svg"
               class="text-[20px] text-[#595959]"
+              [ngClass]="{ 'disabled-upload-icon': uploadData.length >= 20 }"
               [isInline]="false"
               nz-tooltip
               [nzTooltipTitle]="uploadData.length < 20 ? ('preview_debug_upload_support_type' | i18nextEager) + ('upload_max_files' | i18nextEager) : ''"
