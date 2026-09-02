@@ -17,6 +17,25 @@
     }
     <div class="sender-container" [ngClass]="{ 'sender-disabled': disabled, 'is-sending': sending, 'sender-container-full': isRuntime }">
       @if (!isSingleRow) {
+        @if (uploadData.length) {
+          <div class="mb-[4px] flex justify-end">
+            <button
+              nz-button
+              nzSize="small"
+              class="flex !w-[96px] justify-center"
+              nzDanger
+              [disabled]="uploading"
+              nz-popconfirm
+              [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+              (nzOnConfirm)="clearAllUploadData()"
+            >
+              <span class="flex items-center gap-[4px]">
+                <nz-icon nzType="clear" nzTheme="outline" />
+                {{ 'clear_uploaded_files' | i18nextEager }}
+              </span>
+            </button>
+          </div>
+        }
         <div class="mb-[4px] flex flex-wrap gap-x-[9px] gap-y-[8px] overflow-y-auto">
           @for (item of uploadData; track item.fileId; let i = $index) {
             <div class="uploaded-file">

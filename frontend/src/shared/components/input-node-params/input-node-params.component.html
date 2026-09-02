@@ -26,6 +26,22 @@
         >
           <span class="flex items-center gap-[4px]"><span nz-icon nzType="plus"></span> {{ 'add' | i18nextEager }}</span>
         </button>
+        <button
+          *ngIf="inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length"
+          nz-button
+          nzSize="small"
+          class="flex !w-[96px] justify-center ml-2"
+          nzDanger
+          [disabled]="isUploading"
+          nz-popconfirm
+          [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+          (nzOnConfirm)="clearMultiFiles(inputItem)"
+        >
+          <span class="flex items-center gap-[4px]">
+            <nz-icon nzType="clear" nzTheme="outline" />
+            {{ 'clear_uploaded_files' | i18nextEager }}
+          </span>
+        </button>
       </nz-form-label>
       <nz-form-control>
         <!-- 除File类型外，其他类型的输入参数均展示为输入框 -->

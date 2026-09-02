@@ -290,6 +290,14 @@ export class InputNodeParamsComponent {
     );
   }
 
+  public clearMultiFiles(inputItem): void {
+    if (this.isUploading) {
+      return;
+    }
+    inputItem.uploadDatas = [];
+    this.parameterFromGroup.controls[inputItem.uniqueId]?.setValue([]);
+  }
+
   public addMultiFile(index): void {
     if (this.isUploading || this.disabled === 'confirmed') {
       return;

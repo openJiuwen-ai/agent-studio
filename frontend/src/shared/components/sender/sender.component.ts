@@ -455,6 +455,15 @@ export class SenderComponent implements OnDestroy {
     }
   }
 
+  /** 清空全部已上传附件 */
+  public clearAllUploadData(): void {
+    if (this.uploading) {
+      return;
+    }
+    this.uploadData = [];
+    this.checkContentWidth();
+  }
+
   public startRecording() {
     this.recording = true;
     this.timerFn();

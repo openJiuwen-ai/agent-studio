@@ -709,6 +709,15 @@ export class DynamicNodeParamsComponent {
     );
   }
 
+  /** 清空多文件参数的全部已上传文件 */
+  public clearMultiFiles(inputItem): void {
+    if (this.isUploading) {
+      return;
+    }
+    inputItem.uploadDatas = [];
+    this.parameterFromGroup.controls[inputItem.name]?.setValue([]);
+  }
+
   /** 多文件上传添加按钮点击事件 */
   public addMultiFile(index): void {
     if (this.isUploading) {

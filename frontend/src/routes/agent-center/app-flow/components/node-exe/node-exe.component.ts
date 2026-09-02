@@ -964,6 +964,13 @@ export class NodeExeComponent implements OnChanges {
     );
   }
 
+  public clearMultiFiles(param): void {
+    if (this.isUploading) {
+      return;
+    }
+    param.uploadDatas = [];
+  }
+
   public addMultiFile(index): void {
     if (this.isUploading) {
       return;

@@ -82,6 +82,22 @@
                           {{ 'add' | i18nextEager }}</span
                         >
                       </button>
+                      <button
+                        *ngIf="param.type?.includes('array<file') && param.uploadDatas?.length"
+                        nz-button
+                        nzSize="small"
+                        class="flex !w-[96px] justify-center ml-2"
+                        nzDanger
+                        [disabled]="isUploading"
+                        nz-popconfirm
+                        [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+                        (nzOnConfirm)="clearMultiFiles(param)"
+                      >
+                        <span class="flex items-center gap-[4px]"
+                          ><nz-icon nzType="clear" nzTheme="outline"></nz-icon>
+                          {{ 'clear_uploaded_files' | i18nextEager }}</span
+                        >
+                      </button>
                     </div>
 
                     <div class="w-full">

@@ -1216,6 +1216,8 @@
   "upload_max_files": "最多20个",
   "upload_max_files_tip": "最多只能上传20个文件",
   "duplicate_files_rejected_tip": "存在重复文件，请核实后重新上传",
+  "clear_uploaded_files": "清空文件",
+  "clear_uploaded_files_confirm": "确认清空全部已上传文件？",
   "image_size_cannot_exceed_5mb": "图片大小不能超过5MB",
   "file_size_cannot_exceed_128mb": "文件大小不能超过60MB",
   "file_size_cannot_exceed_128": "文件大小不能超过128MB",

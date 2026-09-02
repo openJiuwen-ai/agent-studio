@@ -340,6 +340,16 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  /** 清空全部已上传文件 */
+  public clearAllFiles(): void {
+    if (this.isUploading) {
+      return;
+    }
+    this.fileList = [];
+    this.saveFile();
+    this.cdr.detectChanges();
+  }
+
   saveFile() {
     if (
       this.param.type.includes('file') ||

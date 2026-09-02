@@ -1199,6 +1199,8 @@
   "upload_max_files": "up to 20",
   "upload_max_files_tip": "Up to 20 files can be uploaded",
   "duplicate_files_rejected_tip": "Duplicate file names detected. Please verify and upload again.",
+  "clear_uploaded_files": "Clear Files",
+  "clear_uploaded_files_confirm": "Clear all uploaded files?",
   "image_size_cannot_exceed_5mb": "The image size cannot exceed 5MB",
   "file_size_cannot_exceed_128mb": "The file size cannot exceed 60MB",
   "file_size_cannot_exceed_128": "The file size cannot exceed 128MB",
