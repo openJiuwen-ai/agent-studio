@@ -363,6 +363,10 @@ class FlowMcp(WorkflowComponent):
                                     converted = json.loads(converted)
                                 except ValueError:
                                     pass
+                    # None 值的字段不传给 MCP server（省略而非传 null），
+                    # 兼容性最好：无论 server 接受 null 还是只接受省略都能工作。
+                    if converted is None:
+                        continue
                     api_inputs[name] = converted
             else:
                 workflow_logger.error(

@@ -304,10 +304,15 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
                 continue
             if sub_expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
                 try:
-                    return _convert_simple(data, sub_expected_type, current_path)
+                    result = _convert_simple(data, sub_expected_type, current_path)
                 except JiuWenBaseException:
                     del errors[errors_before:]
                     continue
+                # _convert_simple 失败时不抛异常，而是 append error + return None
+                if len(errors) > errors_before:
+                    del errors[errors_before:]
+                    continue
+                return result
             if sub_expected_type == "null":
                 if data is None or data == "":
                     return None

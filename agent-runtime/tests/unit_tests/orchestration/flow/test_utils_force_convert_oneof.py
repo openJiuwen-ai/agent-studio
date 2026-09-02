@@ -184,6 +184,93 @@ class TestForceConvertSubExpectedTypeFix:
         assert errors == []
 
 
+class TestForceConvertOneOfSimpleTypeErrorCleanup:
+    """oneOf 简单类型错误清理修复
+
+    发现过程：MCP echo 工具的 opt_integer（integer|null）不填时，
+    前端传空字符串 ""，_convert_simple("", "integer") 内部 int("") 抛 ValueError，
+    但 _convert_simple 捕获异常后 append error + return None（不抛异常），
+    _convert_one_of_type 的 except JiuWenBaseException 分支永远不触发，
+    导致 "Incorrect type for key: opt_integer, expected: integer" 残留在 errors 中。
+
+    修复：在 _convert_simple 返回后检查 errors 增长，有则清理并 continue。
+    """
+
+    @staticmethod
+    def test_integer_null_with_empty_string():
+        """integer|null + "" -> null 分支返回 None，无残留错误"""
+        inputs = {"text": "hello", "opt_integer": ""}
+        definition = [
+            {"id": "text", "type": "string"},
+            {"id": "opt_integer", "type": "integer | null"},
+        ]
+        result, errors = force_convert(inputs, definition)
+        assert result["opt_integer"] is None
+        # 关键断言：integer 分支 int("") 失败的错误不能残留
+        assert errors == []
+
+    @staticmethod
+    def test_number_null_with_empty_string():
+        """number|null + "" -> null 分支返回 None，无残留错误"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "number | null"}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
+        assert errors == []
+
+    @staticmethod
+    def test_boolean_null_with_empty_string():
+        """boolean|null + "" -> False（bool("") 不报错，boolean 分支直接成功）"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "boolean | null"}]
+        result, errors = force_convert(inputs, definition)
+        # bool("") == False，_convert_simple 不报错，boolean 分支直接返回
+        assert result["field"] is False
+        assert errors == []
+
+    @staticmethod
+    def test_integer_null_with_valid_value():
+        """integer|null + 42 -> 42（integer 分支直接成功）"""
+        inputs = {"field": 42}
+        definition = [{"id": "field", "type": "integer | null"}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] == 42
+        assert errors == []
+
+    @staticmethod
+    def test_echo_tool_all_optional_params():
+        """模拟 MCP echo 工具：所有类型可选参数都不填（全传空字符串或 None）"""
+        inputs = {
+            "text": "hello",
+            "opt_string": "",
+            "opt_integer": "",
+            "opt_boolean": "",
+            "opt_object": "",
+            "opt_array": "",
+        }
+        definition = [
+            {"id": "text", "type": "string"},
+            {"id": "opt_string", "type": "string | null"},
+            {"id": "opt_integer", "type": "integer | null"},
+            {"id": "opt_boolean", "type": "boolean | null"},
+            {"id": "opt_object", "type": "object | null", "schema": []},
+            {"id": "opt_array", "type": "array | null", "schema": {}},
+        ]
+        result, errors = force_convert(inputs, definition)
+        assert errors == []
+        assert result["text"] == "hello"
+        # string 分支 str("") == "" 直接成功
+        assert result["opt_string"] == ""
+        # boolean 分支 bool("") == False 直接成功（不报错，不走 null）
+        assert result["opt_boolean"] is False
+        # integer/number: int("")/float("") 报错 → 走 null 分支 → None
+        assert result["opt_integer"] is None
+        # object: json.loads("") 报错 → 走 null 分支 → None
+        assert result["opt_object"] is None
+        # array: json.loads("") 报错 → 走 null 分支 → None
+        assert result["opt_array"] is None
+
+
 class TestForceConvertRegression:
     """回归测试：修复前会崩溃的场景"""
 
