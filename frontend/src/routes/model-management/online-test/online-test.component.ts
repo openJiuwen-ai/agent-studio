@@ -417,6 +417,21 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       }
       return false;
     }
+    // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+    if (
+      selectedList.some((f) =>
+        this.fileList.some(
+          (u) => u.name?.toLowerCase() === f.name?.toLowerCase(),
+        ),
+      )
+    ) {
+      const now = Date.now();
+      if (now - this.lastCountWarnAt > 300) {
+        this.message.warning(this.i18n.transform("duplicate_files_rejected_tip"));
+        this.lastCountWarnAt = now;
+      }
+      return false;
+    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));

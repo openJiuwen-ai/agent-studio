@@ -660,6 +660,19 @@ export class DynamicNodeParamsComponent {
         );
         return;
       }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(input.files as any as File[]).some((f) =>
+          inputItem.uploadDatas.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        MessageComponent.showWarn(
+          this.i18n.transform('duplicate_files_rejected_tip'),
+        );
+        return;
+      }
 
       this.inputIndex = this.inputList.findIndex(
         (item) => item.name === inputItem.name,

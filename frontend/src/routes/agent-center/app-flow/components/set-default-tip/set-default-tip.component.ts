@@ -298,6 +298,19 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         );
         return;
       }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(files).some((f) =>
+          this.fileList.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        this.nzMessage?.warning(
+          this.i18n.transform('duplicate_files_rejected_tip'),
+        );
+        return;
+      }
       for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(

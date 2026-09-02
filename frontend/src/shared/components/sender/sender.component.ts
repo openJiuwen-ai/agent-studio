@@ -368,6 +368,19 @@ export class SenderComponent implements OnDestroy {
       );
       return;
     }
+    // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+    if (
+      Array.from(files).some((f) =>
+        this.uploadData.some(
+          (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+        ),
+      )
+    ) {
+      MessageComponent.showWarn(
+        this.i18n.transform('duplicate_files_rejected_tip'),
+      );
+      return;
+    }
     this.uploading = true;
     const fileArray = Array.from(files);
     const validFiles: FileItem[] = fileArray.flatMap((file) => {

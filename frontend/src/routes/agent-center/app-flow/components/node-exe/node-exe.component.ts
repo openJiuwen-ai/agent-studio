@@ -861,6 +861,19 @@ export class NodeExeComponent implements OnChanges {
         );
         return;
       }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(input.files).some((f) =>
+          inputItem.uploadDatas.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        this.nzMessage.warning(
+          this.i18n.transform('duplicate_files_rejected_tip'),
+        );
+        return;
+      }
       for (const file of input.files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
