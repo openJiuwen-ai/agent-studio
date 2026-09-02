@@ -71,8 +71,9 @@
       width: 24px !important;
       min-width: 24px !important;
     }
-    // 叶子节点（非 object 类型）无展开按钮，隐藏宽度避免偏移
-    .ant-tree-switcher.ant-tree-switcher-noop {
+    // 仅顶层叶子节点（无缩进单元、非 object/array<object>）隐藏展开按钮占位避免左偏移；
+    // 嵌套层级的叶子节点保留 24px switcher 占位，使 object 子参数相对父节点右移 24px（不再与父节点平齐）
+    .ant-tree-treenode:not(:has(.ant-tree-indent-unit)) > .ant-tree-switcher.ant-tree-switcher-noop {
       width: 0 !important;
       min-width: 0 !important;
     }
