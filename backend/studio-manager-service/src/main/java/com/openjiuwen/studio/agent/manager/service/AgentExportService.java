@@ -724,11 +724,13 @@ public class AgentExportService {
      * @param projectId projectId
      * @param workspaceId workspaceId
      * @param agentId agentId
+     * @param agentType agent 类型（agent/controller），用于区分导出适配器
      * @return List<ExportResp> 导出结果列表
      */
-    public List<ExportResp> buildExportResps(String projectId, String workspaceId, String agentId) {
+    public List<ExportResp> buildExportResps(String projectId, String workspaceId, String agentId,
+        String agentType) {
         ExportResourceParams body = new ExportResourceParams();
-        body.setResourceType(ResourceTypeEnum.AGENT.toString());
+        body.setResourceType(agentType);
         body.setResourceIds(List.of(agentId));
         ExportResourceVersion version = new ExportResourceVersion();
         version.setResourceId(agentId);

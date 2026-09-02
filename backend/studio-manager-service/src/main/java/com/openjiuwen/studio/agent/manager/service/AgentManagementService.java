@@ -659,9 +659,26 @@ public class AgentManagementService implements IAgentManagementService {
         }
 
         try {
-            List<ExportResp> exportResps = agentExportService.buildExportResps(projectId, workspaceId, agentId);
+            List<ExportResp> exportResps = agentExportService.buildExportResps(projectId, workspaceId, agentId,
+                oldAgent.getType());
             List<ExportInfo> exportInfos = agentExportService.flattenExportInfos(exportResps);
-            agentImportService.importFromExportInfos(projectId, targetWorkspaceId, exportInfos);
+            ImportRsp importRsp = agentImportService.importFromExportInfos(projectId, targetWorkspaceId, exportInfos);
+            if (importRsp.getSucceedLen() == 0) {
+                log.error("Fail to copy agent, no resource imported, agentId: {}", agentId);
+                throw new AgentStudioException(StudioError.AGENT_COPY_FAIL);
+            }
+            // 从导入结果中获取新创建的agent信息
+            if (CollectionUtils.isNotEmpty(importRsp.getImportList())) {
+                importRsp.getImportList().stream()
+                    .filter(res -> StringUtils.isNotEmpty(res.getId()))
+                    .findFirst()
+                    .ifPresent(res -> {
+                        newAgent.setAgentId(res.getId());
+                        if (StringUtils.isNotEmpty(res.getName())) {
+                            newAgent.setName(res.getName());
+                        }
+                    });
+            }
         } catch (AgentStudioException e) {
             log.error("Fail to copy agent, agentId: {}", agentId, e);
             throw new AgentStudioException(StudioError.AGENT_COPY_FAIL);

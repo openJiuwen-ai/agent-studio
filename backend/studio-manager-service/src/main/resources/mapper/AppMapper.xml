@@ -47,7 +47,7 @@
         values (#{appId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=VARCHAR},
                 #{name,jdbcType=VARCHAR}, #{description,jdbcType=VARCHAR}, #{icon,jdbcType=VARCHAR},
                 #{tags,jdbcType=VARCHAR}, #{appType,jdbcType=VARCHAR}, #{resourceId,jdbcType=VARCHAR},
-                #{resourceType,jdbcType=BOOLEAN},
+                #{resourceType,jdbcType=VARCHAR},
                 #{creator,jdbcType=VARCHAR}, #{publishedOn,jdbcType=TIMESTAMP}, #{workflowType,jdbcType=VARCHAR},
                 #{inputParams,jdbcType=VARCHAR},
                 #{outputParams,jdbcType=VARCHAR}, #{prologue,jdbcType=VARCHAR}, #{suggestQueries,jdbcType=VARCHAR})
