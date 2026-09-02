@@ -238,7 +238,13 @@ async def ir_execute(req_json: dict, request: Request):
 
     if req.response_mode == ResponseMode.STREAMING:
         return StreamingResponse(
-            content=stream_response(req, execution_id, runner, moderation_engine),
+            # entry_id=执行入口（app_run 侧写入 request.state.instance_id：执行智能体时=agent_id、
+            # 执行工作流时=workflow_id），作为注册记录 agent_id 供终止接口归属校验与回显；
+            # 直调 ir_execute 未设置时兜底空串（归属校验自然跳过）
+            content=stream_response(
+                req, execution_id, runner, moderation_engine,
+                entry_id=getattr(request.state, "instance_id", ""),
+            ),
             media_type="text/event-stream",
         )
     else:
