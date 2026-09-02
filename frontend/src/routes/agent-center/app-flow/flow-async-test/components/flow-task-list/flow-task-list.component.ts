@@ -131,6 +131,7 @@ export class FlowTaskListComponent {
     }
     this.flowTaskService.createTask(this.currWorkflow.workflow_id, params, query).then((res) => {
       MessageComponent.showSuccess(this.i18n.transform('flowtasklistcomponent_648'));
+      this.selectId = res.id;
       this.getTaskList();
     })
   }

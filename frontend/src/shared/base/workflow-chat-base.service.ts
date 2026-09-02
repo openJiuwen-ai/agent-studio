@@ -260,6 +260,7 @@ export abstract class WorkflowChatBaseComponent {
     const { event, data, createdTime } = chunkObj;
     const {
       text,
+      summary,
       message,
       is_finished,
       node_type,
@@ -486,14 +487,14 @@ export abstract class WorkflowChatBaseComponent {
         this.nodeIdBlock[node_id] = ENodeStatus.FINISHED;
         this.previousNodeId = '';
         const prevAns = this.chatLoop[curIndex].showAnswer?.[this.index];
-        // 修复消息节点返回空输出的情况
+        // 修复消息节点返回空输出的情况：结构化信息走 summary 字段，非 text
         if (prevAns && (!prevAns?.text || !text)) {
-          prevAns.text = prevAns?.text || ' ';
+          prevAns.text = prevAns?.text || summary || ' ';
           prevAns.loading = false;
           prevAns.messageId = createdTime;
         } else if (!text) {
           this.chatLoop[curIndex].showAnswer.push({
-            text: ' ',
+            text: summary || ' ',
             loading: false,
             isShowInputParams: false,
             isConfirmed: 'init',
