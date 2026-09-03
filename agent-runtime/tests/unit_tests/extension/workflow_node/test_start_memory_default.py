@@ -34,7 +34,8 @@ def _memory_inputs(*fields):
 class TestExtractAssignmentValues:
     """_extract_assignment_values — 全类型默认值提取。"""
 
-    def test_all_types_extracted_no_leak(self):
+    @staticmethod
+    def test_all_types_extracted_no_leak():
         """七种类型声明:非空默认全部提取,子字段不泄漏到顶层,空默认 key 缺失。"""
         fields = [
             _var("v_str", "string", "特色美食"),
@@ -118,7 +119,8 @@ class TestExtractAssignmentValues:
         assert "c1" not in result
         assert "c_empty" not in result
 
-    def test_object_assembled_from_children_skips_empty(self):
+    @staticmethod
+    def test_object_assembled_from_children_skips_empty():
         """object 顶层默认为空时从子字段组装;空默认子字段跳过。"""
         fields = [
             _var(
@@ -143,7 +145,8 @@ class TestExtractAssignmentValues:
         assert result["v_obj"] == {"a": "va", "nested": {"deep": "dv"}}
         assert "b_empty" not in result["v_obj"]
 
-    def test_object_all_children_empty_key_absent(self):
+    @staticmethod
+    def test_object_all_children_empty_key_absent():
         """object 子字段全空时整体 key 缺失(不写入空 dict)。"""
         fields = [
             _var(
@@ -158,7 +161,8 @@ class TestExtractAssignmentValues:
 
         assert "v_obj" not in result
 
-    def test_permanent_aging_level_treated_as_session(self):
+    @staticmethod
+    def test_permanent_aging_level_treated_as_session():
         """permanent 视同 session(既有兼容行为)。"""
         fields = [
             {
@@ -174,7 +178,8 @@ class TestExtractAssignmentValues:
 
         assert result["v_perm"] == "pv"
 
-    def test_scalar_with_schema_still_extracted(self):
+    @staticmethod
+    def test_scalar_with_schema_still_extracted():
         """畸形 IR(标量带 schema)按基本类型提取自身 default_value。"""
         fields = [
             _var("v_weird", "string", "wv", schema={"id": "", "type": "string"})
@@ -223,7 +228,8 @@ class TestTransformType:
     def test_empty_non_string_returns_none(self, data_type, value):
         assert Start._transform_type(data_type, value) is None
 
-    def test_invalid_json_falls_back_to_original(self):
+    @staticmethod
+    def test_invalid_json_falls_back_to_original():
         assert Start._transform_type("array", "not-json") == "not-json"
         assert Start._transform_type("object", "[1, 2]") == "[1, 2]"
         assert Start._transform_type("number", "abc") == "abc"
@@ -232,7 +238,8 @@ class TestTransformType:
 class TestAssembleObjectDefault:
     """_assemble_object_default — 子字段组装。"""
 
-    def test_nested_object_and_array_children(self):
+    @staticmethod
+    def test_nested_object_and_array_children():
         subfields = [
             _var("s", "string", "sv"),
             _var("arr", "array", '["x"]', schema={"id": "", "type": "string"}),
