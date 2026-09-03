@@ -4,6 +4,7 @@ Orchestration API — MVP implementation of /v1/orchestration/ir/execute
 
 import json
 import os
+import asyncio
 import time
 import uuid
 from copy import deepcopy
@@ -49,6 +50,13 @@ from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_workflow_queue
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
+
+from agent_runtime.serve.execution_registry import get_execution_registry
+from agent_runtime.serve.apis.run_check import (
+    _CODE_AGENT_PERMISSION,
+    _CODE_WORKFLOW_PERMISSION,
+    _build_error_response,
+)
 # 注：N2L chat 端点已随 agent_builder 抽离到 studio-builder 镜像（agent_builder/serve/apis/n2l_api.py），
 # runtime 不再 import agent_builder.nl_to_agent.nl2（避免 runtime→agent_builder 耦合）。
 
@@ -230,7 +238,13 @@ async def ir_execute(req_json: dict, request: Request):
 
     if req.response_mode == ResponseMode.STREAMING:
         return StreamingResponse(
-            content=stream_response(req, execution_id, runner, moderation_engine),
+            # entry_id=执行入口（app_run 侧写入 request.state.instance_id：执行智能体时=agent_id、
+            # 执行工作流时=workflow_id），作为注册记录 agent_id 供终止接口归属校验与回显；
+            # 直调 ir_execute 未设置时兜底空串（归属校验自然跳过）
+            content=stream_response(
+                req, execution_id, runner, moderation_engine,
+                entry_id=getattr(request.state, "instance_id", ""),
+            ),
             media_type="text/event-stream",
         )
     else:
@@ -289,7 +303,13 @@ def _fallback_terminal_done(execution_id: str) -> str:
     return f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
 
-async def stream_response(req: ExecutionRequest, execution_id: str, runner, moderation_engine=None):
+async def stream_response(
+    req: ExecutionRequest,
+    execution_id: str,
+    runner,
+    moderation_engine=None,
+    entry_id: str = "",
+):
     """
     透传 OutputSchema 格式
     输出格式: data: {"type": "end node stream", "index": 0, "payload": {"response": "text"}}\n\n
@@ -303,29 +323,124 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
     的 processOnControllerDoneMessage 消费 done.data.answer 写入会话消息(getMessages →
     updateConversation)，清空会导致本轮助手答案不入会话历史、第二轮上下文缺失；故仅当 runner
     未发 done 时才构造空兜底。
+
+    执行注册（终止接口数据源）：开头注册 current_task + 归属四元组到 ExecutionRegistry
+    （agent_id=entry_id，由 ir_execute 从 request.state.instance_id 传入：执行智能体时=agent_id、
+    执行工作流时=workflow_id）；finally 首行注销，自然结束/异常/被取消三路径均无残留。
+    运行中被取消时本生成器被 task.cancel() 掐断，末尾无 done（无 done 即中止约定）。
     """
     execution_id = execution_id or str(uuid.uuid4())
-    pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
+    registry = get_execution_registry()
+    entry_task = asyncio.current_task()
+    try:
+        try:
+            _ctx = _request_ctx.get()
+        except LookupError:
+            _ctx = None
+        await registry.register(
+            req.conversation_id,
+            entry_task,
+            execution_id,
+            project_id=(_ctx.project_id if _ctx is not None else ""),
+            agent_id=entry_id,
+            user_id=(_ctx.user_id if _ctx is not None else ""),
+        )
+        pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
 
-    raw_gen = runner.run_streaming(req, execution_id)
-    moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
+        raw_gen = runner.run_streaming(req, execution_id)
+        moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
 
-    async for chunk in moderated_gen:
-        if chunk is None:
-            continue
-        if _stream_event_of(chunk) == "done":
-            # 拦截 runner 的 done，延迟到流末尾发送(出现多个 done 时保留第一个)
-            if pending_done is None:
-                pending_done = chunk
-            continue
-        # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
-        yield _serialize_stream_chunk(chunk)
+        async for chunk in moderated_gen:
+            if chunk is None:
+                continue
+            if _stream_event_of(chunk) == "done":
+                # 拦截 runner 的 done，延迟到流末尾发送(出现多个 done 时保留第一个)
+                if pending_done is None:
+                    pending_done = chunk
+                continue
+            # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
+            yield _serialize_stream_chunk(chunk)
 
-    # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
-    if pending_done is not None:
-        yield _serialize_stream_chunk(pending_done)
-    else:
-        yield _fallback_terminal_done(execution_id)
+        # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
+        if pending_done is not None:
+            yield _serialize_stream_chunk(pending_done)
+        else:
+            yield _fallback_terminal_done(execution_id)
+    finally:
+        await registry.unregister(req.conversation_id, task=entry_task)
+
+
+async def _check_before_cancel(
+    registry,
+    conversation_id: str,
+    project_id: str,
+    agent_id: str,
+    workflow_id: str,
+    language: str,
+):
+    """终止接口运行时归属校验（与执行接口 run_check"项目匹配 403"同规格）。
+
+    路径 project_id 强校验恒在；可选 query agentId/workflowId 提供任一则做入口级校验
+    （与 exec:{conv} 注册记录的 agent_id 字段比对）。不匹配返回 403 ErrorRsp（403 时
+    取消标记不置位——本函数只读不写）；无在飞注册记录幂等放行返回 None。
+    403 错误码按入口分流复用统一码表两码（零新增 i18n key）：携带 agentId→02101016、
+    其余（携带 workflowId 或仅 project 不匹配）→02201020。
+    """
+    registration = await registry.get_registration(conversation_id)
+    if not registration:
+        return None  # 无在飞记录：幂等放行（US9）
+    if registration.get("project_id") != project_id or (
+        (agent_id or workflow_id) and registration.get("agent_id") != (agent_id or workflow_id)
+    ):
+        code_key = _CODE_AGENT_PERMISSION if agent_id else _CODE_WORKFLOW_PERMISSION
+        workflow_logger.info(
+            "Cancel forbidden: conv=%s provided_entry=%s registered_project=%s",
+            conversation_id,
+            agent_id or workflow_id,
+            registration.get("project_id"),
+        )
+        return _build_error_response(403, code_key, language)
+    return None
+
+
+@execution_app.post("/v1/{project_id}/conversations/{conversation_id}/cancel")
+async def cancel_execution(
+    request: Request,
+    project_id: str,
+    conversation_id: str,
+    agentId: str = "",
+    workflowId: str = "",
+):
+    """执行终止端点（工作流/多智能体/单智能体三类合并 1 接口，定位主键 conversation_id）。
+
+    归属校验（_check_before_cancel）→ 置协作式取消标记（所有实例可见，幂等 TTL）
+    + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段。
+    cancelled=取消信号已受理（除 4xx/5xx 外恒 true，不代表终止完成）；running=调用时
+    是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，不视为失败）。
+    运行中被终止的原 SSE 流末尾无 done（无 done 即中止，零改动约定）。
+    """
+    language = request.headers.get("x-language", "zh-cn")
+    registry = get_execution_registry()
+
+    forbidden_response = await _check_before_cancel(
+        registry, conversation_id, project_id, agentId, workflowId, language
+    )
+    if forbidden_response is not None:
+        return forbidden_response
+
+    registration = await registry.get_registration(conversation_id)
+    running = bool(registration)  # 是否检测到在飞执行（仅参考信息）
+    await registry.mark_cancelled(conversation_id)
+    return JSONResponse(
+        status_code=200,
+        content={
+            "agent_id": registration.get("agent_id") or agentId or workflowId,
+            "conversation_id": conversation_id,
+            "cancelled": True,
+            "running": running,
+            "message": "cancel signal accepted",
+        },
+    )
 
 
 @execution_app.post("/v1/orchestration/ir/component/{component_id}/execute")

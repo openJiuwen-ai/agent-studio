@@ -1,0 +1,260 @@
+# -*- coding: UTF-8 -*-
+# Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+"""终止端点与 stream_response 注册/注销单元测试（REQ-2026-002）。
+
+覆盖：
+- cancel_execution 端点校验矩阵：403（project/入口不匹配，标记不置位）、200（在飞/无在飞幂等）、
+  响应五字段（契约 v0.6 §4.1）、403 错误码按入口分流复用两码（OQ-3 定案）；
+- stream_response：执行注册（含四元组数据源）与 finally 注销（正常/异常路径）。
+"""
+
+# pylint: disable=no-self-use
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.responses import JSONResponse
+
+from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
+from agent_runtime.serve.apis import orchestration
+from agent_runtime.serve.apis.orchestration import (
+    _CODE_AGENT_PERMISSION,
+    _CODE_WORKFLOW_PERMISSION,
+    _build_error_response,
+    cancel_execution,
+    stream_response,
+)
+
+
+def _sse(event: str, data: dict | None = None) -> bytes:
+    payload = {"event": event, "data": data or {}}
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def _make_request(headers: dict | None = None):
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/v1/proj-1/conversations/conv-1/cancel",
+        "headers": [
+            (k.lower().encode("utf-8"), v.encode("utf-8")) for k, v in (headers or {}).items()
+        ],
+        "query_string": b"",
+    }
+    from fastapi import Request
+
+    return Request(scope)
+
+
+def _make_registry(registration: dict | None):
+    registry = MagicMock()
+    registry.get_registration = AsyncMock(return_value=registration or {})
+    registry.mark_cancelled = AsyncMock()
+    registry.register = AsyncMock()
+    registry.unregister = AsyncMock()
+    return registry
+
+
+def _patch_registry(registry):
+    return patch("agent_runtime.serve.apis.orchestration.get_execution_registry", lambda: registry)
+
+
+def _req(conversation_id: str = "conv-1") -> ExecutionRequest:
+    return ExecutionRequest.model_validate({"conversationId": conversation_id, "query": "hi"})
+
+
+class TestCancelEndpoint403:
+    @pytest.mark.asyncio
+    async def test_project_mismatch_without_entry_uses_workflow_code(self):
+        """仅 project 不匹配（无入口 query）→ 02201020（其 reason 即 projectId 不一致语义）。"""
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-other", "agent_id": "wf-1", "user_id": "u-1"}
+        )
+        sentinel = JSONResponse(status_code=403, content={"error_code": "sentinel"})
+
+        with patch("agent_runtime.serve.apis.orchestration._build_error_response") as ber:
+            ber.return_value = sentinel
+            with _patch_registry(registry):
+                resp = await cancel_execution(
+                    _make_request({"x-language": "zh-cn"}),
+                    project_id="proj-1",
+                    conversation_id="conv-1",
+                )
+
+        assert resp is sentinel
+        ber.assert_called_once_with(403, _CODE_WORKFLOW_PERMISSION, "zh-cn")
+        registry.mark_cancelled.assert_not_awaited()  # 403 时不置标记
+
+    @pytest.mark.asyncio
+    async def test_agent_entry_mismatch_uses_agent_code(self):
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-real", "user_id": "u-1"}
+        )
+        sentinel = JSONResponse(status_code=403, content={"error_code": "sentinel"})
+
+        with patch("agent_runtime.serve.apis.orchestration._build_error_response") as ber:
+            ber.return_value = sentinel
+            with _patch_registry(registry):
+                resp = await cancel_execution(
+                    _make_request(), project_id="proj-1", conversation_id="conv-1", agentId="agent-wrong"
+                )
+
+        assert resp is sentinel
+        ber.assert_called_once_with(403, _CODE_AGENT_PERMISSION, "zh-cn")
+        registry.mark_cancelled.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_workflow_entry_mismatch_uses_workflow_code(self):
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "wf-real", "user_id": "u-1"}
+        )
+        sentinel = JSONResponse(status_code=403, content={"error_code": "sentinel"})
+
+        with patch("agent_runtime.serve.apis.orchestration._build_error_response") as ber:
+            ber.return_value = sentinel
+            with _patch_registry(registry):
+                resp = await cancel_execution(
+                    _make_request(), project_id="proj-1", conversation_id="conv-1", workflowId="wf-wrong"
+                )
+
+        assert resp is sentinel
+        ber.assert_called_once_with(403, _CODE_WORKFLOW_PERMISSION, "zh-cn")
+
+    @pytest.mark.asyncio
+    async def test_403_response_uses_run_check_errorrsp_builder(self):
+        """未 patch 时经 run_check._build_error_response 构建（ErrorRsp 四字段 + i18n）。"""
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-other", "agent_id": "wf-1", "user_id": "u-1"}
+        )
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request({"x-language": "zh-cn"}), project_id="proj-1", conversation_id="conv-1"
+            )
+        assert resp.status_code == 403
+        assert resp.body
+
+
+class TestCancelEndpoint200:
+    @pytest.mark.asyncio
+    async def test_running_execution_marked_and_echoed(self):
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"}
+        )
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-1"
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body == {
+            "agent_id": "agent-1",
+            "conversation_id": "conv-1",
+            "cancelled": True,
+            "running": True,
+            "message": "cancel signal accepted",
+        }
+        registry.mark_cancelled.assert_awaited_once_with("conv-1")
+
+    @pytest.mark.asyncio
+    async def test_no_inflight_is_idempotent_success(self):
+        """无在飞（从未执行/已结束/已挂起后注销）→ 200 cancelled=true running=false（US9 幂等）。"""
+        registry = _make_registry(None)
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-none", agentId="agent-9"
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["cancelled"] is True
+        assert body["running"] is False
+        assert body["agent_id"] == "agent-9"  # 无注册记录时回显调用方传入的入口 ID
+        registry.mark_cancelled.assert_awaited_once()  # 标记仍置位（挂起场景恢复路径依赖）
+
+    @pytest.mark.asyncio
+    async def test_project_match_with_entry_match_passes(self):
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"}
+        )
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-1", agentId="agent-1"
+            )
+
+        assert resp.status_code == 200
+
+
+class TestStreamRegistration:
+    class _FakeRunner:
+        def __init__(self, chunks):
+            self._chunks = chunks
+
+        async def run_streaming(self, req, execution_id):
+            for chunk in self._chunks:
+                yield chunk
+
+    class _BrokenRunner:
+        async def run_streaming(self, req, execution_id):
+            raise RuntimeError("boom")
+            yield  # pragma: no cover - 使其成为生成器
+
+    async def _collect(self, gen):
+        out = []
+        async for frame in gen:
+            out.append(frame)
+        return out
+
+    @pytest.mark.asyncio
+    async def test_registers_with_entry_id_and_unregisters_in_finally(self):
+        registry = _make_registry(None)
+
+        with _patch_registry(registry):
+            frames = await self._collect(
+                stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry_id="agent-1")
+            )
+
+        assert len(frames) == 2  # message + 兜底 done
+        registry.register.assert_awaited_once()
+        (conv_id, task, exec_id), kwargs = registry.register.await_args
+        assert conv_id == "conv-1"
+        assert exec_id == "exec-1"
+        assert kwargs["agent_id"] == "agent-1"
+        assert kwargs["project_id"] == ""  # 无 _request_ctx 时防御为空串
+        registry.unregister.assert_awaited_once_with("conv-1", task=task)
+
+    @pytest.mark.asyncio
+    async def test_unregister_called_on_runner_exception(self):
+        """执行异常路径 finally 注销仍生效（无注册残留）。"""
+        registry = _make_registry(None)
+
+        with _patch_registry(registry), pytest.raises(RuntimeError):
+            await self._collect(
+                stream_response(_req(), "exec-1", self._BrokenRunner(), entry_id="agent-1")
+            )
+
+        registry.register.assert_awaited_once()
+        registry.unregister.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_registration_uses_request_context_ids(self):
+        """_request_ctx 存在时四元组取 ctx 的 project_id/user_id（协程隔离数据源）。"""
+        registry = _make_registry(None)
+        ctx = MagicMock(project_id="proj-ctx", user_id="user-ctx")
+        token = orchestration._request_ctx.set(ctx)
+        try:
+            with _patch_registry(registry):
+                await self._collect(
+                    stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry_id="wf-1")
+                )
+        finally:
+            orchestration._request_ctx.reset(token)
+
+        _, kwargs = registry.register.await_args
+        assert kwargs["project_id"] == "proj-ctx"
+        assert kwargs["user_id"] == "user-ctx"
+        assert kwargs["agent_id"] == "wf-1"
