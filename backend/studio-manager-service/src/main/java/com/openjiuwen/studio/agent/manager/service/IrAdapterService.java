@@ -1697,10 +1697,28 @@ public class IrAdapterService {
         }
         // 1. 先查找是否存在Headers参数
         Map<String, SchemaConfig> propertiesNode = schemaConfig.getProperties();
+        if (propertiesNode == null) {
+            propertiesNode = new HashMap<>();
+            schemaConfig.setProperties(propertiesNode);
+        }
         for (Map.Entry<String, SchemaConfig> entry : propertiesNode.entrySet()) {
             if (Strings.CS.equals("Headers", entry.getValue().getLocation())) {
                 headers.put(entry.getKey(), entry.getValue().getDefaultValue());
             }
+        }
+        // 2. 仅存在于headers中的参数（如Content-Type）补入schema，与插件详情DTO
+        // （PluginBaseImpl.fillHeaders）保持一致。否则工作流前端按DTO展示并保存的
+        // Headers入参在运行时arguments中不存在，触发101743 param not defined
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (propertiesNode.containsKey(entry.getKey())) {
+                continue;
+            }
+            SchemaConfig headerParam = new SchemaConfig();
+            headerParam.setLocation("Headers");
+            headerParam.setType("string");
+            headerParam.setDescription(entry.getKey());
+            headerParam.setDefaultValue(entry.getValue());
+            propertiesNode.put(entry.getKey(), headerParam);
         }
     }
 
