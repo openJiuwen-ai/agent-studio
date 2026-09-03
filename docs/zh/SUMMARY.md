@@ -11,6 +11,7 @@
   - [可观测性部署](how-to/configure-opentelemetry.md)
   - [知识库接入指南](how-to/knowledge-base-guide.md)
   - [运行问题排查](how-to/troubleshooting.md)
+  - [常见问题 FAQ](../FAQ/faq.md)
 - [参考文档（Reference）](reference/)
   - [REST API 参考](reference/rest-api.md)
 - [解释文档（Explanation）](explanation/)
