@@ -135,7 +135,20 @@ class Type:
         return extracted_key_fields
 
     def _json_schema_type(self):
-        """按照json schema格式转换的类型"""
+        """按照json schema格式转换的类型
+
+        支持联合类型（如 "object | null"、"integer | null"），
+        取第一个非 null 的子类型作为主类型。
+        """
+        # 处理联合类型：取第一个非 null 子类型
+        if "|" in self.var_type:
+            sub_types = [t.strip() for t in self.var_type.split("|")]
+            primary_type = next(
+                (t for t in sub_types if t != "null"), None
+            )
+            if primary_type is None:
+                primary_type = "null"
+            return Type(primary_type).json_schema_type
         for standard_type, aliases in self.type_aliases.items():
             if self.var_type in aliases:
                 return ValueTypeEnum.from_string(standard_type)

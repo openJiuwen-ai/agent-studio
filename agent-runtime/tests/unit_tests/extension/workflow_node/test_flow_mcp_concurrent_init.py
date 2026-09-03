@@ -298,28 +298,44 @@ class TestFormatApiInputsNoneValue:
         assert result["items"] == []
 
     @staticmethod
-    def test_none_value_string_type_returns_none():
-        """None + string type → None (not str(None) → "None")"""
+    def test_none_value_string_type_omits_optional_key():
+        """None + string type (optional) → key omitted (not str(None) → "None")"""
         params = [_MockParam("name", param_type="string", method="Body")]
+        mcp = _make_flow_mcp_for_format(params)
+        result = mcp._format_api_inputs({"name": None})
+        assert "name" not in result
+
+    @staticmethod
+    def test_none_value_integer_type_omits_optional_key():
+        """None + integer type (optional) → key omitted"""
+        params = [_MockParam("count", param_type="integer", method="Body")]
+        mcp = _make_flow_mcp_for_format(params)
+        result = mcp._format_api_inputs({"count": None})
+        assert "count" not in result
+
+    @staticmethod
+    def test_none_value_boolean_type_omits_optional_key():
+        """None + boolean type (optional) → key omitted"""
+        params = [_MockParam("flag", param_type="boolean", method="Body")]
+        mcp = _make_flow_mcp_for_format(params)
+        result = mcp._format_api_inputs({"flag": None})
+        assert "flag" not in result
+
+    @staticmethod
+    def test_none_value_required_string_type_returns_none():
+        """None + string type (required) → key present with value None"""
+        params = [_MockParam("name", param_type="string", method="Body", required=True)]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"name": None})
         assert result["name"] is None
 
     @staticmethod
-    def test_none_value_integer_type_returns_none():
-        """None + integer type → None"""
-        params = [_MockParam("count", param_type="integer", method="Body")]
+    def test_none_value_required_integer_type_returns_none():
+        """None + integer type (required) → key present with value None"""
+        params = [_MockParam("count", param_type="integer", method="Body", required=True)]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"count": None})
         assert result["count"] is None
-
-    @staticmethod
-    def test_none_value_boolean_type_returns_none():
-        """None + boolean type → None"""
-        params = [_MockParam("flag", param_type="boolean", method="Body")]
-        mcp = _make_flow_mcp_for_format(params)
-        result = mcp._format_api_inputs({"flag": None})
-        assert result["flag"] is None
 
 
 # ─── _format_api_inputs: 空字符串处理 ──────────────────────────────
@@ -456,20 +472,20 @@ class TestFormatApiInputsRegression:
 
     @staticmethod
     def test_mcp_optional_string_param_with_none():
-        """可选 string 参数为 None → None，不是 "None" 字符串"""
+        """可选 string 参数为 None → key 省略（不传 "None" 字符串）"""
         params = [
             _MockParam("query", param_type="string", method="Body", required=True),
             _MockParam("optional_text", param_type="string", method="Body", required=False),
         ]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"query": "hello", "optional_text": None})
-        assert result["optional_text"] is None
+        assert "optional_text" not in result
 
     @staticmethod
     def test_multiple_none_params():
-        """多个不同类型的 None 参数"""
+        """多个不同类型的 None 参数：optional 省略、required 传 null、object/array 转 {}/[]"""
         params = [
-            _MockParam("query", param_type="string", method="Body"),
+            _MockParam("query", param_type="string", method="Body", required=True),
             _MockParam("arguments", param_type="object | null", method="Body"),
             _MockParam("items", param_type="array | null", method="Body"),
             _MockParam("count", param_type="integer", method="Body"),
@@ -478,7 +494,11 @@ class TestFormatApiInputsRegression:
         result = mcp._format_api_inputs({
             "query": None, "arguments": None, "items": None, "count": None,
         })
+        # required string → key present with value None
         assert result["query"] is None
+        # object | null → {}
         assert result["arguments"] == {}
+        # array | null → []
         assert result["items"] == []
-        assert result["count"] is None
+        # optional integer → key omitted
+        assert "count" not in result

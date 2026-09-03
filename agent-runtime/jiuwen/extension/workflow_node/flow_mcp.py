@@ -363,9 +363,12 @@ class FlowMcp(WorkflowComponent):
                                     converted = json.loads(converted)
                                 except ValueError:
                                     pass
-                    # None 值的字段不传给 MCP server（省略而非传 null），
-                    # 兼容性最好：无论 server 接受 null 还是只接受省略都能工作。
+                    # None 值的处理策略：
+                    # - required 参数：保留 key 传 null（省略会触发 server 端 "missing required argument"）
+                    # - optional 参数：省略 key（兼容性最好）
                     if converted is None:
+                        if getattr(param, "required", False):
+                            api_inputs[name] = None
                         continue
                     api_inputs[name] = converted
             else:

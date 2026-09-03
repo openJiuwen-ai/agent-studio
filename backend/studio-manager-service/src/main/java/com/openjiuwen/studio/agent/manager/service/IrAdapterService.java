@@ -2075,6 +2075,29 @@ public class IrAdapterService {
             if (JsonSchemaType.OBJECT.type.equals(properties.getValue().getType())) {
                 param.put(SCHEMA, parseWorkflowPluginParams(properties.getValue(), false));
             }
+            // oneOf 场景：从第一个非 null 子 schema 提取 object/array 的 SCHEMA
+            if (paramType != null && paramType.contains("|")
+                && properties.getValue().getOneOf() != null) {
+                SchemaConfig effectiveSchema = properties.getValue().getOneOf().stream()
+                    .filter(s -> s.getType() != null && !JsonSchemaType.NULL.type.equals(s.getType()))
+                    .findFirst()
+                    .orElse(null);
+                if (effectiveSchema != null) {
+                    if (JsonSchemaType.ARRAY.type.equals(effectiveSchema.getType())
+                        && effectiveSchema.getItems() != null) {
+                        String type = effectiveSchema.getItems().getType();
+                        Map<String, Object> sonMap = new HashMap<>();
+                        sonMap.put(TYPE, type);
+                        if (JsonSchemaType.OBJECT.type.equals(type)) {
+                            sonMap.put(SCHEMA, parseWorkflowPluginParams(effectiveSchema.getItems(), false));
+                        }
+                        param.put(SCHEMA, sonMap);
+                    }
+                    if (JsonSchemaType.OBJECT.type.equals(effectiveSchema.getType())) {
+                        param.put(SCHEMA, parseWorkflowPluginParams(effectiveSchema, false));
+                    }
+                }
+            }
             param.entrySet().removeIf(entry -> Objects.isNull(entry.getValue()));
             paramList.add(param);
         }

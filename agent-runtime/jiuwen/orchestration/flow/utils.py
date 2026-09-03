@@ -278,8 +278,10 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         逐个尝试子类型，成功则返回。关键：失败的子类型可能往共享的 errors
         列表写入错误信息，必须在失败后清理，否则后续子类型成功时仍会残留
         前一个失败分支的错误（如 "Incorrect type for key: arguments, expected: object"）。
+        全部子类型都失败时，保留最后一个分支的错误信息，避免静默吞掉非法输入。
         """
         expected_types = [t.strip() for t in expected_type.split("|")]
+        errors_before_all = len(errors)
         for sub_expected_type in expected_types:
             # 记录尝试前的 errors 长度，失败时回退到此位置
             errors_before = len(errors)
@@ -287,6 +289,8 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
                 try:
                     result = _convert_object(data, definition, current_path)
                     if isinstance(result, dict):
+                        # object 转换成功，清理此分支产生的错误
+                        del errors[errors_before:]
                         return result
                 except JiuWenBaseException:
                     pass
@@ -297,6 +301,7 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
                 try:
                     result = _convert_array(data, definition, current_path)
                     if isinstance(result, list):
+                        del errors[errors_before:]
                         return result
                 except JiuWenBaseException:
                     pass
@@ -317,6 +322,10 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
                 if data is None or data == "":
                     return None
                 continue
+        # 全部子类型都失败：补一条错误信息，避免非法输入被静默吞掉
+        errors.append(
+            SCHEMA_VALIDATION_WRONG_TYPE.format(k=current_path, t=expected_type)
+        )
         return None
 
     def _convert_object(inputs, definition, current_path):
