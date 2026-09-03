@@ -90,7 +90,12 @@ class ExecutionRegistry:
             },
         )
         await client.expire(exec_key, EXEC_TTL_SECONDS)
-        await client.set(f"{CANCEL_KEY_PREFIX}{conversation_id}", "false", ex=EXEC_TTL_SECONDS)
+        # 初始化取消标记仅在键不存在时执行（nx）：挂起期间被取消的执行先置标记 true
+        # 后注销，重发时 register 若无条件覆盖会把 true 抹成 false，workflow_runner
+        # 恢复分支（_is_session_cancelled）随即失明，US3"从入口重新执行"失效
+        await client.set(
+            f"{CANCEL_KEY_PREFIX}{conversation_id}", "false", ex=EXEC_TTL_SECONDS, nx=True
+        )
         workflow_logger.info(
             "Execution registered: conv=%s entry=%s instance=%s exec=%s",
             conversation_id,

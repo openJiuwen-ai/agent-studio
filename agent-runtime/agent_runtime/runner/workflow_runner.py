@@ -292,6 +292,24 @@ class WorkflowRunner:
         if is_interrupted and await self._is_session_cancelled(session_id):
             await self._clear_session_cancelled(session_id)
             is_interrupted = False
+            # 丢弃中断态 checkpoint：从入口重跑=旧状态作废；否则 pre_workflow_execute
+            # 撞 workflow-state-exists 错误（CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR）
+            try:
+                checkpointer = CheckpointerFactory.get_checkpointer()
+                clear_checkpoint = getattr(
+                    checkpointer, "_clear_checkpoint_and_sentinel", None
+                )
+                if clear_checkpoint:
+                    await clear_checkpoint(
+                        session_id, ir_json.get("workflowId", ""), session
+                    )
+            except Exception as clear_err:
+                workflow_logger.warning(
+                    "Failed to clear interrupted checkpoint after cancel: "
+                    "conv=%s, %s",
+                    session_id,
+                    clear_err,
+                )
             workflow_logger.info(
                 "Session cancelled before resume: conv=%s, restart from entry", session_id
             )

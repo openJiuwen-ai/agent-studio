@@ -69,7 +69,10 @@ class TestRegister:
             },
         )
         client.expire.assert_awaited_once_with("exec:conv-1", EXEC_TTL_SECONDS)
-        client.set.assert_awaited_once_with("cancel:conv-1", "false", ex=EXEC_TTL_SECONDS)
+        # nx=True：仅当标记不存在时初始化 false，保留挂起期间 cancel 置位的 true（US3 恢复检测依赖）
+        client.set.assert_awaited_once_with(
+            "cancel:conv-1", "false", ex=EXEC_TTL_SECONDS, nx=True
+        )
 
     @pytest.mark.asyncio
     async def test_register_empty_conversation_skipped(self):
