@@ -382,7 +382,10 @@ class HierarchicalControlAgent(BaseControlAgent):
         Returns:
             Tuple[Optional[str], bool]: 调用的agent_id(可为None), 是否存在调用agent循环
         """
-        if self.current_agent_calls_count > self.config.max_agent_calls:
+        # >= 而非 >:count==max 时(第 max+1 次选择)先做循环检测,检出乒乓则强制
+        # main agent 的 default workflow 优雅收尾;若用 >,循环内 count 永远 <= max,
+        # 循环检测永不可达(2fe87a96 引入的回归)
+        if self.current_agent_calls_count >= self.config.max_agent_calls:
             if self._detect_cycle():
                 logger.warning(
                     f"Cyclic repeated calls, call chain: {self.call_agent_history}",
