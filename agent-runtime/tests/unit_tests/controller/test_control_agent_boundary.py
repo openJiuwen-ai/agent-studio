@@ -8,6 +8,7 @@
   检出乒乓 → 强制 main 的 default workflow 优雅收尾;未检出 → 干净退出 None。
   2fe87a96 曾将此处一并改为 >,导致循环检测永不可达(103302 ping-pong 回归)
 """
+# pylint: disable=protected-access
 import os
 import sys
 
