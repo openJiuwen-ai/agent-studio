@@ -315,6 +315,62 @@ def _reset_sub_workflow_component_outputs(self, sub_workflow_session, inputs: In
     io_state.commit()
 
 
+async def _compensate_unexecuted_stream_producers(
+    workflow_self, sub_workflow_session
+) -> None:
+    """图引擎返回后，为本轮从未产帧的流生产者补发 end_message。
+
+    分支未走到的节点（如被 end 节点输入引用的 LLM）不执行：不产帧、不发
+    END_<id>、不进 finished_stream_nodes。ActorManager.consume() 的补偿逻辑
+    只覆盖 finished_stream_nodes，会跳过它，end 节点的流任务因此永远收不到
+    该 producer 的收尾帧 → sub_workflow_stream 收不到 END_FRAME → 外层
+    while 循环等满 stream_timeout（300s）。
+
+    图返回后一切已定：ActorManager 每次 _create_workflow_session 重建，
+    凡不在 _active_producer_ids 中的声明 producer 本轮必然不会再产帧
+    （含未执行、以及执行了但零帧两种情况），补发 end_message 让已启动的
+    end 节点 transform 正常结束并发出 END_FRAME（帧不丢、语义完整）。
+
+    兜底：end 节点流任务从未启动时（无任何帧到达，后发消息会被
+    StreamActor.send 丢弃），它永远不会发 END_FRAME，按期望数量直接向
+    sub_workflow_stream 补齐，解除外层接收循环阻塞。
+    """
+    actor_mgr = sub_workflow_session.actor_manager()
+    if actor_mgr is None or not getattr(actor_mgr, "_sub_graph", False):
+        return
+
+    producer_abilities = getattr(actor_mgr, "_producer_abilities", None) or {}
+    active_ids = getattr(actor_mgr, "_active_producer_ids", None) or {}
+    try:
+        for producer_id, abilities in producer_abilities.items():
+            if producer_id in active_ids:
+                continue
+            for ability in abilities:
+                await actor_mgr.end_message(producer_id, ability)
+                actor_mgr.active_produce_ability(producer_id, ability)
+    except Exception as e:
+        workflow_logger.warning(f"compensate unexecuted stream producers failed: {e}")
+
+    try:
+        end_comp_id = getattr(workflow_self, "_end_comp_id", None)
+        end_actor = (getattr(actor_mgr, "_streams", None) or {}).get(end_comp_id)
+        if end_actor is not None and getattr(end_actor, "_task", None) is None:
+            sub_end_ability = (
+                workflow_self._internal.config()
+                .spec.comp_configs.get(end_comp_id)
+                .abilities
+            )
+            missing = sum(
+                ability in sub_end_ability
+                for ability in (ComponentAbility.STREAM, ComponentAbility.TRANSFORM)
+            )
+            queue = actor_mgr.sub_workflow_stream()
+            for _ in range(missing):
+                await queue.send(StreamEmitter.END_FRAME)
+    except Exception as e:
+        workflow_logger.warning(f"compensate missing END_FRAMEs failed: {e}")
+
+
 async def _patched_sub_stream(
     self,
     inputs: Input,
@@ -341,6 +397,12 @@ async def _patched_sub_stream(
             return
 
         if self._is_streaming:
+            # 图引擎已完成后，为本轮从未产帧的声明 producer 补发 end_message，
+            # 避免 end 节点流任务死等（分支未走到的 LLM 被 end 输入引用）导致
+            # receive 等满 stream_timeout（300s）。
+            await _compensate_unexecuted_stream_producers(
+                self, sub_workflow_session
+            )
             stream_timeout = _bounded_stream_timeout(session)
             sub_end_ability = (
                 self._internal.config()
@@ -407,15 +469,26 @@ async def _patched_sub_invoke(
             stream_ability_count = sum(
                 ability in sub_end_ability for ability in required_abilities
             )
+            # 图引擎已完成后，ActorManager.consume() 只为 finished_stream_nodes
+            # 中的 producer 补发 end_message。未执行的 producer（如不可达分支上的
+            # LLM 节点）不在 finished_stream_nodes 中，被跳过 → end 节点的 stream
+            # actor 永远等该 producer 的 END_FRAME → sub_workflow_stream 收不到
+            # END_FRAME → while 循环死锁。
+            # 修复：为本轮从未产帧的声明 producer 补发 end_message，让 end 节点
+            # 正常跑完 transform 并发出 END_FRAME（帧不丢）；其流任务从未启动时
+            # 直接补齐缺失的 END_FRAME。不再 shutdown+close 强关队列（会丢帧）。
+            _actor_mgr = sub_workflow_session.actor_manager()
+            await _compensate_unexecuted_stream_producers(
+                self, sub_workflow_session
+            )
             stream_timeout = _bounded_stream_timeout(session)
             while stream_ability_count > 0:
                 try:
                     frame = (
-                        await sub_workflow_session.actor_manager()
-                        .sub_workflow_stream()
+                        await _actor_mgr.sub_workflow_stream()
                         .receive(stream_timeout)
                     )
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, RuntimeError):
                     break
                 if frame is None:
                     continue
