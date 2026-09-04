@@ -3,6 +3,7 @@
 
 """This module contains an IRConverter."""
 
+import inspect
 import json
 import logging
 import os
@@ -1939,6 +1940,7 @@ class IRConverter:
             end = pending["end"]
             inputs_schema = pending["inputs_schema"]
             is_stream_out = pending["is_stream_out"]
+            _deferred_node_name = pending.get("node_name")
             batch_schema, stream_schema = _split_inputs_schema_by_source(
                 inputs_schema, ir_stream_source_ids
             )
@@ -1972,6 +1974,8 @@ class IRConverter:
                 set_end_kwargs["inputs_schema"] = inputs_schema
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
+            if _deferred_node_name is not None and "name" in inspect.signature(workflow.set_end_comp).parameters:
+                set_end_kwargs["name"] = _deferred_node_name
 
             workflow.set_end_comp(node_id, end, **set_end_kwargs)
 
@@ -2558,9 +2562,10 @@ class IRConverter:
         _attach_node_def(component, node, configs)
 
         if resolved_type == "jiuwen.start":
-            workflow.set_start_comp(
-                node_id, component, inputs_schema=_build_start_inputs_schema(node),
-            )
+            _start_kwargs = dict(inputs_schema=_build_start_inputs_schema(node))
+            if "name" in inspect.signature(workflow.set_start_comp).parameters:
+                _start_kwargs["name"] = node.get("name")
+            workflow.set_start_comp(node_id, component, **_start_kwargs)
             return component
 
         if resolved_type in {"jiuwen.branch", "jiuwen.intentDetection"}:
@@ -2611,14 +2616,15 @@ class IRConverter:
                     }
                 )
             elif bool(configs.get("isStreamOut")):
-                workflow.set_end_comp(
-                    node_id,
-                    component,
-                    stream_inputs_schema=inputs_schema,
-                    response_mode="streaming",
-                )
+                _end_kwargs = dict(stream_inputs_schema=inputs_schema, response_mode="streaming")
+                if "name" in inspect.signature(workflow.set_end_comp).parameters:
+                    _end_kwargs["name"] = node.get("name")
+                workflow.set_end_comp(node_id, component, **_end_kwargs)
             else:
-                workflow.set_end_comp(node_id, component, inputs_schema=inputs_schema)
+                _end_kwargs = dict(inputs_schema=inputs_schema)
+                if "name" in inspect.signature(workflow.set_end_comp).parameters:
+                    _end_kwargs["name"] = node.get("name")
+                workflow.set_end_comp(node_id, component, **_end_kwargs)
             return component
 
         if resolved_type == "jiuwen.message":
