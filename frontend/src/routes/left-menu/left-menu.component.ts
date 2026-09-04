@@ -6,6 +6,7 @@ import * as angularI18next from 'angular-i18next';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe, I18NextModule } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
 import { IMenuItem } from '@routes/home/home.model';
+import { ConversationWorkspaceService } from '@routes/conversation-workspace/conversation-workspace.service';
 import { ContextService } from '@services/context.service';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { filter, Subject, Subscription } from 'rxjs';
@@ -132,7 +133,8 @@ export class LeftMenuComponent implements OnInit, OnChanges {
     private readonly consoleFrameworkService: ConsoleFrameworkService,
     private readonly i18NextEagerPipe: angularI18next.I18NextEagerPipe,
     private masOperatorService: MasOperatorService,
-    private appAgentRepoServ: AppAgentRepoService
+    private appAgentRepoServ: AppAgentRepoService,
+    private conversationWorkspaceService: ConversationWorkspaceService
   ) {
     // 箭头函数，保存this的指向
     this.handleClickOutMenu = event => {
@@ -247,6 +249,29 @@ export class LeftMenuComponent implements OnInit, OnChanges {
     }
   }
 
+  /** 删除会话（软删除，带确认弹窗）：左菜单「任务空间」会话项悬停删除 */
+  public deleteConversation(event: Event, item: any): void {
+    event.stopPropagation();
+    const id = item?.queryParams?.conversation_id;
+    if (!id) {
+      return;
+    }
+    this.nzModalService.confirm({
+      nzTitle: '删除会话',
+      nzContent: '确定要删除该会话吗？删除后不可恢复。',
+      nzOkText: '删除',
+      nzOkDanger: true,
+      nzCancelText: '取消',
+      nzOnOk: () =>
+        this.conversationWorkspaceService.deleteSession(id).then(() => {
+          if (this.conversationWorkspaceService.activeSession$.value?.conversation_id === id) {
+            this.conversationWorkspaceService.newDraftSession();
+          }
+          return this.conversationWorkspaceService.refreshSessions();
+        }),
+    });
+  }
+
   handleNodeClick(event: Event, item: any, index: number, childIndex: number, isRouter: boolean = true) {
     if (item.name !== '应用广场') {
       StorageService.delSessionStorage('application_square_type');
@@ -255,6 +280,17 @@ export class LeftMenuComponent implements OnInit, OnChanges {
       StorageService.delSessionStorage('JIUWEN_SEARCH_PARAMS');
     }
     this.onClick(event);
+    // 会话助手：新建/打开会话用查询参数驱动导航（不依赖 router，避免整组误高亮）
+    if (item.id === 'conversation-new') {
+      this.router.navigate(['home/conversation'], { queryParams: { new: Date.now() } });
+      return;
+    }
+    if (item.queryParams?.conversation_id) {
+      this.router.navigate(['home/conversation'], {
+        queryParams: { conversation_id: item.queryParams.conversation_id },
+      });
+      return;
+    }
     if (this.cacheMenuData.children.length && this.cacheMenuData.children[this.cacheMenuData.children.length - 1].name === item.name) {
       return;
     }

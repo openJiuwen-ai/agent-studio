@@ -18,6 +18,7 @@ services:
     pull_policy: if_not_present
     restart: always
     environment:
+      TZ: Asia/Shanghai
       MYSQL_ROOT_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-123456}
       MYSQL_DATABASE: "agent-builder"
       MYSQL_CHARACTER_SET_SERVER: utf8mb4

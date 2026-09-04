@@ -1,0 +1,253 @@
+{
+  "workflowId": "workflow_plugin_query_bill",
+  "workflowName": "workflow_plugin_query_bill",
+  "workflowVersion": "0.6.0",
+  "configs": {},
+  "components": [
+    {
+      "id": "node_start",
+      "name": "开始",
+      "type": "jiuwen.start",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {
+          "card_id": ""
+        }
+      },
+      "outputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {
+          "card_id": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "description": "信用卡ID"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "description": "用户输入"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "name": "结束",
+      "type": "jiuwen.end",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "bill_id": "${node_plugin.userFields.data.bill_id}",
+          "amount": "${node_plugin.userFields.data.amount}",
+          "due_date": "${node_plugin.userFields.data.due_date}",
+          "card_id": "${node_start.userFields.card_id}"
+        }
+      },
+      "outputs": {
+        "responseContent": "",
+        "userFields": {
+          "bill_id": "${node_plugin.userFields.data.bill_id}",
+          "amount": "${node_plugin.userFields.data.amount}",
+          "due_date": "${node_plugin.userFields.data.due_date}",
+          "card_id": "${node_start.userFields.card_id}"
+        }
+      },
+      "configs": {
+        "responseTemplate": "信用卡账单金额为：{{amount}}，信用卡id为：{{card_id}}",
+        "responseMode": "directResponse",
+        "isStreamOut": true,
+        "userFields": {
+          "inputs": [
+            {
+              "id": "bill_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "amount",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "due_date",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "bill_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "amount",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref",
+              "description": "信用卡账单"
+            },
+            {
+              "id": "due_date",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "id": "node_plugin",
+      "name": "plugin_query_bill",
+      "type": "jiuwen.plugin",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "card_id": "${node_start.userFields.card_id}"
+        }
+      },
+      "outputs": {
+        "userFields": {
+          "data": ""
+        }
+      },
+      "configs": {
+        "id": "plugin11112",
+        "name": "plugin_query_bill",
+        "description": "plugin_query_bill",
+        "url": "http://fakeIp:5003/query_bill",
+        "method": "POST",
+        "auth": {},
+        "arguments": [
+          {
+            "name": "card_id",
+            "description": "信用卡ID",
+            "type": "String",
+            "method": "Body",
+            "required": true,
+            "defaultValue": ""
+          }
+        ],
+        "pluginDependency": {
+          "paramsWrapper": {
+            "inputList": false,
+            "outputList": false
+          },
+          "hook_function": {}
+        },
+        "response": [],
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "data",
+              "type": "Object",
+              "description": "欠款",
+              "schema": [
+                {
+                  "id": "bill_id",
+                  "type": "String",
+                  "description": "账单ID"
+                },
+                {
+                  "id": "amount",
+                  "type": "String",
+                  "description": "欠款"
+                },
+                {
+                  "id": "due_date",
+                  "type": "String",
+                  "description": "逾期时间"
+                }
+              ]
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_plugin"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_plugin"
+      }
+    }
+  ],
+  "schemaVersion": "0.6",
+  "description": "查询信用卡账单"
+}

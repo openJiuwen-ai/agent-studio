@@ -291,9 +291,45 @@
     width: 100%;
     font-size: 14px;
     color: rgb(25,25,25);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-right: 8px;
     &:hover {
       background: rgb(230, 230, 230);
       border-radius: 8px;
+    }
+
+    .secondMenu-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .session-delete {
+      display: none;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      line-height: 18px;
+      text-align: center;
+      color: #999;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        color: #ff4d4f;
+        background: #fff1f0;
+      }
+    }
+
+    &:hover .session-delete {
+      display: inline-block;
     }
   }
   .secondMenu-collapsed {

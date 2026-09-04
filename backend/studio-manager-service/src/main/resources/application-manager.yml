@@ -11,9 +11,10 @@ spring:
       max-request-size: ${spring_servlet_multipart_max_request_size:130MB}
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
-    url: ${spring_datasource_url}
-    username: ${spring_datasource_username}
-    password: ${spring_datasource_password}
+    # 本地默认指向 127.0.0.1:3306（dev 官方为纯 env 驱动无默认；本地开发加兜底，环境变量仍可覆盖）
+    url: ${spring_datasource_url:jdbc:mariadb://127.0.0.1:3306/agent-builder?allowMultiQueries=true&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowPublicKeyRetrieval=true}
+    username: ${spring_datasource_username:root}
+    password: ${spring_datasource_password:123456}
     driver-class-name: ${spring_datasource_driver_class_name:org.mariadb.jdbc.Driver}
     password-provider:
       type: ${datasource_password_provider_type:DEFAULT}
@@ -217,7 +218,7 @@ inner:
   agent-runtime:
     endpoint: ${agent_runtime_endpoint:}
     run-agent:
-      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations}
+      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations/%s}
     run-workflow:
       uri: ${agent_runtime_run-workflow:/v1/%s/workflows/%s/conversations/%s}
   exclude-tools: ${inner_exclude_tools:OCR,Read_Document}
@@ -246,10 +247,11 @@ storage:
   custom-class: ${STORAGE_CUSTOM_CLASS:}
   custom-classpath: ${STORAGE_CUSTOM_CLASSPATH:}
   obs:
-    url: ${obs_url:}
-    ak: ${obs_ak:}
-    sk: ${obs_sk:}
-    bucket: ${obs_bucket:}
+    # 本地默认指向 MinIO 127.0.0.1:9000（对齐引擎 .env DATASOURCE_OBS_*；环境变量可覆盖）
+    url: ${obs_url:http://127.0.0.1:9000}
+    ak: ${obs_ak:minioadmin}
+    sk: ${obs_sk:minioadmin}
+    bucket: ${obs_bucket:agent-builder}
     staging-bucket: ${obs_staging_bucket:agent-builder-files-staging}
     opensource: ${obs_opensource:true}
     auto-create-bucket: ${obs_bucket_auto_create:true}

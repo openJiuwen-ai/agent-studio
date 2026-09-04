@@ -1,0 +1,55 @@
+第一次请求：
+data: {"event":"start","data":{},"createdTime":1775637534744,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"function_call_end","data":{},"createdTime":1775637534747,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"function_call","data":{"answer":{"function_call":{"name":"calculator_tool","arguments":"{\"expression\": \"9+9\"}"},"time_consumption":{"total_latency":0.0,"model_latency":null,"wait_latency":null,"overall_latency":0.06},"is_workflow":false}},"createdTime":1775637534808,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"api_exec_data","data":{"answer":{"role":"function","name":"calculator_tool","content":{"error_code":0,"result":{"result":"18"},"latency":0.06},"time_consumption":{"plugin_latency":0.06,"overall_latency":0.06}}},"createdTime":1775637534808,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"start","data":{},"createdTime":1775637534810,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"done","data":{},"createdTime":1775637534812,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"assistant","content":"calculator_tool|{\"expression\": \"9+9\"}","tool_calls":[{"type":"function","id":"","function":{"name":"calculator_tool","arguments":"{\"expression\": \"9+9\"}"}}]},{"role":"tool","name":"calculator_tool","content":"{\"result\": \"18\"}","tool_call_id":""},{"role":"assistant","content":"{\"result\": \"18\"}"}]},"createdTime":1775637534812,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+data: {"event":"statistic_data","data":{"answer":{"total_latency":0.0,"model_latency":null,"wait_latency":null,"overall_latency":0.07}},"createdTime":1775637534812,"isStructMessage":false}
+
+data: {"event":"summary_response","data":{"answer":{"role":"assistant","content":"{\"result\": \"18\"}"}},"createdTime":1775637534812,"executionId":"7945a82c-d05a-4587-89da-824950d683e1","isStructMessage":false}
+
+
+
+第二次请求：
+data: {"event":"start","data":{},"createdTime":1775637534993,"executionId":"92c6b983-6fa7-463c-b295-bc4a811946a1","isStructMessage":false}
+
+data: {"event":"function_call_end","data":{},"createdTime":1775637534995,"executionId":"92c6b983-6fa7-463c-b295-bc4a811946a1","isStructMessage":false}
+
+data: {"event":"function_call","data":{"answer":{"function_call":{"name":"workflow_react_tools","arguments":"{\"query\": \"11\"}"},"time_consumption":{"total_latency":0.01,"model_latency":null,"wait_latency":null,"overall_latency":0.02},"is_workflow":true}},"createdTime":1775637535008,"executionId":"92c6b983-6fa7-463c-b295-bc4a811946a1","isStructMessage":false}
+
+data: {"event":"api_exec_data","data":{"answer":{"role":"function","name":"workflow_react_tools","content":{"answer":"11气温20度","workflow_state":"end"},"time_consumption":{"plugin_latency":0.01,"overall_latency":0.02}}},"createdTime":1775637535008,"executionId":"92c6b983-6fa7-463c-b295-bc4a811946a1","isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"assistant","content":"workflow_react_tools|{\"query\": \"11\"}","tool_calls":[{"type":"function","id":"","function":{"name":"workflow_react_tools","arguments":"{\"query\": \"11\"}"}}]},{"role":"tool","name":"1e2c49af-f38b-41b4-9129-af3f694c3f35","content":"11气温20度","tool_call_id":""}]},"createdTime":1775637535008,"executionId":"92c6b983-6fa7-463c-b295-bc4a811946a1","isStructMessage":false}
+
+data: {"event":"statistic_data","data":{"answer":{"overall_latency":0.02}},"createdTime":1775637535008,"isStructMessage":false}
+
+data: {"event":"summary_response","data":{"answer":{"role":"assistant","content":"11气温20度"}},"createdTime":1775637535009,"executionId":"92c6b983-6fa7-463c-b295-bc4a811946a1","isStructMessage":false}
+
+
+第三次请求：
+data: {"event":"start","data":{},"createdTime":1775637535149,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"function_call_end","data":{},"createdTime":1775637535151,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"function_call","data":{"answer":{"function_call":{"name":"mock_plugin_add","arguments":"{\"query\": \"12\"}"},"time_consumption":{"total_latency":0.0,"model_latency":null,"wait_latency":null,"overall_latency":0.06},"is_workflow":false}},"createdTime":1775637535211,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"api_exec_data","data":{"answer":{"role":"function","name":"mock_plugin_add","content":{"error_code":0,"result":{"result":"12啦啦啦"},"latency":0.06},"time_consumption":{"plugin_latency":0.06,"overall_latency":0.06}}},"createdTime":1775637535212,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"start","data":{},"createdTime":1775637535214,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"done","data":{},"createdTime":1775637535216,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"assistant","content":"mock_plugin_add|{\"query\": \"12\"}","tool_calls":[{"type":"function","id":"","function":{"name":"mock_plugin_add","arguments":"{\"query\": \"12\"}"}}]},{"role":"tool","name":"mock_plugin_add","content":"{\"result\": \"12啦啦啦\"}","tool_call_id":""},{"role":"assistant","content":"{\"result\": \"12啦啦啦\"}"}]},"createdTime":1775637535216,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}
+
+data: {"event":"statistic_data","data":{"answer":{"total_latency":0.0,"model_latency":null,"wait_latency":null,"overall_latency":0.07}},"createdTime":1775637535216,"isStructMessage":false}
+
+data: {"event":"summary_response","data":{"answer":{"role":"assistant","content":"{\"result\": \"12啦啦啦\"}"}},"createdTime":1775637535216,"executionId":"bd085c5b-6503-49dc-9e43-652848ac7623","isStructMessage":false}

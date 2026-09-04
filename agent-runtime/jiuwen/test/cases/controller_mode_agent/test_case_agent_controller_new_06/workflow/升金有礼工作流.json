@@ -1,0 +1,787 @@
+{
+  "configs": {
+    "longMemoryEnabled": false,
+    "model": {
+      "modelName": "Qwen/Qwen2.5-72B-Instruct",
+      "modelType": "qwen",
+      "hyperParameters": {
+        "temperature": 0.2
+      }
+    },
+    "prologue": ""
+  },
+  "components": [
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": " ##系统插件，发短信##",
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "code",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "input",
+              "description": "",
+              "id": "mesageId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "input",
+              "description": "",
+              "id": "triggerNode",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "code": "${node_start.userFields.dataId}",
+          "mesageId": "1088111757897830400",
+          "triggerNode": "发送短信"
+        }
+      },
+      "name": "发短息",
+      "id": "node_1747293876339",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录银行APP参与活动，祝您生活愉快，再见！",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "成功结束",
+      "id": "node_1747293794534",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "#BDD#/是这样的，为感谢您长久以来的支持与陪伴，我航推出“升金有礼”积分回馈活动，即日起至{{ActivityTime}}，只要您报名参加，并且在我航的资产达到相应等级，即可抽取积分奖励，您可根据积分余额及相应条件兑换微信立减金、支付宝红包、话费等热门商品，我现在把活动短信发给您，好吗？",
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "ActivityTime",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "ActivityTime": "${node_start.userFields.ActivityTime}"
+        }
+      },
+      "name": "开场白-首轮澄清",
+      "id": "node_1747212048020",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "#BDD#,#GD#/好的，如有需要，您可随时登录银行APP，关注其他活动。那就先不打扰您了，祝您生活愉快，再见！",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "拒绝结束",
+      "id": "node_1747293733349",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "STATUS": "",
+          "USER_RESPONSE": ""
+        }
+      },
+      "configs": {
+        "questionContent": "##",
+        "autoAskTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "fieldNames": [],
+        "withChatHistory": true,
+        "extraPromptForFieldsExtraction": "",
+        "inputComplement": false,
+        "typeComplement": "",
+        "exampleContent": "",
+        "railsConfig": {},
+        "mode": "effect",
+        "assistRecognize": false,
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户最近一轮对话输入",
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "required": false
+            },
+            {
+              "sourceType": "input",
+              "description": "提问器运行状态码",
+              "id": "STATUS",
+              "type": "integer",
+              "required": false
+            }
+          ]
+        },
+        "assistExample": "",
+        "extractFieldsFromResponse": false,
+        "templateAnthropomorphic": false,
+        "allowNodeConfirm": false,
+        "model": {
+          "modelName": "Qwen/Qwen2.5-72B-Instruct",
+          "modelType": "qwen",
+          "hyperParameters": {
+            "temperature": 0.2
+          }
+        },
+        "maxResponse": 3,
+        "allowNodeBreak": false
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "开场白-提问器",
+      "id": "node_1747212899505",
+      "type": "jiuwen.questioner"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "continue": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "sourceType": "null",
+              "description": "xx",
+              "id": "continue",
+              "type": "boolean",
+              "required": true
+            }
+          ]
+        },
+        "code": "def main(args: dict) -> dict:\n    \"\"\"\n    运行代码节点会调用此函数\n    :param args: 输入固定为args字典类型，kv为输入参数键值对\n    :return: 输出参数为字典类型，kv为输出参数键值对\n    \"\"\"\n    ret = {\n        \"continue\": True,\n    }\n    return ret\n",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "代码",
+      "id": "node_1747668619198",
+      "type": "jiuwen.code"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "action_after_completion": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "sourceType": "null",
+              "description": "xx",
+              "id": "action_after_completion",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        "code": "def main(args: dict) -> dict:\n    \"\"\"\n    运行代码节点会调用此函数\n    :param args: 输入固定为args字典类型，kv为输入参数键值对\n    :return: 输出参数为字典类型，kv为输出参数键值对\n    \"\"\"\n    ret = {\n        \"action_after_completion\": \"Terminal\",\n    }\n    return ret\n",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "代码_1",
+      "id": "node_1752658921767",
+      "type": "jiuwen.code"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "continue": "${node_1752722695722.userFields.continue}",
+          "action_after_completion": "${node_1752658921767.userFields.action_after_completion}"
+        },
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "temp",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "action_after_completion",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "continue",
+              "type": "boolean",
+              "value": "${node_1752722695722.userFields.continue}",
+              "required": true
+            },
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "action_after_completion",
+              "type": "string",
+              "value": "${node_1752658921767.userFields.action_after_completion}",
+              "required": true
+            }
+          ]
+        },
+        "responseTemplate": "##升金结束continue: {{temp}}。action_after_completion：{{action_after_completion}}",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {
+          "temp": "${node_1752722695722.userFields.continue}",
+          "action_after_completion": "${node_1752658921767.userFields.action_after_completion}"
+        }
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "continue": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "code_continue",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "null",
+              "description": "xxx",
+              "id": "continue",
+              "type": "boolean",
+              "required": true
+            }
+          ]
+        },
+        "code": "def main(args: dict) -> dict:\n    \"\"\"\n    运行代码节点会调用此函数\n    :param args: 输入固定为args字典类型，kv为输入参数键值对\n    :return: 输出参数为字典类型，kv为输出参数键值对\n    \"\"\"\n    code_continue = args.get('code_continue')\n    if code_continue == True or code_continue == False:\n        ret= {\n        \"continue\": code_continue\n        }\n        return ret\n    ret = {\n        \"continue\": False\n    }\n    return ret",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "code_continue": "${node_1747668619198.userFields.continue}"
+        }
+      },
+      "name": "代码_2",
+      "id": "node_1752722695722",
+      "type": "jiuwen.code"
+    },
+    {
+      "configs": {
+        "userFields": {},
+        "systemFields": {},
+        "branches": [
+          {
+            "boolExpression": "(${node_start.userFields.continue} == true)",
+            "id": "node_1747668528371-if"
+          },
+          {
+            "id": "default"
+          }
+        ]
+      },
+      "name": "判断",
+      "id": "node_1747668528371",
+      "type": "jiuwen.branch"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "dataId": "",
+          "continue": "",
+          "ActivityTime": ""
+        },
+        "memory": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "null",
+              "description": "客户ID",
+              "default_value": "",
+              "id": "dataId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "活动日期",
+              "default_value": "",
+              "id": "ActivityTime",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "xxx",
+              "default_value": "false",
+              "id": "continue",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "null",
+              "description": "客户ID",
+              "default_value": "",
+              "id": "dataId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "活动日期",
+              "default_value": "",
+              "id": "ActivityTime",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "xxx",
+              "default_value": "false",
+              "id": "continue",
+              "type": "boolean",
+              "required": true
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        },
+        "preDefinedFields": {
+          "inputs": [
+            {
+              "schema": [],
+              "sourceType": "null",
+              "description": null,
+              "id": "memory",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "schema": [],
+              "sourceType": "null",
+              "description": null,
+              "id": "memory",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "dataId": "",
+          "continue": "",
+          "ActivityTime": ""
+        },
+        "memory": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "reason": "",
+        "userFields": {},
+        "name": "",
+        "classificationId": ""
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "recallThreshold": 0.8,
+        "chatHistoryMaxTurn": 0,
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "enableKnowledge": false,
+        "enableHistory": false,
+        "overridable": false,
+        "enableInput": true,
+        "kg": {},
+        "llm": {
+          "model": {
+            "modelName": "Qwen/Qwen2.5-72B-Instruct",
+            "modelType": "qwen",
+            "hyperParameters": {
+              "temperature": 0.2
+            }
+          }
+        },
+        "branches": [
+          {
+            "catalog": "不确定，其他的意图",
+            "id": "branch_0"
+          },
+          {
+            "catalog": "感兴趣",
+            "id": "branch_1"
+          }
+        ],
+        "prompt": "你是一个功能分类器，你可以根据用户的请求提问，和相应的功能类别描述，选择正确的功能帮助用户解决问题。"
+      },
+      "inputs": {
+        "input": "${node_1747212899505.userFields.USER_RESPONSE}",
+        "userFields": {}
+      },
+      "name": "意图识别",
+      "id": "node_1747637209846",
+      "type": "jiuwen.intentDetection"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": null,
+    "userId": "2",
+    "projectId": "project_mock",
+    "domainId": "0",
+    "updatedAt": 1752920021462,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "升金有礼子agent-517_bgc",
+  "workflowName": "ShengjinyouliAgent517_1_1_1",
+  "workflowVersion": "0.6.0",
+  "workflowId": "875aeb56-1cd4-404c-9ef9-220c073f2e30",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_1752722695722"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1752658921767"
+      },
+      "target": {
+        "componentId": "node_1752722695722"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1747293733349"
+      },
+      "target": {
+        "componentId": "node_1747668619198"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1747293876339"
+      },
+      "target": {
+        "componentId": "node_1747293794534"
+      }
+    },
+    {
+      "source": {
+        "branchId": "node_1747668528371-if",
+        "componentId": "node_1747668528371"
+      },
+      "target": {
+        "componentId": "node_1747212048020"
+      }
+    },
+    {
+      "source": {
+        "branchId": "node_1747637209846_branch_1",
+        "componentId": "node_1747637209846"
+      },
+      "target": {
+        "componentId": "node_1747293876339"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1747212899505"
+      },
+      "target": {
+        "componentId": "node_1747637209846"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1747293794534"
+      },
+      "target": {
+        "componentId": "node_1752658921767"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1747668619198"
+      },
+      "target": {
+        "componentId": "node_1752722695722"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1747212048020"
+      },
+      "target": {
+        "componentId": "node_1747212899505"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1747668528371"
+      }
+    },
+    {
+      "source": {
+        "branchId": "node_1747668528371-default",
+        "componentId": "node_1747668528371"
+      },
+      "target": {
+        "componentId": "node_1752722695722"
+      }
+    },
+    {
+      "source": {
+        "branchId": "node_1747637209846_branch_0",
+        "componentId": "node_1747637209846"
+      },
+      "target": {
+        "componentId": "node_1747293733349"
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "agentId": "e21b261d-3792-4942-873b-b3b6fef29537",
+  "agentName": "银行手机银行Agent",
+  "agentVersion": "0.6.0",
+  "configs": {
+    "chatHistoryMaxTurn": 10,
+    "global_intents": [],
+    "global_variables": [
+      {
+        "default": "阿发",
+        "description": "name",
+        "name": "name",
+        "type": "string"
+      }
+    ],
+    "maxIteration": 9,
+    "mode": "Controller",
+    "modelConfig": {
+      "modelName": "Qwen/Qwen2.5-72B-Instruct",
+      "modelType": "qwen",
+      "hyperParameters": {
+        "temperature": 0.1,
+        "top_p": 0.2
+      },
+      "extension": {}
+    },
+    "plugins": [],
+    "specify_workflow_order": false,
+    "sysPromptTemplate": "你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"",
+    "workflows": [
+      {
+        "description": "理财服务",
+        "name": "理财服务",
+        "ir_path": "理财服务.json",
+        "id": "ad21cfff-e864-4af8-be97-2e3fe605322c",
+        "workflow_type": "Normal",
+        "action_after_completion": "WaitUserInput"
+      }
+    ],
+    "agents": [
+      {
+        "id": "转账汇款Agent",
+        "name": "转账汇款Agent",
+        "description": "转账汇款Agent",
+        "ir_path": "child_agent_ir_转账汇款.json",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "mode": "Controller"
+      }
+    ]
+  },
+  "description": "银行手机银行Agent",
+  "metadata": {
+    "projectId": "project_mock",
+    "updatedAt": "1753703536023"
+  },
+  "schemaVersion": "0.6.0"
+}

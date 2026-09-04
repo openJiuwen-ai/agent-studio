@@ -312,6 +312,13 @@ export class OverviewComponent implements OnInit {
     this.count_down_status = this.commonService.getCountDownStatus();
 
     this.spaceTeamManagementService.data$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data) => {
+      // [FIX] data$ 首次发射为 null（BehaviorSubject 初始值），此时 CUR_SPACE_OPTIONS 尚未被
+      // left-menu 初始化，getWorkspaceId() 读不到 workspace_id → getAppData 带空 workspace_id
+      // 请求 → 后端 400 "Workspace ID cannot be empty" → 错误分支触发模板 getCardInfoList
+      // 变更检测死循环（overview 卡死）。仅当 workspace 就绪（data.cur_space.id 存在）才继续。
+      if (!data || !data.cur_space?.id) {
+        return;
+      }
       this.isLoading = true;
       this.appData.length = 0;
       this.isShowAssetCard = 0;
@@ -367,12 +374,20 @@ export class OverviewComponent implements OnInit {
               item.resource_type === 'controller'
                 ? this.agentType[item.resource_type]
                 : this.workflowType[item.workflow_type],
-            showTags: (item.tags || [])?.map((tag: string) =>
+            // [FIX] 修复 overview 首页卡死：t_app.tags 存中文标签名（如 "通用"/"效率"），而
+            // t_tag.tag_id 是 UUID，res1.find 匹配不到 → showTags 含 undefined → 模板
+            // {{ tags.name }} 抛 TypeError → Angular CD 死循环 → 页面卡死。
+            // 过滤 find 未命中的 undefined，保证 showTags 不含空元素。
+            showTags: ((item.tags || [])?.map((tag: string) =>
               (res1 || []).find((item: any) => item.tag_id === tag),
-            ),
+            ) || []).filter(Boolean),
             hot: '0',
           };
         });
+      })
+      .catch(() => {
+        // 请求失败不阻塞页面（保持 loading 结束、卡片区隐藏）
+        // [FIX] 补 .catch 避免 Promise.all 拒绝时 unhandled rejection 刷屏（overview 卡死修复的一部分）
       })
       .finally(() => {
         this.isLoading = false;

@@ -1,0 +1,89 @@
+.skill-selector {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .skill-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .skill-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    color: #0958d9;
+    background: #e6f4ff;
+    font-size: 12px;
+  }
+
+  .skill-chip-remove {
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    line-height: 1;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+  }
+
+  .skill-input {
+    width: 100%;
+    min-height: 72px;
+    resize: none;
+  }
+
+  .skill-menu {
+    position: absolute;
+    z-index: 10;
+    right: 0;
+    bottom: calc(100% + 6px);
+    left: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid #d9d9d9;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .skill-menu-item {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    border: 0;
+    text-align: left;
+    background: transparent;
+    cursor: pointer;
+
+    &:hover,
+    &.active {
+      background: #f0f5ff;
+    }
+  }
+
+  .skill-menu-name {
+    color: #262626;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .skill-menu-description,
+  .skill-menu-empty {
+    color: #8c8c8c;
+    font-size: 12px;
+  }
+
+  .skill-menu-empty {
+    padding: 12px;
+  }
+}

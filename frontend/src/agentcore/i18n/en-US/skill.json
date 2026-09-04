@@ -82,7 +82,7 @@
   "skill.detail.reference.header.appVersion": "智能体版本号",
   "skill.detail.reference.header.skillVersion": "引用Skill版本",
   "skill.detail.skill.crumb": "组件库-Skill",
-  "skill.detail.resource.crumb": "资产广场-Skill",
+  "skill.detail.resource.crumb": "专家·技能-Skill",
   "skill.detail.export": "导出",
   "skill.detail.statusTag.developing": "开发中",
   "skill.detail.statusTag.developed": "可用",

@@ -64,6 +64,7 @@ import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
+import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
@@ -174,6 +175,9 @@ public class ControllerManagementService {
 
     @Autowired
     private ModelServiceManager modelServiceManager;
+
+    @Autowired
+    private ModelServiceMapper modelServiceMapper;
 
     @Autowired
     private ShareResourceMapper shareResourceMapper;
@@ -1556,4 +1560,5 @@ public class ControllerManagementService {
         inputs.addAll(filteredInputs);
         controllerVo.setInputs(inputs);
     }
+
 }

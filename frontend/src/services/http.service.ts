@@ -468,11 +468,15 @@ export class HttpService {
   }
 
   public fetchAsyncDefaultWorkspaceId<T>(httpConfig: IHttpConfig): Promise<T> {
-    return this.getAsync<T>(this.mergeConfigDefaultWorkspaceId(httpConfig));
+    // [FIX] mergeConfigDefaultWorkspaceId 已拼一次 prefixPath，getAsync→get→mergeConfig 会再拼一次
+    // → 双前缀畸形 URL（http://localhost:4200http://localhost:4200/...）→ 请求失败。
+    // overrideUrl: true 让 mergeConfig 跳过第二次拼接。
+    return this.getAsync<T>({ ...this.mergeConfigDefaultWorkspaceId(httpConfig), overrideUrl: true });
   }
 
   public fetchDefaultWorkspaceId<T>(httpConfig: IHttpConfig): Observable<T> {
-    return this.get<T>(this.mergeConfigDefaultWorkspaceId(httpConfig));
+    // [FIX] 同上：get→mergeConfig 会二次拼接 prefixPath，overrideUrl: true 跳过。
+    return this.get<T>({ ...this.mergeConfigDefaultWorkspaceId(httpConfig), overrideUrl: true });
   }
 
   private mergeConfig(httpConfigExt: IHttpConfig): HttpConfig {

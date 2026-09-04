@@ -1,0 +1,29 @@
+test_2 mock大模型输入输出
+
+mock 大模型输入
+{'messages': [HumanMessage(type='user', content='以下是控制器的元模板：\n你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 "none_exist"\n\n当前可供选择的功能分类如下：\n分类1: 意图不明\n分类2: 全局意图_提问器中断_投诉\n分类3: 天天盈理财产品推荐\n\n用户与助手的对话历史：\n用户：你好\n助手：#########我行天天盈换新升级，新增余额自动购买及自动快赎，产品扩容到58只底层货币基金，普通赎 回到账时间最快提速约半天，稍后我把产品介绍以短信形式发送给您？\n用户：是本人，我要投诉\n\n当前输入：\n是本人，我要投诉\n\n请根据当前输入和对话历史分析并输出最适合的功能分类。输出格式为JSON，包含以下字段：\nclass: 代表分类结果, 如分类几\n例如:{"class": "分类xx"}。\n请参考以下示例：\n\n如果没有合适的分类，请输出 分类1。\n\n只需输出JSON格式的分类结果，无需任何其他信息。', name=None, id=None)], 'tools': []}
+
+mock 大模型输出
+type='assistant' content='{"class": "分类2"}' name=None id=None tool_calls=None usage_metadata=None raw_content=None reasoning_content=None
+
+---
+
+test_3 mock大模型输入输出
+
+mock 大模型输入
+{'messages': [HumanMessage(type='user', content='以下是控制器的元模板：\n你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 "none_exist"\n\n当前可供选择的功能分类如下：\n分类1: 意图不明\n分类2: 全局意图_提问器中断_投诉\n分类3: 天天盈理财产品推荐\n\n用户与助手的对话历史：\n用户：你好\n助手：#########我行天天盈换新升级，新增余额自动购买及自动快赎，产品扩容到58只底层货币基金，普通赎 回到账时间最快提速约半天，稍后我把产品介绍以短信形式发送给您？\n用户：是本人，我要投诉\n助手：非常抱歉给您带来困扰。祝您生活愉快，再见！\n用户：不投诉了\n\n当前输入：\n不投诉了\n\n请根据当前输入和对话历史分析并输出最适合的功能分类。输出格式为JSON，包含以下字段：\nclass: 代表分类结果, 如分类几\n例如:{"class": "分类xx"}。\n请参考以下示例：\n\n如果没有合适的分类，请输出 分类1。\n\n只需输出JSON格式的分类结果，无需任何其他信息。', name=None, id=None)], 'tools': []}
+
+mock 大模型输出
+type='assistant' content='{"class": "分类1"}' name=None id=None tool_calls=None usage_metadata=None raw_content=None reasoning_content=None
+
+---
+
+test_4 mock大模型输入输出
+
+mock 大模型输入
+{'messages': [HumanMessage(type='user', content='以下是控制器的元模板：\n你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 "none_exist"\n\n当前可供选择的功能分类如下：\n分类1: 意图不明\n分类2: 全局意图_提问器中断_投诉\n分类3: 天天盈理财产品推荐\n\n用户与助手的对话历史：\n用户：你好\n助手：#########我行天天盈换新升级，新增余额自动购买及自动快赎，产品扩容到58只底层货币基金，普通赎 回到账时间最快提速约半天，稍后我把产品介绍以短信形式发送给您？\n用户：是本人，我要投诉\n助手：非常抱歉给您带来困扰。祝您生活愉快，再见！\n用户：不投诉了\n助手：#########我行天天盈换新升级，新增余额自动购买及自动快赎，产品扩容到58只底层货币基金，普通赎 回到账时间最快提速约半天，稍后我把产品介绍以短信形式发送给您？\n用户：我对天天盈感兴趣\n\n当前输入：\n我对天天盈感兴趣\n\n请根据当前输入和对话历史分析并输出最适合的功能分类。输出格式为JSON，包含以下字段：\nclass: 代表分类结果, 如分类几\n例如:{"class": "分类xx"}。\n请参考以下示例：\n\n如果没有合适的分类，请输出 分类1。\n\n只需输出JSON格式的分类结果，无需任何其他信息。', name=None, id=None)], 'tools': []}
+
+mock 大模型输出
+type='assistant' content='{"class": "分类3"}' name=None id=None tool_calls=None usage_metadata=None raw_content=None reasoning_content=None
+
+---

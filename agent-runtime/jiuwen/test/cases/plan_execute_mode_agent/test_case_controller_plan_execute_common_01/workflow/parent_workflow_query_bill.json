@@ -1,0 +1,172 @@
+{
+  "workflowId": "parent_workflow_plugin_query_bill",
+  "workflowName": "parent_workflow_plugin_query_bill",
+  "workflowVersion": "0.6.0",
+  "configs": {},
+  "components": [
+    {
+      "id": "node_start",
+      "name": "开始",
+      "type": "jiuwen.start",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {
+          "card_id": ""
+        }
+      },
+      "outputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {
+          "card_id": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "description": "用户输入"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "name": "结束",
+      "type": "jiuwen.end",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "end_input": "${node_workflowComposite.responseContent}"
+        }
+      },
+      "outputs": {
+        "responseContent": ""
+      },
+      "configs": {
+        "responseTemplate": "{{end_input}}",
+        "responseMode": "directResponse",
+        "isStreamOut": true,
+        "userFields": {
+          "inputs": [
+            {
+              "id": "end_input",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "id": "node_workflowComposite",
+      "name": "子workflow",
+      "typeVersion": "1.0.1",
+      "type": "jiuwen.workflowComposite",
+      "inputs": {
+        "systemFields": {
+          "query": "${node_start.systemFields.query}"
+        },
+        "userFields": {
+          "card_id": "${node_start.userFields.card_id}"
+        }
+      },
+      "outputs": {
+        "responseContent": ""
+      },
+      "configs": {
+        "systemFields": {
+          "inputs": [
+            {
+              "id": "query",
+              "type": "String",
+              "description": "用户Query",
+              "sourceType": "ref"
+            }
+          ]
+        },
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "String",
+              "description": "用户Query",
+              "sourceType": "ref"
+            }
+          ]
+        },
+        "preDefineFields": {
+          "outputs": [
+            {
+              "id": "responseContent",
+              "type": "String"
+            }
+          ]
+        },
+        "reference": {
+          "id": "workflow_plugin_query_bill",
+          "path": "workflow_query_bill.json"
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_workflowComposite"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_workflowComposite"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ],
+  "schemaVersion": "0.6",
+  "description": "勿动"
+}

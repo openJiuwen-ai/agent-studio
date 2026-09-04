@@ -1,0 +1,265 @@
+{
+  "workflowId": "208f87d9af522e103d89f84ca0aa419007643ec96fc5eb98",
+  "workflowName": "2_questioners_zcm",
+  "workflowVersion": "0.6.0",
+  "configs": {},
+  "components": [
+    {
+      "id": "node_start",
+      "name": "开始",
+      "type": "jiuwen.start",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {}
+      },
+      "outputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {}
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "description": "用户输入"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "name": "结束",
+      "type": "jiuwen.end",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "end_input": "${node_questioner1.userFields.singer}",
+          "time": "${node_questioner2.userFields.time}",
+          "frults": "${node_questioner2.userFields.fruits}"
+        }
+      },
+      "outputs": {
+        "responseContent": ""
+      },
+      "configs": {
+        "responseTemplate": "歌手是{{end_input}} 而时间是{{time}} 水果是{{frults}}",
+        "responseMode": "directResponse",
+        "isStreamOut": true,
+        "userFields": {
+          "inputs": [
+            {
+              "id": "end_input",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "time",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "frults",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "id": "node_questioner2",
+      "name": "提问器",
+      "type": "jiuwen.questioner",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {}
+      },
+      "outputs": {
+        "userFields": {
+          "USER_RESPONSE": "",
+          "time": "",
+          "fruits": ""
+        },
+        "user_response": ""
+      },
+      "configs": {
+        "model": {
+          "modelName": "mock_model_name",
+          "modelType": "customer_chat_llm",
+          "hyperParameters": {
+            "temperature": 0.2
+          }
+        },
+        "extra_prompt_for_fields_extraction": null,
+        "prompt_template": [],
+        "rails_config": "",
+        "example_content": "",
+        "question_content": "",
+        "input_complement": false,
+        "with_chat_history": false,
+        "extract_fields_from_response": true,
+        "max_response": 3,
+        "type_complement": "",
+        "field_names": [
+          {
+            "field_name": "time",
+            "description": "时间",
+            "cn_field_name": "时间",
+            "required": true,
+            "reflection": false
+          },
+          {
+            "field_name": "fruits",
+            "description": "水果",
+            "cn_field_name": "水果",
+            "default_value": "",
+            "required": true,
+            "reflection": false
+          }
+        ],
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "description": "用户最近一轮对话"
+            },
+            {
+              "id": "time",
+              "type": "string",
+              "description": "时间"
+            },
+            {
+              "id": "fruits",
+              "type": "string",
+              "description": "水果"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "id": "node_questioner1",
+      "name": "提问器",
+      "type": "jiuwen.questioner",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {}
+      },
+      "outputs": {
+        "userFields": {
+          "USER_RESPONSE": "",
+          "singer": ""
+        },
+        "user_response": ""
+      },
+      "configs": {
+        "model": {
+          "modelName": "mock_model_name",
+          "modelType": "customer_chat_llm",
+          "hyperParameters": {
+            "temperature": 0.2
+          }
+        },
+        "extra_prompt_for_fields_extraction": null,
+        "prompt_template": [],
+        "rails_config": "",
+        "example_content": "",
+        "question_content": "",
+        "input_complement": false,
+        "with_chat_history": false,
+        "extract_fields_from_response": true,
+        "max_response": 3,
+        "type_complement": "",
+        "field_names": [
+          {
+            "field_name": "singer",
+            "description": "歌手",
+            "cn_field_name": "歌手",
+            "required": true,
+            "reflection": false
+          }
+        ],
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "description": "用户最近一轮对话"
+            },
+            {
+              "id": "singer",
+              "type": "string",
+              "description": "歌手"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_questioner1"
+      },
+      "target": {
+        "componentId": "node_questioner2"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_questioner1"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_questioner2"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ],
+  "schemaVersion": "0.6",
+  "description": "111"
+}

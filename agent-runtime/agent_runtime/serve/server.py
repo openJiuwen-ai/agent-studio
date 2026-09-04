@@ -60,6 +60,7 @@ from agent_runtime.context.middleware import RequestContextMiddleware
 from agent_runtime.observability import setup_otel_tracer
 from agent_runtime.memory.adapter.ltm_manager import init_ltm
 from agent_runtime.memory.internal_routes import memory_internal_router
+from agent_runtime.serve.apis.conversation_team import team_router
 from agent_runtime.serve.apis.orchestration import execution_app
 from agent_runtime.serve.apis.app_run import app_run_app
 from agent_runtime.serve.apis.web_run import web_run_app
@@ -111,7 +112,7 @@ logger.info("Registered workflow component: jiuwen.code")
 # FastAPI routers must be included BEFORE Flask app mount (Flask catches all routes)
 # 注：prompt_manage_app（agent_builder.app）已随 agent_builder 抽离到 studio-builder 镜像，runtime 不含。
 apps_map = [
-    execution_app, app_run_app, web_run_app, user_variable_router,
+    execution_app, team_router, app_run_app, web_run_app, user_variable_router,
     conversation_variable_router, memory_internal_router, inner_tools_router,
     release_api_router, openjiuwen_kb_router,
 ]

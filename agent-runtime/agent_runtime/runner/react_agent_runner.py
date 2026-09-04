@@ -620,6 +620,17 @@ class ReActAgentRunner:
                 except Exception as e:
                     workflow_logger.warning(f"Failed to register skill {skill_name}: {e}")
 
+    async def register_agent_tools(self, ir_json: dict, agent: ReActAgent, agent_id: str) -> None:
+        """注册 Agent 的全部 IR 工具（Plugin/MCP/Workflow/Skill）。
+
+        供平台 flow agent 与监督者子 Agent 装载共用（同一套注册语义，D0-3）。
+        skill_work_dir 不传（子 Agent MVP 无 skills；有 skills 时由调用方先下载再传 _register_skills）。
+        """
+        await self._register_plugins(ir_json, agent, agent_id)
+        await self._register_mcp_servers(ir_json, agent, agent_id)
+        await self._register_workflows(ir_json, agent, agent_id)
+        await self._register_skills(ir_json, agent, agent_id)
+
     def _create_agent(self, ir_json: dict, conversation_history: list = None, skill_work_dir: str = "", global_variables: dict = None, has_file_links: bool = False) -> tuple[
         ReActAgent, str]:
         """根据 IR 配置创建 ReActAgent 实例
