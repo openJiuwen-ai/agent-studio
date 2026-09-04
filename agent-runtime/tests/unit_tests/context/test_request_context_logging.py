@@ -69,7 +69,9 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         from contextvars import ContextVar
         from unittest.mock import patch
         real_ctx = ContextVar("test_request_ctx", default={})
-        with patch("jiuwen.common.log.base.request_ctx", real_ctx),              patch("jiuwen.serve.common.context.request_ctx", real_ctx),              patch("agent_runtime.context.middleware._jiuwen_request_ctx", real_ctx):
+        with patch("jiuwen.common.log.base.request_ctx", real_ctx), \
+             patch("jiuwen.serve.common.context.request_ctx", real_ctx), \
+             patch("agent_runtime.context.middleware._jiuwen_request_ctx", real_ctx):
             middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
             captured = {}
 
