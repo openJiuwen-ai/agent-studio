@@ -102,7 +102,7 @@ class TestForceConvertOneOfObjectNull:
         assert errors == []
 
     def test_mcp_arguments_empty_string(self):
-        """MCP arguments=""（空字符串）-> 尝试 object 解析失败后走 null 返回 None"""
+        """MCP arguments=""（空字符串）-> 优先走 null 返回 None，无残留错误"""
         inputs = {"query": "hello", "arguments": ""}
         definition = [
             {"id": "query", "type": "string"},
@@ -116,8 +116,7 @@ class TestForceConvertOneOfObjectNull:
         ]
         result, errors = force_convert(inputs, definition)
         assert result["arguments"] is None
-        # object 转换失败会产生 error，但 null 子类型成功处理了空字符串
-        # errors 中可能有 object 的报错，这是预期行为（oneOf 逐个尝试）
+        assert errors == []
 
 
 class TestForceConvertOneOfStringNull:
@@ -152,6 +151,58 @@ class TestForceConvertOneOfArrayNull:
         definition = [{"id": "field", "type": "array | null", "schema": {"type": "integer"}}]
         result, errors = force_convert(inputs, definition)
         assert isinstance(result["field"], list)
+        assert errors == []
+
+    def test_array_null_with_empty_string(self):
+        """array|null + "" -> 优先走 null 返回 None，无残留错误"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "array | null", "schema": {"type": "integer"}}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
+        assert errors == []
+
+
+class TestUnifiedNullCheck:
+    """统一 null 优先检查：data 为 None/"" 且 null 是合法子类型时直接返回 None"""
+
+    def test_integer_null_with_empty_string(self):
+        """integer|null + "" -> 优先走 null 返回 None，不尝试 int("") 避免报错"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "integer | null"}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
+        assert errors == []
+
+    def test_number_null_with_empty_string(self):
+        """number|null + "" -> 优先走 null 返回 None"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "number | null"}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
+        assert errors == []
+
+    def test_boolean_null_with_empty_string(self):
+        """boolean|null + "" -> 优先走 null 返回 None"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "boolean | null"}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
+        assert errors == []
+
+    def test_string_null_with_empty_string(self):
+        """string|null + "" -> 优先走 null 返回 None"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "string | null"}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
+        assert errors == []
+
+    def test_object_null_with_empty_string(self):
+        """object|null + "" -> 优先走 null 返回 None，不尝试 json.loads("")"""
+        inputs = {"field": ""}
+        definition = [{"id": "field", "type": "object | null", "schema": [{"id": "x", "type": "string"}]}]
+        result, errors = force_convert(inputs, definition)
+        assert result["field"] is None
         assert errors == []
 
 
