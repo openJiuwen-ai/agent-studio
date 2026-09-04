@@ -281,7 +281,6 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         全部子类型都失败时，保留最后一个分支的错误信息，避免静默吞掉非法输入。
         """
         expected_types = [t.strip() for t in expected_type.split("|")]
-        errors_before_all = len(errors)
         for sub_expected_type in expected_types:
             # 记录尝试前的 errors 长度，失败时回退到此位置
             errors_before = len(errors)
