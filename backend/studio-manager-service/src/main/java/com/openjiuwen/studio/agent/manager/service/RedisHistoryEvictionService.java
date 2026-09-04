@@ -102,8 +102,8 @@ public class RedisHistoryEvictionService {
             int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
             eventList.sort((a, b) -> {
-                String timeA = extractStartTime((JSONObject) a);
-                String timeB = extractStartTime((JSONObject) b);
+                String timeA = a instanceof JSONObject joA ? extractStartTime(joA) : null;
+                String timeB = b instanceof JSONObject joB ? extractStartTime(joB) : null;
                 return Comparator.nullsFirst(String::compareTo).compare(timeA, timeB);
             });
 
@@ -123,8 +123,8 @@ public class RedisHistoryEvictionService {
             int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
             invokeList.sort((a, b) -> {
-                Long timeA = extractLongField((JSONObject) a, "start_time");
-                Long timeB = extractLongField((JSONObject) b, "start_time");
+                Long timeA = a instanceof JSONObject joA ? extractLongField(joA, "start_time") : null;
+                Long timeB = b instanceof JSONObject joB ? extractLongField(joB, "start_time") : null;
                 return Comparator.nullsFirst(Long::compareTo).compare(timeA, timeB);
             });
 
@@ -172,8 +172,8 @@ public class RedisHistoryEvictionService {
         int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
         eventList.sort((a, b) -> {
-            String timeA = extractStartTime((JSONObject) a);
-            String timeB = extractStartTime((JSONObject) b);
+            String timeA = a instanceof JSONObject joA ? extractStartTime(joA) : null;
+            String timeB = b instanceof JSONObject joB ? extractStartTime(joB) : null;
             return Comparator.nullsFirst(String::compareTo).compare(timeA, timeB);
         });
 
@@ -210,8 +210,8 @@ public class RedisHistoryEvictionService {
         int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
         list.sort((a, b) -> {
-            Long timeA = extractLongField((JSONObject) a, "startTime");
-            Long timeB = extractLongField((JSONObject) b, "startTime");
+            Long timeA = a instanceof JSONObject joA ? extractLongField(joA, "startTime") : null;
+            Long timeB = b instanceof JSONObject joB ? extractLongField(joB, "startTime") : null;
             return Comparator.nullsFirst(Long::compareTo).compare(timeA, timeB);
         });
 
