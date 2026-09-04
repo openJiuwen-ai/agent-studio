@@ -270,6 +270,9 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
     def _convert_one_of_type(data, expected_type, current_path, definition):
         """Oneof类型参数转换"""
         expected_types = [t.strip() for t in expected_type.split("|")]
+        # 空值 + null 是合法子类型 → 直接返回 None，避免进入其他分支报错
+        if (data is None or data == "") and "null" in expected_types:
+            return None
         for sub_expected_type in expected_types:
             if sub_expected_type == OBJECT:
                 try:
@@ -306,6 +309,9 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         if inputs is None:
             return TYPE_DEFAULT_VALUE_DICT.get(OBJECT)
         if isinstance(inputs, str):
+            # 空字符串视为空值（如 MCP 可选 object 参数未填写），返回默认值而非报错
+            if inputs == "":
+                return TYPE_DEFAULT_VALUE_DICT.get(OBJECT)
             try:
                 converted_value = json.loads(inputs)
             except (ValueError, TypeError):
@@ -355,6 +361,9 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         if inputs is None:
             return TYPE_DEFAULT_VALUE_DICT.get(ARRAY)
         if isinstance(inputs, str):
+            # 空字符串视为空值（如 MCP 可选 array 参数未填写），返回默认值而非报错
+            if inputs == "":
+                return TYPE_DEFAULT_VALUE_DICT.get(ARRAY)
             try:
                 converted_value = json.loads(inputs)
             except (ValueError, TypeError):
