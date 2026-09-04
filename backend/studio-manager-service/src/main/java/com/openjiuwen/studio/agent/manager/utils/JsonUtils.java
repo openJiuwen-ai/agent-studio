@@ -29,6 +29,7 @@ import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * JsonUtils
@@ -267,19 +268,19 @@ public class JsonUtils {
     }
 
     /**
-     * object对象解析为指定类型（静默版：失败返回 null，不打印错误日志）。
+     * object对象解析为指定类型（静默版：失败返回 {@link Optional#empty()}，不打印错误日志）。
      * 适用于失败属于预期场景的探测性转换（如导入时从各类型资源 metadata 中提取 WorkflowEntity 字段，
      * 插件等资源结构不兼容属正常情况），避免正常失败刷出误导排查的 ERROR 堆栈
      *
      * @param obj 对象
      * @param toValueType 类型
-     * @return 指定类型，失败返回 null
+     * @return 指定类型；失败或结果为空返回 {@link Optional#empty()}
      */
-    public static <T> T objectToClassTypeQuiet(Object obj, Class<T> toValueType) {
+    public static <T> Optional<T> objectToClassTypeQuiet(Object obj, Class<T> toValueType) {
         try {
-            return JSON_MAPPER.convertValue(obj, toValueType);
+            return Optional.ofNullable(JSON_MAPPER.convertValue(obj, toValueType));
         } catch (Exception e) {
-            return null;
+            return Optional.empty();
         }
     }
 

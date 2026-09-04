@@ -90,21 +90,21 @@ class RedisHistoryEvictionServiceTest {
 
     @Test
     void handleReadOverflow_nullKey_returnsNull_noRedisAccess() {
-        assertNull(service.handleReadOverflow(null));
+        assertNull(service.handleReadOverflow(null).orElse(null));
         verify(redisClient, never()).get(any(), any(Codec.class));
     }
 
     @Test
     void handleReadOverflow_keyMissing_returnsNull() {
         stubRaw("wf_inst_key", null);
-        assertNull(service.handleReadOverflow("wf_inst_key"));
+        assertNull(service.handleReadOverflow("wf_inst_key").orElse(null));
     }
 
     @Test
     void handleReadOverflow_readFailureJsonParse_errorSwallowedReturnsNull() {
         // 非法 JSON -> 内层异常被捕获 -> 返回 null（不抛出）
         stubRaw("trace_root_span_1", "{not-json");
-        assertNull(service.handleReadOverflow("trace_root_span_1"));
+        assertNull(service.handleReadOverflow("trace_root_span_1").orElse(null));
     }
 
     // ---------- evictWorkflowInstance: eventList ----------
@@ -114,7 +114,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "wf_inst_001";
         stubRaw(key, "{\"eventList\":" + eventsJson("startTime", 10, true) + "}");
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         assertNotNull(result);
         JSONArray kept = JSON.parseObject(result).getJSONArray("eventList");
@@ -133,7 +133,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "wf_inst_single";
         stubRaw(key, "{\"eventList\":" + eventsJson("startTime", 1, true) + "}");
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         assertEquals(1, JSON.parseObject(result).getJSONArray("eventList").size());
     }
@@ -146,7 +146,7 @@ class RedisHistoryEvictionServiceTest {
             + event("2025-01-01T00:00:03") + "]}";
         stubRaw(key, raw);
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         JSONArray kept = JSON.parseObject(result).getJSONArray("eventList");
         assertEquals(3, kept.size());
@@ -165,7 +165,7 @@ class RedisHistoryEvictionServiceTest {
             + event("2025-01-01T00:00:01") + "]}";
         stubRaw(key, raw);
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         assertNotNull(result);
         JSONArray kept = JSON.parseObject(result).getJSONArray("eventList");
@@ -183,7 +183,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "wf_exec_001";
         stubRaw(key, "{\"invoke_list\":" + eventsJson("start_time", 10, false) + "}");
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         JSONArray kept = JSON.parseObject(result).getJSONArray("invoke_list");
         assertEquals(7, kept.size());
@@ -198,7 +198,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "trace_root_span_42";
         stubRaw(key, "{\"jiuwenEventList\":" + eventsJson("startTime", 6, true) + "}");
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         JSONArray kept = JSON.parseObject(result).getJSONArray("jiuwenEventList");
         assertEquals(4, kept.size());
@@ -214,7 +214,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "trace_root_span_empty";
         stubRaw(key, "{\"jiuwenEventList\":[]}");
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         assertEquals("{\"jiuwenEventList\":[]}", result);
         verify(redisClient, never()).setAndKeepTtl(any(), any(), any());
@@ -227,7 +227,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "agent_001_conv_x";
         stubRaw(key, eventsJson("startTime", 8, false));
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         JSONArray kept = JSON.parseArray(result);
         assertEquals(6, kept.size());
@@ -243,7 +243,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "agent_001_exec_rel_y";
         stubRaw(key, eventsJson("startTime", 4, false));
 
-        String result = service.handleReadOverflow(key);
+        String result = service.handleReadOverflow(key).orElse(null);
 
         assertEquals(3, JSON.parseArray(result).size());
     }
@@ -253,7 +253,7 @@ class RedisHistoryEvictionServiceTest {
         String key = "agent_001_conv_bad";
         stubRaw(key, "{\"not\":\"anArray\"}");
 
-        // JSON.parseArray 抛异常 -> 外层 catch -> null
-        assertNull(service.handleReadOverflow(key));
+        // JSON.parseArray 抛异常 -> 外层 catch -> empty
+        assertNull(service.handleReadOverflow(key).orElse(null));
     }
 }

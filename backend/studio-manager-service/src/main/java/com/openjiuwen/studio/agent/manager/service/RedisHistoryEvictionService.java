@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.Comparator;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
  * Redis 历史消息清理服务
@@ -44,13 +46,13 @@ public class RedisHistoryEvictionService {
      * 根据 key 类型选择对应的清理策略，清理后重试读取
      *
      * @param key Redis key
-     * @return 清理后的数据 JSON 字符串，如果仍然失败则返回 null
+     * @return 清理后的数据 JSON 字符串；如果仍然失败则返回 {@link Optional#empty()}
      */
-    public String handleReadOverflow(String key) {
+    public Optional<String> handleReadOverflow(String key) {
         log.warn("Handling Redis read overflow for key: {}, eviction threshold: {}", key, evictionThreshold);
         try {
             if (key == null) {
-                return null;
+                return Optional.empty();
             }
             if (key.contains("trace_root_span_")) {
                 return evictTraceInfo(key);
@@ -64,21 +66,21 @@ public class RedisHistoryEvictionService {
         } catch (Exception e) {
             log.error("Failed to evict history for key: {}", key, e);
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
      * 使用 StringCodec 读取 Redis 中的原始 JSON 字符串（绕过 Jackson 反序列化限制）
      */
-    private String readRawJson(String key) {
+    private Optional<String> readRawJson(String key) {
         String rawValue = redisClient.get(key, StringCodec.INSTANCE);
         if (rawValue == null) {
-            return null;
+            return Optional.empty();
         }
         if (rawValue.startsWith("\"")) {
-            return JSON.parseObject(rawValue, String.class);
+            return Optional.ofNullable(JSON.parseObject(rawValue, String.class));
         }
-        return rawValue;
+        return Optional.of(rawValue);
     }
 
     /**
@@ -87,10 +89,10 @@ public class RedisHistoryEvictionService {
      * 当 JSON 包含 invoke_list 时按 start_time 排序保留最近的调用记录；
      * 同时截断顶层 inputs/outputs 等大字符串字段
      */
-    private String evictWorkflowInstance(String key) {
-        String jsonStr = readRawJson(key);
+    private Optional<String> evictWorkflowInstance(String key) {
+        String jsonStr = readRawJson(key).orElse(null);
         if (jsonStr == null) {
-            return null;
+            return Optional.empty();
         }
 
         JSONObject entity = JSON.parseObject(jsonStr);
@@ -102,8 +104,8 @@ public class RedisHistoryEvictionService {
             int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
             eventList.sort((a, b) -> {
-                String timeA = a instanceof JSONObject joA ? extractStartTime(joA) : null;
-                String timeB = b instanceof JSONObject joB ? extractStartTime(joB) : null;
+                String timeA = a instanceof JSONObject joA ? extractStartTime(joA).orElse(null) : null;
+                String timeB = b instanceof JSONObject joB ? extractStartTime(joB).orElse(null) : null;
                 return Comparator.nullsFirst(String::compareTo).compare(timeA, timeB);
             });
 
@@ -123,8 +125,10 @@ public class RedisHistoryEvictionService {
             int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
             invokeList.sort((a, b) -> {
-                Long timeA = a instanceof JSONObject joA ? extractLongField(joA, "start_time") : null;
-                Long timeB = b instanceof JSONObject joB ? extractLongField(joB, "start_time") : null;
+                Long timeA = a instanceof JSONObject joA
+                    ? extractLongField(joA, "start_time").stream().boxed().findFirst().orElse(null) : null;
+                Long timeB = b instanceof JSONObject joB
+                    ? extractLongField(joB, "start_time").stream().boxed().findFirst().orElse(null) : null;
                 return Comparator.nullsFirst(Long::compareTo).compare(timeA, timeB);
             });
 
@@ -144,36 +148,36 @@ public class RedisHistoryEvictionService {
         modified = true;
 
         if (!modified) {
-            return jsonStr;
+            return Optional.of(jsonStr);
         }
 
         String updatedJson = entity.toJSONString();
         redisClient.setAndKeepTtl(key, updatedJson, Duration.ofDays(7));
 
-        return updatedJson;
+        return Optional.of(updatedJson);
     }
 
     /**
      * 清理 TraceInfo 中的历史事件
      */
-    private String evictTraceInfo(String key) {
-        String jsonStr = readRawJson(key);
+    private Optional<String> evictTraceInfo(String key) {
+        String jsonStr = readRawJson(key).orElse(null);
         if (jsonStr == null) {
-            return null;
+            return Optional.empty();
         }
 
         JSONObject traceInfo = JSON.parseObject(jsonStr);
         JSONArray eventList = traceInfo.getJSONArray("jiuwenEventList");
         if (eventList == null || eventList.isEmpty()) {
-            return jsonStr;
+            return Optional.of(jsonStr);
         }
 
         int originalSize = eventList.size();
         int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
         eventList.sort((a, b) -> {
-            String timeA = a instanceof JSONObject joA ? extractStartTime(joA) : null;
-            String timeB = b instanceof JSONObject joB ? extractStartTime(joB) : null;
+            String timeA = a instanceof JSONObject joA ? extractStartTime(joA).orElse(null) : null;
+            String timeB = b instanceof JSONObject joB ? extractStartTime(joB).orElse(null) : null;
             return Comparator.nullsFirst(String::compareTo).compare(timeA, timeB);
         });
 
@@ -189,29 +193,31 @@ public class RedisHistoryEvictionService {
         log.info("Evicted trace info events: key={}, original={}, remaining={}",
             key, originalSize, eventList.size());
 
-        return updatedJson;
+        return Optional.of(updatedJson);
     }
 
     /**
      * 清理列表类型数据（ExecutionInfoList / ConversationInfoList）
      */
-    private String evictListData(String key, String type) {
-        String jsonStr = readRawJson(key);
+    private Optional<String> evictListData(String key, String type) {
+        String jsonStr = readRawJson(key).orElse(null);
         if (jsonStr == null) {
-            return null;
+            return Optional.empty();
         }
 
         JSONArray list = JSON.parseArray(jsonStr);
         if (list == null || list.isEmpty()) {
-            return jsonStr;
+            return Optional.of(jsonStr);
         }
 
         int originalSize = list.size();
         int targetSize = Math.max(1, (int) (originalSize * evictionThreshold));
 
         list.sort((a, b) -> {
-            Long timeA = a instanceof JSONObject joA ? extractLongField(joA, "startTime") : null;
-            Long timeB = b instanceof JSONObject joB ? extractLongField(joB, "startTime") : null;
+            Long timeA = a instanceof JSONObject joA
+                ? extractLongField(joA, "startTime").stream().boxed().findFirst().orElse(null) : null;
+            Long timeB = b instanceof JSONObject joB
+                ? extractLongField(joB, "startTime").stream().boxed().findFirst().orElse(null) : null;
             return Comparator.nullsFirst(Long::compareTo).compare(timeA, timeB);
         });
 
@@ -225,26 +231,27 @@ public class RedisHistoryEvictionService {
         log.info("Evicted list data: key={}, type={}, original={}, remaining={}",
             key, type, originalSize, list.size());
 
-        return updatedJson;
+        return Optional.of(updatedJson);
     }
 
-    private String extractStartTime(JSONObject event) {
+    private Optional<String> extractStartTime(JSONObject event) {
         try {
             JSONObject data = event.getJSONObject("data");
             if (data != null) {
-                return data.getString("startTime");
+                return Optional.ofNullable(data.getString("startTime"));
             }
         } catch (Exception e) {
             log.debug("Failed to extract startTime from event", e);
         }
-        return null;
+        return Optional.empty();
     }
 
-    private Long extractLongField(JSONObject obj, String field) {
+    private OptionalLong extractLongField(JSONObject obj, String field) {
         try {
-            return obj.getLong(field);
+            Long value = obj.getLong(field);
+            return value == null ? OptionalLong.empty() : OptionalLong.of(value);
         } catch (Exception e) {
-            return null;
+            return OptionalLong.empty();
         }
     }
 
