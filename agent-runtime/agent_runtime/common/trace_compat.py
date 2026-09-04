@@ -17,10 +17,20 @@ from openjiuwen.core.session.agent import create_agent_session as _create_agent_
 from openjiuwen.core.workflow import create_workflow_session as _create_workflow_session
 
 # 一次性检测底层是否支持 trace_id 参数
+def _accepts_trace_id(sig_params) -> bool:
+    """Check if a function accepts trace_id — either as explicit param or via **kwargs."""
+    if "trace_id" in sig_params:
+        return True
+    for p in sig_params.values():
+        if p.kind == inspect.Parameter.VAR_KEYWORD:
+            return True
+    return False
+
+
 _agent_params = inspect.signature(_create_agent_session).parameters
 _wf_params = inspect.signature(_create_workflow_session).parameters
-_agent_accepts_trace_id = "trace_id" in _agent_params
-_wf_accepts_trace_id = "trace_id" in _wf_params
+_agent_accepts_trace_id = _accepts_trace_id(_agent_params)
+_wf_accepts_trace_id = _accepts_trace_id(_wf_params)
 
 
 def create_agent_session_with_trace(session_id: str = None, **kwargs):
