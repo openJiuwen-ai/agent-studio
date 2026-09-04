@@ -116,6 +116,11 @@ class ControllerRunner:
                     WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY, {}
                 )
                 req_params["memory_repo_id"] = controller_memory_repo_id
+                # ContextManager.prepare_execution reads params["app_id"] as the
+                # memory scope id (memory_app_id); ExecutionParams has no app_id
+                # field so it is always "" and get_memory_message returns None.
+                # The memory repo id IS the scope id in this runtime.
+                req_params["app_id"] = controller_memory_repo_id
                 # Ensure user_id reaches sub-workflow global_variables; the
                 # multi-agent request's global_variables.userId is often empty
                 # even though req.user_id is set (e.g. "testUser").
@@ -124,6 +129,18 @@ class ControllerRunner:
                     if not gv.get("userId"):
                         gv["userId"] = req.user_id
                     req_params["global_variables"] = gv
+                # jiuwen reads the request_json contextvar for userId/agentId
+                # (ContextManager.get_memory_message, workflow_handler sub-workflow
+                # retrieval). Nothing in this runtime ever sets it, so userId
+                # resolves to "" and retrieval is silently skipped. Storage
+                # lowercases user_id (memory_extractor), so inject lowercase.
+                from jiuwen.serve.common.context import request_json
+                request_json.set({
+                    **(request_json.get() or {}),
+                    "userId": (req.user_id or "").lower(),
+                    "agentId": str(ir_json.get("agentId", "") or ""),
+                    "conversationId": req.conversation_id or "",
+                })
                 runtime_context.agent_workflow_context[
                     WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY
                 ] = req_params

@@ -16,6 +16,41 @@ from agent_runtime.common.config import settings
 _ltm_instance: Optional[LongTermMemory] = None
 
 
+def _register_memory_usage_prompt_fallback() -> None:
+    """Seed PromptApplier's cache with the memory usage prompt (bounded runtime-side fallback).
+
+    The extension MemoryProxy (jiuwen/extension/memory/client/memory_proxy.py)
+    formats retrieval results through agent-core's PromptApplier, which
+    hard-codes its prompt dir to openjiuwen/core/memory/prompts/ and raises
+    FileNotFoundError because memory_usage_prompt.md is not shipped there.
+    PromptApplier checks its cache BEFORE the file lookup, so seeding the
+    singleton cache here restores retrieval without touching the agent-core
+    tree. Content comes from jiuwen's in-tree MEMORY_USAGE_PROMPT (the same
+    prompt used by the workflow-path retrieval), with the bare MEMORY_CONTENT
+    placeholder converted to PromptTemplate's {{...}} syntax.
+    """
+    try:
+        from openjiuwen.core.foundation.prompt import PromptTemplate
+        from openjiuwen.core.memory.prompts.prompt_applier import PromptApplier
+        from jiuwen.context.memory_engine.prompt.memory_usage import (
+            MEMORY_USAGE_PROMPT,
+        )
+
+        applier = PromptApplier()
+        if "memory_usage_prompt" not in applier._prompt_cache:
+            applier._prompt_cache["memory_usage_prompt"] = PromptTemplate(
+                content=MEMORY_USAGE_PROMPT.replace(
+                    "MEMORY_CONTENT", "{{MEMORY_CONTENT}}"
+                )
+            )
+            logger.info(
+                "Seeded PromptApplier cache for memory_usage_prompt "
+                "(prompt file not shipped in agent-core)"
+            )
+    except Exception as e:
+        logger.warning("Failed to seed memory_usage_prompt fallback: %s", e)
+
+
 async def init_ltm(redis_client: Redis | RedisCluster) -> bool:
     """Initialize LongTermMemory with Redis KV store, OpenSearch vector store, and embedding model.
 
@@ -118,6 +153,9 @@ async def init_ltm(redis_client: Redis | RedisCluster) -> bool:
     ltm.set_config(engine_config)
 
     _ltm_instance = ltm
+    # agent-core does not ship memory_usage_prompt.md; retrieval through the
+    # jiuwen extension MemoryProxy needs it, so seed the PromptApplier cache.
+    _register_memory_usage_prompt_fallback()
     logger.info(
         "Memory library enabled (embedding=%s, opensearch=%s)",
         mem_settings.embedding_model,

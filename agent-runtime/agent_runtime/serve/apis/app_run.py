@@ -134,6 +134,21 @@ def build_agent_ir_path(agent_id: str, version: Optional[str]) -> str:
     return f"{prefix}/{agent_id}/{agent_id}.json"
 
 
+def _long_term_memory_params(long_term_memory: Optional[dict]) -> dict:
+    """前端 long_term_memory（enable_retrieve/enable_extract）→ ExecutionParams 别名键。
+
+    必须写别名键 enableMemoryRetrieve/enableMemoryExtract：params 会被
+    ExecutionParams（按 alias 构造）校验，其余键名会被 pydantic 静默丢弃。
+    memory_repo_id 不映射：workflow_runner/controller_runner 回退读 IR
+    configs.memory.memory_repo_id（Java Adapter 写入）。
+    """
+    ltm = long_term_memory or {}
+    return {
+        "enableMemoryRetrieve": bool(ltm.get("enable_retrieve", False)),
+        "enableMemoryExtract": bool(ltm.get("enable_extract", False)),
+    }
+
+
 def build_req_json_from_workflow(
     body: WorkflowAppRunRequest,
     exec_ctx: ExecutionContext,
@@ -157,7 +172,7 @@ def build_req_json_from_workflow(
         "conversationHistory": exec_ctx.conversation_history,
         "pluginConfigs": [pc.model_dump(by_alias=True) for pc in (body.plugin_configs or [])],
         "enableHistory": body.enable_history,
-        # "long_term_memory"
+        **_long_term_memory_params(body.long_term_memory),
     }
     if secret_env_keys:
         params["secretEnvKeys"] = secret_env_keys
@@ -192,7 +207,7 @@ def build_req_json_from_agent(
         "toolSwitchDict": body.tool_switch_dict,
         "files": process_file_urls(body.files),
         "enableHistory": body.enable_history,
-        # "long_term_memory"
+        **_long_term_memory_params(body.long_term_memory),
     }
     if environment_variables:
         params["environmentVariables"] = environment_variables

@@ -1576,6 +1576,7 @@
   "memory_extract_in_chat_tip": "开启对话中存储记忆，对话中的关键信息（如偏好、需求细节等）将被自动保存，方便后续调用",
   "memory_banK": "记忆库",
   "delete_all": "删除全部",
+  "confirm_delete_all": "确认删除全部记忆？删除后不可恢复。",
   "configuring_user_profiles": "配置用户画像",
   "user_persona_tip": "通过结构化字段（如基本信息、兴趣偏好、行为模式）实现高精度用户画像构建。",
   "memory_name": "记忆名称",

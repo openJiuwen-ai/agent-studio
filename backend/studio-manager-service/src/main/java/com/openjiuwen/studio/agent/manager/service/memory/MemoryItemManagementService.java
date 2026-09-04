@@ -12,6 +12,7 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.ListMemoryItemResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SearchMemoryItemRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.UpdateMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.IMemoryItemManagementService;
 
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -37,7 +39,7 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
 
     @Override
     public ListMemoryItemResponseBody listMemoryItems(String projectId, String memoryRepoId, Integer pageNum,
-        Integer pageSize) {
+        Integer pageSize, String memoryType) {
         String userId = RequestContextUtils.getRequestUserId();
         if (userId == null || userId.isEmpty()) {
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
@@ -46,7 +48,7 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
         try {
             // 静态代码检查G.OTH.04：toLowerCase指定Locale.ROOT，避免在土耳其语等环境下产生大小写转换异常
             ResponseEntity<Object> response = agentRuntimeClient.listMemories(
-                memoryRepoId, userId.toLowerCase(Locale.ROOT), pageSize, pageNum);
+                memoryRepoId, userId.toLowerCase(Locale.ROOT), pageSize, pageNum, memoryType);
 
             if (response.getBody() == null) {
                 return emptyListResponse(pageNum, pageSize);
@@ -69,6 +71,8 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
                         ListMemoryItemResponseBody.MemoryItemInfo item = new ListMemoryItemResponseBody.MemoryItemInfo();
                         item.setId(mem.getString("memory_id"));
                         item.setContent(mem.getString("content"));
+                        item.setType(mem.getString("type"));
+                        item.setLastUpdateTime(mem.getString("last_update_time"));
                         item.setUserId(userId);
                         item.setAgentId(null); // Not available in runtime response
                         item.setScore(null); // Not applicable for list
@@ -123,6 +127,9 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
                 if ("partial".equals(status)) {
                     JSONArray errors = result.getJSONArray("errors");
                     log.warn("Batch delete partially failed for repo {}: {}", memoryRepoId, errors);
+                    // 与批量修改一致的保守策略：任一条失败则整体失败，避免前端误提示删除成功
+                    throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                        "Failed to delete memories, partial errors: " + errors);
                 }
             }
         } catch (Exception e) {
@@ -160,6 +167,11 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
 
             // Parse runtime response: {"total": N, "memories": [...]}
             JSONObject responseBody = JSONObject.from(response.getBody());
+            if (responseBody.containsKey("error")) {
+                // runtime 以 200 + error 字段返回失败，不能当作空结果静默成功
+                throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                    "Failed to search memories: " + responseBody.getString("error"));
+            }
             JSONArray memoriesArray = responseBody.getJSONArray("memories");
             int total = responseBody.getIntValue("total", 0);
 
@@ -189,6 +201,81 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
             log.error("Failed to search memories from runtime for repo {}: {}", memoryRepoId, e.getMessage(), e);
             throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
                 "Failed to search memories: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void updateMemoryItems(String projectId, String memoryRepoId, UpdateMemoryItemRequestBody body) {
+        List<UpdateMemoryItemRequestBody.UpdateMemoryItem> memories = body.getMemories();
+        if (memories == null || memories.isEmpty()) {
+            throw new AgentStudioException(StudioError.MEMORY_REPO_NOT_EXIST,
+                "memories must not be empty for batch update");
+        }
+
+        String userId = RequestContextUtils.getRequestUserId();
+        if (userId == null || userId.isEmpty()) {
+            throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
+        }
+
+        // 静态代码检查G.OTH.04：toLowerCase指定Locale.ROOT，避免在土耳其语等环境下产生大小写转换异常
+        String lowerUserId = userId.toLowerCase(Locale.ROOT);
+
+        // 保守策略（2A）：任一条失败则整体失败，并记录失败条目id；已成功条目不回滚
+        List<String> failedIds = new ArrayList<>();
+        List<String> failedReasons = new ArrayList<>();
+        for (UpdateMemoryItemRequestBody.UpdateMemoryItem item : memories) {
+            try {
+                Map<String, String> requestBody = new HashMap<>();
+                requestBody.put("user_id", lowerUserId);
+                requestBody.put("content", item.getContent());
+
+                ResponseEntity<Object> response = agentRuntimeClient.updateMemory(
+                    memoryRepoId, item.getMemoryId(), requestBody);
+                JSONObject result = response.getBody() == null ? null : JSONObject.from(response.getBody());
+                String status = result == null ? null : result.getString("status");
+                if (!"ok".equals(status)) {
+                    // 非 ok（含 skipped/error）都视为该条未写入，避免用户编辑被静默丢弃
+                    failedIds.add(item.getMemoryId());
+                    failedReasons.add(item.getMemoryId() + ": " + (result == null ? "empty response" : status));
+                }
+            } catch (Exception e) {
+                log.error("Failed to update memory {} in repo {}: {}",
+                    item.getMemoryId(), memoryRepoId, e.getMessage(), e);
+                failedIds.add(item.getMemoryId());
+                failedReasons.add(item.getMemoryId() + ": " + e.getMessage());
+            }
+        }
+
+        if (!failedIds.isEmpty()) {
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to update memories, failed ids: " + failedIds + ", reasons: " + failedReasons);
+        }
+    }
+
+    @Override
+    public void clearUserMemoryItems(String projectId, String memoryRepoId) {
+        String userId = RequestContextUtils.getRequestUserId();
+        if (userId == null || userId.isEmpty()) {
+            throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
+        }
+
+        try {
+            // 静态代码检查G.OTH.04：toLowerCase指定Locale.ROOT，避免在土耳其语等环境下产生大小写转换异常
+            ResponseEntity<Object> response = agentRuntimeClient.clearUserMemories(
+                memoryRepoId, userId.toLowerCase(Locale.ROOT));
+            JSONObject result = response.getBody() == null ? null : JSONObject.from(response.getBody());
+            String status = result == null ? null : result.getString("status");
+            // skipped = 记忆库未初始化（无数据可清空），视为幂等成功
+            if (!"ok".equals(status) && !"skipped".equals(status)) {
+                throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                    "Failed to clear memories: " + (result == null ? "empty response" : status));
+            }
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to clear memories from runtime for repo {}: {}", memoryRepoId, e.getMessage(), e);
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to clear memories: " + e.getMessage());
         }
     }
 

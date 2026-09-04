@@ -26,6 +26,10 @@ public class ListMemoryItemResponseBody {
         private String id;
         @JsonProperty("content")
         private String content;
+        @JsonProperty("type")
+        private String type;
+        @JsonProperty("last_update_time")
+        private String lastUpdateTime;
         @JsonProperty("score")
         private Float score;
         @JsonProperty("user_id")

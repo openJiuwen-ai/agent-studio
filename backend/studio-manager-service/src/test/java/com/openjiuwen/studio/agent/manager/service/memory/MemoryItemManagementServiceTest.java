@@ -10,6 +10,7 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.ListMemoryItemResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SearchMemoryItemRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.UpdateMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 
 import org.junit.jupiter.api.AfterEach;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
@@ -78,11 +80,11 @@ class MemoryItemManagementServiceTest {
         responseBody.put("total", 1);
         responseBody.put("memories", memoriesArray);
 
-        when(agentRuntimeClient.listMemories(eq("repo-1"), eq("test-user"), eq(10), eq(1)))
+        when(agentRuntimeClient.listMemories(eq("repo-1"), eq("test-user"), eq(10), eq(1), isNull()))
             .thenReturn(ResponseEntity.ok(responseBody));
 
         // When
-        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10);
+        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, null);
 
         // Then
         assertNotNull(result);
@@ -98,11 +100,11 @@ class MemoryItemManagementServiceTest {
     @Test
     void test_listMemoryItems_null_response_returns_empty() {
         // Given
-        when(agentRuntimeClient.listMemories(any(), any(), any(), any()))
+        when(agentRuntimeClient.listMemories(any(), any(), any(), any(), any()))
             .thenReturn(ResponseEntity.ok(null));
 
         // When
-        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10);
+        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, null);
 
         // Then
         assertNotNull(result);
@@ -117,11 +119,11 @@ class MemoryItemManagementServiceTest {
         responseBody.put("total", 0);
         responseBody.put("memories", new JSONArray());
 
-        when(agentRuntimeClient.listMemories(any(), any(), any(), any()))
+        when(agentRuntimeClient.listMemories(any(), any(), any(), any(), any()))
             .thenReturn(ResponseEntity.ok(responseBody));
 
         // When
-        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10);
+        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, null);
 
         // Then
         assertNotNull(result);
@@ -138,14 +140,14 @@ class MemoryItemManagementServiceTest {
         responseBody.put("total", 0);
         responseBody.put("memories", new JSONArray());
 
-        when(agentRuntimeClient.listMemories(eq("repo-1"), eq("test-user"), any(), any()))
+        when(agentRuntimeClient.listMemories(eq("repo-1"), eq("test-user"), any(), any(), any()))
             .thenReturn(ResponseEntity.ok(responseBody));
 
         // When
-        memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10);
+        memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, null);
 
         // Then — verify lowercase userId was passed
-        verify(agentRuntimeClient).listMemories(eq("repo-1"), eq("test-user"), eq(10), eq(1));
+        verify(agentRuntimeClient).listMemories(eq("repo-1"), eq("test-user"), eq(10), eq(1), isNull());
     }
 
     @Test
@@ -155,18 +157,18 @@ class MemoryItemManagementServiceTest {
 
         // When / Then
         assertThrows(AgentStudioException.class,
-            () -> memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10));
+            () -> memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, null));
     }
 
     @Test
     void test_listMemoryItems_runtime_error_throws() {
         // Given
-        when(agentRuntimeClient.listMemories(any(), any(), any(), any()))
+        when(agentRuntimeClient.listMemories(any(), any(), any(), any(), any()))
             .thenThrow(new RuntimeException("connection failed"));
 
         // When / Then
         assertThrows(AgentStudioException.class,
-            () -> memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10));
+            () -> memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, null));
     }
 
     // ── deleteMemoryItem tests ──
@@ -230,7 +232,7 @@ class MemoryItemManagementServiceTest {
     }
 
     @Test
-    void test_batchDeleteMemoryItems_partial_failure_logged() {
+    void test_batchDeleteMemoryItems_partial_failure_throws() {
         // Given
         BatchDeleteMemoryItemRequestBody body = new BatchDeleteMemoryItemRequestBody();
         body.setMemoryIds(List.of("mem-1", "mem-2"));
@@ -247,10 +249,9 @@ class MemoryItemManagementServiceTest {
         when(agentRuntimeClient.batchDeleteMemories(any(), any(), anyMap()))
             .thenReturn(ResponseEntity.ok(responseBody));
 
-        // When — should not throw
-        memoryItemManagementService.batchDeleteMemoryItems("project-1", "repo-1", body);
-
-        // Then — verify call was made
+        // When / Then — partial failure must fail the whole request (2A 保守策略)
+        assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.batchDeleteMemoryItems("project-1", "repo-1", body));
         verify(agentRuntimeClient).batchDeleteMemories(eq("repo-1"), eq("test-user"), any(Map.class));
     }
 
@@ -424,5 +425,227 @@ class MemoryItemManagementServiceTest {
 
         // Then — should not throw, defaults are used
         assertNotNull(result);
+    }
+
+    // ── listMemoryItems memory_type / new fields tests ──
+
+    @Test
+    void test_listMemoryItems_maps_type_and_last_update_time() {
+        // Given
+        JSONObject memory = new JSONObject();
+        memory.put("memory_id", "mem-1");
+        memory.put("content", "c");
+        memory.put("type", "summary");
+        memory.put("last_update_time", "2026-09-03 10:00:00");
+
+        JSONArray memoriesArray = new JSONArray();
+        memoriesArray.add(memory);
+
+        JSONObject responseBody = new JSONObject();
+        responseBody.put("total", 1);
+        responseBody.put("memories", memoriesArray);
+
+        when(agentRuntimeClient.listMemories(any(), any(), any(), any(), any()))
+            .thenReturn(ResponseEntity.ok(responseBody));
+
+        // When
+        ListMemoryItemResponseBody result = memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10,
+            "summary");
+
+        // Then
+        assertEquals("summary", result.getItems().get(0).getType());
+        assertEquals("2026-09-03 10:00:00", result.getItems().get(0).getLastUpdateTime());
+    }
+
+    @Test
+    void test_listMemoryItems_passes_memory_type_to_runtime() {
+        // Given
+        JSONObject responseBody = new JSONObject();
+        responseBody.put("total", 0);
+        responseBody.put("memories", new JSONArray());
+
+        when(agentRuntimeClient.listMemories(any(), any(), any(), any(), any()))
+            .thenReturn(ResponseEntity.ok(responseBody));
+
+        // When
+        memoryItemManagementService.listMemoryItems("project-1", "repo-1", 1, 10, "user_profile");
+
+        // Then
+        verify(agentRuntimeClient).listMemories(eq("repo-1"), eq("test-user"), eq(10), eq(1), eq("user_profile"));
+    }
+
+    @Test
+    void test_searchMemoryItems_error_field_throws() {
+        // Given — runtime returns 200 with error field (must not be treated as empty success)
+        JSONObject responseBody = new JSONObject();
+        responseBody.put("total", 0);
+        responseBody.put("memories", new JSONArray());
+        responseBody.put("error", "opensearch down");
+
+        when(agentRuntimeClient.searchMemories(any(), any(), anyMap()))
+            .thenReturn(ResponseEntity.ok(responseBody));
+
+        SearchMemoryItemRequestBody body = new SearchMemoryItemRequestBody();
+        body.setQuery("test");
+
+        // When / Then
+        assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.searchMemoryItems("project-1", "repo-1", body));
+    }
+
+    // ── updateMemoryItems tests ──
+
+    @Test
+    void test_updateMemoryItems_success() {
+        // Given
+        UpdateMemoryItemRequestBody body = new UpdateMemoryItemRequestBody();
+        UpdateMemoryItemRequestBody.UpdateMemoryItem item1 = new UpdateMemoryItemRequestBody.UpdateMemoryItem();
+        item1.setMemoryId("mem-1");
+        item1.setContent("content-1");
+        UpdateMemoryItemRequestBody.UpdateMemoryItem item2 = new UpdateMemoryItemRequestBody.UpdateMemoryItem();
+        item2.setMemoryId("mem-2");
+        item2.setContent("content-2");
+        body.setMemories(List.of(item1, item2));
+
+        JSONObject okBody = new JSONObject();
+        okBody.put("status", "ok");
+
+        when(agentRuntimeClient.updateMemory(any(), any(), anyMap()))
+            .thenReturn(ResponseEntity.ok(okBody));
+
+        // When
+        memoryItemManagementService.updateMemoryItems("project-1", "repo-1", body);
+
+        // Then — each item updated with lowercased user id in body
+        verify(agentRuntimeClient).updateMemory(eq("repo-1"), eq("mem-1"), any(Map.class));
+        verify(agentRuntimeClient).updateMemory(eq("repo-1"), eq("mem-2"), any(Map.class));
+    }
+
+    @Test
+    void test_updateMemoryItems_any_failure_fails_all() {
+        // Given — second item returns non-ok status (2A: 任一失败整体失败并记录失败 id)
+        UpdateMemoryItemRequestBody body = new UpdateMemoryItemRequestBody();
+        UpdateMemoryItemRequestBody.UpdateMemoryItem okItem = new UpdateMemoryItemRequestBody.UpdateMemoryItem();
+        okItem.setMemoryId("mem-ok");
+        okItem.setContent("c1");
+        UpdateMemoryItemRequestBody.UpdateMemoryItem badItem = new UpdateMemoryItemRequestBody.UpdateMemoryItem();
+        badItem.setMemoryId("mem-bad");
+        badItem.setContent("c2");
+        body.setMemories(List.of(okItem, badItem));
+
+        JSONObject okBody = new JSONObject();
+        okBody.put("status", "ok");
+        JSONObject skippedBody = new JSONObject();
+        skippedBody.put("status", "skipped");
+
+        when(agentRuntimeClient.updateMemory(eq("repo-1"), eq("mem-ok"), anyMap()))
+            .thenReturn(ResponseEntity.ok(okBody));
+        when(agentRuntimeClient.updateMemory(eq("repo-1"), eq("mem-bad"), anyMap()))
+            .thenReturn(ResponseEntity.ok(skippedBody));
+
+        // When / Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.updateMemoryItems("project-1", "repo-1", body));
+        assertTrue(ex.getMessage().contains("mem-bad"));
+    }
+
+    @Test
+    void test_updateMemoryItems_feign_exception_fails_all() {
+        // Given — runtime returns HTTP 500, Feign throws per item
+        UpdateMemoryItemRequestBody body = new UpdateMemoryItemRequestBody();
+        UpdateMemoryItemRequestBody.UpdateMemoryItem item = new UpdateMemoryItemRequestBody.UpdateMemoryItem();
+        item.setMemoryId("mem-1");
+        item.setContent("c");
+        body.setMemories(List.of(item));
+
+        when(agentRuntimeClient.updateMemory(any(), any(), anyMap()))
+            .thenThrow(new RuntimeException("connection refused"));
+
+        // When / Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.updateMemoryItems("project-1", "repo-1", body));
+        assertTrue(ex.getMessage().contains("mem-1"));
+    }
+
+    @Test
+    void test_updateMemoryItems_empty_throws() {
+        // Given
+        UpdateMemoryItemRequestBody body = new UpdateMemoryItemRequestBody();
+        body.setMemories(Collections.emptyList());
+
+        // When / Then
+        assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.updateMemoryItems("project-1", "repo-1", body));
+    }
+
+    @Test
+    void test_updateMemoryItems_no_user_id_throws() {
+        // Given
+        mockedStaticRequestContextUtils.when(RequestContextUtils::getRequestUserId).thenReturn(null);
+
+        UpdateMemoryItemRequestBody body = new UpdateMemoryItemRequestBody();
+        UpdateMemoryItemRequestBody.UpdateMemoryItem item = new UpdateMemoryItemRequestBody.UpdateMemoryItem();
+        item.setMemoryId("mem-1");
+        item.setContent("c");
+        body.setMemories(List.of(item));
+
+        // When / Then
+        assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.updateMemoryItems("project-1", "repo-1", body));
+    }
+
+    // ── clearUserMemoryItems tests ──
+
+    @Test
+    void test_clearUserMemoryItems_success() {
+        // Given
+        JSONObject okBody = new JSONObject();
+        okBody.put("status", "ok");
+
+        when(agentRuntimeClient.clearUserMemories(any(), any()))
+            .thenReturn(ResponseEntity.ok(okBody));
+
+        // When
+        memoryItemManagementService.clearUserMemoryItems("project-1", "repo-1");
+
+        // Then — lowercased user id passed
+        verify(agentRuntimeClient).clearUserMemories(eq("repo-1"), eq("test-user"));
+    }
+
+    @Test
+    void test_clearUserMemoryItems_skipped_is_ok() {
+        // Given — memory library not initialized: nothing to clear, idempotent success
+        JSONObject skippedBody = new JSONObject();
+        skippedBody.put("status", "skipped");
+
+        when(agentRuntimeClient.clearUserMemories(any(), any()))
+            .thenReturn(ResponseEntity.ok(skippedBody));
+
+        // When / Then — should not throw
+        memoryItemManagementService.clearUserMemoryItems("project-1", "repo-1");
+    }
+
+    @Test
+    void test_clearUserMemoryItems_error_status_throws() {
+        // Given
+        JSONObject errorBody = new JSONObject();
+        errorBody.put("status", "error");
+
+        when(agentRuntimeClient.clearUserMemories(any(), any()))
+            .thenReturn(ResponseEntity.ok(errorBody));
+
+        // When / Then
+        assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.clearUserMemoryItems("project-1", "repo-1"));
+    }
+
+    @Test
+    void test_clearUserMemoryItems_no_user_id_throws() {
+        // Given
+        mockedStaticRequestContextUtils.when(RequestContextUtils::getRequestUserId).thenReturn("");
+
+        // When / Then
+        assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.clearUserMemoryItems("project-1", "repo-1"));
     }
 }

@@ -8,6 +8,7 @@ import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.ListMemoryItemResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SearchMemoryItemRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.UpdateMemoryItemRequestBody;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -53,7 +54,9 @@ public interface MemoryItemManagementApi {
         @Parameter(in = ParameterIn.PATH, description = "记忆库id", required = true, schema = @Schema())
         @PathVariable("memory_repo_id") String memoryRepoId,
         @ApiParam(value = "页码") @RequestParam(value = "page_num", defaultValue = "1") Integer pageNum,
-        @ApiParam(value = "每页条数") @RequestParam(value = "page_size", defaultValue = "10") Integer pageSize);
+        @ApiParam(value = "每页条数") @RequestParam(value = "page_size", defaultValue = "10") Integer pageSize,
+        @ApiParam(value = "记忆类型过滤，如 summary / user_profile，不传则不过滤")
+        @RequestParam(value = "memory_type", required = false) String memoryType);
 
     @ApiOperation(value = "删除单条记忆", nickname = "deleteMemoryItem",
         notes = "删除指定记忆库下的单条记忆条目", tags = {"MemoryItemManagement"})
@@ -115,4 +118,42 @@ public interface MemoryItemManagementApi {
         @PathVariable("memory_repo_id") String memoryRepoId,
         @NotNull @ApiParam(value = "搜索请求体", required = true) @Valid @RequestBody
         SearchMemoryItemRequestBody body);
+
+    @ApiOperation(value = "批量修改记忆条目", nickname = "updateMemoryItems",
+        notes = "批量修改指定记忆库下当前用户的记忆条目内容；任一条失败则整体失败并记录失败条目id", tags = {"MemoryItemManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "成功"),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v2/{project_id}/agent-manager/memory-repositories/{memory_repo_id}/memories",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.PUT)
+    ResponseEntity<Void> updateMemoryItems(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "记忆库id", required = true, schema = @Schema())
+        @PathVariable("memory_repo_id") String memoryRepoId,
+        @NotNull @ApiParam(value = "批量修改请求体", required = true) @Valid @RequestBody
+        UpdateMemoryItemRequestBody body);
+
+    @ApiOperation(value = "清空当前用户记忆条目", nickname = "clearUserMemoryItems",
+        notes = "清空指定记忆库下当前用户的全部记忆条目", tags = {"MemoryItemManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "成功"),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v2/{project_id}/agent-manager/memory-repositories/{memory_repo_id}/memories",
+        method = RequestMethod.DELETE)
+    ResponseEntity<Void> clearUserMemoryItems(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "记忆库id", required = true, schema = @Schema())
+        @PathVariable("memory_repo_id") String memoryRepoId);
 }
