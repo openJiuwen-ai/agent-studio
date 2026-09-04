@@ -15,19 +15,38 @@
 - 配置启用 + cust-userid 非空 → 覆盖 ctx.user_id（effective userId）
 """
 
+import hashlib
 import json
 import uuid
 
 from agent_runtime.context.request_context import RequestContext, _request_ctx
 from common_utils.customer_header import get_capture_keys, get_config
+from jiuwen.common.log.base import set_x_request_id, set_x_execution_id
+from jiuwen.serve.common.context import request_ctx as _jiuwen_request_ctx
 from openjiuwen.core.common.logging import set_session_id
 from openjiuwen.core.common.logging import workflow_logger
+from opentelemetry import context as otel_context, trace as otel_trace
+from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+from opentelemetry.trace.span import NonRecordingSpan
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 X_EXECUTION_ID = "x-execution-id"
 X_REQUEST_ID = "x-request-id"
 DEFAULT_USER = "testUser"
+
+_HEX_CHARS = set("0123456789abcdefABCDEF")
+
+
+def _to_otel_trace_id(trace_id_str: str) -> int:
+    """Convert a string to a valid OTel 128-bit trace_id.
+
+    OTel trace_id must be 32 hex chars (128-bit). If the input is already
+    32 hex, use it directly; otherwise hash with md5 to get 32 hex chars.
+    """
+    if len(trace_id_str) == 32 and all(c in _HEX_CHARS for c in trace_id_str):
+        return int(trace_id_str, 16)
+    return int(hashlib.md5(trace_id_str.encode()).hexdigest(), 16)
 
 
 def _capture_customer_headers(request: Request) -> dict[str, str]:
@@ -66,13 +85,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         if not execution_id or len(execution_id) > 64:
             if execution_id:
                 workflow_logger.warning(f"header {X_EXECUTION_ID} is illegal")
-            execution_id = str(uuid.uuid4())
+            execution_id = uuid.uuid4().hex
 
         request_id = request.headers.get(X_REQUEST_ID)
         if not request_id or len(request_id) > 64:
             if request_id:
                 workflow_logger.warning(f"header {X_REQUEST_ID} is illegal")
-            request_id = str(uuid.uuid4())
+            request_id = uuid.uuid4().hex
 
         request.state.execution_id = execution_id
         request.state.request_id = request_id
@@ -138,10 +157,25 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         # 5. 设置日志上下文
         set_session_id(ctx.conversation_id or execution_id)
+        # 将 request_id / execution_id 写入 jiuwen 上下文，供下游 get_x_request_id() / get_x_execution_id() 读取
+        _jiuwen_request_ctx.set({})
+        set_x_request_id(request_id)
+        set_x_execution_id(execution_id)
+        # 注入 OTel 上下文，使 openjiuwen 创建的 span 继承我们的 trace_id
+        _otel_span_ctx = SpanContext(
+            trace_id=_to_otel_trace_id(request_id),
+            span_id=int(uuid.uuid4().hex[:16], 16),
+            is_remote=False,
+            trace_flags=TraceFlags(TraceFlags.SAMPLED),
+            trace_state=TraceState(),
+        )
+        _otel_span = NonRecordingSpan(_otel_span_ctx)
+        _otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
         token = _request_ctx.set(ctx)
         try:
             response = await call_next(request)
             return response
         finally:
             _request_ctx.reset(token)
+            otel_context.detach(_otel_token)
             set_session_id("default_trace_id")
