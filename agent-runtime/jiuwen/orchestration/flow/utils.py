@@ -259,11 +259,6 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return _convert_array(data, definition, current_path)
         if expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
             return _convert_simple(data, expected_type, current_path)
-        if expected_type == "null":
-            # null 类型：接受 None、空字符串，其他值原样返回
-            if data is None or data == "":
-                return None
-            return data
         if "|" in expected_type:
             return _convert_one_of_type(data, expected_type, current_path, definition)
 
@@ -273,54 +268,27 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         return res
 
     def _convert_one_of_type(data, expected_type, current_path, definition):
-        """Oneof类型参数转换
-
-        逐个尝试子类型，成功则返回。关键：每个子类型失败后必须清理其写入的
-        错误信息，否则后续子类型成功时仍会残留前一个失败分支的错误。
-        """
+        """Oneof类型参数转换"""
         expected_types = [t.strip() for t in expected_type.split("|")]
-
-        # 优先处理 null：如果数据是 None 或空字符串，且 null 是合法子类型，直接返回 None。
-        # 避免空字符串进入 _convert_object(json.loads 失败) 或 _convert_simple(int("") 失败)
-        # 产生残留错误。
-        if data is None or data == "":
-            if "null" in expected_types:
-                return None
-
+        # 空值 + null 是合法子类型 → 直接返回 None，避免进入其他分支报错
+        if (data is None or data == "") and "null" in expected_types:
+            return None
         for sub_expected_type in expected_types:
-            errors_before = len(errors)
             if sub_expected_type == OBJECT:
                 try:
-                    result = _convert_object(data, definition, current_path)
-                    if isinstance(result, dict):
-                        return result
+                    return _convert_object(data, definition, current_path)
                 except JiuWenBaseException:
-                    pass
-                del errors[errors_before:]
-                continue
+                    continue
             if sub_expected_type == ARRAY:
                 try:
-                    result = _convert_array(data, definition, current_path)
-                    if isinstance(result, list):
-                        return result
+                    return _convert_array(data, definition, current_path)
                 except JiuWenBaseException:
-                    pass
-                del errors[errors_before:]
-                continue
+                    continue
             if sub_expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
                 try:
-                    result = _convert_simple(data, sub_expected_type, current_path)
+                    return _convert_simple(data, expected_type, current_path)
                 except JiuWenBaseException:
-                    del errors[errors_before:]
                     continue
-                if len(errors) > errors_before:
-                    del errors[errors_before:]
-                    continue
-                return result
-            if sub_expected_type == "null":
-                if data is None:
-                    return None
-                continue
         return None
 
     def _convert_object(inputs, definition, current_path):
@@ -341,6 +309,9 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         if inputs is None:
             return TYPE_DEFAULT_VALUE_DICT.get(OBJECT)
         if isinstance(inputs, str):
+            # 空字符串视为空值（如 MCP 可选 object 参数未填写），返回默认值而非报错
+            if inputs == "":
+                return TYPE_DEFAULT_VALUE_DICT.get(OBJECT)
             try:
                 converted_value = json.loads(inputs)
             except (ValueError, TypeError):
@@ -363,25 +334,13 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return TYPE_DEFAULT_VALUE_DICT.get(ERROR)
 
         # 遍历转换object中的每一个属性及其definition，递归调用_convert()，并将结果存在res中
-        # 防御性处理：oneOf/anyOf 类型（如 object|null）的 schema 中可能包含：
-        # 1. 非 dict 项（如嵌套的 oneOf 子 schema 列表）→ 跳过
-        # 2. dict 项但没有 "id" 字段（如 {"type": "null"}）→ 也要跳过
-        #    否则 attr_key 会变成空字符串 ""，产生 {"": None} 这样的脏数据
         converted_object = {}
         for attr_definition in object_schema:
-            if not isinstance(attr_definition, dict):
-                continue
-            if "id" not in attr_definition:
-                continue
-            attr_key = attr_definition["id"]
+            attr_key = attr_definition.get("id", "")
             attr_value = converted_value.get(attr_key)
             converted_object[attr_key] = _convert(
                 attr_value, attr_definition, current_path
             )
-        # 如果 schema 中没有任何可解析的属性定义（全是 oneOf 子 schema 之类），
-        # 直接返回原始输入，不做子属性转换
-        if not converted_object and object_schema:
-            return converted_value
         return converted_object
 
     def _convert_array(inputs, definition, current_path):
@@ -402,6 +361,9 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         if inputs is None:
             return TYPE_DEFAULT_VALUE_DICT.get(ARRAY)
         if isinstance(inputs, str):
+            # 空字符串视为空值（如 MCP 可选 array 参数未填写），返回默认值而非报错
+            if inputs == "":
+                return TYPE_DEFAULT_VALUE_DICT.get(ARRAY)
             try:
                 converted_value = json.loads(inputs)
             except (ValueError, TypeError):
