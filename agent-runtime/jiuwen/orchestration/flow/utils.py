@@ -273,19 +273,30 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         return res
 
     def _convert_one_of_type(data, expected_type, current_path, definition):
-        """Oneof类型参数转换"""
+        """Oneof类型参数转换
+
+        逐个尝试子类型，成功则返回。关键：每个子类型失败后必须清理其写入的
+        错误信息，否则后续子类型成功时仍会残留前一个失败分支的错误。
+        """
         expected_types = [t.strip() for t in expected_type.split("|")]
+
+        # 优先处理 null：如果数据是 None 或空字符串，且 null 是合法子类型，直接返回 None。
+        # 避免空字符串进入 _convert_object(json.loads 失败) 或 _convert_simple(int("") 失败)
+        # 产生残留错误。
+        if data is None or data == "":
+            if "null" in expected_types:
+                return None
+
         for sub_expected_type in expected_types:
+            errors_before = len(errors)
             if sub_expected_type == OBJECT:
                 try:
                     result = _convert_object(data, definition, current_path)
-                    # oneOf schema 可能包含无法解析的子 schema（如嵌套的 oneOf 列表），
-                    # 导致 _convert_object 返回非 dict 值（如原始字符串）。
-                    # 此时应视为 object 转换失败，继续尝试下一个类型。
                     if isinstance(result, dict):
                         return result
                 except JiuWenBaseException:
                     pass
+                del errors[errors_before:]
                 continue
             if sub_expected_type == ARRAY:
                 try:
@@ -294,16 +305,21 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
                         return result
                 except JiuWenBaseException:
                     pass
+                del errors[errors_before:]
                 continue
             if sub_expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
                 try:
-                    return _convert_simple(data, sub_expected_type, current_path)
+                    result = _convert_simple(data, sub_expected_type, current_path)
                 except JiuWenBaseException:
+                    del errors[errors_before:]
                     continue
+                if len(errors) > errors_before:
+                    del errors[errors_before:]
+                    continue
+                return result
             if sub_expected_type == "null":
-                if data is None or data == "":
+                if data is None:
                     return None
-                # 数据非空，尝试其他类型
                 continue
         return None
 
