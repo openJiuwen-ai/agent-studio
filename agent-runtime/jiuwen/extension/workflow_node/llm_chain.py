@@ -533,8 +533,7 @@ class LLMChain(WorkflowComponent):
 
             # content 真流式输出
             if chunk.content and chunk.content != "":
-                if getattr(chunk, "finish_reason", "null") == "null":
-                    accumulated_content += chunk.content
+                accumulated_content += chunk.content
                 yield {USER_FIELDS: {output_id: chunk.content}}
 
         # 流结束：性能统计 + trace + 最终帧
