@@ -9,7 +9,6 @@ import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -29,10 +28,10 @@ public interface HistoryWorkflowMapper {
 
     /**
      * 查询小于某个时间的工作流ID集合
-     * @param time 时间
+     * @param time epoch毫秒时间戳
      * @return 小于某个时间的工作流ID集合
      */
-    List<String> findByUpdatedOnLessThan(@Param("time") Date time);
+    List<String> findByUpdatedOnLessThan(@Param("time") Long time);
 
     /**
      * 删除的数量
