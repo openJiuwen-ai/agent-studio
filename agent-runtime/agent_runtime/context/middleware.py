@@ -45,7 +45,9 @@ def _to_otel_trace_id(trace_id_str: str) -> int:
     32 hex, use it directly; otherwise hash with md5 to get 32 hex chars.
     """
     if len(trace_id_str) == 32 and all(c in _HEX_CHARS for c in trace_id_str):
-        return int(trace_id_str, 16)
+        val = int(trace_id_str, 16)
+        if val != 0:
+            return val
     return int(hashlib.md5(trace_id_str.encode()).hexdigest(), 16)
 
 
@@ -158,7 +160,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         # 5. 设置日志上下文
         set_session_id(ctx.conversation_id or execution_id)
         # 将 request_id / execution_id 写入 jiuwen 上下文，供下游 get_x_request_id() / get_x_execution_id() 读取
-        _jiuwen_request_ctx.set({})
+        _jiuwen_ctx_token = _jiuwen_request_ctx.set({})
         set_x_request_id(request_id)
         set_x_execution_id(execution_id)
         # 注入 OTel 上下文，使 openjiuwen 创建的 span 继承我们的 trace_id
@@ -178,4 +180,5 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         finally:
             _request_ctx.reset(token)
             otel_context.detach(_otel_token)
+            _jiuwen_request_ctx.reset(_jiuwen_ctx_token)
             set_session_id("default_trace_id")
