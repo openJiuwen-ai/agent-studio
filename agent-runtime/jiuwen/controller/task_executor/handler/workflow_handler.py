@@ -975,9 +975,12 @@ class WorkflowHandler(BaseHandler):
             ):
                 yield exec_res
 
-            logger.info(
-                f"task_id: {self.task_id}| Stream execute workflow current_node: {current_node}, "
-                f"workflow_status: {workflow_status}"
+            logger.debug(
+                "task_id: %s| Stream execute workflow current_node: %s, "
+                "workflow_status: %s",
+                self.task_id,
+                current_node,
+                workflow_status,
             )
 
             # 处理中断状态
@@ -1874,8 +1877,11 @@ class WorkflowHandler(BaseHandler):
             self.context_manager.set_global_variables(
                 REQUEST_VARIABLES, request_variables
             )
-            logger.info(
-                f"task_id: {self.task_id}| REQUEST variables synced to ContextManager: {request_variables}, "
-                f"controller_global_variables synced : {controller_global_variables}",
+            logger.debug(
+                "task_id: %s| REQUEST variables synced to ContextManager: %s, "
+                "controller_global_variables synced : %s",
+                self.task_id,
+                request_variables,
+                controller_global_variables,
                 simple_log="REQUEST variables synced to ContextManager",
             )
