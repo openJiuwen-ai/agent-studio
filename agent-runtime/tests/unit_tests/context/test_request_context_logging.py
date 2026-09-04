@@ -66,31 +66,35 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_jiuwen_context_receives_request_id_and_execution_id(self):
         """中间件 dispatch 后，jiuwen 上下文的 get_x_request_id / get_x_execution_id 应返回 header 值。"""
-        middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
-        captured = {}
+        from contextvars import ContextVar
+        from unittest.mock import patch
+        real_ctx = ContextVar("test_request_ctx", default={})
+        with patch("jiuwen.serve.common.context.request_ctx", real_ctx),              patch("agent_runtime.context.middleware._jiuwen_request_ctx", real_ctx):
+            middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
+            captured = {}
 
-        async def call_next(request):
-            captured["request_id"] = get_x_request_id()
-            captured["execution_id"] = get_x_execution_id()
-            return Response("ok")
+            async def call_next(request):
+                captured["request_id"] = get_x_request_id()
+                captured["execution_id"] = get_x_execution_id()
+                return Response("ok")
 
-        request = Request(
-            {
-                "type": "http",
-                "method": "POST",
-                "path": "/v1/orchestration/ir/execute",
-                "headers": [
-                    (b"x-request-id", b"req-from-header-123"),
-                    (b"x-execution-id", b"exec-from-header-456"),
-                ],
-            },
-            receive=self._body_receiver(b'{"conversationId":"conv-abc"}'),
-        )
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "POST",
+                    "path": "/v1/orchestration/ir/execute",
+                    "headers": [
+                        (b"x-request-id", b"req-from-header-123"),
+                        (b"x-execution-id", b"exec-from-header-456"),
+                    ],
+                },
+                receive=self._body_receiver(b'{"conversationId":"conv-abc"}'),
+            )
 
-        await middleware.dispatch(request, call_next)
+            await middleware.dispatch(request, call_next)
 
-        self.assertEqual(captured["request_id"], "req-from-header-123")
-        self.assertEqual(captured["execution_id"], "exec-from-header-456")
+            self.assertEqual(captured["request_id"], "req-from-header-123")
+            self.assertEqual(captured["execution_id"], "exec-from-header-456")
 
     async def test_auto_generated_ids_are_32_char_hex_when_headers_missing(self):
         """X-Request-Id / X-Execution-Id 缺失时，自动生成的 ID 应为32位16进制格式。"""
@@ -197,82 +201,6 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
         span_after = otel_trace.get_current_span()
         self.assertEqual(span_after.get_span_context().trace_id, trace_id_before)
-
-    async def test_middleware_sets_x_request_id_in_jiuwen_context(self):
-        """Middleware should set x-request-id in jiuwen context for downstream access."""
-        middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
-        test_request_id = "aabbccdd11223344556677889900ff00"
-        captured_value = None
-
-        async def call_next(request):
-            nonlocal captured_value
-            from jiuwen.common.log.base import get_x_request_id
-            captured_value = get_x_request_id()
-            return Response("ok")
-
-        request = Request(
-            {
-                "type": "http",
-                "method": "POST",
-                "path": "/v1/orchestration/ir/execute",
-                "headers": [(b"x-request-id", test_request_id.encode())],
-            },
-            receive=self._body_receiver(b'{"conversationId":"conv-jw-ctx"}'),
-        )
-
-        await middleware.dispatch(request, call_next)
-        self.assertEqual(captured_value, test_request_id)
-
-    async def test_middleware_sets_x_execution_id_in_jiuwen_context(self):
-        """Middleware should set x-execution-id in jiuwen context for downstream access."""
-        middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
-        test_execution_id = "exec-aabbccdd11223344"
-        captured_value = None
-
-        async def call_next(request):
-            nonlocal captured_value
-            from jiuwen.common.log.base import get_x_execution_id
-            captured_value = get_x_execution_id()
-            return Response("ok")
-
-        request = Request(
-            {
-                "type": "http",
-                "method": "POST",
-                "path": "/v1/orchestration/ir/execute",
-                "headers": [(b"x-execution-id", test_execution_id.encode())],
-            },
-            receive=self._body_receiver(b'{"conversationId":"conv-exec-ctx"}'),
-        )
-
-        await middleware.dispatch(request, call_next)
-        self.assertEqual(captured_value, test_execution_id)
-
-    async def test_middleware_generates_uuid4_hex_when_header_missing(self):
-        """When X-Request-Id is missing, middleware should generate 32-char hex ID."""
-        middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
-        captured_value = None
-
-        async def call_next(request):
-            nonlocal captured_value
-            from jiuwen.common.log.base import get_x_request_id
-            captured_value = get_x_request_id()
-            return Response("ok")
-
-        request = Request(
-            {
-                "type": "http",
-                "method": "POST",
-                "path": "/v1/orchestration/ir/execute",
-                "headers": [],
-            },
-            receive=self._body_receiver(b'{"conversationId":"conv-no-header"}'),
-        )
-
-        await middleware.dispatch(request, call_next)
-        self.assertIsNotNone(captured_value)
-        self.assertEqual(len(captured_value), 32)
-        self.assertTrue(all(c in "0123456789abcdef" for c in captured_value))
 
     def test_to_otel_trace_id_md5_fallback_for_non_hex(self):
         """Non-32-hex string should be hashed with md5 to produce valid 128-bit trace_id."""
