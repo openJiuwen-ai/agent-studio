@@ -16,6 +16,7 @@ from jiuwen.common.log.base import get_x_request_id
 from openjiuwen.core.session.agent import create_agent_session as _create_agent_session
 from openjiuwen.core.workflow import create_workflow_session as _create_workflow_session
 
+
 # 一次性检测底层是否支持 trace_id 参数
 def _accepts_trace_id(sig_params) -> bool:
     """Check if a function accepts trace_id — either as explicit param or via **kwargs."""
