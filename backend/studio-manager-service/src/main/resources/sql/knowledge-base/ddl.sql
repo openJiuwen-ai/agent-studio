@@ -311,5 +311,3 @@ CREATE TABLE IF NOT EXISTS t_knowledge_file
 ) ENGINE = InnoDB
   CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_general_ci COMMENT = '知识库文件元数据表';
-
-ALTER TABLE t_knowledge_file ADD COLUMN obs_path varchar(512) NULL DEFAULT NULL COMMENT 'OBS存储路径';
