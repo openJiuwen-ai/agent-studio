@@ -259,6 +259,11 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return _convert_array(data, definition, current_path)
         if expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
             return _convert_simple(data, expected_type, current_path)
+        if expected_type == "null":
+            # null 类型：接受 None、空字符串，其他值原样返回
+            if data is None or data == "":
+                return None
+            return data
         if "|" in expected_type:
             return _convert_one_of_type(data, expected_type, current_path, definition)
 
@@ -268,24 +273,58 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         return res
 
     def _convert_one_of_type(data, expected_type, current_path, definition):
-        """Oneof类型参数转换"""
+        """Oneof类型参数转换
+
+        逐个尝试子类型，成功则返回。关键：失败的子类型可能往共享的 errors
+        列表写入错误信息，必须在失败后清理，否则后续子类型成功时仍会残留
+        前一个失败分支的错误（如 "Incorrect type for key: arguments, expected: object"）。
+        全部子类型都失败时，保留最后一个分支的错误信息，避免静默吞掉非法输入。
+        """
         expected_types = [t.strip() for t in expected_type.split("|")]
         for sub_expected_type in expected_types:
+            # 记录尝试前的 errors 长度，失败时回退到此位置
+            errors_before = len(errors)
             if sub_expected_type == OBJECT:
                 try:
-                    return _convert_object(data, definition, current_path)
+                    result = _convert_object(data, definition, current_path)
+                    if isinstance(result, dict):
+                        # object 转换成功，清理此分支产生的错误
+                        del errors[errors_before:]
+                        return result
                 except JiuWenBaseException:
-                    continue
+                    pass
+                # object 转换失败，清理此分支产生的错误
+                del errors[errors_before:]
+                continue
             if sub_expected_type == ARRAY:
                 try:
-                    return _convert_array(data, definition, current_path)
+                    result = _convert_array(data, definition, current_path)
+                    if isinstance(result, list):
+                        del errors[errors_before:]
+                        return result
                 except JiuWenBaseException:
-                    continue
+                    pass
+                del errors[errors_before:]
+                continue
             if sub_expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
                 try:
-                    return _convert_simple(data, expected_type, current_path)
+                    result = _convert_simple(data, sub_expected_type, current_path)
                 except JiuWenBaseException:
+                    del errors[errors_before:]
                     continue
+                # _convert_simple 失败时不抛异常，而是 append error + return None
+                if len(errors) > errors_before:
+                    del errors[errors_before:]
+                    continue
+                return result
+            if sub_expected_type == "null":
+                if data is None or data == "":
+                    return None
+                continue
+        # 全部子类型都失败：补一条错误信息，避免非法输入被静默吞掉
+        errors.append(
+            SCHEMA_VALIDATION_WRONG_TYPE.format(k=current_path, t=expected_type)
+        )
         return None
 
     def _convert_object(inputs, definition, current_path):
@@ -328,13 +367,25 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return TYPE_DEFAULT_VALUE_DICT.get(ERROR)
 
         # 遍历转换object中的每一个属性及其definition，递归调用_convert()，并将结果存在res中
+        # 防御性处理：oneOf/anyOf 类型（如 object|null）的 schema 中可能包含：
+        # 1. 非 dict 项（如嵌套的 oneOf 子 schema 列表）→ 跳过
+        # 2. dict 项但没有 "id" 字段（如 {"type": "null"}）→ 也要跳过
+        #    否则 attr_key 会变成空字符串 ""，产生 {"": None} 这样的脏数据
         converted_object = {}
         for attr_definition in object_schema:
-            attr_key = attr_definition.get("id", "")
+            if not isinstance(attr_definition, dict):
+                continue
+            if "id" not in attr_definition:
+                continue
+            attr_key = attr_definition["id"]
             attr_value = converted_value.get(attr_key)
             converted_object[attr_key] = _convert(
                 attr_value, attr_definition, current_path
             )
+        # 如果 schema 中没有任何可解析的属性定义（全是 oneOf 子 schema 之类），
+        # 直接返回原始输入，不做子属性转换
+        if not converted_object and object_schema:
+            return converted_value
         return converted_object
 
     def _convert_array(inputs, definition, current_path):
