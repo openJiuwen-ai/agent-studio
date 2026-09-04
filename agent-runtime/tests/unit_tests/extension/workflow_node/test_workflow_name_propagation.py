@@ -230,7 +230,7 @@ class TestWorkflowWrapperStartEventData:
         mock_workflow.stream = MagicMock(return_value=single_chunk_stream())
 
         with patch(
-            "openjiuwen.core.session.workflow.create_workflow_session"
+            "agent_runtime.common.trace_compat.create_workflow_session_with_trace"
         ):
             with patch(
                 "openjiuwen.core.runner.Runner.resource_mgr"
@@ -269,7 +269,7 @@ class TestWorkflowWrapperStartEventData:
         mock_workflow.stream = MagicMock(return_value=single_chunk_stream())
 
         with patch(
-            "openjiuwen.core.session.workflow.create_workflow_session"
+            "agent_runtime.common.trace_compat.create_workflow_session_with_trace"
         ):
             with patch(
                 "openjiuwen.core.runner.Runner.resource_mgr"

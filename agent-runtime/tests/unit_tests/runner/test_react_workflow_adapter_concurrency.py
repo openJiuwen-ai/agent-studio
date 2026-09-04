@@ -104,7 +104,7 @@ class TestReactWorkflowAdapterConcurrency:
                 user_fields_keys=[],
             )
 
-        with patch("openjiuwen.core.workflow.create_workflow_session",
+        with patch("agent_runtime.common.trace_compat.create_workflow_session_with_trace",
                    return_value=MagicMock()), \
              patch.object(ir_converter_cls, "async_ir_to_workflow", fake_async_ir_to_workflow):
             results = await asyncio.gather(
@@ -147,7 +147,7 @@ class TestReactWorkflowAdapterConcurrency:
         # adapter 实例上不应残留任何共享 workflow 实例属性
         assert not hasattr(adapter, "_workflow_instance")
 
-        with patch("openjiuwen.core.workflow.create_workflow_session",
+        with patch("agent_runtime.common.trace_compat.create_workflow_session_with_trace",
                    return_value=MagicMock()), \
              patch.object(ir_converter_cls, "async_ir_to_workflow", fake_async_ir_to_workflow):
             result = await adapter.invoke({"query": "X"})
@@ -172,7 +172,7 @@ class TestReactWorkflowAdapterConcurrency:
                 user_fields_keys=[],
             )
 
-        with patch("openjiuwen.core.workflow.create_workflow_session",
+        with patch("agent_runtime.common.trace_compat.create_workflow_session_with_trace",
                    return_value=MagicMock()), \
              patch.object(ir_converter_cls, "async_ir_to_workflow", fake_async_ir_to_workflow):
             results = await asyncio.gather(
