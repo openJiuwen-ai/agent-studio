@@ -1939,7 +1939,6 @@ class IRConverter:
             end = pending["end"]
             inputs_schema = pending["inputs_schema"]
             is_stream_out = pending["is_stream_out"]
-            _node_name = pending.get("node_name")
             batch_schema, stream_schema = _split_inputs_schema_by_source(
                 inputs_schema, ir_stream_source_ids
             )
@@ -1974,7 +1973,7 @@ class IRConverter:
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
 
-            workflow.set_end_comp(node_id, end, name=_node_name, **set_end_kwargs)
+            workflow.set_end_comp(node_id, end, **set_end_kwargs)
 
         for source, target, is_stream in deferred_connections:
             existing_connections.add((source, target))
@@ -2561,7 +2560,6 @@ class IRConverter:
         if resolved_type == "jiuwen.start":
             workflow.set_start_comp(
                 node_id, component, inputs_schema=_build_start_inputs_schema(node),
-                name=node.get("name"),
             )
             return component
 
@@ -2618,10 +2616,9 @@ class IRConverter:
                     component,
                     stream_inputs_schema=inputs_schema,
                     response_mode="streaming",
-                    name=node.get("name"),
                 )
             else:
-                workflow.set_end_comp(node_id, component, inputs_schema=inputs_schema, name=node.get("name"))
+                workflow.set_end_comp(node_id, component, inputs_schema=inputs_schema)
             return component
 
         if resolved_type == "jiuwen.message":
@@ -3865,7 +3862,11 @@ def _add_workflow_comp_with_exception(
     if wait_for_all:
         kwargs["wait_for_all"] = True
     if node_name is not None:
-        kwargs["name"] = node_name
+        # Only pass name if the underlying Workflow supports it (openjiuwen >= 0.1.18)
+        import inspect as _inspect
+        _sig = _inspect.signature(workflow.add_workflow_comp)
+        if "name" in _sig.parameters:
+            kwargs["name"] = node_name
     if isinstance(workflow, LoopGroup):
         workflow.add_workflow_comp(comp_id, component, **kwargs)
     else:
