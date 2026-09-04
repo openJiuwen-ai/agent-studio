@@ -842,8 +842,31 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 return;
             }
             try {
-                PluginEntity plugin = pluginBase.getPluginEntityByVersion(shareResourceEntity.getResourceId(),
-                    versionInfos.get(0).getVersionId());
+                // 共享快照中的版本可能已被删除或从未导入（快照不随发版/删版同步），
+                // 遍历取第一个真实存在的版本解析插件实体，避免固定取快照第一个版本导致
+                // 该版本失效时整张卡片被吞掉、列表与计数口径不一致
+                PluginEntity plugin = null;
+                for (ResourceVersionInfo versionInfo : versionInfos) {
+                    if (versionInfo == null || StringUtils.isEmpty(versionInfo.getVersionId())) {
+                        continue;
+                    }
+                    try {
+                        plugin = pluginBase.getPluginEntityByVersion(shareResourceEntity.getResourceId(),
+                            versionInfo.getVersionId());
+                        break;
+                    } catch (Exception e) {
+                        log.info("share version not available, resourceId={}, versionId={}",
+                            shareResourceEntity.getResourceId(), versionInfo.getVersionId());
+                    }
+                }
+                if (plugin == null) {
+                    // 快照版本全部失效，兜底用插件表现状渲染基本信息卡，保证列表与计数口径一致
+                    plugin = pluginMapper.selectByPrimaryKey(shareResourceEntity.getResourceId(), null);
+                }
+                if (plugin == null) {
+                    log.warn("query plugin failed, resourceId={}", shareResourceEntity.getResourceId());
+                    return;
+                }
                 ShareResourceInfo shareResourceInfo = new ShareResourceInfo().setResourceId(
                         shareResourceEntity.getResourceId())
                     .setCreator(shareResourceEntity.getCreator())
@@ -860,7 +883,7 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 extendAttribute.put("request_info", JSONObject.parseObject(plugin.getRequestInfo(), Object.class));
                 shareResourceInfo.setExtendAttribute(extendAttribute);
                 shareResourceInfos.add(shareResourceInfo);
-            }catch (Exception e) {
+            } catch (Exception e) {
                 log.warn("query plugin failed, resourceId={}", shareResourceEntity.getResourceId());
             }
         });
