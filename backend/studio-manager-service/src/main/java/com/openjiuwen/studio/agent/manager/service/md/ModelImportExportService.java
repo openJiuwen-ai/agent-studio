@@ -367,13 +367,13 @@ public class ModelImportExportService implements IModelImportExportService {
             details.add(describe(e));
         }
         String hardDetail = details.isEmpty() ? null : String.join("; ", details);
-        return item.setDetail(mergeDetail(conflictInfo.getDesc(), hardDetail));
+        return item.setDetail(mergeDetail(conflictInfo.getDesc(), hardDetail).orElse(null));
     }
 
     /**
-     * 合并硬校验失败说明与冲突说明：冲突在前、硬校验在后，用 "；" 分隔。两者皆空返回 null（前端展示"无"）。
+     * 合并硬校验失败说明与冲突说明：冲突在前、硬校验在后，用 "；" 分隔。两者皆空返回 {@link Optional#empty()}（前端展示"无"）。
      */
-    private String mergeDetail(String conflictDesc, String hardCheckDesc) {
+    private Optional<String> mergeDetail(String conflictDesc, String hardCheckDesc) {
         List<String> parts = new ArrayList<>(2);
         if (StringUtils.isNotBlank(conflictDesc)) {
             parts.add(conflictDesc);
@@ -381,7 +381,10 @@ public class ModelImportExportService implements IModelImportExportService {
         if (StringUtils.isNotBlank(hardCheckDesc)) {
             parts.add(hardCheckDesc);
         }
-        return parts.isEmpty() ? null : String.join("；", parts);
+        if (parts.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(String.join("；", parts));
     }
 
     private ModelImportPreviewItem previewForLineFailure(LineContext ctx, AgentStudioException e) {
@@ -981,10 +984,9 @@ public class ModelImportExportService implements IModelImportExportService {
         List<ModelServiceBase> existByName = modelServiceMapper.queryByName(projectId, workspaceId,
             model.getServiceName(), model.getProviderId());
         if (CollectionUtils.isNotEmpty(existByName)) {
-            String providerName = resolveProviderName(model.getProviderId());
+            String providerName = resolveProviderName(model.getProviderId()).orElse(model.getProviderId());
             String desc = String.format("本空间下供应商「%s」已存在相同的模型服务「%s」",
-                StringUtils.isNotBlank(providerName) ? providerName : model.getProviderId(),
-                model.getServiceName());
+                providerName, model.getServiceName());
             return new ConflictInfo(true, desc);
         }
         // 情况2/3：本空间无同名 → 全局按 id 查（跨工作空间 PK 冲突）
@@ -1006,19 +1008,23 @@ public class ModelImportExportService implements IModelImportExportService {
 
     /**
      * 按 providerId 查供应商显示名（一次查询覆盖平台 + 用户两类供应商）。
-     * 查不到返回 null（调用方回退显示 providerId）。
+     * 查不到或名称为空白返回 {@link Optional#empty()}（调用方回退显示 providerId）。
      */
-    private String resolveProviderName(String providerId) {
+    private Optional<String> resolveProviderName(String providerId) {
         if (StringUtils.isBlank(providerId)) {
-            return null;
+            return Optional.empty();
         }
         List<ModelServiceProviderDetail> providers = modelServiceMapper
             .getLogosAndProviderNamesByProviderIds(Collections.singleton(providerId));
         if (CollectionUtils.isEmpty(providers)) {
-            return null;
+            return Optional.empty();
         }
         String name = providers.get(0).getProviderName();
-        return StringUtils.isNotBlank(name) ? name : providers.get(0).getProviderNameEn();
+        if (StringUtils.isNotBlank(name)) {
+            return Optional.of(name);
+        }
+        return Optional.ofNullable(providers.get(0).getProviderNameEn())
+            .filter(StringUtils::isNotBlank);
     }
 
     /**

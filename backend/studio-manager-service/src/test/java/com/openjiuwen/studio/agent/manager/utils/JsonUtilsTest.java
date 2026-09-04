@@ -36,6 +36,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @MockitoSettings(strictness = Strictness.LENIENT)
 class JsonUtilsTest {
@@ -238,6 +239,23 @@ class JsonUtilsTest {
         Map<String, Object> invalidMap = Map.of("name", "err", "age", "notNumber"); // age应为int
         TestObj invalidObj = JsonUtils.objectToClassType(invalidMap, TestObj.class);
         assertNull(invalidObj);
+    }
+
+    /**
+     * 测试 objectToClassTypeQuiet 方法（静默版对象转指定Class类型）
+     * 场景1：正常转换；场景2：转换失败返回 empty；场景3：null 输入返回 empty
+     */
+    @Test
+    void testObjectToClassTypeQuiet() {
+        Map<String, Object> map = Map.of("name", "quietTest", "age", 41);
+        Optional<TestObj> obj = JsonUtils.objectToClassTypeQuiet(map, TestObj.class);
+        assertTrue(obj.isPresent());
+        assertEquals("quietTest", obj.get().getName());
+
+        Map<String, Object> invalidMap = Map.of("name", "err", "age", "notNumber");
+        assertTrue(JsonUtils.objectToClassTypeQuiet(invalidMap, TestObj.class).isEmpty());
+
+        assertTrue(JsonUtils.objectToClassTypeQuiet(null, TestObj.class).isEmpty());
     }
 
     /**

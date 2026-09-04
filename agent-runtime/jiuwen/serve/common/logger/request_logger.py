@@ -126,7 +126,7 @@ def log_function_timing(func):
             result = func(*args, **kwargs)
             elapsed_time = (time.perf_counter() - start_time) * 1000
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"{func.__name__} completed in {elapsed_time:.2f} ms")
+                logger.debug("%s completed in %.2f ms", func.__name__, elapsed_time)
             return result
         except Exception as e:
             elapsed_time = (time.perf_counter() - start_time) * 1000
@@ -140,7 +140,7 @@ def log_function_timing(func):
             result = await func(*args, **kwargs)
             elapsed_time = (time.perf_counter() - start_time) * 1000
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"async {func.__name__} completed in {elapsed_time:.2f} ms")
+                logger.debug("async %s completed in %.2f ms", func.__name__, elapsed_time)
             return result
         except Exception as e:
             elapsed_time = (time.perf_counter() - start_time) * 1000

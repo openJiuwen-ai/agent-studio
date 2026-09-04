@@ -98,7 +98,7 @@ public class WorkflowInstanceService {
             return JSONObject.parseObject(instStr, WorkflowInstanceEntity.class);
         } catch (RedisReadOverflowException e) {
             log.warn("Redis read overflow, triggering history eviction for key: {}", e.getRedisKey());
-            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
+            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey()).orElse(null);
             if (StringUtils.isNotEmpty(cleanedJson)) {
                 return JSONObject.parseObject(cleanedJson, WorkflowInstanceEntity.class);
             }
@@ -281,7 +281,7 @@ public class WorkflowInstanceService {
             return conversationInfos;
         } catch (RedisReadOverflowException e) {
             log.warn("Redis read overflow in getConversationInfos, triggering eviction for key: {}", e.getRedisKey());
-            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
+            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey()).orElse(null);
             if (StringUtils.isNotEmpty(cleanedJson)) {
                 return JSON.parseObject(cleanedJson, ConversationInfoList.class);
             }
@@ -318,7 +318,7 @@ public class WorkflowInstanceService {
             return executionInfos;
         } catch (RedisReadOverflowException e) {
             log.warn("Redis read overflow in getExecutionInfos, triggering eviction for key: {}", e.getRedisKey());
-            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
+            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey()).orElse(null);
             if (StringUtils.isNotEmpty(cleanedJson)) {
                 return JSON.parseObject(cleanedJson, ExecutionInfoList.class);
             }

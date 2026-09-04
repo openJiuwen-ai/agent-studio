@@ -1174,9 +1174,10 @@ public class AgentImportService {
             ImportInfo info = resourceMap.get(result.getId());
             if (info != null && info.getMetadata() != null) {
                 // 探测性转换：仅 WORKFLOW/AGENT/CONTROLLER 等结构兼容的 metadata 能成功提取 traceId，
-                // 插件等资源（如 test_status 为 JSON 数组字符串）转换失败属预期，静默返回 null 即可，
+                // 插件等资源（如 test_status 为 JSON 数组字符串）转换失败属预期，静默返回 empty 即可，
                 // 不打 ERROR 堆栈误导排查
-                WorkflowEntity workflowMeta = JsonUtils.objectToClassTypeQuiet(info.getMetadata(), WorkflowEntity.class);
+                WorkflowEntity workflowMeta = JsonUtils.objectToClassTypeQuiet(info.getMetadata(),
+                    WorkflowEntity.class).orElse(null);
                 if (workflowMeta != null && StringUtils.isNotEmpty(workflowMeta.getTraceId())
                     && !Strings.CS.equals(workflowMeta.getTraceId(), result.getId())) {
                     allIdMappings.put(workflowMeta.getTraceId(), newId);
