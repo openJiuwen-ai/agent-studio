@@ -106,6 +106,7 @@ class RagFlowAdapter(KBServiceAdapter):
         retrieval_params = request.retrieval_params
         top_k = retrieval_params.get("topK", 10)
         score_threshold = retrieval_params.get("scoreThreshold", 0.0)
+        search_mode = str(retrieval_params.get("searchMode", "doc")).lower()
 
         url = f"{endpoint.rstrip('/')}/api/v1/retrieval"
 
@@ -125,6 +126,17 @@ class RagFlowAdapter(KBServiceAdapter):
             body["vector_similarity_weight"] = retrieval_params["vectorSimilarityWeight"]
         if "keyword" in retrieval_params:
             body["keyword"] = retrieval_params["keyword"]
+
+        # 搜索模式映射：与 LakeSearch / General 保持相同的 searchMode 语义。
+        # RAGFlow retrieval 没有独立的 faq scope，FAQ 内容按语义向量召回后
+        # 由 parse_response 依据 searchMode 将结果类型标记为 faq。
+        if search_mode == "keyword":
+            # 纯关键词/BM25 检索：keyword=True 且向量权重置 0，避免退化为混合召回。
+            body["keyword"] = True
+            body["vector_similarity_weight"] = 0.0
+        elif search_mode == "mix":
+            # 混合检索：keyword=True，向量权重优先取用户配置，未配置时由服务端默认。
+            body["keyword"] = True
         if "rerankId" in retrieval_params:
             body["rerank_id"] = retrieval_params["rerankId"]
         if "highlight" in retrieval_params:
@@ -145,7 +157,7 @@ class RagFlowAdapter(KBServiceAdapter):
                         raise RuntimeError(f"RAGFlow API error: status={resp.status}, body={text[:500]}")
 
                     resp_data = await resp.json()
-                    return self.parse_response(resp_data)
+                    return self.parse_response(resp_data, search_mode)
 
         except RuntimeError:
             raise
@@ -155,7 +167,10 @@ class RagFlowAdapter(KBServiceAdapter):
             ) from e
 
     @staticmethod
-    def parse_response(resp_data: dict) -> List[KBSearchResult]:
+    def parse_response(
+        resp_data: dict,
+        search_mode: str = "doc",
+    ) -> List[KBSearchResult]:
         results = []
 
         # 检查响应状态码
@@ -197,6 +212,14 @@ class RagFlowAdapter(KBServiceAdapter):
                 or chunk.get("documentName", "")
             )
 
+            # 显式 FAQ 检索时结果类型标记为 faq；否则保留原有相似度启发式：
+            # RAGFlow FAQ 命中通常相似度会显著高于普通文档切片。
+            result_type = (
+                "faq"
+                if (search_mode or "").lower() == "faq" or score > 0.9
+                else "doc"
+            )
+
             results.append(
                 KBSearchResult(
                     text=text,
@@ -216,7 +239,7 @@ class RagFlowAdapter(KBServiceAdapter):
                     subtitle=doc_name,
                     knowledge_base_type=chunk.get("knowledge_base_type",
                                           chunk.get("knowledgeBaseType", "")),
-                    type="faq" if score > 0.9 else "doc",
+                    type=result_type,
                     metadata=metadata,
                 )
             )

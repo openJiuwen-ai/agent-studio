@@ -317,7 +317,54 @@ async def test_ragflow_builds_request(monkeypatch):
     assert sent["json"]["dataset_ids"] == ["ds-1", "ds-2"]
     assert sent["json"]["page_size"] == 4
     assert sent["json"]["similarity_threshold"] == 0.6
+    assert "keyword" not in sent["json"]
+    assert "vector_similarity_weight" not in sent["json"]
     assert sent["headers"]["Authorization"] == "Bearer key-1"
+
+
+async def test_ragflow_keyword_mode_is_pure_bm25(monkeypatch):
+    """keyword 模式：keyword=True 且 vector_similarity_weight=0，避免退化为混合检索。"""
+    _patch_session(monkeypatch, ragflow_adapter, {"code": 0, "data": {"chunks": []}})
+    adapter = RagFlowAdapter()
+    await adapter.search(
+        query="q",
+        connection_config={"endpoint": "http://rag", "authorization": "key-1"},
+        knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ds-1"}],
+        retrieval_params={"searchMode": "keyword"},
+    )
+    sent = _FakeSession.last
+    assert sent["json"]["keyword"] is True
+    assert sent["json"]["vector_similarity_weight"] == 0.0
+
+
+async def test_ragflow_mix_mode_uses_hybrid_keyword(monkeypatch):
+    """mix 模式：keyword=True，vector_similarity_weight 优先使用用户配置。"""
+    _patch_session(monkeypatch, ragflow_adapter, {"code": 0, "data": {"chunks": []}})
+    adapter = RagFlowAdapter()
+    await adapter.search(
+        query="q",
+        connection_config={"endpoint": "http://rag", "authorization": "key-1"},
+        knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ds-1"}],
+        retrieval_params={"searchMode": "mix", "vectorSimilarityWeight": 0.6},
+    )
+    sent = _FakeSession.last
+    assert sent["json"]["keyword"] is True
+    assert sent["json"]["vector_similarity_weight"] == 0.6
+
+
+async def test_ragflow_mix_mode_without_weight(monkeypatch):
+    """mix 模式未配置权重时交给 RAGFlow 服务端默认混合权重。"""
+    _patch_session(monkeypatch, ragflow_adapter, {"code": 0, "data": {"chunks": []}})
+    adapter = RagFlowAdapter()
+    await adapter.search(
+        query="q",
+        connection_config={"endpoint": "http://rag", "authorization": "key-1"},
+        knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ds-1"}],
+        retrieval_params={"searchMode": "mix"},
+    )
+    sent = _FakeSession.last
+    assert sent["json"]["keyword"] is True
+    assert "vector_similarity_weight" not in sent["json"]
 
 
 async def test_ragflow_apikey_takes_priority_over_authorization(monkeypatch):
@@ -409,6 +456,27 @@ async def test_general_builds_request(monkeypatch):
     assert sent["json"]["top_k"] == 7
     assert sent["json"]["search_threshold"] == 0.5
     assert sent["headers"]["Authorization"] == "Bearer api-1"
+
+
+async def test_general_builds_mix_and_faq_request(monkeypatch):
+    """General 的 mix 和 faq 检索模式分别映射为 method=mix / method=faq。"""
+    for search_mode, expected_method in (("mix", "mix"), ("faq", "faq")):
+        _patch_session(monkeypatch, general_kb_adapter, {"search_result_list": []})
+        adapter = GeneralKBAdapter()
+        await adapter.search(
+            query="q",
+            connection_config={
+                "endpoint": "http://gen",
+                "authorization": "api-1",
+                "extra_params": {},
+            },
+            knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ext-1"}],
+            retrieval_params={"topK": 3, "searchMode": search_mode},
+        )
+        sent = _FakeSession.last
+        assert sent["json"]["method"] == expected_method
+        assert sent["json"]["limit"] == 3
+        assert sent["json"]["top_k"] == 3
 
 
 async def test_general_apikey_takes_priority_over_authorization(monkeypatch):
