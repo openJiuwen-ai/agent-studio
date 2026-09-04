@@ -250,8 +250,9 @@ class Agent(BaseAgent):
         global_variables = runtime_context.agent_workflow_context.get(
             "workflow_req_params", {}
         ).get("global_variables", {})
-        logger.info(
-            f"received global_variables: {global_variables}",
+        logger.debug(
+            "received global_variables: %s",
+            global_variables,
             simple_log="global_variables saved successfully",
         )
         controller_global_vars = self.context_manager.get_global_variables(
@@ -268,8 +269,9 @@ class Agent(BaseAgent):
                 ):
                     global_variables[key] = value
 
-            logger.info(
-                f"update_controller_global_variables global variables updated: {controller_global_vars}",
+            logger.debug(
+                "update_controller_global_variables global variables updated: %s",
+                controller_global_vars,
                 simple_log="update_controller_global_variables global variables updated",
             )
 
