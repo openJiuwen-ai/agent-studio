@@ -272,12 +272,25 @@ def param_deserialization(
             )
         if isinstance(p.get(level_key), str) and p.get(level_key).isdigit():
             p[level_key] = int(p.get(level_key))
+        # 处理 oneOf/anyOf 类型：当 type 为 null 但存在 oneOf 定义时，
+        # 提取非 null 子类型作为实际类型（如 oneOf: [object, null] → "object"）。
+        # 避免 Param.__init__ 将 type 默认为 "string"，导致下游类型判断错误。
+        param_type = p.get("type", "")
+        if not param_type:
+            one_of = p.get("one_of") or p.get("oneOf")
+            if one_of and isinstance(one_of, list):
+                non_null_types = [
+                    item.get("type") for item in one_of
+                    if isinstance(item, dict) and item.get("type") and item.get("type") != "null"
+                ]
+                if non_null_types:
+                    param_type = non_null_types[0]
         params.append(
             Param(
                 name=p.get("name", ""),
                 description=p.get("description", ""),
                 default_value=p.get("default_value"),
-                param_type=p.get("type", ""),
+                param_type=param_type,
                 required=p.get("required", False),
                 visible=p.get("visible", True),
                 level=p.get(level_key, 0),
