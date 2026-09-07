@@ -280,3 +280,163 @@ class TestGenerateFinalStatusMessageTypeProtection:
         assert len(results) == 1
         assert isinstance(results[0], Message)
         assert results[0].content["exec_res"]["answer"] == ""
+
+
+# ===========================================================================
+# Scene tool/workflow filtering — 前缀匹配 + guideline 聚合
+# ===========================================================================
+"""
+Bug 背景：平台 scene.tools 存插件名拼音（如 'zhinenghuiyizhushou'），
+plugin.name 格式为 '{pinyin}{operation_id}'（如 'zhinenghuiyizhushoucreate_meeting'）。
+原代码精确匹配导致 tools_count=0，修复为精确匹配 + 前缀匹配双模式。
+"""
+from types import SimpleNamespace
+import sys
+
+from jiuwen.controller.common.config import SceneConfig, GuidelineConfig
+
+
+def _plugin(full_name: str) -> SimpleNamespace:
+    """模拟 RestFulAPI 插件对象。"""
+    return SimpleNamespace(name=full_name)
+
+
+def _workflow_ctx(wf_name: str) -> SimpleNamespace:
+    """模拟工作流上下文对象。"""
+    return SimpleNamespace(workflow_name=wf_name, description="test workflow")
+
+
+class TestPlannerFilterToolsByScene:
+    """PlanExecutePlanner._filter_tools_by_scene — 精确 + 前缀匹配 + guideline 聚合。"""
+
+    @staticmethod
+    def _make_planner(plugins=None):
+        from jiuwen.controller.task_planner.planners.plan_execute_planner import (
+            PlanExecutePlanner,
+        )
+        obj = PlanExecutePlanner.__new__(PlanExecutePlanner)
+        obj.plugins = plugins or []
+        obj.task_id = "test-001"
+        return obj
+
+    def test_no_scene_returns_all(self):
+        """场景未匹配 → 返回全部插件。"""
+        plugins = [_plugin("p1_create"), _plugin("p2_query")]
+        planner = self._make_planner(plugins)
+        assert len(planner._filter_tools_by_scene(None)) == 2
+
+    def test_prefix_match_all_operations(self):
+        """scene.tools 存插件拼音 → 前缀匹配命中所有 operation。"""
+        plugins = [
+            _plugin("zhinenghuiyizhushoucreate_meeting"),
+            _plugin("zhinenghuiyizhushouquery_meetings"),
+            _plugin("zhinenghuiyizhushouget_meeting"),
+            _plugin("zhinenghuiyizhushoucancel_meeting"),
+        ]
+        planner = self._make_planner(plugins)
+        scene = SceneConfig(id="s1", name="会议", description="",
+                            tools=["zhinenghuiyizhushou"])
+        assert len(planner._filter_tools_by_scene(scene)) == 4
+
+    def test_exact_match_single_operation(self):
+        """scene.tools 存完整 operation 名 → 精确匹配只命中一个。"""
+        plugins = [
+            _plugin("zhinenghuiyizhushoucreate_meeting"),
+            _plugin("zhinenghuiyizhushouquery_meetings"),
+        ]
+        planner = self._make_planner(plugins)
+        scene = SceneConfig(id="s1", name="创建", description="",
+                            tools=["zhinenghuiyizhushoucreate_meeting"])
+        result = planner._filter_tools_by_scene(scene)
+        assert len(result) == 1
+        assert result[0].name == "zhinenghuiyizhushoucreate_meeting"
+
+    def test_no_match(self):
+        """不相关的工具名 → 过滤为空。"""
+        planner = self._make_planner([_plugin("other_plugin_action")])
+        scene = SceneConfig(id="s1", name="会议", description="",
+                            tools=["zhinenghuiyizhushou"])
+        assert len(planner._filter_tools_by_scene(scene)) == 0
+
+    def test_guideline_aggregation(self):
+        """scene.tools 为空 → 从 guidelines 聚合。"""
+        plugins = [_plugin("pluginb_action1"), _plugin("plugina_action2")]
+        planner = self._make_planner(plugins)
+        scene = SceneConfig(id="s1", name="test", description="", tools=[],
+                            guidelines=[
+                                GuidelineConfig(id=1, condition="c1", action="a1", tools=["pluginb"]),
+                                GuidelineConfig(id=2, condition="c2", action="a2", tools=["plugina"]),
+                            ])
+        assert len(planner._filter_tools_by_scene(scene)) == 2
+
+    def test_prefix_no_false_positive(self):
+        """短拼音不应命中长名前缀的插件。"""
+        plugins = [_plugin("huiyi_action"), _plugin("huiyizhushou_action")]
+        planner = self._make_planner(plugins)
+        scene = SceneConfig(id="s1", name="test", description="",
+                            tools=["huiyizhushou"])
+        result = planner._filter_tools_by_scene(scene)
+        assert len(result) == 1
+        assert result[0].name == "huiyizhushou_action"
+
+    def test_empty_tool_name_ignored(self):
+        """scene.tools 中的空字符串不导致匹配所有。"""
+        plugins = [_plugin("pluginA_action1")]
+        planner = self._make_planner(plugins)
+        scene = SceneConfig(id="s1", name="test", description="",
+                            tools=["", "pluginA"])
+        assert len(planner._filter_tools_by_scene(scene)) == 1
+
+
+class TestModeFilterPluginsByScene:
+    """PlanExecuteMode._filter_plugins_by_scene — 执行阶段前缀匹配。"""
+
+    @staticmethod
+    def _make_mode():
+        """构造 PlanExecuteMode，mock 掉重型导入链。"""
+        import importlib
+        _mocks = {}
+        for mod in ("model_service.env_resolver", "model_service.env_resolver"):
+            if mod not in sys.modules:
+                sys.modules[mod] = MagicMock()
+                _mocks[mod] = True
+        try:
+            from jiuwen.controller.agent.control_mode.plan_execute_mode import (
+                PlanExecuteMode,
+            )
+        finally:
+            for mod in _mocks:
+                del sys.modules[mod]
+        obj = PlanExecuteMode.__new__(PlanExecuteMode)
+        obj.task_id = "test-001"
+        obj._skill_context = None
+        return obj
+
+    def test_prefix_match(self):
+        """前缀匹配命中插件。"""
+        plugins = [
+            _plugin("zhinenghuiyizhushoucreate_meeting"),
+            _plugin("zhinenghuiyizhushouquery_meetings"),
+            _plugin("other_plugin_action"),
+        ]
+        mode = self._make_mode()
+        scene = SceneConfig(id="s1", name="会议", description="",
+                            tools=["zhinenghuiyizhushou"])
+        result = mode._filter_plugins_by_scene(plugins, scene)
+        assert len(result) == 2
+
+    def test_skill_injection_merged(self):
+        """skill 注入的工具名与 scene.tools 合并。"""
+        plugins = [_plugin("zhinenghuiyizhushoucreate_meeting"), _plugin("read_file")]
+        mode = self._make_mode()
+        mode._skill_context = SimpleNamespace(tool_names={"read_file"})
+        scene = SceneConfig(id="s1", name="会议", description="",
+                            tools=["zhinenghuiyizhushou"])
+        result = mode._filter_plugins_by_scene(plugins, scene)
+        assert len(result) == 2
+
+    def test_no_scene_returns_all(self):
+        """场景未匹配 → 返回全部。"""
+        plugins = [_plugin("p1"), _plugin("p2")]
+        mode = self._make_mode()
+        assert len(mode._filter_plugins_by_scene(plugins, None)) == 2

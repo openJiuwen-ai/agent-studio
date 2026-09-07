@@ -235,6 +235,11 @@ class Qwen(BaseModel, BaseChatModel):
         )
         total_message = ""
         total_reason_message = ""
+        # tool_calls 累积变量（流式响应中 tool_calls 分多个 chunk 返回）
+        tool_call_name = ""
+        tool_call_arguments = ""
+        tool_call_id = ""
+        finish_reason = "stop"
         if res.status_code == 200:
             for i in res.iter_lines():
                 if not usage_metadata.first_token_time:
@@ -260,19 +265,39 @@ class Qwen(BaseModel, BaseChatModel):
                         DataField.choices_str in res_content_json_content
                         and res_content_json_content.get(DataField.choices_str)
                     ):
-                        # 增加token消耗后，最后一个消息可能不返回choices
-                        total_message += (
-                            res_content_json_content.get(DataField.choices_str)[0]
-                            .get("delta", {})
-                            .get("content", "")
-                            or ""
-                        )
-                        total_reason_message += (
-                            res_content_json_content.get(DataField.choices_str)[0]
-                            .get("delta", {})
-                            .get("reasoning_content", "")
-                            or ""
-                        )
+                        choice = res_content_json_content.get(DataField.choices_str)[0]
+                        delta = choice.get("delta", {})
+
+                        # 累积文本内容
+                        total_message += delta.get("content", "") or ""
+                        total_reason_message += delta.get("reasoning_content", "") or ""
+
+                        # 累积 tool_calls（与 _chat() 对齐）
+                        delta_tool_calls = choice.get("delta", {}).get("tool_calls")
+                        if delta_tool_calls:
+                            if isinstance(delta_tool_calls, list):
+                                for tc in delta_tool_calls:
+                                    func = tc.get("function", {})
+                                    if tc.get("id"):
+                                        tool_call_id = tc["id"]
+                                    if func.get("name"):
+                                        tool_call_name += func["name"]
+                                    if func.get("arguments"):
+                                        tool_call_arguments += func["arguments"]
+                            elif isinstance(delta_tool_calls, dict):
+                                func = delta_tool_calls.get("function", {})
+                                if delta_tool_calls.get("id"):
+                                    tool_call_id = delta_tool_calls["id"]
+                                if func.get("name"):
+                                    tool_call_name += func["name"]
+                                if func.get("arguments"):
+                                    tool_call_arguments += func["arguments"]
+
+                        # 读取 finish_reason
+                        chunk_finish = choice.get("finish_reason")
+                        if chunk_finish:
+                            finish_reason = chunk_finish
+
                     usage_metadata.code = 0
                     usage_metadata.errmsg = "成功"
                     usage_metadata.task_id = res_content_json_content.get("id")
@@ -312,10 +337,38 @@ class Qwen(BaseModel, BaseChatModel):
                         yield AIMessage(
                             content="", usage_metadata=usage_metadata, tool_calls={}
                         )
-            usage_metadata.finish_reason = "stop"
-            yield AIMessage(
-                content=total_message, usage_metadata=usage_metadata, tool_calls={}
-            )
+
+            # 流结束后：如果有 tool_calls，构造 ToolCall 对象（与 _chat() 逻辑一致）
+            if finish_reason == "tool_calls" and tool_call_name:
+                check_and_trans_result = ModelUtil.check_and_trans2json(
+                    tool_call_arguments
+                )
+                if check_and_trans_result[0]:
+                    tools_call = ToolCall(
+                        name=tool_call_name, args=check_and_trans_result[1]
+                    )
+                    if tool_call_id:
+                        tools_call.id = tool_call_id
+                    usage_metadata.finish_reason = "function_call"
+                    yield AIMessage(
+                        content=total_message,
+                        usage_metadata=usage_metadata,
+                        tool_calls=tools_call,
+                    )
+                else:
+                    usage_metadata.finish_reason = "stop"
+                    yield AIMessage(
+                        content=total_message,
+                        usage_metadata=usage_metadata,
+                        tool_calls={},
+                    )
+            else:
+                usage_metadata.finish_reason = "stop"
+                yield AIMessage(
+                    content=total_message,
+                    usage_metadata=usage_metadata,
+                    tool_calls={},
+                )
 
         else:
             raise JiuWenBaseException(

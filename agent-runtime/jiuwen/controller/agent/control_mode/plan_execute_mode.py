@@ -762,15 +762,27 @@ class PlanExecuteMode(BaseMode):
             return filtered
 
         scene_tool_names = set(matched_scene.tools) if matched_scene.tools else set()
+        # 如果场景级工具为空，从指南中聚合所有工具名
+        if not scene_tool_names and matched_scene.guidelines:
+            for guideline in matched_scene.guidelines:
+                if guideline.tools:
+                    scene_tool_names.update(guideline.tools)
+            logger.info(
+                f"task_id: {self.task_id}| [StepExecute] Aggregated tools from guidelines: {scene_tool_names}"
+            )
         injected_names = (
             self._skill_context.tool_names if self._skill_context else set()
         )
         allowed_names = scene_tool_names | injected_names
-        filtered = [
-            p
-            for p in (plugins_source or [])
-            if self._get_plugin_name(p) in allowed_names
-        ]
+
+        def _matches(plugin):
+            pname = self._get_plugin_name(plugin)
+            if pname in allowed_names:
+                return True
+            # plugin.name 格式为 "{plugin_name}{operation_id}"，需前缀匹配
+            return any(pname.startswith(n) for n in allowed_names if n)
+
+        filtered = [p for p in (plugins_source or []) if _matches(p)]
         logger.info(
             f"task_id: {self.task_id}| [StepExecute] Filtered {len(filtered)} plugins by scene",
             simple_log=f"task_id: {self.task_id}| [StepExecute] Filtered {len(filtered)} plugins",
@@ -792,10 +804,16 @@ class PlanExecuteMode(BaseMode):
             return all_workflows
 
         scene_tool_names = set(matched_scene.tools) if matched_scene.tools else set()
+        # 如果场景级工具为空，从指南中聚合所有工具名
+        if not scene_tool_names and matched_scene.guidelines:
+            for guideline in matched_scene.guidelines:
+                if guideline.tools:
+                    scene_tool_names.update(guideline.tools)
         filtered = {
             k: ctx
             for k, ctx in all_workflows.items()
             if ctx.workflow_name in scene_tool_names
+            or any(ctx.workflow_name.startswith(stn) for stn in scene_tool_names if stn)
         }
         logger.info(
             f"task_id: {self.task_id}| [StepExecute] Filtered {len(filtered)} workflows by scene"
