@@ -3,7 +3,7 @@ FROM $BASE_IMAGE
 RUN echo "Built on $BASE_IMAGE"
 
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
-    && apt-get update && apt-get install -y iproute2 libcap2-bin && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y iproute2 libcap2-bin unzip && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd servicegroup && useradd -u 1001 -g servicegroup -m -s /bin/bash service
 
