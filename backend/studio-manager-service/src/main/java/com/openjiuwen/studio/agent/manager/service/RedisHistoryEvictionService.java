@@ -45,28 +45,31 @@ public class RedisHistoryEvictionService {
      * 处理 Redis 读取溢出异常
      * 根据 key 类型选择对应的清理策略，清理后重试读取
      *
+     * <p>注：为保持既有 API 兼容（调用方契约已固化，同参不同返回类型在 Java 中无法重载共存），
+     * 本方法保留 String 返回、失败返回 null 的既有语义；内部清理链已 Optional 化（见各 evict* 方法）。
+     *
      * @param key Redis key
-     * @return 清理后的数据 JSON 字符串；如果仍然失败则返回 {@link Optional#empty()}
+     * @return 清理后的数据 JSON 字符串，如果仍然失败则返回 null
      */
-    public Optional<String> handleReadOverflow(String key) {
+    public String handleReadOverflow(String key) {
         log.warn("Handling Redis read overflow for key: {}, eviction threshold: {}", key, evictionThreshold);
         try {
             if (key == null) {
-                return Optional.empty();
+                return null;
             }
             if (key.contains("trace_root_span_")) {
-                return evictTraceInfo(key);
+                return evictTraceInfo(key).orElse(null);
             } else if (key.contains("_conv_")) {
-                return evictListData(key, "insight_conv");
+                return evictListData(key, "insight_conv").orElse(null);
             } else if (key.contains("_exec_rel_") || key.contains("_rel_")) {
-                return evictListData(key, "exec_rel");
+                return evictListData(key, "exec_rel").orElse(null);
             } else {
-                return evictWorkflowInstance(key);
+                return evictWorkflowInstance(key).orElse(null);
             }
         } catch (Exception e) {
             log.error("Failed to evict history for key: {}", key, e);
         }
-        return Optional.empty();
+        return null;
     }
 
     /**
