@@ -191,7 +191,7 @@ class TestWorkflowRunnerAbortException:
         ), patch(
             "agent_runtime.runner.workflow_runner.create_conversation_context",
         ), patch(
-            "agent_runtime.runner.workflow_runner.create_workflow_session",
+            "agent_runtime.runner.workflow_runner.create_workflow_session_with_trace",
         ), patch(
             "agent_runtime.runner.workflow_runner.CheckpointerFactory.get_checkpointer",
             return_value=mock_checkpointer,

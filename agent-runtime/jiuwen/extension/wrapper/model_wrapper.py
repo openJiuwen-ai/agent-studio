@@ -26,6 +26,7 @@ from openjiuwen.core.foundation.llm.schema.tool_call import ToolCall
 from openjiuwen.core.foundation.tool.schema import ToolInfo
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.agent import create_agent_session
+from agent_runtime.common.trace_compat import create_agent_session_with_trace
 
 BJ_TZ = datetime.timezone(datetime.timedelta(hours=8), name="Asia/Beijing")
 
@@ -351,7 +352,7 @@ class ModelWrapper:
             raise ValueError("model_id and session_id are required")
 
         messages, tools = self._convert_input_to_model_format(inputs)
-        agent_session = create_agent_session(session_id=session_id)
+        agent_session = create_agent_session_with_trace(session_id=session_id)
         model = await Runner.resource_mgr.get_model(
             model_id=model_id, session=agent_session
         )
@@ -420,7 +421,7 @@ class ModelWrapper:
         request_start_time = datetime.datetime.now(tz=BJ_TZ).isoformat()
         first_token_time = ""
         tc_id = ""
-        agent_session = create_agent_session(session_id=session_id)
+        agent_session = create_agent_session_with_trace(session_id=session_id)
         model = await Runner.resource_mgr.get_model(
             model_id=model_id, session=agent_session
         )

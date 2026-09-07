@@ -177,6 +177,27 @@ def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
     url = ir_data.get("url", "")
     headers = copy.deepcopy(ir_data.get(HEADERS, {}))
 
+    # 旧格式插件（资产广场/预置/OpenAPI导入）的 Headers 请求头（如 Content-Type）
+    # 仅存在于 headers 中，不在 arguments 里；而插件详情 DTO 会把 headers 合并进
+    # schema 展示，工作流节点因此保存了这些入参。这里把 headers 中未定义为参数的
+    # 键补成 Headers 位置参数，与 DTO 对齐，避免运行时报 101743 param not defined
+    # （同时自愈存量已发布工作流 IR，无需重新发布）。
+    param_names = {p.name for p in params}
+    for header_key, header_value in headers.items():
+        if header_key in param_names:
+            continue
+        params.append(
+            Param(
+                name=header_key,
+                description=header_key,
+                param_type="string",
+                # 仅字符串值作为默认值，避免非字符串值触发默认值类型校验
+                default_value=header_value if isinstance(header_value, str) else None,
+                required=False,
+                method=_PARAM_LOC_HEADERS,
+            )
+        )
+
     auth = ir_data.get(AUTH, {})
     auth = extend_auth(auth, ir_data)
 

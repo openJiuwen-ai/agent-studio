@@ -25,7 +25,7 @@ def _sub_workflow_session(
 ):
     parent = Mock()
     parent.session_id.return_value = session_id
-    parent.config.return_value = object()
+    parent.config.return_value = Mock()
     parent.workflow_id.return_value = main_workflow_id
     parent.main_workflow_id.return_value = main_workflow_id
     parent.workflow_nesting_depth.return_value = 0

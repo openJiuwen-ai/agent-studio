@@ -230,6 +230,26 @@ CREATE TABLE t_knowledge_test_record
     PRIMARY KEY (record_id)
 );
 
+CREATE TABLE IF NOT EXISTS t_knowledge_file
+(
+    file_id     varchar(64)   NOT NULL,
+    kb_id       varchar(64)   NOT NULL,
+    project_id  varchar(64)   NOT NULL,
+    file_name   varchar(128)  NOT NULL,
+    file_type   varchar(16)   NULL DEFAULT NULL,
+    file_size   bigint        NOT NULL DEFAULT 0,
+    file_status varchar(16)   NOT NULL DEFAULT 'RUNNING',
+    file_tags   varchar(1024) NULL DEFAULT NULL,
+    doc_ids     varchar(2048) NULL DEFAULT NULL,
+    obs_path    varchar(512)  NULL DEFAULT NULL,
+    create_time bigint        NOT NULL DEFAULT 0,
+    update_time bigint        NOT NULL DEFAULT 0,
+    PRIMARY KEY (file_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_id ON t_knowledge_file (kb_id);
+CREATE INDEX IF NOT EXISTS idx_project_kb ON t_knowledge_file (project_id, kb_id);
+
 CREATE INDEX IF NOT EXISTS idx_domain_type ON t_knowledge_base (domain_id, type);
 CREATE INDEX IF NOT EXISTS idx_kb_connection_id ON t_knowledge_base (knowledge_base_connection_id);
 CREATE UNIQUE INDEX IF NOT EXISTS t_knowledge_base_config_unique ON t_knowledge_base_config (config_type, config_item, domain_id);

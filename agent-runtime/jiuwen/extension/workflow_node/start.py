@@ -67,13 +67,50 @@ class DataType(Enum):
     ARRAY = "array"
 
 
+def _to_boolean(value):
+    """前端默认值输入框是纯文本,'false' 字符串必须解析为 False。
+
+    裸 bool() 对任意非空字符串都返回 True,会把 "false" 默认值反转成 True。
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
+def _to_number(value):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    try:
+        return int(str(value))
+    except ValueError:
+        return float(str(value))
+
+
+def _to_array(value):
+    if isinstance(value, list):
+        return value
+    parsed = json.loads(value)
+    if not isinstance(parsed, list):
+        raise ValueError(f"expect JSON array, got: {value!r}")
+    return parsed
+
+
+def _to_object(value):
+    if isinstance(value, dict):
+        return value
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"expect JSON object, got: {value!r}")
+    return parsed
+
+
 DATA_TYPE_CONVERSION = {
     DataType.INTEGER.value: int,
-    DataType.BOOLEAN.value: bool,
-    DataType.NUMBER.value: (float, int, complex),
+    DataType.BOOLEAN.value: _to_boolean,
+    DataType.NUMBER.value: _to_number,     # 原 (float, int, complex) 是 tuple,不可调用
     DataType.STRING.value: str,
-    DataType.OBJECT.value: dict,
-    DataType.ARRAY.value: list,
+    DataType.OBJECT.value: _to_object,
+    DataType.ARRAY.value: _to_array,       # 原 list() 会把 JSON 字符串拆成字符列表
 }
 
 
@@ -248,29 +285,67 @@ class Start(WorkflowComponent):
                 data.get("storage_method") == ASSIGNMENT
                 and aging_level == time_type
             ):
-                if "schema" not in data:
-                    # 基本类型处理，需要根据 type 进行类型转换
-                    if "default_value" in data and "type" in data:
-                        var_id = data.get("id", "")
-                        default_val = data.get("default_value", "")
-                        if var_id:
-                            # 根据 type 进行类型转换
+                var_id = data.get("id", "")
+                if var_id:
+                    data_type = (data.get("type") or "").lower()
+                    default_val = data.get("default_value")
+                    if data_type == DataType.ARRAY.value:
+                        # 数组的 schema 是元素类型定义(标量或 object 皆同),
+                        # default_value 在本层。空默认保持 key 缺失(渲染为空,
+                        # 与历史行为一致;写入 [] 会让模板渲染出 '[]' 字面量)
+                        if default_val not in (None, ""):
                             result[var_id] = Start._transform_type(
-                                data["type"].lower(), default_val, var_id
+                                data_type, default_val, var_id
                             )
-                else:
-                    # 对象或数组类型处理，递归提取内层定义
-                    result.update(
-                        Start._extract_assignment_values(
-                            data.get("schema", []), time_type
+                    elif data_type == DataType.OBJECT.value:
+                        # 对象:整体 default_value 优先;为空时从子字段默认值组装,
+                        # 不再把子字段平铺到顶层(旧 else 递归分支的泄漏问题)
+                        if default_val not in (None, ""):
+                            result[var_id] = Start._transform_type(
+                                data_type, default_val, var_id
+                            )
+                        else:
+                            assembled = Start._assemble_object_default(
+                                data.get("schema", [])
+                            )
+                            if assembled:
+                                result[var_id] = assembled
+                    elif "default_value" in data and "type" in data:
+                        # 基本类型(string/integer/number/boolean)。按 type 分支
+                        # 而非 schema 存在性,畸形 IR(标量带 schema)也能提取
+                        result[var_id] = Start._transform_type(
+                            data_type, default_val, var_id
                         )
-                    )
             # 递归处理 schema
             if "schema" in data and not data.get("storage_method") == ASSIGNMENT:
                 result.update(
                     Start._extract_assignment_values(data["schema"], time_type)
                 )
         return result
+
+    @staticmethod
+    def _assemble_object_default(subfields: list) -> dict:
+        """从子字段默认值组装 object 记忆变量的默认值。
+
+        空默认的子字段跳过(引用渲染为空);嵌套 object 递归组装,
+        组装结果为空则该子字段整体跳过。
+        """
+        assembled = {}
+        for sub in subfields:
+            if not isinstance(sub, dict) or not sub.get("id"):
+                continue
+            sub_type = (sub.get("type") or "string").lower()
+            sub_default = sub.get("default_value")
+            if sub_type == DataType.OBJECT.value:
+                # 嵌套 object:顶层默认为空时仍从其子字段组装(与顶层语义一致)
+                nested = Start._assemble_object_default(sub.get("schema", []))
+                if nested:
+                    assembled[sub["id"]] = nested
+            elif sub_default not in (None, ""):
+                assembled[sub["id"]] = Start._transform_type(
+                    sub_type, sub_default, sub["id"]
+                )
+        return assembled
 
     @staticmethod
     def _transform_type(data_type: str, data_value: Any, data_id: str = "") -> Any:

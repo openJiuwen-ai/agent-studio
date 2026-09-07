@@ -271,6 +271,9 @@ public class JsonUtils {
      * 适用于失败属于预期场景的探测性转换（如导入时从各类型资源 metadata 中提取 WorkflowEntity 字段，
      * 插件等资源结构不兼容属正常情况），避免正常失败刷出误导排查的 ERROR 堆栈
      *
+     * <p>注：为保持既有 API 兼容（工具方法签名已固化，同参不同返回类型在 Java 中无法重载共存），
+     * 保留 T 返回、失败返回 null 的既有语义。
+     *
      * @param obj 对象
      * @param toValueType 类型
      * @return 指定类型，失败返回 null

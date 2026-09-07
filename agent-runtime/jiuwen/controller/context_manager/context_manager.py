@@ -184,8 +184,9 @@ class ContextManager:
         """
         self.load_workflow_contexts(agent_state.workflow_states)
         self.load_controller_context(agent_state.controller_state)
-        logger.info(
-            f"start workflow restore_from_agent_state: {agent_state.controller_state}",
+        logger.debug(
+            "start workflow restore_from_agent_state: %s",
+            agent_state.controller_state,
             simple_log="start workflow restore_from_agent_state",
         )
         # controller模式下更新全局变量

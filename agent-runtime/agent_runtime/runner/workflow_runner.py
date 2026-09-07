@@ -33,6 +33,7 @@ from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactor
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.workflow import create_workflow_session
+from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 
 from agent_runtime.common.logging_context import apply_template_masking_patch
 
@@ -264,7 +265,7 @@ class WorkflowRunner:
 
         # 4. 创建 session，使用固定的 session_id 以支持中断恢复
         t_session = time.perf_counter()
-        session = create_workflow_session(session_id=session_id)
+        session = create_workflow_session_with_trace(session_id=session_id)
         performance_logger.info(
             f"session_creation|{round((time.perf_counter() - t_session) * 1000)}"
         )
