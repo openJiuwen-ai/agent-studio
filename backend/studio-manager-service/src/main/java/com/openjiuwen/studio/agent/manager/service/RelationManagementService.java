@@ -1965,6 +1965,8 @@ public class RelationManagementService implements IRelationManagementService {
             }
 
             Map<String, ShareResourceEntity> finalShareResourceMap = shareResourceMap;
+            // 校验共享版本清单，过滤掉版本表中已不存在（或已软删）的版本，取真实存在的最大版本
+            Map<String, ResourceVersionInfo> validShareLatestMap = buildValidShareLatestVersionMap(shareResources);
             relations.forEach(relation -> {
                 ReleaseVersion releaseVersion = latestVersionMap.get(relation.getResourceId());
                 if (releaseVersion != null) {
@@ -1974,18 +1976,18 @@ public class RelationManagementService implements IRelationManagementService {
                         relation.setLatestVersionAppSubType(releaseVersion.getSubType());
                     }
                 }
-                // 针对引用资源做特殊处理，需要获取共享元素共享的最新版本
+                // 针对引用资源做特殊处理，需要获取共享元素共享的最新版本。
+                // 共享version_list是共享时的快照，不随发版更新，其中的版本可能已被删除或从未导入，
+                // 因此仅在共享清单内存在真实有效的版本、且该版本不早于当前版本时才覆盖，
+                // 避免铃铛提示升级到已不存在的旧版本（点击更新会报版本不存在）
                 if (ReferenceTypeEnum.SHARE.getValue().equals(relation.getReferenceType()) && finalShareResourceMap.containsKey(
                     relation.getResourceId())) {
-                    List<ResourceVersionInfo> shareResourceVersionInfoList = JSONObject.parseObject(
-                        finalShareResourceMap.get(relation.getResourceId()).getVersionList(),
-                        new TypeReference<>() { });
-                    shareResourceVersionInfoList.sort(Comparator.comparing(ResourceVersionInfo::getVersionName));
-                    ResourceVersionInfo shareResourceVersionLast = shareResourceVersionInfoList.get(
-                        shareResourceVersionInfoList.size() - 1);
-
-                    relation.setResourceLatestVersion(shareResourceVersionLast.getVersionId());
-                    relation.setResourceLatestVersionName(shareResourceVersionLast.getVersionName());
+                    ResourceVersionInfo shareLatestVersion = validShareLatestMap.get(relation.getResourceId());
+                    if (shareLatestVersion != null && (StringUtils.isEmpty(relation.getResourceVersion())
+                        || shareLatestVersion.getVersionId().compareTo(relation.getResourceVersion()) >= 0)) {
+                        relation.setResourceLatestVersion(shareLatestVersion.getVersionId());
+                        relation.setResourceLatestVersionName(shareLatestVersion.getVersionName());
+                    }
                 }
             });
             // 2. 更新skill类型资源的最新版本
@@ -1996,6 +1998,50 @@ public class RelationManagementService implements IRelationManagementService {
         relationList.setRelations(relations);
         relationList.setCount((long) relations.size());
         return relationList;
+    }
+
+    /**
+     * 校验共享版本清单中的版本在版本表中真实存在（未软删），并取每个资源共享清单内的最大有效版本。
+     *
+     * @param shareResources 共享资源列表
+     * @return resourceId -> 共享清单内真实存在的最大版本
+     */
+    private Map<String, ResourceVersionInfo> buildValidShareLatestVersionMap(List<ShareResourceEntity> shareResources) {
+        Map<String, List<ResourceVersionInfo>> shareVersionListMap = new HashMap<>();
+        List<ReleaseVersion> existQueryParams = new ArrayList<>();
+        if (ObjectUtils.isNotEmpty(shareResources)) {
+            for (ShareResourceEntity shareResource : shareResources) {
+                if (StringUtils.isEmpty(shareResource.getVersionList())) {
+                    continue;
+                }
+                List<ResourceVersionInfo> versionInfos = JSONObject.parseObject(shareResource.getVersionList(),
+                    new TypeReference<>() { });
+                if (CollectionUtils.isEmpty(versionInfos)) {
+                    continue;
+                }
+                shareVersionListMap.put(shareResource.getResourceId(), versionInfos);
+                versionInfos.forEach(versionInfo -> {
+                    ReleaseVersion queryParam = new ReleaseVersion();
+                    queryParam.setAppId(shareResource.getResourceId());
+                    queryParam.setVersionId(versionInfo.getVersionId());
+                    existQueryParams.add(queryParam);
+                });
+            }
+        }
+        if (existQueryParams.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<String> existingVersionKeys = releaseVersionMapper.queryByWfVersions(existQueryParams).stream()
+            .map(version -> version.getAppId() + "#" + version.getVersionId())
+            .collect(Collectors.toSet());
+
+        Map<String, ResourceVersionInfo> result = new HashMap<>();
+        shareVersionListMap.forEach((resourceId, versionInfos) -> versionInfos.stream()
+            .filter(versionInfo -> versionInfo.getVersionId() != null
+                && existingVersionKeys.contains(resourceId + "#" + versionInfo.getVersionId()))
+            .max(Comparator.comparing(ResourceVersionInfo::getVersionId))
+            .ifPresent(versionInfo -> result.put(resourceId, versionInfo)));
+        return result;
     }
 
     private void searchSkillResourceLatestVersion(List<Relation> relations, List<MappingEntity> mappingEntities) {
