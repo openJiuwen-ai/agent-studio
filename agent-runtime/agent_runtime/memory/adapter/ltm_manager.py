@@ -28,6 +28,11 @@ def _register_memory_usage_prompt_fallback() -> None:
     tree. Content comes from jiuwen's in-tree MEMORY_USAGE_PROMPT (the same
     prompt used by the workflow-path retrieval), with the bare MEMORY_CONTENT
     placeholder converted to PromptTemplate's {{...}} syntax.
+
+    The _prompt_cache write below is the only viable entry point and is
+    deliberately pylint-suppressed (G.CLS.11): agent-core is frozen, its
+    public surface (apply/clear_cache/get_template) never writes the cache,
+    and the per-class Singleton defeats subclass seeding.
     """
     try:
         from openjiuwen.core.foundation.prompt import PromptTemplate
@@ -37,6 +42,10 @@ def _register_memory_usage_prompt_fallback() -> None:
         )
 
         applier = PromptApplier()
+        # 有意为之的受保护访问，豁免理由见 docstring：agent-core 冻结、公开面
+        # 无任何写缓存入口、Singleton 按类隔离使子类播种不可达。本兜底为
+        # 启动期一次性、单键、try/except 包裹的有界写。
+        # pylint: disable=protected-access
         if "memory_usage_prompt" not in applier._prompt_cache:
             applier._prompt_cache["memory_usage_prompt"] = PromptTemplate(
                 content=MEMORY_USAGE_PROMPT.replace(
@@ -47,6 +56,7 @@ def _register_memory_usage_prompt_fallback() -> None:
                 "Seeded PromptApplier cache for memory_usage_prompt "
                 "(prompt file not shipped in agent-core)"
             )
+        # pylint: enable=protected-access
     except Exception as e:
         logger.warning("Failed to seed memory_usage_prompt fallback: %s", e)
 
