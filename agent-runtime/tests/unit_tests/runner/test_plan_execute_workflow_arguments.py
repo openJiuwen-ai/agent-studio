@@ -7,6 +7,8 @@ PlanExecute mode calls a Workflow tool. The fix passes the full
 ``arguments`` dict through ``_create_workflow_task`` → ``input_data``
 and injects it into ``global_variables`` in ``stream_handle_workflow_from_plan_execute``.
 """
+import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -283,16 +285,14 @@ class TestGenerateFinalStatusMessageTypeProtection:
 
 
 # ===========================================================================
-# Scene tool/workflow filtering — 前缀匹配 + guideline 聚合
+# Scene tool/workflow filtering — 精确匹配 + guideline 聚合 + 操作级隔离
 # ===========================================================================
 """
-Bug 背景：平台 scene.tools 存插件名拼音（如 'zhinenghuiyizhushou'），
-plugin.name 格式为 '{pinyin}{operation_id}'（如 'zhinenghuiyizhushoucreate_meeting'）。
-原代码精确匹配导致 tools_count=0，修复为精确匹配 + 前缀匹配双模式。
+修复背景：前端 getSkillOption 原只存 plugin_display_name（插件拼音名），
+丢失 operation 信息，导致 Runtime 精确匹配 tools_count=0。
+根因修复：前端改为保存 plugin_display_name + tool_display_name（完整 operation 名），
+Runtime 恢复精确匹配，实现操作级工具隔离。
 """
-from types import SimpleNamespace
-import sys
-
 from jiuwen.controller.common.config import SceneConfig, GuidelineConfig
 
 
@@ -306,8 +306,8 @@ def _workflow_ctx(wf_name: str) -> SimpleNamespace:
     return SimpleNamespace(workflow_name=wf_name, description="test workflow")
 
 
-class TestPlannerFilterToolsByScene:
-    """PlanExecutePlanner._filter_tools_by_scene — 精确 + 前缀匹配 + guideline 聚合。"""
+class TestPlannerFilterToolsByScene:  # pylint: disable=protected-access
+    """PlanExecutePlanner._filter_tools_by_scene — 精确匹配 + guideline 聚合 + 操作级隔离。"""
 
     @staticmethod
     def _make_planner(plugins=None):
@@ -325,8 +325,8 @@ class TestPlannerFilterToolsByScene:
         planner = self._make_planner(plugins)
         assert len(planner._filter_tools_by_scene(None)) == 2
 
-    def test_prefix_match_all_operations(self):
-        """scene.tools 存插件拼音 → 前缀匹配命中所有 operation。"""
+    def test_exact_match_multiple_operations(self):
+        """scene.tools 存完整 operation 名 → 精确匹配命中指定的多个 operation。"""
         plugins = [
             _plugin("zhinenghuiyizhushoucreate_meeting"),
             _plugin("zhinenghuiyizhushouquery_meetings"),
@@ -335,11 +335,16 @@ class TestPlannerFilterToolsByScene:
         ]
         planner = self._make_planner(plugins)
         scene = SceneConfig(id="s1", name="会议", description="",
-                            tools=["zhinenghuiyizhushou"])
-        assert len(planner._filter_tools_by_scene(scene)) == 4
+                            tools=["zhinenghuiyizhushoucreate_meeting",
+                                   "zhinenghuiyizhushouquery_meetings"])
+        result = planner._filter_tools_by_scene(scene)
+        assert len(result) == 2
+        names = {p.name for p in result}
+        assert "zhinenghuiyizhushoucreate_meeting" in names
+        assert "zhinenghuiyizhushouquery_meetings" in names
 
-    def test_exact_match_single_operation(self):
-        """scene.tools 存完整 operation 名 → 精确匹配只命中一个。"""
+    def test_operation_level_isolation(self):
+        """操作级隔离：选 create_meeting 不应放行 query_meetings。"""
         plugins = [
             _plugin("zhinenghuiyizhushoucreate_meeting"),
             _plugin("zhinenghuiyizhushouquery_meetings"),
@@ -355,46 +360,37 @@ class TestPlannerFilterToolsByScene:
         """不相关的工具名 → 过滤为空。"""
         planner = self._make_planner([_plugin("other_plugin_action")])
         scene = SceneConfig(id="s1", name="会议", description="",
-                            tools=["zhinenghuiyizhushou"])
+                            tools=["zhinenghuiyizhushoucreate_meeting"])
         assert len(planner._filter_tools_by_scene(scene)) == 0
 
     def test_guideline_aggregation(self):
-        """scene.tools 为空 → 从 guidelines 聚合。"""
+        """scene.tools 为空 → 从 guidelines 聚合完整 operation 名。"""
         plugins = [_plugin("pluginb_action1"), _plugin("plugina_action2")]
         planner = self._make_planner(plugins)
         scene = SceneConfig(id="s1", name="test", description="", tools=[],
                             guidelines=[
-                                GuidelineConfig(id=1, condition="c1", action="a1", tools=["pluginb"]),
-                                GuidelineConfig(id=2, condition="c2", action="a2", tools=["plugina"]),
+                                GuidelineConfig(id=1, condition="c1", action="a1",
+                                                tools=["pluginb_action1"]),
+                                GuidelineConfig(id=2, condition="c2", action="a2",
+                                                tools=["plugina_action2"]),
                             ])
         assert len(planner._filter_tools_by_scene(scene)) == 2
 
-    def test_prefix_no_false_positive(self):
-        """短拼音不应命中长名前缀的插件。"""
-        plugins = [_plugin("huiyi_action"), _plugin("huiyizhushou_action")]
+    def test_plugin_name_only_no_longer_matches(self):
+        """旧格式（只有插件拼音名）不再匹配 → 需重新保存场景配置。"""
+        plugins = [_plugin("zhinenghuiyizhushoucreate_meeting")]
         planner = self._make_planner(plugins)
         scene = SceneConfig(id="s1", name="test", description="",
-                            tools=["huiyizhushou"])
-        result = planner._filter_tools_by_scene(scene)
-        assert len(result) == 1
-        assert result[0].name == "huiyizhushou_action"
-
-    def test_empty_tool_name_ignored(self):
-        """scene.tools 中的空字符串不导致匹配所有。"""
-        plugins = [_plugin("pluginA_action1")]
-        planner = self._make_planner(plugins)
-        scene = SceneConfig(id="s1", name="test", description="",
-                            tools=["", "pluginA"])
-        assert len(planner._filter_tools_by_scene(scene)) == 1
+                            tools=["zhinenghuiyizhushou"])
+        assert len(planner._filter_tools_by_scene(scene)) == 0
 
 
-class TestModeFilterPluginsByScene:
-    """PlanExecuteMode._filter_plugins_by_scene — 执行阶段前缀匹配。"""
+class TestModeFilterPluginsByScene:  # pylint: disable=protected-access
+    """PlanExecuteMode._filter_plugins_by_scene — 执行阶段精确匹配。"""
 
     @staticmethod
     def _make_mode():
         """构造 PlanExecuteMode，mock 掉重型导入链。"""
-        import importlib
         _mocks = {}
         for mod in ("model_service.env_resolver", "model_service.env_resolver"):
             if mod not in sys.modules:
@@ -412,8 +408,8 @@ class TestModeFilterPluginsByScene:
         obj._skill_context = None
         return obj
 
-    def test_prefix_match(self):
-        """前缀匹配命中插件。"""
+    def test_exact_match(self):
+        """精确匹配命中指定 operation。"""
         plugins = [
             _plugin("zhinenghuiyizhushoucreate_meeting"),
             _plugin("zhinenghuiyizhushouquery_meetings"),
@@ -421,7 +417,8 @@ class TestModeFilterPluginsByScene:
         ]
         mode = self._make_mode()
         scene = SceneConfig(id="s1", name="会议", description="",
-                            tools=["zhinenghuiyizhushou"])
+                            tools=["zhinenghuiyizhushoucreate_meeting",
+                                   "zhinenghuiyizhushouquery_meetings"])
         result = mode._filter_plugins_by_scene(plugins, scene)
         assert len(result) == 2
 
@@ -431,7 +428,7 @@ class TestModeFilterPluginsByScene:
         mode = self._make_mode()
         mode._skill_context = SimpleNamespace(tool_names={"read_file"})
         scene = SceneConfig(id="s1", name="会议", description="",
-                            tools=["zhinenghuiyizhushou"])
+                            tools=["zhinenghuiyizhushoucreate_meeting"])
         result = mode._filter_plugins_by_scene(plugins, scene)
         assert len(result) == 2
 
@@ -440,3 +437,16 @@ class TestModeFilterPluginsByScene:
         plugins = [_plugin("p1"), _plugin("p2")]
         mode = self._make_mode()
         assert len(mode._filter_plugins_by_scene(plugins, None)) == 2
+
+    def test_operation_level_isolation(self):
+        """操作级隔离：选 create 不放行 query。"""
+        plugins = [
+            _plugin("zhinenghuiyizhushoucreate_meeting"),
+            _plugin("zhinenghuiyizhushouquery_meetings"),
+        ]
+        mode = self._make_mode()
+        scene = SceneConfig(id="s1", name="创建", description="",
+                            tools=["zhinenghuiyizhushoucreate_meeting"])
+        result = mode._filter_plugins_by_scene(plugins, scene)
+        assert len(result) == 1
+        assert result[0].name == "zhinenghuiyizhushoucreate_meeting"

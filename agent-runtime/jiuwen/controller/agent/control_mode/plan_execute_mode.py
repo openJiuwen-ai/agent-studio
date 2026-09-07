@@ -777,10 +777,7 @@ class PlanExecuteMode(BaseMode):
 
         def _matches(plugin):
             pname = self._get_plugin_name(plugin)
-            if pname in allowed_names:
-                return True
-            # plugin.name 格式为 "{plugin_name}{operation_id}"，需前缀匹配
-            return any(pname.startswith(n) for n in allowed_names if n)
+            return pname in allowed_names
 
         filtered = [p for p in (plugins_source or []) if _matches(p)]
         logger.info(
@@ -809,12 +806,10 @@ class PlanExecuteMode(BaseMode):
             for guideline in matched_scene.guidelines:
                 if guideline.tools:
                     scene_tool_names.update(guideline.tools)
-        filtered = {
-            k: ctx
-            for k, ctx in all_workflows.items()
-            if ctx.workflow_name in scene_tool_names
-            or any(ctx.workflow_name.startswith(stn) for stn in scene_tool_names if stn)
-        }
+        filtered = {}
+        for k, ctx in all_workflows.items():
+            if ctx.workflow_name in scene_tool_names:
+                filtered[k] = ctx
         logger.info(
             f"task_id: {self.task_id}| [StepExecute] Filtered {len(filtered)} workflows by scene"
         )

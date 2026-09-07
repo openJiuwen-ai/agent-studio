@@ -20,7 +20,7 @@ _REPO_ROOT = os.path.abspath(
 for _pkg in ("common_utils", "storage", "model_service"):
     _pkg_path = os.path.join(_REPO_ROOT, "packages", _pkg)
     if os.path.isdir(_pkg_path) and _pkg_path not in sys.path:
-        sys.path.insert(0, _pkg_path)
+        sys.path.insert(0, _pkg_path)  # pylint: disable=no-use-sys-path-insert
 
 from jiuwen.common.llm_service.messages import ToolCall
 

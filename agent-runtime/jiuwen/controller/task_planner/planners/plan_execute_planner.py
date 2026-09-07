@@ -257,14 +257,11 @@ class PlanExecutePlanner(TaskPlanner):
             )
 
         # 过滤插件 — plugin.name 格式为 "{plugin_name}{operation_id}"（如 zhinenghuiyizhushoucreate_meeting）
-        # scene_tool_names 中的值可能是插件名（如 zhinenghuiyizhushou）或操作名（如 create_meeting）
-        # 因此需要同时支持精确匹配和前缀匹配
+        # scene_tool_names 中存的是完整 operation 名（前端保存 plugin_display_name + tool_display_name）
         filtered_tools = []
         for plugin in plugins:
             pname = getattr(plugin, "name", "")
             if pname in scene_tool_names:
-                filtered_tools.append(plugin)
-            elif any(pname.startswith(stn) for stn in scene_tool_names if stn):
                 filtered_tools.append(plugin)
 
         scene_name = matched_scene.name if matched_scene else "None"
@@ -296,12 +293,10 @@ class PlanExecutePlanner(TaskPlanner):
             for guideline in matched_scene.guidelines:
                 if guideline.tools:
                     scene_tool_names.update(guideline.tools)
-        filtered = {
-            k: ctx
-            for k, ctx in all_workflows.items()
-            if ctx.workflow_name in scene_tool_names
-            or any(ctx.workflow_name.startswith(stn) for stn in scene_tool_names if stn)
-        }
+        filtered = {}
+        for k, ctx in all_workflows.items():
+            if ctx.workflow_name in scene_tool_names:
+                filtered[k] = ctx
         logger.info(
             f"task_id: {self.task_id}| Filtered {len(filtered)} workflow(s) by scene for task planning"
         )
