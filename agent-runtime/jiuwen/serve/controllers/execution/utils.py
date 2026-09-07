@@ -1138,12 +1138,34 @@ async def post_process_agent_group_streaming_output(
         await AsyncStateManager().delete_state(conversation_id)
     # 更新或者删除存储介质中的workflow state
     try:
-        if execution_data.instance.get_task_end():
+        task_end = execution_data.instance.get_task_end()
+        # 任务结束时若组内仍有待恢复的中断工作流（如：工作流A中断后，用户
+        # 穿插执行了新工作流C），不能删除 AgentGroupState——其中保存着各成员
+        # agent 的中断工作流上下文，删掉后下一轮将无法回到中断入口。
+        has_pending_interrupts = False
+        check_pending_interrupts = getattr(
+            execution_data.instance, "has_pending_interrupted_workflows", None
+        )
+        if check_pending_interrupts is not None:
+            has_pending_interrupts = await check_pending_interrupts()
+        if task_end and not has_pending_interrupts:
             await AsyncStateManager().delete_state(conversation_id)
             logger.info(
                 f"conversation {conversation_id} has deleted execution state for agent group"
             )
         else:
+            if task_end and has_pending_interrupts:
+                # 任务结束但保留状态供恢复：重置 agent 调用计数，避免跨轮
+                # 累积触发 max_agent_calls 限制（报错路径还会误删刚保留的状态）
+                control_agent = getattr(
+                    execution_data.instance, "control_agent", None
+                )
+                if getattr(control_agent, "current_agent_calls_count", 0):
+                    control_agent.current_agent_calls_count = 0
+                logger.info(
+                    f"conversation {conversation_id} keeps agent group state "
+                    f"for pending interrupted workflows"
+                )
             agent_group_state = await execution_data.instance.get_state()
             serialized_agent_state = serialize_object(agent_group_state)
             await AsyncStateManager().save_state(

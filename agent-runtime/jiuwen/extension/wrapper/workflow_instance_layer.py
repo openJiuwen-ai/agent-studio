@@ -121,10 +121,25 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             )
 
             checkpointer = CheckpointerFactory.get_checkpointer()
-            await checkpointer.release(self.session_id)
-            logger.info(
-                f"cleanup released checkpoint state for session: {self.session_id}"
-            )
+            release_workflow = getattr(checkpointer, "release_workflow", None)
+            if release_workflow is not None:
+                # 只清理本工作流的残留 state。不能用 session 级 release()——
+                # 同一会话可能还有其他中断中的工作流（含子工作流 scoped NS），
+                # session 级释放会把它们的 checkpoint 一并清掉，导致之后无法
+                # 回到中断入口。正常完成/异常路径 post_workflow_execute 已做过
+                # 按工作流精确清理，这里只是兜底清残留。
+                await release_workflow(self.session_id, self.workflow_id)
+                logger.info(
+                    f"cleanup released checkpoint state for workflow "
+                    f"{self.workflow_id}, session: {self.session_id}"
+                )
+            else:
+                # 非 FastRedisCheckpointer：post_workflow_execute 已按工作流
+                # 精确清理，跳过（session 级 release 会误删其他中断工作流）。
+                logger.info(
+                    f"cleanup skipped per-workflow release for workflow "
+                    f"{self.workflow_id}, session: {self.session_id}"
+                )
         except Exception as e:
             logger.warning(
                 f"cleanup release checkpoint state failed for session "
