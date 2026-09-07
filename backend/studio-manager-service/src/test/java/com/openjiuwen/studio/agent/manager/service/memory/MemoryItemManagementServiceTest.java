@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -250,8 +251,11 @@ class MemoryItemManagementServiceTest {
             .thenReturn(ResponseEntity.ok(responseBody));
 
         // When / Then — partial failure must fail the whole request (2A 保守策略)
-        assertThrows(AgentStudioException.class,
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> memoryItemManagementService.batchDeleteMemoryItems("project-1", "repo-1", body));
+        // 异常须透传，不被 catch(Exception) 二次包装（消息中不能出现异常类名）
+        assertFalse(ex.getMessage().contains("AgentStudioException"));
+        assertTrue(ex.getMessage().contains("partial errors"));
         verify(agentRuntimeClient).batchDeleteMemories(eq("repo-1"), eq("test-user"), any(Map.class));
     }
 

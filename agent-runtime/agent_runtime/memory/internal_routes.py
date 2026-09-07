@@ -343,6 +343,18 @@ async def update_memory(memory_repo_id: str, memory_id: str, body: dict):
     user_id = user_id.lower()
 
     try:
+        # agent-core 的 update_mem_by_id 在 id 不存在时只打 warning 静默返回（不抛错），
+        # 若不预检会向 manager 返回 ok，用户的编辑被静默丢弃却提示成功。
+        # write_manager 内部正是用 memory_index.get_by_id 判定存在性，此处预检与其等价；
+        # 非 default 索引实现没有 get_by_id 时跳过预检，保持原行为。
+        memory_index = getattr(ltm, "memory_index", None)
+        if memory_index is not None and hasattr(memory_index, "get_by_id"):
+            existing = await memory_index.get_by_id(user_id, memory_repo_id, memory_id)
+            if existing is None:
+                return {
+                    "status": "skipped",
+                    "reason": f"memory {memory_id} not found for user in repo {memory_repo_id}",
+                }
         await ltm.update_mem_by_id(memory_id, content, user_id, memory_repo_id)
         return {"status": "ok"}
     except Exception as e:

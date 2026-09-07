@@ -132,6 +132,9 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
                         "Failed to delete memories, partial errors: " + errors);
                 }
             }
+        } catch (AgentStudioException e) {
+            // partial 时已在上方抛出语义化异常，直接透传，避免被下方 catch(Exception) 二次包装
+            throw e;
         } catch (Exception e) {
             log.error("Failed to batch delete memories from runtime for repo {}: {}",
                 memoryRepoId, e.getMessage(), e);
