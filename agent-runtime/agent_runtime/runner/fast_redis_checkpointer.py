@@ -408,12 +408,14 @@ class FastRedisCheckpointer(Checkpointer):
         try:
             members = await self._redis.smembers(_sentinel_key(session_id))
         except Exception as e:
-            # 查询失败时保守视为无其他 checkpoint，保持原有删除行为
+            # 查询失败时保守视为存在其他 checkpoint，跳过 bare key 删除：
+            # 误保留会在其他工作流的 checkpoint 清理时自愈（届时守卫正常执行），
+            # 而误删除会丢掉同会话其他中断工作流的会话级 comp_state 上下文
             workflow_logger.warning(
                 f"FastRedisCheckpointer: sentinel SMEMBERS failed for "
-                f"session {session_id}: {e}"
+                f"session {session_id}, skipping bare session key delete: {e}"
             )
-            return False
+            return True
         for member in members:
             if isinstance(member, bytes):
                 member = member.decode("utf-8")

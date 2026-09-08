@@ -1154,14 +1154,11 @@ async def post_process_agent_group_streaming_output(
                 f"conversation {conversation_id} has deleted execution state for agent group"
             )
         else:
+            # 任务结束但组内仍有待恢复的中断工作流：保留 AgentGroupState 供下一轮
+            # 回到中断入口。注：无需重置 control_agent.current_agent_calls_count——
+            # save_agent_group_state 本就不会持久化该计数（每轮恢复为 0），
+            # 不存在跨轮累积触发 max_agent_calls 的问题。
             if task_end and has_pending_interrupts:
-                # 任务结束但保留状态供恢复：重置 agent 调用计数，避免跨轮
-                # 累积触发 max_agent_calls 限制（报错路径还会误删刚保留的状态）
-                control_agent = getattr(
-                    execution_data.instance, "control_agent", None
-                )
-                if getattr(control_agent, "current_agent_calls_count", 0):
-                    control_agent.current_agent_calls_count = 0
                 logger.info(
                     f"conversation {conversation_id} keeps agent group state "
                     f"for pending interrupted workflows"

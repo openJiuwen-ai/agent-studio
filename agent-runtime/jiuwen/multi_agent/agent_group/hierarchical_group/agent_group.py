@@ -196,6 +196,10 @@ class HierarchicalAgentGroup(BaseAgentGroup):
         AgentGroupState 是否可以删除——存在待恢复中断时必须保留，否则下一轮
         无法回到中断入口（如：工作流A中断后，用户穿插执行了新工作流C，
         C 完成时不能把 A 的中断记忆一起删掉）。
+
+        检查失败时保守返回 True：误保留状态只是多留一轮（下一轮可正常清理），
+        而误删除会把待恢复的中断上下文一并清掉，重新引入"无法回到中断入口"
+        的问题。不能上抛——调用方在异常分支会中断状态保存流程。
         """
         try:
             run_state = await self.runner.get_state()
@@ -203,12 +207,14 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             for member_state in members_state.values():
                 if getattr(member_state, "workflow_states", None):
                     return True
+            return False
         except Exception as e:
-            logger.warning(
-                f"Failed to check pending interrupted workflows: {e}",
+            logger.error(
+                f"Failed to check pending interrupted workflows, "
+                f"conservatively keeping agent group state: {e}",
                 simple_log="check pending interrupted workflows failed",
             )
-        return False
+            return True
 
     def clear_state(self):
         """
