@@ -60,6 +60,7 @@ from jiuwen.extension.workflow_node.flow_input import FlowInput
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 from jiuwen.extension.workflow_node.flow_message import Message
 from jiuwen.extension.workflow_node.flow_qa import FlowQA, build_struct_input_schemas
+from jiuwen.extension.workflow_node.flow_sql import FlowSql
 from jiuwen.extension.workflow_node.flow_stream_transform import FlowStreamTransform
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
@@ -2474,6 +2475,9 @@ class IRConverter:
                 node_name=configs.get("name") or node_id,
             )
             return FlowStreamTransform(configs, metadata), node_type, configs
+
+        if node_type == "jiuwen.sql":
+            return FlowSql(configs), node_type, configs
 
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
