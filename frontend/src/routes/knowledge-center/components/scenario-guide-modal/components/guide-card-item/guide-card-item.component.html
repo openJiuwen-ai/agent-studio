@@ -1,4 +1,4 @@
-<div class="guide-card-title flex items-center" (click)="changeCardCollapse($event)">
+<div class="guide-card-title flex items-center" cdkDragHandle (click)="changeCardCollapse($event)">
   <div class="left-box mr-[60px] flex w-[calc(100%-16px)] items-center gap-[8px]">
     @if (formListLength > LEAST_GUIDE_COUNT) {
       <img alt="" class="h-[16px] w-[16px]" [src]="changeUrl('assets/agent-center/flow/drag.svg')" />
@@ -60,13 +60,13 @@
           </nz-form-label>
           <nz-form-control [nzErrorTip]="fieldErrorTpl">
             @if (formItem.type === FIELD_TYPE.TEXT_INPUT) {
-              <input
+              <textarea
                 nz-input
-                type="text"
-                style="width: 100%"
                 [placeholder]="'input_placeholder' | i18nextEager"
                 [formControlName]="formItem.id"
-              />
+                [nzAutosize]="{ minRows: 1, maxRows: 4 }"
+                style="width: 100%; resize: none"
+              ></textarea>
             }
             @if (formItem.type === FIELD_TYPE.SELECT) {
               <nz-select

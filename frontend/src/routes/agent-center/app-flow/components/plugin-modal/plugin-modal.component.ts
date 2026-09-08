@@ -292,6 +292,18 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     }
     //流式异常需要限制
     this.exceptionHandling.changeStream(this.nodeInfo.configs.streaming);
+    // 移除 ng-zorro 树节点 content wrapper 的原生 title（默认显示 "---"）
+    this.stripTreeTitles();
+  }
+
+  private stripTreeTitles(): void {
+    setTimeout(() => {
+      ['node-param-tree', 'output-param-tree'].forEach(id => {
+        document
+          .querySelectorAll(`#${id} .ant-tree-node-content-wrapper`)
+          .forEach(el => el.removeAttribute('title'));
+      });
+    }, 500);
   }
 
   public onRefUpdate(info: IParamRef[]) {

@@ -182,6 +182,17 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
         this.validateNode();
       });
     }
+    this.stripTreeTitles();
+  }
+
+  private stripTreeTitles(): void {
+    setTimeout(() => {
+      ['node-param-tree', 'output-param-tree'].forEach(id => {
+        document
+          .querySelectorAll(`#${id} .ant-tree-node-content-wrapper`)
+          .forEach(el => el.removeAttribute('title'));
+      });
+    }, 500);
   }
 
   registerNodeUpdateHander() {

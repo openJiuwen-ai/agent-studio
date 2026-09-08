@@ -1,4 +1,4 @@
-﻿{
+{
   "add": "添加",
   "added": "已添加",
   "prompt": "提示词",
@@ -37,6 +37,7 @@
   "save": "保存",
   "description": "描述",
   "input_placeholder": "请输入",
+  "exception_timeout_range_tip": "可输入范围：0.1 ~ 900 秒",
   "select_placeholder": "请选择",
   "name_verify_tips": "请输入以中文、字母开头，以中文、字母、数字结尾，长度2~30的字符。只允许输入中文、字母、数字、下划线、中划线等字符",
   "validation_name_tip": "支持中英文、数字、下划线、中划线，长度 2-64 字符，以中英文、数字开头。",
@@ -285,6 +286,8 @@
   "dependency_relate_config_label": "依赖关系配置（可选）",
   "add_dependency_relate_label": "添加依赖关系",
   "guide_least_two_tip": "请先至少配置2个指南",
+  "dependency_item_required_tip": "请选择依赖项",
+  "be_depended_item_required_tip": "请选择被依赖项",
   "dependent_relation_label": "依赖",
   "dependency_conflict_tip": "A依赖B、B依赖C、C依赖A，存在闭环冲突，无法保存，请修改",
   "guide_rename_tip": "该规则条件已存在，不支持重名，请修改",

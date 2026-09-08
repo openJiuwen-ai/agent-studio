@@ -14,10 +14,10 @@ export interface ModelImportPreviewItem {
   service_name: string | null;
   provider_id: string | null;
   conflict: boolean;
-  signature_valid: boolean;
+  /** 本行是否合法（解析/import_type 校验通过）；false 时禁止确认导入。 */
+  line_valid: boolean;
   api_url_valid: boolean;
   env_var_valid: boolean;
-  cipher_adapted: boolean | null;
   detail: string | null;
   /** 行类型：MODEL=模型行，PROVIDER=空供应商壳行（用于第一列标题动态切换）。 */
   type: string;
@@ -307,7 +307,7 @@ export class ModelManagementService {
   }
 
   /**
-   * 批量导出模型服务为签名 JSONL 文件（Blob）。
+   * 批量导出模型服务为 JSONL 文件（Blob）。
    * workspace_id 由 HttpService.mergeConfig 自动注入为 query 参数。
    * @param includeProvider true=供应商+模型（缺省），false=只导模型（详情页用，模型挂到目标供应商）
    */
@@ -329,7 +329,7 @@ export class ModelManagementService {
   }
 
   /**
-   * 模型导入预检：上传 .jsonl → 解析+验签+冲突检测+URL/占位符校验，不落库。
+   * 模型导入预检：上传 .jsonl → 解析+冲突检测+URL/占位符校验，不落库。
    * @param targetProviderId 目标供应商 id（详情页只导模型导入用，模型重定向挂到该供应商）
    */
   public previewImportModels(file: File, targetProviderId?: string): Promise<ModelImportPreviewRsp> {

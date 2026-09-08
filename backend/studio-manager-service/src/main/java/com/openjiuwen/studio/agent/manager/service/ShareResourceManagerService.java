@@ -260,6 +260,8 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED, resourceId);
             }
 
+            // 列表卡片名称取活表现值，详情与其保持同源（活名优先，快照名仅作初始兜底）
+            shareResourceResp.setResourceName(workflowEntity.getName());
             shareResourceResp.setIcon(workflowEntity.getAvatar());
             shareResourceResp.setResourceDescription(workflowEntity.getDescription());
             String workflowDslJson = obsService.downloadObsFile(releaseVersion.getDslPath());
@@ -281,6 +283,8 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
             }
 
+            // 列表卡片名称取活表现值，详情与其保持同源（活名优先，快照名仅作初始兜底）
+            shareResourceResp.setResourceName(agent.getName());
             shareResourceResp.setIcon(agent.getIcon());
             shareResourceResp.setResourceDescription(agent.getDescription());
             String controllerJson = obsService.downloadObsFile(releaseVersion.getDslPath());
@@ -634,6 +638,27 @@ public class ShareResourceManagerService implements IShareResourceManagerService
     }
 
     /**
+     * 校验资源的指定版本是否已共享到资产广场，若已共享则拒绝删除。
+     * <p>与 {@link #checkResourceSharedOrNot(String, String)} 资源级校验对应，本方法是版本级校验，
+     * 供工作流/智能体/插件版本删除时复用，与 AgentManagementService#deleteAgentVersion 的校验语义一致。
+     *
+     * @param resourceId 资源ID（agentId / workflowId / pluginId 等）
+     * @param versionId  待删除的版本ID
+     */
+    public void checkVersionSharedOrNot(String resourceId, String versionId) {
+        if (StringUtils.isBlank(resourceId) || StringUtils.isBlank(versionId)) {
+            return;
+        }
+        ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(resourceId);
+        if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
+            && shareResource.getVersionList().contains(versionId)) {
+            log.error("the resource version [{}] of resource [{}] has been shared, you can't delete it",
+                versionId, resourceId);
+            throw new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY);
+        }
+    }
+
+    /**
      * 创建或者更新共享资源的授权范围
      *
      * @param resourceId 资源ID
@@ -817,8 +842,31 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 return;
             }
             try {
-                PluginEntity plugin = pluginBase.getPluginEntityByVersion(shareResourceEntity.getResourceId(),
-                    versionInfos.get(0).getVersionId());
+                // 共享快照中的版本可能已被删除或从未导入（快照不随发版/删版同步），
+                // 遍历取第一个真实存在的版本解析插件实体，避免固定取快照第一个版本导致
+                // 该版本失效时整张卡片被吞掉、列表与计数口径不一致
+                PluginEntity plugin = null;
+                for (ResourceVersionInfo versionInfo : versionInfos) {
+                    if (versionInfo == null || StringUtils.isEmpty(versionInfo.getVersionId())) {
+                        continue;
+                    }
+                    try {
+                        plugin = pluginBase.getPluginEntityByVersion(shareResourceEntity.getResourceId(),
+                            versionInfo.getVersionId());
+                        break;
+                    } catch (Exception e) {
+                        log.info("share version not available, resourceId={}, versionId={}",
+                            shareResourceEntity.getResourceId(), versionInfo.getVersionId());
+                    }
+                }
+                if (plugin == null) {
+                    // 快照版本全部失效，兜底用插件表现状渲染基本信息卡，保证列表与计数口径一致
+                    plugin = pluginMapper.selectByPrimaryKey(shareResourceEntity.getResourceId(), null);
+                }
+                if (plugin == null) {
+                    log.warn("query plugin failed, resourceId={}", shareResourceEntity.getResourceId());
+                    return;
+                }
                 ShareResourceInfo shareResourceInfo = new ShareResourceInfo().setResourceId(
                         shareResourceEntity.getResourceId())
                     .setCreator(shareResourceEntity.getCreator())
@@ -835,7 +883,7 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 extendAttribute.put("request_info", JSONObject.parseObject(plugin.getRequestInfo(), Object.class));
                 shareResourceInfo.setExtendAttribute(extendAttribute);
                 shareResourceInfos.add(shareResourceInfo);
-            }catch (Exception e) {
+            } catch (Exception e) {
                 log.warn("query plugin failed, resourceId={}", shareResourceEntity.getResourceId());
             }
         });

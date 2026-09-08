@@ -527,28 +527,121 @@ class TestDelegatePassthrough:
         mock_delegate.post_agent_team_execute.assert_awaited_once_with(mock_session)
 
     @pytest.mark.asyncio
-    async def test_release_delegates_without_deleting_sentinel(
+    async def test_release_uses_fast_path_not_delegate(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """release() delegates but does NOT delete sentinel SET.
+        """release() with agent_id=None uses fast O(K) path, NOT delegate.
 
-        Sentinel is intentionally preserved to avoid accidental loss of
-        interrupt state. It expires via TTL instead.
+        Sentinel SET is NOT deleted — relies on TTL for cleanup.
+        Delegate.release should NOT be called on the fast path.
         """
+        # Both index SETs return some members
+        mock_redis.smembers = AsyncMock(
+            side_effect=[{"ns-1"}, {"wf-1"}]  # NS index, sentinel
+        )
+        mock_redis.delete = AsyncMock(return_value=5)
+
         await checkpointer.release("sess-1")
+
+        # Fast path: delegate.release NOT called
+        mock_delegate.release.assert_not_called()
+        # Sentinel SET NOT deleted (only NS index + checkpoint keys deleted)
+        # First delete call: checkpoint keys, second: NS index SET
+        assert mock_redis.delete.await_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_release_no_keys_skips_delete(
+        self, checkpointer, mock_delegate, mock_redis
+    ):
+        """release() with empty index SETs → no keys to delete, returns early."""
+        mock_redis.smembers = AsyncMock(return_value=set())  # both SETs empty
+        mock_redis.delete = AsyncMock(return_value=0)
+
+        await checkpointer.release("sess-1")
+
+        # No checkpoint keys to delete; NS index SET also empty/absent
+        # Only the bare session_id key is in the list
+        mock_delegate.release.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_release_falls_back_on_smembers_failure(
+        self, checkpointer, mock_delegate, mock_redis
+    ):
+        """release() falls back to delegate when SMEMBERS raises."""
+        mock_redis.smembers = AsyncMock(side_effect=Exception("Redis down"))
+
+        await checkpointer.release("sess-1")
+
+        # Fallback: delegate.release called with scan_iter path
         mock_delegate.release.assert_awaited_once_with("sess-1", None)
-        # Sentinel SET NOT deleted — relies on TTL for cleanup
-        mock_redis.delete.assert_not_called()
-        mock_redis.srem.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_release_falls_back_on_delete_failure(
+        self, checkpointer, mock_delegate, mock_redis
+    ):
+        """release() falls back to delegate when batch delete raises."""
+        mock_redis.smembers = AsyncMock(
+            side_effect=[{"ns-1"}, {"wf-1"}]
+        )
+        mock_redis.delete = AsyncMock(side_effect=Exception("Delete failed"))
+
+        await checkpointer.release("sess-1")
+
+        # Fallback: delegate.release called
+        mock_delegate.release.assert_awaited_once_with("sess-1", None)
 
     @pytest.mark.asyncio
     async def test_release_with_agent_id(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """Agent-specific release delegates correctly."""
+        """Agent-specific release delegates directly (no scan_iter)."""
         await checkpointer.release("sess-1", agent_id="agent-1")
         mock_delegate.release.assert_awaited_once_with("sess-1", "agent-1")
-        mock_redis.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_release_deletes_correct_key_types(
+        self, checkpointer, mock_delegate, mock_redis
+    ):
+        """release() collects graph keys, workflow state keys, and bare session key."""
+        mock_redis.smembers = AsyncMock(
+            side_effect=[{"wf-1"}, {"wf-1"}]  # NS index, sentinel
+        )
+        mock_redis.delete = AsyncMock(return_value=10)
+
+        await checkpointer.release("sess-1")
+
+        # Collect all keys from ALL delete calls (checkpoint keys + NS index)
+        # delete(*keys) unpacks the list, so each key is a separate positional arg
+        all_keys = []
+        for call in mock_redis.delete.await_args_list:
+            all_keys.extend(call.args)
+
+        # Graph state keys (2 per ns)
+        assert any("workflow-graph" in k and "checkpoint_data_type" in k for k in all_keys)
+        assert any("workflow-graph" in k and "checkpoint_data_value" in k for k in all_keys)
+        # Workflow state keys (4 per workflow_id)
+        assert any("workflow_state_blobs" in k for k in all_keys)
+        assert any("workflow_update_blobs" in k for k in all_keys)
+        # Bare session key
+        assert "sess-1" in all_keys
+
+    @pytest.mark.asyncio
+    async def test_release_preserves_sentinel_set(
+        self, checkpointer, mock_delegate, mock_redis
+    ):
+        """release() must NOT delete the sentinel SET key itself."""
+        mock_redis.smembers = AsyncMock(
+            side_effect=[{"ns-1"}, {"wf-1"}]
+        )
+        mock_redis.delete = AsyncMock(return_value=5)
+
+        await checkpointer.release("sess-1")
+
+        # Check that sentinel key is not in any delete call's key list
+        for call in mock_redis.delete.await_args_list:
+            keys = call.args[0] if call.args else call[0][0]
+            sentinel_key = "agentBuilder:session_exists:sess-1"
+            assert sentinel_key not in keys
 
     @staticmethod
     def test_graph_store(checkpointer, mock_delegate):

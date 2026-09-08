@@ -265,7 +265,27 @@ public class PromptEngineerService implements IPromptEngineerService {
                 log.info("start to get task detail from external service, jiuwenTaskId: {}",
                         promptTaskDetailVo.getJiuwenTaskId());
 
-                JiuWenPromptDeatilRes jiuWenPromptDeatilRes = promptOptimizeTaskService.getTaskDetail(promptTaskDetailVo);
+                JiuWenPromptDeatilRes jiuWenPromptDeatilRes;
+                try {
+                    jiuWenPromptDeatilRes = promptOptimizeTaskService.getTaskDetail(promptTaskDetailVo);
+                } catch (AgentStudioException e) {
+                    // builder 侧 job 已丢失（清理/重启无 store 兜底）：降级为 FAILED + lostTaskMsg，
+                    // 不再冒泡到外层 catch 包成 02701185
+                    if (StudioError.JOB_NOT_FOUND_IN_BUILDER == e.getErrorCode()) {
+                        log.warn("prompt task {} (jiuwenTaskId={}) not found in builder, mark as FAILED",
+                            promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
+                        String lostTaskMsg =
+                            "Task not found in execution engine, may have been cleaned up, please retry or delete.";
+                        promptTaskDetailVo.setMessage(lostTaskMsg);
+                        promptTaskDetailVo.setStatus(PromptTaskStatusEnum.FAILED);
+                        promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(),
+                            lostTaskMsg, projectId, workspaceId);
+                        promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(),
+                            PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
+                        return new PromptBaseResp().setCode(200).setMessage("success").setData(promptTaskDetailVo);
+                    }
+                    throw e;
+                }
                 PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByJiuWenStatus(
                         jiuWenPromptDeatilRes.getProgress().getStatus());
 

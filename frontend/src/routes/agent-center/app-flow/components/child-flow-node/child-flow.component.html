@@ -62,14 +62,16 @@
         ></div>
       </div>
 
-      <div class="node-oprs" *ngIf="!isFlowReadonly">
+      <!-- 只读页面（如共享工作流查看）：共享子流节点（configs.fromShare）保留菜单以提供"详情"入口，
+           非共享节点维持隐藏；编辑类操作由 displayActions 在只读态过滤 -->
+      <div class="node-oprs" *ngIf="!isFlowReadonly || nodeInfo.configs?.fromShare">
         <div (click)="onClickWorkflow()" class="single-test-icon"></div>
         <div class="cursor-pointer" nz-dropdown [nzDropdownMenu]="actionMenu" nzTrigger="click" nzPlacement="bottomRight">
           <nz-icon nzType="more" nzTheme="outline"></nz-icon>
         </div>
         <nz-dropdown-menu #actionMenu="nzDropdownMenu">
           <ul nz-menu>
-            @for (action of actions; track action.label) {
+            @for (action of displayActions; track action.label) {
               <li nz-menu-item (click)="onClickAction(action)">
                 <span>{{ action.label }}</span>
               </li>

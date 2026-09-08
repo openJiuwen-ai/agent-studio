@@ -14,11 +14,27 @@ from typing import Optional
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.session.checkpointer import Checkpointer
 from openjiuwen.core.session.checkpointer.base import (
+    SESSION_NAMESPACE_AGENT,
+    SESSION_NAMESPACE_AGENT_TEAM,
+    SESSION_NAMESPACE_WORKFLOW,
     WORKFLOW_NAMESPACE_GRAPH,
     build_key_with_namespace,
 )
 from openjiuwen.core.graph.store import Store
 from redis.asyncio import Redis
+
+# Agent state key suffixes — mirrors AgentStorage / AgentGroupStorage in
+# openjiuwen/extensions/checkpointer/redis/storage.py
+_AGENT_STATE_BLOBS = "agent_state_blobs"
+_AGENT_STATE_DUMP_TYPE = "agent_state_blobs_dump_type"
+_AGENT_GROUP_STATE_BLOBS = "agent_group_state_blobs"
+_AGENT_GROUP_STATE_DUMP_TYPE = "agent_group_state_blobs_dump_type"
+
+# Workflow state key suffixes — mirrors WorkflowStorage in storage.py
+_WORKFLOW_STATE_BLOBS = "workflow_state_blobs"
+_WORKFLOW_STATE_BLOBS_DUMP_TYPE = "workflow_state_blobs_dump_type"
+_WORKFLOW_UPDATE_BLOBS = "workflow_update_blobs"
+_WORKFLOW_UPDATE_BLOBS_DUMP_TYPE = "workflow_update_blobs_dump_type"
 
 
 # GraphStore key suffixes — mirrors GraphStore._DATA_TYPE / _DATA_VALUE
@@ -206,12 +222,16 @@ class FastRedisCheckpointer(Checkpointer):
     # ── Internal helpers ────────────────────────────────────────
 
     async def _clear_checkpoint_and_sentinel(
-        self, session_id: str, workflow_id: str, session
+        self, session_id: str, workflow_id: str, session=None
     ):
         """Clear GraphStore keys, remove workflow_id from sentinel SET, and workflow storage.
 
         Used for both normal completion and WorkflowAbortException (异常结束节点),
         which should both result in a clean slate for the next run.
+
+        session is optional — release_workflow() calls this without a session
+        object; in that case delegate fallback paths are skipped (precise
+        deletion failure is logged instead).
 
         Only removes the given workflow_id from the sentinel SET — other workflows
         in the same session (e.g., the main workflow when a sub-workflow completes)
@@ -270,10 +290,14 @@ class FastRedisCheckpointer(Checkpointer):
                     try:
                         await graph_state.delete(session_id, workflow_id)
                     except Exception:
-                        await self._delegate.post_workflow_execute(session, {}, None)
+                        await self._delegate_fallback_clear(
+                            session_id, workflow_id, session
+                        )
                         return
                 else:
-                    await self._delegate.post_workflow_execute(session, {}, None)
+                    await self._delegate_fallback_clear(
+                        session_id, workflow_id, session
+                    )
                     return
         else:
             probe_key = build_key_with_namespace(
@@ -301,16 +325,25 @@ class FastRedisCheckpointer(Checkpointer):
         # QA 的 _load_state_from_session 从 comp_state 读到旧的 USER_INTERACT，
         # 走恢复路径而非新开始路径，不生成问题文本。
         # conversationHistory 不受影响——下一轮 Start 节点从 inputs（请求传入）重建。
-        try:
-            await self._redis.delete(session_id)
+        # 注意：bare key 是 session 级共享的。若 session 内还有其他工作流持有
+        # 中断 checkpoint（哨兵 SET 存在别的成员），不能删——否则其他中断工作流
+        # 恢复时会丢失组件状态（如嵌套子工作流的中断上下文）。
+        if await self._session_has_other_checkpoints(session_id, workflow_id):
             workflow_logger.info(
-                f"FastRedisCheckpointer: deleted bare session key for "
-                f"session {session_id}"
+                f"FastRedisCheckpointer: skip bare session key delete for "
+                f"session {session_id}, other workflows still hold checkpoints"
             )
-        except Exception as e:
-            workflow_logger.warning(
-                f"FastRedisCheckpointer: bare session key delete failed: {e}"
-            )
+        else:
+            try:
+                await self._redis.delete(session_id)
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: deleted bare session key for "
+                    f"session {session_id}"
+                )
+            except Exception as e:
+                workflow_logger.warning(
+                    f"FastRedisCheckpointer: bare session key delete failed: {e}"
+                )
 
         # Remove this workflow_id from the sentinel SET (not the whole SET)
         # Redis auto-deletes the key when the last member is removed, so no
@@ -339,14 +372,68 @@ class FastRedisCheckpointer(Checkpointer):
                     f"falling back to full delegate post_workflow_execute for session "
                     f"{session_id}, workflow {workflow_id}: {e}"
                 )
-                await self._delegate.post_workflow_execute(session, {}, None)
+                await self._delegate_fallback_clear(session_id, workflow_id, session)
         else:
             workflow_logger.warning(
                 f"FastRedisCheckpointer: workflow_storage not accessible on delegate, "
                 f"falling back to full delegate post_workflow_execute for session "
                 f"{session_id}, workflow {workflow_id}"
             )
-            await self._delegate.post_workflow_execute(session, {}, None)
+            await self._delegate_fallback_clear(session_id, workflow_id, session)
+
+    async def _delegate_fallback_clear(self, session_id, workflow_id, session) -> None:
+        """Fallback to the delegate's full clear path when precise deletion fails.
+
+        Skipped when session is None (release_workflow path) — precise deletion
+        failure is already logged by the caller.
+        """
+        if session is None:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: delegate fallback unavailable "
+                f"(no session object) for session {session_id}, "
+                f"workflow {workflow_id}"
+            )
+            return
+        await self._delegate.post_workflow_execute(session, {}, None)
+
+    async def _session_has_other_checkpoints(
+        self, session_id: str, workflow_id: str
+    ) -> bool:
+        """Check whether other workflows in this session still hold checkpoints.
+
+        Used to guard session-wide shared resources (e.g., the bare session
+        key) from being deleted while another workflow's interrupt checkpoint
+        is still alive.
+        """
+        try:
+            members = await self._redis.smembers(_sentinel_key(session_id))
+        except Exception as e:
+            # 查询失败时保守视为存在其他 checkpoint，跳过 bare key 删除：
+            # 误保留会在其他工作流的 checkpoint 清理时自愈（届时守卫正常执行），
+            # 而误删除会丢掉同会话其他中断工作流的会话级 comp_state 上下文
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: sentinel SMEMBERS failed for "
+                f"session {session_id}, skipping bare session key delete: {e}"
+            )
+            return True
+        for member in members:
+            if isinstance(member, bytes):
+                member = member.decode("utf-8")
+            if member and member != workflow_id:
+                return True
+        return False
+
+    async def release_workflow(self, session_id: str, workflow_id: str) -> None:
+        """Release checkpoint state for a single workflow within a session.
+
+        Unlike release(session_id) — which deletes ALL checkpoint keys of the
+        session — this only clears the graph state (NS filtered by workflow_id,
+        including sub-workflow scoped NS like {main}|{node}|{sub}), workflow
+        state and sentinel membership belonging to workflow_id. Interrupt
+        checkpoints of OTHER workflows in the same session are preserved so
+        they can still be resumed.
+        """
+        await self._clear_checkpoint_and_sentinel(session_id, workflow_id, None)
 
     # ── Delegate pass-through methods ───────────────────────────
 
@@ -366,14 +453,131 @@ class FastRedisCheckpointer(Checkpointer):
         await self._delegate.post_agent_team_execute(session)
 
     async def release(self, session_id: str, agent_id: Optional[str] = None):
-        """Delegate release. Sentinel SET is NOT deleted — it will expire via TTL.
+        """Release session resources using O(K) precise key deletion.
 
-        Intentionally keeping the sentinel key after release avoids accidental
-        deletion that could cause loss of interrupt state if release is called
-        prematurely. The sentinel TTL (default 24h, configurable via
+        For agent-specific release (agent_id is not None): delegate directly
+        — AgentStorage.clear only deletes 2 keys, no scan_iter.
+
+        For full-session release (agent_id is None): collect all checkpoint
+        keys via existing index SETs (SMEMBERS) and batch_delete them, instead
+        of the delegate's O(N) delete_by_prefix scan_iter.
+
+        Sentinel SET is NOT deleted — it will expire via TTL. This avoids
+        accidental loss of interrupt state if release is called prematurely.
+        The sentinel TTL (default 24h, configurable via
         FAST_CHECKPOINTER_SENTINEL_TTL_SECONDS) ensures eventual cleanup.
+
+        Fallback: if any index SET read fails, falls back to the delegate's
+        release (scan_iter path), ensuring correctness at the cost of speed.
         """
-        await self._delegate.release(session_id, agent_id)
+        if agent_id is not None:
+            await self._delegate.release(session_id, agent_id)
+            return
+
+        success = await self._fast_release_session(session_id)
+        if not success:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: fast release fell back to delegate "
+                f"(scan_iter) for session {session_id}"
+            )
+            await self._delegate.release(session_id, agent_id)
+
+    async def _fast_release_session(self, session_id: str) -> bool:
+        """Precise O(K) deletion of all checkpoint keys for a session.
+
+        Returns False on any failure (caller should fall back to delegate).
+        Sentinel SET is left intact — relies on TTL for cleanup.
+        """
+        keys_to_delete: list = []
+
+        try:
+            # 1. Graph state keys: enumerate NS index SET, build 2 keys per ns
+            ns_index = _ns_index_key(session_id)
+            ns_members = await self._redis.smembers(ns_index)
+            for ns in ns_members:
+                if isinstance(ns, bytes):
+                    ns = ns.decode("utf-8")
+                if not ns:
+                    continue
+                keys_to_delete.append(
+                    build_key_with_namespace(
+                        session_id, WORKFLOW_NAMESPACE_GRAPH, ns,
+                        _GRAPH_DATA_TYPE))
+                keys_to_delete.append(
+                    build_key_with_namespace(
+                        session_id, WORKFLOW_NAMESPACE_GRAPH, ns,
+                        _GRAPH_DATA_VALUE))
+
+            # 2. Workflow state keys: enumerate sentinel SET members, build
+            #    4 keys per workflow_id (state + dump_type + updates + dump_type)
+            sentinel = _sentinel_key(session_id)
+            wf_members = await self._redis.smembers(sentinel)
+            for wf_id in wf_members:
+                if isinstance(wf_id, bytes):
+                    wf_id = wf_id.decode("utf-8")
+                if not wf_id:
+                    continue
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_STATE_BLOBS))
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_STATE_BLOBS_DUMP_TYPE))
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_UPDATE_BLOBS))
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_UPDATE_BLOBS_DUMP_TYPE))
+
+            # 3. Agent state keys: agent_id is dynamic per workflow, but the
+            #    sentinel SET only holds workflow_ids, not agent_ids. Since we
+            #    cannot enumerate agent_ids without a separate index, we probe
+            #    using the agent_id field from the session's workflow context.
+            #    For now, agent/team state keys are left to the delegate's TTL.
+            #    This is acceptable because:
+            #    a) The delegate's delete_by_prefix would have caught them, but
+            #       we're avoiding scan_iter.
+            #    b) Agent state keys have their own TTL (configured in
+            #       RedisCheckpointer init).
+            #    c) 111121 is triggered by workflow/graph state, not agent state.
+            # NOTE: If an agent_id index SET is added in the future, we can
+            #       extend this section to delete agent state keys precisely.
+
+            # 4. Bare session key (comp_state with QA QUESTIONER_STATE_KEY)
+            keys_to_delete.append(session_id)
+
+            if not keys_to_delete:
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: no checkpoint keys found for "
+                    f"session {session_id}, skipping release"
+                )
+                return True
+
+            # 5. Batch delete all collected keys
+            deleted = await self._redis.delete(*keys_to_delete)
+
+            # 6. Clean up the NS index SET (now that all graph keys are gone)
+            try:
+                await self._redis.delete(ns_index)
+            except Exception as e:
+                workflow_logger.warning(
+                    f"FastRedisCheckpointer: NS index SET delete failed for "
+                    f"session {session_id}: {e}"
+                )
+
+            workflow_logger.info(
+                f"FastRedisCheckpointer: fast release deleted {deleted} keys "
+                f"for session {session_id} (sentinel SET left for TTL)"
+            )
+            return True
+
+        except Exception as e:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: fast release failed for session "
+                f"{session_id}: {e}"
+            )
+            return False
 
     def graph_store(self):
         return NsIndexingGraphStore(

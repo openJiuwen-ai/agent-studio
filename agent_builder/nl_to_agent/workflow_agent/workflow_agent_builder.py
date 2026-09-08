@@ -28,7 +28,7 @@ from agent_builder.nl_to_agent.workflow_agent.progress_bar import (
     QUESTION_WITHOUT_OPTION,
 )
 from agent_builder.adapter.exception_bridge import JiuWenBaseException
-from agent_builder.adapter.jiuwen_bridge import SystemMessage
+from agent_builder.adapter.jiuwen_bridge import HumanMessage, SystemMessage
 from agent_builder.adapter.logger_bridge import logger
 
 from .agent_designer.agent_designer import (
@@ -109,7 +109,14 @@ class IntentionOperator:
             else PLAN_INTENTION_PROMPT.replace("{{dig_history}}", dig_history)
         )
         for item in self.model.chat(
-            [SystemMessage(content=prompt)], method="stream", add_prefix=False
+            [
+                SystemMessage(content=prompt),
+                HumanMessage(
+                    content="请根据上述规则分析对话历史，并仅返回要求格式的JSON结果。"
+                ),
+            ],
+            method="stream",
+            add_prefix=False,
         ):
             if item.content:
                 return self.clean_intent(item.content)
@@ -145,7 +152,14 @@ class IntentionOperator:
             else PLAN_INTENTION_PROMPT.replace("{{dig_history}}", dig_history)
         )
         async for item in self.model.achat(
-            [SystemMessage(content=prompt)], method="stream", add_prefix=False
+            [
+                SystemMessage(content=prompt),
+                HumanMessage(
+                    content="请根据上述规则分析对话历史，并仅返回要求格式的JSON结果。"
+                ),
+            ],
+            method="stream",
+            add_prefix=False,
         ):
             yield item.raw_content
             if item.content:

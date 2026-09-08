@@ -89,7 +89,7 @@ export class PromptOptimizeTaskConfigComponent {
     theObjectToApply: this.i18n.transform('prompt_optimize_task_the_object_to_apply'),
   };
   public basicInfoForm = this.fb.group({
-    taskName: new FormControl('', [Validators.required, Validators.maxLength(64)]),
+    taskName: new FormControl('', [Validators.required, Validators.maxLength(34)]),
     type: new FormControl(this.promptTypeOptions[0].value, [Validators.required]),
     desc: new FormControl('', [Validators.required]),
     prompt: new FormControl('', [Validators.required]),
@@ -744,7 +744,7 @@ export class PromptOptimizeTaskConfigComponent {
     // 不触发表单更新事件 { emitEvent: false }
     this.basicInfoForm.patchValue(
       {
-        taskName: `${example.title.substring(0, 50)}#${Date.now()}`,
+        taskName: `${example.title.substring(0, 50)}_${Date.now()}`,
         desc: example.title,
         prompt: example.value,
       },

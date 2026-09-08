@@ -8,6 +8,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+import logging
+
 from agent_runtime.common.ir_interfaces import KnowledgeBaseConfigProvider
 from agent_runtime.context.request_context import _request_ctx
 from storage import get_storage_provider
@@ -202,13 +204,15 @@ class OBSKnowledgeBaseConfigProvider(KnowledgeBaseConfigProvider):
                         connection_id=connection_id,
                     )
                 )
-                workflow_logger.info(
-                    f"CUSTOM mode: using kb_id as external_id: kb_id={kb_id}"
-                )
+                if workflow_logger.logger().isEnabledFor(logging.INFO):
+                    workflow_logger.info(
+                        f"CUSTOM mode: using kb_id as external_id: kb_id={kb_id}"
+                    )
             else:
-                workflow_logger.warning(
-                    f"Failed to load KB reference from OBS: kb_id={kb_id}"
-                )
+                if workflow_logger.logger().isEnabledFor(logging.WARNING):
+                    workflow_logger.warning(
+                        f"Failed to load KB reference from OBS: kb_id={kb_id}"
+                    )
 
         if connection is None:
             connection = KBConnectionConfig(connection_id=connection_id)

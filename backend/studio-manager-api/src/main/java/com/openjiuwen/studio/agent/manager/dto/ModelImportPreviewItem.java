@@ -9,7 +9,7 @@ import io.swagger.annotations.ApiModel;
 import java.io.Serializable;
 
 /**
- * 模型导入预检单行结果（不落库，仅解析+验签+冲突检测）。
+ * 模型导入预检单行结果（不落库，仅解析+冲突检测+URL 校验）。
  */
 @ApiModel(description = "模型导入预检单行结果")
 public class ModelImportPreviewItem implements Serializable {
@@ -27,20 +27,18 @@ public class ModelImportPreviewItem implements Serializable {
     @JsonProperty("conflict")
     private Boolean conflict;
 
-    @JsonProperty("signature_valid")
-    private Boolean signatureValid;
+    /**
+     * 本行是否合法（解析/import_type 校验通过）。false 时该行不可导入，前端禁用"确认导入"按钮。
+     * 解析失败或 import_type 错时置 false；其他路径（URL/占位符/冲突）为警告而非硬错误，保持 true。
+     */
+    @JsonProperty("line_valid")
+    private Boolean lineValid;
 
     @JsonProperty("api_url_valid")
     private Boolean apiUrlValid;
 
     @JsonProperty("env_var_valid")
     private Boolean envVarValid;
-
-    /**
-     * 鉴权加密方式是否被当前环境适配。true=明文/MASKED（可正常导入），false=文件包含加密鉴权且当前环境无解密能力（需用户在目标环境重新配置密钥）。
-     */
-    @JsonProperty("cipher_adapted")
-    private Boolean cipherAdapted;
 
     @JsonProperty("detail")
     private String detail;
@@ -88,12 +86,12 @@ public class ModelImportPreviewItem implements Serializable {
         return this;
     }
 
-    public Boolean getSignatureValid() {
-        return signatureValid;
+    public Boolean getLineValid() {
+        return lineValid;
     }
 
-    public ModelImportPreviewItem setSignatureValid(Boolean signatureValid) {
-        this.signatureValid = signatureValid;
+    public ModelImportPreviewItem setLineValid(Boolean lineValid) {
+        this.lineValid = lineValid;
         return this;
     }
 
@@ -112,15 +110,6 @@ public class ModelImportPreviewItem implements Serializable {
 
     public ModelImportPreviewItem setEnvVarValid(Boolean envVarValid) {
         this.envVarValid = envVarValid;
-        return this;
-    }
-
-    public Boolean getCipherAdapted() {
-        return cipherAdapted;
-    }
-
-    public ModelImportPreviewItem setCipherAdapted(Boolean cipherAdapted) {
-        this.cipherAdapted = cipherAdapted;
         return this;
     }
 

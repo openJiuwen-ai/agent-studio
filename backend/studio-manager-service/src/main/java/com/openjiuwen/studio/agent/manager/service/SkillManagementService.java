@@ -156,79 +156,92 @@ public class SkillManagementService implements ISkillManagementService {
         log.info("Import skill, workspaceId: {}, projectId: {}", workspaceId, projectId);
         // 文件格式转换
         File zipFile = MultipartFileToZipUtils.convertToZipFile(multipartFile);
+        try {
+            // 调用校验方法
+            ZipValidationUtils.validateZipFile(zipFile);
 
-        // 调用校验方法
-        ZipValidationUtils.validateZipFile(zipFile);
+            // 获取frontmatter信息
+            Map<String, Object> frontmatter = ZipValidationUtils.getFrontmatter();
 
-        // 获取frontmatter信息
-        Map<String, Object> frontmatter = ZipValidationUtils.getFrontmatter();
+            // 生成Skill相关
+            String skillId = UUID.randomUUID().toString();
 
-        // 生成Skill相关
-        String skillId = UUID.randomUUID().toString();
+            // 构造OBS存储路径,上传文件到OBS
+            String obsKey = String.format(SKILL_VERSION_FILE_PATH_TEMPLATE,
+                    RequestContextUtils.getRequestUserId(),
+                    skillId,
+                    skillId,
+                    multipartFile.getOriginalFilename());
+            String obsUrl;
 
-        // 构造OBS存储路径,上传文件到OBS
-        String obsKey = String.format(SKILL_VERSION_FILE_PATH_TEMPLATE,
-                RequestContextUtils.getRequestUserId(),
-                skillId,
-                skillId,
-                zipFile.getName());
-        String obsUrl;
+            // 上传Skill制品包
+            try (InputStream inputStream = new FileInputStream(zipFile)) {
+                log.warn("File upload to OBS, obsKey: {}", obsKey);
+                mgObsService.uploadObsFile(obsKey, inputStream, -1);
+                obsUrl = mgObsService.getTemporaryGetRsp(false, obsKey, 3600);
+            } catch (Exception e) {
+                log.error("Error OBS upload, skillId: {}, filename: {}", skillId, zipFile.getName(), e);
+                throw new AgentStudioException(StudioError.UPLOAD_FILE_TO_OBS_FAILED);
+            }
 
-        // 上传Skill制品包
-        try (InputStream inputStream = new FileInputStream(zipFile)) {
-            log.warn("File upload to OBS, obsKey: {}", obsKey);
-            mgObsService.uploadObsFile(obsKey, inputStream, -1);
-            obsUrl = mgObsService.getTemporaryGetRsp(false, obsKey, 3600);
-        } catch (Exception e) {
-            log.error("Error OBS upload, skillId: {}, filename: {}", skillId, zipFile.getName(), e);
-            throw new AgentStudioException(StudioError.UPLOAD_FILE_TO_OBS_FAILED);
+            // 构造Skill实体并保存
+            SkillEntity skillEntity = new SkillEntity()
+                    .setSkillId(skillId)
+                    .setDomainId(RequestContextUtils.getRequestUserDomainId())
+                    .setName(frontmatter.get(NAME).toString())
+                    .setIcon(SKILL_DEFAULT_ICON)
+                    .setStatus(SkillStatus.DEVELOPED.getValue())
+                    .setSource(SkillSource.IMPORT.getValue())
+                    .setDescription(frontmatter.get(DESCRIPTION).toString())
+                    .setCreatorId(RequestContextUtils.getRequestUserId())
+                    .setCreatorName(RequestContextUtils.getRequestUserName())
+                    .setLatestVersion(skillId)
+                    .setUsedVersion(skillId)
+                    .setCreatedAt(System.currentTimeMillis())
+                    .setUpdatedAt(System.currentTimeMillis())
+                    .setWorkspaceId(workspaceId)
+                    .setProjectId(projectId);
+            skillMapper.insert(skillEntity);
+
+            // 构造SkillVersion实体并保存
+            String versionName = skillId.replace("-", "").substring(0, 7);
+            SkillVersionEntity skillVersionEntity = new SkillVersionEntity()
+                    .setId(skillId)
+                    .setSkillId(skillId)
+                    .setVersionName(versionName)
+                    .setUsed(1)
+                    .setName(frontmatter.get(NAME).toString())
+                    .setDescription(frontmatter.get(DESCRIPTION).toString())
+                    .setObsPath(obsKey)
+                    .setCreatorId(RequestContextUtils.getRequestUserId())
+                    .setCreatorName(RequestContextUtils.getRequestUserName())
+                    .setCreatedAt(System.currentTimeMillis());
+            skillVersionMapper.insert(skillVersionEntity);
+
+            // 构造返回结果
+            ImportStudioSkillResponseBody response = new ImportStudioSkillResponseBody()
+                    .setSkillId(skillId)
+                    .setSkillName(frontmatter.get(NAME).toString())
+                    .setDescription(frontmatter.get(DESCRIPTION).toString())
+                    .setObsUrl(obsUrl)
+                    .setVersionName(versionName)
+                    .setStatus(SkillStatus.DEVELOPED)
+                    .setSource(ImportStudioSkillResponseBody.SourceEnum.IMPORT);
+            log.info("Import skill succeeded, skillId: {}, obsKey: {}", skillId, obsKey);
+            return response;
+        } finally {
+            if (zipFile.exists()) {
+                try {
+                    if (!zipFile.delete()) {
+                        zipFile.deleteOnExit();
+                        log.warn("Failed to delete temporary zip file: {}", zipFile.getAbsolutePath());
+                    }
+                } catch (SecurityException e) {
+                    log.warn("Security exception while deleting temporary zip file: {}",
+                            zipFile.getAbsolutePath(), e);
+                }
+            }
         }
-
-        // 构造Skill实体并保存
-        SkillEntity skillEntity = new SkillEntity()
-                .setSkillId(skillId)
-                .setDomainId(RequestContextUtils.getRequestUserDomainId())
-                .setName(frontmatter.get(NAME).toString())
-                .setIcon(SKILL_DEFAULT_ICON)
-                .setStatus(SkillStatus.DEVELOPED.getValue())
-                .setSource(SkillSource.IMPORT.getValue())
-                .setDescription(frontmatter.get(DESCRIPTION).toString())
-                .setCreatorId(RequestContextUtils.getRequestUserId())
-                .setCreatorName(RequestContextUtils.getRequestUserName())
-                .setLatestVersion(skillId)
-                .setUsedVersion(skillId)
-                .setCreatedAt(System.currentTimeMillis())
-                .setUpdatedAt(System.currentTimeMillis())
-                .setWorkspaceId(workspaceId)
-                .setProjectId(projectId);
-        skillMapper.insert(skillEntity);
-
-        // 构造SkillVersion实体并保存
-        String versionName = skillId.replace("-", "").substring(0, 7);
-        SkillVersionEntity skillVersionEntity = new SkillVersionEntity()
-                .setId(skillId)
-                .setSkillId(skillId)
-                .setVersionName(versionName)
-                .setUsed(1)
-                .setName(frontmatter.get(NAME).toString())
-                .setDescription(frontmatter.get(DESCRIPTION).toString())
-                .setObsPath(obsKey)
-                .setCreatorId(RequestContextUtils.getRequestUserId())
-                .setCreatorName(RequestContextUtils.getRequestUserName())
-                .setCreatedAt(System.currentTimeMillis());
-        skillVersionMapper.insert(skillVersionEntity);
-
-        // 构造返回结果
-        ImportStudioSkillResponseBody response = new ImportStudioSkillResponseBody()
-                .setSkillId(skillId)
-                .setSkillName(frontmatter.get(NAME).toString())
-                .setDescription(frontmatter.get(DESCRIPTION).toString())
-                .setObsUrl(obsUrl)
-                .setVersionName(versionName)
-                .setStatus(SkillStatus.DEVELOPED)
-                .setSource(ImportStudioSkillResponseBody.SourceEnum.IMPORT);
-        log.info("Import skill succeeded, skillId: {}, obsKey: {}", skillId, obsKey);
-        return response;
     }
 
     /**

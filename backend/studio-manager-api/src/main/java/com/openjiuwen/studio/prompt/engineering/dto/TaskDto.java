@@ -30,7 +30,7 @@ public class TaskDto implements Serializable {
     private String id = null;
 
     @JsonProperty("name")
-    @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,30}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
+    @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,32}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     private String name = null;
 
     @JsonProperty("description")

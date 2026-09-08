@@ -1,8 +1,7 @@
 <span
-  nz-popover
-  [nzPopoverPlacement]="tiTipPosition || 'top'"
-  nzPopoverTrigger="hover"
-  [nzPopoverContent]="tipContent"
+  nz-tooltip
+  [nzTooltipPlacement]="tiTipPosition || 'top'"
+  [nzTooltipTitle]="tiTip || null"
 >
   <svg
     width="16.000000"
@@ -30,6 +29,3 @@
     <path d="M11.51 6.08C11.79 6.08 12.04 6.35 12.07 6.68L12.66 13.16C12.69 13.49 12.45 13.76 12.12 13.76L3.87 13.76C3.54 13.76 3.3 13.49 3.33 13.16L3.92 6.68C3.95 6.35 4.2 6.08 4.48 6.08L11.51 6.08Z" stroke="#595959" stroke-opacity="1.000000" stroke-width="1.000000"/>
   </svg>
 </span>
-<ng-template #tipContent>
-  {{ tiTip }}
-</ng-template>

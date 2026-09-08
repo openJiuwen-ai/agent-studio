@@ -1,11 +1,11 @@
-<form nz-form [formGroup]="formGroupItem" nzLayout="inline" class="dependency-form">
+<form nz-form [formGroup]="formGroupItem" nzLayout="inline" class="dependency-form" [attr.id]="'dependency' + itemIndex">
   <div class="form-row">
     @for (formItem of [dependencyFormConfig[SCENARIO_FIELD_ID.DEPEND_ITEM], dependencyFormConfig[SCENARIO_FIELD_ID.DEPEND_SYMBOL], dependencyFormConfig[SCENARIO_FIELD_ID.BE_DEPENDED_ITEM]]; track trackByIndex($index)) {
       <nz-form-item class="inline-form-item">
         @if (formItem.label) {
           <nz-form-label>{{ formItem.label }}</nz-form-label>
         }
-        <nz-form-control>
+        <nz-form-control [nzErrorTip]="formItem.errorTip">
           @if (formItem.type === FIELD_TYPE.SELECT) {
             <nz-select
               class="flex-select"
@@ -15,6 +15,10 @@
               [compareWith]="compareWith"
               [class.row-cycle-error-select]="isRowInCycle(itemIndex)"
               [class.priority-warning-select]="isHigherDependentLower && formItem.id === SCENARIO_FIELD_ID.BE_DEPENDED_ITEM"
+              nz-tooltip
+              [nzTooltipTitle]="formGroupItem.get(formItem.id)?.value?.[SCENARIO_FIELD_ID.TRIGGER_CONDITION]"
+              nzTooltipPlacement="top"
+              [class.dependency-select-error]="formGroupItem.get(formItem.id)?.invalid && formGroupItem.get(formItem.id)?.touched"
               (nzOnSearch)="false"
             >
               <nz-option

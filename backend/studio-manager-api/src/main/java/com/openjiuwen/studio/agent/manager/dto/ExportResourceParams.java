@@ -36,7 +36,6 @@ public class ExportResourceParams implements Serializable {
 
     @JsonProperty("resource_versions")
     @Valid
-    @NotNull
     @Size()
     private List<ExportResourceVersion> resourceVersions = null;
 

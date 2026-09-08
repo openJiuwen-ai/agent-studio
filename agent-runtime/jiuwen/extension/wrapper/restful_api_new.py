@@ -471,6 +471,11 @@ class RestfulApiToolNew(Tool):
                 StatusCode.PLUGIN_PROXY_CONNECT_ERROR.code,
                 f"{StatusCode.PLUGIN_PROXY_CONNECT_ERROR.errmsg}: {error}",
             ) from error
+        if isinstance(error, exception.JiuWenBaseException):
+            raise exception.JiuWenBaseException(
+                error.error_code,
+                error.message,
+            ) from error
         raise exception.JiuWenBaseException(
             StatusCode.PLUGIN_UNEXPECTED_ERROR.code,
             f"{StatusCode.PLUGIN_UNEXPECTED_ERROR.errmsg}: {error}",

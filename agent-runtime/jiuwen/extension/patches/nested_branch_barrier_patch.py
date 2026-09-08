@@ -9,7 +9,7 @@ Must be applied *after* ``apply_parallel_branch_grouping_patch``.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any
 
 from openjiuwen.core.common.logging import workflow_logger as logger
@@ -17,39 +17,73 @@ from openjiuwen.core.common.logging import workflow_logger as logger
 _NESTED_PATCH_APPLIED = False
 
 
+def _build_adjacency_list(self) -> dict[str, list[str]]:
+    """构建邻接表：dict[node -> [neighbors]]，覆盖所有边类型。
+
+    覆盖三类边：
+    1. 普通边 self.edges 中 src 是 str 的边
+    2. list-source 边 self.edges 中 src 是 list 的边（每个子节点都映射到 tgt）
+    3. 条件分支边 self.branches 中每个 router 的 _branches 的 target
+    """
+    adj: dict[str, list[str]] = defaultdict(list)
+    # 普通边 + list-source 边
+    for (src, tgt) in self.edges:
+        if isinstance(tgt, str):
+            if isinstance(src, str):
+                adj[src].append(tgt)
+            elif isinstance(src, list):
+                for s in src:
+                    adj[s].append(tgt)
+    # 条件分支边
+    for branch_node, routers in self.branches.items():
+        for _name, br in routers.items():
+            router = getattr(br, "condition", None)
+            if router is None:
+                continue
+            branches = getattr(router, "_branches", None)
+            if not branches:
+                continue
+            for b in branches:
+                tgt = b.target
+                if isinstance(tgt, str):
+                    tgt = [tgt]
+                for t in tgt or []:
+                    adj[branch_node].append(t)
+    return adj
+
+
 def _forward_reachable_patched(self, start_node: str) -> set[str]:
     """BFS forward search: all nodes reachable from *start_node*.
 
-    Fixes: traverse conditional edges (``self.branches``) and list-source edges.
+    使用邻接表 O(V+E)，覆盖普通边、list-source 边、条件分支边。
+    邻接表缓存在 self._adj_cache 上，整个 compile 期间图拓扑不变，可安全复用。
+    结果缓存在 self._reachable_cache 上，同一 start_node 只算一次。
     """
+    # 结果缓存：同一 start_node 只算一次
+    result_cache = getattr(self, "_reachable_cache", None)
+    if result_cache is None:
+        result_cache = {}
+        self._reachable_cache = result_cache  # type: ignore[attr-defined]
+    if start_node in result_cache:
+        return result_cache[start_node]
+
+    # 邻接表缓存：整个 compile 期间共享
+    adj = getattr(self, "_adj_cache", None)
+    if adj is None:
+        adj = _build_adjacency_list(self)
+        self._adj_cache = adj  # type: ignore[attr-defined]
+
     visited: set[str] = set()
-    queue = [start_node]
+    queue: deque[str] = deque([start_node])
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         if node in visited:
             continue
         visited.add(node)
-        for (src, tgt) in self.edges:
-            if isinstance(src, list):
-                if node in src and isinstance(tgt, str) and tgt not in visited:
-                    queue.append(tgt)
-            elif src == node and isinstance(tgt, str) and tgt not in visited:
-                queue.append(tgt)
-        if node in self.branches:
-            for _name, br in self.branches[node].items():
-                router = getattr(br, "condition", None)
-                if router is None:
-                    continue
-                branches = getattr(router, "_branches", None)
-                if not branches:
-                    continue
-                for b in branches:
-                    tgt = b.target
-                    if isinstance(tgt, str):
-                        tgt = [tgt]
-                    for t in tgt or []:
-                        if t not in visited:
-                            queue.append(t)
+        for neighbor in adj.get(node, []):
+            if neighbor not in visited:
+                queue.append(neighbor)
+    result_cache[start_node] = visited
     return visited
 
 

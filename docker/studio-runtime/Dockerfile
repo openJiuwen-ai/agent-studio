@@ -16,7 +16,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev procps gawk hostname sed coreutils findutils bash nginx antiword \
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖（临时安装编译工具链，编译完成后卸载）

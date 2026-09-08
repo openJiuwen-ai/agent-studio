@@ -79,10 +79,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import com.google.common.collect.Lists;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -302,6 +305,7 @@ public class AgentImportService {
      * @param file 前端传入的导入文件，文件内容格式为多条jsonl，每个资源一行
      * @return ImportRsp
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file) {
         return importFile(projectId, workspaceId, file, null);
     }
@@ -315,6 +319,7 @@ public class AgentImportService {
      * @param mode 导入模式
      * @return ImportRsp
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file, String mode) {
         List<ImportInfo> resourceList = getAndValidateImportInfos(workspaceId, file);
         return doImport(projectId, workspaceId, resourceList, mode);
@@ -328,6 +333,7 @@ public class AgentImportService {
      * @param exportInfos 导出资源列表
      * @return ImportRsp
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importFromExportInfos(String projectId, String targetWorkspaceId,
         List<ExportInfo> exportInfos) {
         List<ImportInfo> resourceList = sortImportInfos(exportInfos.stream()
@@ -645,7 +651,11 @@ public class AgentImportService {
             }
             mappingEntities.add(mappingEntity);
         }
-        mappingMapper.insertBatch(mappingEntities);
+        // 分批插入：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767）。
+        // t_mapping 单行 17 个参数，单批上限 = 32767/17 ≈ 1927 行；取 1000 留充足余量。
+        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 1000)) {
+            mappingMapper.insertBatch(batch);
+        }
     }
 
     private void handleSpaciousSubController(ControllerVO controllerVO, String projectId, String workspaceId,
@@ -1003,8 +1013,12 @@ public class AgentImportService {
         if (CollectionUtils.isNotEmpty(mappingList)) {
             // 分组并删除旧数据
             groupedDelete(mappingList);
-            // 批量插入新数据
-            mappingMapper.insertBatch(mappingList);
+            // 批量插入新数据：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767）。
+            // t_mapping 单行 17 个参数，单批上限 = 32767/17 ≈ 1927 行；取 1000 留充足余量，
+            // 大工作流导入产生的 mapping 较多时避免参数超限导致连接被打成 broken。
+            for (List<MappingEntity> batch : Lists.partition(mappingList, 1000)) {
+                mappingMapper.insertBatch(batch);
+            }
         }
     }
 
@@ -1159,13 +1173,13 @@ public class AgentImportService {
             allIdMappings.put(result.getId(), newId);
             ImportInfo info = resourceMap.get(result.getId());
             if (info != null && info.getMetadata() != null) {
-                try {
-                    WorkflowEntity workflowMeta = JsonUtils.objectToClassType(info.getMetadata(), WorkflowEntity.class);
-                    if (StringUtils.isNotEmpty(workflowMeta.getTraceId())
-                        && !Strings.CS.equals(workflowMeta.getTraceId(), result.getId())) {
-                        allIdMappings.put(workflowMeta.getTraceId(), newId);
-                    }
-                } catch (Exception ignored) {
+                // 探测性转换：仅 WORKFLOW/AGENT/CONTROLLER 等结构兼容的 metadata 能成功提取 traceId，
+                // 插件等资源（如 test_status 为 JSON 数组字符串）转换失败属预期，静默返回 null 即可，
+                // 不打 ERROR 堆栈误导排查
+                WorkflowEntity workflowMeta = JsonUtils.objectToClassTypeQuiet(info.getMetadata(), WorkflowEntity.class);
+                if (workflowMeta != null && StringUtils.isNotEmpty(workflowMeta.getTraceId())
+                    && !Strings.CS.equals(workflowMeta.getTraceId(), result.getId())) {
+                    allIdMappings.put(workflowMeta.getTraceId(), newId);
                 }
             }
         }
@@ -1202,24 +1216,33 @@ public class AgentImportService {
                     if (parentResource == null) {
                         return;
                     }
-                    switch (ResourceTypeEnum.fromValue(parentResource.getResourceType())) {
-                        case WORKFLOW -> handleWorkflowDsl(parentResource, parentResult, result);
-                        case AGENT -> handleAgentDsl(parentResource, parentResult, result);
-                        case CONTROLLER -> {
-                            handleControllerDsl(parentResource, parentResult, result, allIdMappings);
-                            if (CollectionUtils.isNotEmpty(parentResource.getParents())) {
-                                parentResource.getParents().forEach(grandParentId -> {
-                                    ImportInfo grandParentResource = resourceMap.get(grandParentId);
-                                    ImportResourceResult grandParentResult = resultMap.get(grandParentId);
-                                    if (grandParentResult == null || Strings.CS.equals(grandParentResult.getStatus(),
-                                        ImportExportStatusEnum.FAILED.getCode())) {
-                                        return;
-                                    }
-                                    handleGrandControllerDsl(grandParentResource, grandParentResult, result);
-                            });
+                    try {
+                        switch (ResourceTypeEnum.fromValue(parentResource.getResourceType())) {
+                            case WORKFLOW -> handleWorkflowDsl(parentResource, parentResult, result);
+                            case AGENT -> handleAgentDsl(parentResource, parentResult, result);
+                            case CONTROLLER -> {
+                                handleControllerDsl(parentResource, parentResult, result, allIdMappings);
+                                if (CollectionUtils.isNotEmpty(parentResource.getParents())) {
+                                    parentResource.getParents().forEach(grandParentId -> {
+                                        ImportInfo grandParentResource = resourceMap.get(grandParentId);
+                                        ImportResourceResult grandParentResult = resultMap.get(grandParentId);
+                                        if (grandParentResult == null || Strings.CS.equals(grandParentResult.getStatus(),
+                                            ImportExportStatusEnum.FAILED.getCode())) {
+                                            return;
+                                        }
+                                        handleGrandControllerDsl(grandParentResource, grandParentResult, result);
+                                    });
+                                }
+                            }
                         }
+                    } catch (Exception e) {
+                        // 单个父资源 DSL 处理失败只影响该资源，不得中断整个 handleResourceDsl：
+                        // 否则后续 DSL 上传循环被整体跳过，所有已落库资源 dsl_path/ir_path 悬空，
+                        // 而导入仍返回成功（假成功），点开资源报 OBS 404。
+                        // 失败的父资源将按导出包原样 DSL 上传（子资源引用替换不完整，见下方日志）。
+                        log.error("import update parent dsl failed, parentId: {}, parentType: {}, childId: {}",
+                            parentId, parentResource.getResourceType(), result.getId(), e);
                     }
-                }
                 });
             });
         });
@@ -1869,7 +1892,7 @@ public class AgentImportService {
             .filter(v -> Strings.CS.equalsAny(v.getType(), NodeType.LLM.getType(), NodeType.AGENT.getType()))
             .forEach(node -> {
                 Map<String, Object> config = node.getConfigs();
-                if (config.get("model") == null) {
+                if (config == null || config.get("model") == null) {
                     return;
                 }
                 Map<String, Object> model = MapReadUtil.safeCastToMapWithStringKey(config.get("model"));
@@ -1878,7 +1901,9 @@ public class AgentImportService {
             });
         Map<String, Object> workflowConfig = workflowVO.getConfigs();
         // 处理workflow dsl config中的default_model
-        if (workflowConfig.get("default_model") == null) {
+        // configs 为 null 的工作流（如无全局配置的子工作流）没有 default_model 可替换，直接跳过；
+        // 此前未判空导致 NPE 中断整个 handleResourceDsl，DSL 上传被整体跳过（点开工作流报 OBS 404）
+        if (workflowConfig == null || workflowConfig.get("default_model") == null) {
             return;
         }
         Map<String, String> defaultModel = JsonUtils.objectToClass(workflowConfig.get("default_model"));

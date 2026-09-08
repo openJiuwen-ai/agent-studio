@@ -48,10 +48,11 @@ class ReactWorkflowAdapter(Tool):
     async def invoke(self, inputs: dict, **kwargs) -> dict:
         """调用工作流"""
         from openjiuwen.core.workflow import create_workflow_session
+        from agent_runtime.common.trace_compat import create_workflow_session_with_trace
         from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 
         session_id = kwargs.get("session_id", str(uuid.uuid4()))
-        session = create_workflow_session(session_id=session_id)
+        session = create_workflow_session_with_trace(session_id=session_id)
         wf_inputs = self._convert_inputs(inputs)
         # R-02: per-call 新建 workflow 实例 → 各自独立 _session/_graph → 并发 stream 不竞写
         # 每次 invoke 取当前调用上下文的 customer headers（禁止固化首请求 Header）

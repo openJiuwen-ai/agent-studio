@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import AsyncIterator, Dict, List, Optional, Union
 
 from agent_runtime.common.kb_config_providers import OBSKnowledgeBaseConfigProvider
+import logging
+
 from common_utils.redis_manager import get_redis_client
 from agent_runtime.extension.workflow_node.kb_adapter.base import KBSearchResult, KBServiceAdapter
 from agent_runtime.extension.workflow_node.kb_adapter.factory import KBAdapterFactory
@@ -630,15 +632,17 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
                 },
             }
 
-            workflow_logger.info(
-                "FlowKnowledgeRetrieval invoke completed, results=%s",
-                json.dumps(output_list, ensure_ascii=False, default=str),
-                event_type=LogEventType.WORKFLOW_COMPONENT_END,
-                component_id=session.get_component_id(),
-                component_type_str=JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE,
-                session_id=session.get_session_id(),
-                metadata={"num_results": len(results)},
-            )
+            # json.dumps 序列化整个检索结果集开销较大，仅在 INFO 启用时执行
+            if workflow_logger.logger().isEnabledFor(logging.INFO):
+                workflow_logger.info(
+                    "FlowKnowledgeRetrieval invoke completed, results=%s",
+                    json.dumps(output_list, ensure_ascii=False, default=str),
+                    event_type=LogEventType.WORKFLOW_COMPONENT_END,
+                    component_id=session.get_component_id(),
+                    component_type_str=JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE,
+                    session_id=session.get_session_id(),
+                    metadata={"num_results": len(results)},
+                )
 
             return output
 

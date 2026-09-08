@@ -191,7 +191,15 @@ redis:
   client-type: ${redis_client_type:redisson}
   enable-log: ${redis_enable_log:false}
   max-debug-msg-size: ${redis_max_debug_msg_size:10000}
-  max-string-length: ${redis_max_string_length:20000000}
+  # Redisson codec 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制，
+  # 用于反序列化 insight_exec_* 等调用链缓存大字符串值。默认 100MB。
+  max-string-length: ${redis_max_string_length:100000000}
+  # 写入 Redis 前对单条消息内容做截断的长度(字符数)，超过此长度的 String 字段会被截断并追加 [TRUNCATED] 标记。
+  # 设为 -1 或 <=0 时不截断。默认 -1（不截断）。
+  max-single-message-length: ${redis_max_single_message_length:-1}
+  # Redis 读取溢出(StreamConstraintsException)时历史消息清理比例，保留最近指定比例的数据，清理最旧的部分。
+  # 0.75 表示保留 75%、清理 25%。默认 0.75。
+  history-eviction-threshold: ${redis_history_eviction_threshold:0.75}
 
 # health check
 management:
@@ -483,6 +491,10 @@ delegate:
     agency-token-url: ${agency_token_url:}
 
 jackson:
+  # Jackson 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制。
+  # 用于 Spring 容器全局 ObjectMapper，影响 RedisTemplate 等使用容器 ObjectMapper 的组件。默认 50MB。
+  max-string-length: ${jackson_max_string_length:50000000}
+  # Jackson 反序列化允许的最大 token 数，防止超大 JSON 解析时 token 数爆炸。默认 10M。
   max-token-limit: ${jackson_max_token_limit:10000000}
   time-zone: GMT+8
   date-format: 'yyyy-MM-dd HH:mm:ss' # 启用时间戳后此配置失效，可保留/删除
@@ -642,10 +654,10 @@ maas:
 controller:
   show-intent-param:
     enable: ${controller_show-intent-param_enable:false}
-  init-dsl: ${controller_init_dsl:{"id":"","name":"","description":"多Agent控制器","inputs":[],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"多Agent控制器","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"","specify_workflow_order":false,"global_intents":[]}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
-  init-dsl-en: ${controller_init_dsl_en:{"id":"","name":"","description":"Multi-Agent Controller","inputs":[],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"Multi-Agent Controller","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"","specify_workflow_order":false,"global_intents":[]}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
-  init-intent-dsl: ${controller_init_intent_dsl:{"id":"","name":"","description":"多Agent控制器","inputs":[{"name":"workflowSequence","type":"array","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"activeWorkflows","type":"array","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"intent","type":"string","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""}}],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"多Agent控制器","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"","specify_workflow_order":false,"global_intents":[]}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
-  init-intent-dsl-en: ${controller_init_intent_dsl_en:{"id":"","name":"","description":"Multi-Agent Controller","inputs":[{"name":"workflowSequence","type":"array","description":"","required":true,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"activeWorkflows","type":"array","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"intent","type":"string","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""}}],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"Multi-Agent Controller","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"","specify_workflow_order":false,"global_intents":[]}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
+  init-dsl: ${controller_init_dsl:{"id":"","name":"","description":"多Agent控制器","inputs":[],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"多Agent控制器","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"","specify_workflow_order":false,"global_intents":[],"temperature":0.5,"top_p":0.5,"agents":[],"intent":{"name":"","description":""}}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
+  init-dsl-en: ${controller_init_dsl_en:{"id":"","name":"","description":"Multi-Agent Controller","inputs":[],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"Multi-Agent Controller","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"You are a multi workflow controller with the ability to accurately analyze user intent and select the most suitable workflow from the configured business workflows. If you are unable to select a workflow, you will return 'none_exist'","specify_workflow_order":false,"global_intents":[],"temperature":0.5,"top_p":0.5,"agents":[],"intent":{"name":"","description":""}}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
+  init-intent-dsl: ${controller_init_intent_dsl:{"id":"","name":"","description":"多Agent控制器","inputs":[{"name":"workflowSequence","type":"array","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"activeWorkflows","type":"array","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"intent","type":"string","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""}}],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"多Agent控制器","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"","specify_workflow_order":false,"global_intents":[],"temperature":0.5,"top_p":0.5,"agents":[],"intent":{"name":"","description":""}}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
+  init-intent-dsl-en: ${controller_init_intent_dsl_en:{"id":"","name":"","description":"Multi-Agent Controller","inputs":[{"name":"workflowSequence","type":"array","description":"","required":true,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"activeWorkflows","type":"array","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""},"schema":{"name":"","type":"string"}},{"name":"intent","type":"string","description":"","required":false,"source":"system","value":{"type":"generated","content":null,"hint":"","default":""}}],"global_variables":[],"nodes":[{"id":"controller","type":"Controller","name":"Multi-Agent Controller","configs":{"enable_history":false,"max_iteration":9,"chat_history_max_turn":"10","workflows":[],"prompt":"You are a multi workflow controller with the ability to accurately analyze user intent and select the most suitable workflow from the configured business workflows. If you are unable to select a workflow, you will return 'none_exist'","specify_workflow_order":false,"global_intents":[],"temperature":0.5,"top_p":0.5,"agents":[],"intent":{"name":"","description":""}}}],"edges":[],"layouts":{"controller":{"x":190,"y":300}}}}
   init-ir: ${controller_init_ir:{"schemaVersion":"0.6.0","agentVersion":"0.6.0","configs":{"mode":"Controller","specify_workflow_order":false,"agents":[],"workflows":[],"global_intents":[],"global_variables":[]}}}
   unique-workflow-types: ${controller_unique_workflow_types:Normal}
   global-intend-default-action: ${controller_global_intend_default_action:WaitUserInput}

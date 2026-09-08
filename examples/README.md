@@ -7,6 +7,7 @@
 | 示例 | 说明 |
 |------|------|
 | [quick-chat](quick-chat/) | 通过 REST API 调用已发布的智能体，发送问题并接收回复 |
+| [custom-password-provider](custom-password-provider/) | 自定义数据库密码获取实现，对接 KMS、Vault、K8s Secret 等外部凭据管理服务 |
 
 ## 约定
 

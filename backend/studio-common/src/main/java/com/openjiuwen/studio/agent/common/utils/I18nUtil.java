@@ -29,7 +29,13 @@ public class I18nUtil {
      * @return 异常信息
      */
     public String getMessage(String code, Object... args) {
-        return messageSource.getMessage(code, args, LanguageUtils.getLanguageLocale());
+        // 防御性兜底：i18n 资源缺失时返回 code 本身，避免 MessageSource 抛 NoSuchMessageException
+        // 导致全局异常处理器自己崩掉、客户端收不到可读错误（表现为"空响应/语法错误"）。
+        try {
+            return messageSource.getMessage(code, args, code, LanguageUtils.getLanguageLocale());
+        } catch (Exception e) {
+            return code;
+        }
     }
 
     /**
@@ -40,7 +46,11 @@ public class I18nUtil {
      */
     public String getMessage(StudioError studioError, Object... args) {
         String code = "openjiuwen." + studioError.getModule().getSubCode() + studioError.getCode();
-        return messageSource.getMessage(code, args, LanguageUtils.getLanguageLocale());
+        try {
+            return messageSource.getMessage(code, args, code, LanguageUtils.getLanguageLocale());
+        } catch (Exception e) {
+            return code;
+        }
     }
 
     /**

@@ -40,6 +40,7 @@ from openjiuwen.core.session.stream.base import (
     BaseStreamMode,
 )
 from openjiuwen.core.session.workflow import create_workflow_session
+from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 
 # 映射：调试事件返回 → service
 _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
@@ -133,7 +134,7 @@ class WorkflowWrapper:
         envs = self._build_envs(params)
         if agent_id:
             envs["_AGENT_ID"] = agent_id
-        session = create_workflow_session(session_id=session_id, envs=envs)
+        session = create_workflow_session_with_trace(session_id=session_id, envs=envs)
         self._prepare_runtime_context(params)
 
         # 构建对话历史（每次调用都从 params 重建，因为 _chat_history 是本地字段，不存储在 checkpointer 中）

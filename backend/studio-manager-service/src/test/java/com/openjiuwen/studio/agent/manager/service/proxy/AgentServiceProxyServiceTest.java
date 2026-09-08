@@ -369,7 +369,7 @@ class AgentServiceProxyServiceTest {
 
             com.alibaba.fastjson.JSONObject expectedResult = new com.alibaba.fastjson.JSONObject();
             expectedResult.put("data", "embedding-result");
-            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(),
+            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(), anyString(),
                 any(EmbeddingRequest.class), any(), any())).thenReturn(expectedResult);
 
             EmbeddingRequest request = new EmbeddingRequest();
@@ -420,7 +420,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.InternalServerError(
                 "internal error", mockFeignRequest(), errorBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(),
+            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(), anyString(),
                 any(EmbeddingRequest.class), any(), any())).thenThrow(feignException);
 
             EmbeddingRequest request = new EmbeddingRequest();
@@ -467,7 +467,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.BadGateway(
                 "bad gateway", mockFeignRequest(), badBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(),
+            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(), anyString(),
                 any(EmbeddingRequest.class), any(), any())).thenThrow(feignException);
 
             EmbeddingRequest request = new EmbeddingRequest();
@@ -501,7 +501,7 @@ class AgentServiceProxyServiceTest {
 
             com.alibaba.fastjson.JSONObject expectedResult = new com.alibaba.fastjson.JSONObject();
             expectedResult.put("results", "rerank-result");
-            when(builderClient.rerank(anyString(), anyString(), anyString(),
+            when(builderClient.rerank(anyString(), anyString(), anyString(), anyString(),
                 any(RankDocumentsRequest.class), any(), any())).thenReturn(expectedResult);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
@@ -556,7 +556,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.InternalServerError(
                 "internal error", mockFeignRequest(), errorBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.rerank(anyString(), anyString(), anyString(),
+            when(builderClient.rerank(anyString(), anyString(), anyString(), anyString(),
                 any(RankDocumentsRequest.class), any(), any())).thenThrow(feignException);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
@@ -605,7 +605,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.ServiceUnavailable(
                 "service unavailable", mockFeignRequest(), badBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.rerank(anyString(), anyString(), anyString(),
+            when(builderClient.rerank(anyString(), anyString(), anyString(), anyString(),
                 any(RankDocumentsRequest.class), any(), any())).thenThrow(feignException);
 
             RankDocumentsRequest request = new RankDocumentsRequest();

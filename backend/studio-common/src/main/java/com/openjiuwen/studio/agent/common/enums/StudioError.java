@@ -2021,11 +2021,6 @@ public enum StudioError {
     MD_VIDEO_GENERATION_TASK_NOT_EXIST(BAD_REQUEST, MODEL, "1071"),
 
     /**
-     * 模型导入文件行签名校验失败
-     */
-    MODEL_IMPORT_SIGNATURE_INVALID(BAD_REQUEST, MODEL, "1080"),
-
-    /**
      * 模型导入文件格式非法（非JSONL / 行解析失败 / payload缺失）
      */
     MODEL_IMPORT_FORMAT_INVALID(BAD_REQUEST, MODEL, "1081"),
@@ -3761,6 +3756,11 @@ public enum StudioError {
      * 获取提示词优化任务详情失败
      */
     GET_PROMPT_TASK_DETAIL_FAILED(BAD_REQUEST, PE, "1185"),
+
+    /**
+     * 提示词优化任务在执行引擎中已丢失（被清理或重启后无持久化兜底）
+     */
+    JOB_NOT_FOUND_IN_BUILDER(BAD_REQUEST, PE, "1186"),
 
 
 

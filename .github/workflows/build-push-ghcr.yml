@@ -1,9 +1,7 @@
 name: Build & Push Docker Images
 
 on:
-  push:
-    branches:
-      - studio-2.0
+  workflow_dispatch:
 
 concurrency:
   group: build-push-${{ github.ref }}
@@ -15,8 +13,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout code
+      - name: Checkout code (studio-2.0)
         uses: actions/checkout@v4
+        with:
+          ref: studio-2.0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -237,7 +237,7 @@ jobs:
           SERVICE: ${{ matrix.service }}
         run: |
           set -euo pipefail
-          BUILD_TS=$(date +"%Y%m%d%H%M%S")
+          BUILD_TS=$(TZ=Asia/Shanghai date +"%Y%m%d%H%M%S")
           SRC="${REPOSITORY}/${SERVICE}:latest"
           AMD64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
           ARM64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')

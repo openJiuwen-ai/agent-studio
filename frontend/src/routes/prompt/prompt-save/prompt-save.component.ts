@@ -132,6 +132,9 @@ export class PromptSaveComponent {
     this.savePromptForm.controls.type.setValue(this.promptSaveInitInfo.type === 'multi' ? this.promptTypeOptions[1].value : this.promptTypeOptions[0].value);
     this.promptTypeSelected = this.savePromptForm.value.type;
 
+    // 预填值后立即标记为 touched，使不合法的预填名称能展示校验错误提示
+    this.savePromptForm.controls.name.markAsTouched();
+
     this.variables = this.promptSaveInitInfo?.variableList ?? [];
     this.initVariables = this.variables;
     this.cdr.markForCheck();

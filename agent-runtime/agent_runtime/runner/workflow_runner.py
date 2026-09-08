@@ -33,6 +33,7 @@ from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactor
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.workflow import create_workflow_session
+from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 
 from agent_runtime.common.logging_context import apply_template_masking_patch
 
@@ -200,9 +201,18 @@ class WorkflowRunner:
             workflow_logger.error(
                 f"Failed to load IR from {ir_path}: {e}", exc_info=True
             )
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = "Failed to load workflow configuration"
+            else:
+                raw_msg = getattr(e, "message", None) or "Failed to load workflow configuration"
             yield {
                 "event": "error",
-                "data": {"response": "Failed to load workflow configuration"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
@@ -255,7 +265,7 @@ class WorkflowRunner:
 
         # 4. 创建 session，使用固定的 session_id 以支持中断恢复
         t_session = time.perf_counter()
-        session = create_workflow_session(session_id=session_id)
+        session = create_workflow_session_with_trace(session_id=session_id)
         performance_logger.info(
             f"session_creation|{round((time.perf_counter() - t_session) * 1000)}"
         )
@@ -568,9 +578,18 @@ class WorkflowRunner:
             workflow_logger.error(
                 f"Failed to load IR from {ir_path}: {e}", exc_info=True
             )
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = "Failed to load workflow configuration"
+            else:
+                raw_msg = getattr(e, "message", None) or "Failed to load workflow configuration"
             yield {
                 "event": "error",
-                "data": {"response": "Failed to load workflow configuration"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
@@ -584,9 +603,18 @@ class WorkflowRunner:
             )
         except Exception as e:
             workflow_logger.error(f"Failed to create component: {e}", exc_info=True)
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = f"Failed to create component: {e}"
+            else:
+                raw_msg = getattr(e, "message", None) or f"Failed to create component: {e}"
             yield {
                 "event": "error",
-                "data": {"response": f"Failed to create component: {e}"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
@@ -622,9 +650,21 @@ class WorkflowRunner:
             workflow_logger.error(
                 f"Debug component execution failed: {e}", exc_info=True
             )
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = f"Debug component execution failed: {e}"
+            else:
+                raw_msg = (
+                    getattr(e, "message", None)
+                    or f"Debug component execution failed: {e}"
+                )
             yield {
                 "event": "error",
-                "data": {"response": f"Debug component execution failed: {e}"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),

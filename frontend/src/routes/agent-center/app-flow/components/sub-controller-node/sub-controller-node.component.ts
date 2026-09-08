@@ -195,6 +195,24 @@ export class SubControllerNodeComponent
     window.open(newurl, '_blank');
   }
 
+  /**
+   * 点击子控制器节点面板中的工作流条目，跳转工作流详情页。
+   * 子控制器为共享资源（节点 configs.fromShare 已由后端 markSharedNodes 标记）时，
+   * 其内嵌工作流均为跨空间引用，携带 fromShare=true 进入只读页；
+   * 条目自身标记优先（如未来后端对嵌套 configs 也标记 fromShare）。
+   */
+  public onClickSubWorkflow(item: any) {
+    if (!item?.id) {
+      return;
+    }
+    const prefixUrl = window.location.href?.split('/home')[0];
+    const fromShare = item.configs?.fromShare || this.nodeInfo.configs?.fromShare || '';
+    const queryParams = `?id=${item.id}&versionId=${item.configs?.version_id ?? ''}&workspace_id=${this.workspaceId}&fromShare=${fromShare}`;
+
+    const newurl = `${prefixUrl}/home/agent-center/app-flow/flow${queryParams}`;
+    window.open(newurl, '_blank');
+  }
+
   public onClickAgentsflowId() {
     const config = this.nodeInfo.configs;
     this.clipboard.copy(config.id);

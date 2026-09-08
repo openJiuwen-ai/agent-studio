@@ -19,6 +19,7 @@ from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.session.agent import Session, create_agent_session
+from agent_runtime.common.trace_compat import create_agent_session_with_trace
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.single_agent.agents.react_agent import ReActAgent, ReActAgentConfig
 from openjiuwen.core.single_agent.schema.agent_card import AgentCard
@@ -756,7 +757,7 @@ class ReActAgentRunner:
 
         try:
             session_id = req.conversation_id or "default_session"
-            session = create_agent_session(session_id=session_id, card=agent.card)
+            session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
             await session.pre_run(inputs=inputs)
             # 提取 openjiuwen tracer 并注入到 inputs 中
             inputs.setdefault("_jiuwen_runtime_kwargs", {})["session"] = session

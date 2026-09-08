@@ -1,4 +1,5 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import json
 import os
 from dataclasses import dataclass, field
 from enum import Enum
@@ -282,6 +283,14 @@ class RequestParamsCreator:
         self, api_inputs_params: List[Param], inputs: dict
     ):
         """缺少的required参数填充默认值"""
+        if isinstance(inputs, str):
+            try:
+                inputs = json.loads(inputs)
+            except (ValueError, TypeError) as e:
+                raise exception.PluginCommonException(
+                    code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                    message=f"参数值应为合法的JSON字符串，实际收到: {inputs[:100]}",
+                ) from e
         if not isinstance(inputs, dict):
             raise exception.PluginCommonException(
                 code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,

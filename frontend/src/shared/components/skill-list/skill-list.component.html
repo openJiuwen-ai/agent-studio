@@ -94,6 +94,7 @@
                  nz-tooltip
                  [nzTooltipTitle]="inputParamsTipTmpl2"
                  nzTooltipColor="#fff"
+                 [nzTooltipOverlayStyle]="{ maxWidth: '320px' }"
         />
         <nz-icon *ngIf="(type === 'workflow' || type === 'mcp') && curAgentModeCode !== AGENT_MODE_CODE.PLANNING_MODE"
                  nzType="setting"

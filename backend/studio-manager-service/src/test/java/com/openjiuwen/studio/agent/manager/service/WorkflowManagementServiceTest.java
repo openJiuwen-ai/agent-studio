@@ -953,6 +953,59 @@ class WorkflowManagementServiceTest {
     }
 
     @Test
+    void testDeleteWorkflowVersion_SharedVersion_throwsCannotDelete() {
+        // 已共享到资产广场的版本不允许删除——应抛 SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+
+            doThrow(new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY))
+                .when(shareResourceManagerService).checkVersionSharedOrNot(eq("wf-1"), eq("v1"));
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "v1", "w1"));
+            assertEquals(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY, ex.getErrorCode());
+            // 共享校验抛错后不应走到删除逻辑
+            verify(releaseVersionMapper, never()).deleteByPrimaryKey(any());
+            verify(agentCommonService, never()).softDeleteReleaseVersionById(any());
+        }
+    }
+
+    @Test
+    void testDeleteWorkflowVersion_callsVersionSharedCheck() {
+        // 未共享版本应顺利调用删除流程，且校验方法以正确参数被调用
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-1");
+            releaseVersion.setDslPath("dsl/path");
+            releaseVersion.setIrPath("ir/path");
+            releaseVersion.setAppId("wf-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+            when(releaseVersionMapper.selectByAppId(anyString())).thenReturn(Collections.emptyList());
+
+            workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "v1", "w1");
+
+            verify(shareResourceManagerService).checkVersionSharedOrNot("wf-1", "v1");
+        }
+    }
+
+    @Test
     void testDeleteWorkflowVersion_SoftDelete_AllVersionsDeleted() {
         try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
             ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");

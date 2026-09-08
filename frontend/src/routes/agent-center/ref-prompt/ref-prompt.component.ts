@@ -276,6 +276,7 @@ export class RefPromptComponent implements OnInit {
 
   public hasNextPage = true;
   public controller = new AbortController();
+  private promptRequestId = 0;
   public searchItems: any[] = [
     {
       label: this.i18n.transform('industry'),
@@ -373,6 +374,7 @@ export class RefPromptComponent implements OnInit {
   }
 
   public async getPrompts(conf: { isScroll: boolean } = { isScroll: false }) {
+    const reqId = ++this.promptRequestId;
     try {
       if (this.controller) {
         this.controller.abort();
@@ -420,6 +422,9 @@ export class RefPromptComponent implements OnInit {
       }
 
       const { data, has_next_page, count } = await this.promptServ.getPromptTemplateListAsync(params, this.controller.signal, query);
+      if (reqId !== this.promptRequestId) {
+        return;
+      }
       this.hasNextPage = has_next_page;
       if (conf?.isScroll) {
         this.tmpls.push(...data);
@@ -435,7 +440,9 @@ export class RefPromptComponent implements OnInit {
         this.curTmpl = this.tmpls[0];
       }
     } finally {
-      this.isLoading = false;
+      if (reqId === this.promptRequestId) {
+        this.isLoading = false;
+      }
     }
   }
 
@@ -516,12 +523,13 @@ export class RefPromptComponent implements OnInit {
 
   changeAppTab(tab: AssertSquareTagType) {
     if (tab.active) {
-      this.tmpls.length = 0;
-      if (tab.id === 'all') {
-        this.selectedTagId = '';
-      } else {
-        this.selectedTagId = tab.id;
+      const newTagId = tab.id === 'all' ? '' : tab.id;
+      if (this.selectedTagId === newTagId) {
+        return;
       }
+      this.tmpls.length = 0;
+      this.curTmpl = null;
+      this.selectedTagId = newTagId;
     }
     this.getPrompts().then();
   }

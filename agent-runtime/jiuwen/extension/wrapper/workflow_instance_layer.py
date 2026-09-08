@@ -6,6 +6,7 @@
 from types import SimpleNamespace
 from typing import Any, AsyncGenerator, NamedTuple, Union
 
+from jiuwen.common.log.base import logger
 from jiuwen.controller.common.message import Message
 from jiuwen.extension.wrapper.message_converter import WorkflowMessageConverter
 from jiuwen.extension.wrapper.workflow_wrapper import WorkflowWrapper
@@ -103,9 +104,47 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         else:
             self._runtime_context[key] = value
 
-    async def cleanup(self) -> None:
-        """Release workflow execution resources."""
-        return None
+    async def cleanup(self, preserve_state: bool = False) -> None:
+        """Release workflow execution resources.
+
+        Args:
+            preserve_state: True 时保留 openjiuwen session 的 checkpoint state
+                （供下一轮中断恢复使用）；False 时清理 Redis 中该 session 的
+                残留 state，避免下一轮首发执行触发 111121
+                （workflow state exists but non-interactive input and cleanup is disabled）。
+        """
+        if preserve_state or not self.session_id:
+            return
+        try:
+            from openjiuwen.core.session.checkpointer.checkpointer import (
+                CheckpointerFactory,
+            )
+
+            checkpointer = CheckpointerFactory.get_checkpointer()
+            release_workflow = getattr(checkpointer, "release_workflow", None)
+            if release_workflow is not None:
+                # 只清理本工作流的残留 state。不能用 session 级 release()——
+                # 同一会话可能还有其他中断中的工作流（含子工作流 scoped NS），
+                # session 级释放会把它们的 checkpoint 一并清掉，导致之后无法
+                # 回到中断入口。正常完成/异常路径 post_workflow_execute 已做过
+                # 按工作流精确清理，这里只是兜底清残留。
+                await release_workflow(self.session_id, self.workflow_id)
+                logger.info(
+                    f"cleanup released checkpoint state for workflow "
+                    f"{self.workflow_id}, session: {self.session_id}"
+                )
+            else:
+                # 非 FastRedisCheckpointer：post_workflow_execute 已按工作流
+                # 精确清理，跳过（session 级 release 会误删其他中断工作流）。
+                logger.info(
+                    f"cleanup skipped per-workflow release for workflow "
+                    f"{self.workflow_id}, session: {self.session_id}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"cleanup release checkpoint state failed for session "
+                f"{self.session_id}: {e}"
+            )
 
     def mark_interrupted(self) -> None:
         """Mark current workflow execution as interrupted."""

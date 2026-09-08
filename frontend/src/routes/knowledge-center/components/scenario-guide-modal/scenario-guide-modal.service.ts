@@ -142,12 +142,19 @@ export class ScenarioGuideModalService {
     }
 
     const relations = formValue[SCENARIO_FIELD_ID.DEPENDENCY_LIST];
-    if (relations) {
-      modalData.relations = relations.map((item) => ({
-        type: 'dependency',
-        src: item[SCENARIO_FIELD_ID.DEPEND_ITEM].priority,
-        tgt: item[SCENARIO_FIELD_ID.BE_DEPENDED_ITEM].priority,
-      }));
+    if (relations?.length) {
+      // 防御：过滤掉依赖项/被依赖项未选择完整的行，避免空值取 priority 报错
+      modalData.relations = relations
+        .filter(
+          (item) =>
+            item?.[SCENARIO_FIELD_ID.DEPEND_ITEM] &&
+            item?.[SCENARIO_FIELD_ID.BE_DEPENDED_ITEM],
+        )
+        .map((item) => ({
+          type: 'dependency',
+          src: item[SCENARIO_FIELD_ID.DEPEND_ITEM].priority,
+          tgt: item[SCENARIO_FIELD_ID.BE_DEPENDED_ITEM].priority,
+        }));
     }
 
     return modalData;

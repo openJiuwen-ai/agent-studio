@@ -77,11 +77,19 @@ public class JiuwenEventProcessor {
     @Value("${redis.max_debug_msg_size:10000}")
     private int maxDebugMsgLength;
 
+    @Value("${redis.max-single-message-length:-1}")
+    private int maxSingleMessageLength;
+
     private static int maxMsgLength = 10000;
+
+    private static int maxSingleMsgLen = -1;
+
+    private static final String TRUNCATED_MARK = "[TRUNCATED]";
 
     @PostConstruct
     public void postConstruct() {
         JiuwenEventProcessor.maxMsgLength = maxDebugMsgLength;
+        JiuwenEventProcessor.maxSingleMsgLen = maxSingleMessageLength;
     }
 
     /**
@@ -115,7 +123,73 @@ public class JiuwenEventProcessor {
                 log.warn("Fix set variable input fail.");
             }
             eventList.add(jiuwenEvent);
+            messageContentClipping(jiuwenEvent);
         }
+    }
+
+    /**
+     * 对 JiuwenEvent 中的所有消息字段做截断
+     * 当 maxSingleMsgLen <= 0 时不截断
+     *
+     * @param event 九问事件
+     */
+    static void messageContentClipping(JiuwenEvent event) {
+        if (maxSingleMsgLen <= 0) {
+            return;
+        }
+        if (event == null || event.getData() == null) {
+            return;
+        }
+        JiuwenEventData data = event.getData();
+        if (data.getInputs() != null) {
+            singleMessageMapClipping(data.getInputs());
+        }
+        if (data.getOutputs() != null) {
+            singleMessageMapClipping(data.getOutputs());
+        }
+        if (data.getMetaData() != null) {
+            singleMessageMapClipping(data.getMetaData());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void singleMessageMapClipping(Map<String, Object> data) {
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof String) {
+                entry.setValue(truncateWithMark((String) value, maxSingleMsgLen));
+            } else if (value instanceof Map) {
+                singleMessageMapClipping((Map<String, Object>) value);
+            } else if (value instanceof List) {
+                singleMessageListClipping((List<Object>) value);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void singleMessageListClipping(List<Object> data) {
+        int idx = 0;
+        for (Object value : data) {
+            if (value instanceof String) {
+                data.set(idx, truncateWithMark((String) value, maxSingleMsgLen));
+            } else if (value instanceof Map) {
+                singleMessageMapClipping((Map<String, Object>) value);
+            } else if (value instanceof List) {
+                singleMessageListClipping((List<Object>) value);
+            }
+            ++idx;
+        }
+    }
+
+    private static String truncateWithMark(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        int cutLength = maxLength - TRUNCATED_MARK.length();
+        if (cutLength <= 0) {
+            return TRUNCATED_MARK;
+        }
+        return value.substring(0, cutLength) + TRUNCATED_MARK;
     }
 
     /**

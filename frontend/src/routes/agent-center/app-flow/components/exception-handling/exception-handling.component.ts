@@ -115,6 +115,10 @@ export class ExceptionHandlingComponent implements OnInit, OnDestroy {
   minTimeout = 0.1;
 
   onTimeoutChange() {
+    if (this.exception_process.timeout == null) {
+      this.changeValue.emit();
+      return;
+    }
     if (this.exception_process.timeout > this.maxTimeout) {
       this.exception_process.timeout = this.maxTimeout;
     }

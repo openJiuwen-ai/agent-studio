@@ -866,7 +866,8 @@ export class PromptEditorComponent {
           }
         } else if (node.localName === 'div') {
           const subResult = this.html2prompt(node);
-          if (subResult === '\n') {
+          if (subResult === '') {
+          } else if (subResult === '\n') {
             // 空行不要重复加换行符
             result += '\n';
           } else {
@@ -1338,6 +1339,7 @@ export class PromptEditorComponent {
           this.editorContainer.element.nativeElement,
           newLine,
         );
+        this.rebuildPrompt();
       }
     }, 0);
   }

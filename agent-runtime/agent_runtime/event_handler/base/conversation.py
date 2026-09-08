@@ -7,6 +7,7 @@ Redis key格式: {conversationId}_{instanceId}_{userId}[_{versionId}]
 """
 
 import json
+import logging
 import os
 import time
 import traceback
@@ -99,6 +100,11 @@ class ConversationManager:
                 if raw is not None:
                     data = raw.decode("utf-8") if isinstance(raw, bytes) else raw
                     conversation = json.loads(data)
+                    # manager Redisson JsonJacksonCodec 对 String 双重编码，redis-py 单次解码得 str。
+                    # 若结果是 str 再解一次（仅读侧兜底，不碰 update_conversation 写回路径，
+                    # 避免 runtime 写单编码 value 破坏 manager 后续 JsonJacksonCodec 读）。
+                    if isinstance(conversation, str):
+                        conversation = json.loads(conversation)
                     # 刷新TTL
                     await redis.expire(key, DEFAULT_TTL)
                     return conversation
@@ -179,9 +185,10 @@ class ConversationManager:
                     size += len(content)
 
                 if size > MAX_MESSAGE_SIZE:
-                    workflow_logger.warning(
-                        f"Conversation message size exceed limit. size={size} limit={MAX_MESSAGE_SIZE}"
-                    )
+                    if workflow_logger.logger().isEnabledFor(logging.WARNING):
+                        workflow_logger.warning(
+                            f"Conversation message size exceed limit. size={size} limit={MAX_MESSAGE_SIZE}"
+                        )
                     break
                 offset += 1
 

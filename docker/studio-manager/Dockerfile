@@ -6,7 +6,7 @@ RUN echo "Built on $BASE_IMAGE" \
        elif [ -f /etc/apt/sources.list ]; then \
          sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
        fi \
-    && apt-get update && apt-get install -y vim \
+    && apt-get update && apt-get install -y vim unzip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 注：此处修改需同步修改studio-manager.yaml中的runAsUser、runAsGroup、fsGroup

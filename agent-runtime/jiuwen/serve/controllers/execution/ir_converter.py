@@ -3,6 +3,7 @@
 
 """This module contains an IRConverter."""
 
+import inspect
 import json
 import logging
 import os
@@ -749,12 +750,20 @@ class _LoopPassThroughComponent(WorkflowComponent):
 class _ParallelInvokeLaneDoneComponent(WorkflowComponent):
     """Control marker emitted when one parallel lane has completed."""
 
+    def skip_trace(self) -> bool:
+        return True
+
+
     async def invoke(self, inputs, session, context):
         return {}
 
 
 class _ParallelTransformLaneDoneComponent(WorkflowComponent):
     """Stream-preserving control marker for a completed parallel lane."""
+
+    def skip_trace(self) -> bool:
+        return True
+
 
     async def transform(
         self, inputs: Any, session: Any, context: Any
@@ -800,6 +809,10 @@ class _LaneSentinelComponent(WorkflowComponent):
     does not route it -- the LLM field resolves to empty, matching the fact
     that the LLM branch did not execute.
     """
+
+    def skip_trace(self) -> bool:
+        return True
+
 
     async def stream(self, inputs: Any, session: Any, context: Any) -> AsyncIterator[Any]:
         # One empty data frame: its first_frame=True arrival starts the
@@ -1128,22 +1141,24 @@ class IRConverter:
         agent_id_in_config = f"{agent_id}_{agent_version}"
         plugin_irs = ir_data.get("configs", {}).get("plugins")
         plugins = None
-        logger.info(
-            f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
-            f"agent_id={agent_id}, "
-            f"configs keys="
-            f"{list(ir_data.get('configs', {}).keys()) if isinstance(ir_data.get('configs'), dict) else 'N/A'}"
-        )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
+                f"agent_id={agent_id}, "
+                f"configs keys="
+                f"{list(ir_data.get('configs', {}).keys()) if isinstance(ir_data.get('configs'), dict) else 'N/A'}"
+            )
         if plugin_irs:
             plugins = []
             for idx, plugin_ir in enumerate(plugin_irs):
                 try:
                     plugin = PluginIRConverter.ir_to_plugin(plugin_ir, agent_id, conversation_id)
                     plugins.append(plugin)
-                    logger.info(
-                        f"[PluginLoad] create_agent_config: "
-                        f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
-                    )
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(
+                            f"[PluginLoad] create_agent_config: "
+                            f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
+                        )
                 except Exception as e:
                     plugin_name = plugin_ir.get("name", plugin_ir.get("id", f"index_{idx}"))
                     logger.error(
@@ -1230,10 +1245,13 @@ class IRConverter:
             # check if current ir_data has child agents
             if current_ir_data.get("configs", {}).get("agents"):
                 for child in current_ir_data.get("configs", {}).get("agents"):
-                    logger.info(
-                        f"loading ir data of {child.get('id')}",
-                        simple_log="loading ir data of child",
-                    )
+                    # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "loading ir data of %s",
+                            child.get("id"),
+                            simple_log="loading ir data of child",
+                        )
                     # 支持从父Agent修改子Agent描述
                     parent_description = child.get("description", "")
                     child_ir_data = await async_ir_load(child.get("ir_path"))
@@ -1681,6 +1699,18 @@ class IRConverter:
                 # come from stream sources; otherwise use regular INVOKE path.
                 if target_type in IRConverter._AGGREGATE_TYPES:
                     continue
+                # A message that references only batch values (start userFields /
+                # memory defaults) must stay on the regular INVOKE path even when
+                # a stream-capable LLM sits upstream. Otherwise its batch $refs
+                # get wrapped as stream generators that starve (empty render,
+                # default values disappear).
+                if (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                ):
+                    continue
                 stream_input_target_ids.add(target)
 
         parallel_stream_done_inputs: dict[str, dict] = {}
@@ -1698,6 +1728,18 @@ class IRConverter:
                 source in ir_stream_source_ids
                 and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
                 and target_type not in IRConverter._AGGREGATE_TYPES
+                # Keep in sync with the message guard in stream_input_target_ids
+                # collection and _is_stream_connection: a message that references
+                # only batch values (start userFields / memory defaults) must not
+                # be treated as a streaming join terminal, otherwise its lane-done
+                # is wired as TRANSFORM while phase-2 connects a regular edge ->
+                # GRAPH_VERTEX_STREAM_CALL_ERROR at runtime.
+                and not (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                )
             )
             if is_stream_join_edge:
                 parallel_stream_done_inputs[done_node] = {
@@ -1922,6 +1964,7 @@ class IRConverter:
             end = pending["end"]
             inputs_schema = pending["inputs_schema"]
             is_stream_out = pending["is_stream_out"]
+            _deferred_node_name = pending.get("node_name")
             batch_schema, stream_schema = _split_inputs_schema_by_source(
                 inputs_schema, ir_stream_source_ids
             )
@@ -1955,6 +1998,8 @@ class IRConverter:
                 set_end_kwargs["inputs_schema"] = inputs_schema
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
+            if _deferred_node_name is not None and "name" in inspect.signature(workflow.set_end_comp).parameters:
+                set_end_kwargs["name"] = _deferred_node_name
 
             workflow.set_end_comp(node_id, end, **set_end_kwargs)
 
@@ -2471,6 +2516,7 @@ class IRConverter:
             "timeout": _timeout,
             "max_retries": _max_retries,
             "exception_config": exception_config,
+            "node_name": node.get("name"),
         }
         if parallel_join_nodes and node_id in parallel_join_nodes:
             _comp_reg["wait_for_all"] = True
@@ -2540,9 +2586,10 @@ class IRConverter:
         _attach_node_def(component, node, configs)
 
         if resolved_type == "jiuwen.start":
-            workflow.set_start_comp(
-                node_id, component, inputs_schema=_build_start_inputs_schema(node)
-            )
+            _start_kwargs = dict(inputs_schema=_build_start_inputs_schema(node))
+            if "name" in inspect.signature(workflow.set_start_comp).parameters:
+                _start_kwargs["name"] = node.get("name")
+            workflow.set_start_comp(node_id, component, **_start_kwargs)
             return component
 
         if resolved_type in {"jiuwen.branch", "jiuwen.intentDetection"}:
@@ -2555,6 +2602,7 @@ class IRConverter:
                         "timeout": _timeout,
                         "max_retries": _max_retries,
                         "exception_config": exception_config,
+                        "node_name": node.get("name"),
                     }
                 )
                 return component
@@ -2588,17 +2636,19 @@ class IRConverter:
                         "end": component,
                         "inputs_schema": inputs_schema,
                         "is_stream_out": bool(configs.get("isStreamOut")),
+                        "node_name": node.get("name"),
                     }
                 )
             elif bool(configs.get("isStreamOut")):
-                workflow.set_end_comp(
-                    node_id,
-                    component,
-                    stream_inputs_schema=inputs_schema,
-                    response_mode="streaming",
-                )
+                _end_kwargs = dict(stream_inputs_schema=inputs_schema, response_mode="streaming")
+                if "name" in inspect.signature(workflow.set_end_comp).parameters:
+                    _end_kwargs["name"] = node.get("name")
+                workflow.set_end_comp(node_id, component, **_end_kwargs)
             else:
-                workflow.set_end_comp(node_id, component, inputs_schema=inputs_schema)
+                _end_kwargs = dict(inputs_schema=inputs_schema)
+                if "name" in inspect.signature(workflow.set_end_comp).parameters:
+                    _end_kwargs["name"] = node.get("name")
+                workflow.set_end_comp(node_id, component, **_end_kwargs)
             return component
 
         if resolved_type == "jiuwen.message":
@@ -2892,6 +2942,7 @@ class IRConverter:
                 timeout=pending["timeout"],
                 max_retries=pending["max_retries"],
                 exception_config=pending["exception_config"],
+                node_name=pending.get("node_name"),
             )
 
     _AGGREGATE_TYPES = frozenset(
@@ -2985,8 +3036,37 @@ class IRConverter:
             source_id in stream_source_ids
             and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
         ):
+            # A message referencing only batch values (start userFields / memory
+            # defaults) stays on the regular edge + INVOKE path. A stream edge
+            # would wrap its batch $refs as stream generators that starve
+            # (empty render, default values disappear).
+            if (
+                target_type == "jiuwen.message"
+                and not IRConverter._message_schema_has_stream_ref(
+                    target_node, stream_source_ids
+                )
+            ):
+                return False
             return True
         return False
+
+    @staticmethod
+    def _message_schema_has_stream_ref(
+        target_node: dict, stream_source_ids: set[str]
+    ) -> bool:
+        """True when a ``jiuwen.message`` node references at least one stream source.
+
+        A message only needs the stream-input path (COLLECT) when it actually
+        consumes streamed output from an upstream LLM. When it references only
+        batch values (start userFields / memory defaults), keep it on the
+        regular INVOKE path even if a stream-capable LLM sits upstream —
+        otherwise its batch ``$ref``s get wrapped as stream generators that
+        starve (empty render, default values disappear).
+        """
+        _, stream_schema = _split_inputs_schema_by_source(
+            _convert_schema(target_node.get("inputs") or {}), stream_source_ids
+        )
+        return stream_schema is not None
 
     @staticmethod
     def _add_normal_edge_spec_only(
@@ -3575,10 +3655,14 @@ class IRConverter:
                 mode=child.get("mode", "Controller"),
             )
             child_metadata_list.append(child_metadata)
-            logger.info(
-                f"Added child agent metadata: id={child.get('id')}, mode={child.get('mode')}",
-                simple_log="added child agent metadata",
-            )
+            # routine 元数据添加日志，降级为 DEBUG 并加守卫
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Added child agent metadata: id=%s, mode=%s",
+                    child.get("id"),
+                    child.get("mode"),
+                    simple_log="added child agent metadata",
+                )
         agent_config.child_agents_metadata = child_metadata_list
 
     @staticmethod
@@ -3820,6 +3904,7 @@ def _add_workflow_comp_with_exception(
     stream_inputs_schema=None,
     comp_ability=None,
     wait_for_all: bool | None = None,
+    node_name: str | None = None,
 ) -> None:
     """Register a component on Workflow or LoopGroup.
 
@@ -3835,6 +3920,12 @@ def _add_workflow_comp_with_exception(
         kwargs["comp_ability"] = comp_ability
     if wait_for_all:
         kwargs["wait_for_all"] = True
+    if node_name is not None:
+        # Only pass name if the underlying Workflow supports it (openjiuwen >= 0.1.18)
+        import inspect as _inspect
+        _sig = _inspect.signature(workflow.add_workflow_comp)
+        if "name" in _sig.parameters:
+            kwargs["name"] = node_name
     if isinstance(workflow, LoopGroup):
         workflow.add_workflow_comp(comp_id, component, **kwargs)
     else:

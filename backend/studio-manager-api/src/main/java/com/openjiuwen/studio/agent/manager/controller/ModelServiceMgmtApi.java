@@ -232,7 +232,7 @@ import org.springframework.web.multipart.MultipartFile;
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModelStatusReq body);
 
-    @ApiOperation(value = "", nickname = "exportModelServices", notes = "批量导出模型服务为签名JSONL文件",
+    @ApiOperation(value = "", nickname = "exportModelServices", notes = "批量导出模型服务为 JSONL 文件",
         response = Resource.class, tags = {"ModelServiceMgmt"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "成功", response = Resource.class)
@@ -245,7 +245,7 @@ import org.springframework.web.multipart.MultipartFile;
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModelExportReq body);
 
-    @ApiOperation(value = "", nickname = "previewImportModelServices", notes = "模型导入预检（解析+验签+冲突检测，不落库）",
+    @ApiOperation(value = "", nickname = "previewImportModelServices", notes = "模型导入预检（解析+冲突检测+URL校验，不落库）",
         response = ModelImportPreviewRsp.class, tags = {"ModelServiceMgmt"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "成功", response = ModelImportPreviewRsp.class)
@@ -276,7 +276,7 @@ import org.springframework.web.multipart.MultipartFile;
         MultipartFile file,
         @ApiParam(value = "冲突策略: SKIP-同名跳过 / COVER-同名覆盖", required = false, defaultValue = "SKIP")
         @RequestParam(value = "conflict_strategy", required = false, defaultValue = "SKIP")
-        ModelImportConflictStrategy conflictStrategy,
+        String conflictStrategy,
         @ApiParam(value = "目标供应商id（详情页只导模型导入用，模型重定向挂到该供应商）", required = false)
         @RequestParam(value = "target_provider_id", required = false) String targetProviderId);
 

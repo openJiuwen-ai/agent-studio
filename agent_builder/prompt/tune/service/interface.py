@@ -15,7 +15,7 @@ from agent_builder.adapter.check_info import CheckInfo
 from pydantic import BaseModel, Field, FieldValidationInfo, field_validator
 
 TASK_NAME_LENGTH_MIN_LIMIT = 1
-TASK_NAME_LENGTH_MAX_LIMIT = 32
+TASK_NAME_LENGTH_MAX_LIMIT = 34
 
 TASK_DESC_LENGTH_MIN_LIMIT = 1
 TASK_DESC_LENGTH_MAX_LIMIT = 256

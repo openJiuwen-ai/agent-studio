@@ -17,7 +17,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     fi \
     && DEBIAN_FRONTEND=noninteractive apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       curl tar unzip net-tools wget iptables cron libpq-dev procps gawk hostname sed coreutils findutils bash nginx \
+       curl tar unzip net-tools wget iptables cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 安装 pip Python 依赖（临时安装编译工具链，编译完成后卸载）

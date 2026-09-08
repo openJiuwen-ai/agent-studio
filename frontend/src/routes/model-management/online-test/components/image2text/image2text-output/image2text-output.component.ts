@@ -192,6 +192,20 @@ export class Image2textOutputComponent {
       }, 0);
     }
   }
+
+  /**
+   * 切换"问题详情"展开/收起。
+   * 展开时需主动将新渲染的详情内容滚入可视区：当"展开问题详情"按钮位于滚动容器视口底部
+   * （如上传多张图片、错误内容较长时）时，详情按 *ngIf 渲染到按钮下方，会落到可视区之外，
+   * 且收起时浏览器钳回 scrollTop 已把 isUserScrolling 置为 true，故此处需重置后再滚动。
+   */
+  public toggleErrorDetail(open: boolean) {
+    this.errorIsOpen = open;
+    if (open) {
+      this.isUserScrolling = false;
+      this.scrollToBottom();
+    }
+  }
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
