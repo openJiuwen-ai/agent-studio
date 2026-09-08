@@ -256,8 +256,9 @@ class PlanExecutePlanner(TaskPlanner):
                 f"task_id: {self.task_id}| Aggregated tools from guidelines: {scene_tool_names}"
             )
 
-        # 过滤插件 — plugin.name 格式为 "{plugin_name}{operation_id}"（如 zhinenghuiyizhushoucreate_meeting）
-        # scene_tool_names 中存的是完整 operation 名（前端保存 plugin_display_name + tool_display_name）
+        # 过滤插件 — plugin.name 格式为 "{plugin_pinyin}{operation_name}"（如 zhinenghuiyizhushoucreate_meeting）
+        # scene_tool_names 中存完整 operation 名（前端保存 plugin_display_name + tool_display_name）
+        # Java IR parsePluginConfig 确保 plugin.name 包含 operation 后缀，实现精确匹配
         filtered_tools = []
         for plugin in plugins:
             pname = getattr(plugin, "name", "")

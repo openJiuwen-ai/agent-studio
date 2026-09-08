@@ -288,10 +288,9 @@ class TestGenerateFinalStatusMessageTypeProtection:
 # Scene tool/workflow filtering — 精确匹配 + guideline 聚合 + 操作级隔离
 # ===========================================================================
 """
-修复背景：前端 getSkillOption 原只存 plugin_display_name（插件拼音名），
-丢失 operation 信息，导致 Runtime 精确匹配 tools_count=0。
-根因修复：前端改为保存 plugin_display_name + tool_display_name（完整 operation 名），
-Runtime 恢复精确匹配，实现操作级工具隔离。
+Java IR parsePluginConfig 确保 plugin.name 包含 operation 后缀
+（如 'zhinenghuiyizhushoucreate_meeting'），前端 scene.tools 也存完整 operation 名，
+Runtime 精确匹配实现操作级工具隔离。
 """
 from jiuwen.controller.common.config import SceneConfig, GuidelineConfig
 
@@ -376,17 +375,17 @@ class TestPlannerFilterToolsByScene:  # pylint: disable=protected-access
                             ])
         assert len(planner._filter_tools_by_scene(scene)) == 2
 
-    def test_plugin_name_only_no_longer_matches(self):
-        """旧格式（只有插件拼音名）不再匹配 → 需重新保存场景配置。"""
-        plugins = [_plugin("zhinenghuiyizhushoucreate_meeting")]
+    def test_empty_tool_name_ignored(self):
+        """scene.tools 中的空字符串不导致匹配所有。"""
+        plugins = [_plugin("pluginA_action1")]
         planner = self._make_planner(plugins)
         scene = SceneConfig(id="s1", name="test", description="",
-                            tools=["zhinenghuiyizhushou"])
-        assert len(planner._filter_tools_by_scene(scene)) == 0
+                            tools=["", "pluginA_action1"])
+        assert len(planner._filter_tools_by_scene(scene)) == 1
 
 
 class TestModeFilterPluginsByScene:  # pylint: disable=protected-access
-    """PlanExecuteMode._filter_plugins_by_scene — 执行阶段精确匹配。"""
+    """PlanExecuteMode._filter_plugins_by_scene — 执行阶段精确匹配 + 操作级隔离。"""
 
     @staticmethod
     def _make_mode():
