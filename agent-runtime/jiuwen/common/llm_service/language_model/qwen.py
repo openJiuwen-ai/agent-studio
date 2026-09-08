@@ -282,8 +282,9 @@ class Qwen(BaseModel, BaseChatModel):
                                     func = tc.get("function", {})
                                     if tc.get("id"):
                                         tool_calls_acc[idx]["id"] = tc["id"]
+                                    func = tc.get("function", {})
                                     if func.get("name"):
-                                        tool_calls_acc[idx]["name"] += func["name"]
+                                        tool_calls_acc[idx]["name"] = func["name"]
                                     if func.get("arguments"):
                                         tool_calls_acc[idx]["arguments"] += func["arguments"]
                             elif isinstance(delta_tool_calls, dict):
@@ -293,8 +294,9 @@ class Qwen(BaseModel, BaseChatModel):
                                 func = delta_tool_calls.get("function", {})
                                 if delta_tool_calls.get("id"):
                                     tool_calls_acc[idx]["id"] = delta_tool_calls["id"]
+                                func = delta_tool_calls.get("function", {})
                                 if func.get("name"):
-                                    tool_calls_acc[idx]["name"] += func["name"]
+                                    tool_calls_acc[idx]["name"] = func["name"]
                                 if func.get("arguments"):
                                     tool_calls_acc[idx]["arguments"] += func["arguments"]
 
