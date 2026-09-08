@@ -428,11 +428,40 @@ class End(BaseEnd):
         result["user_fields"] = user_fields
         return result
 
+    def _stream_path_alive(self, session) -> bool:
+        """判断 mix 流路径（collect/transform）是否还有可能启动。
+
+        流路径仅在某个声明流生产者向本节点发出首帧后才启动（StreamActor.send
+        以 first_frame 启动 stream_call），而首帧一旦发出，该生产者必然已进入
+        ActorManager._active_producer_ids。因此若本节点的所有流生产者都从未
+        产帧（分支未走到 / 执行了但零帧，其后发的 end_message 会被未启动的
+        actor 丢弃），流路径必不到达，批路径无需等满 3s 协调超时。
+        无法判断时保守返回 True（维持原 3s 等待）。
+        """
+        try:
+            if session is None:
+                return True
+            inner = getattr(session, "_inner", None)
+            actor_mgr = inner.actor_manager() if inner is not None else None
+            if actor_mgr is None:
+                return True
+            node_id = session.get_component_id()
+            producer_ids = (getattr(actor_mgr, "_consumer_dict", None) or {}).get(
+                node_id
+            )
+            if not producer_ids:
+                return False
+            active = getattr(actor_mgr, "_active_producer_ids", None) or {}
+            return any(pid in active for pid in producer_ids)
+        except Exception:
+            return True
+
     async def _mix_coordinate(
         self,
         key: str,
         inputs: dict,
         outputs: dict,
+        session=None,
     ) -> tuple[dict, dict, bool]:
         """mix 协调：push 数据到 _mix_data，等待另一条路径。
 
@@ -467,10 +496,15 @@ class End(BaseEnd):
 
         # ——— 批路径：只注入数据，等待流路径渲染 ———
         if key == "batch":
+            # 流路径必不到达（所有流生产者从未产帧）时跳过等待，
+            # 否则结束节点会白等满 3s 协调超时（分支未走到场景）。
+            wait_timeout = 3.0 if self._stream_path_alive(session) else 0.0
             async with self._mix_condition:
-                if not self._mix_render_complete:
+                if not self._mix_render_complete and wait_timeout > 0:
                     try:
-                        await asyncio.wait_for(self._mix_condition.wait(), timeout=3.0)
+                        await asyncio.wait_for(
+                            self._mix_condition.wait(), timeout=wait_timeout
+                        )
                     except asyncio.TimeoutError:
                         pass
             if self._mix_render_complete:
@@ -601,7 +635,7 @@ class End(BaseEnd):
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
-            "batch", inputs, outputs
+            "batch", inputs, outputs, session
         )
         if not _mix_i_am_renderer:
             return None
@@ -736,7 +770,7 @@ class End(BaseEnd):
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
-            "batch", inputs, outputs
+            "batch", inputs, outputs, session
         )
         if not _mix_i_am_renderer:
             return
@@ -955,7 +989,7 @@ class End(BaseEnd):
 
         # mix 模式协调
         final_inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
-            "stream", final_inputs, outputs
+            "stream", final_inputs, outputs, session
         )
         if not _mix_i_am_renderer:
             return None
@@ -1209,7 +1243,7 @@ class End(BaseEnd):
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
-            "stream", inputs, outputs
+            "stream", inputs, outputs, session
         )
         if not _mix_i_am_renderer:
             return

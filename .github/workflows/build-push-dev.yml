@@ -49,7 +49,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        run: echo "build_ts=$(date +"%Y%m%d%H%M%S")" >> "$GITHUB_OUTPUT"
+        run: echo "build_ts=$(TZ=Asia/Shanghai date +"%Y%m%d%H%M%S")" >> "$GITHUB_OUTPUT"
 
       - name: Build backend with Maven
         run: |
@@ -204,7 +204,7 @@ jobs:
             studio-builder) BASE_IMAGE=python:3.11-slim; DOCKERFILE=Dockerfile ;;
           esac
           if [ "${ARCH}" = amd64 ]; then SUFFIX=x86_64; else SUFFIX=arm64; fi
-          TAG="dev-${BUILD_TS}.${SUFFIX}"
+          TAG="dev-core-${BUILD_TS}.${SUFFIX}"
           docker buildx build \
             --file "docker/${SERVICE}/${DOCKERFILE}" \
             --platform "linux/${ARCH}" \
@@ -289,5 +289,5 @@ jobs:
       - name: Print image summary
         run: |
           echo "Dev images published with tags:"
-          echo "  dev-${{ needs.prepare.outputs.build_ts }}.x86_64"
-          echo "  dev-${{ needs.prepare.outputs.build_ts }}.arm64"
+          echo "  dev-core-${{ needs.prepare.outputs.build_ts }}.x86_64"
+          echo "  dev-core-${{ needs.prepare.outputs.build_ts }}.arm64"
