@@ -352,7 +352,7 @@ class FlowMcp(WorkflowComponent):
                                             if name in props and isinstance(props[name], dict):
                                                 props[name]["type"] = "object" if isinstance(parsed, dict) else "array"
                                     converted = parsed
-                            except (json.JSONDecodeError, ValueError):
+                            except (json.JSONDecodeError, TypeError):
                                 pass
                         api_inputs[name] = converted
             else:
