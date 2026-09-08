@@ -1730,6 +1730,47 @@ public enum StudioError {
      */
     IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_INPUT(BAD_REQUEST, CONFIG, "1027"),
 
+    /* ***********************数据源管理***********************/
+    /**
+     * 数据源不存在
+     */
+    DATASOURCE_NOT_FOUND(NOT_FOUND, CONFIG, "1028"),
+
+    /**
+     * 数据源名称重复
+     */
+    DATASOURCE_NAME_DUPLICATE(BAD_REQUEST, CONFIG, "1029"),
+
+    /**
+     * 数据源连接失败
+     */
+    DATASOURCE_CONNECTION_FAILED(INTERNAL_SERVER_ERROR, CONFIG, "1030"),
+
+    /**
+     * 数据源无权限
+     */
+    DATASOURCE_NO_PERMISSION(FORBIDDEN, CONFIG, "1031"),
+
+    /**
+     * SQL安全校验失败
+     */
+    DATASOURCE_SQL_SECURITY_VIOLATION(BAD_REQUEST, CONFIG, "1032"),
+
+    /**
+     * SQL执行失败
+     */
+    DATASOURCE_EXECUTE_FAILED(INTERNAL_SERVER_ERROR, CONFIG, "1033"),
+
+    /**
+     * 不支持的数据源类型
+     */
+    DATASOURCE_TYPE_UNSUPPORTED(BAD_REQUEST, CONFIG, "1034"),
+
+    /**
+     * 数据源参数校验失败
+     */
+    DATASOURCE_PARAM_INVALID(BAD_REQUEST, CONFIG, "1035"),
+
     /* ***********************模型接入***********************/
     /**
      * 缺少模型配置

@@ -861,7 +861,7 @@ springdoc:
 auth:
   path:
     # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
-    excluded: ${auth_path_excluded:/v1/health, /health}
+    excluded: ${auth_path_excluded:/v1/health, /health, /v1/studio/datasources/.*/execute}
   sso:
     # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
     validate-url: ${auth_sso_validate_url:}
@@ -887,3 +887,21 @@ task:
     max-execute-milliseconds: ${task_async_max_execute_milliseconds:172800000}
     execute-lock-key: ${task_async_execute_lock_key:async_execute_lock}
     clear-lock-key: ${task_async_clear_lock_key:async_clear_lock}
+
+# ========== 数据源管理配置 ==========
+datasource:
+  ir-path: ${datasource_ir_path:datasource/ir}
+  cache:
+    hours: ${datasource_cache_hours:24}
+    pool-size: ${datasource_cache_pool_size:150}
+  max-connections-per-host: ${datasource_max_connections_per_host:5}
+  execute:
+    timeout: ${datasource_execute_timeout:25}
+    max-response: ${datasource_execute_max_response:1000}
+    sql-limit: ${datasource_sql_limit:8000}
+    allowed-operations: ${datasource_allowed_operations:SELECT,INSERT,UPDATE}
+  check:
+    pool-size: ${datasource_check_pool_size:10}
+    timeout: ${datasource_check_timeout:25}
+  query:
+    max-length: ${datasource_query_max_length:5000}

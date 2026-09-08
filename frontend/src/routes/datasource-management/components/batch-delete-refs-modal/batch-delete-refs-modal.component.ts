@@ -109,7 +109,7 @@ export class BatchDeleteRefsModalComponent {
     if (this.secondConfirmCheck()) {
       this.close();
       const ids = this.resource_ids.map((item) => item.resource_id);
-      this.dataSourceRepoServe.batchDeleteDatasource({ ids }).then(() => {
+      this.dataSourceRepoServe.batchDeleteDatasource(ids).then(() => {
         MessageComponent.showSuccess(
           this.i18n.transform('successfully_batch_delete_datasource'),
         );

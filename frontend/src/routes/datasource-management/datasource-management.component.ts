@@ -3,7 +3,6 @@ import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
 import { DataSourceManagementRepoService } from '@services/repositories/datasource-management-repo.service';
-import { DeleteRefsService } from '@shared/services/delete-refs.service';
 import { CommonService } from '@services/common.service';
 import { FormateTimePipe } from 'src/pipes/formate-time.pipe';
 import {
@@ -11,15 +10,13 @@ import {
 } from '@shared/components/new-common-no-data-with-btn/new-common-no-data-with-btn.component';
 import { PipesModule } from '../../pipes/pipes.module';
 import {
-  BatchDeleteRefsModalComponent
-} from '@routes/datasource-management/components/batch-delete-refs-modal/batch-delete-refs-modal.component';
-import {
   EditableDatasourceHalfmodalComponent
 } from '@routes/datasource-management/components/editable-datasource-halfmodal/editable-datasource-halfmodal.component';
 import { HttpService } from '@services/http.service';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDrawerService } from 'ng-zorro-antd/drawer';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { IDatasourceList } from '@routes/agent-center/types/datasource.types';
 
 @Component({
   selector: 'datasource-management',
@@ -32,7 +29,6 @@ import { NzMessageService } from 'ng-zorro-antd/message';
       provide: I18NEXT_NAMESPACE,
       useValue: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
     },
-    DeleteRefsService,
     FormateTimePipe,
     NzModalService,
     NzDrawerService,
@@ -47,7 +43,6 @@ export class DatasourceManagementComponent implements OnInit {
   constructor(
     private i18n: I18NextEagerPipe,
     private dataSourceRepoServe: DataSourceManagementRepoService,
-    private deleteRefsServe: DeleteRefsService,
     private nzDrawer: NzDrawerService,
     private nzModal: NzModalService,
     private nzMessage: NzMessageService,
@@ -88,24 +83,46 @@ export class DatasourceManagementComponent implements OnInit {
   public trackByFn(index: number) {
     return index;
   }
-  updateCheckStatus(): void {
 
+  updateCheckStatus(): void {
+    this.allChecked = this.srcData.data.length > 0 && this.srcData.data.every(item => this.isChecked(item));
+    this.indeterminate = this.checkedList.length > 0 && !this.allChecked;
   }
 
   isChecked(row: any): boolean {
-    return false;
+    return this.checkedList.includes(row);
   }
 
   onItemChecked(row: any, checked: boolean): void {
-
+    if (checked) {
+      if (!this.checkedList.includes(row)) {
+        this.checkedList.push(row);
+      }
+    } else {
+      this.checkedList = this.checkedList.filter(i => i !== row);
+    }
+    this.updateCheckStatus();
   }
 
   onAllChecked(checked: boolean): void {
-
+    if (checked) {
+      this.srcData.data.forEach(item => {
+        if (!this.checkedList.includes(item)) {
+          this.checkedList.push(item);
+        }
+      });
+    } else {
+      this.checkedList = this.checkedList.filter(i => !this.srcData.data.includes(i));
+    }
+    this.updateCheckStatus();
   }
 
   listAction(key: string, row: any) {
-
+    if (key === 'edit') {
+      this.openHalfModel(row.id);
+    } else if (key === 'delete') {
+      this.deleteDatasource(row.id, row.name);
+    }
   }
 
   searchValue = '';
@@ -125,35 +142,98 @@ export class DatasourceManagementComponent implements OnInit {
     this.getDatasourceListData();
   }
 
-  pageSizeChange(size: number) {}
+  pageSizeChange(size: number) {
+    this.pageSize.size = size;
+    this.currentPage = 1;
+    this.getDatasourceListData();
+  }
 
   getDatasourceListData() {
-
+    this.loading = true;
+    const params: any = {
+      page: this.currentPage,
+      pageSize: this.pageSize.size,
+    };
+    if (this.searchValue.trim()) {
+      params.name = this.searchValue.trim();
+    }
+    this.dataSourceRepoServe
+      .getDatasourceList(params)
+      .then((res: IDatasourceList) => {
+        this.srcData.data = res.datasources || [];
+        this.totalNumber = res.total || 0;
+        this.checkedList = [];
+        this.updateCheckStatus();
+      })
+      .finally(() => {
+        this.loading = false;
+      });
   }
 
-  // 单个删除
-  private deleteDatasource(id: string): any {
-
+  private deleteDatasource(id: string, name: string): void {
+    this.nzModal.confirm({
+      nzTitle: this.i18n.transform('delete_data_source'),
+      nzContent: this.i18n.transform('delete_warn', { name }),
+      nzOkText: this.i18n.transform('ok'),
+      nzOkType: 'primary',
+      nzCancelText: this.i18n.transform('cancel'),
+      nzOnOk: () => {
+        this.dataSourceRepoServe.deleteDatasource(id).then(() => {
+          this.nzMessage.success(this.i18n.transform('delete_success'));
+          this.searchList();
+        });
+      },
+    });
   }
 
-  // 批量删除
-  deleteData(){
-
+  deleteData() {
+    const ids = this.checkedList.map(item => item.id);
+    this.nzModal.confirm({
+      nzTitle: this.i18n.transform('batch_delete_data_source'),
+      nzContent: this.i18n.transform('batch_delete_warn'),
+      nzOkText: this.i18n.transform('ok'),
+      nzOkType: 'primary',
+      nzOkDanger: true,
+      nzCancelText: this.i18n.transform('cancel'),
+      nzOnOk: () => {
+        this.dataSourceRepoServe.batchDeleteDatasource(ids).then(() => {
+          this.nzMessage.success(
+            this.i18n.transform('successfully_batch_delete_datasource'),
+          );
+          this.searchList();
+        });
+      },
+    });
   }
 
   public createDatasource() {
-
+    this.openHalfModel();
   }
 
-  private openHalfModel(param?) {
-
+  private openHalfModel(id?: string) {
+    const drawerRef = this.nzDrawer.create({
+      nzContent: EditableDatasourceHalfmodalComponent,
+      nzWidth: '600px',
+      nzMaskClosable: true,
+      nzContentParams: {
+        id: id || '',
+        title: id
+          ? this.i18n.transform('edit_data_source')
+          : this.i18n.transform('connect_data_source'),
+      },
+    });
+    drawerRef.afterClose.subscribe(() => {
+      this.getDatasourceListData();
+    });
   }
 
   handleClickClearSearch() {
-
+    this.searchValue = '';
+    this.searchList();
   }
 
   searchList() {
-
+    this.currentPage = 1;
+    this.getDatasourceListData();
   }
 }
