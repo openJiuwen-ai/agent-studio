@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -25,10 +27,12 @@ public class CreateVersionReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "示例名称")
     @Length(max = 64)
     private String versionName = null;
 
     @JsonProperty("version_note")
+    @Schema(description = "版本号", example = "1.0.0")
     @Length(max = 1024)
     private String versionNote = null;
 

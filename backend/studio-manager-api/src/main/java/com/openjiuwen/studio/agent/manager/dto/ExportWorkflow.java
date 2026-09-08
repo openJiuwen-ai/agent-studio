@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class ExportWorkflow implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "example-id-123")
     private String workflowId = null;
 
     @JsonProperty("workflow_version")
+    @Schema(description = "工作流版本", example = "1.0.0")
     private String workflowVersion = null;
 
     public String getWorkflowId() {

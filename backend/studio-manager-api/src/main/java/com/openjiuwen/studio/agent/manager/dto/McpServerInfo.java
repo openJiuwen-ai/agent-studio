@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -31,113 +32,142 @@ public class McpServerInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("server_id")
+    @Schema(description = "服务ID", example = "550e8400-e29b-41d4-a716-446655440000")
     @Length(max = 64)
     private String serverId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-001")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "my-mcp-server")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "my-mcp-server")
     private String nameEn = null;
 
     @JsonProperty("desc")
+    @Schema(description = "服务描述", example = "这是一个MCP服务")
     @Length(max = 1000)
     private String desc = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-url")
     private String icon = null;
 
     @JsonProperty("icon_name")
+    @Schema(description = "图标名称", example = "550e8400-e29b-41d4-a716-446655440000.png")
     @Pattern(
         regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\.[a-zA-Z]+$")
     private String iconName = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具配置", example = "{}")
     @Valid
     private McpServerTools tools = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见性", example = "public")
     @Length(max = 32)
     private String visibility = null;
 
     @JsonProperty("url")
+    @Schema(description = "服务URL", example = "https://example.com/mcp")
     @Length(max = 256)
     private String url = null;
 
     @JsonProperty("auth")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo auth = null;
 
     @JsonProperty("type")
+    @Schema(description = "服务类型", example = "mcp")
     @Length(max = 32)
     private String type = null;
 
     @JsonProperty("category")
+    @Schema(description = "服务分类", example = "tool")
     @Length(max = 32)
     private String category = null;
 
     @JsonProperty("configs")
+    @Schema(description = "服务配置", example = "{}")
     @Valid
     private McpServerConfig configs = null;
 
     @JsonProperty("config_status")
+    @Schema(description = "配置状态", example = "configured")
     @Length(max = 32)
     private String configStatus = null;
 
     @JsonProperty("binding")
+    @Schema(description = "是否绑定", example = "true")
     private Boolean binding = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user001")
     @Length(max = 64)
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user-001")
     @Length(max = 64)
     private String creatorId = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2024-05-01T00:00:00.000Z")
     private Date createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2024-05-01T00:00:00.000Z")
     private Date updateTime = null;
 
     @JsonProperty("service_config")
+    @Schema(description = "服务配置", example = "{}")
     @Length(max = 30000)
     private String serviceConfig = null;
 
     @JsonProperty("mcp_tool")
+    @Schema(description = "MCP工具", example = "[]")
     @Length(max = 500000)
     private String mcpTool = null;
 
     @JsonProperty("org_type")
+    @Schema(description = "组织类型", example = "enterprise")
     private String orgType = null;
 
     @JsonProperty("deploy_type")
+    @Schema(description = "部署类型", example = "function")
     private String deployType = null;
 
     @JsonProperty("trace_id")
+    @Schema(description = "链路追踪ID", example = "trace-001")
     @Length(max = 64)
     private String traceId = null;
 
     @JsonProperty("share_info")
+    @Schema(description = "分享信息", example = "{}")
     @Valid
     private ShareInfo shareInfo = null;
 
     @JsonProperty("share_reference")
+    @Schema(description = "分享引用列表", example = "[]")
     @Valid
     @Size()
     private List<MappingEntity> shareReference = null;
 
     @JsonProperty("origin")
+    @Schema(description = "来源", example = "0")
     private Integer origin = null;
 
     public String getServerId() {

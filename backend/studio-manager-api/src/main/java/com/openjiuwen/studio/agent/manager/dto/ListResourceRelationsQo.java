@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,34 +29,41 @@ public class ListResourceRelationsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "agent", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String resourceType = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "分页偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 0L, max = 100L)
     private Integer limit = 10;
 
     @JsonProperty("version")
+    @Schema(description = "版本号", example = "v1.0.0")
     @Length(max = 64)
     private String version = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "chat")
     @Length(max = 64)
     private String appType = null;
 
     @JsonProperty("reference_type")
+    @Schema(description = "引用类型", example = "all")
     private String referenceType = "all";
 
     public String getResourceType() {

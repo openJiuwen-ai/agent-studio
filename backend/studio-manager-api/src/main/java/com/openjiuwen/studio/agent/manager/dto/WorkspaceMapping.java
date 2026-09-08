@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,21 +26,26 @@ public class WorkspaceMapping implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "映射ID", example = "mapping-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("workspaceId")
+    @Schema(description = "工作空间ID", example = "ws-001")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("externalMappingId")
+    @Schema(description = "外部映射ID", example = "ext-001")
     @Length(max = 128)
     private String externalMappingId = null;
 
     @JsonProperty("externalExtension")
+    @Schema(description = "外部扩展信息", example = "ext-info")
     private String externalExtension = null;
 
     @JsonProperty("externalMappingSource")
+    @Schema(description = "外部映射来源", example = "1")
     private Integer externalMappingSource = null;
 
     public String getId() {

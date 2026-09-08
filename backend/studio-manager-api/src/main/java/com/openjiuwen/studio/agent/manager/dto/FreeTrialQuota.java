@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class FreeTrialQuota implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     private Integer limit = null;
 
     @JsonProperty("usage")
+    @Schema(description = "使用量", example = "1")
     private Integer usage = null;
 
     public Integer getLimit() {

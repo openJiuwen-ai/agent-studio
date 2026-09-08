@@ -1,0 +1,1717 @@
+openapi: 3.1.0
+info:
+  title: Agent Runtime API
+  description: 智能体运行时 API 文档（对话/推理/执行）
+  version: v1
+paths:
+  /v1/health:
+    get:
+      tags:
+      - execution_app
+      summary: 健康检查
+      description: Restful API for server health.
+      operationId: health_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+  /v1/orchestration/ir/execute:
+    post:
+      tags:
+      - execution_app
+      summary: IR 执行（流式/非流式）
+      description: 'IR execute endpoint.
+
+        直接透传 openjiuwen 原生格式，不做额外包装'
+      operationId: ir_execute_v1_orchestration_ir_execute_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              type: object
+              title: Req Json
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - execution_app
+      summary: 删除执行实例
+      description: Restful API for delete Agent instance and Workflow instance by
+        executionId.
+      operationId: delete_ir_execution_instance_v1_orchestration_ir_execute_delete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              type: object
+              title: Req Json
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/orchestration/ir/component/{component_id}/execute:
+    post:
+      tags:
+      - execution_app
+      summary: 单组件调试执行
+      description: 单组件调试端点（：与普通执行一致 — body 安全 + effective userId 服务器覆盖）
+      operationId: component_debug_execute_v1_orchestration_ir_component__component_id__execute_post
+      parameters:
+      - name: component_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Component Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Req Json
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions:
+    post:
+      tags:
+      - execution_app
+      summary: 生成追问（智能体场景）
+      description: 自动生成追问（Agent 场景）。
+      operationId: agent_additional_questions_v1__project_id__agents__agent_id__conversations__conversation_id__additional_questions_post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Agent Id
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Workspace Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Req Json
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions:
+    post:
+      tags:
+      - execution_app
+      summary: 生成追问（工作流场景）
+      description: 自动生成追问（Workflow 场景）。
+      operationId: workflow_additional_questions_v1__project_id__workflows__workflow_id__conversations__conversation_id__additional_questions_post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Workspace Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Req Json
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}:
+    post:
+      tags:
+      - app_run
+      summary: 工作流对话
+      description: 通过 workflow_id 和 conversation_id 发起工作流对话（流式响应）。设置请求头 stream=false
+        可切换为非流式响应。version=latest 时使用最新发布版本的 IR。
+      operationId: run_workflow_app_v1__project_id__workflows__workflow_id__conversations__conversation_id__post
+      parameters:
+      - name: version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      - name: environment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Environment Id
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workspace Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowAppRunRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}:
+    post:
+      tags:
+      - app_run
+      summary: 智能体对话（单智能体/多智能体）
+      description: 通过 agent_id 和 conversation_id 发起智能体对话。支持单智能体（ReAct）和多智能体（Controller），由
+        IR 文件的 mode 字段自动决定执行模式。设置请求头 stream=false 可切换为非流式响应。version=latest 时使用最新发布版本的
+        IR。
+      operationId: run_agent_app_v1__project_id__agents__agent_id__conversations__conversation_id__post
+      parameters:
+      - name: version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      - name: environment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Environment Id
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workspace Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAppRunRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/node_execute/{node_id}:
+    post:
+      tags:
+      - app_run
+      summary: 工作流单节点执行
+      description: 对指定工作流中的单个节点进行独立调试执行，使用开发版 IR（无 version）。
+      operationId: run_node_execute_v1__project_id__workflows__workflow_id__conversations__conversation_id__node_execute__node_id__post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeExecuteRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/workflows/chat/{short_code}/conversations/{conversation_id}:
+    post:
+      tags:
+      - web_run
+      summary: 网页工作流对话
+      description: 通过 short_code 查询发布信息后复用工作流执行链。先从 Redis 查询 release_web_rel_{short_code}
+        获取 ReleaseInfo，再用其中的 appId/versionId/projectId 构造执行上下文。
+      operationId: run_web_workflow_v1_workflows_chat__short_code__conversations__conversation_id__post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowAppRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/agents/chat/{short_code}:
+    post:
+      tags:
+      - web_run
+      summary: 网页智能体对话
+      description: 通过 short_code 查询发布信息后复用智能体执行链。conversation_id 为空时自动生成 UUID。handler_type
+        由 IR 的 mode 决定（ReAct/Controller/PlanExecute）。
+      operationId: run_web_agent_v1_agents_chat__short_code__post
+      parameters:
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Workspace Id
+      - name: conversation_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Conversation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAppRunRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/variables:
+    get:
+      tags:
+      - conversation_variable
+      summary: 获取会话全局变量
+      description: 获取会话全局变量
+      operationId: get_conversation_variables_v1__project_id__agents__agent_id__conversations__conversation_id__variables_get
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Agent Id
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      - name: resource_type
+        in: query
+        required: false
+        schema:
+          type: string
+          default: workflow
+          title: Resource Type
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/variables/{var_id}:
+    put:
+      tags:
+      - conversation_variable
+      summary: 更新会话全局变量
+      description: 更新会话全局变量
+      operationId: update_conversation_variable_v1__project_id__agents__agent_id__conversations__conversation_id__variables__var_id__put
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Agent Id
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      - name: var_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Var Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVariableReq'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/memory-repos/{memory_repo_id}:
+    delete:
+      tags:
+      - memory-internal
+      summary: Delete Memory Repo
+      description: 'Delete all memory data for a memory repo.
+
+
+        Called by Java Manager via Runtime RCE when a memory repo is deleted.'
+      operationId: delete_memory_repo_internal_v1_memory_repos__memory_repo_id__delete
+      parameters:
+      - name: memory_repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Repo Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/memory-repos/{memory_repo_id}/users/{user_id}/memories:
+    delete:
+      tags:
+      - memory-internal
+      summary: Clear User Memories
+      description: Clear all memories for a user within a memory repo scope.
+      operationId: clear_user_memories_internal_v1_memory_repos__memory_repo_id__users__user_id__memories_delete
+      parameters:
+      - name: memory_repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Repo Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - memory-internal
+      summary: List User Memories
+      description: Paginated list of memories for a user within a memory repo scope.
+      operationId: list_user_memories_internal_v1_memory_repos__memory_repo_id__users__user_id__memories_get
+      parameters:
+      - name: memory_repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Repo Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 10
+          title: Page Size
+      - name: page_num
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page Num
+      - name: memory_type
+        in: query
+        required: false
+        schema:
+          type: string
+          title: Memory Type
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/memory-repos/{memory_repo_id}/users/{user_id}/memories/batch-delete:
+    post:
+      tags:
+      - memory-internal
+      summary: Batch Delete Memories
+      description: 'Batch-delete memories by ID list.
+
+
+        Body: {"memory_ids": ["id1", "id2", ...]}'
+      operationId: batch_delete_memories_internal_v1_memory_repos__memory_repo_id__users__user_id__memories_batch_delete_post
+      parameters:
+      - name: memory_repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Repo Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/memory-repos/{memory_repo_id}/users/{user_id}/memories/search:
+    post:
+      tags:
+      - memory-internal
+      summary: Search Memories
+      description: 'Semantic search for memories within a memory repo scope.
+
+
+        Body: {"query": "...", "top_k": 10, "threshold": 0.3}'
+      operationId: search_memories_internal_v1_memory_repos__memory_repo_id__users__user_id__memories_search_post
+      parameters:
+      - name: memory_repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Repo Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/memory-repos/{memory_repo_id}/memories/{memory_id}:
+    put:
+      tags:
+      - memory-internal
+      summary: Update Memory
+      description: 'Update a single memory''s content.
+
+
+        Body: {"user_id": "...", "content": "new content"}'
+      operationId: update_memory_internal_v1_memory_repos__memory_repo_id__memories__memory_id__put
+      parameters:
+      - name: memory_repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Repo Id
+      - name: memory_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/inner-tools/file/resolve:
+    post:
+      tags:
+      - inner_tools
+      summary: 解析文件
+      description: 根据 file_url 下载并解析文件内容，支持 txt/csv/xlsx/docx
+      operationId: resolve_file_v1_inner_tools_file_resolve_post
+      parameters:
+      - name: file_url
+        in: query
+        required: true
+        schema:
+          type: string
+          description: 文件访问url
+          title: File Url
+        description: 文件访问url
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileResolveResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/inner-tools/document/create:
+    post:
+      tags:
+      - inner_tools
+      summary: 文档生成
+      description: 根据文本内容生成 docx，上传 OBS 返回临时下载链接
+      operationId: create_document_v1_inner_tools_document_create_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDocumentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/releases:
+    post:
+      tags:
+      - release
+      summary: 创建应用发布信息
+      description: '创建应用发布信息 — 将 ReleaseInfo 写入 Redis。
+
+
+        1. 根据 short_code 构建 Redis key
+
+        2. 补充 projectId / workspaceId / domainId / alreadyBeenCalled / updateTime
+
+        3. 写入 Redis'
+      operationId: create_release_info_v1__project_id__releases_post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workspace Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseInfo'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/releases/{release_id}:
+    delete:
+      tags:
+      - release
+      summary: 删除应用发布信息
+      description: '删除应用发布信息 — 从 Redis 删除 ReleaseInfo。
+
+
+        1. 根据 short_code 构建 Redis key
+
+        2. 从 Redis 删除'
+      operationId: delete_release_info_v1__project_id__releases__release_id__delete
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: release_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Release Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/kb/create:
+    post:
+      tags:
+      - openjiuwen_kb
+      summary: 创建知识库
+      description: 创建知识库。
+      operationId: create_kb_internal_v1_kb_create_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKBRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KBResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/kb/upload:
+    post:
+      tags:
+      - openjiuwen_kb
+      summary: 上传文档到知识库
+      description: 上传文档到知识库（multipart 文件流方式）。
+      operationId: upload_documents_internal_v1_kb_upload_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_documents_internal_v1_kb_upload_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/kb/search:
+    post:
+      tags:
+      - openjiuwen_kb
+      summary: 检索知识库
+      description: 检索知识库。
+      operationId: search_kb_internal_v1_kb_search_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/kb/delete:
+    delete:
+      tags:
+      - openjiuwen_kb
+      summary: 删除知识库
+      description: 删除知识库。
+      operationId: delete_kb_internal_v1_kb_delete_delete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteKBRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KBResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/kb/{kb_id}/documents/{doc_id}:
+    delete:
+      tags:
+      - openjiuwen_kb
+      summary: 删除知识库文档
+      description: 删除知识库中的文档（通过 doc_ids 从向量库移除）。
+      operationId: delete_document_internal_v1_kb__kb_id__documents__doc_id__delete
+      parameters:
+      - name: kb_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kb Id
+      - name: doc_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Doc Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteDocumentsRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KBResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/v1/kb/list:
+    get:
+      tags:
+      - openjiuwen_kb
+      summary: 列出知识库
+      description: 列出知识库存在状态。
+      operationId: list_kbs_internal_v1_kb_list_get
+      parameters:
+      - name: kb_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kb Ids
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListKBResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AgentAppRunRequest:
+      properties:
+        query:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Query
+          description: 用户输入消息
+          examples:
+          - 你好，请帮我分析数据
+        resumeInput:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resumeinput
+          description: 恢复执行的输入（用于中断恢复场景）
+        inputs:
+          additionalProperties: true
+          type: object
+          title: Inputs
+          description: 输入参数（含 query、intent、workflowSequence、activeWorkflows 等）
+          examples:
+          - intent: chat
+            query: 你好
+        long_term_memory:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Long Term Memory
+          description: 长期记忆配置
+        tool_switch_dict:
+          additionalProperties: true
+          type: object
+          title: Tool Switch Dict
+          description: 工具开关配置，key 为工具ID，value 为是否启用
+          examples:
+          - tool_001: true
+        model_deployment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Deployment Id
+          description: 模型部署ID
+        enable_history:
+          type: boolean
+          title: Enable History
+          description: 是否启用会话历史
+          default: true
+        histories:
+          items:
+            $ref: '#/components/schemas/ConversationHistoryMessage'
+          type: array
+          title: Histories
+          description: 会话历史消息（携带时跳过 Redis 加载）
+        files:
+          items:
+            type: string
+          type: array
+          title: Files
+          description: 文件 URL 列表（支持图片/视频，自动识别扩展名）
+          examples:
+          - - https://example.com/image.png
+        agent_type:
+          type: string
+          title: Agent Type
+          description: 智能体类型：auto-自动推断、deepresearch-深度研究（不支持）
+          default: auto
+          examples:
+          - auto
+        version:
+          anyOf:
+          - type: string
+          - type: integer
+          - type: 'null'
+          title: Version
+          description: 发布版本号，latest 表示使用最新发布版本
+          examples:
+          - latest
+          - 1
+        userId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Userid
+          description: 用户ID
+      type: object
+      title: AgentAppRunRequest
+      description: 智能体试运行请求
+    Body_upload_documents_internal_v1_kb_upload_post:
+      properties:
+        kb_id:
+          type: string
+          title: Kb Id
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+        model_config_json:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Config Json
+      type: object
+      required:
+      - kb_id
+      - file
+      title: Body_upload_documents_internal_v1_kb_upload_post
+    ConversationHistoryMessage:
+      properties:
+        role:
+          type: string
+          minLength: 1
+          title: Role
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+          default: ''
+        files:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Files
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        intent:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Intent
+        tool_call_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Call Id
+        tool_calls:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ToolCallSchema'
+            type: array
+          - type: 'null'
+          title: Tool Calls
+        function_call:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Function Call
+        enable_history:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enable History
+          default: true
+        agent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Id
+      type: object
+      required:
+      - role
+      title: ConversationHistoryMessage
+      description: Defines the structure of one conversation history message.
+    CreateDocumentRequest:
+      properties:
+        input:
+          type: string
+          title: Input
+          description: 文档内容
+        document_name:
+          type: string
+          title: Document Name
+          description: 文档名
+        expires:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Expires
+          description: 签名URL有效期（天）
+      type: object
+      required:
+      - input
+      - document_name
+      title: CreateDocumentRequest
+    CreateDocumentResponse:
+      properties:
+        url:
+          type: string
+          title: Url
+          description: 文档下载链接
+      type: object
+      required:
+      - url
+      title: CreateDocumentResponse
+    CreateKBRequest:
+      properties:
+        kb_id:
+          type: string
+          title: Kb Id
+          description: 知识库 ID
+        kb_name:
+          type: string
+          title: Kb Name
+          description: 知识库名称
+          default: ''
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metadata
+          description: 知识库元数据
+        model_config:
+          $ref: '#/components/schemas/KBModelConfig'
+          description: Embedding 模型配置
+      type: object
+      required:
+      - kb_id
+      - model_config
+      title: CreateKBRequest
+      description: 创建知识库请求。
+    DeleteDocumentsRequest:
+      properties:
+        doc_ids:
+          items:
+            type: string
+          type: array
+          title: Doc Ids
+      type: object
+      title: DeleteDocumentsRequest
+      description: 删除文档请求。
+    DeleteKBRequest:
+      properties:
+        kb_id:
+          type: string
+          title: Kb Id
+          description: 知识库 ID
+      type: object
+      required:
+      - kb_id
+      title: DeleteKBRequest
+      description: 删除知识库请求。
+    FileResolveResponse:
+      properties:
+        content:
+          type: string
+          title: Content
+          description: 文件内容
+      type: object
+      required:
+      - content
+      title: FileResolveResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    KBModelConfig:
+      properties:
+        model_service_id:
+          type: string
+          title: Model Service Id
+          description: 模型服务 ID（deploymentId）
+        workspace_id:
+          type: string
+          title: Workspace Id
+          description: 工作空间 ID
+          default: ''
+        project_id:
+          type: string
+          title: Project Id
+          description: 项目 ID
+          default: '0'
+        auth_id:
+          type: string
+          title: Auth Id
+          description: 认证 ID（为空时按 workspace 自动匹配）
+          default: ''
+      type: object
+      required:
+      - model_service_id
+      title: KBModelConfig
+      description: Embedding 模型配置（通过模型中心解析）。
+    KBResponse:
+      properties:
+        success:
+          type: boolean
+          title: Success
+          default: true
+        message:
+          type: string
+          title: Message
+          default: ''
+      type: object
+      title: KBResponse
+      description: 通用知识库操作响应。
+    ListKBResponse:
+      properties:
+        kbs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Kbs
+      type: object
+      title: ListKBResponse
+      description: 知识库列表响应。
+    NodeExecuteRequest:
+      properties:
+        inputs:
+          additionalProperties: true
+          type: object
+          title: Inputs
+          description: 节点输入参数
+          examples:
+          - query: 测试数据
+        plugin_configs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/PluginConfig'
+            type: array
+          - type: 'null'
+          title: Plugin Configs
+          description: 插件配置列表
+        version:
+          anyOf:
+          - type: string
+          - type: integer
+          - type: 'null'
+          title: Version
+          description: 发布版本号
+        userId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Userid
+          description: 用户ID
+      type: object
+      title: NodeExecuteRequest
+      description: 工作流单节点执行请求
+    PluginConfig:
+      properties:
+        pluginId:
+          type: string
+          minLength: 1
+          title: Pluginid
+        config:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Config
+          default: {}
+      type: object
+      required:
+      - pluginId
+      title: PluginConfig
+      description: Defines the structure of one plugin config.
+    ReleaseInfo:
+      properties:
+        app_id:
+          type: string
+          title: App Id
+          default: ''
+        app_type:
+          type: string
+          title: App Type
+          default: ''
+        version_id:
+          type: string
+          title: Version Id
+          default: ''
+        channel_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Channel Type
+        short_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Short Code
+        project_id:
+          type: string
+          title: Project Id
+          default: ''
+        workspace_id:
+          type: string
+          title: Workspace Id
+          default: ''
+        domain_id:
+          type: string
+          title: Domain Id
+          default: ''
+        visibility_scope:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Visibility Scope
+        call_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Call Count
+        already_been_called:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Already Been Called
+        update_time:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Update Time
+      type: object
+      title: ReleaseInfo
+      description: 应用发布信息
+    SearchRequest:
+      properties:
+        kb_id:
+          type: string
+          title: Kb Id
+          description: 知识库 ID
+        query:
+          type: string
+          title: Query
+          description: 检索查询文本
+        top_k:
+          type: integer
+          title: Top K
+          description: 返回结果数量
+          default: 5
+        filters:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Filters
+          description: 元数据过滤条件
+        index_type:
+          type: string
+          title: Index Type
+          description: '检索模式: vector/bm25/hybrid'
+          default: vector
+        model_config:
+          anyOf:
+          - $ref: '#/components/schemas/KBModelConfig'
+          - type: 'null'
+          description: Embedding 模型配置（KB 未缓存时必传）
+      type: object
+      required:
+      - kb_id
+      - query
+      title: SearchRequest
+      description: 检索知识库请求。
+    SearchResponse:
+      properties:
+        results:
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+          type: array
+          title: Results
+      type: object
+      title: SearchResponse
+      description: 检索响应。
+    SearchResultItem:
+      properties:
+        text:
+          type: string
+          title: Text
+          default: ''
+        score:
+          type: number
+          title: Score
+          default: 0.0
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+      type: object
+      title: SearchResultItem
+      description: 单条检索结果。
+    ToolCallSchema:
+      properties:
+        type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+          default: ''
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+          default: ''
+        function:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Function
+      type: object
+      title: ToolCallSchema
+      description: schema of tool calls for role is assistant
+    UpdateVariableReq:
+      properties:
+        value:
+          title: Value
+      type: object
+      title: UpdateVariableReq
+      description: 更新变量请求体
+    UploadResponse:
+      properties:
+        success:
+          type: boolean
+          title: Success
+          default: true
+        doc_count:
+          type: integer
+          title: Doc Count
+          default: 0
+        doc_ids:
+          items:
+            type: string
+          type: array
+          title: Doc Ids
+        message:
+          type: string
+          title: Message
+          default: ''
+      type: object
+      title: UploadResponse
+      description: 上传文档响应。
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WorkflowAppRunRequest:
+      properties:
+        inputs:
+          additionalProperties: true
+          type: object
+          title: Inputs
+          description: 输入参数，必须包含 query 字段作为用户消息
+          examples:
+          - query: 帮我创建一个工作流
+        memory_inputs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Memory Inputs
+          description: 记忆输入参数
+          examples:
+          - last_topic: 天气
+        globals:
+          additionalProperties: true
+          type: object
+          title: Globals
+          description: 全局变量
+          examples:
+          - var1: value1
+        environment:
+          additionalProperties: true
+          type: object
+          title: Environment
+          description: 环境变量（优先使用 environment_id 从 Redis 加载）
+          examples:
+          - API_KEY: sk-xxx
+        messages:
+          items:
+            $ref: '#/components/schemas/ConversationHistoryMessage'
+          type: array
+          title: Messages
+          description: 会话历史消息（携带时跳过 Redis 加载）
+        long_term_memory:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Long Term Memory
+          description: 长期记忆配置
+        plugin_configs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/PluginConfig'
+            type: array
+          - type: 'null'
+          title: Plugin Configs
+          description: 插件配置列表
+        version:
+          anyOf:
+          - type: string
+          - type: integer
+          - type: 'null'
+          title: Version
+          description: 发布版本号，latest 表示使用最新发布版本
+          examples:
+          - latest
+          - 1
+        userId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Userid
+          description: 用户ID
+        enable_history:
+          type: boolean
+          title: Enable History
+          description: 是否启用会话历史
+          default: true
+      type: object
+      title: WorkflowAppRunRequest
+      description: 工作流试运行请求

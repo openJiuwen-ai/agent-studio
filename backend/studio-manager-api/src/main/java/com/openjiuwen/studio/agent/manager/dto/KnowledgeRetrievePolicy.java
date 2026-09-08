@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Range;
@@ -29,25 +30,32 @@ public class KnowledgeRetrievePolicy implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("search_mode")
+    @Schema(description = "知识库检索模式：doc-语义检索、keyword-关键词检索、mix-混合检索", example = "doc")
     private SearchModeEnum searchMode = SearchModeEnum.DOC;
 
     @JsonProperty("top_k")
     @Range(min = 1L, max = 50L)
+    @Schema(description = "检索返回的 Top-K 数量，取值范围 1~50", example = "5")
     private Integer topK = 5;
 
     @JsonProperty("recall_threshold")
+    @Schema(description = "语义检索召回阈值，取值范围 0~1，低于此阈值的结果将被过滤", example = "0.5")
     private Float recallThreshold = 0.5f;
 
     @JsonProperty("faq_threshold")
+    @Schema(description = "FAQ 检索匹配阈值，取值范围 0~1", example = "0.9")
     private Float faqThreshold = 0.9f;
 
     @JsonProperty("need_extras_faq_search")
+    @Schema(description = "是否在语义检索结果不足时额外执行 FAQ 检索", example = "false")
     private Boolean needExtrasFaqSearch = false;
 
     @JsonProperty("show_source")
+    @Schema(description = "是否在回答中展示知识来源引用", example = "true")
     private Boolean showSource = null;
 
     @JsonProperty("retrieve_image")
+    @Schema(description = "是否检索图片内容", example = "false")
     private Boolean retrieveImage = false;
 
 

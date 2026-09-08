@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,18 +22,23 @@ public class ListFileReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_name")
+    @Schema(description = "文件名称", example = "document.pdf")
     private String fileName = null;
 
     @JsonProperty("file_type")
+    @Schema(description = "文件类型", example = "pdf")
     private String fileType = null;
 
     @JsonProperty("file_status")
+    @Schema(description = "文件状态", example = "uploaded")
     private String fileStatus = null;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "1")
     private Integer pageNum = null;
 
     @JsonProperty("page_size")
+    @Schema(description = "每页大小", example = "10")
     private Integer pageSize = null;
 
     public String getFileName() {

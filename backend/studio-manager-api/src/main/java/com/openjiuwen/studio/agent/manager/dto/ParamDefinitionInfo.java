@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -27,22 +28,28 @@ public class ParamDefinitionInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "参数编码", example = "api_key")
     private String code = null;
 
     @JsonProperty("name")
+    @Schema(description = "参数名称", example = "API密钥")
     private String name = null;
 
     @JsonProperty("need")
+    @Schema(description = "是否必填", example = "true")
     private String need = null;
 
     @JsonProperty("type")
+    @Schema(description = "参数类型", example = "STRING")
     private TypeEnum type = null;
 
     @JsonProperty("remark")
+    @Schema(description = "参数备注", example = "用于API认证的密钥")
     @Length(max = 2000)
     private String remark = null;
 
     @JsonProperty("pattern")
+    @Schema(description = "参数校验正则", example = "^[a-zA-Z0-9]+$")
     @Length(max = 200)
     private String pattern = null;
 

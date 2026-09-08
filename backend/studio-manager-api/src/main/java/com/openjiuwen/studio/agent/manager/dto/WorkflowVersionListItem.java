@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,39 +25,51 @@ public class WorkflowVersionListItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String workflowId = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "我的工作流")
     private String name = null;
 
     @JsonProperty("avatar")
+    @Schema(description = "头像", example = "https://example.com/avatar.png")
     private String avatar = null;
 
     @JsonProperty("code")
+    @Schema(description = "工作流编码", example = "WF001")
     private String code = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "这是一个工作流")
     private String description = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "workflow")
     private String type = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "ver_001")
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "v1.0.0")
     private String versionName = null;
 
     @JsonProperty("reference_workflows")
+    @Schema(description = "引用工作流", example = "[]")
     private String referenceWorkflows = null;
 
     @JsonProperty("reference_agents")
+    @Schema(description = "引用智能体", example = "[]")
     private String referenceAgents = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     public String getWorkflowId() {

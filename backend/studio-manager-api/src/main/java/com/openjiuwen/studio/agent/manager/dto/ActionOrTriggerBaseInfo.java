@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -23,17 +24,21 @@ public class ActionOrTriggerBaseInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识ID", example = "action_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "发送邮件")
     @Length(max = 128)
     private String name = null;
 
     @JsonProperty("created_time")
+    @Schema(description = "创建时间", example = "2026-01-01T10:00:00Z")
     private Date createdTime = null;
 
     @JsonProperty("updated_time")
+    @Schema(description = "更新时间", example = "2026-01-01T12:00:00Z")
     private Date updatedTime = null;
 
     public String getId() {

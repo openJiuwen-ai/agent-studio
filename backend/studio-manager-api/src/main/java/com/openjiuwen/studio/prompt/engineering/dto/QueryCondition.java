@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -25,25 +26,31 @@ public class QueryCondition implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String taskId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     @Length(max = 255)
     private String name = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     @Length(max = 10000)
     private String content = null;
 
     @JsonProperty("is_good_rating")
+    @Schema(description = "isGoodRating", example = "true")
     private Boolean isGoodRating = false;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "1")
     private Integer type = null;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String fileId = null;
 
     public String getTaskId() {

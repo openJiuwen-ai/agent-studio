@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,12 +26,15 @@ public class RelationInGuideLine implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "example-type")
     private String type = null;
 
     @JsonProperty("src")
+    @Schema(description = "src", example = "1")
     private Integer src = null;
 
     @JsonProperty("tgt")
+    @Schema(description = "tgt", example = "1")
     private Integer tgt = null;
 
     public String getType() {

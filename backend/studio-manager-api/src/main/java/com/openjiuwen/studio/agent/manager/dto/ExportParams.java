@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,26 +29,31 @@ public class ExportParams implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tool_ids")
+    @Schema(description = "工具ID列表", example = "[\"tool-1\",\"tool-2\"]")
     @Valid
     @Size()
     private List<@Length() String> toolIds = null;
 
     @JsonProperty("agent_ids")
+    @Schema(description = "智能体ID列表", example = "[\"agent-1\",\"agent-2\"]")
     @Valid
     @Size()
     private List<@Length() String> agentIds = null;
 
     @JsonProperty("workflow_ids")
+    @Schema(description = "工作流ID列表", example = "[\"wf-1\",\"wf-2\"]")
     @Valid
     @Size()
     private List<@Length() String> workflowIds = null;
 
     @JsonProperty("agents")
+    @Schema(description = "智能体列表", example = "[]")
     @Valid
     @Size()
     private List<ExportAgent> agents = null;
 
     @JsonProperty("workflows")
+    @Schema(description = "工作流列表", example = "[]")
     @Valid
     @Size()
     private List<ExportWorkflow> workflows = null;

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -30,30 +31,37 @@ public class McpServerConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "config_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("server_id")
+    @Schema(description = "服务ID", example = "server_001")
     @Length(max = 64)
     private String serverId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project_001")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("auth_keys")
+    @Schema(description = "认证密钥列表", example = "[{\"keyId\":\"key1\",\" keyValue\":\"secret\"}]")
     @Valid
     @Size()
     private List<AuthKeyInfo> authKeys = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     @Length(max = 64)
     private String creatorId = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1714521600000")
     private Date createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "1714608000000")
     private Date updateTime = null;
 
     public String getId() {

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openjiuwen.studio.agent.common.dto.knowledge.KnowledgeFaq;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -30,10 +32,12 @@ public class ListFaqResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10", required = true)
     @NotNull
     private Integer count = null;
 
     @JsonProperty("faq_list")
+    @Schema(description = "FAQ", example = "[]", required = true)
     @Valid
     @NotNull
     @Size(max = 1000)

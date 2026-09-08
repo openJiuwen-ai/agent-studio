@@ -81,9 +81,12 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Min(0) @Max(10000)
+        @Parameter(in = ParameterIn.QUERY, description = "分页记录的起始位置偏移量,默认值0", required = false, schema = @Schema())
         @ApiParam(value = "分页记录的起始位置偏移量,默认值0", allowableValues = "0, 10000", defaultValue = "0")
         @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset,
-        @Min(1) @Max(1000) @ApiParam(value = "每一页的数量,默认10", allowableValues = "1, 1000", defaultValue = "10")
+        @Min(1) @Max(1000)
+        @Parameter(in = ParameterIn.QUERY, description = "每一页的数量,默认10", required = false, schema = @Schema())
+        @ApiParam(value = "每一页的数量,默认10", allowableValues = "1, 1000", defaultValue = "10")
         @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit);
 
     @ApiOperation(value = "查询默认知识库连接详情", nickname = "showDefaultKnowledgeBaseConnection",

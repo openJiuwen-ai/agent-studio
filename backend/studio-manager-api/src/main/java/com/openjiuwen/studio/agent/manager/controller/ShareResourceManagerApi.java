@@ -53,8 +53,11 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "资源id", required = true, schema = @Schema())
         @PathVariable("resource_id") String resourceId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
-        String workspaceId, @ApiParam(value = "资源类型，controller-多智能体、workflow-工作流、plugin-插件",
+        String workspaceId,
+        @Parameter(in = ParameterIn.QUERY, description = "资源类型，controller-多智能体、workflow-工作流、plugin-插件", required = false, schema = @Schema())
+        @ApiParam(value = "资源类型，controller-多智能体、workflow-工作流、plugin-插件",
             allowableValues = "controller, workflow, plugin") @RequestParam(value = "resource_type", required = false)
         String resourceType);
 
@@ -70,6 +73,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "创建资源共享请求体", required = true) @Valid @RequestBody
         ShareResourceRequestInfo body);

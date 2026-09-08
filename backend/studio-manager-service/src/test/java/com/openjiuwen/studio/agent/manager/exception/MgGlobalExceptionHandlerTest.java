@@ -94,7 +94,6 @@ class MgGlobalExceptionHandlerTest {
         FieldError fieldError = new FieldError("obj", "name", "is required");
         when(ex.getBindingResult()).thenReturn(bindingResult);
         when(bindingResult.getFieldErrors()).thenReturn(List.of(fieldError));
-        when(ex.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.BAD_REQUEST);
         when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("validation error");
         when(i18nUtil.getSuggestion(any(StudioError.class))).thenReturn("fix it");
 
@@ -102,7 +101,10 @@ class MgGlobalExceptionHandlerTest {
 
         assertNotNull(response);
         assertNotNull(response.getBody());
-        assertEquals("nameis required", response.getBody().getErrorMsg());
+        assertEquals("name: is required", response.getBody().getErrorMsg());
+        assertNotNull(response.getBody().getDetails());
+        assertEquals(1, response.getBody().getDetails().size());
+        assertEquals("name: is required", response.getBody().getDetails().get(0).getErrorMsg());
     }
 
     @Test
