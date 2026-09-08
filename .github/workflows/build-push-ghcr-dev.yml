@@ -1,15 +1,10 @@
-name: Build & Push Dev Docker Images
+name: Build & Push Dev Branch Docker Images
 
 on:
   workflow_dispatch:
-    inputs:
-      agent_core_ref:
-        description: 'agent-core 分支/tag (默认 develop)'
-        required: false
-        default: develop
 
 concurrency:
-  group: build-push-dev-${{ github.ref }}
+  group: build-push-dev-daily-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,14 +15,10 @@ jobs:
     outputs:
       build_ts: ${{ steps.meta.outputs.build_ts }}
     steps:
-      - name: Checkout agent-studio
+      - name: Checkout code (studio-2.0-dev)
         uses: actions/checkout@v4
-
-      - name: Checkout agent-core
-        run: |
-          set -euo pipefail
-          AGENT_CORE_REF="${{ inputs.agent_core_ref || 'develop' }}"
-          git clone --branch "${AGENT_CORE_REF}" --depth 1 https://gitcode.com/openJiuwen/agent-core.git agent-core
+        with:
+          ref: studio-2.0-dev
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -76,16 +67,12 @@ jobs:
           cd ..
           tar -cf docker/studio-console/agent-console.tar -C frontend dist
 
-      - name: Prepare studio-runtime artifacts (dev)
+      - name: Prepare studio-runtime artifacts
         run: |
-          # 复制 runtime 源码到构建上下文
           rm -rf docker/studio-runtime/agent_runtime
           cp -rf agent-runtime/agent_runtime docker/studio-runtime/agent_runtime
           rm -rf docker/studio-runtime/jiuwen
           cp -rf agent-runtime/jiuwen docker/studio-runtime/jiuwen
-          rm -rf docker/studio-runtime/agent_builder
-          test -d agent_builder
-          cp -rf agent_builder docker/studio-runtime/agent_builder
           rm -rf docker/studio-runtime/model_service
           test -d packages/model_service/model_service
           cp -rf packages/model_service/model_service docker/studio-runtime/model_service
@@ -97,22 +84,9 @@ jobs:
           cp -rf packages/common_utils/common_utils docker/studio-runtime/common_utils
           rm -rf docker/studio-runtime/tests
           cp -rf agent-runtime/tests docker/studio-runtime/tests
+          cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
           rm -rf docker/studio-runtime/bin
           cp -rf docker/studio-runtime/script docker/studio-runtime/bin
-
-          # 移除 requirements.txt 中的 openjiuwen 行（改为从源码安装）—— 先拷贝再 sed 副本，不动检出源文件
-          cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
-          sed -i -E '/^openjiuwen([[:space:]]|[<>=!~]|$)/d' docker/studio-runtime/requirements.txt
-
-          # 复制 agent-core 源码到构建上下文（清理不必要的文件以减小构建上下文）
-          cp -rf agent-core docker/studio-runtime/agent-core
-          rm -rf docker/studio-runtime/agent-core/.git \
-                 docker/studio-runtime/agent-core/tests \
-                 docker/studio-runtime/agent-core/docs \
-                 docker/studio-runtime/agent-core/.venv \
-                 docker/studio-runtime/agent-core/__pycache__ \
-                 docker/studio-runtime/agent-core/.pytest_cache \
-                 docker/studio-runtime/agent-core/report
 
       - name: Prepare studio-builder artifacts
         run: |
@@ -137,12 +111,13 @@ jobs:
       - name: Upload build contexts
         uses: actions/upload-artifact@v4
         with:
-          name: docker-dev-build-contexts
+          name: docker-dev-daily-build-contexts
           path: |
             docker/studio-manager
             docker/studio-console
             docker/studio-runtime
             docker/studio-builder
+            docker/grafana
           retention-days: 1
           if-no-files-found: error
 
@@ -155,14 +130,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [studio-manager, studio-console, studio-runtime, studio-builder]
-        arch: [amd64, arm64]
+        include:
+          - service: studio-manager
+            context_dir: studio-manager
+            base_image: eclipse-temurin:17-jre
+            cache_scope: studio-manager-dev
+          - service: studio-console
+            context_dir: studio-console
+            base_image: nginx:1.27
+            cache_scope: studio-console-dev
+          - service: studio-runtime
+            context_dir: studio-runtime
+            base_image: python:3.11-slim
+            cache_scope: studio-runtime-dev
+          - service: studio-builder
+            context_dir: studio-builder
+            base_image: python:3.11-slim
+            cache_scope: studio-builder-dev
+          - service: grafana-victorialogs
+            context_dir: grafana
+            cache_scope: grafana-victorialogs
 
     steps:
       - name: Download build contexts
         uses: actions/download-artifact@v4
         with:
-          name: docker-dev-build-contexts
+          name: docker-dev-daily-build-contexts
           path: docker
 
       - name: Set up QEMU
@@ -173,6 +166,7 @@ jobs:
 
       - name: Resolve image repository config
         id: image_config
+        shell: bash
         env:
           GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
         run: |
@@ -189,68 +183,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push ${{ matrix.service }} for ${{ matrix.arch }}
-        env:
-          REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
-          SERVICE: ${{ matrix.service }}
-          ARCH: ${{ matrix.arch }}
-          BUILD_TS: ${{ needs.prepare.outputs.build_ts }}
-        run: |
-          set -euo pipefail
-          case "${SERVICE}" in
-            studio-manager) BASE_IMAGE=eclipse-temurin:17-jre; DOCKERFILE=Dockerfile ;;
-            studio-console) BASE_IMAGE=nginx:1.27; DOCKERFILE=Dockerfile ;;
-            studio-runtime) BASE_IMAGE=python:3.11-slim; DOCKERFILE=Dockerfile.dev ;;
-            studio-builder) BASE_IMAGE=python:3.11-slim; DOCKERFILE=Dockerfile ;;
-          esac
-          if [ "${ARCH}" = amd64 ]; then SUFFIX=x86_64; else SUFFIX=arm64; fi
-          TAG="dev-core-${BUILD_TS}.${SUFFIX}"
-          docker buildx build \
-            --file "docker/${SERVICE}/${DOCKERFILE}" \
-            --platform "linux/${ARCH}" \
-            --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
-            --cache-from "type=gha,scope=${SERVICE}-dev-${ARCH}" \
-            --cache-to "type=gha,scope=${SERVICE}-dev-${ARCH},mode=min" \
-            --tag "${REPOSITORY}/${SERVICE}:${TAG}" \
-            --progress plain \
-            --push \
-            "docker/${SERVICE}"
-
-  build-grafana:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout agent-studio
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Resolve image repository config
-        id: image_config
-        shell: bash
-        env:
-          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
-        run: |
-          set -euo pipefail
-          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
-          echo "ghcr_registry=${GHCR_IMAGE_REPOSITORY%%/*}" >> "${GITHUB_OUTPUT}"
-          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "${GITHUB_OUTPUT}"
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.image_config.outputs.ghcr_registry }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Check existing Grafana multi-architecture image
+        if: matrix.service == 'grafana-victorialogs'
         id: grafana_image
         shell: bash
         env:
@@ -266,28 +200,43 @@ jobs:
               echo "Grafana image already contains linux/amd64 and linux/arm64; skipping build."
             fi
           fi
-          echo "exists=${EXISTS}" >> "${GITHUB_OUTPUT}"
+          echo "exists=${EXISTS}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Grafana multi-architecture image
-        if: steps.grafana_image.outputs.exists != 'true'
+      - name: Build and push ${{ matrix.service }}
+        if: matrix.service != 'grafana-victorialogs' || steps.grafana_image.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
-          context: docker/grafana
+          context: docker/${{ matrix.context_dir }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.image_config.outputs.ghcr_repository }}/grafana-victorialogs:11.3.0-0.29.0
+          tags: ${{ steps.image_config.outputs.ghcr_repository }}/${{ matrix.service }}:${{ matrix.service == 'grafana-victorialogs' && '11.3.0-0.29.0' || format('dev-{0}', needs.prepare.outputs.build_ts) }}
           build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
             GRAFANA_VERSION=11.3.0
             VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0
-          cache-from: type=gha,scope=grafana-victorialogs
-          cache-to: type=gha,scope=grafana-victorialogs,mode=max
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,scope=${{ matrix.cache_scope }},mode=max
+
+      - name: Create architecture tags on GHCR
+        if: matrix.service != 'grafana-victorialogs'
+        env:
+          REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
+          SERVICE: ${{ matrix.service }}
+          BUILD_TS: ${{ needs.prepare.outputs.build_ts }}
+        run: |
+          set -euo pipefail
+          SRC="${REPOSITORY}/${SERVICE}:dev-${BUILD_TS}"
+          AMD64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          ARM64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          docker buildx imagetools create -t "${REPOSITORY}/${SERVICE}:dev-${BUILD_TS}.x86_64" "${REPOSITORY}/${SERVICE}@${AMD64_DIGEST}"
+          docker buildx imagetools create -t "${REPOSITORY}/${SERVICE}:dev-${BUILD_TS}.arm64" "${REPOSITORY}/${SERVICE}@${ARM64_DIGEST}"
 
   summary:
-    needs: [prepare, build-and-push, build-grafana]
+    needs: [prepare, build-and-push]
     runs-on: ubuntu-latest
     steps:
       - name: Print image summary
         run: |
-          echo "Dev images published with tags:"
-          echo "  dev-core-${{ needs.prepare.outputs.build_ts }}.x86_64"
-          echo "  dev-core-${{ needs.prepare.outputs.build_ts }}.arm64"
+          echo "Dev branch images published with tags:"
+          echo "  dev-${{ needs.prepare.outputs.build_ts }}.x86_64"
+          echo "  dev-${{ needs.prepare.outputs.build_ts }}.arm64"
