@@ -1728,6 +1728,18 @@ class IRConverter:
                 source in ir_stream_source_ids
                 and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
                 and target_type not in IRConverter._AGGREGATE_TYPES
+                # Keep in sync with the message guard in stream_input_target_ids
+                # collection and _is_stream_connection: a message that references
+                # only batch values (start userFields / memory defaults) must not
+                # be treated as a streaming join terminal, otherwise its lane-done
+                # is wired as TRANSFORM while phase-2 connects a regular edge ->
+                # GRAPH_VERTEX_STREAM_CALL_ERROR at runtime.
+                and not (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                )
             )
             if is_stream_join_edge:
                 parallel_stream_done_inputs[done_node] = {
