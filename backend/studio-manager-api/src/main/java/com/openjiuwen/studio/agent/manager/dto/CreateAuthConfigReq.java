@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -30,11 +32,13 @@ public class CreateAuthConfigReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("metadata_id")
+    @Schema(description = "元数据", example = "example-id-123", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     @NotBlank
     private String metadataId = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证", example = "示例字符串", required = true)
     @Valid
     @NotNull
     @Size()

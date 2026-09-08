@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -25,9 +27,11 @@ public class ShareResourceListRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10")
     private Integer count = null;
 
     @JsonProperty("resource_list")
+    @Schema(description = "资源", example = "[]")
     @Valid
     @Size()
     private List<ShareResourceInfo> resourceList = null;

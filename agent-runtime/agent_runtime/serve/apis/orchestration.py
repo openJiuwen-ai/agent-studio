@@ -130,7 +130,7 @@ def _get_runner_by_type(agent_type: str):
     return _get_workflow_runner()
 
 
-@execution_app.get("/v1/health", response_class=PlainTextResponse)
+@execution_app.get("/v1/health", response_class=PlainTextResponse, summary="健康检查")
 async def health():
     """Restful API for server health."""
     return (
@@ -140,7 +140,7 @@ async def health():
     )
 
 
-@execution_app.post("/v1/orchestration/ir/execute")
+@execution_app.post("/v1/orchestration/ir/execute", summary="IR 执行（流式/非流式）")
 async def ir_execute(req_json: dict, request: Request):
     """
     IR execute endpoint.
@@ -328,7 +328,7 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
         yield _fallback_terminal_done(execution_id)
 
 
-@execution_app.post("/v1/orchestration/ir/component/{component_id}/execute")
+@execution_app.post("/v1/orchestration/ir/component/{component_id}/execute", summary="单组件调试执行")
 async def component_debug_execute(component_id: str, req_json: dict, request: Request):
     """单组件调试端点（：与普通执行一致 — body 安全 + effective userId 服务器覆盖）"""
     try:
@@ -443,7 +443,7 @@ async def _load_ir_json(ir_path: str) -> dict:
         raise IRBuildException(f"IR file JSON format error: {ir_path}, {e}") from e
 
 
-@execution_app.delete("/v1/orchestration/ir/execute")
+@execution_app.delete("/v1/orchestration/ir/execute", summary="删除执行实例")
 async def delete_ir_execution_instance(req_json: dict):
     """
     Restful API for delete Agent instance and Workflow instance by executionId.
@@ -491,7 +491,8 @@ def _get_additional_questions_service() -> AdditionalQuestionsService:
 
 
 @execution_app.post(
-    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions"
+    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions",
+    summary="生成追问（智能体场景）",
 )
 async def agent_additional_questions(
     project_id: str,
@@ -512,7 +513,8 @@ async def agent_additional_questions(
 
 
 @execution_app.post(
-    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions"
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions",
+    summary="生成追问（工作流场景）",
 )
 async def workflow_additional_questions(
     project_id: str,

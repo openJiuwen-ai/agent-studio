@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,63 +28,82 @@ public class PeOptimizationTaskVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "text")
     private String type = null;
 
     @JsonProperty("jiuwen_task_id")
+    @Schema(description = "jiuwen任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String jiuwenTaskId = null;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String taskId = null;
 
     @JsonProperty("test_set_id")
+    @Schema(description = "测试集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String testSetId = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "")
     @Valid
     private ModelConfig modelConfig = null;
 
     @JsonProperty("assistant_config")
+    @Schema(description = "助手配置", example = "")
     @Valid
     private ModelConfig assistantConfig = null;
 
     @JsonProperty("num_iter")
+    @Schema(description = "迭代次数", example = "3")
     private Integer numIter = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "running")
     private String status = null;
 
     @JsonProperty("progress_rate")
+    @Schema(description = "进度百分比", example = "50.0")
     private Double progressRate = null;
 
     @JsonProperty("best_prompt")
+    @Schema(description = "最佳提示词", example = "优化后的提示词内容")
     private String bestPrompt = null;
 
     @JsonProperty("error_msg")
+    @Schema(description = "错误信息", example = "")
     private String errorMsg = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private String createdOn = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private String updatedOn = null;
 
     @JsonProperty("running_on")
+    @Schema(description = "运行时间", example = "2024-01-01T00:00:00.000Z")
     private String runningOn = null;
 
     @JsonProperty("prompts")
+    @Schema(description = "提示词列表", example = "")
     @Valid
     private List<PePromptVo> prompts = null;
 

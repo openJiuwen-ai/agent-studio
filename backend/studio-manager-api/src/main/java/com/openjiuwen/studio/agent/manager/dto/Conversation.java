@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,9 +29,11 @@ public class Conversation implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("lastUpdateTime")
+    @Schema(description = "last更新时间", example = "1")
     private Long lastUpdateTime = null;
 
     @JsonProperty("messageList")
+    @Schema(description = "消息列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowMessage> messageList = null;

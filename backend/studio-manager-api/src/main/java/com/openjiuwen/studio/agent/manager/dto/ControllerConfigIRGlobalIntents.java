@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -23,22 +24,28 @@ public class ControllerConfigIRGlobalIntents implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "意图名称", example = "greeting")
     private String name = null;
 
     @JsonProperty("intent_id")
+    @Schema(description = "意图ID", example = "intent-001")
     private String intentId = null;
 
     @JsonProperty("description")
+    @Schema(description = "意图描述", example = "用户问候意图")
     private String description = null;
 
     @JsonProperty("handler_type")
+    @Schema(description = "处理器类型", example = "workflow")
     private String handlerType = null;
 
     @JsonProperty("handler")
+    @Schema(description = "处理器内容", example = "{\"workflow_id\":\"wf-001\"}")
     @Valid
     private Object handler = null;
 
     @JsonProperty("action_after_completion")
+    @Schema(description = "完成后动作", example = "continue")
     private String actionAfterCompletion = null;
 
     public String getName() {

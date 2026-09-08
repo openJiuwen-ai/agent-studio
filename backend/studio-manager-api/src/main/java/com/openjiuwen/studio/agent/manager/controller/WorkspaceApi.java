@@ -75,6 +75,7 @@ import org.springframework.web.bind.annotation.RequestParam;
     ResponseEntity<GetWorkspaceListRsp> initWorkspace(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
+        @Parameter(in = ParameterIn.QUERY, description = "user-查询用户下有哪些空间，project-查询当前project下有哪些空间。", required = false, schema = @Schema())
         @ApiParam(value = "user-查询用户下有哪些空间，project-查询当前project下有哪些空间。",
             allowableValues = "user, project", defaultValue = "user")
         @RequestParam(value = "scope", required = false, defaultValue = "user") String scope);

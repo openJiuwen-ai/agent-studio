@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -26,15 +28,18 @@ public class AuthConfigListQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "example-id-123", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("provider_id")
+    @Schema(description = "提供者ID", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String providerId = null;
 
     @JsonProperty("metadata_id")
+    @Schema(description = "元数据", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String metadataId = null;
 

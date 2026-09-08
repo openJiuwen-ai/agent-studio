@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,19 +26,24 @@ public class KnowledgeRepoReference implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("knowledge_repo_id")
+    @Schema(description = "知识库ID", example = "kr001")
     private String knowledgeRepoId = null;
 
     @JsonProperty("knowledge_repo_name")
+    @Schema(description = "知识库名称", example = "产品知识库")
     private String knowledgeRepoName = null;
 
     @JsonProperty("knowledge_repo_icon")
+    @Schema(description = "知识库图标", example = "icon.png")
     private String knowledgeRepoIcon = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     @Length(min = 1, max = 16)
     private String status = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "产品相关知识库")
     @Length(min = 1, max = 100)
     private String desc = null;
 

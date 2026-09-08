@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -27,22 +28,27 @@ public class TaskDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,32}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("tag_ids")
+    @Schema(description = "标签Ids", example = "")
     @Valid
     @Size(max = 500)
     private List<@Length() String> tagIds = null;
 
     @JsonProperty("industry_id")
+    @Schema(description = "行业ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String industryId = null;
 

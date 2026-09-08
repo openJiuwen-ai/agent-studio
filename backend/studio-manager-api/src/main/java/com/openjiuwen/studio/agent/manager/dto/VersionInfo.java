@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -26,25 +27,32 @@ public class VersionInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0", required = true)
     @NotBlank
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "v1.0.0")
     private String versionName = null;
 
     @JsonProperty("version_note")
+    @Schema(description = "版本备注", example = "初始版本")
     private String versionNote = null;
 
     @JsonProperty("status")
+    @Schema(description = "版本状态", example = "published")
     private String status = null;
 
     @JsonProperty("release_time")
+    @Schema(description = "发布时间", example = "2026-09-01T00:00:00Z")
     private Date releaseTime = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者名称", example = "admin")
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     private String creatorId = null;
 
     public String getVersionId() {

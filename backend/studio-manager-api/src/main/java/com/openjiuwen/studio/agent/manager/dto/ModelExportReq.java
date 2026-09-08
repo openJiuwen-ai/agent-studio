@@ -4,8 +4,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.swagger.annotations.ApiModel;
-import io.swagger.annotations.ApiModelProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.io.Serializable;
 import java.util.List;
@@ -21,19 +20,20 @@ import java.util.List;
  * </ul>
  * {@code model_ids} 与 {@code provider_id} 二选一非空（controller 层校验）。
  */
-@ApiModel(description = "模型批量导出请求体")
+@Schema(description = "模型批量导出请求体")
 public class ModelExportReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model_ids")
+    @Schema(description = "模型", example = "[]")
     private List<String> modelIds;
 
     @JsonProperty("provider_id")
-    @ApiModelProperty(value = "按供应商导出（供应商+其下全部模型），与 model_ids 二选一")
+    @Schema(description = "按供应商导出（供应商+其下全部模型），与 model_ids 二选一", example = "example-id-123")
     private String providerId;
 
     @JsonProperty("include_provider")
-    @ApiModelProperty(value = "是否带供应商元数据；仅对 model_ids 方式生效，默认 true")
+    @Schema(description = "是否带供应商元数据；仅对 model_ids 方式生效，默认 true", example = "true")
     private Boolean includeProvider;
 
     public List<String> getModelIds() {

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,9 +26,11 @@ public class IamUserInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("iamUserId")
+    @Schema(description = "iam用户ID", example = "example-id-123")
     private String iamUserId = null;
 
     @JsonProperty("iamUserName")
+    @Schema(description = "iam用户名称", example = "示例名称")
     private String iamUserName = null;
 
     public String getIamUserId() {

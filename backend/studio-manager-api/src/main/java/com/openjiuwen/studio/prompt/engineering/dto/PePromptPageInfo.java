@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -24,16 +25,20 @@ public class PePromptPageInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("data")
+    @Schema(description = "数据列表", example = "")
     @Valid
     private List<PePromptVo> data = null;
 
     @JsonProperty("total_page")
+    @Schema(description = "总页数", example = "10")
     private Integer totalPage = null;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10")
     private Integer count = null;
 
     @JsonProperty("has_next_page")
+    @Schema(description = "是否有下一页", example = "false")
     private Boolean hasNextPage = false;
 
     public List<PePromptVo> getData() {

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.common.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,11 +27,13 @@ public class TriggerParam implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "参数名称", example = "prompt", required = true)
     @NotBlank
     @Length(max = 500)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "参数描述", example = "触发器提示词参数")
     @Length(max = 500)
     private String description = null;
 
