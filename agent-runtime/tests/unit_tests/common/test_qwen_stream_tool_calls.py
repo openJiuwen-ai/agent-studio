@@ -148,3 +148,44 @@ class TestQwenStreamToolCalls:
         last = messages[-1]
         assert isinstance(last.tool_calls, ToolCall)
         assert last.tool_calls.name == "query_meetings"
+
+    def test_parallel_tool_calls_multiple_indices(self):
+        """并行 function calling：多个 index 的 tool_calls → 生成 List[ToolCall]。"""
+        chunks = [
+            # chunk 1: index 0 的 tool_call 开始
+            {"id": "1", "choices": [{"delta": {
+                "tool_calls": [{"index": 0, "id": "call_a", "function": {
+                    "name": "create_meeting",
+                    "arguments": "{\"title\": \"周会\"}"
+                }}]
+            }, "finish_reason": None}]},
+            # chunk 2: index 1 的 tool_call 开始
+            {"id": "1", "choices": [{"delta": {
+                "tool_calls": [{"index": 1, "id": "call_b", "function": {
+                    "name": "query_meetings",
+                    "arguments": "{\"date\": \"2026-09-08\"}"
+                }}]
+            }, "finish_reason": None}]},
+            # chunk 3: finish_reason
+            {"id": "1", "choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+            {"id": "1", "choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}},
+        ]
+        lines = _make_sse_lines(chunks)
+        qwen = self._make_qwen()
+
+        with patch("jiuwen.common.llm_service.language_model.qwen.requests.post",
+                    return_value=self._mock_response(lines)), \
+             patch("jiuwen.common.llm_service.language_model.qwen.TemplateManager") as tm, \
+             patch("jiuwen.common.llm_service.language_model.qwen.ModelUtil.truncate_params",
+                    side_effect=lambda p: (p.get("top_p", 0.5), p.get("temperature", 0.5))):
+            tm.return_value.get.return_value = MagicMock(content=[])
+            messages = list(qwen._stream([]))
+
+        last = messages[-1]
+        # 多个 tool_calls 应返回列表
+        assert isinstance(last.tool_calls, list)
+        assert len(last.tool_calls) == 2
+        assert last.tool_calls[0].name == "create_meeting"
+        assert last.tool_calls[0].id == "call_a"
+        assert last.tool_calls[1].name == "query_meetings"
+        assert last.tool_calls[1].id == "call_b"

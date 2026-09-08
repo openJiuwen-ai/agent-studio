@@ -1603,7 +1603,7 @@ public class IrAdapterService {
         // 确保 name 包含 operation 后缀，实现操作级工具隔离
         // OBS DSL JSON 可能只存了插件拼音名，需通过 transferPlugin2Tool 拼接 operation 名
         String displayName = toolEntity.getToolDisplayName();
-        if (ids.length > 1 && !"0".equals(ids[1]) && !displayName.contains(ids[1])) {
+        if (displayName != null && ids.length > 1 && !"0".equals(ids[1]) && !displayName.contains(ids[1])) {
             try {
                 List<PluginEntity> pluginEntities = pluginService.getPlugin(
                     projectId, null, Collections.singletonList(pluginId));
