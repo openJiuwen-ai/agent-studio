@@ -6,11 +6,8 @@
 # 无关产物**（manager jar / 前端 dist / runtime 源码 / requirements / nginx 模板），
 # 仅重建 arch 相关部分：deps/linux(aarch64 二进制) + deps/wheels(aarch64)。
 #
-# 与 x86 路径的差异详见 versions.arm64.env 头部注释。要点：
-#   - MySQL 8.0.46 aarch64 官方只有 glibc2.28 全量包（880MB）→ 解压后裁剪逼近 minimal；
-#   - Redis 7.0.14 / nginx 1.26.3 源码编译，在 debian:10 arm64 容器（glibc 2.28 基线）内完成；
-#   - aarch64 wheels 由容器内运行的内置 aarch64 python-3.11 原生 pip 解析下载（完整依赖闭包）；
-#   - MySQL 官方 CDN 单连接 ~80KB/s → 大文件 16 并发分块下载。
+# 与 x86 路径的差异（MySQL 全量包裁剪、Redis/nginx 源码编译、glibc 2.28 基线等）
+# 详见 versions.arm64.env 头部注释。
 #
 # 用法: ./build_arm64.sh [--seed-apps <x86 staging 目录>] [-v 版本] [--skip-deps] [--skip-wheels]
 #   --seed-apps 默认 build/AgentStudio-native-<ver>（x86 构建产物），须含 app/ 与 scripts/。
@@ -298,19 +295,23 @@ BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git:     $GIT_COMMIT"
   echo "built:   $BUILD_TIME"
   echo "平台:    Linux arm64 (glibc 2.28+)"
-  echo "本包仅含 ARM64 原生依赖。与 x86 包的差异：MySQL 为官方 aarch64 全量包裁剪"
-  echo "（${MYSQL_VERSION}，glibc2.28，官方无 minimal 变体）；Redis/nginx 为 debian:10 arm64"
-  echo "容器内源码编译（仅链 glibc，基线 2.28）；无 Windows 侧依赖。"
-  echo
-  echo "组件产物（与 x86 包同源构建）:"
-  echo "  studio-manager.jar / frontend/dist/hws / agent_runtime/jiuwen/agent_builder"
-  echo "  model_service/storage/common_utils（PYTHONPATH=app）"
+  echo "本包仅含 ARM64 原生依赖（无 Windows 侧依赖）；目录结构与启动方式见 README.txt。"
+  echo "与 x86 包的差异：MySQL 为官方 aarch64 全量包裁剪（glibc2.28，官方无 minimal 变体）；"
+  echo "Redis/nginx 为 debian:10 arm64 容器内源码编译（仅链 glibc，基线 2.28）。"
   echo
   echo "原生依赖版本（详见 versions.env）:"
   echo "  JRE=${JRE17_VERSION}  MySQL=${MYSQL_VERSION}  Redis=${REDIS_VERSION}  Python=${PYTHON_VERSION}  nginx=${NGINX_VERSION}"
-  echo
-  echo "启动：./scripts/start.sh   控制台: http://localhost/openjiuwen/"
 } > "$STAGING/MANIFEST.txt"
+
+# 模板 README.txt 为 Win+Linux x64 双平台措辞，按 ARM64 包改写平台标识与 deps 说明
+if [ -f "$STAGING/README.txt" ]; then
+  sed -i -e 's#跨平台（Windows x64 / Linux x64）#ARM64 Linux 专用（glibc 2.28+）#' \
+         -e '/^    win\/  jre-17/d' \
+         -e 's#^    linux/ .*Linux 原生依赖#    linux/ jre-17 mysql-8.0 redis-7 minio mc python-3.11 nginx   ARM64 原生依赖#' \
+         -e '/^  - Windows 非管理员/d' \
+         -e '/^  - Windows 不含 cron/d' \
+    "$STAGING/README.txt"
+fi
 
 mkdir -p "$DIST"
 PY=python3; command -v python3 >/dev/null 2>&1 || PY=python; command -v python >/dev/null 2>&1 || PY="py -3"

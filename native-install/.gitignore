@@ -2,4 +2,5 @@
 build/
 dist/
 .cache/
+.cache-arm64/
 *.log
