@@ -16,6 +16,7 @@ FlowMcp - MCP 调用组件
 
 import asyncio
 from builtins import ExceptionGroup
+import copy
 from enum import Enum
 import json
 
@@ -80,6 +81,16 @@ def _build_flow_mcp_error(
         error_code=status.value[0],
         message=status.value[1].format(**kwargs),
     )
+
+
+def _is_param_required(param) -> bool:
+    """判断参数是否必填
+
+    param.required 可能是 bool，也可能是 "true"/"false" 字符串
+    （见 _create_client 对 required 字段的兼容校验）。直接作 truthy
+    判断会把非空字符串 "false" 误判为必填，统一归一化后比较。
+    """
+    return str(getattr(param, "required", False)).lower() == "true"
 
 
 def _create_mcp_client(config: McpServerConfig):
@@ -220,7 +231,7 @@ class FlowMcp(WorkflowComponent):
                 "description": param.description,
                 "default": param.default_value,
             }
-            if param.required:
+            if _is_param_required(param):
                 required.append(param.name)
         properties[JIUWEN_RUNTIME_KWARGS] = {"type": "object"}
 
@@ -278,8 +289,9 @@ class FlowMcp(WorkflowComponent):
                     await self._init_api()
 
         inputs_data = inputs.get(USER_FIELDS, {})
+        schema_patches = {}
         if not self._is_older_version:
-            api_inputs = self._format_api_inputs(inputs_data)
+            api_inputs, schema_patches = self._format_api_inputs(inputs_data)
         else:
             api_inputs = inputs_data
 
@@ -304,8 +316,14 @@ class FlowMcp(WorkflowComponent):
             api_inputs = dict(api_inputs)
             api_inputs[JIUWEN_RUNTIME_KWARGS] = jiuwen_kwargs
 
+        # JSON 启发式解析发生时，基于 card 副本构建按调用隔离的 MCPTool，
+        # 避免就地修改共享 schema（跨 invoke 持久化 / 并发互相污染）
+        tool = self.api
+        if schema_patches and self.api is not None:
+            tool = self._build_patched_tool(schema_patches)
+
         try:
-            result = await self.api.invoke(api_inputs)
+            result = await tool.invoke(api_inputs)
             api_outputs = self._convert_mcp_result(result)
         except BaseError as tool_error:
             raise self._create_error_response(tool_error.cause)
@@ -313,23 +331,72 @@ class FlowMcp(WorkflowComponent):
         outputs = self._format_api_outputs(api_outputs)
         return {USER_FIELDS: outputs}
 
-    def _format_api_inputs(self, inputs: dict) -> dict:
+    def _format_api_inputs(self, inputs: dict) -> tuple:
         """格式化 API 输入参数（基于 client._tool_params 的类型转换）
 
         注意：method=Headers 的参数会被提取到 _header_params，不作为 call_tool 的 arguments
+
+        Returns:
+            tuple: (api_inputs, schema_patches)
+                - api_inputs: 格式化后的调用参数
+                - schema_patches: {参数名: "object"/"array"}，记录 JSON 字符串被
+                  解析成 dict/list 的参数，供调用方按 card 副本生成 schema，
+                  不就地修改共享的 tool card
         """
         tool_params = getattr(self._client, "_tool_params", None)
         api_params_dict = {param.name: param for param in tool_params}
         api_inputs = {}
         header_params = {}
+        schema_patches = {}
         for name, value in inputs.items():
             param = api_params_dict.get(name)
             if param:
                 if param.method == "Headers":
-                    # method=Headers 的参数应该放到 HTTP 请求头
+                    # method=Headers 的参数应该放到 HTTP 请求头。
+                    # None（可选 header 未填写）跳过，避免 str(None) 把
+                    # 字符串 "None" 写入请求头；必填 header 为 None 时
+                    # 显式报错——header 不参与 card schema 的 client-side
+                    # 校验，静默跳过后下游没有任何报错点，与 Body 分支
+                    # 必填参数由 MCPTool 校验报错的行为不一致
+                    if value is None:
+                        if _is_param_required(param):
+                            workflow_logger.error(
+                                f"{TAG} _format_api_inputs error: required header param value is None",
+                                event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                                component_type_str="FlowMcp",
+                                metadata={"param_name": name},
+                            )
+                            raise _build_flow_mcp_error(
+                                FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
+                                param=name,
+                            )
+                        continue
                     header_params[name] = transform_type(value, param.type, name)
                 else:
-                    api_inputs[name] = transform_type(value, param.type, name)
+                    # None 直接透传：MCP server 对可选参数（dict | None = None）接受 None。
+                    # 避免 transform_type(None, "string") → 字符串 "None" → Pydantic 校验失败。
+                    if value is None:
+                        api_inputs[name] = None
+                    else:
+                        converted = transform_type(value, param.type, name)
+                        # JSON 启发式：对看起来像 JSON object/array 的字符串值尝试解析。
+                        # 仅限 _should_parse_json_value 判定的两种情况，
+                        # 避免把工具期望原样接收的合法 JSON 字符串改写为对象/数组。
+                        # 解析结果记录到 schema_patches，由 invoke 基于 card 副本修补。
+                        if (
+                            self._is_json_like_string(converted)
+                            and self._should_parse_json_value(param)
+                        ):
+                            try:
+                                parsed = json.loads(converted)
+                                if isinstance(parsed, (dict, list)):
+                                    schema_patches[name] = (
+                                        "object" if isinstance(parsed, dict) else "array"
+                                    )
+                                    converted = parsed
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                        api_inputs[name] = converted
             else:
                 workflow_logger.error(
                     f"{TAG} _format_api_inputs error: param not found",
@@ -343,7 +410,59 @@ class FlowMcp(WorkflowComponent):
                 )
         # 保存 header_params 到实例变量，供后续 invoke 使用
         self._header_params = header_params
-        return api_inputs
+        return api_inputs, schema_patches
+
+    @staticmethod
+    def _is_json_like_string(value) -> bool:
+        """判断值是否为疑似 JSON object/array 的字符串（以 { 或 [ 开头）
+
+        空字符串切片为 ""，不会命中，无需单独判空。
+        """
+        return isinstance(value, str) and value[:1] in ("{", "[")
+
+    @staticmethod
+    def _should_parse_json_value(param) -> bool:
+        """判断字符串值是否适用 JSON 启发式解析
+
+        - 声明为 object/array 的参数：解析（把 JSON 字符串值转成声明的类型形态）
+        - IR 缺失类型信息、被默认推断为 string 的参数（type_inferred）：解析。
+          老工作流兼容：Java 对 oneOf schema 生成的参数无 type 字段，
+          Python 侧默认为 string，但工具实际期望 dict/list
+          （如 meta-wise-chat 的 arguments）
+        - 显式声明为 string 的参数：不解析，尊重工具接口定义，
+          避免破坏期望原样接收 JSON 字符串的既有 string 参数
+
+        已知权衡（老 IR 兼容的固有代价）：IR 无类型信息的"真 string"参数
+        收到合法 JSON 对象/数组字符串时也会被解析，服务端 Pydantic 会以
+        明确报错拒绝（不会静默写坏数据）。老 IR 中无任何信号可区分
+        "真 string"与"被误标 string 的 object"（如 meta-wise-chat 老流
+        arguments 在 IR 中无 type/oneOf/schema），若收窄到"确认存在
+        oneOf/object 信息"才解析，老工作流将回归 101873 线上故障。
+        根治方向：Java 侧在 IR 保留 oneOf 类型信息，或初始化时经
+        list_tools 用服务端 schema 交叉校正推断类型（后续跟进）。
+        """
+        if param.type in ("object", "array"):
+            return True
+        return param.type == "string" and getattr(param, "type_inferred", False)
+
+    def _build_patched_tool(self, schema_patches: dict) -> MCPTool:
+        """基于 tool card 深拷贝副本生成按调用隔离的 MCPTool
+
+        JSON 解析会改变参数值的实际形态（string → dict/list），需同步修正
+        card schema 中对应 type，client-side 校验（format_with_schema）才能通过。
+        就地修改 self.api.card.input_params 会让修改在多次 invoke 之间持久存在
+        （后续正常 string 输入将无法通过校验），并发 invoke 还会互相污染，
+        因此基于副本生成，共享对象保持只读。
+        """
+        card = self.api.card
+        patched_params = copy.deepcopy(card.input_params)
+        if isinstance(patched_params, dict):
+            props = patched_params.get("properties", {})
+            for name, new_type in schema_patches.items():
+                if name in props and isinstance(props[name], dict):
+                    props[name]["type"] = new_type
+        patched_card = card.model_copy(update={"input_params": patched_params})
+        return MCPTool(mcp_client=self._client, tool_info=patched_card)
 
     def _format_api_outputs(self, outputs: dict) -> dict:
         """格式化 MCP 输出结果
