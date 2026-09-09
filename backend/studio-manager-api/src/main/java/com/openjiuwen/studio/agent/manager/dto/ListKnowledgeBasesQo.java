@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,46 +32,57 @@ public class ListKnowledgeBasesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "查询偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("share_scope")
+    @Schema(description = "共享范围", example = "PUBLIC")
     private String shareScope = null;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 10;
 
     @JsonProperty("name")
+    @Schema(description = "知识库名称", example = "我的知识库")
     @Pattern(regexp = "^.{0,64}$")
     @Length(max = 192)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "知识库类型", example = "vector")
     private String type = null;
 
     @JsonProperty("knowledge_base_connection_id")
+    @Schema(description = "知识库连接ID", example = "conn_001")
     @Length(max = 100)
     private String knowledgeBaseConnectionId = null;
 
     @JsonProperty("status")
+    @Schema(description = "知识库状态", example = "ACTIVE")
     private String status = null;
 
     @JsonProperty("knowledge_base_ids")
+    @Schema(description = "知识库ID列表", example = "[\"kb_001\"]")
     @Valid
     @Size(min = 1, max = 100)
     private List<@Length(max = 128) String> knowledgeBaseIds = null;
 
     @JsonProperty("share_type")
+    @Schema(description = "共享类型", example = "SHARED")
     private String shareType = null;
 
     @JsonProperty("knowledge_base_type")
+    @Schema(description = "知识库类型编码", example = "1")
     private Integer knowledgeBaseType = null;
 
     public String getWorkspaceId() {

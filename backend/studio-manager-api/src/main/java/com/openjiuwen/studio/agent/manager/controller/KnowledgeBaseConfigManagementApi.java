@@ -47,9 +47,13 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64) @ApiParam(value = "知识库id")
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "知识库id", required = false, schema = @Schema())
+        @ApiParam(value = "知识库id")
         @RequestParam(value = "knowledge_base_id", required = false) String knowledgeBaseId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64) @ApiParam(value = "空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "空间id", required = false, schema = @Schema())
+        @ApiParam(value = "空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId);
 
 }

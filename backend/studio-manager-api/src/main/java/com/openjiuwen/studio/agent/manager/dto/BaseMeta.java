@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -25,26 +26,32 @@ public class BaseMeta implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("openapi_snippet")
+    @Schema(description = "OpenAPI片段", example = "{\"path\":\"/api/test\"}")
     @Valid
     private Object openapiSnippet = null;
 
     @JsonProperty("props")
+    @Schema(description = "属性", example = "{\"key\":\"value\"}")
     @Valid
     private Object props = null;
 
     @JsonProperty("props_present")
+    @Schema(description = "已存在的属性集合", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> propsPresent = null;
 
     @JsonProperty("json_example")
+    @Schema(description = "JSON示例", example = "{\"key\":\"value\"}")
     @Valid
     private Object jsonExample = null;
 
     @JsonProperty("xml_example")
+    @Schema(description = "XML示例", example = "<root></root>")
     private String xmlExample = null;
 
     @JsonProperty("definition")
+    @Schema(description = "定义", example = "{\"type\":\"object\"}")
     @Valid
     private Object definition = null;
 

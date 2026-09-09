@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,10 +29,12 @@ public class ModelConf implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "ID", example = "example-id-123")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9][a-zA-Z0-9-_]{0,31}$")
     @NotBlank
     @Length(min = 1, max = 32)

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,20 +26,25 @@ public class PeOptimizationResultVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("prompt_id")
+    @Schema(description = "提示词ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String promptId = null;
 
     @JsonProperty("prompt_name")
+    @Schema(description = "提示词名称", example = "示例名称")
     @Length(max = 512)
     private String promptName = null;
 
     @JsonProperty("generate_result")
+    @Schema(description = "generate结果", example = "示例文本")
     @Length(max = 512)
     private String generateResult = null;
 
     @JsonProperty("eval_failed_reason")
+    @Schema(description = "评估FailedReason", example = "示例文本")
     @Length(max = 255)
     private String evalFailedReason = null;
 

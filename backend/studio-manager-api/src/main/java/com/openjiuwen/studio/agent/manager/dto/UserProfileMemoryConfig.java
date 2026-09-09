@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,13 +29,16 @@ public class UserProfileMemoryConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("user_profile_enable")
+    @Schema(description = "用户", example = "true")
     private Boolean userProfileEnable = false;
 
     @JsonProperty("time_window")
+    @Schema(description = "时间窗口", example = "{}")
     @Valid
     private UserProfileTimeWindowConfig timeWindow = null;
 
     @JsonProperty("topics")
+    @Schema(description = "主题列表", example = "[]")
     @Valid
     @Size(max = 30)
     private List<UserProfileTopicInfo> topics = null;

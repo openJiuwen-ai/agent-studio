@@ -95,6 +95,7 @@ import com.openjiuwen.studio.agent.manager.entity.KnowledgeRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
+import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationInputVariable;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationVariable;
@@ -1599,7 +1600,25 @@ public class IrAdapterService {
                 && CommonConstant.Plugin.INTF_TYPE_STREAMING.equalsIgnoreCase(toolEntity.getIntfType());
             result.put(STREAMING, isStream);
         }
-        result.put(NAME, toolEntity.getToolDisplayName());
+        // 确保 name 包含 operation 后缀，实现操作级工具隔离
+        // OBS DSL JSON 可能只存了插件拼音名，需通过 transferPlugin2Tool 拼接 operation 名
+        String displayName = toolEntity.getToolDisplayName();
+        if (ids.length > 1 && !"0".equals(ids[1])) {
+            try {
+                List<PluginEntity> pluginEntities = pluginService.getPlugin(
+                    projectId, null, Collections.singletonList(pluginId));
+                if (!pluginEntities.isEmpty()) {
+                    ToolEntity correctTool = pluginBaseImpl.transferPlugin2Tool(
+                        pluginEntities.get(0), ids[1]);
+                    displayName = correctTool.getToolDisplayName();
+                }
+            } catch (Exception e) {
+                // 查询失败时使用原始名称
+                log.warn("Failed to resolve operation display name for plugin {}: {}",
+                    pluginId, e.getMessage());
+            }
+        }
+        result.put(NAME, displayName);
         result.put(DESCRIPTION, toolEntity.getToolDesc());
         result.put(URL, toolEntity.getRequestInfo().getUrl());
         result.put(METHOD, toolEntity.getRequestInfo().getMethod());

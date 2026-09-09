@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,12 +27,15 @@ public class RoleInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("roleId")
+    @Schema(description = "角色ID", example = "example-id-123")
     private String roleId = null;
 
     @JsonProperty("roleNameCn")
+    @Schema(description = "角色名称cn", example = "示例名称")
     private String roleNameCn = null;
 
     @JsonProperty("roleNameEn")
+    @Schema(description = "角色名称en", example = "{}")
     @Valid
     private Object roleNameEn = null;
 

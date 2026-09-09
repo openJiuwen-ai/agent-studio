@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,15 +25,19 @@ public class ResourceUsageDetails implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "资源类型", example = "cpu")
     private String type = null;
 
     @JsonProperty("isExceedLimit")
+    @Schema(description = "是否超出限制", example = "false")
     private Boolean isExceedLimit = true;
 
     @JsonProperty("usedLimit")
+    @Schema(description = "已使用限制量", example = "50")
     private Integer usedLimit = null;
 
     @JsonProperty("totalAmount")
+    @Schema(description = "总量", example = "100")
     private Integer totalAmount = null;
 
     public String getType() {

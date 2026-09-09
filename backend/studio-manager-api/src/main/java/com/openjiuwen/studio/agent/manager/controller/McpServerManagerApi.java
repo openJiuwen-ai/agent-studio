@@ -168,9 +168,13 @@ import org.springframework.web.bind.annotation.RequestParam;
     ResponseEntity<McpServerTools> listMcpServerTools(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @Min(0) @Max(10000) @ApiParam(value = "分页起始页，默认 0", allowableValues = "10000, 0", defaultValue = "0")
+        @Min(0) @Max(10000)
+        @Parameter(in = ParameterIn.QUERY, description = "分页起始页，默认 0", required = false, schema = @Schema())
+        @ApiParam(value = "分页起始页，默认 0", allowableValues = "10000, 0", defaultValue = "0")
         @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset,
-        @Min(0) @Max(100) @ApiParam(value = "分页大小，默认 10", allowableValues = "100, 0", defaultValue = "10")
+        @Min(0) @Max(100)
+        @Parameter(in = ParameterIn.QUERY, description = "分页大小，默认 10", required = false, schema = @Schema())
+        @ApiParam(value = "分页大小，默认 10", allowableValues = "100, 0", defaultValue = "10")
         @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit,
         @NotNull @ApiParam(value = "过滤条件", required = true) @Valid @RequestBody McpServerReq body);
 

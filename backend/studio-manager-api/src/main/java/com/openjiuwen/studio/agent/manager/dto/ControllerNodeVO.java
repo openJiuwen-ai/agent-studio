@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -28,32 +29,39 @@ public class ControllerNodeVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "节点唯一标识", example = "node_001", required = true)
     @NotBlank
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "节点名称", example = "LLM节点", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "节点类型", example = "llm", required = true)
     @NotBlank
     private String type = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入字段列表", example = "[{\"name\":\"question\",\"type\":\"string\"}]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出字段列表", example = "[{\"name\":\"answer\",\"type\":\"string\"}]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> outputs = null;
 
     @JsonProperty("configs")
+    @Schema(description = "节点配置对象", example = "{\"model\":\"gpt-4\",\"temperature\":0.7}")
     @Valid
     private Object configs = null;
 
     @JsonProperty("branches")
+    @Schema(description = "分支列表", example = "[{\"condition\":\"x>0\",\"target\":\"node_002\"}]")
     @Valid
     @Size()
     private List<WorkflowBranchVO> branches = null;

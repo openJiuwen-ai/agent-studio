@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,35 +30,44 @@ public class McpServerRuntimeVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "MCP服务ID", example = "mcp_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "MCP服务名称", example = "天气查询服务")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "MCP服务描述", example = "提供天气信息查询服务")
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "MCP服务类型", example = "sse")
     private String type = null;
 
     @JsonProperty("command")
+    @Schema(description = "启动命令", example = "npx")
     private String command = null;
 
     @JsonProperty("baseUrl")
+    @Schema(description = "基础URL", example = "https://mcp.example.com")
     private String baseUrl = null;
 
     @JsonProperty("args")
+    @Schema(description = "启动参数列表", example = "[\"--port\", \"8080\"]")
     @Valid
     @Size()
     private List<@Length() String> args = null;
 
     @JsonProperty("env")
+    @Schema(description = "环境变量", example = "{\"API_KEY\": \"xxx\"}")
     @Valid
     @Size()
     private Map<@Length() String, @Length() String> env = null;
 
     @JsonProperty("headers")
+    @Schema(description = "请求头", example = "{\"Authorization\": \"Bearer xxx\"}")
     @Valid
     @Size()
     private Map<@Length() String, @Length() String> headers = null;

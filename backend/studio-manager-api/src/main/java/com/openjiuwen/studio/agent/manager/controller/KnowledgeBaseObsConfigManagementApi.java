@@ -53,7 +53,9 @@ import java.util.List;
     ResponseEntity<CreateKnowledgeBaseObsConfigResp> createKnowledgeBaseObsConfig(
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "项目空间ID。", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "项目空间ID。", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Parameter(in = ParameterIn.PATH, description = "知识库ID。", required = true, schema = @Schema())
         @PathVariable("knowledge_base_id") String knowledgeBaseId,
@@ -72,7 +74,9 @@ import java.util.List;
     ResponseEntity<KnowledgeBaseObsConfigExecuteResp> knowledgeBaseObsConfigExecute(
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "项目空间ID。", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "项目空间ID。", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Parameter(in = ParameterIn.PATH, description = "知识库ID。", required = true, schema = @Schema())
         @PathVariable("knowledge_base_id") String knowledgeBaseId,
@@ -111,7 +115,9 @@ import java.util.List;
         produces = {"application/json"}, method = RequestMethod.GET)
     ResponseEntity<List<String>> listObsBucketNames(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
-    @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "项目空间ID。", required = true)
+    @PathVariable("project_id") String projectId, @NotNull
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
+    @ApiParam(value = "项目空间ID。", required = true)
     @RequestParam(value = "workspace_id", required = true) String workspaceId);
 
     @ApiOperation(value = "展示用户obs指定路径下的文件对象名集合", nickname = "listObsBucketObjects", notes = "",
@@ -123,7 +129,9 @@ import java.util.List;
         produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
     ResponseEntity<List<String>> listObsBucketObjects(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "项目空间ID。", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "项目空间ID。", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @ApiParam(value = "") @Valid @RequestBody(required = false) ObsBucketObjectsReq body);
 
@@ -137,7 +145,9 @@ import java.util.List;
         produces = {"application/json"}, method = RequestMethod.GET)
     ResponseEntity<KnowledgeBaseObsConfigResp> showKnowledgeBaseObsConfig(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @NotNull @ApiParam(value = "项目空间ID。", required = true)
+        @PathVariable("project_id") String projectId, @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "项目空间ID。", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Parameter(in = ParameterIn.PATH, description = "知识库ID。", required = true, schema = @Schema())
         @PathVariable("knowledge_base_id") String knowledgeBaseId);

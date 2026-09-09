@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class WorkFlowEnv implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "变量名称", example = "api_key")
     private String name = null;
 
     @JsonProperty("cn_name")
+    @Schema(description = "变量中文名称", example = "API密钥")
     private String cnName = null;
 
     @JsonProperty("type")
+    @Schema(description = "变量类型", example = "string")
     private String type = null;
 
     @JsonProperty("description")
+    @Schema(description = "变量描述", example = "API认证密钥")
     private String description = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = null;
 
     public String getName() {

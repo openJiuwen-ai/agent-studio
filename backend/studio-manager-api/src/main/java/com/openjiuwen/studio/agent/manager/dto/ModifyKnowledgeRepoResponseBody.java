@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,6 +28,7 @@ public class ModifyKnowledgeRepoResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("knowledge_repo_id")
+    @Schema(description = "知识仓ID", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String knowledgeRepoId = null;

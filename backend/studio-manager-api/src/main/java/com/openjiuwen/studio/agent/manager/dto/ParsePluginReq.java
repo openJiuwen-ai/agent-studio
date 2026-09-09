@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,6 +23,7 @@ public class ParsePluginReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "内容示例")
     private String content = null;
 
     public String getContent() {

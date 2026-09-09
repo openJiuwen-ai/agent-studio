@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,9 +25,11 @@ public class Reference implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("switch")
+    @Schema(description = "是否启用引用和归属", example = "false")
     private Boolean _switch = false;
 
     @JsonProperty("json_format")
+    @Schema(description = "是否以JSON格式输出引用", example = "false")
     private Boolean jsonFormat = false;
 
     public Reference setSwitch(Boolean _switch) {

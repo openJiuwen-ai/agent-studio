@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -30,9 +32,11 @@ public class PermissionsRequestBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("share_scope")
+    @Schema(description = "sharescope", example = "STRING")
     private ShareScopeEnum shareScope = ShareScopeEnum.SELF;
 
     @JsonProperty("auth_workspace_id_list")
+    @Schema(description = "认证", example = "[]")
     @Valid
     @Size(max = 50)
     private List<@Length(min = 1, max = 64) String> authWorkspaceIdList = null;

@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.core.io.Resource;
@@ -24,13 +26,16 @@ public class WorkflowsImportBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file")
+    @Schema(description = "文件", example = "file-content", required = true)
     @NotBlank
     private Resource file = null;
 
     @JsonProperty("import_workflows")
+    @Schema(description = "导入", example = "示例字符串")
     private String importWorkflows = null;
 
     @JsonProperty("import_tools")
+    @Schema(description = "导入", example = "示例字符串")
     private String importTools = null;
 
     public Resource getFile() {

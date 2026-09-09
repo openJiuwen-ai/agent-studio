@@ -695,7 +695,7 @@ front-page:
   # lakesearch_faq_enable: 知识库faq功能开关，默认打开
   default-configs: ${front-page_default-configs:{"knowledge_repo_url":"","son_workflow_level_limit":true,"stream_interval_timeout":900000,"stream_first_chunk_timeout":900000,"opsvc_project_id":"opsvc_project_mock","runtime_api_endpoint_prefix":"","lakesearch_faq_enable":true}}
   configs: ${front-page_configs:{}}
-  block-nodes: ${front_page_block_nodes:Sql,DataQuery,Agent,Http}
+  block-nodes: ${front_page_block_nodes:DataQuery,Agent,Http}
   code_env_options: ${code_env_options:["sandbox","local"]}
   # exec_env和enable_sandbox没有值时，exec_env取值，默认取sandbox
   code_def_env: ${code_def_env:sandbox}
@@ -851,17 +851,25 @@ prr:
   is-soft-delete: ${soft_delete:true}
   soft-delete-ttl-days: ${soft_delete_ttl_days:730}
 
-# 关闭 API文档核心接口,关闭 SwaggerUI 页面访问
+# API文档配置（springdoc-openapi），默认关闭，本地开发设 API_DOCS_ENABLED=true 开启
 springdoc:
   api-docs:
-    enabled: false
+    enabled: ${API_DOCS_ENABLED:false}
+    path: /v3/api-docs
   swagger-ui:
-    enabled: false
+    enabled: ${API_DOCS_ENABLED:false}
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+    doc-expansion: none
+    default-models-expand-depth: 1
+    default-model-expand-depth: 1
+  default-flat-param-object: true
 # 鉴权配置
 auth:
   path:
     # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
-    excluded: ${auth_path_excluded:/v1/health, /health}
+    excluded: ${auth_path_excluded:/v1/health, /health, /v1/studio/datasources/*/execute, /v3/api-docs/**, /swagger-ui/**, /swagger-ui.html}
   sso:
     # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
     validate-url: ${auth_sso_validate_url:}
@@ -887,3 +895,21 @@ task:
     max-execute-milliseconds: ${task_async_max_execute_milliseconds:172800000}
     execute-lock-key: ${task_async_execute_lock_key:async_execute_lock}
     clear-lock-key: ${task_async_clear_lock_key:async_clear_lock}
+
+# ========== 数据源管理配置 ==========
+datasource:
+  ir-path: ${datasource_ir_path:datasource/ir}
+  cache:
+    hours: ${datasource_cache_hours:24}
+    pool-size: ${datasource_cache_pool_size:150}
+  max-connections-per-host: ${datasource_max_connections_per_host:5}
+  execute:
+    timeout: ${datasource_execute_timeout:25}
+    max-response: ${datasource_execute_max_response:1000}
+    sql-limit: ${datasource_sql_limit:8000}
+    allowed-operations: ${datasource_allowed_operations:SELECT,INSERT,UPDATE}
+  check:
+    pool-size: ${datasource_check_pool_size:10}
+    timeout: ${datasource_check_timeout:25}
+  query:
+    max-length: ${datasource_query_max_length:5000}

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,11 +29,13 @@ public class TemplateBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("question")
+    @Schema(description = "问题", example = "示例问题", required = true)
     @NotBlank
     @Length(max = 4000)
     private String question = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "", required = true)
     @Valid
     @NotNull
     private ModelConfig modelConfig = null;

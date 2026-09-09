@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,9 +22,11 @@ public class PromptBaseInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String taskId = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "示例文本")
     private String message = null;
 
     public String getTaskId() {

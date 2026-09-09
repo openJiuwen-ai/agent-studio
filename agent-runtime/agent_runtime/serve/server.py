@@ -138,7 +138,7 @@ def _register_customer_header_provider() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
+async def lifespan(_app: FastAPI):
     """define startup and shutdown logic here"""
     # 初始化 workflow_logger 日志级别（从环境变量 WORKFLOW_LOG_LEVEL 读取）
     workflow_log_level = settings.workflow_log.level.upper()
@@ -270,6 +270,10 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
             else:
                 logger.error(f"Failed to register sandbox SysOperation: {sandbox_res}")
 
+    if settings.server.docs_enabled:
+        from agent_runtime.serve.openapi_archiver import archive_openapi_docs
+        archive_openapi_docs(_app)
+
     try:
         yield
     finally:
@@ -288,13 +292,22 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
 
 def instance_app(config: dict | None = None):
     """instance FastAPI server"""
-    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)  # noqa: redefined-outer-name
-    app.add_middleware(RequestContextMiddleware)
+    _docs = settings.server.docs_enabled
+    _app = FastAPI(
+        lifespan=lifespan,
+        docs_url="/runtime/docs" if _docs else None,
+        redoc_url="/runtime/redoc" if _docs else None,
+        openapi_url="/runtime/openapi.json" if _docs else None,
+        title="Agent Runtime API",
+        version="v1",
+        description="智能体运行时 API 文档（对话/推理/执行）",
+    )
+    _app.add_middleware(RequestContextMiddleware)
 
     for i in apps_map:
-        app.include_router(i)
+        _app.include_router(i)
 
-    @app.exception_handler(RequestValidationError)
+    @_app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
         """请求参数校验失败时返回统一格式的错误响应，而非FastAPI默认的detail格式."""
         errors = exc.errors()
@@ -319,7 +332,7 @@ def instance_app(config: dict | None = None):
             },
         )
 
-    @app.exception_handler(AgentBuilderError)
+    @_app.exception_handler(AgentBuilderError)
     async def agent_builder_error_handler(request: Request, exc: AgentBuilderError):
         exec_id = getattr(request.state, "execution_id", "unknown")
         req_id = getattr(request.state, "request_id", "unknown")
@@ -345,7 +358,7 @@ def instance_app(config: dict | None = None):
     # 这里单独兜底，保持未捕获 storage 错误的结构化 500 响应不变（code 取 exc.code）。
     from storage.exceptions import StorageConfigError, StorageReadError
 
-    @app.exception_handler(StorageReadError)
+    @_app.exception_handler(StorageReadError)
     async def storage_read_error_handler(request: Request, exc: StorageReadError):
         logger.error(f"StorageReadError: {exc}", exc_info=True)
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
@@ -362,7 +375,7 @@ def instance_app(config: dict | None = None):
             },
         )
 
-    @app.exception_handler(StorageConfigError)
+    @_app.exception_handler(StorageConfigError)
     async def storage_config_error_handler(request: Request, exc: StorageConfigError):
         logger.error(f"StorageConfigError: {exc}", exc_info=True)
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
@@ -381,7 +394,7 @@ def instance_app(config: dict | None = None):
 
     from jiuwen.common.exception import JiuWenBaseException
 
-    @app.exception_handler(JiuWenBaseException)
+    @_app.exception_handler(JiuWenBaseException)
     async def jiuwen_exception_handler(request: Request, exc: JiuWenBaseException):
         """框架业务异常 — 透传异常自身携带的 error_code，并通过 i18n 查询对应的错误消息."""
         exec_id = getattr(request.state, "execution_id", "unknown")
@@ -405,7 +418,7 @@ def instance_app(config: dict | None = None):
             },
         )
 
-    @app.exception_handler(Exception)
+    @_app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
         exec_id = getattr(request.state, "execution_id", "unknown")
         req_id = getattr(request.state, "request_id", "unknown")
@@ -421,7 +434,7 @@ def instance_app(config: dict | None = None):
             },
         )
 
-    return app
+    return _app
 
 
 # Create the app instance at module level
