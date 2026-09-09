@@ -8,8 +8,24 @@
 
 import logging
 import os
+import shutil
 import sys
 import zipfile
+
+
+def is_executable(rel, platform):
+    """Linux 包需 +x 的条目：scripts/ 全部 + deps/linux 的 bin/sbin 目录与 redis/minio 二进制。
+    Windows 构建机文件系统无 Unix 执行位，zipfile 照抄 os.stat 会全部变 644 → 目标机
+    ./scripts/start.sh 报 Permission denied。显式置 755 保证两平台构建机产物一致。"""
+    if platform != 'linux':
+        return False
+    parts = rel.split('/')
+    if parts[0] == 'scripts':
+        return True
+    if len(parts) >= 3 and parts[0] == 'deps' and parts[1] == 'linux':
+        if any(p in ('bin', 'sbin') for p in parts[2:-1]) or parts[2] in ('redis-7', 'minio'):
+            return True
+    return False
 
 
 def kept_for_platform(rel, platform):
@@ -100,7 +116,14 @@ def main():
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, staging).replace(os.sep, '/')
                 if kept_for_platform(rel, platform):
-                    z.write(full, rel)
+                    # 显式 Unix 权限位（create_system=3 + external_attr）：Windows 构建机
+                    # 产不出执行位；脚本与 deps/linux 二进制按 is_executable 置 755，其余 644。
+                    zi = zipfile.ZipInfo.from_file(full, rel)
+                    zi.compress_type = zipfile.ZIP_DEFLATED
+                    zi.create_system = 3
+                    zi.external_attr = (0o100000 | (0o755 if is_executable(rel, platform) else 0o644)) << 16
+                    with open(full, 'rb') as src, z.open(zi, 'w') as dst:
+                        shutil.copyfileobj(src, dst)
                     kept += 1
                 else:
                     excluded += 1
