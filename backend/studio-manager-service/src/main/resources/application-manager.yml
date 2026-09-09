@@ -695,7 +695,7 @@ front-page:
   # lakesearch_faq_enable: 知识库faq功能开关，默认打开
   default-configs: ${front-page_default-configs:{"knowledge_repo_url":"","son_workflow_level_limit":true,"stream_interval_timeout":900000,"stream_first_chunk_timeout":900000,"opsvc_project_id":"opsvc_project_mock","runtime_api_endpoint_prefix":"","lakesearch_faq_enable":true}}
   configs: ${front-page_configs:{}}
-  block-nodes: ${front_page_block_nodes:Sql,DataQuery,Agent,Http}
+  block-nodes: ${front_page_block_nodes:DataQuery,Agent,Http}
   code_env_options: ${code_env_options:["sandbox","local"]}
   # exec_env和enable_sandbox没有值时，exec_env取值，默认取sandbox
   code_def_env: ${code_def_env:sandbox}
@@ -869,7 +869,7 @@ springdoc:
 auth:
   path:
     # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
-    excluded: ${auth_path_excluded:/v1/health, /health, /v1/studio/datasources/.*/execute, /v3/api-docs/**, /swagger-ui/**, /swagger-ui.html}
+    excluded: ${auth_path_excluded:/v1/health, /health, /v1/studio/datasources/*/execute, /v3/api-docs/**, /swagger-ui/**, /swagger-ui.html}
   sso:
     # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
     validate-url: ${auth_sso_validate_url:}
