@@ -82,7 +82,7 @@ def test_cycle_topology_no_infinite_loop():
 def test_cycle_topology_with_barrier():
     """Cycle topology with a wait_for_all barrier.
 
-    Two branch nodes in a loop (like the real 工行 workflow), with
+    Two branch nodes in a loop , with
     predecessors feeding into a barrier node. _resolve_barrier_groups
     must terminate and return a valid result.
     """
