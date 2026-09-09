@@ -20,17 +20,37 @@
             {{ getType(inputItem) }}
           </span>
         </div>
-        <button
-          *ngIf="isShowMultiBtn(inputItem)"
-          nz-button
-          nzType="default"
-          [nzGhost]="true"
-          class="flex"
-          [disabled]="inputItem.uploadDatas?.length >= 10 || isUploading"
-          (click)="addMultiFile(i)"
-        >
-          <span class="flex items-center"><nz-icon nzType="plus" nzTheme="outline" /> {{ 'add' | i18nextEager }}</span>
-        </button>
+        <div class="flex gap-[8px]">
+          <button
+            *ngIf="isShowMultiBtn(inputItem)"
+            nz-button
+            class="flex !w-[96px] justify-center"
+            nzSize="small"
+            [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
+            (click)="addMultiFile(i)"
+          >
+            <span class="flex items-center gap-[4px]">
+              <nz-icon nzType="plus" nzTheme="outline" />
+              {{ 'add' | i18nextEager }}
+            </span>
+          </button>
+          <button
+            *ngIf="inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length"
+            nz-button
+            nzSize="small"
+            class="flex !w-[96px] justify-center"
+            nzDanger
+            [disabled]="isUploading"
+            nz-popconfirm
+            [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+            (nzOnConfirm)="clearMultiFiles(inputItem)"
+          >
+            <span class="flex items-center gap-[4px]">
+              <nz-icon nzType="clear" nzTheme="outline" />
+              {{ 'clear_uploaded_files' | i18nextEager }}
+            </span>
+          </button>
+        </div>
       </nz-form-label>
       <nz-form-control>
         <!-- string类型的输入参数 -->
@@ -162,7 +182,7 @@
               <div class="mt-[6px] flex">
                 <div class="text-[14px] text-[#191919]">
                   {{ 'the_current_blank_document_please' | i18nextEager }}
-                  {{ 'upload_max_ten_files' | i18nextEager }}
+                  {{ 'upload_max_files' | i18nextEager }}
                 </div>
               </div>
             </div>
@@ -182,7 +202,7 @@
             >
               <nz-spin *ngIf="fileItem.progress === 'loading'" nzSimple [nzSize]="'small'"></nz-spin>
               <meta-upload-file-icon *ngIf="fileItem.progress !== 'loading'" [fileName]="fileItem.name"></meta-upload-file-icon>
-              <span class="ml-[12px]" [ngClass]="{ 'text-[#F23030]': fileItem.progress === 'failed' }" nz-tooltip [nzTooltipTitle]="fileItem.name"> {{ fileItem.name }}</span>
+              <span class="ml-[12px] min-w-0 flex-1 truncate" [ngClass]="{ 'text-[#F23030]': fileItem.progress === 'failed' }" nz-tooltip [nzTooltipTitle]="fileItem.name"> {{ fileItem.name }}</span>
               <nz-icon
                 nzType="delete"
                 nzTheme="outline"

@@ -404,13 +404,41 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     this.image2text.sendQuestion();
   }
 
-  beforeUploadImage2Text = (file: NzUploadFile): boolean => {
+  /** 数量拦截提示节流时间戳（beforeUpload 按文件逐个调用，防止整批拒绝时提示重复弹出） */
+  private lastCountWarnAt = 0;
+
+  beforeUploadImage2Text = (file: NzUploadFile, selectedList: NzUploadFile[] = []): boolean => {
+    // 数量硬拦截：本批与已有累计超过 5 张时整批拒绝（nzLimit 只控制列表展示，不拦截选择）
+    if (this.fileList.length + selectedList.length > 5) {
+      const now = Date.now();
+      if (now - this.lastCountWarnAt > 300) {
+        this.message.warning(this.i18n.transform("image_upload_max_count_exceeded"));
+        this.lastCountWarnAt = now;
+      }
+      return false;
+    }
+    // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+    if (
+      selectedList.some((f) =>
+        this.fileList.some(
+          (u) => u.name?.toLowerCase() === f.name?.toLowerCase(),
+        ),
+      )
+    ) {
+      const now = Date.now();
+      if (now - this.lastCountWarnAt > 300) {
+        this.message.warning(this.i18n.transform("duplicate_files_rejected_tip"));
+        this.lastCountWarnAt = now;
+      }
+      return false;
+    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));
       return false;
     }
-    const isValidSize = file.size! / 1024 / 1024 < 4;
+    // 与文案"不超过5MB"一致：恰好 5MB 允许通过，仅超过才拒绝（兄弟组件同为 > 判定）
+    const isValidSize = file.size! / 1024 / 1024 <= 5;
     if (!isValidSize) {
       this.message.error(this.i18n.transform("unsupported_file_type_1"));
       return false;

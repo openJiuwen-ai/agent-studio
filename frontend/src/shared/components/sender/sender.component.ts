@@ -349,7 +349,7 @@ export class SenderComponent implements OnDestroy {
   }
 
   public uploadFile() {
-    if (this.uploadData.length >= 10) {
+    if (this.uploadData.length >= 20) {
       return;
     }
     this.fileInput.nativeElement.click();
@@ -362,9 +362,22 @@ export class SenderComponent implements OnDestroy {
     if (len <= 0) {
       return;
     }
-    if (len + this.uploadData.length > 10) {
+    if (len + this.uploadData.length > 20) {
       MessageComponent.showWarn(
-        this.i18n.transform('upload_max_ten_files_tip'),
+        this.i18n.transform('upload_max_files_tip'),
+      );
+      return;
+    }
+    // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+    if (
+      Array.from(files).some((f) =>
+        this.uploadData.some(
+          (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+        ),
+      )
+    ) {
+      MessageComponent.showWarn(
+        this.i18n.transform('duplicate_files_rejected_tip'),
       );
       return;
     }
@@ -440,6 +453,15 @@ export class SenderComponent implements OnDestroy {
     if (!this.uploadData.length) {
       this.checkContentWidth();
     }
+  }
+
+  /** 清空全部已上传附件 */
+  public clearAllUploadData(): void {
+    if (this.uploading) {
+      return;
+    }
+    this.uploadData = [];
+    this.checkContentWidth();
   }
 
   public startRecording() {

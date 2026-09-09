@@ -191,7 +191,7 @@
                 <div class="text-[14px] text-[#191919]">
                   {{ 'the_current_blank_document_please' | i18nextEager }}
                   {{
-                    (isMulti ? 'upload_max_ten_files' : 'one_file_only')
+                    (isMulti ? 'upload_max_files' : 'one_file_only')
                       | i18nextEager
                   }}
                 </div>
@@ -205,6 +205,23 @@
             *ngIf="fileList.length"
             class="mt-[16px] flex w-full flex-col items-center"
           >
+            <div class="mb-[8px] flex w-full justify-end">
+              <button
+                nz-button
+                nzSize="small"
+                class="flex !w-[96px] justify-center"
+                nzDanger
+                [disabled]="isUploading"
+                nz-popconfirm
+                [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+                (nzOnConfirm)="clearAllFiles()"
+              >
+                <span class="flex items-center gap-[4px]">
+                  <nz-icon nzType="clear" nzTheme="outline" />
+                  {{ 'clear_uploaded_files' | i18nextEager }}
+                </span>
+              </button>
+            </div>
             <div
               *ngFor="let fileItem of fileList; index as i"
               class="mb-[8px] flex w-[100%] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
@@ -218,10 +235,12 @@
                 [fileName]="fileItem.name"
               ></meta-upload-file-icon>
               <span
-                class="ml-[12px] overflow-text"
+                class="ml-[12px] min-w-0 flex-1 truncate"
                 [ngClass]="{
                   'text-[#F23030]': fileItem.progress === 'failed'
                 }"
+                nz-tooltip
+                [nzTooltipTitle]="fileItem.name"
               >
                 {{ fileItem.name }}</span
               >

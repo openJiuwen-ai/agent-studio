@@ -895,10 +895,15 @@ public class AgentServiceProxyService {
             // 如果是第一次上传，设置过期时间5分钟
             redisClient.expire(key, Duration.ofSeconds(timeScopeUploadNum));
         }
-        if (currentCount > maxUploadNum) {
+        // 用自增前的值判断：第 1~maxUploadNum 次返回 0~maxUploadNum-1，均放行；
+        // 第 maxUploadNum+1 次返回 maxUploadNum，>= 判定拒绝，与文案"最多上传N个"严格一致
+        if (currentCount >= maxUploadNum) {
             log.error("The number of the upload files exceeds the limit. currentCount:{}, maxUploadNum:{}",
                     currentCount, maxUploadNum);
-            throw new AgentStudioException(StudioError.AGENT_UPLOAD_FILE_NUM);
+            long minutes = timeScopeUploadNum / 60;
+            String timeWindowReadable = String.valueOf(minutes > 0 ? minutes : timeScopeUploadNum);
+            throw new AgentStudioException(StudioError.AGENT_UPLOAD_FILE_NUM,
+                    String.valueOf(maxUploadNum), timeWindowReadable);
         }
     }
 

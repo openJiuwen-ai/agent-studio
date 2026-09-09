@@ -760,8 +760,8 @@ export class PromptEditorComponent implements AfterViewInit, OnInit, OnDestroy, 
     if (len <= 0) {
       return;
     }
-    if (len + this.uploadData.length > 10) {
-      MessageComponent.showWarn(this.i18n.transform('upload_max_ten_files_tip'));
+    if (len + this.uploadData.length > 20) {
+      MessageComponent.showWarn(this.i18n.transform('upload_max_files_tip'));
       return;
     }
     this.uploading = true;

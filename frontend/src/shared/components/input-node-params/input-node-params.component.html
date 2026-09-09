@@ -19,12 +19,28 @@
         <button
           *ngIf="isShowMultiBtn(inputItem)"
           nz-button
-          nzType="default"
-          [nzGhost]="true"
-          [disabled]="inputItem.uploadDatas?.length >= 10 || isUploading"
+          class="flex !w-[96px] justify-center ml-2"
+          nzSize="small"
+          [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
           (click)="addMultiFile(i)"
         >
-          <span class="flex items-center"><span nz-icon nzType="plus"></span> {{ 'add' | i18nextEager }}</span>
+          <span class="flex items-center gap-[4px]"><span nz-icon nzType="plus"></span> {{ 'add' | i18nextEager }}</span>
+        </button>
+        <button
+          *ngIf="inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length"
+          nz-button
+          nzSize="small"
+          class="flex !w-[96px] justify-center ml-2"
+          nzDanger
+          [disabled]="isUploading"
+          nz-popconfirm
+          [nzPopconfirmTitle]="'clear_uploaded_files_confirm' | i18nextEager"
+          (nzOnConfirm)="clearMultiFiles(inputItem)"
+        >
+          <span class="flex items-center gap-[4px]">
+            <nz-icon nzType="clear" nzTheme="outline" />
+            {{ 'clear_uploaded_files' | i18nextEager }}
+          </span>
         </button>
       </nz-form-label>
       <nz-form-control>
@@ -135,7 +151,7 @@
               <div class="mt-[6px] flex">
                 <div class="text-[14px] text-[#191919]">
                   {{ 'the_current_blank_document_please' | i18nextEager }}
-                  {{ 'upload_max_ten_files' | i18nextEager }}
+                  {{ 'upload_max_files' | i18nextEager }}
                 </div>
               </div>
             </div>
@@ -152,14 +168,14 @@
           >
             <div
               *ngFor="let fileItem of inputItem.uploadDatas"
-              class="mb-[8px] flex w-[100%] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
+              class="mb-[8px] flex w-[100%] min-w-[280px] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
               (mouseenter)="fileItem.isHover = true"
               (mouseleave)="fileItem.isHover = false"
             >
               <nz-spin *ngIf="fileItem.progress === 'loading'" nzSimple [nzSize]="'small'"></nz-spin>
               <meta-upload-file-icon *ngIf="fileItem.progress !== 'loading'" [fileName]="fileItem.name"></meta-upload-file-icon>
               <span
-                class="ml-[12px]"
+                class="ml-[12px] min-w-0 flex-1 truncate"
                 [ngClass]="{
                   'text-[#F23030]': fileItem.progress === 'failed',
                 }"
@@ -177,7 +193,7 @@
                   'disabled-delete': disabled === 'confirmed' || (isUploading && inputIndex !== i),
                 }"
                 [ngStyle]="{
-                  display: fileItem.isHover && disabled !== 'confirmed' ? 'inline-block' : 'none',
+                  visibility: fileItem.isHover && disabled !== 'confirmed' ? 'visible' : 'hidden',
                 }"
               />
             </div>

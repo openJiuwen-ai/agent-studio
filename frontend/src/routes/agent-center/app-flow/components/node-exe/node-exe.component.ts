@@ -855,9 +855,22 @@ export class NodeExeComponent implements OnChanges {
       if (!inputItem.uploadDatas) {
         inputItem.uploadDatas = [];
       }
-      if (len + inputItem.uploadDatas.length > 10) {
+      if (len + inputItem.uploadDatas.length > 20) {
         this.nzMessage.warning(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
+        );
+        return;
+      }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(input.files).some((f) =>
+          inputItem.uploadDatas.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        this.nzMessage.warning(
+          this.i18n.transform('duplicate_files_rejected_tip'),
         );
         return;
       }
@@ -947,10 +960,15 @@ export class NodeExeComponent implements OnChanges {
 
   public isShowMultiBtn(param) {
     return (
-      param.type?.includes('array<file') &&
-      param?.uploadDatas?.length &&
-      param?.uploadDatas?.length < 10
+      param.type?.includes('array<file') && param?.uploadDatas?.length > 0
     );
+  }
+
+  public clearMultiFiles(param): void {
+    if (this.isUploading) {
+      return;
+    }
+    param.uploadDatas = [];
   }
 
   public addMultiFile(index): void {

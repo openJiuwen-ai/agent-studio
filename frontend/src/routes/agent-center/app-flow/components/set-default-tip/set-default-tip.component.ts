@@ -238,7 +238,8 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
   }
 
   public async onUploadFile(e: Event) {
-    this.isUploading = true;
+    // 注意：isUploading 需在校验全部通过后再置 true，
+    // 提前 return（数量/同名/大小校验拦截）才不会卡住上传中状态（禁用清空按钮、弹层无法关闭）
     const input = e.target as HTMLInputElement;
     const files = input.files as FileList;
     const len = files.length;
@@ -275,6 +276,7 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         type: file.type,
         url: '',
       };
+      this.isUploading = true;
       this.fileList = [fileItem];
       const formData = new FormData();
       formData.append('file', file);
@@ -292,12 +294,26 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     } else {
-      if (len + this.fileList.length > 10) {
+      if (len + this.fileList.length > 20) {
         this.nzMessage?.warning(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
         );
         return;
       }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(files).some((f) =>
+          this.fileList.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        this.nzMessage?.warning(
+          this.i18n.transform('duplicate_files_rejected_tip'),
+        );
+        return;
+      }
+      this.isUploading = true;
       for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -316,11 +332,25 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
           this.fileList = this.fileList.filter((f) => f.fileId !== fileItem.fileId);
           this.cdr.detectChanges();
         });
+        // 上传完成后显式刷新视图：popover overlay 中 Promise 回调可能不触发变更检测，
+        // 导致 progress 已变为 succeeded 但转圈不消失（点击才恢复）
+        this.cdr.detectChanges();
       }
     }
     this.isUploading = false;
     input.value = '';
     this.saveFile();
+    this.cdr.detectChanges();
+  }
+
+  /** 清空全部已上传文件 */
+  public clearAllFiles(): void {
+    if (this.isUploading) {
+      return;
+    }
+    this.fileList = [];
+    this.saveFile();
+    this.cdr.detectChanges();
   }
 
   saveFile() {

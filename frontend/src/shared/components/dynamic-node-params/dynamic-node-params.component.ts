@@ -654,9 +654,22 @@ export class DynamicNodeParamsComponent {
       if (!inputItem.uploadDatas) {
         inputItem.uploadDatas = [];
       }
-      if (fileLen + inputItem.uploadDatas.length > 10) {
+      if (fileLen + inputItem.uploadDatas.length > 20) {
         MessageComponent.showWarn(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
+        );
+        return;
+      }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(input.files as any as File[]).some((f) =>
+          inputItem.uploadDatas.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        MessageComponent.showWarn(
+          this.i18n.transform('duplicate_files_rejected_tip'),
         );
         return;
       }
@@ -694,6 +707,15 @@ export class DynamicNodeParamsComponent {
     return (
       inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length > 0
     );
+  }
+
+  /** 清空多文件参数的全部已上传文件 */
+  public clearMultiFiles(inputItem): void {
+    if (this.isUploading) {
+      return;
+    }
+    inputItem.uploadDatas = [];
+    this.parameterFromGroup.controls[inputItem.name]?.setValue([]);
   }
 
   /** 多文件上传添加按钮点击事件 */
