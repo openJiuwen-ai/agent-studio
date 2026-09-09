@@ -308,13 +308,14 @@ if [ -f "$STAGING/README.txt" ]; then
   sed -i -e 's#跨平台（Windows x64 / Linux x64）#ARM64 Linux 专用（glibc 2.28+）#' \
          -e '/^    win\/  jre-17/d' \
          -e 's#^    linux/ .*Linux 原生依赖#    linux/ jre-17 mysql-8.0 redis-7 minio mc python-3.11 nginx   ARM64 原生依赖#' \
+         -e '/^  Windows:  powershell/d' \
          -e '/^  - Windows 非管理员/d' \
          -e '/^  - Windows 不含 cron/d' \
     "$STAGING/README.txt"
 fi
 
 mkdir -p "$DIST"
-PY=python3; command -v python3 >/dev/null 2>&1 || PY=python; command -v python >/dev/null 2>&1 || PY="py -3"
+PY=python3; command -v "$PY" >/dev/null 2>&1 || PY=python; command -v "$PY" >/dev/null 2>&1 || PY="py -3"
 ZIP="$DIST/${NAME}-native-${VER}-linux-arm64.zip"
 $PY "$NATIVE_ROOT/lib/zip_platform.py" "$STAGING" "$ZIP" linux
 
