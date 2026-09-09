@@ -168,6 +168,7 @@
                 class="tag-input"
                 [class.input-error]="tagInputError"
                 formControlName="modelTagInputValue"
+                (focus)="onModelTagFocus()"
                 (keydown.enter)="onModelTagEnter($event)"
                 (blur)="onModelTagBlur()"
                 (compositionstart)="onCompositionStart()"
