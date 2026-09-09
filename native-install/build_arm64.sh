@@ -54,41 +54,59 @@ to_docker_vol(){
     *) echo "$1" ;;
   esac
 }
-# 解档工具：MSYS 用 System32 bsdtar（GNU tar 不认 RPM/cpio 与 Windows 盘符）；Linux 用 bsdtar/tar
+# 解档工具（tar.gz/tar.xz）：MSYS 用 System32 bsdtar；Linux 用 GNU tar 即可。
+# RPM 是 cpio 归档、GNU tar 不认——其提取走 extract_rpm 的 bsdtar/rpm2cpio 回退链。
 TAR_BIN="tar"
 if [ -x /c/Windows/System32/tar.exe ]; then TAR_BIN=/c/Windows/System32/tar.exe; fi
 
 # 下载（GitHub 自动走 GITHUB_MIRROR；大文件多并发分块——MySQL 官方 CDN 单连接限速 ~80KB/s）
-# 用法: dl <url> <out> [并发数，默认8]
+# 用法: dl <url> <out> [并发数，默认8] [sha256，可选——非空则强校验]
+# --ssl-no-revoke：Windows Schannel curl 查不到 CRL/OCSP 吊销服务器时 exit 35（同
+# fetch_deps.sh）；Linux OpenSSL 下为 no-op（默认不查吊销，仍校验证书链）。
 dl(){
-  local url="$1" out="$2" conns="${3:-8}"
+  local url="$1" out="$2" conns="${3:-8}" sha="${4:-}"
   case "$url" in https://github.com/*) [ -n "${GITHUB_MIRROR:-}" ] && url="${GITHUB_MIRROR}${url}" ;; esac
-  if [ -s "$out" ]; then log "  缓存命中: $(basename "$out")"; return 0; fi
-  log "  下载: $url"
-  # 大小探测带重试：DNS/网络瞬时抖动（curl exit 6 等）在 pipefail 下会直接杀脚本
+  # 探测 Content-Length（字节）；失败或无长度输出 0
+  probe_size(){
+    local v
+    v=$(curl -sIL --ssl-no-revoke --connect-timeout 20 "$url" 2>/dev/null | tr -d '\r' \
+        | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}') || v=0
+    echo "$v"
+  }
+  # 缓存命中校验大小与可选 SHA256：单连接中断留下的半成品不能误判命中——否则错误
+  # 推迟到解压阶段才暴露，只能手删 .cache-arm64。探测不到大小时仅校验 SHA256。
   local size=0 att
-  for att in 1 2 3; do
-    if size=$(curl -sIL --connect-timeout 20 "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}'); then
-      [ "$size" -gt 0 ] && break
+  if [ -s "$out" ]; then
+    size=$(probe_size)
+    if { [ "$size" -eq 0 ] || [ "$(wc -c < "$out")" -eq "$size" ]; } && sha256_ok "$out" "$sha"; then
+      log "  缓存命中: $(basename "$out")"; return 0
     fi
-    size=0; sleep 3
+    log "  缓存大小/校验不符，删除重下: $(basename "$out")"
+    rm -f "$out"
+  fi
+  # 大小探测带重试：DNS/网络瞬时抖动（curl exit 6 等）在 pipefail 下会直接杀脚本
+  for att in 1 2 3; do
+    size=$(probe_size)
+    [ "$size" -gt 0 ] && break
+    sleep 3
   done
   [ "$size" -gt 0 ] || die "无法获取文件大小（网络/DNS 波动，可重跑续传）: $url"
+  log "  下载: $url"
   if [ "$size" -lt 33554432 ] || [ "$conns" -le 1 ]; then
-    curl -fL --retry 3 --retry-delay 5 --connect-timeout 30 -o "$out" "$url" || die "下载失败: $url"
+    curl -fL --ssl-no-revoke --retry 3 --retry-delay 5 --connect-timeout 30 -o "$out" "$url" || die "下载失败: $url"
   else
     # Range 支持探测：代理类镜像（如 ghfast.top）常不支持分段 → 自动回退单连接。
     # 注意 curl 传输出错时 -w 仍会打印 http_code，不能再用 `|| echo 000`（会拼成 "206000"）。
-    rc=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 30 -r 0-1023 "$url" 2>/dev/null || true)
+    rc=$(curl -s --ssl-no-revoke -o /dev/null -w '%{http_code}' --connect-timeout 30 -r 0-1023 "$url" 2>/dev/null || true)
     if [ "$rc" != "206" ]; then
       log "  [hint] 该源不支持 Range(HTTP $rc)，回退单连接"
-      curl -fL --retry 3 --retry-delay 5 --connect-timeout 30 -o "$out" "$url" || die "下载失败: $url"
+      curl -fL --ssl-no-revoke --retry 3 --retry-delay 5 --connect-timeout 30 -o "$out" "$url" || die "下载失败: $url"
     else
       local chunk=$(( (size + conns - 1) / conns )) i s e pids=()
       rm -f "$out".part*
       for ((i=0; i<conns; i++)); do
         s=$((i*chunk)); e=$((s+chunk-1)); [ "$e" -ge "$size" ] && e=$((size-1)); [ "$s" -ge "$size" ] && break
-        curl -fs --retry 3 --retry-delay 2 --connect-timeout 30 -r "$s-$e" -o "$out.part$i" "$url" &
+        curl -fs --ssl-no-revoke --retry 3 --retry-delay 2 --connect-timeout 30 -r "$s-$e" -o "$out.part$i" "$url" &
         pids+=($!)
       done
       for p in "${pids[@]}"; do wait "$p" || die "分块下载失败: $url（重跑续传）"; done
@@ -98,6 +116,14 @@ dl(){
     fi
   fi
   [ "$(wc -c < "$out")" -eq "$size" ] || die "大小校验失败: $(basename "$out") 期望=$size 实际=$(wc -c < "$out")"
+  sha256_ok "$out" "$sha" || die "SHA256 校验失败: $(basename "$out")"
+}
+
+# 可选 SHA256 校验：期望值为空则跳过（versions.arm64.env 各 *_SHA256 默认留空，填上即强校验）
+sha256_ok(){
+  [ -n "$2" ] || return 0
+  local got; got=$(sha256sum "$1" | cut -d' ' -f1)
+  [ "$got" = "$2" ]
 }
 
 log "SEED=$SEED  STAGING=$STAGING  VER=$VER"
@@ -130,7 +156,7 @@ if [ $SKIP_DEPS -eq 0 ]; then
 
   # JRE 17
   log "  JRE 17 (aarch64)"
-  dl "$JRE17_LINUX_URL" "$CACHE/jre17-linux.tar.gz"
+  dl "$JRE17_LINUX_URL" "$CACHE/jre17-linux.tar.gz" 8 "$JRE17_LINUX_SHA256"
   rm -rf "$CACHE/x-jre17-linux"; mkdir -p "$CACHE/x-jre17-linux" "$LIN/jre-17"
   "$TAR_BIN" -xzf "$CACHE/jre17-linux.tar.gz" -C "$CACHE/x-jre17-linux" || die "解压 jre17 失败"
   jdkdir=$(find "$CACHE/x-jre17-linux" -maxdepth 1 -mindepth 1 -type d | head -1)
@@ -140,7 +166,7 @@ if [ $SKIP_DEPS -eq 0 ]; then
 
   # MySQL 8.0（全量包 → 裁剪逼近 minimal）
   log "  MySQL ${MYSQL_VERSION} (aarch64, glibc2.28 全量包→裁剪，16 并发下载约 10-20 分钟)"
-  dl "$MYSQL_LINUX_URL" "$CACHE/mysql-linux.tar.xz" 16
+  dl "$MYSQL_LINUX_URL" "$CACHE/mysql-linux.tar.xz" 16 "$MYSQL_LINUX_SHA256"
   rm -rf "$CACHE/x-mysql-linux"; mkdir -p "$CACHE/x-mysql-linux" "$LIN/mysql-8.0"
   "$TAR_BIN" -xf "$CACHE/mysql-linux.tar.xz" -C "$CACHE/x-mysql-linux" || die "解压 mysql 失败"
   mysqldir=$(find "$CACHE/x-mysql-linux" -maxdepth 1 -mindepth 1 -type d -name 'mysql-*' | head -1)
@@ -155,12 +181,12 @@ if [ $SKIP_DEPS -eq 0 ]; then
   # MinIO + mc
   log "  MinIO + mc (linux-arm64)"
   mkdir -p "$LIN/minio"
-  dl "$MINIO_LINUX_URL" "$CACHE/minio-linux"; cp -f "$CACHE/minio-linux" "$LIN/minio/minio"
-  dl "$MC_LINUX_URL"     "$CACHE/mc-linux";     cp -f "$CACHE/mc-linux"     "$LIN/minio/mc"
+  dl "$MINIO_LINUX_URL" "$CACHE/minio-linux" 8 "$MINIO_LINUX_SHA256"; cp -f "$CACHE/minio-linux" "$LIN/minio/minio"
+  dl "$MC_LINUX_URL"     "$CACHE/mc-linux"     8 "$MC_LINUX_SHA256";     cp -f "$CACHE/mc-linux"     "$LIN/minio/mc"
 
   # Python 3.11
   log "  Python 3.11 (aarch64)"
-  dl "$PYTHON_LINUX_URL" "$CACHE/python-linux.tar.gz"
+  dl "$PYTHON_LINUX_URL" "$CACHE/python-linux.tar.gz" 8 "$PYTHON_LINUX_SHA256"
   rm -rf "$CACHE/x-python-linux"; mkdir -p "$CACHE/x-python-linux" "$LIN/python-3.11"
   "$TAR_BIN" -xzf "$CACHE/python-linux.tar.gz" -C "$CACHE/x-python-linux" || die "解压 python 失败"
   # 不限 -type f：bin/python3 可能是 symlink（bsdtar 在 Windows 上可能物化为文件或链接）
@@ -173,29 +199,41 @@ if [ $SKIP_DEPS -eq 0 ]; then
   # Linux 兼容库（el7 aarch64，bundle 进 deps/linux/lib，同 x86 侧 soname 做法）
   log "  兼容库 (ncurses/libaio/numa, el7 aarch64)"
   mkdir -p "$LIN/lib"
-  extract_rpm(){ # extract_rpm <url> <name>  → 展开到 $CACHE/x-<name>
-    dl "$1" "$CACHE/$2.rpm"
+  extract_rpm(){ # extract_rpm <url> <name> [sha256]  → 展开到 $CACHE/x-<name>
+    dl "$1" "$CACHE/$2.rpm" 8 "${3:-}"
     rm -rf "$CACHE/x-$2"; mkdir -p "$CACHE/x-$2"
-    "$TAR_BIN" -xf "$CACHE/$2.rpm" -C "$CACHE/x-$2" || die "解 RPM 失败: $2（需 bsdtar）"
+    # RPM 是 cpio 归档，GNU tar 不认（同 fetch_deps.sh）：bsdtar 优先；Windows 用
+    # System32 bsdtar（MSYS 自带的是 GNU tar）；再回退 rpm2cpio|cpio。
+    local ok=0
+    if command -v bsdtar >/dev/null 2>&1; then
+      bsdtar -xf "$CACHE/$2.rpm" -C "$CACHE/x-$2" 2>/dev/null && ok=1
+    elif [ -x /c/Windows/System32/tar.exe ]; then
+      /c/Windows/System32/tar.exe -xf "$CACHE/$2.rpm" -C "$CACHE/x-$2" && ok=1
+    elif command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1; then
+      (cd "$CACHE/x-$2" && rpm2cpio "$CACHE/$2.rpm" | cpio -idm 2>/dev/null) && ok=1
+    else
+      die "解 RPM 需 bsdtar（apt install libarchive-tools / yum install bsdtar）或 rpm2cpio+cpio: $2"
+    fi
+    [ "$ok" -eq 1 ] || die "解 RPM 失败: $2"
   }
   copy_so(){ # copy_so <dir> <real> <soname>（RPM 内真实文件改名拷为 soname）
     local f; f=$(find "$1" -type f -name "$2" | head -1)
     if [ -n "$f" ]; then cp -f "$f" "$LIN/lib/$3"; else log "  [warn] 未找到 $2（跳过）"; fi
   }
-  extract_rpm "$NCURSES_LIBS_URL" ncurses-libs
+  extract_rpm "$NCURSES_LIBS_URL" ncurses-libs "$NCURSES_LIBS_SHA256"
   copy_so "$CACHE/x-ncurses-libs" "libncurses.so.5.9" "libncurses.so.5"
   copy_so "$CACHE/x-ncurses-libs" "libtinfo.so.5.9"  "libtinfo.so.5"
-  extract_rpm "$LIBAIO_URL" libaio
+  extract_rpm "$LIBAIO_URL" libaio "$LIBAIO_SHA256"
   copy_so "$CACHE/x-libaio" "libaio.so.1.0.1" "libaio.so.1"
-  extract_rpm "$NUMACTL_LIBS_URL" numactl-libs
+  extract_rpm "$NUMACTL_LIBS_URL" numactl-libs "$NUMACTL_LIBS_SHA256"
   copy_so "$CACHE/x-numactl-libs" "libnuma.so.1.0.0" "libnuma.so.1"
 
   # 源码包（编译在容器内做，此处仅下载缓存）
   log "  源码包 (redis/nginx/pcre2/zlib)"
-  dl "$REDIS_LINUX_URL" "$CACHE/redis-linux.tar.gz"
-  dl "$NGINX_LINUX_URL" "$CACHE/nginx-linux.tar.gz"
-  dl "$PCRE2_URL" "$CACHE/pcre2.tar.gz"
-  dl "$ZLIB_URL" "$CACHE/zlib.tar.gz"
+  dl "$REDIS_LINUX_URL" "$CACHE/redis-linux.tar.gz" 8 "$REDIS_LINUX_SHA256"
+  dl "$NGINX_LINUX_URL" "$CACHE/nginx-linux.tar.gz" 8 "$NGINX_LINUX_SHA256"
+  dl "$PCRE2_URL" "$CACHE/pcre2.tar.gz" 8 "$PCRE2_SHA256"
+  dl "$ZLIB_URL" "$CACHE/zlib.tar.gz" 8 "$ZLIB_SHA256"
 
   # ── B2. docker(linux/arm64, debian:10=glibc2.28) 编译 redis + nginx ─────────
   # 注：宿主侧检查一律用 -f 不用 -x——MSYS(Git Bash) 下非 .exe 文件 stat 无执行位，
