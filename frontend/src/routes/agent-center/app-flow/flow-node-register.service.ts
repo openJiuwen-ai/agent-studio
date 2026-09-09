@@ -44,6 +44,7 @@ import { WorkflowNodeComponent } from './components/workflow-node/workflow-node.
 import { FLOW_COLORS, NODE_NAMES, NODE_SIZE } from './flow.const';
 import { TargetMarker } from './utils/flow-utils';
 import { StreamTransformNodeComponent } from './components/stream-transform-node/stream-transform-node.component';
+import { HttpNodeComponent } from './components/http-node/http-node.component';
 
 interface IControlParams {
   pos: 'top' | 'right' | 'bottom' | 'left';
@@ -97,6 +98,7 @@ export class FlowNodeRegisterService {
     this.registerParamExtractionNode(injector);
     this.registerCommentNode(injector);
     this.registerStreamTransformNode(injector);
+    this.registerHttpNode(injector);
   }
 
   public unregisterComponents() {
@@ -327,6 +329,12 @@ export class FlowNodeRegisterService {
         injector,
         StreamTransformNodeComponent,
       ),
+    );
+  }
+
+  private registerHttpNode(injector: Injector) {
+    register(
+      this.commonRegisterNode('op-http-node', injector, HttpNodeComponent),
     );
   }
 

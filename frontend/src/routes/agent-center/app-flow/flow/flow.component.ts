@@ -108,6 +108,7 @@ import { QuestionerModalComponent } from '../components/questioner-modal/questio
 import { RunModalComponent } from '../components/run-modal/run-modal.component';
 import { SetVariableModalComponent } from '../components/set-variable-modal/set-variable-modal.component';
 import { SqlModalComponent } from '../components/sql-modal/sql-modal.component';
+import { HttpModalComponent } from '../components/http-modal/http-modal.component';
 import { StartModalComponent } from '../components/start-modal/start-modal.component';
 import { UpdateNodeNameModalComponent } from '../components/update-node-name-modal/update-node-name-modal.component';
 import { IRefIndex, NodeUtils } from '../components/utils';
@@ -251,6 +252,7 @@ const NodeMap = {
   StructuredMessagesException: ExceptionModalComponent,
   ParamExtraction: ParamExtractionModalComponent,
   StreamTransform: StreamTransformModalComponent,
+  Http: HttpModalComponent,
 };
 
 export interface ICreateNodeConfig {

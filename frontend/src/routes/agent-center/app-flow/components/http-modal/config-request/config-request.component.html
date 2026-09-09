@@ -1,0 +1,239 @@
+<form #requestForm="ngForm">
+  <!-- Query Params -->
+  <meta-acc-block class="block">
+    <ng-template #blockTitle>
+      <div class="flex items-center gap-[4px] font-bold">
+        <span>{{ 'request_params' | i18nextEager }}</span>
+        <span nz-icon nzType="question-circle" nzTheme="outline"
+          nz-tooltip [nzTooltipTitle]="'request_params_tip' | i18nextEager"
+          style="font-size: 14px; color: #808080; cursor: pointer;"></span>
+      </div>
+    </ng-template>
+
+    <ng-template #content>
+      <div class="mt-2 flex items-center gap-2">
+        <div class="w-1/3 text-label">{{ 'param_name' | i18nextEager }}</div>
+        <div class="flex w-2/3 items-center gap-2 text-label">
+          <div class="flex h-fit w-[calc(100%-16px)] items-center">
+            <div class="w-[35%]">{{ 'type' | i18nextEager }}</div>
+            <div class="w-[65%]">{{ 'value' | i18nextEager }}</div>
+          </div>
+          <div class="h-full w-[16px]"></div>
+        </div>
+      </div>
+
+      <div *ngFor="let param of queryParams; index as i" class="mt-2 flex gap-2">
+        <div class="w-1/3">
+          <input nz-input
+            [name]="'queryFormName' + i"
+            [maxlength]="paramNameMaxLen"
+            [(ngModel)]="param.name"
+            [title]="param.name"
+            [placeholder]="'input_placeholder' | i18nextEager"
+            (ngModelChange)="changeUpdate()"
+            (blur)="onInputSave()"
+            [httpHeadersOrQueryKey]="getQueryExistingNames(i)"
+            [class.input-error]="requestForm?.controls['queryFormName' + i]?.invalid && (requestForm?.controls['queryFormName' + i]?.dirty || requestForm?.controls['queryFormName' + i]?.touched)"
+          />
+          <div *ngIf="requestForm?.controls['queryFormName' + i]?.invalid && (requestForm?.controls['queryFormName' + i]?.dirty || requestForm?.controls['queryFormName' + i]?.touched)" class="error-tip">
+            {{requestForm?.controls['queryFormName' + i]?.errors?.serviceName?.tiErrorMessage}}
+          </div>
+        </div>
+        <div class="flex w-2/3 gap-[8px]">
+          <div class="flex h-fit w-[calc(100%-16px)] items-center gap-2">
+            <div class="flex w-full">
+              <div class="w-[35%]">
+                <nz-select
+                  class="combo-select-left"
+                  style="width: 100%"
+                  [name]="'queryFormType' + i"
+                  [(ngModel)]="param.value.type"
+                  (ngModelChange)="onTypeChange(param)"
+                >
+                  <nz-option *ngFor="let opt of sourceOptions" [nzLabel]="opt.label" [nzValue]="opt.value"></nz-option>
+                </nz-select>
+              </div>
+              <div class="w-[65%]">
+                <input nz-input
+                  class="combo-select-right"
+                  *ngIf="param.value.type === 'literal'"
+                  [name]="'queryFormValue' + i"
+                  nonEmptyValidator
+                  [(ngModel)]="param.value.content"
+                  [title]="param.value.content"
+                  [placeholder]="'input_placeholder' | i18nextEager"
+                  (ngModelChange)="changeUpdate()"
+                  (blur)="onInputSave()"
+                  [class.input-error]="requestForm?.controls['queryFormValue' + i]?.invalid && (requestForm?.controls['queryFormValue' + i]?.dirty || requestForm?.controls['queryFormValue' + i]?.touched)"
+                />
+                <div *ngIf="requestForm?.controls['queryFormValue' + i]?.invalid && (requestForm?.controls['queryFormValue' + i]?.dirty || requestForm?.controls['queryFormValue' + i]?.touched)" class="error-tip">
+                  {{requestForm?.controls['queryFormValue' + i]?.errors?.serviceName?.tiErrorMessage}}
+                </div>
+                <input-tree-select
+                  class="combo-select-right"
+                  style="width: 100%"
+                  *ngIf="param.value.type === 'ref'"
+                  [options]="param.refs"
+                  [(ngModel)]="param.value.content"
+                  [placeholder]="'select_placeholder' | i18nextEager"
+                  refSelectedRequire
+                  [name]="'queryFormValue' + i"
+                  (select)="treeSelect()"
+                ></input-tree-select>
+              </div>
+            </div>
+          </div>
+          <span nz-icon nzType="delete" nzTheme="outline"
+            class="delete-icon" style="font-size: 16px; cursor: pointer; padding-top: 6px;"
+            (click)="deleteQueryParam(i)"></span>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template #right>
+      <div class="flex items-center justify-center">
+        <button nz-btn nzType="text" (click)="addQueryParam()"
+          nz-tooltip [nzTooltipTitle]="'add_params' | i18nextEager"
+          [disabled]="isReachedParamLimit(queryParams)">
+          <span nz-icon nzType="plus" nzTheme="outline"></span>
+        </button>
+      </div>
+    </ng-template>
+  </meta-acc-block>
+
+  <!-- Headers -->
+  <meta-acc-block class="mt-4 block">
+    <ng-template #blockTitle>
+      <div class="flex items-center gap-[4px] font-bold">
+        <span>{{ 'request_header' | i18nextEager }}</span>
+        <span nz-icon nzType="question-circle" nzTheme="outline"
+          nz-tooltip [nzTooltipTitle]="'request_header_tip' | i18nextEager"
+          style="font-size: 14px; color: #808080; cursor: pointer;"></span>
+      </div>
+    </ng-template>
+
+    <ng-template #content>
+      <div class="mt-2 flex items-center gap-2">
+        <div class="w-1/3 text-label">Key</div>
+        <div class="flex w-2/3 items-center gap-2 text-label">
+          <div class="flex h-fit w-[calc(100%-16px)] items-center">
+            <div class="w-[35%]">{{ 'type' | i18nextEager }}</div>
+            <div class="w-[65%]">Value</div>
+          </div>
+          <div class="h-full w-[16px]"></div>
+        </div>
+      </div>
+
+      <div *ngFor="let param of headerParams; index as i" class="mt-2 flex gap-2">
+        <div class="w-1/3">
+          <input nz-input
+            [name]="'headerFormName' + i"
+            [maxlength]="paramNameMaxLen"
+            [(ngModel)]="param.name"
+            [title]="param.name"
+            [placeholder]="'input_placeholder' | i18nextEager"
+            (ngModelChange)="changeUpdate()"
+            (blur)="onInputSave()"
+            [httpHeadersOrQueryKey]="getHeaderExistingNames(i)"
+            [class.input-error]="requestForm?.controls['headerFormName' + i]?.invalid && (requestForm?.controls['headerFormName' + i]?.dirty || requestForm?.controls['headerFormName' + i]?.touched)"
+          />
+          <div *ngIf="requestForm?.controls['headerFormName' + i]?.invalid && (requestForm?.controls['headerFormName' + i]?.dirty || requestForm?.controls['headerFormName' + i]?.touched)" class="error-tip">
+            {{requestForm?.controls['headerFormName' + i]?.errors?.serviceName?.tiErrorMessage}}
+          </div>
+        </div>
+        <div class="flex w-2/3 gap-[8px]">
+          <div class="flex h-fit w-[calc(100%-16px)] items-center gap-2">
+            <div class="flex w-full">
+              <div class="w-[35%]">
+                <nz-select
+                  class="combo-select-left"
+                  style="width: 100%"
+                  [name]="'headerFormType' + i"
+                  [(ngModel)]="param.value.type"
+                  (ngModelChange)="onTypeChange(param)"
+                >
+                  <nz-option *ngFor="let opt of sourceOptions" [nzLabel]="opt.label" [nzValue]="opt.value"></nz-option>
+                </nz-select>
+              </div>
+              <div class="w-[65%]">
+                <input nz-input
+                  class="combo-select-right"
+                  *ngIf="param.value.type === 'literal'"
+                  [name]="'headerFormValue' + i"
+                  nonEmptyValidator
+                  [(ngModel)]="param.value.content"
+                  [title]="param.value.content"
+                  [placeholder]="'input_placeholder' | i18nextEager"
+                  (ngModelChange)="changeUpdate()"
+                  (blur)="onInputSave()"
+                  [class.input-error]="requestForm?.controls['headerFormValue' + i]?.invalid && (requestForm?.controls['headerFormValue' + i]?.dirty || requestForm?.controls['headerFormValue' + i]?.touched)"
+                />
+                <div *ngIf="requestForm?.controls['headerFormValue' + i]?.invalid && (requestForm?.controls['headerFormValue' + i]?.dirty || requestForm?.controls['headerFormValue' + i]?.touched)" class="error-tip">
+                  {{requestForm?.controls['headerFormValue' + i]?.errors?.serviceName?.tiErrorMessage}}
+                </div>
+                <input-tree-select
+                  class="combo-select-right"
+                  style="width: 100%"
+                  *ngIf="param.value.type === 'ref'"
+                  [options]="param.refs"
+                  [(ngModel)]="param.value.content"
+                  [placeholder]="'select_placeholder' | i18nextEager"
+                  refSelectedRequire
+                  [name]="'headerFormValue' + i"
+                  (select)="treeSelect()"
+                ></input-tree-select>
+              </div>
+            </div>
+          </div>
+          <span nz-icon nzType="delete" nzTheme="outline"
+            class="delete-icon" style="font-size: 16px; cursor: pointer; padding-top: 6px;"
+            (click)="deleteHeaderParam(i)"></span>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template #right>
+      <div class="flex items-center justify-center">
+        <button nz-btn nzType="text" (click)="addHeaderParam()"
+          nz-tooltip [nzTooltipTitle]="'add_params' | i18nextEager"
+          [disabled]="isReachedParamLimit(headerParams)">
+          <span nz-icon nzType="plus" nzTheme="outline"></span>
+        </button>
+      </div>
+    </ng-template>
+  </meta-acc-block>
+
+  <!-- Request Body -->
+  <meta-acc-block class="mt-4 block">
+    <ng-template #blockTitle>
+      <div class="flex items-center gap-[4px] font-bold">
+        <span>{{ 'request_body' | i18nextEager }}</span>
+        <span nz-icon nzType="question-circle" nzTheme="outline"
+          nz-tooltip [nzTooltipTitle]="'request_body_tip' | i18nextEager"
+          style="font-size: 14px; color: #808080; cursor: pointer;"></span>
+      </div>
+    </ng-template>
+
+    <ng-template #content>
+      <nz-select
+        class="mb-2 mt-2"
+        style="width: 100%"
+        [name]="'bodyFormType'"
+        [(ngModel)]="configs.request_type"
+        (ngModelChange)="onSaveChange()"
+      >
+        <nz-option *ngFor="let opt of bodyOptions" [nzLabel]="opt.label" [nzValue]="opt.value"></nz-option>
+      </nz-select>
+      <meta-cmd-textarea
+        *ngIf="configs.request_type === 'JSON'"
+        class="block w-full relative"
+        [ngModelOptions]="{ standalone: true }"
+        [(ngModel)]="configs.request_body"
+        [variants]="tipVals"
+        (ngModelChange)="changeUpdate()"
+        (blur)="onInputSave()"
+        [placeholder]="'request_body_placeholder' | i18nextEager"
+      ></meta-cmd-textarea>
+    </ng-template>
+  </meta-acc-block>
+</form>

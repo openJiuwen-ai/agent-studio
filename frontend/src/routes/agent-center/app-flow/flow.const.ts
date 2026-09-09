@@ -211,6 +211,7 @@ export const NODE_NAMES = [
   'loopstart',
   'loopend',
   'intentdetectioncontainer',
+  'http',
 ];
 
 export const WORKFLOW_SVGS = {
