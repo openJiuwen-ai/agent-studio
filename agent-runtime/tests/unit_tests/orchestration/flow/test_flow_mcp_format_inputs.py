@@ -12,7 +12,9 @@ Covers the fix for:
 - JSON heuristic constrained to declared object/array params or type-inferred
   (legacy IR) string params; explicit string params are never rewritten
 - schema patches returned per call (shared tool card is never mutated)
-- method=Headers params with None value are skipped (no "None" header)
+- method=Headers params with None value are skipped (no "None" header);
+  REQUIRED headers with None value raise explicitly instead of being
+  silently swallowed (headers bypass card schema validation)
 """
 
 from unittest.mock import MagicMock
@@ -65,7 +67,8 @@ def _create_mcp_with_tool_card(params, input_params_schema):
     mock_card.model_copy = MagicMock(
         side_effect=lambda update=None: MagicMock(input_params=update["input_params"])
     )
-    mock_tool._card = mock_card
+    # Tool 基类通过公开 card property 暴露 _card，产品代码只访问 self.api.card
+    mock_tool.card = mock_card
     mcp.api = mock_tool
     return mcp
 
@@ -231,6 +234,57 @@ class TestFormatApiInputsHeaders:
         assert "auth_token" not in mcp._header_params
         assert result["query"] == "hello"
 
+    @staticmethod
+    def test_required_header_none_raises():
+        """method=Headers + required=True + None → 显式报错
+
+        header 不参与 card schema 的 client-side 校验，静默跳过后
+        下游没有任何报错点，必须与 Body 分支必填校验行为一致。
+        """
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers", required=True),
+            MockParam("query", param_type="string", method="Body"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        with pytest.raises(Exception):  # JiuWenBaseException 101876
+            mcp._format_api_inputs({"auth_token": None, "query": "hello"})
+
+    @staticmethod
+    def test_required_header_string_true_none_raises():
+        """required="true"（字符串形式，见 _create_client 兼容校验）+ None → 同样报错"""
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers", required="true"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        with pytest.raises(Exception):
+            mcp._format_api_inputs({"auth_token": None})
+
+    @staticmethod
+    def test_required_header_string_false_none_skipped():
+        """required="false"（字符串形式）+ None → 非空字符串不得被 truthy 误判为必填"""
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers", required="false"),
+            MockParam("query", param_type="string", method="Body"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, _ = mcp._format_api_inputs({"auth_token": None, "query": "hello"})
+        assert "auth_token" not in mcp._header_params
+        assert result["query"] == "hello"
+
+    @staticmethod
+    def test_required_header_with_value_included():
+        """required header 有值 → 正常写入 _header_params，不报错"""
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers", required=True),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        mcp._format_api_inputs({"auth_token": "tok123"})
+        assert mcp._header_params["auth_token"] == "tok123"
+
 
 class TestFormatApiInputsParamNotFound:
     """Test _format_api_inputs when input param is not in tool_params"""
@@ -377,7 +431,7 @@ class TestBuildPatchedTool:
         # original card still untouched after building patched tool
         assert schema["properties"]["arguments"]["type"] == "string"
         # patched copy has the corrected type
-        model_copy_call = mcp.api._card.model_copy.call_args
+        model_copy_call = mcp.api.card.model_copy.call_args
         patched_params = model_copy_call.kwargs["update"]["input_params"]
         assert patched_params["properties"]["arguments"]["type"] == "object"
         assert patched_tool is not None
@@ -396,7 +450,7 @@ class TestBuildPatchedTool:
         mcp = _create_mcp_with_tool_card(params, schema)
 
         patched_tool = mcp._build_patched_tool({"items": "array"})
-        model_copy_call = mcp.api._card.model_copy.call_args
+        model_copy_call = mcp.api.card.model_copy.call_args
         patched_params = model_copy_call.kwargs["update"]["input_params"]
         assert patched_params["properties"]["items"]["type"] == "array"
         assert patched_params["properties"]["items"]["description"] == "keep me"

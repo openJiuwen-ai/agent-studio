@@ -247,6 +247,30 @@ def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
     return card
 
 
+def _unique_non_null_type(type_candidates: list) -> str:
+    """从类型候选列表中提取唯一的非 null 类型
+
+    JSON Schema 中 type 允许为字符串或字符串数组（如 {"type": ["object", "null"]}），
+    数组形式的候选项会被展开；非字符串项直接丢弃，避免 list/dict 流入
+    Param → Type → ValueTypeEnum 对非字符串调用 .lower()/.startswith() 崩溃。
+
+    Args:
+        type_candidates: 类型候选列表，元素可为 str / list / 其他类型
+
+    Returns:
+        str: 去重后唯一的非 null 类型；无有效项或不唯一时返回 ""
+    """
+    non_null_types = set()
+    for candidate in type_candidates or []:
+        sub_types = candidate if isinstance(candidate, list) else [candidate]
+        for sub_type in sub_types:
+            if isinstance(sub_type, str) and sub_type and sub_type != "null":
+                non_null_types.add(sub_type)
+    if len(non_null_types) == 1:
+        return next(iter(non_null_types))
+    return ""
+
+
 def param_deserialization(
     arguments: list, allow_schema_is_empty: bool = False
 ) -> List[Param]:
@@ -272,21 +296,29 @@ def param_deserialization(
             )
         if isinstance(p.get(level_key), str) and p.get(level_key).isdigit():
             p[level_key] = int(p.get(level_key))
-        # 处理 oneOf/anyOf 类型：当 type 为 null 但存在 oneOf 定义时，
+        # 处理 oneOf/anyOf 类型：当 type 缺失但存在 oneOf/anyOf 定义时，
         # 提取非 null 子类型作为实际类型（如 oneOf: [object, null] → "object"）。
         # 避免 Param.__init__ 将 type 默认为 "string"，导致下游类型判断错误。
-        # 仅当非 null 子类型唯一时才提取：多个非 null 子类型（如 object+array）
-        # 无法确定实际类型，取第一个会错误归类，保持缺省走 string 兜底。
+        # 仅当非 null 子类型（去重后）唯一时才提取：多个不同非 null 子类型
+        # （如 object+array）无法确定实际类型，取第一个会错误归类，
+        # 保持缺省走 string 兜底。
         param_type = p.get("type", "")
+        if isinstance(param_type, list):
+            # JSON Schema 允许顶层 type 为数组（如 ["object", "null"]），
+            # 直接传入 Param 会对 list 调用字符串方法而崩溃
+            param_type = _unique_non_null_type(param_type)
+        elif not isinstance(param_type, str):
+            param_type = ""
         if not param_type:
-            one_of = p.get("one_of") or p.get("oneOf")
-            if one_of and isinstance(one_of, list):
-                non_null_types = [
-                    item.get("type") for item in one_of
-                    if isinstance(item, dict) and item.get("type") and item.get("type") != "null"
-                ]
-                if len(non_null_types) == 1:
-                    param_type = non_null_types[0]
+            union_schemas = (
+                p.get("one_of") or p.get("oneOf")
+                or p.get("any_of") or p.get("anyOf")
+            )
+            if isinstance(union_schemas, list):
+                param_type = _unique_non_null_type(
+                    [item.get("type") for item in union_schemas
+                     if isinstance(item, dict)]
+                )
         param = Param(
             name=p.get("name", ""),
             description=p.get("description", ""),
@@ -300,7 +332,8 @@ def param_deserialization(
             actual_type=p.get("actual_type", ""),
             allow_schema_is_empty=allow_schema_is_empty,
         )
-        # 标记类型是否为推断缺省（IR 无 type 且 oneOf 无法提取唯一子类型）。
+        # 标记类型是否为推断缺省（IR 无 type/数组形式 type 无法归一，
+        # 且 oneOf/anyOf 无法提取唯一非 null 子类型）。
         # FlowMcp 的 JSON 启发式仅对该类参数或显式 object/array 参数生效，
         # 显式声明 string 的参数不做 JSON 转换，避免破坏原样接收字符串的工具。
         param.type_inferred = not param_type

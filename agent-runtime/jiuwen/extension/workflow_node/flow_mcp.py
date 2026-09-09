@@ -83,6 +83,16 @@ def _build_flow_mcp_error(
     )
 
 
+def _is_param_required(param) -> bool:
+    """判断参数是否必填
+
+    param.required 可能是 bool，也可能是 "true"/"false" 字符串
+    （见 _create_client 对 required 字段的兼容校验）。直接作 truthy
+    判断会把非空字符串 "false" 误判为必填，统一归一化后比较。
+    """
+    return str(getattr(param, "required", False)).lower() == "true"
+
+
 def _create_mcp_client(config: McpServerConfig):
     """根据 client_type 创建对应的 MCP Client 实例"""
     client_type = config.client_type
@@ -342,11 +352,26 @@ class FlowMcp(WorkflowComponent):
             param = api_params_dict.get(name)
             if param:
                 if param.method == "Headers":
-                    # method=Headers 的参数应该放到 HTTP 请求头；
-                    # None（可选 header 未填写）跳过，与 Body 分支的 None 透传一致，
-                    # 避免 str(None) 把字符串 "None" 写入请求头
-                    if value is not None:
-                        header_params[name] = transform_type(value, param.type, name)
+                    # method=Headers 的参数应该放到 HTTP 请求头。
+                    # None（可选 header 未填写）跳过，避免 str(None) 把
+                    # 字符串 "None" 写入请求头；必填 header 为 None 时
+                    # 显式报错——header 不参与 card schema 的 client-side
+                    # 校验，静默跳过后下游没有任何报错点，与 Body 分支
+                    # 必填参数由 MCPTool 校验报错的行为不一致
+                    if value is None:
+                        if _is_param_required(param):
+                            workflow_logger.error(
+                                f"{TAG} _format_api_inputs error: required header param value is None",
+                                event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                                component_type_str="FlowMcp",
+                                metadata={"param_name": name},
+                            )
+                            raise _build_flow_mcp_error(
+                                FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
+                                param=name,
+                            )
+                        continue
+                    header_params[name] = transform_type(value, param.type, name)
                 else:
                     # None 直接透传：MCP server 对可选参数（dict | None = None）接受 None。
                     # 避免 transform_type(None, "string") → 字符串 "None" → Pydantic 校验失败。
@@ -359,9 +384,7 @@ class FlowMcp(WorkflowComponent):
                         # 避免把工具期望原样接收的合法 JSON 字符串改写为对象/数组。
                         # 解析结果记录到 schema_patches，由 invoke 基于 card 副本修补。
                         if (
-                            isinstance(converted, str)
-                            and converted
-                            and converted[0] in ("{", "[")
+                            self._is_json_like_string(converted)
                             and self._should_parse_json_value(param)
                         ):
                             try:
@@ -390,6 +413,14 @@ class FlowMcp(WorkflowComponent):
         return api_inputs, schema_patches
 
     @staticmethod
+    def _is_json_like_string(value) -> bool:
+        """判断值是否为疑似 JSON object/array 的字符串（以 { 或 [ 开头）
+
+        空字符串切片为 ""，不会命中，无需单独判空。
+        """
+        return isinstance(value, str) and value[:1] in ("{", "[")
+
+    @staticmethod
     def _should_parse_json_value(param) -> bool:
         """判断字符串值是否适用 JSON 启发式解析
 
@@ -400,6 +431,15 @@ class FlowMcp(WorkflowComponent):
           （如 meta-wise-chat 的 arguments）
         - 显式声明为 string 的参数：不解析，尊重工具接口定义，
           避免破坏期望原样接收 JSON 字符串的既有 string 参数
+
+        已知权衡（老 IR 兼容的固有代价）：IR 无类型信息的"真 string"参数
+        收到合法 JSON 对象/数组字符串时也会被解析，服务端 Pydantic 会以
+        明确报错拒绝（不会静默写坏数据）。老 IR 中无任何信号可区分
+        "真 string"与"被误标 string 的 object"（如 meta-wise-chat 老流
+        arguments 在 IR 中无 type/oneOf/schema），若收窄到"确认存在
+        oneOf/object 信息"才解析，老工作流将回归 101873 线上故障。
+        根治方向：Java 侧在 IR 保留 oneOf 类型信息，或初始化时经
+        list_tools 用服务端 schema 交叉校正推断类型（后续跟进）。
         """
         if param.type in ("object", "array"):
             return True
@@ -410,11 +450,11 @@ class FlowMcp(WorkflowComponent):
 
         JSON 解析会改变参数值的实际形态（string → dict/list），需同步修正
         card schema 中对应 type，client-side 校验（format_with_schema）才能通过。
-        就地修改 self.api._card.input_params 会让修改在多次 invoke 之间持久存在
+        就地修改 self.api.card.input_params 会让修改在多次 invoke 之间持久存在
         （后续正常 string 输入将无法通过校验），并发 invoke 还会互相污染，
         因此基于副本生成，共享对象保持只读。
         """
-        card = self.api._card
+        card = self.api.card
         patched_params = copy.deepcopy(card.input_params)
         if isinstance(patched_params, dict):
             props = patched_params.get("properties", {})
