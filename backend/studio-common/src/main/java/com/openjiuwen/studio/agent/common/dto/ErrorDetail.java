@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.common.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -19,9 +20,11 @@ import java.util.Objects;
 @Validated
 public class ErrorDetail {
     @JsonProperty("error_code")
+    @Schema(description = "错误码", example = "400")
     private String errorCode = null;
 
     @JsonProperty("error_msg")
+    @Schema(description = "错误消息", example = "参数校验失败")
     private String errorMsg = null;
 
     public String getErrorCode() {

@@ -1,7 +1,6 @@
 export interface IDatasourceList {
-  total_count?: number;
-  count?: number;
-  datasource_list: IDatasourceItem[];
+  total: number;
+  datasources: IDatasourceItem[];
 }
 
 export interface IDatasourceItem {
@@ -9,47 +8,43 @@ export interface IDatasourceItem {
   name: string;
   desc: string;
   type: string;
-  internet_access: string;
   status: string;
-  error_message: string;
-  created_by: string;
-  creator_id: string;
-  created_on: string;
-  updated_by: string;
-  updater_id: string;
-  updated_on: string;
+  lastErrorMessage: string;
+  createdBy: string;
+  createdOn: string;
+  updatedBy: string;
+  updatedOn: string;
+  connectionInfo: IConnectionInfo;
 }
 
 export interface IDatasourceDetail {
   id: string;
   name: string;
-  description: string;
+  desc: string;
   type: string;
-  internet_access: string;
   status: string;
-  error_message: string;
-  creator: string;
-  creator_id: string;
-  create_time: string;
-  updater: string;
-  updater_id: string;
-  update_time: string;
-  connection_info: IConnectionInfo;
+  lastErrorMessage: string;
+  createdBy: string;
+  createdOn: string;
+  updatedBy: string;
+  updatedOn: string;
+  connectionInfo: IConnectionInfo;
 }
 
 export interface IConnectionInfo {
   host: string;
   port: string;
-  ssl_enabled: boolean;
-  database_name: string;
+  sslEnabled: boolean;
+  databaseName: string;
   user: string;
   password: string;
+  sqlVersion?: string;
+  metadata?: Record<string, string>;
 }
 
 export interface IModifyDatasourceBody {
   name: string;
   desc: string;
   type: string;
-  internet_access: string;
-  connection_info: IConnectionInfo;
+  connectionInfo: IConnectionInfo;
 }

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -29,50 +30,63 @@ public class ReleaseAppInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0", required = true)
     @NotBlank
     private String versionId = null;
 
     @JsonProperty("app_id")
+    @Schema(description = "应用ID", example = "app-123456", required = true)
     @NotBlank
     private String appId = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "agent")
     private String appType = null;
 
     @JsonProperty("sub_type")
+    @Schema(description = "应用子类型", example = "chat")
     @Length(max = 100)
     private String subType = null;
 
     @JsonProperty("name")
+    @Schema(description = "应用名称", example = "智能助手")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "应用描述", example = "这是一个智能助手应用")
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "应用图标URL", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白", example = "您好，有什么可以帮您？")
     private String prologue = null;
 
     @JsonProperty("suggest_queries")
+    @Schema(description = "推荐问题列表", example = "[\"如何使用\",\"功能介绍\"]")
     @Valid
     @Size()
     private List<@Length() String> suggestQueries = null;
 
     @JsonProperty("workflow_type")
+    @Schema(description = "工作流类型", example = "standard")
     private String workflowType = null;
 
     @JsonProperty("nodes")
+    @Schema(description = "工作流节点列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowNodeVO> nodes = null;
 
     @JsonProperty("voice_interaction")
+    @Schema(description = "语音交互配置", example = "{}")
     @Valid
     private VoiceInteraction voiceInteraction = null;
 
     @JsonProperty("memory_repo_id")
+    @Schema(description = "记忆库ID", example = "repo-123456")
     private String memoryRepoId = null;
 
     public String getVersionId() {

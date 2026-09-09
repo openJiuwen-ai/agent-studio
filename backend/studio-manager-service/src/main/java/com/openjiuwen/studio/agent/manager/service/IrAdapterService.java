@@ -95,6 +95,7 @@ import com.openjiuwen.studio.agent.manager.entity.KnowledgeRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
+import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationInputVariable;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationVariable;
@@ -1599,7 +1600,25 @@ public class IrAdapterService {
                 && CommonConstant.Plugin.INTF_TYPE_STREAMING.equalsIgnoreCase(toolEntity.getIntfType());
             result.put(STREAMING, isStream);
         }
-        result.put(NAME, toolEntity.getToolDisplayName());
+        // 确保 name 包含 operation 后缀，实现操作级工具隔离
+        // OBS DSL JSON 可能只存了插件拼音名，需通过 transferPlugin2Tool 拼接 operation 名
+        String displayName = toolEntity.getToolDisplayName();
+        if (ids.length > 1 && !"0".equals(ids[1])) {
+            try {
+                List<PluginEntity> pluginEntities = pluginService.getPlugin(
+                    projectId, null, Collections.singletonList(pluginId));
+                if (!pluginEntities.isEmpty()) {
+                    ToolEntity correctTool = pluginBaseImpl.transferPlugin2Tool(
+                        pluginEntities.get(0), ids[1]);
+                    displayName = correctTool.getToolDisplayName();
+                }
+            } catch (Exception e) {
+                // 查询失败时使用原始名称
+                log.warn("Failed to resolve operation display name for plugin {}: {}",
+                    pluginId, e.getMessage());
+            }
+        }
+        result.put(NAME, displayName);
         result.put(DESCRIPTION, toolEntity.getToolDesc());
         result.put(URL, toolEntity.getRequestInfo().getUrl());
         result.put(METHOD, toolEntity.getRequestInfo().getMethod());
@@ -1697,10 +1716,28 @@ public class IrAdapterService {
         }
         // 1. 先查找是否存在Headers参数
         Map<String, SchemaConfig> propertiesNode = schemaConfig.getProperties();
+        if (propertiesNode == null) {
+            propertiesNode = new HashMap<>();
+            schemaConfig.setProperties(propertiesNode);
+        }
         for (Map.Entry<String, SchemaConfig> entry : propertiesNode.entrySet()) {
             if (Strings.CS.equals("Headers", entry.getValue().getLocation())) {
                 headers.put(entry.getKey(), entry.getValue().getDefaultValue());
             }
+        }
+        // 2. 仅存在于headers中的参数（如Content-Type）补入schema，与插件详情DTO
+        // （PluginBaseImpl.fillHeaders）保持一致。否则工作流前端按DTO展示并保存的
+        // Headers入参在运行时arguments中不存在，触发101743 param not defined
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (propertiesNode.containsKey(entry.getKey())) {
+                continue;
+            }
+            SchemaConfig headerParam = new SchemaConfig();
+            headerParam.setLocation("Headers");
+            headerParam.setType("string");
+            headerParam.setDescription(entry.getKey());
+            headerParam.setDefaultValue(entry.getValue());
+            propertiesNode.put(entry.getKey(), headerParam);
         }
     }
 

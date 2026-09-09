@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -26,19 +27,23 @@ public class ModelServiceListRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("total")
+    @Schema(description = "总数", example = "100")
     private Integer total = null;
 
     @JsonProperty("data")
+    @Schema(description = "模型服务列表", example = "[]")
     @Valid
     @Size()
     private List<ModelServiceRsp> data = null;
 
     @JsonProperty("all_model_type")
+    @Schema(description = "所有模型类型列表", example = "[\"chat\",\"embedding\"]")
     @Valid
     @Size()
     private List<@Length() String> allModelType = null;
 
     @JsonProperty("all_model_series")
+    @Schema(description = "所有模型系列列表", example = "[\"GPT\",\"Llama\"]")
     @Valid
     @Size()
     private List<@Length() String> allModelSeries = null;

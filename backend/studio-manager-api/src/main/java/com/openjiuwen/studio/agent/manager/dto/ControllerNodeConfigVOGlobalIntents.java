@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -23,25 +24,32 @@ public class ControllerNodeConfigVOGlobalIntents implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "intent_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "全局意图1")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述信息", example = "这是一个全局意图")
     private String description = null;
 
     @JsonProperty("handler_type")
+    @Schema(description = "处理器类型", example = "llm")
     private String handlerType = null;
 
     @JsonProperty("handler")
+    @Schema(description = "处理器对象", example = "{\"type\":\"llm\",\"model\":\"gpt-4\"}")
     @Valid
     private Object handler = null;
 
     @JsonProperty("termination")
+    @Schema(description = "是否终止", example = "false")
     private Boolean termination = null;
 
     @JsonProperty("action")
+    @Schema(description = "动作", example = "reply")
     private String action = null;
 
     public String getId() {

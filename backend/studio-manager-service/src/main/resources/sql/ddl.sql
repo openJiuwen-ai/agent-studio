@@ -2182,3 +2182,21 @@ CREATE TABLE IF NOT EXISTS `t_task` (
     INDEX `idx_finish_time`(`finish_time` ASC) USING BTREE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='任务记录表';
 
+CREATE TABLE IF NOT EXISTS `t_agent_datasource` (
+    `id`                VARCHAR(64)     NOT NULL COMMENT '数据源ID，主键',
+    `project_id`        VARCHAR(64)     NOT NULL COMMENT '项目ID',
+    `workspace_id`      VARCHAR(64)     NOT NULL COMMENT '工作空间ID',
+    `name`              VARCHAR(64)     NOT NULL COMMENT '数据源名称',
+    `type`              VARCHAR(16)     NOT NULL COMMENT '数据源类型（MYSQL/POSTGRESQL/GAUSSDB）',
+    `desc`              VARCHAR(2048)   NULL COMMENT '数据源描述',
+    `connection_info`   TEXT            NULL COMMENT '连接信息（加密存储密码）',
+    `status`            VARCHAR(32)     NULL COMMENT '连通性检测状态',
+    `last_error_message` VARCHAR(2048)  NULL COMMENT '最后一次错误信息',
+    `created_by`        VARCHAR(64)     NULL COMMENT '创建人',
+    `created_on`        TIMESTAMP       NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_by`        VARCHAR(64)     NULL COMMENT '修改人',
+    `updated_on`        TIMESTAMP       NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    INDEX `idx_project_workspace` (`project_id`, `workspace_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据源配置表';
+

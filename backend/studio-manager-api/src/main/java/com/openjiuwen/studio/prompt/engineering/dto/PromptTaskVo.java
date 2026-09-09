@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -32,84 +33,108 @@ public class PromptTaskVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @NotBlank
     @Length(min = 1, max = 64)
     private String name = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "示例描述", required = true)
     @NotBlank
     @Length(max = 1024)
     private String desc = null;
 
     @JsonProperty("dataSetId")
+    @Schema(description = "数据集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String dataSetId = null;
 
     @JsonProperty("ptType")
+    @Schema(description = "提示词类型", example = "text")
     private String ptType = null;
 
     @JsonProperty("ptText")
+    @Schema(description = "提示词文本", example = "示例文本")
     @Length(min = 1, max = 10000)
     private String ptText = null;
 
     @JsonProperty("ptVar")
+    @Schema(description = "提示词变量", example = "示例文本")
     private String ptVar = null;
 
     @JsonProperty("execTime")
+    @Schema(description = "执行时间", example = "1700000000000")
     private Long execTime = null;
 
     @JsonProperty("ptModel")
+    @Schema(description = "提示词模型", example = "示例文本")
     private String ptModel = null;
 
     @JsonProperty("execObject")
+    @Schema(description = "执行对象", example = "示例文本")
     private String execObject = null;
 
     @JsonProperty("maxIterNum")
+    @Schema(description = "最大迭代次数", example = "10")
     @Range(min = 1L, max = 100L)
     private Integer maxIterNum = null;
 
     @JsonProperty("targetAcc")
+    @Schema(description = "目标准确率", example = "0.95")
     private String targetAcc = null;
 
     @JsonProperty("showCaseNum")
+    @Schema(description = "展示用例数量", example = "3")
     private Integer showCaseNum = null;
 
     @JsonProperty("targetType")
+    @Schema(description = "目标类型", example = "objective")
     private TargetTypeEnum targetType = null;
 
     @JsonProperty("scoreStandard")
+    @Schema(description = "评分标准", example = "示例文本")
     private String scoreStandard = null;
 
     @JsonProperty("backKnowledge")
+    @Schema(description = "背景知识", example = "示例文本")
     @Length(min = 1, max = 65535)
     private String backKnowledge = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "1")
     private Integer status = null;
 
     @JsonProperty("projectId")
+    @Schema(description = "项目ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String projectId = null;
 
     @JsonProperty("workspaceId")
+    @Schema(description = "工作空间ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String workspaceId = null;
 
     @JsonProperty("createdTime")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdTime = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     @Length(min = 1, max = 64)
     private String creator = null;
 
     @JsonProperty("creatorId")
+    @Schema(description = "创建者ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String creatorId = null;
 
     @JsonProperty("updatedTime")
+    @Schema(description = "更新时间", example = "1700000000000")
     private Long updatedTime = null;
 
     @JsonProperty("iterationResults")
+    @Schema(description = "迭代结果列表", example = "")
     @Valid
     private List<PromptIterationResultVo> iterationResults = null;
 

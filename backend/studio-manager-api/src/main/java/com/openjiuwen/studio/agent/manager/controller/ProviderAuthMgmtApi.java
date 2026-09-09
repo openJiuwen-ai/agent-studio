@@ -54,8 +54,11 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.POST)
     ResponseEntity<Void> createAuthConfig(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Parameter(in = ParameterIn.QUERY, description = "", required = false, schema = @Schema())
         @ApiParam(value = "") @RequestParam(value = "available_check", required = false) Boolean availableCheck,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody CreateAuthConfigReq body);
 
@@ -66,7 +69,9 @@ import org.springframework.web.bind.annotation.RequestParam;
     @RequestMapping(value = "/v1/{project_id}/model-manager/provider/auths/{id}", method = RequestMethod.DELETE)
     ResponseEntity<Void> removeAuthConfig(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
@@ -80,11 +85,17 @@ import org.springframework.web.bind.annotation.RequestParam;
     @RequestMapping(value = "/v1/{project_id}/model-manager/provider/auths", method = RequestMethod.DELETE)
     ResponseEntity<Void> removeProviderAuthCfg(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$") @ApiParam(value = "")
+        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = false, schema = @Schema())
+        @ApiParam(value = "")
         @RequestParam(value = "provider_id", required = false) String providerId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$") @ApiParam(value = "")
+        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = false, schema = @Schema())
+        @ApiParam(value = "")
         @RequestParam(value = "auth_id", required = false) String authId);
 
 }

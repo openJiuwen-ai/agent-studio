@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,58 +26,76 @@ public class McpServiceSkinnyEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "mcp-server-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "天气服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "Weather Service")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供天气查询功能")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "Provide weather query functionality")
     private String descriptionEn = null;
 
     @JsonProperty("fcInstanceUrl")
+    @Schema(description = "FC实例URL", example = "https://fc.example.com/instance")
     private String fcInstanceUrl = null;
 
     @JsonProperty("fcRegion")
+    @Schema(description = "FC区域", example = "cn-north-4")
     private String fcRegion = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-server")
     private String icon = null;
 
     @JsonProperty("deployType")
+    @Schema(description = "部署类型", example = "cloud")
     private String deployType = null;
 
     @JsonProperty("serverConfig")
+    @Schema(description = "服务配置", example = "服务配置JSON")
     private String serverConfig = null;
 
     @JsonProperty("fcInstanceStatus")
+    @Schema(description = "FC实例状态", example = "running")
     private String fcInstanceStatus = null;
 
     @JsonProperty("createdByUserId")
+    @Schema(description = "创建者用户ID", example = "user001")
     private String createdByUserId = null;
 
     @JsonProperty("tenant_id")
+    @Schema(description = "租户ID", example = "tenant001")
     private String tenantId = null;
 
     @JsonProperty("last_updated_by_user_id")
+    @Schema(description = "最后更新者用户ID", example = "user002")
     private String lastUpdatedByUserId = null;
 
     @JsonProperty("deleted")
+    @Schema(description = "是否已删除", example = "false")
     private Boolean deleted = false;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1704067200000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "1704067200000")
     private Long lastUpdatedDate = null;
 
     @JsonProperty("dept_code")
+    @Schema(description = "部门编码", example = "dept001")
     private String deptCode = null;
 
     public String getId() {

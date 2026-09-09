@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.io.Serializable;
 import java.util.List;
 
@@ -17,12 +19,15 @@ public class ModelImportPreviewRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("total_count")
+    @Schema(description = "总数", example = "10")
     private Integer totalCount = 0;
 
     @JsonProperty("conflict_count")
+    @Schema(description = "数量", example = "10")
     private Integer conflictCount = 0;
 
     @JsonProperty("items")
+    @Schema(description = "items", example = "[]")
     private List<ModelImportPreviewItem> items;
 
     public Integer getTotalCount() {

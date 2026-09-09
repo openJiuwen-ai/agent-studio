@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,30 +25,39 @@ public class AgentVersionListItem implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "Agent版本ID", example = "agent_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "Agent名称", example = "智能客服")
     private String name = null;
 
     @JsonProperty("icon")
+    @Schema(description = "Agent图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("description")
+    @Schema(description = "Agent描述", example = "用于智能问答的客服Agent")
     private String description = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user001")
     private String creator = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0")
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "正式版")
     private String versionName = null;
 
     @JsonProperty("reference_workflows")
+    @Schema(description = "引用的工作流", example = "workflow_001")
     private String referenceWorkflows = null;
 
     @JsonProperty("reference_agents")
+    @Schema(description = "引用的Agent", example = "agent_002")
     private String referenceAgents = null;
 
     public String getId() {

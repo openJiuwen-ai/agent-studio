@@ -85,8 +85,10 @@ class HierarchicalControlAgent(BaseControlAgent):
                     self._prepare_agent_inputs(
                         current_inputs, agent_id, force_default_workflow
                     )
-                    logger.info(
-                        f"load conv_history related to agent_id {agent_id}: {self._get_history(current_inputs)}",
+                    logger.debug(
+                        "load conv_history related to agent_id %s: %s",
+                        agent_id,
+                        self._get_history(current_inputs),
                         simple_log=f"load conv_history related to agent_id {agent_id}",
                     )
                     send_task = asyncio.create_task(
@@ -345,8 +347,9 @@ class HierarchicalControlAgent(BaseControlAgent):
         # message_context作为intermediate_message返回
         message.data.data["answer"] = self.message_context.msgs
         final_intermediate_message = message.data.data["answer"]
-        logger.info(
-            f"updated intermediate_message: {final_intermediate_message}",
+        logger.debug(
+            "updated intermediate_message: %s",
+            final_intermediate_message,
             simple_log="updated intermediate_message",
         )
 
@@ -357,8 +360,10 @@ class HierarchicalControlAgent(BaseControlAgent):
             for msg in self.message_context.msgs
             if msg.agent_id == agent_id
         ]
-        logger.info(
-            f"get chat_history for agent: {agent_id} chat_history: {selected_chat_history}",
+        logger.debug(
+            "get chat_history for agent: %s chat_history: %s",
+            agent_id,
+            selected_chat_history,
             simple_log=f"get chat_history for agent: {agent_id}",
         )
         context = current_inputs["runtime_context"].agent_workflow_context

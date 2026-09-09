@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -32,27 +33,32 @@ public class ShareResourceRequestInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @NotBlank
     @Length(max = 64)
     private String resourceId = null;
 
     @JsonProperty("resource_name")
+    @Schema(description = "资源名称", example = "搜索插件", required = true)
     @NotBlank
     @Length(min = 1, max = 64)
     private String resourceName = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "plugin", required = true)
     @NotNull
     private ResourceTypeEnum resourceType = null;
 
     @JsonProperty("version_list")
+    @Schema(description = "版本列表", example = "[\"1.0.0\",\"1.1.0\"]", required = true)
     @Valid
     @NotNull
     @Size(max = 50)
     private List<@Length() String> versionList = new ArrayList<String>();
 
     @JsonProperty("auth_workspace_id_list")
+    @Schema(description = "授权工作空间ID列表", example = "[\"ws001\",\"ws002\"]", required = true)
     @Valid
     @NotNull
     @Size(min = 1, max = 1000)

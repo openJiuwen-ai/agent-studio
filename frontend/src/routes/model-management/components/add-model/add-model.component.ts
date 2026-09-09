@@ -91,6 +91,21 @@ export class AddModelComponent implements OnInit {
 
   showModelTagInput: boolean = false;
   modelTags: Array<any> = [];
+  /** IME 组合中标识 */
+  private isComposing: boolean = false;
+  /** 标签输入框内联错误（过长/重复提示） */
+  tagInputError: string = '';
+  /** 即将提交：mousedown 于确定按钮时置位，blur 定时器需放弃清空（submit 会处理） */
+  private submitPending: boolean = false;
+  /** 点按了 ✓/✗ 按钮（mousedown 先于 blur 触发），blur 定时器需放弃清空 */
+  private tagActionPending: boolean = false;
+  /** blur 定时器代数：每次 blur 递增并捕获当时代数，聚焦时也递增使在途定时器作废
+   * （防止 150ms 内重新聚焦后被旧定时器 cancelTagInput 误关）；定时器触发时
+   * 代数不匹配即静默退出。同时解决桥接标志残留：聚焦 = 新输入会话，复位两个标志，
+   * 避免输入框未聚焦时点按按钮（无 blur 消费标志）导致标志泄漏到下一次会话。 */
+  private tagBlurGen: number = 0;
+  private static readonly TAG_MAX_LEN = 10;
+  private static readonly TAG_MAX_COUNT = 5;
 
   modelInfo = {
     is_network: false,
@@ -203,7 +218,7 @@ export class AddModelComponent implements OnInit {
       throttling_policy: new FormControl('none', [Validators.required]),
       is_support_stream: new FormControl('true', [Validators.required]),
       model_description: new FormControl(''),
-      modelTagInputValue: new FormControl('', [Validators.maxLength(10)]),
+      modelTagInputValue: new FormControl(''),
       is_public: new FormControl(false),
       is_support_close_reasoning: new FormControl(false),
     });
@@ -214,6 +229,37 @@ export class AddModelComponent implements OnInit {
     if (this.model_id) {
       this.getModelInfo();
     }
+    // Belt-and-suspenders: any form value change that makes it past other handlers gets re-validated here.
+    // We do NOT truncate here (we want the user to see what they typed) but we do refresh the inline error.
+    this.myForm.controls.modelTagInputValue.valueChanges.subscribe((v: string) => {
+      this.validateTagInput(v || '', false);
+    });
+  }
+
+  /** Validate current tag input value; return true if acceptable to commit. */
+  private validateTagInput(value: string, toastOnError: boolean): boolean {
+    const trimmed = (value || '').trim();
+    const TAG_MAX_LEN = AddModelComponent.TAG_MAX_LEN;
+    if (trimmed.length > TAG_MAX_LEN) {
+      const msg = this.i18n.transform('tag_length_error_tip');
+      this.tagInputError = msg;
+      if (toastOnError) this.message.warning(msg);
+      return false;
+    }
+    if (trimmed.length > 0 && this.findModelTagFirstIndex(this.modelTags, 'label', trimmed) !== -1) {
+      const msg = this.i18n.transform('tag_duplicate_error_tip');
+      this.tagInputError = msg;
+      if (toastOnError) this.message.warning(msg);
+      return false;
+    }
+    if (this.modelTags.length >= AddModelComponent.TAG_MAX_COUNT && trimmed.length > 0) {
+      const msg = this.i18n.transform('tag_count_error_tip');
+      this.tagInputError = msg;
+      if (toastOnError) this.message.warning(msg);
+      return false;
+    }
+    this.tagInputError = '';
+    return true;
   }
 
   beforeUpload = (file: NzUploadFile): boolean => {
@@ -260,7 +306,18 @@ export class AddModelComponent implements OnInit {
     this.myForm.controls.interface_protocol.setValue(this.protocolMap[model.interface_protocol] ? model.interface_protocol : model_protocol);
     this.myForm.controls.logo.setValue(model.logo || cdnAssetUrl('assets/model/default_model_detail.svg'));
     this.myForm.controls.is_support_stream.setValue(model.is_support_stream.toString());
-    this.modelTags = model.model_tags ? model.model_tags?.split(',').map(item => ({ label: item })) : [];
+    // 回显忠实呈现存量标签：不做 trim/去重/截断/数量裁剪。存量数据若违反
+    // 长度/数量/重复约束，由 submit() 的显式校验拦截并提示，用户知情后再处理；
+    // 否则"打开→保存"会静默丢弃第6条及以后的标签、裁短超长标签（前10字符相同的
+    // 不同超长标签截断后还会误判为重复），存量数据被无感知改写/丢失。
+    // 例外：空段不是标签——无标签模型存的是 ""，"" 是 truthy，不过滤会渲染出一个
+    // 空 chip 并卡死提交校验，因此仅过滤空段（304cb35c 同语义）。
+    this.modelTags = model.model_tags
+      ? model.model_tags
+          .split(',')
+          .filter(item => (item || '').length > 0)
+          .map(item => ({ label: item }))
+      : [];
     this.myForm.controls.throttling_policy.setValue(model.throttling_policy ? model.throttling_policy.toString() : 'none');
     this.myForm.controls.is_public.setValue(model?.is_public ? model.is_public : false);
     this.myForm.controls.is_support_close_reasoning.setValue(model?.is_support_close_reasoning ? model.is_support_close_reasoning : false);
@@ -321,8 +378,49 @@ export class AddModelComponent implements OnInit {
     }
   }
 
+  /** Flush any in-progress tag input when submitting the whole form.
+   *  Returns true if the input can be safely ignored (empty or successfully committed), false if invalid. */
+  private flushPendingTagInput(toast: boolean): boolean {
+    if (!this.showModelTagInput) return true;
+    const rawValue = this.myForm.getRawValue().modelTagInputValue;
+    const value = (rawValue || '').trim();
+    if (value.length === 0) {
+      this.myForm.controls.modelTagInputValue.setValue('');
+      this.showModelTagInput = false;
+      this.tagInputError = '';
+      return true;
+    }
+    if (!this.validateTagInput(value, toast)) {
+      return false;
+    }
+    this.modelTags = [...this.modelTags, { label: value }];
+    this.myForm.controls.modelTagInputValue.setValue('');
+    this.showModelTagInput = false;
+    this.tagInputError = '';
+    return true;
+  }
+
   handleAutoInfo() {
     const value = this.myForm.getRawValue();
+    const TAG_MAX_LEN = AddModelComponent.TAG_MAX_LEN;
+    const TAG_MAX_COUNT = AddModelComponent.TAG_MAX_COUNT;
+    const seen = new Set<string>();
+    // Defense in depth ONLY：回显已不做归一化，存量违规标签（超长/超量/重复/空）
+    // 在 submit() Step 2 被显式拦截，正常 UI 流程到达此处时下列过滤均为空操作、
+    // 不会丢任何内容。仅防御未来新增调用方绕过 submit() 校验直调本方法。
+    // 输出保持标签原样（trim 只用于校验判定）：存量 " a" 显示什么就存什么，
+    // 不做保存侧的空白静默归一化；新输入路径的 trim 在 confirmCurrentTag 已完成。
+    const safeTags = (this.modelTags || [])
+      .map(t => t?.label || '')
+      .filter(l => l.trim().length > 0 && l.trim().length <= TAG_MAX_LEN)
+      .filter(l => {
+        const key = l.trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, TAG_MAX_COUNT);
+    this.modelTags = safeTags.map(l => ({ label: l }));
     const params: any = {
       provider_id: this.provider_id,
       api_url: this.convertToBackendFormat(value.api_url),
@@ -334,7 +432,7 @@ export class AddModelComponent implements OnInit {
       model_type: value.model_type,
       service_name: value.service_name,
       model_id: this.model_id,
-      model_tags: this.modelTags?.map(item => item.label)?.join(','),
+      model_tags: safeTags.join(','),
       throttling_policy: value.throttling_policy === 'none' ? '' : value.throttling_policy,
       is_network: this.modelInfo.is_network,
       logo: value.logo,
@@ -346,6 +444,36 @@ export class AddModelComponent implements OnInit {
   }
 
   submit() {
+    // Step 1: If the tag input is currently open, try to flush/validate it first.
+    if (this.showModelTagInput) {
+      if (!this.flushPendingTagInput(true)) {
+        return;
+      }
+    }
+    // Step 2: Validate committed tags（含回显的存量标签：违规数据显式拦截并提示，绝不静默改写/丢弃）
+    const TAG_MAX_LEN = AddModelComponent.TAG_MAX_LEN;
+    const TAG_MAX_COUNT = AddModelComponent.TAG_MAX_COUNT;
+    const invalidTag = this.modelTags.find(t => !t.label || t.label.trim().length === 0 || t.label.trim().length > TAG_MAX_LEN);
+    if (invalidTag) {
+      this.message.warning(this.i18n.transform('tag_length_error_tip'));
+      return;
+    }
+    if (this.modelTags.length > TAG_MAX_COUNT) {
+      this.message.warning(this.i18n.transform('tag_count_error_tip'));
+      return;
+    }
+    const seenLabels = new Set<string>();
+    const duplicateTag = this.modelTags.find(t => {
+      const l = (t?.label || '').trim();
+      if (seenLabels.has(l)) return true;
+      seenLabels.add(l);
+      return false;
+    });
+    if (duplicateTag) {
+      this.message.warning(this.i18n.transform('tag_duplicate_error_tip'));
+      return;
+    }
+
     let modelInfo = this.handleAutoInfo();
     if (!this.checkGroup()) return;
 
@@ -437,28 +565,133 @@ export class AddModelComponent implements OnInit {
   }
 
   onCustomTagDelete(item: any): void {
-    const index: number = this.modelTags.indexOf(item);
-    if (index !== -1) {
-      this.modelTags.splice(index, 1);
-    }
+    this.modelTags = this.modelTags.filter(t => t !== item);
   }
 
   onModelTagClick(): void {
-    this.showModelTagInput = true;
-  }
-
-  onModelTagInputKeyup(event: any): void {
-    const formValue = this.myForm.getRawValue();
-    const value: string = formValue.modelTagInputValue;
-
-    if (value.trim() === '' || value.length > 10 || this.findModelTagFirstIndex(this.modelTags, 'label', value) !== -1) {
-      this.showModelTagInput = false;
+    if (this.modelTags.length >= AddModelComponent.TAG_MAX_COUNT) {
+      this.message.warning(this.i18n.transform('tag_count_error_tip'));
       return;
     }
+    this.showModelTagInput = true;
+    this.tagInputError = '';
+    this.myForm.controls.modelTagInputValue.setValue('');
+    this.refocusTagInput();
+  }
 
+  /** IME composition start */
+  onCompositionStart(): void {
+    this.isComposing = true;
+  }
+
+  /** IME composition end (candidate confirmed). Validate and show inline error, but do NOT auto-add. */
+  onCompositionEnd(event: Event): void {
+    this.isComposing = false;
+    const input = event.target as HTMLInputElement;
+    this.validateTagInput(input.value, false);
+  }
+
+  /** Enter key handler: commit current tag via confirmCurrentTag(). IME Enter during composition is ignored. */
+  onModelTagEnter(event: Event): void {
+    if (this.isComposing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.confirmCurrentTag();
+  }
+
+  /** ✓ button or Enter: add current tag if valid; empty input is a no-op (clear & refocus).
+   *  NOTE: 不在此复位 tagActionPending —— mousedown 设置的标志需存活到 onModelTagBlur 的
+   *  定时器消费（聚焦处理器也会复位），否则随后触发的 blur 会看到 false 而错误清空输入。 */
+  confirmCurrentTag(): void {
+    const value: string = (this.myForm.getRawValue().modelTagInputValue || '').trim();
+    if (value === '') {
+      this.myForm.controls.modelTagInputValue.setValue('');
+      this.tagInputError = '';
+      this.cdr.markForCheck();
+      if (this.showModelTagInput && this.modelTags.length < AddModelComponent.TAG_MAX_COUNT) {
+        this.refocusTagInput();
+      }
+      return;
+    }
+    if (this.modelTags.length >= AddModelComponent.TAG_MAX_COUNT) {
+      this.message.warning(this.i18n.transform('tag_count_error_tip'));
+      this.showModelTagInput = false;
+      this.myForm.controls.modelTagInputValue.setValue('');
+      this.tagInputError = '';
+      this.cdr.markForCheck();
+      return;
+    }
+    if (!this.validateTagInput(value, true)) {
+      this.cdr.markForCheck();
+      return;
+    }
+    this.modelTags = [...this.modelTags, { label: value }];
+    this.myForm.controls.modelTagInputValue.setValue('');
+    this.tagInputError = '';
+    if (this.modelTags.length >= AddModelComponent.TAG_MAX_COUNT) {
+      this.showModelTagInput = false;
+    } else {
+      this.refocusTagInput();
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** ✗ button or blur: discard current input, close input, return to + button state. */
+  cancelTagInput(): void {
     this.myForm.controls.modelTagInputValue.setValue('');
     this.showModelTagInput = false;
-    this.modelTags.push({ label: value });
+    this.tagInputError = '';
+    this.cdr.markForCheck();
+  }
+
+  /** mousedown on ✓/✗ fires before blur — set flag so blur handler doesn't clobber the click. */
+  onTagActionMouseDown(): void {
+    this.tagActionPending = true;
+  }
+
+  /** Blur: treat as cancel unless a ✓/✗ click or drawer submit is in progress.
+   *  150ms 延时窗口内任何重新聚焦都会递增 tagBlurGen 使本定时器作废，杜绝
+   *  "blur→快速点回输入框→旧定时器仍 cancelTagInput 误关已重新聚焦的输入"的竞态。 */
+  onModelTagBlur(): void {
+    const gen = ++this.tagBlurGen;
+    setTimeout(() => {
+      if (gen !== this.tagBlurGen) return; // 已被重新聚焦/更新的 blur 取代，静默退出
+      if (this.tagActionPending || this.submitPending) {
+        // ✓/✗ 点击或确定按钮 submit 正在处理：不清空输入，复位标志位防止泄漏。
+        this.tagActionPending = false;
+        this.submitPending = false;
+        return;
+      }
+      if (this.isTagInputFocused()) return; // 兜底：当前焦点已回到输入框，视为继续编辑
+      this.cancelTagInput();
+    }, 150);
+  }
+
+  /** 聚焦 = 新输入会话开始：作废在途 blur 定时器，并复位桥接标志。
+   *  输入框未聚焦时点按确定/✓/✗ 不会触发 blur 来消费标志，若不在聚焦时复位，
+   *  残留的 submitPending/tagActionPending 会让下一次 blur 误判"提交中"而跳过取消，
+   *  未确认的输入被保留并在再次提交时由 flushPendingTagInput 意外写入。 */
+  onModelTagFocus(): void {
+    this.tagBlurGen++;
+    this.submitPending = false;
+    this.tagActionPending = false;
+  }
+
+  private isTagInputFocused(): boolean {
+    const input = this.elementRef.nativeElement.querySelector('input[formControlName="modelTagInputValue"]') as HTMLInputElement | null;
+    return !!input && document.activeElement === input;
+  }
+
+  /** mousedown on the drawer 确定 button — fires before blur so we can preserve pending tag input for submit(). */
+  onSubmitMouseDown(): void {
+    this.submitPending = true;
+  }
+
+  private refocusTagInput(): void {
+    setTimeout(() => {
+      const input = this.elementRef.nativeElement.querySelector('input[formControlName="modelTagInputValue"]') as HTMLInputElement | null;
+      if (input) input.focus();
+    }, 0);
   }
 
   private findModelTagFirstIndex(arr: any, key: string, value: string): number {

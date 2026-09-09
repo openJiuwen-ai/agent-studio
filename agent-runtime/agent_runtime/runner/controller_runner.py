@@ -27,6 +27,7 @@ from jiuwen.serve.controllers.execution.utils import (
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
+from agent_runtime.common.trace_compat import create_agent_session_with_trace
 
 
 def _parse_controller_stream_chunk(chunk) -> dict | None:
@@ -182,7 +183,7 @@ class ControllerRunner:
                 "user_id": req.user_id,
             }
             setup_otel_tracer()
-            session = create_agent_session(session_id=session_id, card=agent_group.card)
+            session = create_agent_session_with_trace(session_id=session_id, card=agent_group.card)
             await session.pre_run(inputs=session_inputs)
 
             streaming_output = agent_group.astream(

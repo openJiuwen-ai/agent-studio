@@ -1,25 +1,21 @@
-<!-- <div class="flex h-full w-full flex-col" (keydown)="handleKeyDown($event)">
-  <tp-halfmodal-header class="mb-[16px] block">
+<div class="flex h-full w-full flex-col" (keydown)="handleKeyDown($event)">
+  <div class="mb-[16px] block">
     <div class="flex w-[calc(100%-38px)] items-center justify-between">
       <div class="flex items-center gap-[8px]">
-        <img class="model-config-icon" [src]="iconUrl" alt="qa-node" />
-
-        <edit-name
-        [(name)]="nodeInfo.name"
-        (onBlurConfirm)="updateName()"
-      ></edit-name>
+        <img class="model-config-icon" [src]="iconUrl" alt="sql-node" />
+        <edit-name [(name)]="nodeInfo.name" (onBlurConfirm)="updateName()"></edit-name>
       </div>
 
       <div class="flex items-center gap-[16px]" *ngIf="!isFlowReadonly">
-        <div (click)="onClickTest()" class="single-test-icon-modal" [tiTip]="'single-test'| i18nextEager"></div>
-        <div class="cursor-pointer" [tiTip]="'icon-more'| i18nextEager">
-          <ti-menu
-            class="pw-three-dots-more-modal"
-            [items]="actions"
-            (select)="onClickAction($event)"
-            ellipsis
-          ></ti-menu>
+        <div (click)="onClickTest()" class="single-test-icon-modal" nz-tooltip [nzTooltipTitle]="'single-test' | i18nextEager"></div>
+        <div class="cursor-pointer" nz-dropdown [nzDropdownMenu]="actionsMenu" nzTrigger="click" nzPlacement="bottomRight">
+          <span nz-icon nzType="more" nzTheme="outline"></span>
         </div>
+        <nz-dropdown-menu #actionsMenu="nzDropdownMenu">
+          <ul nz-menu>
+            <li *ngFor="let action of actions" nz-menu-item (click)="onClickAction(action)">{{ action.label }}</li>
+          </ul>
+        </nz-dropdown-menu>
         <div class="h-[16px] w-[1px] bg-[#dbdbdb]"></div>
       </div>
     </div>
@@ -27,22 +23,16 @@
     <node-description [nodeInfo]="nodeInfo" (descriptionChange)="updateView()"></node-description>
 
     <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
-  </tp-halfmodal-header>
+  </div>
 
-  <tp-halfmodal-body id="flow-llm-modal-body">
-    <div class="relative h-full w-full overflow-auto">
-      <!-!- 输入参数配置表格 -!->
-      <meta-acc-block
-        class="block w-[calc(100%-8px)]"
-        [title]="'input_params' | i18nextEager"
-      >
+  <div id="flow-sql-modal-body" class="relative h-full w-full overflow-auto flex-1 pr-[16px]">
+    <div class="h-full w-full overflow-auto">
+      <meta-acc-block class="block w-[calc(100%-8px)]" [title]="'input_params' | i18nextEager">
         <ng-template #content>
-          <div class="mt-2 flex items-center gap-1">
-            <div class="w-1/3 text-label">
-              {{ 'param_name' | i18nextEager }}
-            </div>
+          <div class="mt-2 flex items-center gap-2">
+            <div class="w-1/3 text-label">{{ 'param_name' | i18nextEager }}</div>
             <div class="flex w-2/3 items-center gap-2 text-label">
-              <div class="flex h-fit w-[calc(100%-16px)] items-center">
+              <div class="flex h-fit w-full items-center">
                 <div class="w-[35%]">{{ 'type' | i18nextEager }}</div>
                 <div class="w-[65%]">{{ 'value' | i18nextEager }}</div>
               </div>
@@ -51,44 +41,37 @@
           </div>
 
           <form #inputForm="ngForm">
-            <div
-              *ngFor="let param of inputParams; index as i"
-              class="mt-2 flex gap-1"
-            >
+            <div *ngFor="let param of inputParams; index as i" class="mt-2 flex items-start gap-2">
               <div class="w-1/3">
                 <input
                   style="width: 100%"
                   type="text"
                   [name]="'inputFormName' + i"
-                  [tiValidation]="{ type: 'changeAlert' }"
-                  [errorMessageWrapper]="wrapper"
+                  nz-input
                   [maxlength]="paramNameMaxLen"
-                  tiText
-                  [title]="param.name"
                   [(ngModel)]="param.name"
+                  [title]="param.name"
                   (input)="onNameChange()"
                   [placeholder]="'input_placeholder' | i18nextEager"
                   [valueValidityValidator]="getInputNames(i)"
                   (ngModelChange)="changeUpdateTime()"
                   (blur)="inputOnSave()"
                 />
-
-                <div class="w-full" #wrapper></div>
               </div>
 
               <div class="flex w-2/3 gap-[8px]">
                 <div class="flex h-fit w-[calc(100%-16px)] items-center gap-2">
                   <div class="flex w-full">
                     <div class="w-[35%]">
-                      <ti-select
+                      <nz-select
                         class="combo-select-left"
                         style="width: 100%"
                         [name]="'inputFormType' + i"
-                        [options]="inputSourceOptions"
+                        [nzOptions]="$any(inputSourceOptions)"
                         [(ngModel)]="param.value.type"
-                        valueKey="value"
+                        nzLabelKey="value"
                         (ngModelChange)="onInputValueTypeChange(param)"
-                      ></ti-select>
+                      ></nz-select>
                     </div>
 
                     <div class="w-[65%]">
@@ -97,11 +80,9 @@
                         *ngIf="param.value.type === 'literal'"
                         style="width: 100%"
                         [name]="'inputFormValue' + i"
-                        [tiValidation]="{ type: 'changeAlert' }"
-                        nonEmptyValidator
-                        [errorMessageWrapper]="valueWrapper"
                         type="text"
-                        tiText
+                        nz-input
+                        nonEmptyValidator
                         [placeholder]="'input_placeholder' | i18nextEager"
                         [(ngModel)]="param.value.content"
                         (ngModelChange)="onSave()"
@@ -115,21 +96,19 @@
                         [options]="param.refs"
                         [name]="'inputFormValue' + i"
                         refSelectedRequire
-                        [tiValidation]="{ type: 'changeAlert' }"
-                        [errorMessageWrapper]="valueWrapper"
                         [placeholder]="'select_placeholder' | i18nextEager"
                         (select)="treeSelect()"
                       ></input-tree-select>
-
-                      <div class="w-full" #valueWrapper></div>
                     </div>
                   </div>
                 </div>
-                <tp-icon
-                  class="text-4 cursor-pointer pt-2 text-[#191919]"
+                <span
                   (click)="deleteInputParam(i)"
-                  name="cloudx-action-delete"
-                />
+                  style="font-size: 16px; color: #191919; cursor: pointer; padding-top: 6px"
+                  nz-icon
+                  nzType="delete"
+                  nzTheme="outline"
+                ></span>
               </div>
             </div>
           </form>
@@ -140,15 +119,13 @@
             <button
               (click)="addInputParam()"
               class="w-fit"
-              tiButton
-              [tiTip]="'add_params' | i18nextEager"
-              [hasBorder]="false"
+              nz-button
+              nzType="text"
+              nz-tooltip
+              [nzTooltipTitle]="'add_params' | i18nextEager"
               [disabled]="isReachedParamLimit(inputParams)"
             >
-              <tp-icon
-                class="header-button-icon"
-                name="cloudx-action-create-1"
-              />
+              <span nz-icon nzType="plus" nzTheme="outline"></span>
             </button>
           </div>
         </ng-template>
@@ -156,54 +133,38 @@
 
       <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
 
-      <!-!- 数据库 -!->
-      <meta-acc-block
-        class="mt-4 block w-[calc(100%-8px)]"
-        [title]="'data_query.sql' | i18nextEager"
-      >
+      <meta-acc-block class="mt-4 block w-[calc(100%-8px)]" [title]="'data_query.sql' | i18nextEager">
         <ng-template #content>
-          <form class="flex flex-col" [formGroup]="formGroup">
-            <ti-select
-              #select
-              class="mt-[8px] !w-full"
-              [options]="datasourceOptions"
-              formControlName="datasource"
-              idKey="id"
-              [placeholder]="'select_placeholder' | i18nextEager"
-              [tiValidation]="datasourceValidation"
-              [noDataText]="'sqlmodalcomponent_575' | i18nextEager"
-              [searchable]="true"
-              (beforeSearch)="onBeforeSearch($event)"
-              (beforeOpen)="onBeforeOpenIntentGroup($event)"
-              (scrollToBottom)="loadMore($event, select)"
-              (ngModelChange)="onSave()"
+          <nz-select
+            class="mt-[8px] w-full"
+            [ngModel]="selectedDatasource"
+            (ngModelChange)="selectedDatasource = $event; onSave()"
+            nzAllowClear
+            [compareWith]="compareDatasource"
+            [nzPlaceHolder]="'select_placeholder' | i18nextEager"
+            [nzShowSearch]="true"
+            [nzLoading]="datasourceLoading"
+            (nzOnSearch)="onDatasourceSearch($event)"
+            style="width: 100%"
+          >
+            <nz-option
+              *ngFor="let ds of datasourceOptions"
+              [nzValue]="ds"
+              [nzLabel]="ds.name + ' (' + ds.type + ')'"
             >
-              <ng-template #item let-item>
-                <ng-container
-                  *ngIf="item.name || nodeInfo?.configs?.name; else emptyTmpl"
-                >
-                  <span class="flex items-center gap-1">
-                    {{ item.name || nodeInfo?.configs?.name }}
-                    <span
-                      class="flex h-[18px] items-center rounded-[2px] bg-[#e6e6e6] px-1"
-                    >
-                      {{ item.type || nodeInfo?.configs?.type }}
-                    </span>
-                  </span>
-                </ng-container>
-
-                <ng-template #emptyTmpl>
-                  <span class="text-[#808080]">{{'select_placeholder' | i18nextEager}}</span>
-                </ng-template>
-              </ng-template>
-            </ti-select>
-          </form>
+              <span class="flex items-center gap-1">
+                {{ ds.name }}
+                <span class="flex h-[18px] items-center rounded-[2px] bg-[#e6e6e6] px-1">
+                  {{ ds.type }}
+                </span>
+              </span>
+            </nz-option>
+          </nz-select>
         </ng-template>
       </meta-acc-block>
 
       <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
 
-      <!-!- SQL -!->
       <meta-acc-block class="mt-4 block">
         <ng-template #blockTitle>
           <div class="font-bold">SQL</div>
@@ -211,161 +172,111 @@
 
         <ng-template #content>
           <div class="mt-2 w-full">
-            <meta-cmd-textarea
-              class="block w-full"
+            <textarea
+              nz-input
+              class="w-full"
+              style="min-height: 120px; font-family: monospace;"
               [(ngModel)]="sql"
-              [variants]="tipVals"
-              [placeholder]="placeholderStr"
+              [placeholder]="'sqlmodalcomponent_586' | i18nextEager"
               (ngModelChange)="changeUpdateTime()"
               (blur)="inputOnSave()"
-            />
+            ></textarea>
           </div>
         </ng-template>
       </meta-acc-block>
 
       <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
 
-      <!-!- 输出参数配置表格 -!->
       <meta-acc-block class="mt-4 block" [title]="'output_params' | i18nextEager">
         <ng-template #content>
-          <div class="mt-2 flex items-center gap-1">
-            <div
-              class="text-label"
-              [ngStyle]="{
-                flex: 1,
-              }"
-            >
-              {{ 'param_name' | i18nextEager }}
-            </div>
-            <div
-              class="text-label"
-              [ngStyle]="{
-                width: labelWidth.type
-              }"
-            >
-              {{ 'type' | i18nextEager }}
-            </div>
+          <div class="mt-2 flex items-center gap-2">
+            <div class="text-label flex-1">{{ 'param_name' | i18nextEager }}</div>
+            <div class="text-label w-[90px]">{{ 'type' | i18nextEager }}</div>
             <div class="w-[36px]"></div>
           </div>
 
           <form #outputForm="ngForm">
-            <ti-tree id="node-param-tree" [data]="outputParams">
-              <ng-template let-param let-i="index">
-                <div class="mt-[8px] flex w-full gap-1 leading-none">
-                  <div
-                    [ngStyle]="{
-                      flex: 1,
-                    }"
-                  >
+            <nz-tree id="node-param-tree" [nzData]="$any(outputParams)" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
+              <ng-template #nzTreeTemplate let-node let-origin="origin">
+                <div class="mt-[8px] flex w-full items-start gap-2">
+                  <div style="flex: 1">
                     <input
                       style="width: 100%"
                       type="text"
-                      [name]="'outputFormName' + i"
-                      (keydown)="$event.stopPropagation()"
-                      [tiValidation]="{ type: 'changeAlert' }"
-                      [errorMessageWrapper]="wrapper"
+                      [name]="'outputFormName' + node.key"
                       [maxlength]="paramNameMaxLen"
-                      [disabled]="disableEdit(param)"
-                      tiText
-                      [(ngModel)]="param.name"
-                      [title]="param.name"
-                      (input)="onStartNodeNameChange()"
-                      [valueValidityValidator]="getStartNodeInputNames(param)"
+                      [disabled]="disableEdit(origin)"
+                      nz-input
+                      [(ngModel)]="origin.name"
+                      [title]="origin.name"
+                      [valueValidityValidator]="getOutputNames(origin)"
                       [placeholder]="'input_placeholder' | i18nextEager"
                       (ngModelChange)="changeUpdateTime()"
                       (blur)="inputOnSave()"
                     />
-                    <div class="w-full" #wrapper></div>
                   </div>
 
-                  <div
-                    [ngStyle]="{
-                      width: labelWidth.type
-                    }"
-                  >
-                    <tp-cascader
-                      *ngIf="param.depth === 0; else otherTypes"
+                  <div style="width: 90px">
+                    <nz-select
+                      *ngIf="origin.depth === 0; else otherTypes"
                       style="width: 100%"
-                      trigger="hover"
-                      [name]="'outputFormType' + i"
-                      [tiValidation]="{ type: 'changeAlert' }"
-                      [(ngModel)]="param.type"
-                      (ngModelChange)="onStartOutputParamTypeChange(param)"
-                      [items]="startTypeOptions"
-                      valueKey="value"
-                      [disabled]="disableEdit(param)"
-                      [placeholder]="'select_placeholder' | i18nextEager"
-                    ></tp-cascader>
+                      [name]="'outputFormType' + node.key"
+                      [(ngModel)]="origin.type"
+                      [nzOptions]="$any(inputTypeOptions)"
+                      nzLabelKey="value"
+                      [disabled]="disableEdit(origin)"
+                      [nzPlaceHolder]="'select_placeholder' | i18nextEager"
+                      (ngModelChange)="onOutputParamTypeChange(origin); onSave()"
+                    ></nz-select>
 
                     <ng-template #otherTypes>
-                      <tp-cascader
-                        *ngIf="param.depth === 5; else subTypes"
+                      <nz-select
+                        *ngIf="origin.depth === 5; else subTypes"
                         style="width: 100%"
-                        trigger="hover"
-                        [name]="'outputFormType' + i"
-                        [tiValidation]="{ type: 'changeAlert' }"
-                        [(ngModel)]="param.type"
-                        (ngModelChange)="onStartOutputParamTypeChange(param)"
-                        [items]="startTypeOp"
-                        valueKey="value"
-                        [disabled]="disableEdit(param)"
-                        [placeholder]="'select_placeholder' | i18nextEager"
-                      >
-                      </tp-cascader>
+                        [name]="'outputFormType' + node.key"
+                        [(ngModel)]="origin.type"
+                        [nzOptions]="$any(noneObjDataTypes)"
+                        nzLabelKey="value"
+                        [disabled]="disableEdit(origin)"
+                        [nzPlaceHolder]="'select_placeholder' | i18nextEager"
+                        (ngModelChange)="onOutputParamTypeChange(origin); onSave()"
+                      ></nz-select>
 
                       <ng-template #subTypes>
-                        <tp-cascader
-                          trigger="hover"
+                        <nz-select
                           style="width: 100%"
-                          [name]="'outputFormType' + i"
-                          [tiValidation]="{ type: 'changeAlert' }"
-                          [(ngModel)]="param.type"
-                          [items]="standTypeOps"
-                          (ngModelChange)="onStartOutputParamTypeChange(param)"
-                          valueKey="value"
-                          [disabled]="disableEdit(param)"
-                          [placeholder]="'select_placeholder' | i18nextEager"
-                        >
-                        </tp-cascader>
+                          [name]="'outputFormType' + node.key"
+                          [(ngModel)]="origin.type"
+                          [nzOptions]="$any(outputDataTypes)"
+                          nzLabelKey="value"
+                          [disabled]="disableEdit(origin)"
+                          [nzPlaceHolder]="'select_placeholder' | i18nextEager"
+                          (ngModelChange)="onOutputParamTypeChange(origin); onSave()"
+                        ></nz-select>
                       </ng-template>
                     </ng-template>
-
-                    <div class="w-full" #wrapper></div>
                   </div>
 
-                  <div class="w-[36px]"  style="display: flex;">
-                  <div
-                    class="h-[28px] w-[16px]"
-                    [ngStyle]="{
-                      'margin-left': opMarginLeft
-                    }"
-                  >
+                  <div class="flex items-center gap-1" style="width: 36px">
                     <meta-add-props-icon
-                      *ngIf="isObjectLikeType(param.type)"
-                      (click)="addChild(param)"
+                      *ngIf="isObjectLikeType(origin.type)"
+                      (click)="addChild(origin); onSave()"
                     />
-                  </div>
-
-                  <div
-                    class="flex h-[28px] w-[16px] items-center justify-center"
-                    [ngStyle]="{
-                      'margin-left': opMarginLeft
-                    }"
-                  >
-                    <tp-icon
-                      *ngIf="showDelete(param)"
-                      (click)="deleteStartNodeParam(param)"
+                    <span
+                      *ngIf="showDelete(origin)"
+                      (click)="deleteOutputParam(origin)"
                       style="font-size: 16px; color: #191919; cursor: pointer"
-                      name="cloudx-action-delete"
-                    ></tp-icon>
+                      nz-icon
+                      nzType="delete"
+                      nzTheme="outline"
+                    ></span>
                   </div>
-                </div>
                 </div>
               </ng-template>
-            </ti-tree>
+            </nz-tree>
           </form>
         </ng-template>
       </meta-acc-block>
     </div>
-  </tp-halfmodal-body>
-</div> -->
+  </div>
+</div>

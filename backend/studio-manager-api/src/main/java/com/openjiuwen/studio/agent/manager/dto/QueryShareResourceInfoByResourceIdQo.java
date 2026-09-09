@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,16 +29,19 @@ public class QueryShareResourceInfoByResourceIdQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "example-id-123", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("release_version")
+    @Schema(description = "发布版本", example = "1.0.0", required = true)
     @NotBlank
     private String releaseVersion = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "example-type")
     private String resourceType = null;
 
     public String getWorkspaceId() {

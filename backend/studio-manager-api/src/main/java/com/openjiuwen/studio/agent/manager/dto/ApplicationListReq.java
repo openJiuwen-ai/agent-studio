@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,30 +30,37 @@ public class ApplicationListReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("ids")
+    @Schema(description = "智能体ID列表", example = "[\"app_001\"]")
     @Valid
     @Size(max = 100)
     private List<@Length() String> ids = null;
 
     @JsonProperty("name")
+    @Schema(description = "智能体名称", example = "my_agent")
     @Length(min = 1, max = 64)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "智能体类型列表", example = "[\"chat\"]")
     @Valid
     @Size()
     private List<@Length() String> type = null;
 
     @JsonProperty("status")
+    @Schema(description = "智能体状态", example = "published")
     private String status = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "分页偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "100")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 100;
 

@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -29,15 +31,18 @@ public class UserProfileTopicInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("topic_name")
+    @Schema(description = "主题名称", example = "示例名称", required = true)
     @NotBlank
     @Length(max = 100)
     private String topicName = null;
 
     @JsonProperty("topic_description")
+    @Schema(description = "主题", example = "示例描述")
     @Length(max = 500)
     private String topicDescription = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签列表", example = "[]")
     @Valid
     @Size(max = 30)
     private List<UserProfileTagInfo> tags = null;

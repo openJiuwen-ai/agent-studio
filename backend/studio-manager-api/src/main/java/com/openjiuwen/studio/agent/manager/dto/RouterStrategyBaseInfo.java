@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -26,48 +27,61 @@ public class RouterStrategyBaseInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "路由策略ID", example = "strategy-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String id = null;
 
     @JsonProperty("strategy_key")
+    @Schema(description = "策略键", example = "route_key_001")
     private String strategyKey = null;
 
     @JsonProperty("strategy_name")
+    @Schema(description = "策略名称", example = "默认路由策略")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5a-zA-Z0-9_. |/:\\\\-]{1,35}$")
     private String strategyName = null;
 
     @JsonProperty("strategy_description")
+    @Schema(description = "策略描述", example = "默认的路由策略")
     private String strategyDescription = null;
 
     @JsonProperty("service_list")
+    @Schema(description = "服务列表", example = "[]")
     @Valid
     @Size()
     private List<ModelServiceRsp> serviceList = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域ID", example = "domain-123")
     private String domainId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String workspaceId = null;
 
     @JsonProperty("created_by_user_name")
+    @Schema(description = "创建者用户名", example = "张三")
     private String createdByUserName = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建日期时间戳", example = "1709251200000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新日期时间戳", example = "1709337600000")
     private Long lastUpdatedDate = null;
 
     @JsonProperty("strategy_timeout")
+    @Schema(description = "策略超时时间（毫秒）", example = "30000")
     private Integer strategyTimeout = null;
 
     @JsonProperty("strategy_retry_count")
+    @Schema(description = "策略重试次数", example = "3")
     private Integer strategyRetryCount = null;
 
     public String getId() {

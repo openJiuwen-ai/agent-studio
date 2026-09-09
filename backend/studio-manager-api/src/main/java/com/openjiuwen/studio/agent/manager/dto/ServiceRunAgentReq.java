@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,31 +30,38 @@ public class ServiceRunAgentReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("query")
+    @Schema(description = "查询内容", example = "你好")
     @Length(max = 1000000)
     private String query = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> inputs = null;
 
     @JsonProperty("tool_switch_dict")
+    @Schema(description = "工具开关字典", example = "{\"search\":true}")
     @Valid
     @Size()
     private Map<String, Boolean> toolSwitchDict = null;
 
     @JsonProperty("model_deployment_id")
+    @Schema(description = "模型部署ID", example = "dep_001")
     @Length(max = 100)
     private String modelDeploymentId = null;
 
     @JsonProperty("enable_history")
+    @Schema(description = "是否启用历史记录", example = "true")
     private Boolean enableHistory = true;
 
     @JsonProperty("long_term_memory")
+    @Schema(description = "长期记忆配置", example = "{}")
     @Valid
     private LongTermMemoryRuntime longTermMemory = null;
 
     @JsonProperty("files")
+    @Schema(description = "文件列表", example = "[\"file_001\"]")
     @Valid
     @Size()
     private List<@Length(max = 1000) String> files = null;

@@ -66,7 +66,7 @@
             AND file_status = #{fileStatus}
         </if>
         ORDER BY create_time DESC
-        LIMIT #{offset}, #{limit}
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <select id="countByKbId" resultType="int">

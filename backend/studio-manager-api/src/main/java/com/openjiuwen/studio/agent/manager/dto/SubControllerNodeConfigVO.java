@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,62 +28,79 @@ public class SubControllerNodeConfigVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "节点ID", example = "node001")
     private String id = null;
 
     @JsonProperty("intent")
+    @Schema(description = "意图配置", example = "意图配置信息")
     @Valid
     private WorkflowNodeConfigVOIntent intent = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "天气查询节点")
     private String name = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v001")
     private String versionId = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "v1.0.0")
     private String versionName = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "工作流节点配置")
     private String description = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型配置", example = "模型配置信息")
     @Valid
     private ModelConfigVO model = null;
 
     @JsonProperty("top_p")
+    @Schema(description = "TopP参数", example = "0.9")
     private Float topP = null;
 
     @JsonProperty("temperature")
+    @Schema(description = "温度参数", example = "0.7")
     private Float temperature = null;
 
     @JsonProperty("enable_history")
+    @Schema(description = "是否启用历史", example = "true")
     private Boolean enableHistory = null;
 
     @JsonProperty("max_iteration")
+    @Schema(description = "最大迭代次数", example = "10")
     private Integer maxIteration = null;
 
     @JsonProperty("workflows")
+    @Schema(description = "工作流列表", example = "工作流列表")
     @Valid
     @Size()
     private List<ControllerNodeConfigVOWorkflows> workflows = null;
 
     @JsonProperty("agents")
+    @Schema(description = "Agent列表", example = "Agent列表")
     @Valid
     @Size()
     private List<SubControllerNodeConfigVOAgents> agents = null;
 
     @JsonProperty("specify_workflow_order")
+    @Schema(description = "是否指定工作流顺序", example = "false")
     private Boolean specifyWorkflowOrder = null;
 
     @JsonProperty("global_intents")
+    @Schema(description = "全局意图列表", example = "全局意图列表")
     @Valid
     @Size()
     private List<ControllerNodeConfigVOGlobalIntents> globalIntents = null;
 
     @JsonProperty("prompt")
+    @Schema(description = "提示词", example = "你是一个天气助手")
     private String prompt = null;
 
     @JsonProperty("chat_history_max_turn")
+    @Schema(description = "对话历史最大轮次", example = "20")
     private Integer chatHistoryMaxTurn = null;
 
     public String getId() {

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.hibernate.validator.constraints.Range;
 import org.springframework.validation.annotation.Validated;
 
@@ -25,10 +27,12 @@ public class QueryEnvironmentInstancesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("pageNo")
+    @Schema(description = "页码no", example = "0")
     @Range(min = 1L, max = 1000L)
     private Integer pageNo = 1;
 
     @JsonProperty("pageSize")
+    @Schema(description = "页码大小", example = "0")
     @Range(min = 1L, max = 100L)
     private Integer pageSize = 10;
 

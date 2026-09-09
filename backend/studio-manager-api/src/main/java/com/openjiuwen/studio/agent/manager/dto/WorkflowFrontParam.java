@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -24,37 +25,46 @@ public class WorkflowFrontParam implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "参数名称", example = "input_param")
     @Length(max = 1000)
     private String name = null;
 
     @JsonProperty("front_name")
+    @Schema(description = "前端展示名称", example = "输入参数")
     @Length(max = 1000)
     private String frontName = null;
 
     @JsonProperty("front_content")
+    @Schema(description = "前端内容", example = "请输入参数值")
     @Length(max = 100000)
     private String frontContent = null;
 
     @JsonProperty("type")
+    @Schema(description = "参数类型", example = "string")
     @Length(max = 1000)
     private String type = null;
 
     @JsonProperty("description")
+    @Schema(description = "参数描述", example = "用户输入的参数")
     @Length(max = 100000)
     private String description = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = null;
 
     @JsonProperty("source")
+    @Schema(description = "参数来源", example = "user_input")
     @Length(max = 1000)
     private String source = null;
 
     @JsonProperty("schema")
+    @Schema(description = "参数Schema定义", example = "{\"type\":\"string\"}")
     @Valid
     private Object schema = null;
 
     @JsonProperty("value")
+    @Schema(description = "参数值", example = "hello")
     @Valid
     private Object value = null;
 

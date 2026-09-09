@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.NotBlank;
 
@@ -24,16 +25,20 @@ public class AgentsImportBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file")
+    @Schema(description = "导入文件", example = "agents.zip", required = true)
     @NotBlank
     private Resource file = null;
 
     @JsonProperty("import_agents")
+    @Schema(description = "导入Agent标识", example = "true")
     private String importAgents = null;
 
     @JsonProperty("import_tools")
+    @Schema(description = "导入工具标识", example = "true")
     private String importTools = null;
 
     @JsonProperty("import_workflows")
+    @Schema(description = "导入工作流标识", example = "true")
     private String importWorkflows = null;
 
     public Resource getFile() {

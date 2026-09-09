@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,21 +27,26 @@ public class CommonWorkspaceReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作空间ID", example = "workspace_001")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作空间名称", example = "我的工作空间")
     @Length(min = 1, max = 64)
     private String name = null;
 
     @JsonProperty("icon")
+    @Schema(description = "工作空间图标", example = "icon-default")
     private String icon = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作空间描述", example = "这是一个工作空间")
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "工作空间类型", example = "standard")
     private String type = null;
 
     public String getId() {

@@ -241,6 +241,23 @@ class JsonUtilsTest {
     }
 
     /**
+     * 测试 objectToClassTypeQuiet 方法（静默版对象转指定Class类型，失败静默返回 null）
+     * 场景1：正常转换；场景2：转换失败返回 null；场景3：null 输入返回 null
+     */
+    @Test
+    void testObjectToClassTypeQuiet() {
+        Map<String, Object> map = Map.of("name", "quietTest", "age", 41);
+        TestObj obj = JsonUtils.objectToClassTypeQuiet(map, TestObj.class);
+        assertNotNull(obj);
+        assertEquals("quietTest", obj.getName());
+
+        Map<String, Object> invalidMap = Map.of("name", "err", "age", "notNumber");
+        assertNull(JsonUtils.objectToClassTypeQuiet(invalidMap, TestObj.class));
+
+        assertNull(JsonUtils.objectToClassTypeQuiet(null, TestObj.class));
+    }
+
+    /**
      * 测试 objectToClassRef 方法（对象转TypeReference类型）
      * 场景1：正常转换（Map转List<TestObj>）
      * 场景2：转换失败

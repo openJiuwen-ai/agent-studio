@@ -187,6 +187,7 @@ const commonLogic = {
       LoopOutput: cdnAssetUrl('assets/agent-center/flow/End.svg'),
       QA: cdnAssetUrl('assets/agent-center/flow/QA.svg'),
       Sql: cdnAssetUrl('assets/agent-center/flow/Sql.svg'),
+      DataQuery: cdnAssetUrl('assets/agent-center/flow/Sql.svg'),
       StructuredMessagesException: cdnAssetUrl('assets/agent-center/flow/Exception.svg'),
       ParamExtraction: cdnAssetUrl('assets/agent-center/flow/param-extraction.svg'),
       Card:cdnAssetUrl('assets/agent-center/flow/Card.svg'),
