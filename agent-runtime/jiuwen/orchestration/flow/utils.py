@@ -275,8 +275,18 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return None
         # 空字符串仅当 string 不是合法子类型时才视为 null（如 integer|null、
         # object|null 的可选参数未填写）；string|null 场景 "" 是有效字符串值，
-        # 保持原有语义按 string 分支返回 ""，不改成 None
+        # 保持原有语义按 string 分支返回 ""，不改成 None。
+        # 必填参数空串保留校验错误，与 _convert_object/_convert_array 的
+        # 必填分支对齐，避免未填写被静默转成 None 吞掉；
+        # None 分支不检查 required，与 _convert_object(None)/_convert_array(None)
+        # 的上游行为一致（None 多来自引用解析结果，报错会误伤引用场景）
         if data == "" and "null" in expected_types and STRING not in expected_types:
+            if definition.get("required"):
+                errors.append(
+                    SCHEMA_VALIDATION_WRONG_TYPE.format(
+                        k=current_path, t=expected_type
+                    )
+                )
             return None
         for sub_expected_type in expected_types:
             if sub_expected_type == OBJECT:

@@ -35,6 +35,7 @@ class MockParam:
         required=False,
         default_value=None,
         type_inferred=False,
+        description="",
     ):
         self.name = name
         self.type = param_type
@@ -42,6 +43,7 @@ class MockParam:
         self.required = required
         self.default_value = default_value
         self.type_inferred = type_inferred
+        self.description = description
 
 
 def _create_flow_mcp_with_params(params):
@@ -410,6 +412,61 @@ class TestFormatApiInputsJsonHeuristic:
         result, patches = mcp._format_api_inputs({"count": "123"})
         assert result["count"] == "123"
         assert patches == {}
+
+
+class TestBuildInputParamsFromArguments:
+    """Test card schema required 列表构建的 required 归一化（检视意见：flow_mcp.py:234）"""
+
+    @staticmethod
+    def test_bool_required_true_in_required_list():
+        """required=True（bool）→ 进入 required 列表（原有行为不变）"""
+        params = [MockParam("query", param_type="string", required=True)]
+        mcp = _create_flow_mcp_with_params(params)
+        schema = mcp._build_input_params_from_arguments()
+        assert schema["required"] == ["query"]
+
+    @staticmethod
+    def test_bool_required_false_no_required_key():
+        """required=False（bool）→ 无 required 键（原有行为不变）"""
+        params = [MockParam("opt", param_type="string", required=False)]
+        mcp = _create_flow_mcp_with_params(params)
+        schema = mcp._build_input_params_from_arguments()
+        assert "required" not in schema
+
+    @staticmethod
+    def test_string_required_false_not_in_required_list():
+        """required="false"（字符串形态）→ 非空字符串不得被 truthy 误判为必填
+
+        误判会使可选参数进入 card required 列表，未填写时被
+        format_with_schema + skip_none_value 强校验拦截。
+        """
+        params = [MockParam("opt", param_type="string", required="false")]
+        mcp = _create_flow_mcp_with_params(params)
+        schema = mcp._build_input_params_from_arguments()
+        assert "required" not in schema
+
+    @staticmethod
+    def test_string_required_true_in_required_list():
+        """required="true"（字符串形态）→ 正常进入 required 列表，混合形态判定正确"""
+        params = [
+            MockParam("query", param_type="string", required="true"),
+            MockParam("opt", param_type="string", required="false"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+        schema = mcp._build_input_params_from_arguments()
+        assert schema["required"] == ["query"]
+
+    @staticmethod
+    def test_headers_param_excluded_from_properties_and_required():
+        """method=Headers 参数不进 properties/required（原有行为不变）"""
+        params = [
+            MockParam("auth", param_type="string", method="Headers", required=True),
+            MockParam("query", param_type="string", required=True),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+        schema = mcp._build_input_params_from_arguments()
+        assert "auth" not in schema["properties"]
+        assert schema["required"] == ["query"]
 
 
 class TestBuildPatchedTool:

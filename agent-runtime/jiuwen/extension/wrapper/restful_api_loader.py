@@ -123,7 +123,9 @@ def _build_input_params_schema(params: List[Param]) -> dict:
         if default_value is not None:
             property_schema["default"] = default_value
         properties[p.name] = property_schema
-        if getattr(p, "required", False):
+        # required 可能是 bool 或 "true"/"false" 字符串，直接作 truthy 判断
+        # 会把非空字符串 "false" 误判为必填，归一化后判断（与 FlowMcp 一致）
+        if str(getattr(p, "required", False)).lower() == "true":
             required.append(p.name)
     schema: dict = {"type": "object", "properties": properties}
     if required:

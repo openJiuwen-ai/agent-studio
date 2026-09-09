@@ -231,7 +231,7 @@ class FlowMcp(WorkflowComponent):
                 "description": param.description,
                 "default": param.default_value,
             }
-            if param.required:
+            if _is_param_required(param):
                 required.append(param.name)
         properties[JIUWEN_RUNTIME_KWARGS] = {"type": "object"}
 

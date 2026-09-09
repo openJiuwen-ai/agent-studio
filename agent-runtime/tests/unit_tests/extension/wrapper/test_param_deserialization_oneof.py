@@ -19,7 +19,11 @@ Covers the fix for:
   in IR), used by FlowMcp to gate the JSON heuristic
 """
 
-from jiuwen.extension.wrapper.restful_api_loader import param_deserialization
+from jiuwen.extension.wrapper.restful_api_loader import (
+    _build_input_params_schema,
+    param_deserialization,
+)
+from jiuwen.plugin.models.param import Param
 
 
 class TestParamDeserializationOneOf:
@@ -402,3 +406,45 @@ class TestParamDeserializationUnionTypeForms:
         params = param_deserialization(arguments)
         assert params[0].type == "string"
         assert params[0].type_inferred is True
+
+
+class TestBuildInputParamsSchemaRequired:
+    """_build_input_params_schema 的 required 归一化（自查发现的兄弟点：与 flow_mcp:234 同款 truthy 问题）"""
+
+    @staticmethod
+    def _string_param(name, required):
+        return Param(
+            name=name, description="d", param_type="string", required=required
+        )
+
+    @staticmethod
+    def test_bool_required_true_in_list():
+        """required=True（bool）→ 进入 required 列表（原有行为不变）"""
+        schema = _build_input_params_schema(
+            [TestBuildInputParamsSchemaRequired._string_param("a", True)]
+        )
+        assert schema["required"] == ["a"]
+
+    @staticmethod
+    def test_bool_required_false_not_in_list():
+        """required=False（bool）→ 不进入（原有行为不变）"""
+        schema = _build_input_params_schema(
+            [TestBuildInputParamsSchemaRequired._string_param("a", False)]
+        )
+        assert "required" not in schema
+
+    @staticmethod
+    def test_string_required_false_not_in_list():
+        """required="false"（字符串形态）→ 不得被 truthy 误判为必填"""
+        schema = _build_input_params_schema(
+            [TestBuildInputParamsSchemaRequired._string_param("a", "false")]
+        )
+        assert "required" not in schema
+
+    @staticmethod
+    def test_string_required_true_in_list():
+        """required="true"（字符串形态）→ 正常进入 required 列表"""
+        schema = _build_input_params_schema(
+            [TestBuildInputParamsSchemaRequired._string_param("a", "true")]
+        )
+        assert schema["required"] == ["a"]

@@ -12,6 +12,9 @@ Covers the fix for:
 - _convert_object/_convert_array: empty string for OPTIONAL params returns
   type default without error residue; for REQUIRED params keeps validation
   error (not silently swallowed)
+- _convert_one_of_type: REQUIRED params with "" keep the validation error
+  (aligned with _convert_object/_convert_array); None passes through without
+  error (consistent with upstream None handling in the sibling converters)
 """
 
 from jiuwen.orchestration.flow.utils import force_convert
@@ -83,6 +86,54 @@ class TestConvertOneOfNullHandling:
         ]
         converted, errors = force_convert({"cfg": {"k": "v"}}, definition)
         assert converted["cfg"] == {"k": "v"}
+        assert errors == []
+
+
+class TestConvertOneOfRequiredEmptyString:
+    """required 联合类型参数收到空字符串 → 保留校验错误（与 _convert_object 对齐）"""
+
+    @staticmethod
+    def test_required_object_null_empty_string_keeps_error():
+        """required object|null + '' → None + 错误保留（必填未填不得静默吞掉）"""
+        definition = [
+            {"id": "cfg", "type": "object | null", "required": True,
+             "schema": [{"id": "k", "type": "string"}]}
+        ]
+        converted, errors = force_convert({"cfg": ""}, definition)
+        assert converted["cfg"] is None
+        assert len(errors) == 1
+        assert "cfg" in errors[0]
+
+    @staticmethod
+    def test_required_integer_null_empty_string_keeps_error():
+        """required integer|null + '' → None + 错误保留"""
+        definition = [{"id": "n", "type": "integer | null", "required": True}]
+        converted, errors = force_convert({"n": ""}, definition)
+        assert converted["n"] is None
+        assert len(errors) == 1
+        assert "n" in errors[0]
+
+    @staticmethod
+    def test_required_string_null_empty_string_stays_valid_no_error():
+        """required string|null + '' → ''，无错误（"" 是合法 string 值，负例）"""
+        definition = [{"id": "s", "type": "string | null", "required": True}]
+        converted, errors = force_convert({"s": ""}, definition)
+        assert converted["s"] == ""
+        assert errors == []
+
+    @staticmethod
+    def test_required_object_null_none_passes_without_error():
+        """required object|null + None → None，无错误
+
+        与 _convert_object(None)/_convert_array(None) 的上游行为一致：
+        None 多来自引用解析结果，不做 required 拦截（负例，防过度修复）。
+        """
+        definition = [
+            {"id": "cfg", "type": "object | null", "required": True,
+             "schema": [{"id": "k", "type": "string"}]}
+        ]
+        converted, errors = force_convert({"cfg": None}, definition)
+        assert converted["cfg"] is None
         assert errors == []
 
 
