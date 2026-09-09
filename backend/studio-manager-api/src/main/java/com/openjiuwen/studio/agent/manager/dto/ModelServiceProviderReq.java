@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -25,36 +26,44 @@ public class ModelServiceProviderReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("provider_name")
+    @Schema(description = "模型服务商名称", example = "华为云", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9_ |.\\\\:/-]{2,64}$")
     @NotBlank
     private String providerName = null;
 
     @JsonProperty("provider_name_en")
+    @Schema(description = "模型服务商英文名称", example = "HuaweiCloud", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_.|: /\\\\-]{2,64}$")
     @NotBlank
     private String providerNameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "华为云模型服务")
     @Length(max = 1000)
     private String description = null;
 
     @JsonProperty("logo")
+    @Schema(description = "Logo", example = "logo.png")
     private String logo = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签", example = "AI,大模型")
     @Length(max = 1000)
     private String tags = null;
 
     @JsonProperty("provider_url")
+    @Schema(description = "服务商URL", example = "https://www.huaweicloud.com")
     @Length(max = 255)
     private String providerUrl = null;
 
     @JsonProperty("auth_type")
+    @Schema(description = "认证类型", example = "API_KEY", required = true)
     @Pattern(regexp = "(API_KEY|NO_AUTH|APP_CODE|AK_SK|CUSTOM_APIKEY|CUSTOM_IAM|HIS_IAM|SGOV|HMAC)")
     @NotBlank
     private String authType = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{\"api_key\":\"sk-xxx\"}")
     @Length(max = 5000)
     private String authInfo = null;
 

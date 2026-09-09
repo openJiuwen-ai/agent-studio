@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,38 +29,48 @@ public class McpServiceDeployReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "MCP服务ID", example = "mcp_001")
     @Pattern(regexp = "^[a-zA-Z0-9-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "MCP服务名称", example = "我的MCP服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "MCP服务英文名称", example = "MyMcpService")
     @Pattern(regexp = "^[a-zA-Z0-9\\s.,!?;:'\"()_（）-]{2,64}$")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "MCP服务描述", example = "这是一个MCP服务")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "MCP服务英文描述", example = "This is an MCP service")
     @Length(max = 2048)
     private String descriptionEn = null;
 
     @JsonProperty("org_type")
+    @Schema(description = "组织类型", example = "TEAM")
     private String orgType = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务端配置", example = "{}")
     private String serverConfig = null;
 
     @JsonProperty("readme")
+    @Schema(description = "说明文档", example = "README内容")
     private String readme = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-url")
     private String icon = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo authInfo = null;
 

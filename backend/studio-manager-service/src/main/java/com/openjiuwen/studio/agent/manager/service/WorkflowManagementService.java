@@ -860,6 +860,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             List<Map<String, Object>> nodes = JsonUtils.objectToClass(workflowVO.getNodes());
             workflowValidationService.validateIdAndName(nodes, projectId, workspaceId);
             workflowValidationService.validateTools(nodes, projectId, workspaceId);
+            workflowValidationService.validateSqlNodes(nodes, projectId, workspaceId);
             workflowValidationService.validateQuestionerNode(nodes, workflowId);
         }
 

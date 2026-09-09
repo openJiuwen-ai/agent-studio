@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,41 +29,52 @@ public class ModifyPluginReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tool_display_name")
+    @Schema(description = "工具展示名称", example = "my_tool")
     @Pattern(regexp = "^[a-zA-Z0-9_]{2,64}$")
     private String toolDisplayName = null;
 
     @JsonProperty("tool_chinese_name")
+    @Schema(description = "工具中文名称", example = "我的工具")
     @Length(min = 1, max = 64)
     private String toolChineseName = null;
 
     @JsonProperty("tool_desc")
+    @Schema(description = "工具描述", example = "这是一个示例工具")
     @Length(max = 600)
     private String toolDesc = null;
 
     @JsonProperty("icon")
+    @Schema(description = "工具图标", example = "icon-url")
     private String icon = null;
 
     @JsonProperty("request_info")
+    @Schema(description = "请求信息", example = "{}")
     @Valid
     private RequestInfo requestInfo = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo authInfo = null;
 
     @JsonProperty("test_status")
+    @Schema(description = "测试状态", example = "SUCCESS")
     private String testStatus = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     @JsonProperty("call_mode")
+    @Schema(description = "调用模式", example = "SYNC")
     private String callMode = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     private String metadata = null;
 
     @JsonProperty("auth_required")
+    @Schema(description = "是否需要认证", example = "false")
     private Boolean authRequired = false;
 
     public String getToolDisplayName() {

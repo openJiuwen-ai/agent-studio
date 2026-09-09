@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,53 +28,69 @@ public class ToolReference implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tool_id")
+    @Schema(description = "工具ID", example = "tool001")
     private String toolId = null;
 
     @JsonProperty("plugin_display_name")
+    @Schema(description = "插件显示名称", example = "weather_plugin")
     private String pluginDisplayName = null;
 
     @JsonProperty("plugin_chinese_name")
+    @Schema(description = "插件中文名称", example = "天气插件")
     private String pluginChineseName = null;
 
     @JsonProperty("tool_display_name")
+    @Schema(description = "工具显示名称", example = "weather_tool")
     private String toolDisplayName = null;
 
     @JsonProperty("tool_chinese_name")
+    @Schema(description = "工具中文名称", example = "天气查询")
     private String toolChineseName = null;
 
     @JsonProperty("tool_parameter")
+    @Schema(description = "工具参数", example = "工具参数信息")
     private String toolParameter = null;
 
     @JsonProperty("tool_icon")
+    @Schema(description = "工具图标", example = "icon-tool")
     private String toolIcon = null;
 
     @JsonProperty("limit")
+    @Schema(description = "限制次数", example = "100")
     private Integer limit = null;
 
     @JsonProperty("usage")
+    @Schema(description = "使用次数", example = "50")
     private Integer usage = null;
 
     @JsonProperty("is_free")
+    @Schema(description = "是否免费", example = "1")
     private Integer isFree = null;
 
     @JsonProperty("credential_status")
+    @Schema(description = "凭证状态", example = "valid")
     private String credentialStatus = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "工具描述信息")
     @Length(min = 1, max = 600)
     private String desc = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "认证配置信息")
     @Valid
     private AuthInfo authInfo = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "元数据信息")
     private String metadata = null;
 
     @JsonProperty("last_version_id")
+    @Schema(description = "最新版本ID", example = "v002")
     private String lastVersionId = null;
 
     @JsonProperty("last_version_name")
+    @Schema(description = "最新版本名称", example = "v2.0.0")
     private String lastVersionName = null;
 
     public String getToolId() {

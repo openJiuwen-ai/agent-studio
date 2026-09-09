@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,21 +22,27 @@ public class ModelInterfaceProtocolRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "协议ID", example = "protocol-001")
     private String id = null;
 
     @JsonProperty("protocol")
+    @Schema(description = "协议名称", example = "OpenAI")
     private String protocol = null;
 
     @JsonProperty("en_name")
+    @Schema(description = "英文名称", example = "OpenAI Compatible")
     private String enName = null;
 
     @JsonProperty("zh_name")
+    @Schema(description = "中文名称", example = "OpenAI兼容协议")
     private String zhName = null;
 
     @JsonProperty("model_types")
+    @Schema(description = "支持的模型类型", example = "chat,embedding")
     private String modelTypes = null;
 
     @JsonProperty("visible")
+    @Schema(description = "是否可见", example = "true")
     private String visible = null;
 
     public String getId() {

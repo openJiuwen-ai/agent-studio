@@ -79,12 +79,10 @@ export class DataSourceManagementRepoService {
   }
 
   /** 批量删除数据源 */
-  public batchDeleteDatasource(params: any) {
+  public batchDeleteDatasource(datasourceIds: string[]) {
     return this.http.postAsync({
       url: `${this.prefix}/datasource/batch-delete`,
-      params: {
-        ...params,
-      },
+      params: { datasourceIds },
     });
   }
 

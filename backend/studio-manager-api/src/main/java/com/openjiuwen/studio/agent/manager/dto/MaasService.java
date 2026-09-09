@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class MaasService implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("served_model_name")
+    @Schema(description = "模型", example = "示例名称")
     private String servedModelName = null;
 
     @JsonProperty("is_subscribed")
+    @Schema(description = "issubscribed", example = "true")
     private Boolean isSubscribed = false;
 
     public String getServedModelName() {

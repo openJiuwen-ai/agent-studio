@@ -53,7 +53,9 @@ public interface MemoryItemManagementApi {
         @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "记忆库id", required = true, schema = @Schema())
         @PathVariable("memory_repo_id") String memoryRepoId,
+        @Parameter(in = ParameterIn.QUERY, description = "页码", required = false, schema = @Schema())
         @ApiParam(value = "页码") @RequestParam(value = "page_num", defaultValue = "1") Integer pageNum,
+        @Parameter(in = ParameterIn.QUERY, description = "每页条数", required = false, schema = @Schema())
         @ApiParam(value = "每页条数") @RequestParam(value = "page_size", defaultValue = "10") Integer pageSize,
         @ApiParam(value = "记忆类型过滤，如 summary / user_profile，不传则不过滤")
         @RequestParam(value = "memory_type", required = false) String memoryType);

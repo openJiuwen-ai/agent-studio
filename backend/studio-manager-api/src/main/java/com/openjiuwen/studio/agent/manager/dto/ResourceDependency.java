@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class ResourceDependency implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "res001")
     private String resourceId = null;
 
     @JsonProperty("resource_name")
+    @Schema(description = "资源名称", example = "搜索插件")
     private String resourceName = null;
 
     @JsonProperty("resource_version")
+    @Schema(description = "资源版本", example = "1.0.0")
     private String resourceVersion = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "plugin")
     private String resourceType = null;
 
     @JsonProperty("parent_id")
+    @Schema(description = "父资源ID", example = "parent001")
     private String parentId = null;
 
     public String getResourceId() {

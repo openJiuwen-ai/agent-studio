@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,26 +26,32 @@ public class AbilityInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "能力ID", example = "abc123")
     @Length(max = 50)
     private String id = null;
 
     @JsonProperty("code")
+    @Schema(description = "能力编码", example = "search")
     @Length(max = 50)
     private String code = null;
 
     @JsonProperty("name")
+    @Schema(description = "能力名称", example = "搜索能力")
     @Length(max = 500)
     private String name = null;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "conn001")
     @Length(max = 50)
     private String connectorId = null;
 
     @JsonProperty("sub_ability")
+    @Schema(description = "子能力", example = "sub_search")
     @Length(max = 10000)
     private String subAbility = null;
 
     @JsonProperty("description")
+    @Schema(description = "能力描述", example = "用于搜索知识库")
     @Length(max = 500)
     private String description = null;
 

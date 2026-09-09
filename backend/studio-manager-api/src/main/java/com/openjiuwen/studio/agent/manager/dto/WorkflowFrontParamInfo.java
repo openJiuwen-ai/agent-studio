@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,34 +29,43 @@ public class WorkflowFrontParamInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "智能客服工作流")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "用于智能问答的客服工作流")
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "工作流类型", example = "chat")
     private String type = null;
 
     @JsonProperty("icon")
+    @Schema(description = "工作流图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFrontParam> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFrontParam> outputs = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白", example = "您好，请问有什么可以帮您？")
     private String prologue = null;
 
     @JsonProperty("suggest_queries")
+    @Schema(description = "建议查询列表", example = "[\"如何重置密码\"]")
     @Valid
     @Size()
     private List<@Length() String> suggestQueries = null;

@@ -44,7 +44,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         consumes = {"application/json"}, method = RequestMethod.POST)
     ResponseEntity<ApikeyResponse> createApiKey(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ApiKeyRequest body);
 
@@ -58,7 +60,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
         String id, @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "查询 API Key 列表", nickname = "queryApiKeys",

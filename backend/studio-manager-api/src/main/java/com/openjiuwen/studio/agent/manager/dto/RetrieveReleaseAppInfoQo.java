@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,10 +27,12 @@ public class RetrieveReleaseAppInfoQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("find_by")
+    @Schema(description = "findby", example = "示例字符串", required = true)
     @NotBlank
     private String findBy = null;
 
     @JsonProperty("channel_type")
+    @Schema(description = "渠道类型", example = "example-type", required = true)
     @NotBlank
     private String channelType = null;
 

@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,67 +32,84 @@ public class PromptTaskCreateReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @NotBlank
     @Length(min = 1, max = 34)
     private String name = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 256)
     private String desc = null;
 
     @JsonProperty("promptId")
+    @Schema(description = "提示词ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     private String promptId = null;
 
     @JsonProperty("execTime")
+    @Schema(description = "执行时间", example = "1700000000000")
     private Long execTime = null;
 
     @JsonProperty("ptType")
+    @Schema(description = "提示词类型", example = "text")
     private PtTypeEnum ptType = null;
 
     @JsonProperty("ptText")
+    @Schema(description = "提示词文本", example = "示例文本")
     @Length(max = 10000)
     private String ptText = null;
 
     @JsonProperty("ptVars")
+    @Schema(description = "提示词变量", example = "示例文本")
     @Length(max = 1200)
     private String ptVars = null;
 
     @JsonProperty("dataSetId")
+    @Schema(description = "数据集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     private String dataSetId = null;
 
     @JsonProperty("ptObject")
+    @Schema(description = "执行对象配置", example = "")
     @Valid
     private ExecConfig ptObject = null;
 
     @JsonProperty("assitantObject")
+    @Schema(description = "助手对象配置", example = "")
     @Valid
     private ExecConfig assitantObject = null;
 
     @JsonProperty("maxIterNum")
+    @Schema(description = "最大迭代次数", example = "10")
     @Range(min = 1L, max = 20L)
     private Integer maxIterNum = null;
 
     @JsonProperty("targetAcc")
+    @Schema(description = "目标准确率", example = "0.95")
     private String targetAcc = null;
 
     @JsonProperty("showCaseNum")
+    @Schema(description = "展示用例数量", example = "3")
     @Range(min = 0L, max = 5L)
     private Integer showCaseNum = null;
 
     @JsonProperty("targetType")
+    @Schema(description = "目标类型", example = "objective")
     private TargetTypeEnum targetType = null;
 
     @JsonProperty("scoreStandard")
+    @Schema(description = "评分标准", example = "示例文本")
     @Length(max = 5000)
     private String scoreStandard = null;
 
     @JsonProperty("backKnowledge")
+    @Schema(description = "背景知识", example = "示例文本")
     @Length(max = 5000)
     private String backKnowledge = null;
 
     @JsonProperty("algorithm")
+    @Schema(description = "优化算法", example = "greedy")
     private AlgorithmEnum algorithm = null;
 
     public String getName() {

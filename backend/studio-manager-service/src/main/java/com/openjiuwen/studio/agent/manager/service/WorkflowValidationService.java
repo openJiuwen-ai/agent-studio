@@ -33,6 +33,7 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
+import com.openjiuwen.studio.agent.manager.entity.DatasourceEntity;
 import com.openjiuwen.studio.agent.manager.entity.KnowledgeRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
@@ -40,6 +41,7 @@ import com.openjiuwen.studio.agent.manager.entity.ShareScopeEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.enums.ToolType;
+import com.openjiuwen.studio.agent.manager.mapper.DatasourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper;
@@ -233,6 +235,9 @@ public class WorkflowValidationService {
 
     @Autowired
     private EnvironmentServiceManagerService environmentServiceManagerService;
+
+    @Autowired
+    private DatasourceMapper datasourceMapper;
 
     @Value("${workflow.schema:}")
     private String workflowSchema;
@@ -1760,6 +1765,37 @@ public class WorkflowValidationService {
                 throw new AgentStudioException(StudioError.PLUGIN_EXCEPTION_OVER_LIMIT);
             }
         }
+    }
+
+    /**
+     * 校验SQL/数据查询节点引用的数据源是否存在且有权限
+     * @param nodes nodes
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     */
+    public void validateSqlNodes(List<Map<String, Object>> nodes, String projectId, String workspaceId) {
+        if (nodes == null) {
+            return;
+        }
+        List<Map<String, Object>> sqlNodes = nodes.stream()
+            .filter(node -> NodeType.SQL.getType().equals(node.get("type"))
+                         || NodeType.DATA_QUERY.getType().equals(node.get("type")))
+            .toList();
+        sqlNodes.forEach(node -> {
+            Map<String, Object> config = JsonUtils.objectToClass(node.get("configs"));
+            if (config == null) {
+                return;
+            }
+            String datasourceId = (String) config.get("id");
+            if (StringUtils.isBlank(datasourceId)) {
+                return;
+            }
+            DatasourceEntity entity = datasourceMapper.getByPrimaryKeyAndWorkspaceId(
+                datasourceId, projectId, workspaceId);
+            if (entity == null) {
+                throw new AgentStudioException(StudioError.DATASOURCE_NO_PERMISSION, datasourceId);
+            }
+        });
     }
 
     /**

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,9 +26,11 @@ public class MemoryUserProfileExtractConfigIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("maxChatTurn")
+    @Schema(description = "maxchatturn", example = "10")
     private Integer maxChatTurn = null;
 
     @JsonProperty("timeWindow")
+    @Schema(description = "时间window", example = "1")
     private Integer timeWindow = null;
 
     public Integer getMaxChatTurn() {

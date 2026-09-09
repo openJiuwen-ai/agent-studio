@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -25,15 +26,19 @@ public class CesMetricDataResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("metric_name")
+    @Schema(description = "指标名称", example = "cpu_usage")
     private String metricName = null;
 
     @JsonProperty("max")
+    @Schema(description = "最大值", example = "95.5")
     private Double max = null;
 
     @JsonProperty("min")
+    @Schema(description = "最小值", example = "10.2")
     private Double min = null;
 
     @JsonProperty("datapoints")
+    @Schema(description = "数据点列表", example = "[]")
     @Valid
     @Size()
     private List<Datapoints> datapoints = null;

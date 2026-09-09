@@ -60,6 +60,7 @@ from jiuwen.extension.workflow_node.flow_input import FlowInput
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 from jiuwen.extension.workflow_node.flow_message import Message
 from jiuwen.extension.workflow_node.flow_qa import FlowQA, build_struct_input_schemas
+from jiuwen.extension.workflow_node.flow_sql import FlowSql
 from jiuwen.extension.workflow_node.flow_stream_transform import FlowStreamTransform
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
@@ -1699,6 +1700,18 @@ class IRConverter:
                 # come from stream sources; otherwise use regular INVOKE path.
                 if target_type in IRConverter._AGGREGATE_TYPES:
                     continue
+                # A message that references only batch values (start userFields /
+                # memory defaults) must stay on the regular INVOKE path even when
+                # a stream-capable LLM sits upstream. Otherwise its batch $refs
+                # get wrapped as stream generators that starve (empty render,
+                # default values disappear).
+                if (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                ):
+                    continue
                 stream_input_target_ids.add(target)
 
         parallel_stream_done_inputs: dict[str, dict] = {}
@@ -1716,6 +1729,18 @@ class IRConverter:
                 source in ir_stream_source_ids
                 and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
                 and target_type not in IRConverter._AGGREGATE_TYPES
+                # Keep in sync with the message guard in stream_input_target_ids
+                # collection and _is_stream_connection: a message that references
+                # only batch values (start userFields / memory defaults) must not
+                # be treated as a streaming join terminal, otherwise its lane-done
+                # is wired as TRANSFORM while phase-2 connects a regular edge ->
+                # GRAPH_VERTEX_STREAM_CALL_ERROR at runtime.
+                and not (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                )
             )
             if is_stream_join_edge:
                 parallel_stream_done_inputs[done_node] = {
@@ -2451,6 +2476,9 @@ class IRConverter:
             )
             return FlowStreamTransform(configs, metadata), node_type, configs
 
+        if node_type == "jiuwen.sql":
+            return FlowSql(configs), node_type, configs
+
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
         )
@@ -3012,8 +3040,37 @@ class IRConverter:
             source_id in stream_source_ids
             and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
         ):
+            # A message referencing only batch values (start userFields / memory
+            # defaults) stays on the regular edge + INVOKE path. A stream edge
+            # would wrap its batch $refs as stream generators that starve
+            # (empty render, default values disappear).
+            if (
+                target_type == "jiuwen.message"
+                and not IRConverter._message_schema_has_stream_ref(
+                    target_node, stream_source_ids
+                )
+            ):
+                return False
             return True
         return False
+
+    @staticmethod
+    def _message_schema_has_stream_ref(
+        target_node: dict, stream_source_ids: set[str]
+    ) -> bool:
+        """True when a ``jiuwen.message`` node references at least one stream source.
+
+        A message only needs the stream-input path (COLLECT) when it actually
+        consumes streamed output from an upstream LLM. When it references only
+        batch values (start userFields / memory defaults), keep it on the
+        regular INVOKE path even if a stream-capable LLM sits upstream —
+        otherwise its batch ``$ref``s get wrapped as stream generators that
+        starve (empty render, default values disappear).
+        """
+        _, stream_schema = _split_inputs_schema_by_source(
+            _convert_schema(target_node.get("inputs") or {}), stream_source_ids
+        )
+        return stream_schema is not None
 
     @staticmethod
     def _add_normal_edge_spec_only(

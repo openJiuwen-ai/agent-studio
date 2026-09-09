@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,17 +26,21 @@ public class PluginAuthUpdateRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("pluginId")
+    @Schema(description = "插件ID", example = "plugin_001")
     @Length(max = 64)
     private String pluginId = null;
 
     @JsonProperty("isNewlyPublished")
+    @Schema(description = "是否为新发布", example = "true")
     private Boolean isNewlyPublished = false;
 
     @JsonProperty("versionId")
+    @Schema(description = "版本ID", example = "v1.0.0")
     @Length(max = 64)
     private String versionId = null;
 
     @JsonProperty("message")
+    @Schema(description = "响应消息", example = "操作成功")
     @Length(max = 256)
     private String message = null;
 
