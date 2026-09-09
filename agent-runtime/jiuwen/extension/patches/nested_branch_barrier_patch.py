@@ -87,22 +87,46 @@ def _forward_reachable_patched(self, start_node: str) -> set[str]:
     return visited
 
 
+def _would_create_cycle(
+    parent: dict[str, str], child: str, ancestor: str
+) -> bool:
+    """检查将 parent[child] = ancestor 是否会形成环。
+
+    沿 parent 链从 ancestor 向上遍历，如果能回到 child 则会成环。
+    """
+    node = ancestor
+    visited: set[str] = set()
+    while node in parent and node not in visited:
+        visited.add(node)
+        node = parent[node]
+        if node == child:
+            return True
+    return False
+
+
 def _build_branch_parent_patched(self) -> dict[str, str]:
     """Map nested branch nodes to their parent branch node.
 
     Uses ``_forward_reachable`` to detect indirect nesting.
+    赋值前检查是否会形成环（含 loop 的工作流中分支节点互相可达），
+    若会成环则跳过——环拓扑中的分支不是真正的嵌套关系。
     """
     parent: dict[str, str] = {}
     nested_branch_nodes = set(self.branch_targets) | set(self.branches)
     for branch_node_id, targets in self.branch_targets.items():
         for target in targets:
             if target in nested_branch_nodes:
-                parent[target] = branch_node_id
+                if target != branch_node_id and not _would_create_cycle(
+                    parent, target, branch_node_id
+                ):
+                    parent[target] = branch_node_id
             else:
                 reachable = self._forward_reachable(target)
                 for inner_bn in nested_branch_nodes:
                     if inner_bn != branch_node_id and inner_bn in reachable:
-                        if inner_bn not in parent:
+                        if inner_bn not in parent and not _would_create_cycle(
+                            parent, inner_bn, branch_node_id
+                        ):
                             parent[inner_bn] = branch_node_id
     return parent
 
@@ -227,9 +251,27 @@ def _resolve_barrier_groups_nested_patched(
     return result if result else source_list
 
 
+def _branch_root_patched(
+    branch_node_id: str, branch_parent: dict[str, str]
+) -> str:
+    """带环检测的 _branch_root，防止 parent dict 含环时死循环。
+
+    原始 _branch_root 假设 parent 是一棵树（无环），但含 loop 的
+    工作流中 _build_branch_parent_patched 可能产生环（已被 B 方案
+    源头修复），此为兜底防护。
+    """
+    root = branch_node_id
+    visited: set[str] = set()
+    while root in branch_parent and root not in visited:
+        visited.add(root)
+        root = branch_parent[root]
+    return root
+
+
 _original_forward_reachable: Any = None
 _original_resolve_barrier_groups: Any = None
 _original_build_branch_parent: Any = None
+_original_branch_root: Any = None
 
 
 def apply_nested_branch_barrier_patch() -> bool:
@@ -239,7 +281,7 @@ def apply_nested_branch_barrier_patch() -> bool:
     """
     global _NESTED_PATCH_APPLIED
     global _original_forward_reachable, _original_resolve_barrier_groups
-    global _original_build_branch_parent
+    global _original_build_branch_parent, _original_branch_root
 
     if _NESTED_PATCH_APPLIED:
         return False
@@ -249,10 +291,12 @@ def apply_nested_branch_barrier_patch() -> bool:
     _original_forward_reachable = PregelGraph._forward_reachable
     _original_resolve_barrier_groups = PregelGraph._resolve_barrier_groups
     _original_build_branch_parent = PregelGraph._build_branch_parent
+    _original_branch_root = PregelGraph._branch_root
 
     PregelGraph._forward_reachable = _forward_reachable_patched  # type: ignore[assignment]
     PregelGraph._resolve_barrier_groups = _resolve_barrier_groups_nested_patched  # type: ignore[assignment]
     PregelGraph._build_branch_parent = _build_branch_parent_patched  # type: ignore[assignment]
+    PregelGraph._branch_root = staticmethod(_branch_root_patched)  # type: ignore[assignment]
 
     _NESTED_PATCH_APPLIED = True
     logger.info("nested_branch_barrier_patch applied")
