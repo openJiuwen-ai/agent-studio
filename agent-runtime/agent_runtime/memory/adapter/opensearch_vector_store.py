@@ -204,8 +204,9 @@ class OpenSearchVectorStore(BaseVectorStore):
                 "terms": {"_id": [str(i) for i in ids]}
             }
         }
+        # conflicts=proceed: 按 id 删除同样幂等，并发重复删除时忽略版本冲突。
         await self._client.delete_by_query(
-            index=collection_name, body=body, ignore=[404]
+            index=collection_name, body=body, ignore=[404], conflicts="proceed"
         )
 
     async def delete_docs_by_filters(
@@ -216,8 +217,12 @@ class OpenSearchVectorStore(BaseVectorStore):
     ) -> None:
         must = [{"term": {k: v}} for k, v in filters.items()]
         body = {"query": {"bool": {"filter": must}}}
+        # conflicts=proceed: write_manager 会按记忆类型逐个 manager 重复执行同一
+        # user+scope 的 delete_by_query；后到的 manager 搜索视图尚未刷新（默认 1s），
+        # 仍会命中已被前一个 manager 删除的文档，触发 if_seq_no 版本冲突 409。
+        # 忽略冲突继续执行（幂等删除：仍在的删掉、已删的跳过）。
         await self._client.delete_by_query(
-            index=collection_name, body=body, ignore=[404]
+            index=collection_name, body=body, ignore=[404], conflicts="proceed"
         )
 
     async def list_collection_names(self) -> List[str]:
@@ -336,8 +341,9 @@ class OpenSearchVectorStore(BaseVectorStore):
         body: Dict[str, Any],
     ) -> None:
         """Delete documents matching a query body."""
+        # conflicts=proceed: 同 delete_docs_by_filters，忽略重复删除的版本冲突。
         await self._client.delete_by_query(
-            index=collection_name, body=body, ignore=[404]
+            index=collection_name, body=body, ignore=[404], conflicts="proceed"
         )
 
     async def raw_search(

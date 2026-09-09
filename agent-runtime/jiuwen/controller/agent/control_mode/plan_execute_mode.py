@@ -853,6 +853,27 @@ class PlanExecuteMode(BaseMode):
     async def _call_llm_with_hint(self, hint_message: str, tools: List) -> dict:
         """使用 hint 消息调用 LLM"""
         messages = self._build_llm_messages(hint_message)
+        # 长期记忆注入：与 task_planner/planning_modules/llm_module.py 保持一致，
+        # 把检索到的记忆作为 user 消息附加到末尾，使 StepExecute 的回答能引用
+        # 记忆内容（未配置记忆/无记忆/检索失败时静默跳过，不影响执行）。
+        try:
+            memory_message = await self.context_manager.get_memory_message(
+                self.context_manager.get_latest_user_content()
+            )
+            if memory_message is not None and getattr(
+                memory_message, "content", ""
+            ):
+                messages.append(
+                    {
+                        "role": getattr(memory_message, "type", "user"),
+                        "content": memory_message.content,
+                    }
+                )
+        except Exception as mem_err:
+            logger.warning(
+                f"task_id: {self.task_id}| [StepExecute] memory retrieval failed, "
+                f"skip injection: {mem_err}"
+            )
         llm_output = await self._stream_llm_response(messages, tools)
 
         tool_calls, has_tool_calls = self._parse_tool_calls(llm_output)

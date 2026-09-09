@@ -7,6 +7,7 @@ import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.ListMemoryItemResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SearchMemoryItemRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.UpdateMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.service.IMemoryItemManagementService;
 
 import org.slf4j.Logger;
@@ -24,8 +25,9 @@ public class MemoryItemManagementApiController implements MemoryItemManagementAp
 
     @Override
     public ResponseEntity<ListMemoryItemResponseBody> listMemoryItems(String projectId, String memoryRepoId,
-        Integer pageNum, Integer pageSize) {
-        return ResponseModel.success(memoryItemManagementService.listMemoryItems(projectId, memoryRepoId, pageNum, pageSize));
+        Integer pageNum, Integer pageSize, String memoryType) {
+        return ResponseModel.success(
+            memoryItemManagementService.listMemoryItems(projectId, memoryRepoId, pageNum, pageSize, memoryType));
     }
 
     @Override
@@ -45,5 +47,18 @@ public class MemoryItemManagementApiController implements MemoryItemManagementAp
     public ResponseEntity<ListMemoryItemResponseBody> searchMemoryItems(String projectId, String memoryRepoId,
         SearchMemoryItemRequestBody body) {
         return ResponseModel.success(memoryItemManagementService.searchMemoryItems(projectId, memoryRepoId, body));
+    }
+
+    @Override
+    public ResponseEntity<Void> updateMemoryItems(String projectId, String memoryRepoId,
+        UpdateMemoryItemRequestBody body) {
+        memoryItemManagementService.updateMemoryItems(projectId, memoryRepoId, body);
+        return ResponseModel.success(null);
+    }
+
+    @Override
+    public ResponseEntity<Void> clearUserMemoryItems(String projectId, String memoryRepoId) {
+        memoryItemManagementService.clearUserMemoryItems(projectId, memoryRepoId);
+        return ResponseModel.success(null);
     }
 }

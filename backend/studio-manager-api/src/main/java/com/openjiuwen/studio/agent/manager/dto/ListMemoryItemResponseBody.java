@@ -33,6 +33,10 @@ public class ListMemoryItemResponseBody {
         @JsonProperty("content")
         @Schema(description = "记忆内容", example = "用户偏好设置")
         private String content;
+        @JsonProperty("type")
+        private String type;
+        @JsonProperty("last_update_time")
+        private String lastUpdateTime;
         @JsonProperty("score")
         @Schema(description = "相关性分数", example = "0.95")
         private Float score;

@@ -1555,6 +1555,7 @@
   "memory_extract_in_chat_tip": "Enable memory storage in conversations; key information (such as preferences, detailed needs, etc.) will be automatically saved for easy retrieval later.",
   "memory_banK": "Memory bank",
   "delete_all": "Delete all",
+  "confirm_delete_all": "Delete all memories? This action cannot be undone.",
   "configuring_user_profiles": "Configuring user profiles",
   "user_persona_tip": "High-precision user profiling is achieved through structured fields such as basic information, interest preferences, and behavioral patterns.",
   "memory_name": "Memory name",

@@ -354,7 +354,27 @@ public interface AgentRuntimeClient {
         @PathVariable("memory_repo_id") String memoryRepoId,
         @PathVariable("user_id") String userId,
         @RequestParam(value = "page_size", defaultValue = "10") Integer pageSize,
-        @RequestParam(value = "page_num", defaultValue = "1") Integer pageNum);
+        @RequestParam(value = "page_num", defaultValue = "1") Integer pageNum,
+        @RequestParam(value = "memory_type", required = false) String memoryType);
+
+    /**
+     * Update a single memory's content for a user within a memory repo scope.
+     * Calls runtime internal API which updates OpenSearch.
+     */
+    @PutMapping(value = "/internal/v1/memory-repos/{memory_repo_id}/memories/{memory_id}")
+    ResponseEntity<Object> updateMemory(
+        @PathVariable("memory_repo_id") String memoryRepoId,
+        @PathVariable("memory_id") String memoryId,
+        @RequestBody java.util.Map<String, String> body);
+
+    /**
+     * Clear all memories for a user within a memory repo scope.
+     * Calls runtime internal API which deletes from OpenSearch.
+     */
+    @DeleteMapping(value = "/internal/v1/memory-repos/{memory_repo_id}/users/{user_id}/memories")
+    ResponseEntity<Object> clearUserMemories(
+        @PathVariable("memory_repo_id") String memoryRepoId,
+        @PathVariable("user_id") String userId);
 
     /**
      * Batch-delete memories by ID list for a user within a memory repo scope.
