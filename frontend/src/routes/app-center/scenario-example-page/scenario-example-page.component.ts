@@ -428,8 +428,18 @@ export class ScenarioExamplePageComponent
     return (
       !this.isRequesting &&
       !this.isStreamFail &&
-      !!this.chatLoop[0]?.showAnswer?.[0]?.text?.trim()
+      // 任一 answer 块有内容即可复制：copyAnswer 拼接全部块，
+      // 首块为空（如首个输出节点无文本）但后续节点有输出时按钮不能被隐藏
+      !!this.chatLoop[0]?.showAnswer?.some((sub: any) => !!sub?.text?.trim())
     );
+  }
+
+  /** 全部 answer 块拼接后的字符数（与 copyAnswer 复制内容同口径） */
+  public getAnswerCharCount() {
+    return (this.chatLoop[0]?.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim().length;
   }
 
   /** 开始节点的输入参数列表通过校验后，点击【开始运行】，获取表单key-value，作为run接口的入参 */
