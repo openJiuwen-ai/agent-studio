@@ -14,9 +14,11 @@ import zipfile
 
 
 def is_executable(rel, platform):
-    """Linux 包需 +x 的条目：scripts/ 全部 + deps/linux 的 bin/sbin 目录与 redis/minio 二进制。
+    """
+    Linux 包需 +x 的条目：scripts/ 全部 + deps/linux 的 bin/sbin 目录与 redis/minio 二进制。
     Windows 构建机文件系统无 Unix 执行位，zipfile 照抄 os.stat 会全部变 644 → 目标机
-    ./scripts/start.sh 报 Permission denied。显式置 755 保证两平台构建机产物一致。"""
+    ./scripts/start.sh 报 Permission denied。显式置 755 保证两平台构建机产物一致。
+    """
     if platform != 'linux':
         return False
     parts = rel.split('/')
