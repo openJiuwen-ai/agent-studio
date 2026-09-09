@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -29,49 +30,61 @@ public class PePromptTemplateNewVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-()（）]{0,32}[\\u4e00-\\u9fa5a-zA-Z0-9()（）]$")
     @NotBlank
     private String name = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容", required = true)
     @NotBlank
     @Length(min = 1, max = 10000)
     private String content = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private String createdOn = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private String updatedOn = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 255)
     private String description = null;
 
     @JsonProperty("industry_id")
+    @Schema(description = "行业ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String industryId = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "PLAYGROUND", required = true)
     @Pattern(regexp = "PLAYGROUND|EXPERIMENT|CANDIDATE|HORIZONTAL|NO_SOURCE|PRESET")
     @NotBlank
     private String source = null;
 
     @JsonProperty("variables")
+    @Schema(description = "变量", example = "[{\"name\":\"var1\",\"type\":\"string\",\"value\":\"val1\"}]")
     private String variables = null;
 
     @JsonProperty("pt_type")
+    @Schema(description = "提示词类型", example = "text")
     @Pattern(regexp = "multi|text")
     private String ptType = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签列表", example = "")
     @Valid
     private List<@Length() String> tags = null;
 

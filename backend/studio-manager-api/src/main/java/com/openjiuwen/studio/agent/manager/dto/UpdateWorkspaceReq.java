@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -28,12 +29,14 @@ public class UpdateWorkspaceReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作空间ID", example = "ws001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作空间名称", example = "我的工作空间", required = true)
     @Pattern(
         regexp = "^[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！!](?:[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！! ]*[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！!])?$")
     @NotBlank
@@ -41,13 +44,16 @@ public class UpdateWorkspaceReq implements Serializable {
     private String name = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon.png")
     private String icon = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "用于团队协作的工作空间")
     @Length(max = 256)
     private String description = null;
 
     @JsonProperty("externalMappingInfo")
+    @Schema(description = "外部映射信息", example = "{}")
     @Valid
     private ExternalMappingInfo externalMappingInfo = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,35 +28,45 @@ public class ControllerExecutionDetail implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("conversation_id")
+    @Schema(description = "会话ID", example = "conv_001")
     private String conversationId = null;
 
     @JsonProperty("execution_id")
+    @Schema(description = "执行ID", example = "exec_001")
     private String executionId = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入信息", example = "{}")
     private String inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出信息", example = "{}")
     private String outputs = null;
 
     @JsonProperty("error_info")
+    @Schema(description = "错误信息", example = "")
     private String errorInfo = null;
 
     @JsonProperty("invocations")
+    @Schema(description = "调用信息列表", example = "[]")
     @Valid
     @Size()
     private List<ControllerInvokeInfo> invocations = null;
 
     @JsonProperty("status")
+    @Schema(description = "执行状态", example = "SUCCESS")
     private String status = null;
 
     @JsonProperty("start_time")
+    @Schema(description = "开始时间", example = "1700000000000")
     private Long startTime = null;
 
     @JsonProperty("end_time")
+    @Schema(description = "结束时间", example = "1700000001000")
     private Long endTime = null;
 
     @JsonProperty("nestedWorkflows")
+    @Schema(description = "嵌套工作流列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowBaseData> nestedWorkflows = null;

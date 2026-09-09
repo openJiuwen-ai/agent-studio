@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -23,13 +25,16 @@ public class WorkflowBranchConfigVOConditions implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("operator")
+    @Schema(description = "操作符", example = "示例字符串")
     private String operator = null;
 
     @JsonProperty("left")
+    @Schema(description = "left", example = "{}")
     @Valid
     private WorkflowFieldVO left = null;
 
     @JsonProperty("right")
+    @Schema(description = "right", example = "{}")
     @Valid
     private WorkflowFieldVO right = null;
 

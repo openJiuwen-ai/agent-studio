@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,19 +27,23 @@ public class ModelInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Length(min = 1, max = 32)
     private String name = null;
 
     @JsonProperty("id")
+    @Schema(description = "模型ID", example = "model-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("type")
+    @Schema(description = "模型类型", example = "chat")
     @Pattern(regexp = "^.*$")
     @Length(min = 1, max = 64)
     private String type = null;
 
     @JsonProperty("status")
+    @Schema(description = "模型状态", example = "active")
     @Length(min = 1, max = 16)
     private String status = null;
 

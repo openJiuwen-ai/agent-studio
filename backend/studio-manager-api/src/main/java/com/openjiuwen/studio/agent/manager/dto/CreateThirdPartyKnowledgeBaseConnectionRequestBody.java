@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.openjiuwen.studio.agent.common.annotation.ValidKnowledgeBaseName;
 
 import jakarta.validation.Valid;
@@ -27,22 +28,27 @@ public class CreateThirdPartyKnowledgeBaseConnectionRequestBody implements Seria
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "知识库名称", example = "my-knowledge-base")
     @ValidKnowledgeBaseName
     @Length(max = 50)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "知识库描述")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "data:image/png;base64,iVBORw0KGgo=")
     @Length(max = 1024000)
     private String icon = null;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "connector-001")
     private String connectorId = null;
 
     @JsonProperty("params")
+    @Schema(description = "连接参数列表", example = "[]")
     @Valid
     @Size(max = 10)
     private List<ConnectionParamInfo> params = null;

@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -21,18 +22,23 @@ public class SubControllerNodeConfigVOAgents implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node-001")
     private String nodeId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "agent-node")
     private String name = null;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "agent-001")
     private String id = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "agent")
     private String type = null;
 
     @JsonProperty("mode")
+    @Schema(description = "模式", example = "auto")
     private String mode = null;
 
     public String getNodeId() {

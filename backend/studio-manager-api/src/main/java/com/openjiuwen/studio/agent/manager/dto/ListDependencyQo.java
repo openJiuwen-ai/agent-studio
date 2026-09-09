@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -26,11 +28,13 @@ public class ListDependencyQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Size(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Size(max = 64)
     private String versionId = null;

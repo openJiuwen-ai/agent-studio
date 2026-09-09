@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,25 +34,30 @@ public class StructuredInfoRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "结构化信息ID", example = "msg001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "结构化信息名称", example = "问候语", required = true)
     @NotBlank
     @Length(min = 2, max = 64)
     private String name = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "greeting")
     @Length(max = 64)
     private String category = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "{\"key\":\"value\"}")
     @Valid
     @Size(max = 10)
     private Map<String, Object> content = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见范围", example = "personal", required = true)
     @NotNull
     private VisibilityEnum visibility = null;
 

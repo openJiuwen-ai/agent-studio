@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,62 +27,79 @@ public class McpServerDetailInfoDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "mcp-server-001")
     @Pattern(regexp = "^[a-zA-Z0-9-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-server")
     private String icon = null;
 
     @JsonProperty("serverCode")
+    @Schema(description = "服务编码", example = "weather-service")
     @Pattern(regexp = "^(?!_)(?!-)(?!\\d)[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]{2,64}$")
     private String serverCode = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "天气服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "Weather Service")
     @Pattern(regexp = "^[a-zA-Z0-9\\s.,!?;:'\"()_（）-]{2,64}$")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供天气查询功能")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：；“”‘’，。？、()（）/@!！*%# ]*$")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "Provide weather query functionality")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：；“”‘’，。？、()（）/@!！*%# ]*$")
     private String descriptionEn = null;
 
     @JsonProperty("url")
+    @Schema(description = "服务URL", example = "https://api.weather.com")
     @Pattern(regexp = "(http|https)://[a-zA-Z0-9-.]+(:[0-9]+)?(/\\S*)?")
     private String url = null;
 
     @JsonProperty("type")
+    @Schema(description = "服务类型", example = "local")
     private String type = null;
 
     @JsonProperty("org_type")
+    @Schema(description = "组织类型", example = "personal")
     private String orgType = null;
 
     @JsonProperty("readme")
+    @Schema(description = "README文档", example = "服务说明文档")
     private String readme = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务配置", example = "服务配置JSON")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！*%# \\s]*$")
     private String serverConfig = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具列表", example = "工具列表JSON")
     private String tools = null;
 
     @JsonProperty("view_times")
+    @Schema(description = "浏览次数", example = "1024")
     private Long viewTimes = null;
 
     @JsonProperty("install_times")
+    @Schema(description = "安装次数", example = "256")
     private Long installTimes = null;
 
     @JsonProperty("score")
+    @Schema(description = "评分", example = "4.5")
     private Double score = null;
 
     @JsonProperty("score_avg")
+    @Schema(description = "平均评分", example = "4.2")
     private Double scoreAvg = null;
 
     public String getId() {

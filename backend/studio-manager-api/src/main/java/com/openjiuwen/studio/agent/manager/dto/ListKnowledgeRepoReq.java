@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -22,18 +23,23 @@ public class ListKnowledgeRepoReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "知识库名称", example = "my-knowledge-base")
     private String name = null;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "1")
     private Integer pageNum = null;
 
     @JsonProperty("page_size")
+    @Schema(description = "每页数量", example = "10")
     private Integer pageSize = null;
 
     @JsonProperty("knowledge_base_type")
+    @Schema(description = "知识库类型", example = "1")
     private Integer knowledgeBaseType = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "file")
     @Length(max = 64)
     private String type = null;
 

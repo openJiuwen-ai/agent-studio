@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -32,46 +33,56 @@ public class CreateChannelReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0")
     @Length(max = 10000)
     private String versionId = null;
 
     @JsonProperty("channel_type")
+    @Schema(description = "通道类型", example = "WEB", required = true)
     @NotBlank
     @Length(max = 10000)
     private String channelType = null;
 
     @JsonProperty("sub_type")
+    @Schema(description = "子类型", example = "chat")
     @Length(max = 100)
     private String subType = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据列表", example = "[\"meta1\"]")
     @Valid
     @Size(max = 2)
     private List<@Length(min = 1, max = 100) String> metadata = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFrontParam> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFrontParam> outputs = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白", example = "你好，有什么可以帮您？")
     @Length(max = 1000000)
     private String prologue = null;
 
     @JsonProperty("suggest_queries")
+    @Schema(description = "推荐问题列表", example = "[\"问题1\"]")
     @Valid
     @Size()
     private List<@Length() String> suggestQueries = null;
 
     @JsonProperty("visibility_scope")
+    @Schema(description = "可见范围", example = "TENANT")
     private VisibilityScopeEnum visibilityScope = VisibilityScopeEnum.TENANT;
 
     @JsonProperty("call_count")
+    @Schema(description = "调用次数", example = "100")
     @Range(min = -1L, max = 10000L)
     private Integer callCount = null;
 

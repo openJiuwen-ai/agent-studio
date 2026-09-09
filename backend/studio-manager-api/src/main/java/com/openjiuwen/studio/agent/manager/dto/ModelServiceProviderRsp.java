@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -26,57 +28,73 @@ public class ModelServiceProviderRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "模型服务提供商ID", example = "provider-001")
     private String id = null;
 
     @JsonProperty("provider_name")
+    @Schema(description = "提供商名称", example = "华为云")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9_ |.:/\\\\-]{2,64}$")
     private String providerName = null;
 
     @JsonProperty("provider_name_en")
+    @Schema(description = "提供商英文名称", example = "HuaweiCloud")
     @Pattern(regexp = "^[a-zA-Z0-9_| /:.\\\\-]{2,64}$")
     private String providerNameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "提供商描述", example = "提供大模型服务")
     private String description = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签", example = "AI,大模型")
     private String tags = null;
 
     @JsonProperty("provider_url")
+    @Schema(description = "提供商URL", example = "https://www.huaweicloud.com")
     private String providerUrl = null;
 
     @JsonProperty("logo")
+    @Schema(description = "Logo地址", example = "https://example.com/logo.png")
     private String logo = null;
 
     @JsonProperty("auth_configs")
+    @Schema(description = "认证配置列表", example = "[]")
     @Valid
     @Size()
     private List<ProviderAuthConfig> authConfigs = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "1700000000000")
     private Long lastUpdatedDate = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域ID", example = "domain-001")
     private String domainId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String workspaceId = null;
 
     @JsonProperty("auth_config_status")
+    @Schema(description = "认证配置状态", example = "configured")
     private String authConfigStatus = null;
 
     @JsonProperty("created_by_user")
+    @Schema(description = "创建用户", example = "user001")
     private String createdByUser = null;
 
     @JsonProperty("last_updated_by_user")
+    @Schema(description = "最后更新用户", example = "user001")
     private String lastUpdatedByUser = null;
 
     public String getId() {

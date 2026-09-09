@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,24 +28,29 @@ public class ListExternalKnowledgeBasesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws001", required = true)
     @NotBlank
     @Length(max = 100)
     private String workspaceId = null;
 
     @JsonProperty("knowledge_base_name")
+    @Schema(description = "知识库名称", example = "产品知识库")
     @Length(max = 100)
     private String knowledgeBaseName = null;
 
     @JsonProperty("knowledge_base_connection_id")
+    @Schema(description = "知识库连接ID", example = "conn001", required = true)
     @NotBlank
     @Length(max = 100)
     private String knowledgeBaseConnectionId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 65535L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "10")
     @Range(min = 1L, max = 200L)
     private Integer limit = 10;
 

@@ -82,7 +82,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @Size(max = 100) @ApiParam(value = "空间ID", required = true)
+        @NotNull @Size(max = 100) @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema()) @ApiParam(value = "空间ID", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody
         CreateExternalKnowledgeBaseRequestBody body);
@@ -104,7 +104,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "创建知识库请求体", required = true) @Valid @RequestBody
         CreateKnowledgeRepoRequestBody body);
 
@@ -125,7 +125,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
@@ -151,7 +151,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除知识库下的文档标签", nickname = "deleteKnowledgeRepoTags",
@@ -172,7 +172,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId, @Size(min = 1, max = 64)
@@ -201,7 +201,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "命中测试记录id", required = true, schema = @Schema())
         @PathVariable("record_id") String recordId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "查询第三方知识库列表", nickname = "listExternalKnowledgeBases",
@@ -324,7 +324,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_base_id") String knowledgeBaseId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema()) @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId,
         @NotNull @ApiParam(value = "可见范围", required = true) @Valid @RequestBody PermissionsRequestBody body);
 
@@ -348,7 +348,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "修改知识库请求体", required = true) @Valid @RequestBody
         ModifyKnowledgeRepoRequestBody body);
 
@@ -369,11 +369,11 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @Min(0) @Max(10000) @ApiParam(value = "分页记录的起始位置偏移量，默认值0", allowableValues = "10000, 0")
+        @Min(0) @Max(10000) @Parameter(in = ParameterIn.QUERY, description = "分页记录的起始位置偏移量，默认值0", required = false, schema = @Schema()) @ApiParam(value = "分页记录的起始位置偏移量，默认值0", allowableValues = "10000, 0")
         @RequestParam(value = "offset", required = false) Integer offset,
-        @Min(1) @Max(1000) @ApiParam(value = "每一页的数量，默认值10", allowableValues = "1000, 1", defaultValue = "10")
+        @Min(1) @Max(1000) @Parameter(in = ParameterIn.QUERY, description = "每一页的数量，默认值10", required = false, schema = @Schema()) @ApiParam(value = "每一页的数量，默认值10", allowableValues = "1000, 1", defaultValue = "10")
         @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit,
         @NotNull @ApiParam(value = "知识库检索请求体", required = true) @Valid @RequestBody
         SearchKnowledgeRepoRequestBody body);
@@ -397,7 +397,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "开启一个知识库", nickname = "startKnowledgeRepo", notes = "开启一个知识库",
@@ -419,7 +419,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "停用一个知识库", nickname = "stopKnowledgeRepo",
@@ -442,7 +442,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "知识库id", required = true, schema = @Schema())
         @PathVariable("knowledge_repo_id") String knowledgeRepoId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
 }

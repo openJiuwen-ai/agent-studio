@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -25,15 +26,19 @@ public class McpServiceBatchDeployResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("totalCount")
+    @Schema(description = "总数量", example = "10")
     private Integer totalCount = null;
 
     @JsonProperty("successCount")
+    @Schema(description = "成功数量", example = "8")
     private Integer successCount = null;
 
     @JsonProperty("failedCount")
+    @Schema(description = "失败数量", example = "2")
     private Integer failedCount = null;
 
     @JsonProperty("results")
+    @Schema(description = "部署结果列表", example = "[]")
     @Valid
     @Size()
     private List<McpDeployResult> results = null;

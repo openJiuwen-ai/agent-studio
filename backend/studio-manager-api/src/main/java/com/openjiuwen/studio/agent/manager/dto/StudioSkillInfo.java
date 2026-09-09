@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,56 +27,71 @@ public class StudioSkillInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("skill_id")
+    @Schema(description = "技能ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String skillId = null;
 
     @JsonProperty("skill_name")
+    @Schema(description = "技能名称", example = "天气查询")
     @Length(min = 1, max = 64)
     private String skillName = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标地址", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("status")
+    @Schema(description = "技能状态", example = "ENABLED")
     private SkillStatus status = null;
 
     @JsonProperty("source")
+    @Schema(description = "技能来源", example = "CUSTOM")
     private SkillSource source = null;
 
     @JsonProperty("description")
+    @Schema(description = "技能描述", example = "查询天气信息的技能")
     @Length(min = 1, max = 1024)
     private String description = null;
 
     @JsonProperty("created_time")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdTime = null;
 
     @JsonProperty("creator_name")
+    @Schema(description = "创建者名称", example = "张三")
     @Length(min = 1, max = 64)
     private String creatorName = null;
 
     @JsonProperty("updated_time")
+    @Schema(description = "更新时间", example = "1700000000000")
     private Long updatedTime = null;
 
     @JsonProperty("obs_url")
+    @Schema(description = "OBS地址", example = "https://obs.example.com/skill")
     @Length(min = 1, max = 1024)
     private String obsUrl = null;
 
     @JsonProperty("obs_path")
+    @Schema(description = "OBS路径", example = "/skills/weather")
     @Length(min = 1, max = 1024)
     private String obsPath = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域ID", example = "domain-001")
     private String domainId = null;
 
     @JsonProperty("latest_version")
+    @Schema(description = "最新版本", example = "v1.0.0")
     @Length(min = 1, max = 64)
     private String latestVersion = null;
 
     @JsonProperty("used_version")
+    @Schema(description = "使用版本", example = "v1.0.0")
     @Length(min = 1, max = 64)
     private String usedVersion = null;
 
     @JsonProperty("used_version_name")
+    @Schema(description = "使用版本名称", example = "1.0.0")
     @Length(min = 1, max = 32)
     private String usedVersionName = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -31,41 +32,50 @@ public class WorkflowVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作流ID", example = "wf_001", required = true)
     @NotBlank
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "智能客服工作流", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "用于智能问答的客服工作流")
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "工作流图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("nodes")
+    @Schema(description = "节点列表", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()
     private List<WorkflowNodeVO> nodes = new ArrayList<WorkflowNodeVO>();
 
     @JsonProperty("edges")
+    @Schema(description = "边列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowEdgeVO> edges = null;
 
     @JsonProperty("layouts")
+    @Schema(description = "布局信息", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> layouts = null;
 
     @JsonProperty("configs")
+    @Schema(description = "配置信息", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> configs = null;
 
     @JsonProperty("comments")
+    @Schema(description = "评论列表", example = "[]")
     @Valid
     @Size()
     private List<Object> comments = null;

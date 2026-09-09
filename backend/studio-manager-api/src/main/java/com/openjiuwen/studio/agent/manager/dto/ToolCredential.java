@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -30,36 +31,45 @@ public class ToolCredential implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "凭证ID", example = "cred_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("tool_id")
+    @Schema(description = "工具ID", example = "tool_001")
     @Length(max = 84)
     private String toolId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("auth_keys")
+    @Schema(description = "鉴权密钥列表", example = "[]")
     @Valid
     @Size()
     private List<AuthKeyInfo> authKeys = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user001")
     @Length(max = 64)
     private String creatorId = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00Z")
     private Date createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2026-01-01T12:00:00Z")
     private Date updateTime = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     private String workspaceId = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域ID", example = "domain_001")
     private String domainId = null;
 
     public String getId() {

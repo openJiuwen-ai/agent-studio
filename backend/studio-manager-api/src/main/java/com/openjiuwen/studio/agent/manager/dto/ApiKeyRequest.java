@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -24,11 +26,13 @@ public class ApiKeyRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("apikey_name")
+    @Schema(description = "名称", example = "示例名称")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5a-zA-Z0-9_.-]{1,35}$")
     @Length(max = 64)
     private String apikeyName = null;
 
     @JsonProperty("apikey_description")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 1024)
     private String apikeyDescription = null;
 

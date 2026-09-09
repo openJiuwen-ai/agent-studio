@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.hibernate.validator.constraints.Range;
@@ -23,30 +24,37 @@ public class KnowledgeTaskInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "知识任务ID", example = "task_001")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "知识任务名称", example = "知识库构建任务")
     @Length(min = 1, max = 255)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "任务类型", example = "knowledge")
     @Length(max = 64)
     private String type = null;
 
     @JsonProperty("status")
+    @Schema(description = "任务状态", example = "running")
     @Length(max = 64)
     private String status = null;
 
     @JsonProperty("process")
+    @Schema(description = "处理进度", example = "50.0")
     @Range(min = 0L, max = 64L)
     private Float process = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1717200000000")
     @Range(min = 0L, max = 253402214400000L)
     private Long createTime = null;
 
     @JsonProperty("task_desc")
+    @Schema(description = "任务描述", example = "构建知识库")
     @Length(min = 1, max = 255)
     private String taskDesc = null;
 

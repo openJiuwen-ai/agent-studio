@@ -118,9 +118,11 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("app_id") String appId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
         @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "版本id。", required = false, schema = @Schema())
         @ApiParam(value = "版本id。") @RequestParam(value = "version_id", required = false) String versionId);
 
     @ApiOperation(value = "查询资源可用的版本", nickname = "listVersions", notes = "查询资源可用的版本。",
@@ -141,9 +143,11 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("app_id") String appId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
         @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotBlank @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "资源类型：workflow/agent/controller。", required = true, schema = @Schema())
         @ApiParam(value = "资源类型：workflow/agent/controller。", required = true)
         @RequestParam(value = "resource_type", required = true) String resourceType);
 
