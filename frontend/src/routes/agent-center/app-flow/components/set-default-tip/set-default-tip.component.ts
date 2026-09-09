@@ -238,7 +238,8 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
   }
 
   public async onUploadFile(e: Event) {
-    this.isUploading = true;
+    // 注意：isUploading 需在校验全部通过后再置 true，
+    // 提前 return（数量/同名/大小校验拦截）才不会卡住上传中状态（禁用清空按钮、弹层无法关闭）
     const input = e.target as HTMLInputElement;
     const files = input.files as FileList;
     const len = files.length;
@@ -275,6 +276,7 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         type: file.type,
         url: '',
       };
+      this.isUploading = true;
       this.fileList = [fileItem];
       const formData = new FormData();
       formData.append('file', file);
@@ -311,6 +313,7 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         );
         return;
       }
+      this.isUploading = true;
       for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(

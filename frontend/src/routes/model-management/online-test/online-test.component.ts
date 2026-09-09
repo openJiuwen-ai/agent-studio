@@ -437,7 +437,8 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       this.message.error(this.i18n.transform("unsupported_file_type"));
       return false;
     }
-    const isValidSize = file.size! / 1024 / 1024 < 5;
+    // 与文案"不超过5MB"一致：恰好 5MB 允许通过，仅超过才拒绝（兄弟组件同为 > 判定）
+    const isValidSize = file.size! / 1024 / 1024 <= 5;
     if (!isValidSize) {
       this.message.error(this.i18n.transform("unsupported_file_type_1"));
       return false;
