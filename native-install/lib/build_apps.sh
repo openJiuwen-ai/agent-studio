@@ -70,10 +70,12 @@ cp -rf "$WORKSPACE/packages/storage/storage"             "$STAGING/app/storage"
 cp -rf "$WORKSPACE/packages/common_utils/common_utils"   "$STAGING/app/common_utils"
 
 # 合并 runtime + builder 依赖为单一 requirements.txt（同一 venv 供 EIStart 与 EIBuilder 两服务，
-# 按包名去重、runtime 优先；psycopg2 与 psycopg2-binary 是不同包均保留）。
+# 按包名去重、runtime 优先）。psycopg2（源码包，PyPI 只发 win wheel + sdist，无 manylinux wheel）
+# 剔除：目标 Linux 裸机无 gcc+pg_config，pip 解析/构建 sdist 失败会中止整个安装；psycopg2 模块
+# 由 psycopg2-binary 提供（manylinux2014，glibc 2.17+，与 docker-builder 同源）。
 log "  合并 requirements.txt (agent-runtime + agent_builder)"
 { tr -d '\r' < "$WORKSPACE/agent-runtime/requirements.txt"; tr -d '\r' < "$WORKSPACE/agent_builder/requirements.txt"; echo; } | \
-  awk 'NF { p=$1; sub(/[<>=!~].*/,"",p); if(!seen[p]++) print }' > "$STAGING/app/requirements.txt"
+  awk 'NF { p=$1; sub(/[<>=!~].*/,"",p); if (p=="psycopg2") next; if(!seen[p]++) print }' > "$STAGING/app/requirements.txt"
 
 # ── [4] 生成 nginx.conf.tmpl + 复制 init.sql ────────────────────────────────
 log "[4/4] 生成 nginx.conf.tmpl + 复制 init.sql"
