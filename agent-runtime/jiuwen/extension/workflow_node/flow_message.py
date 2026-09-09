@@ -111,7 +111,7 @@ class MessageConfig(BaseModel):
         description="Node name.",
     )
     template: str = Field(
-        min_length=1,
+        default="",
         description="Message body with placeholders; variables from userFields or flat inputs.",
     )
     output_mode: Optional[str] = Field(
