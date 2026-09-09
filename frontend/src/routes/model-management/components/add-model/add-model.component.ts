@@ -99,6 +99,11 @@ export class AddModelComponent implements OnInit {
   private submitPending: boolean = false;
   /** 点按了 ✓/✗ 按钮（mousedown 先于 blur 触发），blur 定时器需放弃清空 */
   private tagActionPending: boolean = false;
+  /** blur 定时器代数：每次 blur 递增并捕获当时代数，聚焦时也递增使在途定时器作废
+   * （防止 150ms 内重新聚焦后被旧定时器 cancelTagInput 误关）；定时器触发时
+   * 代数不匹配即静默退出。同时解决桥接标志残留：聚焦 = 新输入会话，复位两个标志，
+   * 避免输入框未聚焦时点按按钮（无 blur 消费标志）导致标志泄漏到下一次会话。 */
+  private tagBlurGen: number = 0;
   private static readonly TAG_MAX_LEN = 10;
   private static readonly TAG_MAX_COUNT = 5;
 
@@ -301,21 +306,17 @@ export class AddModelComponent implements OnInit {
     this.myForm.controls.interface_protocol.setValue(this.protocolMap[model.interface_protocol] ? model.interface_protocol : model_protocol);
     this.myForm.controls.logo.setValue(model.logo || cdnAssetUrl('assets/model/default_model_detail.svg'));
     this.myForm.controls.is_support_stream.setValue(model.is_support_stream.toString());
-    const TAG_MAX_LEN = AddModelComponent.TAG_MAX_LEN;
-    const TAG_MAX_COUNT = AddModelComponent.TAG_MAX_COUNT;
-    const seen = new Set<string>();
+    // 回显忠实呈现存量标签：不做 trim/去重/截断/数量裁剪。存量数据若违反
+    // 长度/数量/重复约束，由 submit() 的显式校验拦截并提示，用户知情后再处理；
+    // 否则"打开→保存"会静默丢弃第6条及以后的标签、裁短超长标签（前10字符相同的
+    // 不同超长标签截断后还会误判为重复），存量数据被无感知改写/丢失。
+    // 例外：空段不是标签——无标签模型存的是 ""，"" 是 truthy，不过滤会渲染出一个
+    // 空 chip 并卡死提交校验，因此仅过滤空段（304cb35c 同语义）。
     this.modelTags = model.model_tags
       ? model.model_tags
           .split(',')
-          .map(item => (item || '').trim())
-          .filter(l => l.length > 0)
-          .filter(l => {
-            if (seen.has(l)) return false;
-            seen.add(l);
-            return true;
-          })
-          .slice(0, TAG_MAX_COUNT)
-          .map(item => ({ label: item.length > TAG_MAX_LEN ? item.slice(0, TAG_MAX_LEN) : item }))
+          .filter(item => (item || '').length > 0)
+          .map(item => ({ label: item }))
       : [];
     this.myForm.controls.throttling_policy.setValue(model.throttling_policy ? model.throttling_policy.toString() : 'none');
     this.myForm.controls.is_public.setValue(model?.is_public ? model.is_public : false);
@@ -404,14 +405,18 @@ export class AddModelComponent implements OnInit {
     const TAG_MAX_LEN = AddModelComponent.TAG_MAX_LEN;
     const TAG_MAX_COUNT = AddModelComponent.TAG_MAX_COUNT;
     const seen = new Set<string>();
-    // Build tag list from existing modelTags; defense in depth: strip empty/duplicate/over-long tags.
-    // Over-long tags that slipped past UI are DROPPED here — submit() should already have blocked them.
+    // Defense in depth ONLY：回显已不做归一化，存量违规标签（超长/超量/重复/空）
+    // 在 submit() Step 2 被显式拦截，正常 UI 流程到达此处时下列过滤均为空操作、
+    // 不会丢任何内容。仅防御未来新增调用方绕过 submit() 校验直调本方法。
+    // 输出保持标签原样（trim 只用于校验判定）：存量 " a" 显示什么就存什么，
+    // 不做保存侧的空白静默归一化；新输入路径的 trim 在 confirmCurrentTag 已完成。
     const safeTags = (this.modelTags || [])
-      .map(t => (t?.label || '').trim())
-      .filter(l => l.length > 0 && l.length <= TAG_MAX_LEN)
+      .map(t => t?.label || '')
+      .filter(l => l.trim().length > 0 && l.trim().length <= TAG_MAX_LEN)
       .filter(l => {
-        if (seen.has(l)) return false;
-        seen.add(l);
+        const key = l.trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       })
       .slice(0, TAG_MAX_COUNT);
@@ -445,16 +450,27 @@ export class AddModelComponent implements OnInit {
         return;
       }
     }
-    // Step 2: Validate committed tags
+    // Step 2: Validate committed tags（含回显的存量标签：违规数据显式拦截并提示，绝不静默改写/丢弃）
     const TAG_MAX_LEN = AddModelComponent.TAG_MAX_LEN;
     const TAG_MAX_COUNT = AddModelComponent.TAG_MAX_COUNT;
-    const invalidTag = this.modelTags.find(t => !t.label || t.label.trim().length === 0 || t.label.length > TAG_MAX_LEN);
+    const invalidTag = this.modelTags.find(t => !t.label || t.label.trim().length === 0 || t.label.trim().length > TAG_MAX_LEN);
     if (invalidTag) {
       this.message.warning(this.i18n.transform('tag_length_error_tip'));
       return;
     }
     if (this.modelTags.length > TAG_MAX_COUNT) {
       this.message.warning(this.i18n.transform('tag_count_error_tip'));
+      return;
+    }
+    const seenLabels = new Set<string>();
+    const duplicateTag = this.modelTags.find(t => {
+      const l = (t?.label || '').trim();
+      if (seenLabels.has(l)) return true;
+      seenLabels.add(l);
+      return false;
+    });
+    if (duplicateTag) {
+      this.message.warning(this.i18n.transform('tag_duplicate_error_tip'));
       return;
     }
 
@@ -584,8 +600,8 @@ export class AddModelComponent implements OnInit {
   }
 
   /** ✓ button or Enter: add current tag if valid; empty input is a no-op (clear & refocus).
-   *  NOTE: 不在此复位 tagActionPending —— mousedown 设置的标志需存活到 onModelTagBlur 的 150ms 定时器消费，
-   *  否则随后触发的 blur 会看到 false 而错误清空输入。标志位统一由 onModelTagBlur 复位。 */
+   *  NOTE: 不在此复位 tagActionPending —— mousedown 设置的标志需存活到 onModelTagBlur 的
+   *  定时器消费（聚焦处理器也会复位），否则随后触发的 blur 会看到 false 而错误清空输入。 */
   confirmCurrentTag(): void {
     const value: string = (this.myForm.getRawValue().modelTagInputValue || '').trim();
     if (value === '') {
@@ -633,17 +649,37 @@ export class AddModelComponent implements OnInit {
     this.tagActionPending = true;
   }
 
-  /** Blur: treat as cancel unless a ✓/✗ click or drawer submit is in progress. */
+  /** Blur: treat as cancel unless a ✓/✗ click or drawer submit is in progress.
+   *  150ms 延时窗口内任何重新聚焦都会递增 tagBlurGen 使本定时器作废，杜绝
+   *  "blur→快速点回输入框→旧定时器仍 cancelTagInput 误关已重新聚焦的输入"的竞态。 */
   onModelTagBlur(): void {
+    const gen = ++this.tagBlurGen;
     setTimeout(() => {
+      if (gen !== this.tagBlurGen) return; // 已被重新聚焦/更新的 blur 取代，静默退出
       if (this.tagActionPending || this.submitPending) {
         // ✓/✗ 点击或确定按钮 submit 正在处理：不清空输入，复位标志位防止泄漏。
         this.tagActionPending = false;
         this.submitPending = false;
         return;
       }
+      if (this.isTagInputFocused()) return; // 兜底：当前焦点已回到输入框，视为继续编辑
       this.cancelTagInput();
     }, 150);
+  }
+
+  /** 聚焦 = 新输入会话开始：作废在途 blur 定时器，并复位桥接标志。
+   *  输入框未聚焦时点按确定/✓/✗ 不会触发 blur 来消费标志，若不在聚焦时复位，
+   *  残留的 submitPending/tagActionPending 会让下一次 blur 误判"提交中"而跳过取消，
+   *  未确认的输入被保留并在再次提交时由 flushPendingTagInput 意外写入。 */
+  onModelTagFocus(): void {
+    this.tagBlurGen++;
+    this.submitPending = false;
+    this.tagActionPending = false;
+  }
+
+  private isTagInputFocused(): boolean {
+    const input = this.elementRef.nativeElement.querySelector('input[formControlName="modelTagInputValue"]') as HTMLInputElement | null;
+    return !!input && document.activeElement === input;
   }
 
   /** mousedown on the drawer 确定 button — fires before blur so we can preserve pending tag input for submit(). */
