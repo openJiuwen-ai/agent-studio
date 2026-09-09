@@ -70,15 +70,19 @@ Copy-Item "$Workspace\packages\storage\storage"             "$Staging\app\storag
 Copy-Item "$Workspace\packages\common_utils\common_utils"   "$Staging\app\common_utils"       -Recurse -Force
 
 # 合并 runtime + builder 依赖为单一 requirements.txt（同一 venv 供 EIStart 与 EIBuilder 两服务，
-# 按包名去重、runtime 优先；psycopg2 与 psycopg2-binary 是不同包均保留）。
+# 按包名去重、runtime 优先）。psycopg2（源码包，PyPI 只发 win wheel + sdist，无 manylinux wheel）
+# 剔除：目标 Linux 裸机无 gcc+pg_config，pip 解析/构建 sdist 失败会中止整个安装（连 wheel 下载
+# 也全军覆没）；psycopg2 模块由 psycopg2-binary 提供（manylinux2014，glibc 2.17+，与 docker-builder 同源）。
 # 无 BOM 写（PS5.1 Set-Content -Encoding UTF8 加 BOM 会破坏 pip 解析首个包名）。
 A-Log "  合并 requirements.txt (agent-runtime + agent_builder)"
 $mergedReqs = New-Object System.Collections.Generic.List[string]
 $seenPkg = New-Object 'System.Collections.Generic.HashSet[string]'
+$skipPkgs = @('psycopg2')
 foreach ($l in @((Get-Content "$Workspace\agent-runtime\requirements.txt") + (Get-Content "$Workspace\agent_builder\requirements.txt"))) {
   $t = $l.Trim()
   if (-not $t) { continue }
   $pkg = (($t -split '[<>=!~]', 2)[0]).Trim()
+  if ($skipPkgs -contains $pkg) { continue }
   if ($seenPkg.Add($pkg)) { $mergedReqs.Add($t) }
 }
 [System.IO.File]::WriteAllLines("$Staging\app\requirements.txt", $mergedReqs, (New-Object System.Text.UTF8Encoding $false))

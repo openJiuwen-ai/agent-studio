@@ -2,14 +2,17 @@
 
 把 AgentStudio 打成一个**单一跨平台包**（含 Windows x64 + Linux x64 两套原生依赖），
 拷到 Windows 或 Linux 机器上**一键拉起全部原生进程**，不依赖 Docker。
+另提供 **ARM64(aarch64) Linux 单平台包**（`build_arm64.sh`，需 Docker），见下文「ARM64 构建」。
 
 ## 组成
 
 ```
 native-install/
   versions.env              # 原生依赖下载源（版本/URL/SHA256）—— 改版本只动这里
+  versions.arm64.env        # ARM64(aarch64) 侧依赖源（与上平行、自包含，差异见其头部注释）
   build.sh                  # Linux 构建机：产出含 Win+Linux 依赖的单包（推荐主路径）
   build.ps1                 # Windows 构建机：同上（Linux redis/nginx 经 WSL 编译）
+  build_arm64.sh            # ARM64 包构建：复用 x86 构建的架构无关产物，仅重建 aarch64 依赖
   lib/
     build_apps.sh / .ps1     # 复刻 docker/package.sh：mvn→jar、pnpm→dist、复制 runtime 源码
     fetch_deps.sh / .ps1     # 下载两平台原生依赖并规范化；Linux redis/nginx 从源码编译
@@ -62,6 +65,18 @@ Linux 的 redis/nginx 需 Linux 工具链编译——`fetch_deps.ps1` 会优先�
 `fetch_deps.sh` 完成编译；无 WSL 则告警并跳过（请在 Linux 主机跑 `build.sh` 或用 wsl 补齐
 `deps/linux/redis-7` 与 `deps/linux/nginx` 后再打包）。
 
+### ARM64(aarch64) Linux 包
+```bash
+cd native-install
+./build.sh                 # ① 先跑一次 x86 构建，产出 seed（jar/前端/源码/requirements，架构无关）
+./build_arm64.sh           # ② 复用 seed，仅重建 aarch64 侧依赖（deps/linux + wheels）并打包
+```
+前置：bash + Docker（`docker buildx ls` 应含 linux/arm64，Docker Desktop 自带 QEMU）；
+Windows 构建机用 Git Bash 运行。
+产物：`dist/AgentStudio-native-<ver>-linux-arm64.zip`（仅 Linux arm64，glibc ≥ 2.28）。
+耗时参考：MySQL 官方 CDN 下载 10-20 分钟（16 并发分块）、容器内编译 10-30 分钟。
+与 x86 路径的差异详见 `versions.arm64.env` 头部注释。
+
 ## 目标机一键启动
 
 把包解压到任意目录，进入包根：
@@ -86,6 +101,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 
 ## 平台差异
 
+- **ARM64 包**：基线 glibc 2.28+（x86 包为 2.17+）；不含 Windows 侧依赖；Redis 为源码编译
+  7.0.14（x86 包为 Remi el7 RPM）；aarch64 内核 <5.19 时启动脚本自动忽略 Redis
+  ARM64-COW-BUG 告警。
 - **Windows 非 admin 无法绑 80**：`start.ps1` 自动改用 8080 并提示；以管理员重跑恢复 80。
 - **Windows 不含 cron**：不执行 runtime 的日志轮转定时任务（Linux 仍执行）。
 - **runtime 第三方包补丁**：`scripts/runtime_patches.py` 用 `site.getsitepackages()` 解析真实
