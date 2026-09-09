@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# pylint: disable=protected-access
 """Verify nested_branch_barrier_patch cycle detection (A+B fix).
 
 Regression tests for the production incident where a complex workflow with
@@ -27,7 +28,8 @@ class _FakeExec:
     def __call__(self, **kw):
         pass
 
-    def component_type(self):
+    @staticmethod
+    def component_type():
         return "fake"
 
 
@@ -82,9 +84,8 @@ def test_cycle_topology_no_infinite_loop():
 def test_cycle_topology_with_barrier():
     """Cycle topology with a wait_for_all barrier.
 
-    Two branch nodes in a loop , with
-    predecessors feeding into a barrier node. _resolve_barrier_groups
-    must terminate and return a valid result.
+    Two branch nodes in a loop, with predecessors feeding into a barrier node.
+    _resolve_barrier_groups must terminate and return a valid result.
     """
     g = _make_graph(
         ["branchA", "branchB", "predA", "predB", "loop1", "loop2", "barrier"],
