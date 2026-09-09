@@ -423,11 +423,23 @@ export class ScenarioExamplePageComponent
     return Promise.resolve(false);
   }
 
-  /** 复制按钮disabled属性，要使用相反的返回值 */
+  /** 复制按钮disabled属性，要使用相反的返回值（流式生成中/失败/无内容均不可复制） */
   public canCopyAnswer() {
     return (
-      !this.isStreamFail && !!this.chatLoop[0]?.showAnswer?.[0]?.text?.trim()
+      !this.isRequesting &&
+      !this.isStreamFail &&
+      // 任一 answer 块有内容即可复制：copyAnswer 拼接全部块，
+      // 首块为空（如首个输出节点无文本）但后续节点有输出时按钮不能被隐藏
+      !!this.chatLoop[0]?.showAnswer?.some((sub: any) => !!sub?.text?.trim())
     );
+  }
+
+  /** 全部 answer 块拼接后的字符数（与 copyAnswer 复制内容同口径） */
+  public getAnswerCharCount() {
+    return (this.chatLoop[0]?.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim().length;
   }
 
   /** 开始节点的输入参数列表通过校验后，点击【开始运行】，获取表单key-value，作为run接口的入参 */
@@ -444,11 +456,16 @@ export class ScenarioExamplePageComponent
 
   /** 复制整体答案 */
   public copyAnswer(messages: any) {
-    this.clipboard.copy(messages[0].showAnswer[0].text);
-    this.chatLoop[0].showCopiedTip = true;
-    setTimeout(() => {
-      this.chatLoop[0].showCopiedTip = false;
-    }, 1000);
+    // 拼接全部 answer 块（task 型含循环/多节点输出时 showAnswer 可能多块），块间空行分隔
+    const content = (messages[0]?.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim();
+    if (!content) {
+      return;
+    }
+    this.clipboard.copy(content);
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   public changeCollapsedState(configInfo: any) {

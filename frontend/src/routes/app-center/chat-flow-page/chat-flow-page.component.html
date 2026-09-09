@@ -231,13 +231,24 @@
                           class="bottom-container"
                           *ngIf="
                             last &&
-                            item.latency &&
+                            (item.latency || !isRequesting) &&
                             !(answer.isError && !answer.loading)
                           "
                         >
                           <div class="left-area">
-                            {{ 'run_time' | i18nextEager }}
-                            <span style="color: #191919">{{ item.latency }}</span>
+                            <ng-container *ngIf="item.latency">
+                              {{ 'run_time' | i18nextEager }}
+                              <span style="color: #191919">{{ item.latency }}</span>
+                            </ng-container>
+                            <div
+                              *ngIf="!isRequesting && !answer.loading && answer.text?.trim()"
+                              class="chat-footer-icon"
+                              nz-tooltip
+                              [nzTooltipTitle]="'copy' | i18nextEager"
+                              (click)="handleCopyAnswer(item)"
+                            >
+                              <nz-icon nzType="copy" nzTheme="outline"></nz-icon>
+                            </div>
                           </div>
 
                           <div *ngIf="isF1" class="flex gap-[12px]">

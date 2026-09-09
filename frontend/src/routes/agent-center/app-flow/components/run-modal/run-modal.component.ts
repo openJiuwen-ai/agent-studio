@@ -55,6 +55,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { ScrollingModule } from '@angular/cdk/scrolling';
+import { MessageComponent } from '@shared/services/cfdata.service';
 
 @Component({
   selector: 'flow-run-modal',
@@ -432,6 +433,19 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
       }
       this.cdr.markForCheck();
     }, 3000);
+  }
+
+  /** 一键复制最终输出结果，保留原始 markdown 结构 */
+  public handleCopyAnswer(item: any) {
+    const content = (item.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim();
+    if (!content) {
+      return;
+    }
+    this.clipboard.copy(content);
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   public changePluginFormCollapse(pluginForm: any) {

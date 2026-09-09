@@ -1,4 +1,5 @@
 import { TextFieldModule } from '@angular/cdk/text-field';
+import { Clipboard } from '@angular/cdk/clipboard';
 import {
   ChangeDetectorRef,
   Component,
@@ -252,6 +253,7 @@ export class DialogHalfmodalComponent
     public sessioMgnService : SessioMgnService,
     private drawerService: NzDrawerService,
     private renderer: Renderer2,
+    private clipboard: Clipboard,
     ) {
     super(
       appFlowServe,
@@ -496,6 +498,19 @@ export class DialogHalfmodalComponent
 
   public getText(content: any): string {
     return content?.trim() ?? '';
+  }
+
+  /** 一键复制本轮回答，保留原始 markdown 结构 */
+  public handleCopyAnswer(item: any) {
+    const content = (item.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim();
+    if (!content) {
+      return;
+    }
+    this.clipboard.copy(content);
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   public onSoundOut(content: any) {

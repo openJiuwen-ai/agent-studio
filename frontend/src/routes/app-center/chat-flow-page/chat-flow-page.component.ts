@@ -1,4 +1,5 @@
 import { TextFieldModule } from '@angular/cdk/text-field';
+import { Clipboard } from '@angular/cdk/clipboard';
 import {
   ChangeDetectorRef,
   Component,
@@ -9,7 +10,7 @@ import {
 } from '@angular/core';
 import { FormBuilder, NgForm } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MaskComponent } from '@shared/services/cfdata.service';
+import { MaskComponent, MessageComponent } from '@shared/services/cfdata.service';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSelectModule } from 'ng-zorro-antd/select';
@@ -247,6 +248,7 @@ export class ChatFlowPageComponent
     private commonService: CommonService,
     private readonly http: HttpService,
     private modalService: NzModalService,
+    private clipboard: Clipboard,
   ) {
     super(
       appFlowServe,
@@ -812,6 +814,19 @@ export class ChatFlowPageComponent
     if (this.permissionSubscription) {
       this.permissionSubscription.unsubscribe();
     }
+  }
+
+  /** 一键复制本轮回答，保留原始 markdown 结构（全部 answer 块拼接） */
+  public handleCopyAnswer(item: any) {
+    const content = (item.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim();
+    if (!content) {
+      return;
+    }
+    this.clipboard.copy(content);
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   // 复制到工作台

@@ -542,12 +542,15 @@ export class ChatItemComponent implements OnDestroy {
   }
 
   public copy(text) {
-    const el = document.createElement('input');
-    el.setAttribute('value', text);
+    // 使用 textarea 保留换行符，确保 markdown 结构完整
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
     document.body.appendChild(el);
     el.select();
     document.execCommand('copy');
     document.body.removeChild(el);
-    MessageComponent.showSuccess(this.i18n.transform('copy_success'));
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 }

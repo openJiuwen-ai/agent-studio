@@ -664,12 +664,9 @@ export class ChatKnowledgePageComponent implements OnInit {
 
   /** 复制整体答案 */
   copyAllAnswer(messages: any, currentIndex: number) {
-    this.clipboard.copy(messages?.showAnswer.replace('\n\n', ''));
-    this.chatLoop[currentIndex].showCopiedTip = true;
-    setTimeout(() => {
-      this.chatLoop[currentIndex].showCopiedTip = false;
-      this.cdr.markForCheck();
-    }, 600);
+    // 直接复制原始 markdown，保留段落分隔与结构（原 replace 会吞掉第一个段落分隔）
+    this.clipboard.copy(messages?.showAnswer ?? '');
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   /** 点击底部的清空对话，开启新聊天 */
