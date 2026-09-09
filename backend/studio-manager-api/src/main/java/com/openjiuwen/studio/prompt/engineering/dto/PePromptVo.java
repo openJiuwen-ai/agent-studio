@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -26,48 +27,62 @@ public class PePromptVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     private String content = null;
 
     @JsonProperty("answer")
+    @Schema(description = "答案", example = "示例答案")
     private String answer = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4")
     private String model = null;
 
     @JsonProperty("manual_score")
+    @Schema(description = "人工评分", example = "4")
     private Integer manualScore = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "")
     @Valid
     private ModelConfig modelConfig = null;
 
     @JsonProperty("evaluation_avg")
+    @Schema(description = "平均评分", example = "1")
     private Integer evaluationAvg = null;
 
     @JsonProperty("variable_vo")
+    @Schema(description = "变量列表", example = "")
     @Valid
     @Size(max = 20)
     private List<VariableVo> variableVo = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "2024-01-01T00:00:00.000Z")
     private String updater = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private Date createdOn = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private Date updatedOn = null;
 
     @JsonProperty("file_info")
+    @Schema(description = "文件信息", example = "")
     @Valid
     private FileInfoVo fileInfo = null;
 

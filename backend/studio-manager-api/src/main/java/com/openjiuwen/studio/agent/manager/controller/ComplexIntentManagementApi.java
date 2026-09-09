@@ -63,7 +63,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "意图包信息请求体", required = true) @Valid @RequestBody ComplexIntentInfoReq body);
 
@@ -86,7 +86,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "模型id", required = true, schema = @Schema())
         @PathVariable("intent_id") String intentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "意图包信息请求体", required = true) @Valid @RequestBody
         ComplexIntentBranchInfoReq body);
 
@@ -108,7 +108,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "模型id", required = true, schema = @Schema())
         @PathVariable("intent_id") String intentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除一个意图包分支", nickname = "deleteComplexIntentBranch",
@@ -133,7 +133,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "意图包分支id", required = true, schema = @Schema())
         @PathVariable("branch_id") String branchId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "导出高级意图包", nickname = "exportIntent", notes = "导出高级意图包",
@@ -152,7 +152,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "导出参数设置", required = true) @Valid @RequestBody ComplexIntentExportParams body);
 
@@ -172,7 +172,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "导入意图分支", nickname = "importIntent", notes = "导入图分支",
@@ -189,12 +189,12 @@ import org.springframework.web.multipart.MultipartFile;
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ComplexIntentImportRsp> importIntent(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @Parameter(description = "file detail") @Valid @RequestPart(value = "file", required = true) MultipartFile file,
-        @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$") @Size(min = 1, max = 64) @ApiParam(value = "意图包名称")
+        @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$") @Size(min = 1, max = 64) @Parameter(in = ParameterIn.QUERY, description = "意图包名称", required = false, schema = @Schema()) @ApiParam(value = "意图包名称")
         @RequestParam(value = "intent_name", required = false) String intentName);
 
     @ApiOperation(value = "导入意图分支", nickname = "importIntentBranch", notes = "导入图分支",
@@ -211,7 +211,7 @@ import org.springframework.web.multipart.MultipartFile;
         produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ComplexIntentImportRsp> importIntentBranch(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
@@ -277,7 +277,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "意图包id", required = true, schema = @Schema())
         @PathVariable("intent_id") String intentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "修改意图包请求体", required = true) @Valid @RequestBody ComplexIntentInfoReq body);
 
@@ -302,7 +302,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "意图包分支id", required = true, schema = @Schema())
         @PathVariable("branch_id") String branchId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "修改意图包请求体", required = true) @Valid @RequestBody
         ComplexIntentBranchInfoReq body);
 
@@ -324,7 +324,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "意图包id", required = true, schema = @Schema())
         @PathVariable("intent_id") String intentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
 }

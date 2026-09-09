@@ -375,6 +375,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   private async getMcpList(params, offset, limit) {
     params[mapKeys.TYPE] = 'custom';
     params[mapKeys.entry_point] = 'partial';
+    if (params.name) {
+      params[mapKeys.LANGUAGE] = this.isZH() ? 'ZH' : 'EN';
+    }
     const { mcps, total } = await this.mcpService.getServiceList(params, {
       offset,
       limit,

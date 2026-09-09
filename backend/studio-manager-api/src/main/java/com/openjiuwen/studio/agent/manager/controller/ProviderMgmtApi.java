@@ -47,7 +47,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         consumes = {"application/json"}, method = RequestMethod.POST)
     ResponseEntity<String> createModelServiceProviders(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModelServiceProviderReq body);
 
@@ -59,7 +59,7 @@ import org.springframework.web.bind.annotation.RequestParam;
     @RequestMapping(value = "/v1/{project_id}/model-manager/integration/providers/{id}", method = RequestMethod.DELETE)
     ResponseEntity<Void> deleteModelServiceProvider(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
@@ -76,7 +76,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
@@ -94,7 +94,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$") @Size(max = 80)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
-        String id, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String id, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId);
 
     @ApiOperation(value = "", nickname = "queryPlatformProviders", notes = "查询平台预置模型服务供应商列表",
@@ -130,12 +130,12 @@ import org.springframework.web.bind.annotation.RequestParam;
         consumes = {"application/json"}, method = RequestMethod.PUT)
     ResponseEntity<Void> updateModelServiceProvider(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
         String id,
-        @ApiParam(value = "") @RequestParam(value = "available_check", required = false) Boolean availableCheck,
+        @Parameter(in = ParameterIn.QUERY, description = "", required = false, schema = @Schema()) @ApiParam(value = "") @RequestParam(value = "available_check", required = false) Boolean availableCheck,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModelServiceProviderReq body);
 
     @ApiOperation(value = "", nickname = "updateModelServiceProviderAuthInfo", notes = "更新供应商权鉴信息",
@@ -147,12 +147,12 @@ import org.springframework.web.bind.annotation.RequestParam;
         consumes = {"application/json"}, method = RequestMethod.PUT)
     ResponseEntity<Void> updateModelServiceProviderAuthInfo(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("id")
         String id,
-        @ApiParam(value = "") @RequestParam(value = "available_check", required = false) Boolean availableCheck,
+        @Parameter(in = ParameterIn.QUERY, description = "", required = false, schema = @Schema()) @ApiParam(value = "") @RequestParam(value = "available_check", required = false) Boolean availableCheck,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ProviderAuthInfoReq body);
 
 }

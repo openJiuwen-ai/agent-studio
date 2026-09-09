@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -23,6 +25,7 @@ public class GetStudioSkillDetailsResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("skill_info")
+    @Schema(description = "技能", example = "{}")
     @Valid
     private StudioSkillInfo skillInfo = null;
 

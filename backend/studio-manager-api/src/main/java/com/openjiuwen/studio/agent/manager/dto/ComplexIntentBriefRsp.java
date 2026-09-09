@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -25,10 +27,12 @@ public class ComplexIntentBriefRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("intent_id")
+    @Schema(description = "意图ID", example = "example-id-123")
     @Length(max = 64)
     private String intentId = null;
 
     @JsonProperty("branch_id")
+    @Schema(description = "分支ID", example = "example-id-123")
     @Length(max = 64)
     private String branchId = null;
 

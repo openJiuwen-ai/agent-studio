@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,24 +29,29 @@ public class ListRouterStrategyQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("page_size")
+    @Schema(description = "每页大小", example = "10")
     @Range(min = 1L, max = 1000L)
     private Integer pageSize = 10;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "0")
     @Range(min = 0L)
     private Integer pageNum = 0;
 
     @JsonProperty("query")
+    @Schema(description = "查询关键词", example = "搜索")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9._ /:|\\\\-]{0,64}$")
     @Length(max = 64)
     private String query = null;
 
     @JsonProperty("sort_by")
+    @Schema(description = "排序字段", example = "name")
     @Length(max = 32)
     private String sortBy = null;
 

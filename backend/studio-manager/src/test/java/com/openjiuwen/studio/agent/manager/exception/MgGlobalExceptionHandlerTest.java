@@ -96,35 +96,29 @@ public class MgGlobalExceptionHandlerTest extends BaseTest {
         MethodParameter parameter = new MethodParameter(original);
         BindingResult bindingResult = mock(BindingResult.class);
         when(bindingResult.getFieldErrors()).thenReturn(
-            Collections.singletonList(new FieldError("objectA", "fieldA", " field error")));
+            Collections.singletonList(new FieldError("objectA", "fieldA", "field error")));
         MethodArgumentNotValidException exception = new MethodArgumentNotValidException(parameter, bindingResult);
 
         // run the test
         ResponseEntity<ErrorRsp> result = globalExceptionHandler.handleMethodArgumentNotValidException(exception);
 
         // verify the results
-        assertEquals("fieldA field error", Objects.requireNonNull(result.getBody()).getErrorMsg());
+        assertEquals("fieldA: field error", Objects.requireNonNull(result.getBody()).getErrorMsg());
     }
 
     @Test
-    public void test_handleMethodArgumentNotValidException_empty_field_error() throws Exception {
+    public void test_handleMethodArgumentNotValidException_empty_field_error() {
         // Given
         MethodArgumentNotValidException exception = mock(MethodArgumentNotValidException.class);
         BindingResult bindingResult = mock(BindingResult.class);
         when(exception.getBindingResult()).thenReturn(bindingResult);
         when(bindingResult.getFieldErrors()).thenReturn(Collections.emptyList());
-        when(exception.getStatusCode()).thenReturn(HttpStatus.BAD_REQUEST);
-        try (MockedStatic<ResponseModel> responseModelMock = mockStatic(ResponseModel.class)) {
-            responseModelMock.when(() -> ResponseModel.num2HttpStatus(anyString())).thenReturn(HttpStatus.BAD_REQUEST);
-            StudioError studioError = mock(StudioError.class);
-            when(studioError.getCode()).thenReturn("METHOD_ARGUMENT_NOT_VALID");
-            // When
-            ResponseEntity<ErrorRsp> response = globalExceptionHandler.handleMethodArgumentNotValidException(exception);
-            // Then
-            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-            assertEquals("openjiuwen.02001003", Objects.requireNonNull(response.getBody()).getErrorCode());
-            assertNull(response.getBody().getErrorMsg());
-        }
+        // When
+        ResponseEntity<ErrorRsp> response = globalExceptionHandler.handleMethodArgumentNotValidException(exception);
+        // Then
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("openjiuwen.02001003", Objects.requireNonNull(response.getBody()).getErrorCode());
+        assertEquals("", response.getBody().getErrorMsg());
     }
 
     @Test

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,27 +28,33 @@ public class ListAgentApplicationsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "100")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 100;
 
     @JsonProperty("name")
+    @Schema(description = "应用名称", example = "my-agent")
     @Pattern(regexp = "^.{0,64}$")
     @Length(max = 192)
     private String name = null;
 
     @JsonProperty("id")
+    @Schema(description = "应用ID", example = "app-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("status")
+    @Schema(description = "应用状态", example = "running")
     private String status = null;
 
     @JsonProperty("type")
+    @Schema(description = "应用类型", example = "chat")
     @Pattern(regexp = "^[a-zA-Z,]+$")
     @Length(min = 1, max = 64)
     private String type = null;

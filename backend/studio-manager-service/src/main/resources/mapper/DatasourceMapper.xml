@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.DatasourceMapper">
+
+    <resultMap id="BaseResultMap" type="com.openjiuwen.studio.agent.manager.entity.DatasourceEntity">
+        <id column="id" jdbcType="VARCHAR" property="id"/>
+        <result column="project_id" jdbcType="VARCHAR" property="projectId"/>
+        <result column="workspace_id" jdbcType="VARCHAR" property="workspaceId"/>
+        <result column="name" jdbcType="VARCHAR" property="name"/>
+        <result column="type" jdbcType="VARCHAR" property="type"/>
+        <result column="desc" jdbcType="VARCHAR" property="desc"/>
+        <result column="connection_info" jdbcType="LONGVARCHAR" property="connectionInfo"/>
+        <result column="status" jdbcType="VARCHAR" property="status"/>
+        <result column="last_error_message" jdbcType="VARCHAR" property="lastErrorMessage"/>
+        <result column="created_by" jdbcType="VARCHAR" property="createdBy"/>
+        <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
+        <result column="updated_by" jdbcType="VARCHAR" property="updatedBy"/>
+        <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, project_id, workspace_id, name, type, `desc`, connection_info, status,
+        last_error_message, created_by, created_on, updated_by, updated_on
+    </sql>
+
+    <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.DatasourceEntity">
+        INSERT INTO t_agent_datasource (
+            id, project_id, workspace_id, name, type, `desc`, connection_info,
+            status, last_error_message, created_by, created_on, updated_by, updated_on
+        ) VALUES (
+            #{id,jdbcType=VARCHAR},
+            #{projectId,jdbcType=VARCHAR},
+            #{workspaceId,jdbcType=VARCHAR},
+            #{name,jdbcType=VARCHAR},
+            #{type,jdbcType=VARCHAR},
+            #{desc,jdbcType=VARCHAR},
+            #{connectionInfo,jdbcType=LONGVARCHAR},
+            #{status,jdbcType=VARCHAR},
+            #{lastErrorMessage,jdbcType=VARCHAR},
+            #{createdBy,jdbcType=VARCHAR},
+            NOW(),
+            #{updatedBy,jdbcType=VARCHAR},
+            NOW()
+        )
+    </insert>
+
+    <update id="update" parameterType="com.openjiuwen.studio.agent.manager.entity.DatasourceEntity">
+        UPDATE t_agent_datasource
+        <set>
+            <if test="name != null">name = #{name,jdbcType=VARCHAR},</if>
+            <if test="type != null">type = #{type,jdbcType=VARCHAR},</if>
+            <if test="desc != null">`desc` = #{desc,jdbcType=VARCHAR},</if>
+            <if test="connectionInfo != null">connection_info = #{connectionInfo,jdbcType=LONGVARCHAR},</if>
+            <if test="status != null">status = #{status,jdbcType=VARCHAR},</if>
+            <if test="lastErrorMessage != null">last_error_message = #{lastErrorMessage,jdbcType=VARCHAR},</if>
+            <if test="updatedBy != null">updated_by = #{updatedBy,jdbcType=VARCHAR},</if>
+            updated_on = NOW()
+        </set>
+        WHERE id = #{id,jdbcType=VARCHAR}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM t_agent_datasource
+        WHERE id = #{id,jdbcType=VARCHAR}
+        AND project_id = #{projectId,jdbcType=VARCHAR}
+        AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+    </delete>
+
+    <select id="getByPrimaryKeyAndWorkspaceId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_agent_datasource
+        WHERE id = #{id,jdbcType=VARCHAR}
+        AND project_id = #{projectId,jdbcType=VARCHAR}
+        AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+    </select>
+
+    <select id="getById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_agent_datasource
+        WHERE id = #{id,jdbcType=VARCHAR}
+    </select>
+
+    <select id="listDatasource" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_agent_datasource
+        WHERE project_id = #{projectId,jdbcType=VARCHAR}
+        AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+        <if test="name != null and name != ''">
+            AND name LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%')
+        </if>
+        <if test="type != null and type != ''">
+            AND type = #{type,jdbcType=VARCHAR}
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status,jdbcType=VARCHAR}
+        </if>
+        ORDER BY created_on DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countDatasource" resultType="int">
+        SELECT COUNT(*)
+        FROM t_agent_datasource
+        WHERE project_id = #{projectId,jdbcType=VARCHAR}
+        AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+        <if test="name != null and name != ''">
+            AND name LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%')
+        </if>
+        <if test="type != null and type != ''">
+            AND type = #{type,jdbcType=VARCHAR}
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status,jdbcType=VARCHAR}
+        </if>
+    </select>
+
+    <select id="getByNameAndWorkspaceId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_agent_datasource
+        WHERE name = #{name,jdbcType=VARCHAR}
+        AND project_id = #{projectId,jdbcType=VARCHAR}
+        AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+    </select>
+
+</mapper>

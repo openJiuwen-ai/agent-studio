@@ -545,8 +545,8 @@ export class agentCommonLogic {
         this.agentBotPageService.agentDetail.set(res);
         config?.successCb?.();
       })
-      .catch(() => {
-        config?.failCb?.();
+      .catch((error) => {
+        config?.failCb?.(error);
       })
       .finally(() => {
         config?.finallyCb?.();

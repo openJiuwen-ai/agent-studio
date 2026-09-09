@@ -58,6 +58,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "创建知识库分层规则请求体", required = true) @Valid @RequestBody
         CreateKnowledgeSegmentRuleRequestBody body);
@@ -80,6 +81,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @PathVariable("project_id") String projectId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "知识分层规则id", required = true, schema = @Schema())
         @PathVariable("id") String id, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
@@ -102,9 +104,12 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @Size(min = 1, max = 100) @ApiParam(value = "知识库id") @RequestParam(value = "repo_id", required = false)
+        @Size(min = 1, max = 100)
+        @Parameter(in = ParameterIn.QUERY, description = "知识库id", required = false, schema = @Schema())
+        @ApiParam(value = "知识库id") @RequestParam(value = "repo_id", required = false)
         String repoId);
 
     @ApiOperation(value = "修改一个知识库分层规则", nickname = "modifyKnowledgeSegmentRule",
@@ -126,6 +131,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "分层规则id", required = true, schema = @Schema())

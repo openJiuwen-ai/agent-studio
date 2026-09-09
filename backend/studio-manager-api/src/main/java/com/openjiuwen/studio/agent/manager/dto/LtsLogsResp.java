@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -25,17 +26,21 @@ public class LtsLogsResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("count")
+    @Schema(description = "日志总数", example = "100")
     private Integer count = null;
 
     @JsonProperty("isQueryComplete")
+    @Schema(description = "查询是否完成", example = "true")
     private Boolean isQueryComplete = null;
 
     @JsonProperty("logs")
+    @Schema(description = "日志列表", example = "[]")
     @Valid
     @Size()
     private List<LogContents> logs = null;
 
     @JsonProperty("analysisLogs")
+    @Schema(description = "分析日志列表", example = "[]")
     @Valid
     @Size()
     private List<Object> analysisLogs = null;

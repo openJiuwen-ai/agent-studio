@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,32 +28,40 @@ public class ControllerAgentIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "Agent唯一标识", example = "agent_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "Agent名称", example = "my_agent")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "Agent描述信息", example = "这是一个智能助手Agent")
     private String description = null;
 
     @JsonProperty("intent")
+    @Schema(description = "意图配置对象", example = "{\"type\":\"chat\"}")
     @Valid
     private WorkflowNodeConfigVOIntent intent = null;
 
     @JsonProperty("ir_path")
+    @Schema(description = "IR文件路径", example = "/agents/agent_001/ir.json")
     private String irPath = null;
 
     @JsonProperty("arguments")
+    @Schema(description = "输入参数列表", example = "[{\"name\":\"input1\",\"type\":\"string\"}]")
     @Valid
     @Size()
     private List<WorkflowFieldIR> arguments = null;
 
     @JsonProperty("response")
+    @Schema(description = "输出响应列表", example = "[{\"name\":\"output1\",\"type\":\"string\"}]")
     @Valid
     @Size()
     private List<WorkflowFieldIR> response = null;
 
     @JsonProperty("mode")
+    @Schema(description = "运行模式", example = "auto")
     private String mode = null;
 
     public String getId() {

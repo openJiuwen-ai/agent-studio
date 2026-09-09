@@ -68,6 +68,8 @@ public class IRAdapter {
         IR_NODE_ADAPTER_MAP.put(NodeType.PARAM_EXTRACTION.getType(), new ParamExtractionAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.PARAM_OUT.getType(), new ParamOutputAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.STREAM_TRANSFORM.getType(), new StreamTransformNodeAdapter());
+        IR_NODE_ADAPTER_MAP.put(NodeType.SQL.getType(), new SqlNodeAdapter());
+        IR_NODE_ADAPTER_MAP.put(NodeType.DATA_QUERY.getType(), new SqlNodeAdapter());
     }
 
     // 对于引用意图容器节点的参数，映射为意图节点

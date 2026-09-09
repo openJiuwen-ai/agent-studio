@@ -75,6 +75,7 @@ class TestServerLifespanLocalSysOp:
         mock_resource_mgr.add_sys_operation.return_value = mock_add_result
 
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
@@ -119,6 +120,7 @@ class TestServerLifespanLocalSysOp:
         mock_resource_mgr = MagicMock()
         mock_resource_mgr.get_sys_operation.return_value = MagicMock()
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
@@ -171,6 +173,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.return_value = mock_add_result
 
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
@@ -223,6 +226,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.return_value = mock_add_result
 
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = "http://172.23.10.84:9090"
         mock_settings.security_sandbox.sandbox_type = "aio"
         mock_settings.security_sandbox.scope = "system"
@@ -275,6 +279,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.return_value = mock_add_result
 
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = "http://172.23.10.84:9090"
         mock_settings.security_sandbox.sandbox_type = "aio"
         mock_settings.security_sandbox.scope = "session"
@@ -332,6 +337,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.side_effect = add_sys_op_side_effect
 
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = "http://172.23.10.84:9090"
         mock_settings.security_sandbox.sandbox_type = "aio"
         mock_settings.security_sandbox.scope = "system"
@@ -384,6 +390,7 @@ class TestServerLifespanS3Init:
         mock_resource_mgr = MagicMock()
         mock_resource_mgr.get_sys_operation.return_value = MagicMock()
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
@@ -434,6 +441,7 @@ class TestServerLifespanS3Init:
         mock_resource_mgr = MagicMock()
         mock_resource_mgr.get_sys_operation.return_value = MagicMock()
         mock_settings = MagicMock()
+        mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 

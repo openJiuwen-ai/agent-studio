@@ -246,6 +246,7 @@ const NodeMap = {
   SubController: ControllerModalComponent,
   QA: QAModalComponent,
   Sql: SqlModalComponent,
+  DataQuery: SqlModalComponent,
   StructuredMessagesException: ExceptionModalComponent,
   ParamExtraction: ParamExtractionModalComponent,
   StreamTransform: StreamTransformModalComponent,

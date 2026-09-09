@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,20 +27,24 @@ public class AddWorkspaceMemberReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("member_id")
+    @Schema(description = "成员ID", example = "user_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String memberId = null;
 
     @JsonProperty("member_name")
+    @Schema(description = "成员名称", example = "张三")
     @Pattern(regexp = "^[a-zA-Z0-9\\u4e00-\\u9fa5._-][a-zA-Z0-9\\u4e00-\\u9fa5._\\- ]{0,63}$")
     @Length(min = 1, max = 64)
     private String memberName = null;
 
     @JsonProperty("member_source")
+    @Schema(description = "成员来源", example = "IAM")
     @Length(min = 1, max = 128)
     private String memberSource = "IAM";
 
     @JsonProperty("role")
+    @Schema(description = "成员角色", example = "admin")
     private MemberRole role = null;
 
     public String getMemberId() {

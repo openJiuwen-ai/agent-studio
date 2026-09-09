@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,9 +30,11 @@ public class WorkflowBranchBoolExpression implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("operator")
+    @Schema(description = "操作符", example = "示例字符串")
     private String operator = null;
 
     @JsonProperty("expressions")
+    @Schema(description = "expressions", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> expressions = null;
