@@ -1,6 +1,6 @@
 # coding: utf-8
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-# pylint: disable=protected-access,no-self-use
+# pylint: disable=protected-access
 
 """
 Test _format_api_inputs for None/empty value handling in MCP parameters.
@@ -9,6 +9,10 @@ Covers the fix for:
 - transform_type(None, "string") → str(None) → "None" string → MCP server Pydantic crash
 - param_deserialization extracts actual type from oneOf (e.g. object|null → "object")
 - _format_api_inputs uses correct type to handle None/empty/JSON values
+- JSON heuristic constrained to declared object/array params or type-inferred
+  (legacy IR) string params; explicit string params are never rewritten
+- schema patches returned per call (shared tool card is never mutated)
+- method=Headers params with None value are skipped (no "None" header)
 """
 
 from unittest.mock import MagicMock
@@ -21,12 +25,21 @@ from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 class MockParam:
     """Mock tool parameter for testing"""
 
-    def __init__(self, name, param_type="string", method="Body", required=False, default_value=None):
+    def __init__(
+        self,
+        name,
+        param_type="string",
+        method="Body",
+        required=False,
+        default_value=None,
+        type_inferred=False,
+    ):
         self.name = name
         self.type = param_type
         self.method = method
         self.required = required
         self.default_value = default_value
+        self.type_inferred = type_inferred
 
 
 def _create_flow_mcp_with_params(params):
@@ -43,121 +56,150 @@ def _create_flow_mcp_with_params(params):
     return mcp
 
 
+def _create_mcp_with_tool_card(params, input_params_schema):
+    """Create FlowMcp with both client params and MCPTool card (for patched-tool tests)"""
+    mcp = _create_flow_mcp_with_params(params)
+    mock_tool = MagicMock()
+    mock_card = MagicMock()
+    mock_card.input_params = input_params_schema
+    mock_card.model_copy = MagicMock(
+        side_effect=lambda update=None: MagicMock(input_params=update["input_params"])
+    )
+    mock_tool._card = mock_card
+    mcp.api = mock_tool
+    return mcp
+
+
 class TestFormatApiInputsNoneValue:
     """Test _format_api_inputs when value is None → should pass through as None"""
 
-    def test_none_value_object_type(self):
+    @staticmethod
+    def test_none_value_object_type():
         """None + object type → None (MCP server accepts None for optional params)"""
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"arguments": None})
+        result, patches = mcp._format_api_inputs({"arguments": None})
         assert result["arguments"] is None
+        assert patches == {}
 
-    def test_none_value_array_type(self):
+    @staticmethod
+    def test_none_value_array_type():
         """None + array type → None"""
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"items": None})
+        result, _ = mcp._format_api_inputs({"items": None})
         assert result["items"] is None
 
-    def test_none_value_string_type(self):
+    @staticmethod
+    def test_none_value_string_type():
         """None + string type → None (not str(None) → "None")"""
         params = [MockParam("name", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"name": None})
+        result, _ = mcp._format_api_inputs({"name": None})
         assert result["name"] is None
 
-    def test_none_value_integer_type(self):
+    @staticmethod
+    def test_none_value_integer_type():
         """None + integer type → None"""
         params = [MockParam("count", param_type="integer", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"count": None})
+        result, _ = mcp._format_api_inputs({"count": None})
         assert result["count"] is None
 
-    def test_none_value_boolean_type(self):
+    @staticmethod
+    def test_none_value_boolean_type():
         """None + boolean type → None"""
         params = [MockParam("flag", param_type="boolean", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"flag": None})
+        result, _ = mcp._format_api_inputs({"flag": None})
         assert result["flag"] is None
 
 
 class TestFormatApiInputsEmptyString:
     """Test _format_api_inputs when value is empty string"""
 
-    def test_empty_string_object_type_passes_through(self):
-        """'' + object type → '' (transform_type passes through; force_convert upstream handles conversion)"""
+    @staticmethod
+    def test_empty_string_object_type_passes_through():
+        """'' + object type → '' (no JSON parse, no error)"""
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"arguments": ""})
-        # transform_type("", "object") returns "" as-is (line 77: return value)
-        # The empty string → {} conversion is handled upstream by force_convert (utils.py)
+        result, patches = mcp._format_api_inputs({"arguments": ""})
         assert result["arguments"] == ""
+        assert patches == {}
 
-    def test_empty_string_array_type_passes_through(self):
-        """'' + array type → '' (transform_type passes through; force_convert upstream handles conversion)"""
+    @staticmethod
+    def test_empty_string_array_type_passes_through():
+        """'' + array type → ''"""
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"items": ""})
+        result, _ = mcp._format_api_inputs({"items": ""})
         assert result["items"] == ""
 
-    def test_empty_string_string_type_stays_empty(self):
+    @staticmethod
+    def test_empty_string_string_type_stays_empty():
         """'' + string type → '' (pass through)"""
         params = [MockParam("name", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"name": ""})
+        result, _ = mcp._format_api_inputs({"name": ""})
         assert result["name"] == ""
 
 
 class TestFormatApiInputsValidValue:
     """Test _format_api_inputs with valid (non-None, non-empty) values"""
 
-    def test_valid_dict_for_object_type(self):
+    @staticmethod
+    def test_valid_dict_for_object_type():
         """Valid dict → dict (no transformation needed)"""
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"arguments": {"key": "value"}})
+        result, patches = mcp._format_api_inputs({"arguments": {"key": "value"}})
         assert result["arguments"] == {"key": "value"}
+        assert patches == {}
 
-    def test_valid_list_for_array_type(self):
+    @staticmethod
+    def test_valid_list_for_array_type():
         """Valid list → list"""
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"items": [1, 2, 3]})
+        result, _ = mcp._format_api_inputs({"items": [1, 2, 3]})
         assert result["items"] == [1, 2, 3]
 
-    def test_valid_string_value(self):
+    @staticmethod
+    def test_valid_string_value():
         """Valid string → string"""
         params = [MockParam("query", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"query": "hello world"})
+        result, _ = mcp._format_api_inputs({"query": "hello world"})
         assert result["query"] == "hello world"
 
-    def test_invalid_json_string_keeps_original(self):
+    @staticmethod
+    def test_invalid_json_string_keeps_original():
         """Invalid JSON string not starting with {/[ → kept as-is (heuristic skips)"""
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"arguments": "not valid json"})
+        result, patches = mcp._format_api_inputs({"arguments": "not valid json"})
         # "not valid json" doesn't start with '{' or '[', so heuristic is skipped
         assert result["arguments"] == "not valid json"
+        assert patches == {}
 
 
 class TestFormatApiInputsHeaders:
     """Test _format_api_inputs for method=Headers parameters"""
 
-    def test_headers_extracted_separately(self):
+    @staticmethod
+    def test_headers_extracted_separately():
         """method=Headers → extracted to _header_params, not in api_inputs"""
         params = [
             MockParam("auth_token", param_type="string", method="Headers"),
@@ -165,7 +207,7 @@ class TestFormatApiInputsHeaders:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({
+        result, _ = mcp._format_api_inputs({
             "auth_token": "my_token",
             "query": "hello world",
         })
@@ -173,11 +215,28 @@ class TestFormatApiInputsHeaders:
         assert result["query"] == "hello world"
         assert mcp._header_params["auth_token"] == "my_token"
 
+    @staticmethod
+    def test_none_header_value_skipped():
+        """method=Headers + None → skipped, not converted to "None" string"""
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers"),
+            MockParam("query", param_type="string", method="Body"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, _ = mcp._format_api_inputs({
+            "auth_token": None,
+            "query": "hello",
+        })
+        assert "auth_token" not in mcp._header_params
+        assert result["query"] == "hello"
+
 
 class TestFormatApiInputsParamNotFound:
     """Test _format_api_inputs when input param is not in tool_params"""
 
-    def test_unknown_param_raises_error(self):
+    @staticmethod
+    def test_unknown_param_raises_error():
         """Input param not found in tool_params → raises JiuWenBaseException"""
         params = [MockParam("query", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
@@ -187,74 +246,171 @@ class TestFormatApiInputsParamNotFound:
 
 
 class TestFormatApiInputsJsonHeuristic:
-    """Test _format_api_inputs JSON heuristic: strings starting with {/[ get parsed"""
+    """Test JSON heuristic gating: which params get JSON-string values parsed"""
 
-    def _create_mcp_with_tool_card(self, params, input_params_schema):
-        """Create FlowMcp with both client params and MCPTool card for schema patching"""
+    @staticmethod
+    def test_declared_object_type_json_string_parsed():
+        """Declared object param + JSON string → parsed to dict + patch recorded"""
+        params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
-        # Mock MCPTool with card for schema patching
-        mock_tool = MagicMock()
-        mock_tool._card = MagicMock()
-        mock_tool._card.input_params = input_params_schema
-        mcp.api = mock_tool
-        return mcp
 
-    def test_json_object_string_parsed_to_dict(self):
-        """'{"key": "value"}' string → parsed to dict when schema says string but value is JSON"""
-        params = [MockParam("arguments", param_type="string", method="Body")]
-        schema = {"properties": {"arguments": {"type": "string"}}}
-        mcp = self._create_mcp_with_tool_card(params, schema)
-
-        result = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
+        result, patches = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
         assert result["arguments"] == {"key": "value"}
-        # Schema should be patched to "object"
-        assert schema["properties"]["arguments"]["type"] == "object"
+        assert patches == {"arguments": "object"}
 
-    def test_json_array_string_parsed_to_list(self):
-        """'[1, 2, 3]' string → parsed to list"""
-        params = [MockParam("items", param_type="string", method="Body")]
-        schema = {"properties": {"items": {"type": "string"}}}
-        mcp = self._create_mcp_with_tool_card(params, schema)
+    @staticmethod
+    def test_declared_array_type_json_string_parsed():
+        """Declared array param + JSON string → parsed to list + patch recorded"""
+        params = [MockParam("items", param_type="array", method="Body")]
+        mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"items": "[1, 2, 3]"})
+        result, patches = mcp._format_api_inputs({"items": "[1, 2, 3]"})
         assert result["items"] == [1, 2, 3]
-        assert schema["properties"]["items"]["type"] == "array"
+        assert patches == {"items": "array"}
 
-    def test_json_string_without_tool_card_still_parsed(self):
-        """JSON string parsed even without MCPTool (no schema patching)"""
-        params = [MockParam("arguments", param_type="string", method="Body")]
+    @staticmethod
+    def test_inferred_string_type_json_string_parsed():
+        """Legacy IR (no type info → inferred string) + JSON string → parsed"""
+        params = [
+            MockParam("arguments", param_type="string", method="Body", type_inferred=True)
+        ]
         mcp = _create_flow_mcp_with_params(params)
-        mcp.api = None  # No MCPTool
 
-        result = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
+        result, patches = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
         assert result["arguments"] == {"key": "value"}
+        assert patches == {"arguments": "object"}
 
-    def test_invalid_json_keeps_string(self):
-        """'{"broken": ' invalid JSON → kept as original string"""
-        params = [MockParam("arguments", param_type="string", method="Body")]
-        schema = {"properties": {"arguments": {"type": "string"}}}
-        mcp = self._create_mcp_with_tool_card(params, schema)
+    @staticmethod
+    def test_inferred_string_type_json_array_parsed():
+        """Legacy IR inferred string + JSON array string → parsed to list"""
+        params = [
+            MockParam("items", param_type="string", method="Body", type_inferred=True)
+        ]
+        mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({"arguments": '{"broken": '})
+        result, patches = mcp._format_api_inputs({"items": '["a", "b"]'})
+        assert result["items"] == ["a", "b"]
+        assert patches == {"items": "array"}
+
+    @staticmethod
+    def test_explicit_string_type_json_string_kept():
+        """Explicit string param + JSON-looking string → kept as string (no rewrite)"""
+        params = [
+            MockParam("payload", param_type="string", method="Body", type_inferred=False)
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, patches = mcp._format_api_inputs({"payload": '{"key": "value"}'})
+        assert result["payload"] == '{"key": "value"}'
+        assert patches == {}
+
+    @staticmethod
+    def test_explicit_string_type_json_array_kept():
+        """Explicit string param + JSON array string → kept as string"""
+        params = [
+            MockParam("payload", param_type="string", method="Body", type_inferred=False)
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, patches = mcp._format_api_inputs({"payload": "[1, 2]"})
+        assert result["payload"] == "[1, 2]"
+        assert patches == {}
+
+    @staticmethod
+    def test_param_without_inferred_flag_defaults_to_no_parse():
+        """Missing type_inferred attr (other Param sources) → treated as explicit"""
+        params = [MockParam("payload", param_type="string", method="Body")]
+        del params[0].type_inferred  # simulate Param from other loaders
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, patches = mcp._format_api_inputs({"payload": '{"a": 1}'})
+        assert result["payload"] == '{"a": 1}'
+        assert patches == {}
+
+    @staticmethod
+    def test_invalid_json_keeps_string_no_patch():
+        """'{"broken": ' invalid JSON → kept as original string, no patch"""
+        params = [MockParam("arguments", param_type="object", method="Body")]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, patches = mcp._format_api_inputs({"arguments": '{"broken": '})
         assert result["arguments"] == '{"broken": '
-        # Schema should NOT be patched
+        assert patches == {}
+
+    @staticmethod
+    def test_empty_dict_string_parsed():
+        """'{}' empty JSON object string → parsed to empty dict"""
+        params = [MockParam("arguments", param_type="object", method="Body")]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, patches = mcp._format_api_inputs({"arguments": "{}"})
+        assert result["arguments"] == {}
+        assert patches == {"arguments": "object"}
+
+    @staticmethod
+    def test_json_scalar_string_not_parsed():
+        """'123' / '"quoted"' → not dict/list, heuristic leaves value as-is"""
+        params = [MockParam("count", param_type="string", method="Body", type_inferred=True)]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, patches = mcp._format_api_inputs({"count": "123"})
+        assert result["count"] == "123"
+        assert patches == {}
+
+
+class TestBuildPatchedTool:
+    """Test _build_patched_tool creates per-call copy without mutating shared card"""
+
+    @staticmethod
+    def test_shared_card_not_mutated():
+        """Patching builds a copy — original card.input_params stays untouched"""
+        params = [MockParam("arguments", param_type="object", method="Body")]
+        schema = {"type": "object", "properties": {"arguments": {"type": "string"}}}
+        mcp = _create_mcp_with_tool_card(params, schema)
+
+        _, patches = mcp._format_api_inputs({"arguments": '{"k": "v"}'})
+        assert patches == {"arguments": "object"}
+        # shared schema untouched by _format_api_inputs
         assert schema["properties"]["arguments"]["type"] == "string"
 
-    def test_empty_dict_string_parsed(self):
-        """'{}' empty JSON object string → parsed to empty dict"""
-        params = [MockParam("arguments", param_type="string", method="Body")]
-        schema = {"properties": {"arguments": {"type": "string"}}}
-        mcp = self._create_mcp_with_tool_card(params, schema)
+        patched_tool = mcp._build_patched_tool(patches)
+        # original card still untouched after building patched tool
+        assert schema["properties"]["arguments"]["type"] == "string"
+        # patched copy has the corrected type
+        model_copy_call = mcp.api._card.model_copy.call_args
+        patched_params = model_copy_call.kwargs["update"]["input_params"]
+        assert patched_params["properties"]["arguments"]["type"] == "object"
+        assert patched_tool is not None
 
-        result = mcp._format_api_inputs({"arguments": "{}"})
-        assert result["arguments"] == {}
-        assert schema["properties"]["arguments"]["type"] == "object"
+    @staticmethod
+    def test_patched_params_are_deep_copy():
+        """Nested structures in patched schema are independent from the original"""
+        params = [MockParam("items", param_type="array", method="Body")]
+        schema = {
+            "type": "object",
+            "properties": {
+                "items": {"type": "string", "description": "keep me"},
+                "other": {"type": "string"},
+            },
+        }
+        mcp = _create_mcp_with_tool_card(params, schema)
+
+        patched_tool = mcp._build_patched_tool({"items": "array"})
+        model_copy_call = mcp.api._card.model_copy.call_args
+        patched_params = model_copy_call.kwargs["update"]["input_params"]
+        assert patched_params["properties"]["items"]["type"] == "array"
+        assert patched_params["properties"]["items"]["description"] == "keep me"
+        assert patched_params["properties"]["other"]["type"] == "string"
+        # original unchanged
+        assert schema["properties"]["items"]["type"] == "string"
+        assert patched_tool is not None
 
 
 class TestFormatApiInputsRegression:
     """Regression tests for the original crash scenario"""
 
-    def test_none_value_never_becomes_none_string(self):
+    @staticmethod
+    def test_none_value_never_becomes_none_string():
         """Core regression: None must NOT become the string "None" """
         params = [
             MockParam("query", param_type="string", method="Body", required=True),
@@ -262,7 +418,7 @@ class TestFormatApiInputsRegression:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({
+        result, _ = mcp._format_api_inputs({
             "query": "hello",
             "arguments": None,
         })
@@ -272,7 +428,8 @@ class TestFormatApiInputsRegression:
             "Regression: arguments should not be string 'None'"
         )
 
-    def test_multiple_none_params(self):
+    @staticmethod
+    def test_multiple_none_params():
         """Multiple None params of different types all stay None"""
         params = [
             MockParam("query", param_type="string", method="Body"),
@@ -282,7 +439,7 @@ class TestFormatApiInputsRegression:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result = mcp._format_api_inputs({
+        result, _ = mcp._format_api_inputs({
             "query": None,
             "arguments": None,
             "items": None,

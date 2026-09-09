@@ -275,6 +275,8 @@ def param_deserialization(
         # 处理 oneOf/anyOf 类型：当 type 为 null 但存在 oneOf 定义时，
         # 提取非 null 子类型作为实际类型（如 oneOf: [object, null] → "object"）。
         # 避免 Param.__init__ 将 type 默认为 "string"，导致下游类型判断错误。
+        # 仅当非 null 子类型唯一时才提取：多个非 null 子类型（如 object+array）
+        # 无法确定实际类型，取第一个会错误归类，保持缺省走 string 兜底。
         param_type = p.get("type", "")
         if not param_type:
             one_of = p.get("one_of") or p.get("oneOf")
@@ -283,23 +285,26 @@ def param_deserialization(
                     item.get("type") for item in one_of
                     if isinstance(item, dict) and item.get("type") and item.get("type") != "null"
                 ]
-                if non_null_types:
+                if len(non_null_types) == 1:
                     param_type = non_null_types[0]
-        params.append(
-            Param(
-                name=p.get("name", ""),
-                description=p.get("description", ""),
-                default_value=p.get("default_value"),
-                param_type=param_type,
-                required=p.get("required", False),
-                visible=p.get("visible", True),
-                level=p.get(level_key, 0),
-                method=p.get("method", "Body"),
-                schema=p.get("schema", []),
-                actual_type=p.get("actual_type", ""),
-                allow_schema_is_empty=allow_schema_is_empty,
-            )
+        param = Param(
+            name=p.get("name", ""),
+            description=p.get("description", ""),
+            default_value=p.get("default_value"),
+            param_type=param_type,
+            required=p.get("required", False),
+            visible=p.get("visible", True),
+            level=p.get(level_key, 0),
+            method=p.get("method", "Body"),
+            schema=p.get("schema", []),
+            actual_type=p.get("actual_type", ""),
+            allow_schema_is_empty=allow_schema_is_empty,
         )
+        # 标记类型是否为推断缺省（IR 无 type 且 oneOf 无法提取唯一子类型）。
+        # FlowMcp 的 JSON 启发式仅对该类参数或显式 object/array 参数生效，
+        # 显式声明 string 的参数不做 JSON 转换，避免破坏原样接收字符串的工具。
+        param.type_inferred = not param_type
+        params.append(param)
     return params
 
 
