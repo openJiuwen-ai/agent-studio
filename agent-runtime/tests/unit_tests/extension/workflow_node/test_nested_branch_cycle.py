@@ -8,6 +8,8 @@ Loop components caused mutually-reachable branch nodes, producing a cyclic
 ``parent`` dict in ``_build_branch_parent_patched`` and an infinite loop
 in ``_branch_root``.
 """
+import asyncio
+
 import pytest
 
 from openjiuwen.core.graph.graph import PregelGraph
@@ -22,6 +24,15 @@ from jiuwen.extension.patches.nested_branch_barrier_patch import (
 
 apply_parallel_branch_grouping_patch()
 apply_nested_branch_barrier_patch()
+
+
+@pytest.fixture(autouse=True)
+def _ensure_event_loop():
+    """PregelGraph.__init__ creates asyncio.Future, requiring a running loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield
+    asyncio.set_event_loop(None)
 
 
 class _FakeExec:
