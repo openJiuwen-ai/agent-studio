@@ -1,5 +1,7 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
+import { I18nNamespace } from '@i18n';
+import { I18NEXT_NAMESPACE } from 'angular-i18next';
 import {
   NonEmptyValidatorDirective,
   ValueValidityValidatorDirective,
@@ -28,6 +30,12 @@ import { takeUntil } from 'rxjs';
   ],
   templateUrl: './config-input-output.component.html',
   styleUrl: './config-input-output.component.less',
+  providers: [
+    {
+      provide: I18NEXT_NAMESPACE,
+      useValue: I18nNamespace.AGENT_CENTER,
+    },
+  ],
 })
 export class ConfigInputOutputComponent extends ModalBaseComponent {
   @ViewChild('inputForm') inputForm!: NgForm;

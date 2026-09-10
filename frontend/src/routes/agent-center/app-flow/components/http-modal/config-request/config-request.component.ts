@@ -1,5 +1,7 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
+import { I18nNamespace } from '@i18n';
+import { I18NEXT_NAMESPACE } from 'angular-i18next';
 import {
   NonEmptyValidatorDirective,
   ValueValidityValidatorDirective,
@@ -7,7 +9,7 @@ import {
 import { HttpHeadersOrQueryKeyDirective } from '@shared/directives/common-validator.directive';
 import { MODULES } from '@shared/modules';
 import { cloneDeep } from 'lodash';
-import { IHttpConfig, IParamRef, IWorkflowField, type IHttpRepo } from '../../../node.type';
+import { type IHttpConfig, IParamRef, IWorkflowField, type IHttpRepo } from '../../../node.type';
 import { getInitInputParamConfig } from '../../../flow.const';
 import { AccBlockComponent } from '../../acc-block/acc-block.component';
 import { ModalBaseComponent } from '../../base/modal-base.component';
@@ -32,6 +34,12 @@ import { takeUntil } from 'rxjs';
   ],
   templateUrl: './config-request.component.html',
   styleUrl: './config-request.component.less',
+  providers: [
+    {
+      provide: I18NEXT_NAMESPACE,
+      useValue: I18nNamespace.AGENT_CENTER,
+    },
+  ],
 })
 export class ConfigRequestComponent extends ModalBaseComponent {
   @Input() nodeInfo!: IHttpRepo;

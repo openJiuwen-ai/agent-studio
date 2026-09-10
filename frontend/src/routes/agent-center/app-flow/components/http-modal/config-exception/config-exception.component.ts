@@ -1,5 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { MonacoEditorModule, MonacoEditorConstructionOptions } from '@materia-ui/ngx-monaco-editor';
+import { I18nNamespace } from '@i18n';
+import { I18NEXT_NAMESPACE } from 'angular-i18next';
 import { MODULES } from '@shared/modules';
 import { type IHttpConfig } from '../../../node.type';
 import { AccBlockComponent } from '../../acc-block/acc-block.component';
@@ -11,6 +13,12 @@ import { NODE_SAVE_DEBOUNCE_TIME } from '../../../flow.const';
   imports: [MODULES, MonacoEditorModule, AccBlockComponent],
   templateUrl: './config-exception.component.html',
   styleUrl: './config-exception.component.less',
+  providers: [
+    {
+      provide: I18NEXT_NAMESPACE,
+      useValue: I18nNamespace.AGENT_CENTER,
+    },
+  ],
 })
 export class ConfigExceptionComponent {
   @Input() configs!: IHttpConfig;
