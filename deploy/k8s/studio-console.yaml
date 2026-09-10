@@ -7,9 +7,9 @@ spec:
   ports:
     - name: cce-service-0
       protocol: TCP
-      # HTTPS启动：将port和targetPort改为443
+      # HTTPS启动：将port和targetPort改为443和8443
       port: 80
-      targetPort: 80
+      targetPort: 8080
       nodePort: 30001
   selector:
     app: studio-console
@@ -106,8 +106,8 @@ data:
     
     
         server {
-            listen pod_ip:443 ssl;
-            #listen pod_ip:80;
+            listen pod_ip:8443 ssl;
+            #listen pod_ip:8080;
             http2 on;
             proxy_ignore_client_abort   on;
             ssl_protocols TLSv1.2;
@@ -948,11 +948,21 @@ spec:
           terminationMessagePolicy: File
           imagePullPolicy: Never
           securityContext:
-            privileged: true
+            privileged: false
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
-      securityContext: {}
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: default-secret
       schedulerName: default-scheduler

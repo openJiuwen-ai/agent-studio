@@ -152,7 +152,9 @@ spec:
           terminationMessagePolicy: File
           imagePullPolicy: Never
           securityContext:
-            privileged: true
+            privileged: false
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst

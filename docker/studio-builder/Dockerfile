@@ -57,7 +57,7 @@ RUN mkdir -p /opt/cloud/logs \
     && chown -R service:service /opt/tmp/agent \
     && chmod 755 /home
 
-USER service
+USER 1000:1000
 
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=31015
