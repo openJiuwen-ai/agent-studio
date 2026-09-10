@@ -108,6 +108,7 @@ services:
     image: ${STUDIO_CONSOLE_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
+    user: "1001:1000"
     cpus: 0.5
     mem_limit: 512m
     environment:
@@ -144,7 +145,7 @@ services:
     image: ${STUDIO_MANAGER_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
-    privileged: true
+    user: "1001:1001"
     cpus: 2
     mem_limit: 4g
     ports:
@@ -239,7 +240,7 @@ services:
     image: ${STUDIO_RUNTIME_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
-    privileged: true
+    user: "1000:1000"
     cpus: 2
     mem_limit: 4g
     ports:
@@ -351,7 +352,7 @@ services:
     image: ${STUDIO_BUILDER_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
-    privileged: true
+    user: "1000:1000"
     cpus: 2
     mem_limit: 4g
     ports:

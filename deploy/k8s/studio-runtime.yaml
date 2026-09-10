@@ -247,7 +247,8 @@ spec:
           terminationMessagePolicy: File
           imagePullPolicy: Never
           securityContext:
-            privileged: true
+            privileged: false
+            runAsNonRoot: true
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst

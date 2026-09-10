@@ -5,7 +5,7 @@ RUN echo "Built on $BASE_IMAGE"
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y iproute2 libcap2-bin unzip && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd servicegroup && useradd -u 1001 -g servicegroup -m -s /bin/bash service
+RUN groupadd -g 1000 servicegroup && useradd -u 1001 -g servicegroup -m -s /bin/bash service
 
 RUN mkdir -p /opt/cloud/wiseagent-nginx/nginx/sbin \
     && mkdir -p /opt/cloud/wiseagent-nginx/nginx/conf \
@@ -32,7 +32,17 @@ RUN chmod u+x start.sh \
     && mkfifo nginx/keypassfifo \
     && chown 1001:1000 nginx/keypassfifo \
     && chmod 600 nginx/keypassfifo \
+    && mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi \
+    && chown -R 1001:1000 /var/lib/nginx \
+    && mkdir -p /var/log/nginx \
+    && chown -R 1001:1000 /var/log/nginx \
+    && mkdir -p /var/cache/nginx \
+    && chown -R 1001:1000 /var/cache/nginx \
+    && touch /run/nginx.pid \
+    && chown 1001:1000 /run/nginx.pid \
     && setcap cap_net_bind_service=+eip /usr/sbin/nginx
+
+USER 1001:1000
 
 EXPOSE 80 443
 

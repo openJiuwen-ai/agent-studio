@@ -24,13 +24,13 @@ COPY script/ bin/
 COPY config/ config/
 
 # 赋权
-RUN mkdir -p logs \
+RUN mkdir -p logs ssl \
     && chmod -R 550 app/ \
-    && chmod -R 750 bin/ config/ logs/ \
-    && chown -R service:service app/ bin/ config/ logs/
+    && chmod -R 750 bin/ config/ logs/ ssl/ \
+    && chown -R service:service app/ bin/ config/ logs/ ssl/
 
 # 切换到非 root 用户运行
-USER service
+USER 1001:1001
 
 # 暴露 Spring Boot 默认端口
 EXPOSE 31111
