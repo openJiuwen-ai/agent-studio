@@ -201,6 +201,7 @@ import { HttpService } from '@services/http.service';
 import {
   EnvironmentVariablesManagementService,
 } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
 import { FlowEventUtils } from '@routes/agent-center/app-flow/utils/flow-event-utils';
 
 import { PublishChannelPageComponent } from 'src/shared/components/publish-channel-page/publish-channel-page.component';
@@ -383,7 +384,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public globalConfigInputs = [];
   public globalConfigVariables = [];
   public globalConfigMemoryConfig = null;
-  public globalConfigEnvironment = '';
   public globalConfigFlowId = null;
   public logConversationId = '';
   public nodeConfigNodeInfo = null;
@@ -573,6 +573,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   private halfModalVersion = 0;
 
   private envList: any = [];
+  public defaultEnvId = '';
 
   showEnv = true;
   public isFromAgentBuilder: boolean = false;
@@ -680,6 +681,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     private tiMessage: NzMessageService,
     private modelRouterStrategiesService: ModelRouterStrategiesService,
     private envVariablesManagement: EnvironmentVariablesManagementService,
+    private envManagementService: EnvManagementService,
     private readonly http: HttpService,
     private helpCenterService: HelpCenterService,
     private flowHelperServ: FlowHelperService,
@@ -2219,7 +2221,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.globalConfigInputs = this.workflowDetail.details.inputs;
       this.globalConfigVariables = this.workflowDetail.details.global_variables;
       this.globalConfigMemoryConfig = this.workflowDetail.memory_config;
-      this.globalConfigEnvironment = this.workflowDetail.details.environment || '';
       this.globalConfigFlowId = this.workflowId;
     } else {
       this.globalConfigInputs = (this.workflowDetail.workflow_details.configs as any)?.inputs || [];
@@ -2275,25 +2276,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       isDrag: false,
       successCb: () => {
         this.showGlobalConfigDrawer = false;
-        this.envList = [];
-        if (
-          this.workflowDetail.workflow_details.configs
-            ?.environment &&
-          typeof this.workflowDetail.workflow_details.configs
-            ?.environment === 'string'
-        ) {
-          this.envVariablesManagement
-            .getEnvVariablesDetail(
-              this.workflowDetail.workflow_details.configs
-                .environment,
-            )
-            .then((res) => {
-              this.envList = res?.variables;
-              if (this.type !== 'multi') {
-                this.updateOutputsMap();
-              }
-            });
-        }
       },
     });
   }
@@ -2302,12 +2284,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     inputs: IWorkflowField[];
     global_variables: IWorkflowField[];
     memory_config: IMemoryLibBaseInfo;
-    environment: string;
   }) {
     this.workflowDetail.details.inputs = configs.inputs;
     this.workflowDetail.details.global_variables =
       configs.global_variables;
-    this.workflowDetail.details.environment = configs.environment;
     if (this.configServ.isSupportUserPersona()) {
       this.workflowDetail.memory_config = configs.memory_config;
     }
@@ -2560,26 +2540,39 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       );
 
       this.envList = [];
-      if (
-        this.workflowDetail.workflow_details.configs?.environment &&
-        typeof this.workflowDetail.workflow_details.configs?.environment ===
-        'string'
-      ) {
-        this.envVariablesManagement
-          .getEnvVariablesDetail(
-            this.workflowDetail.workflow_details.configs.environment,
-          )
-          .then((res) => {
-            this.envList = res?.variables;
-            if (this.type !== 'multi') {
-              this.updateOutputsMap();
-            }
-          });
-      } else {
-        setTimeout(() => {
+      const configEnv = (this.type === 'multi'
+        ? this.workflowDetail.details?.environment
+        : this.workflowDetail.workflow_details.configs?.environment);
+      if (configEnv && typeof configEnv === 'string') {
+        // 优先使用工作流配置中绑定的环境
+        this.defaultEnvId = configEnv;
+        this.envVariablesManagement.getEnvVariablesDetail(configEnv).then(res => {
+          this.envList = res?.variables;
           if (this.type !== 'multi') {
             this.updateOutputsMap();
           }
+        }).catch(() => {
+          if (this.type !== 'multi') { this.updateOutputsMap(); }
+        });
+      } else {
+        // 未绑定环境时使用默认环境
+        this.envManagementService.getEnvironmentList({ offset: 0, limit: 99 }).then(envRes => {
+          const defaultEnv = (envRes?.env_info || []).find((e: any) => e.isDefault);
+          if (defaultEnv?.id) {
+            this.defaultEnvId = defaultEnv.id;
+            this.envVariablesManagement.getEnvVariablesDetail(defaultEnv.id).then(res => {
+              this.envList = res?.variables;
+              if (this.type !== 'multi') {
+                this.updateOutputsMap();
+              }
+            }).catch(() => {
+              if (this.type !== 'multi') { this.updateOutputsMap(); }
+            });
+          } else {
+            if (this.type !== 'multi') { this.updateOutputsMap(); }
+          }
+        }).catch(() => {
+          if (this.type !== 'multi') { this.updateOutputsMap(); }
         });
       }
 
@@ -4176,13 +4169,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  resetEnvList(e) {
-    this.envList = [];
-    if (this.workflowDetail.workflow_details.configs?.environment && typeof this.workflowDetail.workflow_details.configs?.environment === 'string') {
-      this.envList = e?.variables;
-    }
-  }
-
   // 获取前序节点的引用（outputs）信息，生成引用options
   private getPredecessorsRef(id: string): IRefInfo[] {
     const cell = this.graph.getCellById(id);
@@ -4284,6 +4270,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           envArr.push({
             outputs: outputsCfg,
             refNodeName: this.i18n.transform('envParams'),
+            refNodeId: 'envParams',
             type: 'environment',
           });
         }

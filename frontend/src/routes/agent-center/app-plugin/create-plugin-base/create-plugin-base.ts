@@ -55,6 +55,8 @@ import { CommonUtils } from 'src/utils/common.util';
 import { CreateTipModalComponent } from '@routes/platform-management/resource-management/alert-model/create-tip-modal/create-tip-modal.component';
 import { CommonService } from '@services/common.service';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import { EnvironmentVariablesManagementService } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
 import { ParamEditorComponent } from '@routes/agent-center/app-plugin/components/param-editor/param-editor.component';
 import { PromptType, VariableType } from '@interfaces/prompt/prompt-optimize-task.interface';
 import { pluginContentImportModal } from '@routes/agent-center/app-plugin/components/import-openapi-modal/plugin-content-import-modal.component';
@@ -158,7 +160,9 @@ export class CreatePluginBaseComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private configServ: AgentConfigService,
-    private readonly commonService: CommonService
+    private readonly commonService: CommonService,
+    private envVarService: EnvironmentVariablesManagementService,
+    private envManagementService: EnvManagementService,
   ) {}
 
   public logo = cdnAssetUrl('assets/agent-center/images/plugin-default.svg');
@@ -393,6 +397,7 @@ export class CreatePluginBaseComponent implements OnInit {
 
   ngOnInit() {
     this.isOp = this.ctxServ.isOpAccount;
+    this.loadEnvVarList();
     this.isHideFg = true;
     this.authList = this.authRadioList.filter(item => item?.show);
     this.showTips = StorageService.getLocalStorage(CREATE_ALERT_TIPS_STKEY) !== 0;
@@ -421,6 +426,22 @@ export class CreatePluginBaseComponent implements OnInit {
 
   ngOnDestroy(): void {
     this.agentDataServe.setPluginDebugRes('');
+  }
+
+  /** 加载默认环境的环境变量列表，供 Path 参数引用选择 */
+  private loadEnvVarList(): void {
+    this.envManagementService.getEnvironmentList({ offset: 0, limit: 99 }).then(res => {
+      const defaultEnv = (res?.env_info || []).find((e: any) => e.isDefault);
+      if (!defaultEnv?.id) {
+        this.envVarList = [];
+        return;
+      }
+      this.envVarService.getEnvVariablesDetail(defaultEnv.id).then(varRes => {
+        this.envVarList = (varRes?.variables || [])
+          .filter(v => v.name)
+          .map(v => ({ name: v.name, type: v.value?.type || 'string' }));
+      }).catch(() => { this.envVarList = []; });
+    }).catch(() => { this.envVarList = []; });
   }
 
   InitPluginConfigs(): void {
@@ -1170,6 +1191,9 @@ export class CreatePluginBaseComponent implements OnInit {
   }
 
   public patchArgs: any[] = [];
+
+  /** 默认环境的环境变量列表，供 Path 参数引用选择 */
+  public envVarList: { name: string; type: string }[] = [];
 
   InitPathConfigs(input_schema): void {
     if (input_schema?.length > 0) {

@@ -13,9 +13,16 @@ import static org.mockito.Mockito.when;
 
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
+import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
+import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariableValue;
+import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
+import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
+import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
 import com.openjiuwen.studio.agent.manager.service.mcp.McpClientService;
 import com.openjiuwen.studio.agent.manager.service.mcp.McpServiceManager;
 import com.openjiuwen.studio.agent.manager.service.mcp.auth.IMcpBase;
@@ -23,6 +30,7 @@ import com.openjiuwen.studio.agent.manager.service.mcp.local.McpUpdateTask;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerDao;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServiceDao;
 import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
+import com.openjiuwen.studio.agent.manager.utils.McpJsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.McpUtil;
 import com.openjiuwen.studio.agent.manager.service.workspace.WorkspaceMappingService;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
@@ -47,6 +55,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -89,6 +98,15 @@ class McpServiceManagerTest {
 
     @Mock
     private McpUtil mcpUtil;
+
+    @Mock
+    private EnvironmentManagerMapper environmentManagerMapper;
+
+    @Mock
+    private EnvironmentCacheUtil environmentCacheUtil;
+
+    @Mock
+    private UrlCheckUtils urlCheckUtils;
 
     private MockedStatic<RequestContextUtils> requestContextUtilsMock;
 
@@ -396,6 +414,337 @@ class McpServiceManagerTest {
 
         mcpServiceManager.getMcpServiceToolList(entity);
         verify(mcpClientService, times(1)).getMcpServiceToolList(any(), any(), any(), any());
+    }
+
+    // --- resolveEnvPlaceholderUrl 测试 ---
+
+    /**
+     * 用例描述：验证含环境变量占位符的URL能被正确解析为真实地址
+     * 预制条件：项目中存在默认环境，缓存中有对应的环境变量
+     * 输入参数：url=http://${_env.plugin_url_params.host}/sse, host=127.0.0.1:8080
+     * 预期结果：返回 http://127.0.0.1:8080/sse
+     *
+     * Given：前置条件 / 初始状态
+     *  1. Mock environmentManagerMapper 返回含默认环境的列表
+     *  2. Mock environmentCacheUtil 返回含host变量的JSON
+     * When：执行动作（仅1行核心调用）
+     *  执行：resolveEnvPlaceholderUrl(url, projectId, workspaceId)
+     * Then：结果校验
+     *  1. 断言返回值为解析后的真实URL
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_Normal() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        envEntity.setIsDefault(true);
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId))
+            .thenReturn(List.of(envEntity));
+
+        String envJson = buildEnvJson("host", "127.0.0.1:8080", false);
+        when(environmentCacheUtil.getEnvironmentCache("env-1", workspaceId)).thenReturn(envJson);
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, projectId, workspaceId);
+
+        Assertions.assertEquals("http://127.0.0.1:8080/sse", result);
+    }
+
+    /**
+     * 用例描述：验证无默认环境时返回原始URL
+     * 预制条件：项目中不存在默认环境
+     * 输入参数：url含占位符, projectId/workspaceId非空
+     * 预期结果：返回原始URL
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_NoDefaultEnv() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1"))
+            .thenReturn(Collections.emptyList());
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, "proj-1", "ws-1");
+
+        Assertions.assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证环境变量缓存为空时返回原始URL
+     * 预制条件：存在默认环境但缓存为空字符串
+     * 输入参数：url含占位符
+     * 预期结果：返回原始URL
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_EmptyCache() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1"))
+            .thenReturn(List.of(envEntity));
+        when(environmentCacheUtil.getEnvironmentCache("env-1", "ws-1")).thenReturn("");
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, "proj-1", "ws-1");
+
+        Assertions.assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证变量值含$特殊字符时能正确替换不报错（Matcher.quoteReplacement修复）
+     * 预制条件：环境变量值含$字符（如价格变量 price=$10.00）
+     * 输入参数：url含占位符, 变量值含$
+     * 预期结果：返回含$的替换后URL，不抛异常
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_DollarSignInValue() {
+        String url = "http://${_env.plugin_url_params.token}/sse";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId))
+            .thenReturn(List.of(envEntity));
+
+        String envJson = buildEnvJson("token", "user$pass123", false);
+        when(environmentCacheUtil.getEnvironmentCache("env-1", workspaceId)).thenReturn(envJson);
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, projectId, workspaceId);
+
+        Assertions.assertEquals("http://user$pass123/sse", result);
+    }
+
+    /**
+     * 用例描述：验证占位符前后有空格时正则能正确匹配并消除空格
+     * 预制条件：URL中占位符前后有空格（ParamEditor芯片可能插入多余空格）
+     * 输入参数：url含空格包裹的占位符
+     * 预期结果：返回的URL不含多余空格
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_SpacesAroundPlaceholder() {
+        String url = "http://  ${_env.plugin_url_params.host}  /sse";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId))
+            .thenReturn(List.of(envEntity));
+
+        String envJson = buildEnvJson("host", "127.0.0.1:8080", false);
+        when(environmentCacheUtil.getEnvironmentCache("env-1", workspaceId)).thenReturn(envJson);
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, projectId, workspaceId);
+
+        Assertions.assertEquals("http://127.0.0.1:8080/sse", result);
+    }
+
+    /**
+     * 用例描述：验证projectId为空时返回原始URL
+     * 预制条件：projectId为空字符串
+     * 输入参数：url含占位符, projectId=""
+     * 预期结果：返回原始URL，不查询环境
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_BlankProjectId() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, "", "ws-1");
+
+        Assertions.assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证解析过程发生异常时返回原始URL
+     * 预制条件：environmentCacheUtil抛出异常
+     * 输入参数：url含占位符
+     * 预期结果：返回原始URL不抛异常
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_ExceptionReturnsOriginal() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1"))
+            .thenReturn(List.of(envEntity));
+        when(environmentCacheUtil.getEnvironmentCache("env-1", "ws-1"))
+            .thenThrow(new RuntimeException("Redis down"));
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, "proj-1", "ws-1");
+
+        Assertions.assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证缓存返回"{}"时返回原始URL（与空字符串等价处理）
+     * 预制条件：存在默认环境但缓存值为"{}"
+     * 输入参数：url含占位符, envJson="{}"
+     * 预期结果：返回原始URL
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_EmptyJsonObjectCache() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1"))
+            .thenReturn(List.of(envEntity));
+        when(environmentCacheUtil.getEnvironmentCache("env-1", "ws-1")).thenReturn("{}");
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, "proj-1", "ws-1");
+
+        Assertions.assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证workspaceId为空时返回原始URL
+     * 预制条件：workspaceId为空字符串
+     * 输入参数：url含占位符, workspaceId=""
+     * 预期结果：返回原始URL，不查询环境
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_BlankWorkspaceId() {
+        String url = "http://${_env.plugin_url_params.host}/sse";
+
+        String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+            "resolveEnvPlaceholderUrl", url, "proj-1", "");
+
+        Assertions.assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证secret类型环境变量经过CryptoUtils.decrypt解密后替换占位符
+     * 预制条件：环境变量标记为secret=true，CryptoUtils.decrypt返回明文
+     * 输入参数：url含占位符, 变量值=密文, secret=true
+     * 预期结果：返回使用解密后明文替换的URL
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_SecretVarDecrypted() {
+        String url = "http://${_env.plugin_url_params.token}/sse";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId))
+            .thenReturn(List.of(envEntity));
+
+        String envJson = buildEnvJson("token", "encrypted-cipher-text", true);
+        when(environmentCacheUtil.getEnvironmentCache("env-1", workspaceId)).thenReturn(envJson);
+
+        try (MockedStatic<CryptoUtils> cryptoMock = Mockito.mockStatic(CryptoUtils.class)) {
+            cryptoMock.when(() -> CryptoUtils.decrypt("encrypted-cipher-text")).thenReturn("real-token-value");
+
+            String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+                "resolveEnvPlaceholderUrl", url, projectId, workspaceId);
+
+            Assertions.assertEquals("http://real-token-value/sse", result);
+        }
+    }
+
+    /**
+     * 用例描述：验证CryptoUtils.decrypt抛异常时跳过该变量，占位符保留在URL中不替换
+     * 预制条件：secret变量解密失败
+     * 输入参数：url含占位符, 变量值=密文, secret=true, decrypt抛异常
+     * 预期结果：该变量未被替换（URL仍含占位符），不抛异常
+     */
+    @Test
+    void testResolveEnvPlaceholderUrl_DecryptFailureSkipsVar() {
+        String url = "http://${_env.plugin_url_params.token}/sse";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+
+        EnvironmentManagerEntity envEntity = new EnvironmentManagerEntity();
+        envEntity.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId))
+            .thenReturn(List.of(envEntity));
+
+        String envJson = buildEnvJson("token", "bad-cipher", true);
+        when(environmentCacheUtil.getEnvironmentCache("env-1", workspaceId)).thenReturn(envJson);
+
+        try (MockedStatic<CryptoUtils> cryptoMock = Mockito.mockStatic(CryptoUtils.class)) {
+            cryptoMock.when(() -> CryptoUtils.decrypt("bad-cipher"))
+                .thenThrow(new RuntimeException("Decrypt failed"));
+
+            String result = ReflectionTestUtils.invokeMethod(mcpServiceManager,
+                "resolveEnvPlaceholderUrl", url, projectId, workspaceId);
+
+            // 解密失败后跳过该变量，占位符保留在URL中
+            Assertions.assertEquals(url, result);
+        }
+    }
+
+    // --- refreshToolsAfterImport 测试 ---
+
+    /**
+     * 用例描述：验证URL不含环境变量占位符时refreshToolsAfterImport直接返回不触发异步任务
+     * 预制条件：serviceEntity的fcInstanceUrl为普通URL
+     * 输入参数：fcInstanceUrl=http://127.0.0.1:8080/sse（不含${_env.）
+     * 预期结果：mcpTaskExecutor.execute不被调用
+     *
+     * Given：前置条件 / 初始状态
+     *  1. 构造不含占位符的McpServiceEntity
+     * When：执行动作（仅1行核心调用）
+     *  执行：mcpServiceManager.refreshToolsAfterImport(entity)
+     * Then：结果校验
+     *  1. 验证mcpTaskExecutor.execute从未被调用
+     */
+    @Test
+    void testRefreshToolsAfterImport_NoPlaceholder() {
+        McpServiceEntity entity = createMockServiceEntity("svc-no-ph",
+            "http://127.0.0.1:8080/sse");
+
+        mcpServiceManager.refreshToolsAfterImport(entity);
+
+        verify(mcpTaskExecutor, times(0)).execute(any(Runnable.class));
+    }
+
+    /**
+     * 用例描述：验证URL含环境变量占位符时refreshToolsAfterImport触发异步任务
+     * 预制条件：serviceEntity的fcInstanceUrl含${_env.占位符
+     * 输入参数：fcInstanceUrl含${_env.plugin_url_params.host}
+     * 预期结果：mcpTaskExecutor.execute至少被调用1次
+     */
+    @Test
+    void testRefreshToolsAfterImport_WithPlaceholder() {
+        McpServiceEntity entity = createMockServiceEntity("svc-with-ph",
+            "http://${_env.plugin_url_params.host}/sse");
+        entity.setProjectId("proj-1");
+        entity.setTenantId("tenant-1");
+
+        mcpServiceManager.refreshToolsAfterImport(entity);
+
+        verify(mcpTaskExecutor, org.mockito.Mockito.atLeast(1)).execute(any(Runnable.class));
+    }
+
+    // --- 环境变量辅助方法 ---
+
+    /**
+     * 构建环境变量JSON字符串（数组格式，与EnvironmentCacheUtil缓存格式一致）
+     * @param name 变量名
+     * @param content 变量内容
+     * @param secret 是否为密文
+     * @return JSON数组字符串
+     */
+    private String buildEnvJson(String name, String content, boolean secret) {
+        EnvironmentVariable var = new EnvironmentVariable();
+        var.setName(name);
+        EnvironmentVariableValue value = new EnvironmentVariableValue();
+        value.setType(EnvironmentVariableValue.TypeEnum.STRING);
+        value.setContent(content);
+        value.setSecret(secret);
+        var.setValue(value);
+        return McpJsonUtils.toJson(List.of(var));
     }
 
 }

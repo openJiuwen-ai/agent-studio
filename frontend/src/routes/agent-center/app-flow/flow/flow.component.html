@@ -458,8 +458,7 @@
       [(conversationId)]="conversationId"
       [currWorkflow]="workflowDetail"
       [versionName]="versionName"
-      [environment_id]="workflowDetail?.workflow_details?.configs?.environment
-        || workflowDetail?.details?.environment"
+      [environment_id]="defaultEnvId"
       (clickErrorInfo)="clickErrorInfo($event)"
       (close)="dialogHalfmodalClose()"
     ></dialog-halfmodal>
@@ -472,7 +471,7 @@
       [conversationId]="conversationId"
       [currWorkflow]="workflowDetail"
       (close)="showRunModal = false"
-      [environment_id]="workflowDetail?.workflow_details?.configs?.environment"
+      [environment_id]="defaultEnvId"
       [showRunModal]="showRunModal"
     ></flow-run-modal>
   </div>
@@ -491,7 +490,6 @@
       [inputs]="globalConfigInputs"
       [globalVariables]="globalConfigVariables"
       [memoryConfig]="globalConfigMemoryConfig"
-      [environment]="globalConfigEnvironment"
       [flowId]="globalConfigFlowId"
       (configsChange)="onGlobalConfigsMultiChange($event)"
       (close)="showGlobalConfigDrawer = false"
@@ -502,7 +500,6 @@
       [flowId]="workflowId"
       [configs]="workflowDetail?.workflow_details?.configs"
       (configsChange)="onGlobalConfigsChange($event)"
-      (upDateEnv)="resetEnvList($event)"
       (close)="showGlobalConfigDrawer = false"
     ></global-config-modal>
     }

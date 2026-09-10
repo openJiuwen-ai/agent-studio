@@ -75,7 +75,7 @@ public class McpServerDetailReq implements Serializable {
 
     @JsonProperty("server_config")
     @Schema(description = "服务配置", example = "{}")
-    @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！*%# \\s]*$")
+    @Pattern(regexp = "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！*%#$ \\s]*$")
     private String serverConfig = null;
 
     @JsonProperty("tools")

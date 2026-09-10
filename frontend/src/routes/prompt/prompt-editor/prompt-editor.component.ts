@@ -258,11 +258,26 @@ export class PromptEditorComponent {
         if (editorEl && savedScrollTop > 0) {
           editorEl.scrollTop = savedScrollTop;
         }
+        // 重建 DOM 后光标会丢失到内容开头，将光标定位到末尾，避免后续变量插入到文本前面
+        this.moveCursorToEnd(editorEl);
       });
       value = value.replaceAll(this.CURSOR_MARK,'');
       // 此行代码置后，chunks2dom中的dom更新导致angular更新异常
       this.promptValue = String(value) + '';
     });
+  }
+
+  private moveCursorToEnd(editorEl: HTMLElement): void {
+    if (!editorEl || !editorEl.lastChild) return;
+    const lastChild = editorEl.lastChild;
+    if (lastChild.nodeType !== Node.ELEMENT_NODE) return;
+    const range = document.createRange();
+    range.selectNodeContents(lastChild);
+    range.collapse(false);
+    const selection = document.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   registerOnChange(fn: (value: any) => void): void {
@@ -941,11 +956,8 @@ export class PromptEditorComponent {
       'variable-input cursor-text'
     ) {
       const range = document.createRange();
-      range.setStart(
-        editorElement.lastChild,
-        editorElement.lastChild.childNodes.length,
-      );
-      range.collapse(true);
+      range.selectNodeContents(editorElement.lastChild);
+      range.collapse(false);
       selection.removeAllRanges();
       selection.addRange(range);
     }
@@ -1068,13 +1080,20 @@ export class PromptEditorComponent {
     ) {
       range.startContainer.parentNode.insertBefore(
         wrapper,
-        range.startContainer,
+        range.startContainer.nextSibling,
       );
     } else if (range.startContainer.nodeType === Node.TEXT_NODE) {
       range.startContainer.parentNode.parentNode.insertBefore(
         wrapper,
         range.startContainer?.parentNode?.nextSibling,
       );
+    } else if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+      const children = range.startContainer.childNodes;
+      if (range.startOffset >= children.length) {
+        range.startContainer.appendChild(wrapper);
+      } else {
+        range.startContainer.insertBefore(wrapper, children[range.startOffset]);
+      }
     } else {
       range.startContainer.parentNode.insertBefore(
         wrapper,
