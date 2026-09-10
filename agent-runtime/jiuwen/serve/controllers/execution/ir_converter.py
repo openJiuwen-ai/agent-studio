@@ -2505,6 +2505,35 @@ class IRConverter:
         if node_type == "jiuwen.sql":
             return FlowSql(configs), node_type, configs
 
+        if node_type == "EI.http":
+            from openjiuwen.core.workflow.components.tool.http import (
+                HTTPRequestComponent,
+                HttpComponentConfig,
+                HttpRequestParamConfig,
+                HttpRequestBodyConfig,
+                HttpContentType,
+            )
+
+            url = configs.get("url", "")
+            method = (configs.get("method") or "GET").upper()
+            request_type = configs.get("requestType") or configs.get("request_type") or "NONE"
+            request_body = configs.get("requestBody") or configs.get("request_body") or ""
+
+            body_config = None
+            if request_type.upper() == "JSON" and request_body:
+                body_config = HttpRequestBodyConfig(
+                    content_type=HttpContentType.JSON,
+                    json_data=request_body,
+                )
+
+            http_params = HttpRequestParamConfig(
+                url=url,
+                method=method,
+                body=body_config,
+            )
+            http_config = HttpComponentConfig(request_params=http_params)
+            return HTTPRequestComponent(http_config), node_type, configs
+
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
         )

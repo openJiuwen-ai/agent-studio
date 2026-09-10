@@ -7,8 +7,10 @@ import {
   ViewChild,
 } from '@angular/core';
 import { Validators } from '@angular/forms';
+import { I18nNamespace } from '@i18n';
 import { MODULES } from '@shared/modules';
 import { CommonValidation } from '@shared/validation/commonValidation';
+import { I18NEXT_NAMESPACE, I18NextEagerPipe, I18NextModule } from 'angular-i18next';
 import { cloneDeep } from 'lodash';
 import { AppFlowService } from '../../app-flow.service';
 import { NodeService } from '../../node.service';
@@ -44,6 +46,13 @@ import { ConfigInputOutputComponent } from './config-input-output/config-input-o
     ReadonlyParamsTreeComponent,
     EditNameComponent,
     NodeDescriptionComponent,
+    I18NextModule,
+  ],
+  providers: [
+    {
+      provide: I18NEXT_NAMESPACE,
+      useValue: [I18nNamespace.AGENT_CENTER],
+    },
   ],
   templateUrl: './http-modal.component.html',
   styleUrl: './http-modal.component.less',
@@ -86,6 +95,7 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
   private validationRules = [Validators.required];
 
   constructor(
+    private i18n: I18NextEagerPipe,
     protected override nodeServ: NodeService,
     protected override appFlowServ: AppFlowService,
   ) {

@@ -1,5 +1,7 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
+import { I18nNamespace } from '@i18n';
+import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import {
   NonEmptyValidatorDirective,
   ValueValidityValidatorDirective,
@@ -15,6 +17,12 @@ import { AccBlockComponent } from '../../acc-block/acc-block.component';
   imports: [MODULES, NonEmptyValidatorDirective, ValueValidityValidatorDirective, NoCnDirective, AccBlockComponent],
   templateUrl: './config-auth.component.html',
   styleUrl: './config-auth.component.less',
+  providers: [
+    {
+      provide: I18NEXT_NAMESPACE,
+      useValue: I18nNamespace.AGENT_CENTER,
+    },
+  ],
 })
 export class ConfigAuthComponent {
   @Input() configs!: IHttpConfig;
@@ -25,10 +33,7 @@ export class ConfigAuthComponent {
   @Output() inputChange = new EventEmitter<void>();
   @Output() updateTimeChange = new EventEmitter<void>();
 
-  authMethods = [
-    { label: $localize`No Auth`, value: 'none' },
-    { label: 'API Key', value: 'api' },
-  ];
+  authMethods: { label: string; value: string }[] = [];
 
   auth = 'none';
 
@@ -39,6 +44,13 @@ export class ConfigAuthComponent {
 
   apiKeyAuthArgs: IServAuthKV[] = [];
   apiAuthArgsLimit = 4;
+
+  constructor(private i18n: I18NextEagerPipe) {
+    this.authMethods = [
+      { label: this.i18n.transform('no_auth'), value: 'none' },
+      { label: 'API Key', value: 'api' },
+    ];
+  }
 
   ngOnInit(): void {
     if (this.configs.auth_info?.domain) {
