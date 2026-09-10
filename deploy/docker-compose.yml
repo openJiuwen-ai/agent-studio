@@ -122,10 +122,10 @@ services:
       # - ./config/cert.pem:/home/secret/cert.pem
       # - ./config/pri_key.pem:/home/secret/pri_key.pem
     ports:
-      # HTTPS启动：改为 443:443
-      - '${CONSOLE_PORT:-80}:80'
+      # HTTPS启动：改为 443:8443
+      - '${CONSOLE_PORT:-80}:8080'
     healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/80'"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
       interval: 10s
       timeout: 5s
       retries: 6
