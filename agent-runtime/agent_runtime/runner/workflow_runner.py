@@ -32,7 +32,6 @@ from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactory
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 from openjiuwen.core.session.stream import BaseStreamMode
-from openjiuwen.core.workflow import create_workflow_session
 from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 
 from agent_runtime.common.logging_context import apply_template_masking_patch
@@ -342,7 +341,7 @@ class WorkflowRunner:
             # round so the OTel handler keeps the cached root context.
             saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
             if saved_trace_id:
-                session = create_workflow_session(session_id=session_id, trace_id=saved_trace_id)
+                session = create_workflow_session_with_trace(session_id=session_id, trace_id=saved_trace_id)
             else:
                 session = create_workflow_session_with_trace(session_id=session_id)
         else:
