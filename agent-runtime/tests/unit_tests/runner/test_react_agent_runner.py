@@ -315,6 +315,30 @@ class TestConversationHistory:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_enabled_empty_history_preserves_checkpoint_context():
+        runner = ReActAgentRunner(api_key="test")
+        context_engine = SimpleNamespace(
+            create_context=AsyncMock(),
+            save_contexts=AsyncMock(),
+        )
+        agent = SimpleNamespace(context_engine=context_engine)
+
+        with patch(
+            "agent_runtime.runner.react_agent_runner.convert_conversation_history"
+        ) as converter:
+            await getattr(runner, "_seed_conversation_history")(
+                agent,
+                object(),
+                [],
+                enable_history=True,
+            )
+
+        converter.assert_not_called()
+        context_engine.create_context.assert_not_awaited()
+        context_engine.save_contexts.assert_not_awaited()
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_disabled_history_clears_seeded_context():
         runner = ReActAgentRunner(api_key="test")
         context_engine = SimpleNamespace(
@@ -342,16 +366,19 @@ class TestConversationHistory:
         context_engine.save_contexts.assert_awaited_once_with(session)
 
     @pytest.mark.parametrize(
-        ("configured", "expected"),
-        [(None, 3), ("invalid", 3), (0, 3), ("2", 2)],
+        ("model_config", "expected"),
+        [
+            ({}, 20),
+            ({"historySize": None}, 20),
+            ({"historySize": "invalid"}, 20),
+            ({"historySize": 0}, 20),
+            ({"historySize": -1}, 20),
+            ({"historySize": "2"}, 2),
+        ],
     )
-    def test_invalid_history_size_falls_back_to_workflow_default(
-        self, configured, expected
+    def test_invalid_history_size_falls_back_to_agent_default(
+        self, model_config, expected
     ):
-        model_config = {}
-        if configured is not None:
-            model_config["historySize"] = configured
-
         assert getattr(ReActAgentRunner, "_parse_history_size")(
             {"configs": {"modelConfig": model_config}}
         ) == expected

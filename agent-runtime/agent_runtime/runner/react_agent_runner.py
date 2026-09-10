@@ -26,6 +26,9 @@ from openjiuwen.core.single_agent.agents.react_agent import ReActAgent, ReActAge
 from openjiuwen.core.single_agent.schema.agent_card import AgentCard
 
 
+DEFAULT_AGENT_HISTORY_SIZE = 20
+
+
 def _adapt_react_agent_config(ir_json: dict) -> dict:
     """将 IR 配置适配为 IRModelConfigProvider 期望的格式"""
     configs = ir_json.get("configs", {})
@@ -146,15 +149,17 @@ class ReActAgentRunner:
 
     @staticmethod
     def _parse_history_size(ir_json: dict) -> int:
-        """读取单智能体历史轮数；非法配置回退到工作流节点的默认值。"""
+        """读取单智能体历史轮数；非法配置回退到单智能体默认值。"""
         history_size = (
-            ir_json.get("configs", {}).get("modelConfig", {}).get("historySize", 3)
+            ir_json.get("configs", {})
+            .get("modelConfig", {})
+            .get("historySize", DEFAULT_AGENT_HISTORY_SIZE)
         )
         try:
             history_size = int(history_size)
         except (TypeError, ValueError):
-            return 3
-        return history_size if history_size > 0 else 3
+            return DEFAULT_AGENT_HISTORY_SIZE
+        return history_size if history_size > 0 else DEFAULT_AGENT_HISTORY_SIZE
 
     @staticmethod
     async def _seed_conversation_history(
@@ -164,8 +169,13 @@ class ReActAgentRunner:
         enable_history: bool,
     ) -> None:
         """用请求中的权威历史初始化 ReAct 上下文并写回当前 session 状态。"""
+        # 启用历史但未加载到消息时保留 checkpointer 已恢复的上下文。
+        # 空列表也可能来自 Redis 读取异常，不能将其视为权威空历史。
+        if enable_history is not False and not conversation_history:
+            return
+
         history_messages = (
-            convert_conversation_history(conversation_history or [])
+            convert_conversation_history(conversation_history)
             if enable_history is not False
             else []
         )
