@@ -373,6 +373,29 @@ class TestAssembleObjectDefault:
         assert assembled == {"n_zero": 0, "b_false": False}
 
     @staticmethod
+    def test_nested_string_none_default_skipped():
+        """嵌套 string 子字段 default_value 为 None/缺省时不组装出 'None' 字面量。
+
+        _transform_type 对 string 类型不做空值短路(str(None)='None'),
+        None/'' 必须在转换前拦截。
+        """
+        subfields = [
+            _var("s_none", "string", None),
+            {
+                "storage_method": "assignment",
+                "aging_level": "session",
+                "id": "s_missing",
+                "type": "string",
+            },
+            _var("s_empty", "string", ""),
+            _var("s_ok", "string", "sv"),
+        ]
+
+        assembled = Start._assemble_object_default(subfields)
+
+        assert assembled == {"s_ok": "sv"}
+
+    @staticmethod
     def test_schema_none_or_non_list_returns_empty():
         """schema 为 None/非 list 容错为空,不再抛 TypeError(检视意见3)。"""
         assert Start._assemble_object_default(None) == {}
