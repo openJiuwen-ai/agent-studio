@@ -176,6 +176,21 @@ class WorkflowRunner:
         checkpointer = CheckpointerFactory.get_checkpointer()
         return await checkpointer.session_exists(session_id)
 
+    async def _is_session_cancelled(self, conversation_id: str) -> bool:
+        """查询协作式取消标记（终止接口置位；键名与 serve/execution_registry.py 保持一致）
+
+        直读 Redis，不 import serve 层（依赖方向：runner 不依赖 serve）。
+        Redis 客户端 decode_responses=False，值为 bytes，按 bytes 语义比较。
+        """
+        value = await get_redis_client().get(f"cancel:{conversation_id}")
+        if isinstance(value, bytes):
+            return value == b"true"
+        return value == "true"
+
+    async def _clear_session_cancelled(self, conversation_id: str) -> None:
+        """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
+        await get_redis_client().delete(f"cancel:{conversation_id}")
+
     async def run_streaming(
         self,
         req: ExecutionRequest,
@@ -273,6 +288,32 @@ class WorkflowRunner:
         # 5. 检查会话是否处于中断状态，构建 inputs
         t_checkpoint = time.perf_counter()
         is_interrupted = await self._is_session_interrupted(session_id)
+        # 取消标记检测（终止接口）：中断节点挂起期间被取消 → 清标记、不恢复中断态，
+        # 从入口重新执行（同会话 ID 再次输入从智能体入口重跑，US3）
+        if is_interrupted and await self._is_session_cancelled(session_id):
+            await self._clear_session_cancelled(session_id)
+            is_interrupted = False
+            # 丢弃中断态 checkpoint：从入口重跑=旧状态作废；否则 pre_workflow_execute
+            # 撞 workflow-state-exists 错误（CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR）
+            try:
+                checkpointer = CheckpointerFactory.get_checkpointer()
+                clear_checkpoint = getattr(
+                    checkpointer, "_clear_checkpoint_and_sentinel", None
+                )
+                if clear_checkpoint:
+                    await clear_checkpoint(
+                        session_id, ir_json.get("workflowId", ""), session
+                    )
+            except Exception as clear_err:
+                workflow_logger.warning(
+                    "Failed to clear interrupted checkpoint after cancel: "
+                    "conv=%s, %s",
+                    session_id,
+                    clear_err,
+                )
+            workflow_logger.info(
+                "Session cancelled before resume: conv=%s, restart from entry", session_id
+            )
         performance_logger.info(
             f"checkpoint_check|{round((time.perf_counter() - t_checkpoint) * 1000)}"
         )
