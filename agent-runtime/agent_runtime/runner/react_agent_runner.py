@@ -14,6 +14,7 @@ from typing import AsyncGenerator, Optional, Dict
 
 from agent_runtime.runner.react_stream_data_adapter import ReactStreamDataAdapter
 from agent_runtime.runner.react_file_reader_adapter import ReactFileReaderAdapter
+from agent_runtime.runner.context import convert_conversation_history
 from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from openjiuwen.core.common.logging import workflow_logger
@@ -23,6 +24,9 @@ from agent_runtime.common.trace_compat import create_agent_session_with_trace
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.single_agent.agents.react_agent import ReActAgent, ReActAgentConfig
 from openjiuwen.core.single_agent.schema.agent_card import AgentCard
+
+
+DEFAULT_AGENT_HISTORY_SIZE = 20
 
 
 def _adapt_react_agent_config(ir_json: dict) -> dict:
@@ -143,6 +147,46 @@ class ReActAgentRunner:
         """选择本轮用户输入；恢复输入优先于普通 query。"""
         return req.resume_input or req.query or "Hello"
 
+    @staticmethod
+    def _parse_history_size(ir_json: dict) -> int:
+        """读取单智能体历史轮数；非法配置回退到单智能体默认值。"""
+        history_size = (
+            ir_json.get("configs", {})
+            .get("modelConfig", {})
+            .get("historySize", DEFAULT_AGENT_HISTORY_SIZE)
+        )
+        try:
+            history_size = int(history_size)
+        except (TypeError, ValueError):
+            return DEFAULT_AGENT_HISTORY_SIZE
+        return history_size if history_size > 0 else DEFAULT_AGENT_HISTORY_SIZE
+
+    @staticmethod
+    async def _seed_conversation_history(
+        agent: ReActAgent,
+        session: Session,
+        conversation_history: list,
+        enable_history: bool,
+    ) -> None:
+        """用请求中的权威历史初始化 ReAct 上下文并写回当前 session 状态。"""
+        # 启用历史但未加载到消息时保留 checkpointer 已恢复的上下文。
+        # 空列表也可能来自 Redis 读取异常，不能将其视为权威空历史。
+        if enable_history is not False and not conversation_history:
+            return
+
+        history_messages = (
+            convert_conversation_history(conversation_history)
+            if enable_history is not False
+            else []
+        )
+        await agent.context_engine.create_context(
+            session=session,
+            history_messages=history_messages,
+        )
+        # ReActAgent.stream 会再次从 session 恢复上下文。先保存可避免旧 checkpoint
+        # 覆盖本次请求从 Redis 加载的历史；resumeInput 场景不会调用此方法。
+        await agent.context_engine.save_contexts(session)
+
     async def _load_ir(self, ir_path: str) -> dict:
         """从存储加载 IR 配置"""
         try:
@@ -173,8 +217,13 @@ class ReActAgentRunner:
         template = re.sub(r"\{\{inputs\.([\w.]+)\}\}", replace_inputs, template)
         return template
 
-    def _parse_prompt_template(self, ir_json: dict, conversation_history: list = None, skill_work_dir: str = "", global_variables: dict = None, has_file_links: bool = False) -> \
-    list[dict]:
+    def _parse_prompt_template(
+        self,
+        ir_json: dict,
+        skill_work_dir: str = "",
+        global_variables: dict = None,
+        has_file_links: bool = False,
+    ) -> list[dict]:
         """解析 IR 中的提示词模板，添加工具使用说明和 skill 提示词"""
         configs = ir_json.get("configs", {})
         sys_prompt = configs.get("sysPromptTemplate", "")
@@ -200,12 +249,10 @@ class ReActAgentRunner:
         # 文件链接提示词
         file_links_prompt = self._build_file_links_prompt() if has_file_links else ""
 
-        history_section = self._format_conversation_history(conversation_history)
-
         if sys_prompt:
-            full_prompt = sys_prompt + tool_instruction + skills_prompt + file_links_prompt + history_section
+            full_prompt = sys_prompt + tool_instruction + skills_prompt + file_links_prompt
         else:
-            full_prompt = "你是一个AI助手，能够帮助用户完成任务。" + tool_instruction + skills_prompt + file_links_prompt + history_section
+            full_prompt = "你是一个AI助手，能够帮助用户完成任务。" + tool_instruction + skills_prompt + file_links_prompt
 
         return [{"role": "system", "content": full_prompt}]
 
@@ -222,21 +269,6 @@ class ReActAgentRunner:
     def _build_skills_prompt(self, ir_json: dict, skill_work_dir: str = "") -> str:
         """构建 skill 提示词"""
         return build_skills_prompt(ir_json, skill_work_dir=skill_work_dir)
-
-    def _format_conversation_history(self, history: list) -> str:
-        """格式化对话历史"""
-        if not history:
-            return ""
-
-        history_lines = ["\n\n## 对话历史"]
-        for msg in history:
-            msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else msg
-            role = msg_dict.get("role", "")
-            content = msg_dict.get("content", "")
-            if content:
-                history_lines.append(f"- **{role}**: {content}")
-
-        return "\n".join(history_lines)
 
     def _parse_max_iterations(self, ir_json: dict) -> int:
         """解析最大迭代次数"""
@@ -620,19 +652,26 @@ class ReActAgentRunner:
                 except Exception as e:
                     workflow_logger.warning(f"Failed to register skill {skill_name}: {e}")
 
-    def _create_agent(self, ir_json: dict, conversation_history: list = None, skill_work_dir: str = "", global_variables: dict = None, has_file_links: bool = False) -> tuple[
-        ReActAgent, str]:
+    def _create_agent(
+        self,
+        ir_json: dict,
+        skill_work_dir: str = "",
+        global_variables: dict = None,
+        has_file_links: bool = False,
+    ) -> tuple[ReActAgent, str]:
         """根据 IR 配置创建 ReActAgent 实例
 
         Args:
             ir_json: IR 配置
-            conversation_history: 对话历史
             skill_work_dir: skill 文件的实际工作目录
             global_variables: 全局变量（含用户入参变量）
             has_file_links: query 中是否包含文件链接
         """
-        prompt_template = self._parse_prompt_template(ir_json, conversation_history, skill_work_dir, global_variables, has_file_links)
+        prompt_template = self._parse_prompt_template(
+            ir_json, skill_work_dir, global_variables, has_file_links
+        )
         max_iterations = self._parse_max_iterations(ir_json)
+        history_size = self._parse_history_size(ir_json)
         agent_id = ir_json.get("agentId", "react_agent")
 
         card = AgentCard(
@@ -644,6 +683,9 @@ class ReActAgentRunner:
         config = ReActAgentConfig()
         config.configure_max_iterations(max_iterations=max_iterations)
         config.configure_prompt_template(prompt_template)
+        # ContextEngine 会把当前尚未完成的 user 消息也视为一轮，因此窗口需要
+        # 在用户配置的历史轮数基础上加 1。
+        config.configure_context_engine(default_window_round_num=history_size + 1)
 
         agent = ReActAgent(card)
         agent.configure(config)
@@ -696,7 +738,9 @@ class ReActAgentRunner:
         try:
             conversation_history = req.params.conversation_history
             global_variables = req.params.global_variables or {}
-            agent, agent_id = self._create_agent(ir_json, conversation_history, skill_work_dir, global_variables, has_file_links)
+            agent, agent_id = self._create_agent(
+                ir_json, skill_work_dir, global_variables, has_file_links
+            )
             agent.set_llm(llm)
         except Exception as e:
             workflow_logger.error(f"Failed to create agent: {e}")
@@ -759,11 +803,20 @@ class ReActAgentRunner:
             session_id = req.conversation_id or "default_session"
             session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
             await session.pre_run(inputs=inputs)
+            if req.resume_input is None:
+                await self._seed_conversation_history(
+                    agent,
+                    session,
+                    conversation_history,
+                    req.params.enable_history,
+                )
             # 提取 openjiuwen tracer 并注入到 inputs 中
             inputs.setdefault("_jiuwen_runtime_kwargs", {})["session"] = session
 
             # 构建 LLM inputs（用于事件记录）—— 包含系统提示词以便调试查看
-            prompt_messages = self._parse_prompt_template(ir_json, conversation_history, skill_work_dir, global_variables, has_file_links)
+            prompt_messages = self._parse_prompt_template(
+                ir_json, skill_work_dir, global_variables, has_file_links
+            )
             llm_inputs = list(prompt_messages) + [{"role": "user", "content": query}]
 
             # 构建 LLM metaData（模型参数）
