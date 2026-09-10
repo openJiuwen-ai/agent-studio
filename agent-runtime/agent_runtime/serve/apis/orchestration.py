@@ -388,7 +388,7 @@ async def _check_before_cancel(
     """
     registration = await registry.get_registration(conversation_id)
     if not registration:
-        return None  # 无在飞记录：幂等放行（US9）
+        return None  # 无在飞记录：幂等放行（US9）；是否置位由调用方按挂起态决定
     if registration.get("project_id") != project_id or (
         (agent_id or workflow_id) and registration.get("agent_id") != (agent_id or workflow_id)
     ):
@@ -401,6 +401,26 @@ async def _check_before_cancel(
         )
         return _build_error_response(403, code_key, language)
     return None
+
+
+async def _has_suspended_checkpoint(conversation_id: str) -> bool:
+    """会话是否存在挂起 checkpoint（fast/底层 checkpointer 均实现 session_exists）。
+
+    checkpointer 探测失败时保守返回 True：挂起态取消是 US3 主路径，探测不可用期间
+    维持"置位"既有行为，宁可多置位（TTL 过期兜底）也不静默丢失取消信号。
+    """
+    try:
+        from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactory
+
+        checkpointer = CheckpointerFactory.get_checkpointer()
+        return bool(await checkpointer.session_exists(conversation_id))
+    except Exception as err:  # noqa: BLE001 探测失败按挂起处理（保守置位）
+        workflow_logger.warning(
+            "Suspend-check probe failed, fall back to mark: conv=%s, %s",
+            conversation_id,
+            err,
+        )
+        return True
 
 
 @execution_app.post("/v1/{project_id}/conversations/{conversation_id}/cancel")
@@ -430,6 +450,26 @@ async def cancel_execution(
 
     registration = await registry.get_registration(conversation_id)
     running = bool(registration)  # 是否检测到在飞执行（仅参考信息）
+    if not running and not await _has_suspended_checkpoint(conversation_id):
+        # 无在飞且无挂起（从未执行/已结束会话）：幂等放行但绝不写取消标记。
+        # 否则任意 conversation_id 可跨项目置位 cancel:true，污染该会话后续的
+        # 挂起恢复（resume 误判为已取消、合法 checkpoint 被清）；标记仅对
+        # 有意义的取消（在飞终止/挂起终止）置位（检视意见①）
+        workflow_logger.info(
+            "Cancel accepted as no-op: no in-flight registration and no suspended "
+            "checkpoint, conv=%s",
+            conversation_id,
+        )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "agent_id": registration.get("agent_id") or agentId or workflowId,
+                "conversation_id": conversation_id,
+                "cancelled": True,
+                "running": False,
+                "message": "cancel signal accepted",
+            },
+        )
     await registry.mark_cancelled(conversation_id)
     return JSONResponse(
         status_code=200,

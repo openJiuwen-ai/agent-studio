@@ -23,6 +23,7 @@ EXEC_KEY_PREFIX = "exec:"  # hash: instance_id/project_id/agent_id/user_id
 CANCEL_KEY_PREFIX = "cancel:"  # string 标记: "true"/"false"
 CANCEL_CHANNEL = "runtime:cancel"  # pub/sub 频道：广播会话取消
 EXEC_TTL_SECONDS = 3600  # 注册记录/标记 TTL 兜底（进程崩溃后键自动过期）
+SUBSCRIBER_RETRY_SECONDS = 5  # 订阅断开后重连退避间隔（单测可 patch 为 0）
 _TRUE_BYTES = b"true"
 _TRUE_STR = "true"
 
@@ -120,7 +121,19 @@ class ExecutionRegistry:
                 return
             self._records.pop(conversation_id, None)
         client = self._redis()
-        await client.delete(f"{EXEC_KEY_PREFIX}{conversation_id}")
+        # 跨实例晚删保护：注册键仍归本实例时才删。多实例同会话重叠执行时，旧实例
+        # 晚到的 finally 若无条件 delete，会删掉新实例刚写入的注册键（归属校验/
+        # 取消失效，检视意见④）；instance 不匹配则保留新实例的注册记录
+        exec_key = f"{EXEC_KEY_PREFIX}{conversation_id}"
+        registration = await self.get_registration(conversation_id)
+        if registration.get("instance_id", self._instance_id) != self._instance_id:
+            workflow_logger.info(
+                "Skip unregister: exec key owned by instance=%s (stale finally), conv=%s",
+                registration.get("instance_id"),
+                conversation_id,
+            )
+            return
+        await client.delete(exec_key)
         workflow_logger.info("Execution unregistered: conv=%s", conversation_id)
 
     async def get_registration(self, conversation_id: str) -> dict:
@@ -171,42 +184,54 @@ class ExecutionRegistry:
         return False
 
     async def subscribe_runtime_cancel(self) -> None:
-        """订阅 runtime:cancel 频道（server lifespan 后台 task）。
+        """订阅 runtime:cancel 频道（server lifespan 后台 task，断开后自动重连）。
 
         收到会话取消广播 → 本地注册表命中则 task.cancel()；未命中（本实例非持有方
-        或执行已挂起/结束）忽略。关闭时取消订阅并释放连接。
+        或执行已挂起/结束）忽略。连接级异常（Redis 断连等）不终止订阅：退避后
+        重建 pubsub 续订，仅 CancelledError（shutdown task.cancel）退出循环——
+        否则订阅单点静默失效，跨实例取消广播将永远无人消费。
         """
-        client = self._redis()
-        pubsub = client.pubsub()
-        try:
-            await pubsub.subscribe(CANCEL_CHANNEL)
-            workflow_logger.info(
-                "Subscribed runtime cancel channel: %s (instance=%s)",
-                CANCEL_CHANNEL,
-                self._instance_id,
-            )
-            async for message in pubsub.listen():
-                if not isinstance(message, dict) or message.get("type") != "message":
-                    continue
-                data = message.get("data")
-                conversation_id = data.decode() if isinstance(data, bytes) else data
-                if not conversation_id:
-                    continue
-                local_cancelled = await self.cancel_local(conversation_id)
-                workflow_logger.info(
-                    "Cancel broadcast received: conv=%s local_cancelled=%s",
-                    conversation_id,
-                    local_cancelled,
-                )
-        except asyncio.CancelledError:
-            workflow_logger.info("Runtime cancel subscriber stopping (instance=%s)", self._instance_id)
-            raise
-        finally:
+        while True:
+            pubsub = None
             try:
-                await pubsub.unsubscribe(CANCEL_CHANNEL)
-                await pubsub.aclose()
-            except Exception:  # noqa: BLE001 关闭路径容错
-                pass
+                pubsub = self._redis().pubsub()
+                await pubsub.subscribe(CANCEL_CHANNEL)
+                workflow_logger.info(
+                    "Subscribed runtime cancel channel: %s (instance=%s)",
+                    CANCEL_CHANNEL,
+                    self._instance_id,
+                )
+                async for message in pubsub.listen():
+                    if not isinstance(message, dict) or message.get("type") != "message":
+                        continue
+                    data = message.get("data")
+                    conversation_id = data.decode() if isinstance(data, bytes) else data
+                    if not conversation_id:
+                        continue
+                    local_cancelled = await self.cancel_local(conversation_id)
+                    workflow_logger.info(
+                        "Cancel broadcast received: conv=%s local_cancelled=%s",
+                        conversation_id,
+                        local_cancelled,
+                    )
+            except asyncio.CancelledError:
+                workflow_logger.info("Runtime cancel subscriber stopping (instance=%s)", self._instance_id)
+                raise
+            except Exception as err:  # noqa: BLE001 订阅须自愈：任何连接级异常退避重连
+                workflow_logger.warning(
+                    "Runtime cancel subscriber failed (instance=%s), resubscribe in %ss: %s",
+                    self._instance_id,
+                    SUBSCRIBER_RETRY_SECONDS,
+                    err,
+                )
+            finally:
+                if pubsub is not None:
+                    try:
+                        await pubsub.unsubscribe(CANCEL_CHANNEL)
+                        await pubsub.aclose()
+                    except Exception:  # noqa: BLE001 关闭路径容错
+                        pass
+            await asyncio.sleep(SUBSCRIBER_RETRY_SECONDS)
 
 
 _registry: Optional[ExecutionRegistry] = None

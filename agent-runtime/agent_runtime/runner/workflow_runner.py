@@ -304,6 +304,17 @@ class WorkflowRunner:
                     await clear_checkpoint(
                         session_id, ir_json.get("workflowId", ""), session
                     )
+                else:
+                    # 非 fast checkpointer（如 FAST_CHECKPOINTER_ENABLED=false 时的底层
+                    # 实现）无该清理方法：此处显式降级——入口重跑将在
+                    # pre_workflow_execute 撞 CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR
+                    # 显性报错，而非无声吞掉（检视意见③）
+                    workflow_logger.warning(
+                        "Checkpointer lacks _clear_checkpoint_and_sentinel (non-fast "
+                        "checkpointer?): restart-from-entry will hit "
+                        "CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR, conv=%s",
+                        session_id,
+                    )
             except Exception as clear_err:
                 workflow_logger.warning(
                     "Failed to clear interrupted checkpoint after cancel: "
@@ -314,6 +325,20 @@ class WorkflowRunner:
             workflow_logger.info(
                 "Session cancelled before resume: conv=%s, restart from entry", session_id
             )
+        elif not is_interrupted:
+            # 全新执行（非恢复）开始即清残留取消标记：上次取消遗留的 true 若不清，
+            # 本执行一旦进入中断节点挂起，下次 resume 会被误判为已取消、误清本执行
+            # 的合法 checkpoint（检视意见②）。DEL 不存在键为 no-op；US3 的恢复分支
+            # （is_interrupted=true）不受影响。防御性清理：失败不阻断执行主流程
+            # （残留标记经 TTL 过期兜底）
+            try:
+                await self._clear_session_cancelled(session_id)
+            except Exception as stale_clear_err:  # noqa: BLE001
+                workflow_logger.warning(
+                    "Failed to clear stale cancel flag on new execution: conv=%s, %s",
+                    session_id,
+                    stale_clear_err,
+                )
         performance_logger.info(
             f"checkpoint_check|{round((time.perf_counter() - t_checkpoint) * 1000)}"
         )

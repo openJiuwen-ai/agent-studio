@@ -392,6 +392,7 @@ class TestServerLifespanCancelSubscriber:
         mock_settings = MagicMock()
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.docs_enabled = False  # 阻断 openapi 归档（mock app 无法 dump，60022377 引入该调用）
 
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
@@ -422,7 +423,10 @@ class TestServerLifespanCancelSubscriber:
 
             async def run_lifespan():
                 async with lifespan(mock_app):
-                    pass
+                    # mock 环境下 startup 的 await 全部立即完成、事件循环无调度点，
+                    # 订阅协程（create_task 产物）需要一次真实挂起才会启动（真实环境
+                    # startup 有 Redis/S3 等耗时 await，不存在此问题）
+                    await asyncio.sleep(0)
 
             asyncio.run(run_lifespan())
 
@@ -438,13 +442,19 @@ class TestServerLifespanCancelSubscriber:
     def test_subscribe_task_cancelled_on_shutdown_not_fatal():
         """shutdown 时取消订阅任务；订阅协程异常不阻断停机（fire-and-forget 语义）。"""
         mock_registry = MagicMock()
+        cancelled = {"flag": False}
 
         async def _hanging_subscribe():
             import asyncio
-            await asyncio.Event().wait()  # 永不完成，只能被 cancel
+            try:
+                await asyncio.Event().wait()  # 永不完成，只能被 cancel
+            except asyncio.CancelledError:
+                cancelled["flag"] = True  # 证明 lifespan shutdown 确实 cancel 了订阅 task
+                raise
 
         mock_registry.subscribe_runtime_cancel = _hanging_subscribe
         TestServerLifespanCancelSubscriber._run_lifespan_with_registry(mock_registry)
+        assert cancelled["flag"] is True, "lifespan shutdown 应 cancel 订阅任务"
         # 走完 lifespan 无异常即通过（cancel + await CancelledError 被 finally 吞掉）
 
 

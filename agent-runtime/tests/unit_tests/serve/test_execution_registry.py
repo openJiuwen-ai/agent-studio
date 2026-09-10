@@ -185,7 +185,7 @@ class TestUnregister:
 
     @pytest.mark.asyncio
     async def test_unregister_keeps_new_execution_for_stale_task(self):
-        """旧流 finally 晚到时不得误删新执行的注册（同会话二次执行竞态保护）。"""
+        """旧流 finally 晚到时不得误删新执行的本地注册（同会话二次执行竞态保护）。"""
         client = _make_redis()
         registry = ExecutionRegistry()
         old_task = asyncio.create_task(asyncio.sleep(0))
@@ -197,6 +197,20 @@ class TestUnregister:
             await registry.unregister("conv-1", task=old_task)
 
         assert registry._records["conv-1"].task is new_task  # noqa: SLF001
+        # stale task 在本地所有权校验即被拦截（早于 Redis 侧），delete 不应被调
+        client.delete.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unregister_keeps_redis_key_owned_by_other_instance(self):
+        """跨实例晚删保护（检视④）：注册键已归其他实例时，本实例晚到的 finally
+        不得删除它——否则新实例刚写入的注册（归属校验/取消数据源）被误删。"""
+        client = _make_redis()
+        client.hgetall = AsyncMock(return_value={b"instance_id": b"i-other", b"project_id": b"p"})
+        registry = ExecutionRegistry()
+
+        with _patch_redis(client):
+            await registry.unregister("conv-1")
+
         client.delete.assert_not_awaited()
 
 
@@ -236,6 +250,8 @@ class TestLocalCancel:
 class TestSubscriber:
     @staticmethod
     def _make_pubsub(messages):
+        """pubsub mock：首轮 listen 吐出 messages；流断开后的重连轮抛 CancelledError
+        （模拟 shutdown task.cancel），使订阅协程以取消语义退出、单测可 await 到返回。"""
         pubsub = MagicMock()
         pubsub.subscribe = AsyncMock()
         pubsub.unsubscribe = AsyncMock()
@@ -245,7 +261,20 @@ class TestSubscriber:
             for message in messages:
                 yield message
 
-        pubsub.listen = lambda: _listen()
+        state = {"first": True}
+
+        def _listen_call():
+            if not state["first"]:
+
+                async def _shutdown():
+                    raise asyncio.CancelledError
+                    yield  # pragma: no cover 使其成为 async generator
+
+                return _shutdown()
+            state["first"] = False
+            return _listen()
+
+        pubsub.listen = _listen_call
         return pubsub
 
     @pytest.mark.asyncio
@@ -261,15 +290,16 @@ class TestSubscriber:
         registry = ExecutionRegistry()
         task = asyncio.create_task(asyncio.sleep(10))
 
-        with _patch_redis(client):
+        with _patch_redis(client), \
+             patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
             await registry.register("conv-1", task)
-            await registry.subscribe_runtime_cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await registry.subscribe_runtime_cancel()
 
-        await asyncio.sleep(0)
-        assert task.canceling if hasattr(task, "canceling") else True
         assert task.cancelled() or task.done()
-        pubsub.unsubscribe.assert_awaited_once_with(CANCEL_CHANNEL)
-        pubsub.aclose.assert_awaited_once()
+        # 重连语义下每轮 finally 均清理连接，断言至少清理一次而非恰好一次
+        assert pubsub.unsubscribe.await_count >= 1
+        assert pubsub.aclose.await_count >= 1
 
     @pytest.mark.asyncio
     async def test_subscriber_ignores_unknown_conversation(self):
@@ -280,10 +310,70 @@ class TestSubscriber:
         client.pubsub = MagicMock(return_value=pubsub)
         registry = ExecutionRegistry()
 
-        with _patch_redis(client):
-            await registry.subscribe_runtime_cancel()  # 不抛错即通过
+        with _patch_redis(client), \
+             patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
+            with pytest.raises(asyncio.CancelledError):
+                await registry.subscribe_runtime_cancel()
 
-        pubsub.unsubscribe.assert_awaited_once_with(CANCEL_CHANNEL)
+        assert pubsub.unsubscribe.await_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_subscriber_does_not_cancel_other_conversation(self):
+        """路由隔离：广播仅命中目标会话，注册中的其他会话 task 不得被误取消。"""
+        client = _make_redis()
+        pubsub = self._make_pubsub(
+            [{"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-2"}]
+        )
+        client.pubsub = MagicMock(return_value=pubsub)
+        registry = ExecutionRegistry()
+        task = asyncio.create_task(asyncio.sleep(10))
+
+        with _patch_redis(client), \
+             patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
+            await registry.register("conv-1", task)  # 广播目标是 conv-2
+            with pytest.raises(asyncio.CancelledError):
+                await registry.subscribe_runtime_cancel()
+
+        assert not task.cancelled()  # conv-1 的在飞 task 不受 conv-2 广播影响
+        task.cancel()  # 清理
+
+    @pytest.mark.asyncio
+    async def test_subscriber_resubscribes_after_connection_error(self):
+        """断线自愈：listen 抛连接异常不终止订阅，退避后重连并处理后续广播。"""
+        client = _make_redis()
+        pubsub = MagicMock()
+        pubsub.subscribe = AsyncMock()
+        pubsub.unsubscribe = AsyncMock()
+        pubsub.aclose = AsyncMock()
+
+        async def _broken():
+            raise ConnectionError("redis gone")
+            yield  # pragma: no cover 使其成为 async generator
+
+        async def _ok():
+            yield {"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-1"}
+            raise asyncio.CancelledError  # 处理完目标消息后模拟 shutdown
+
+        calls = {"n": 0}
+
+        def _listen_call():
+            calls["n"] += 1
+            return _broken() if calls["n"] == 1 else _ok()
+
+        pubsub.listen = _listen_call
+        client.pubsub = MagicMock(return_value=pubsub)
+        registry = ExecutionRegistry()
+        task = asyncio.create_task(asyncio.sleep(10))
+
+        with _patch_redis(client), \
+             patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
+            await registry.register("conv-1", task)
+            with pytest.raises(asyncio.CancelledError):
+                await registry.subscribe_runtime_cancel()
+
+        assert calls["n"] == 2  # 第一轮断线，第二轮重连成功
+        await asyncio.sleep(0)  # 让 task.cancel() 信号得到调度
+        assert task.cancelled() or task.done()  # 重连后的广播仍完成了本地取消
 
 
 class TestSingleton:

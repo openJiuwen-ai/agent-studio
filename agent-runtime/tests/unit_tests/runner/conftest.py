@@ -4,6 +4,7 @@
 
 import os
 import sys
+import types
 from unittest.mock import MagicMock
 
 # storage / model_service 真实包可用（packages/ 经 editable 安装）时用真实包：

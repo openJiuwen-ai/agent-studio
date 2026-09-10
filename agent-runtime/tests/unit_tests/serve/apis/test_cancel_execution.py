@@ -159,11 +159,32 @@ class TestCancelEndpoint200:
         registry.mark_cancelled.assert_awaited_once_with("conv-1")
 
     @pytest.mark.asyncio
-    async def test_no_inflight_is_idempotent_success(self):
-        """无在飞（从未执行/已结束/已挂起后注销）→ 200 cancelled=true running=false（US9 幂等）。"""
+    async def test_no_inflight_suspended_marks_and_succeeds(self):
+        """无在飞但存在挂起 checkpoint（挂起态取消）→ 200 且标记置位（US3 恢复路径依赖）。"""
         registry = _make_registry(None)
 
-        with _patch_registry(registry):
+        with _patch_registry(registry), \
+             patch("agent_runtime.serve.apis.orchestration._has_suspended_checkpoint",
+                   AsyncMock(return_value=True)):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-none", agentId="agent-9"
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["cancelled"] is True
+        assert body["running"] is False
+        registry.mark_cancelled.assert_awaited_once_with("conv-none")
+
+    @pytest.mark.asyncio
+    async def test_no_inflight_no_suspension_is_noop(self):
+        """无在飞且无挂起（从未执行/已结束）→ 200 幂等放行但**不置位标记**
+        （检视①：否则任意 conv id 可跨项目污染 cancel:true，误伤该会话后续挂起恢复）。"""
+        registry = _make_registry(None)
+
+        with _patch_registry(registry), \
+             patch("agent_runtime.serve.apis.orchestration._has_suspended_checkpoint",
+                   AsyncMock(return_value=False)):
             resp = await cancel_execution(
                 _make_request(), project_id="proj-1", conversation_id="conv-none", agentId="agent-9"
             )
@@ -173,7 +194,7 @@ class TestCancelEndpoint200:
         assert body["cancelled"] is True
         assert body["running"] is False
         assert body["agent_id"] == "agent-9"  # 无注册记录时回显调用方传入的入口 ID
-        registry.mark_cancelled.assert_awaited_once()  # 标记仍置位（挂起场景恢复路径依赖）
+        registry.mark_cancelled.assert_not_awaited()  # 关键断言：无意义取消不留痕
 
     @pytest.mark.asyncio
     async def test_project_match_with_entry_match_passes(self):
