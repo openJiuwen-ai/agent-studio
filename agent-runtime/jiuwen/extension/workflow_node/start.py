@@ -148,11 +148,12 @@ class Start(WorkflowComponent):
         workflow_id = self._get_workflow_id(inputs, session)
         conversation_id = self._get_conversation_id(inputs, session)
 
-        # 1. 验证必需变量
-        self._validate_inputs(inputs)
+        # 1. 合并本轮 _request 中已声明的入参（先于默认值，避免默认值遮蔽真实输入）并校验必填字段
+        effective_inputs = self._merge_request_inputs(inputs, session)
+        self._validate_inputs(effective_inputs)
 
         # 2. 填充默认值
-        inputs_with_defaults = self._fill_default_values(inputs)
+        inputs_with_defaults = self._fill_default_values(effective_inputs)
 
         # 3. 获取 preDefinedFields 中定义的会话级变量
         assignment_inputs = self._get_assignment_inputs()
@@ -558,6 +559,37 @@ class Start(WorkflowComponent):
                 continue
             result[key] = value
         return result
+
+    def _merge_request_inputs(self, inputs: dict, session: Session) -> dict:
+        """将本轮 _request 中 Start 已声明的入参合并到直接输入。
+
+        在默认值填充之前执行，使本轮请求真实值优先于默认值：
+        直接输入有效值 > _request 同名非 None 值 > Start 配置默认值。
+
+        只允许 Start 声明的用户字段从 _request 进入，避免未声明字段泄漏；
+        顶层已有非 None 值时不覆盖；_request 值为 None 时不覆盖；
+        用 is None 判据而非真值判断，保留 False/0/空集合等合法假值。
+        """
+        merged_inputs = deepcopy(inputs or {})
+        request_inputs = get_workflow_param(session, REQUEST_VARIABLES) or {}
+
+        declared_fields = self._config.get(USER_FIELDS, {}).get("inputs", [])
+        declared_ids = {
+            field.get("id")
+            for field in declared_fields
+            if isinstance(field, dict) and field.get("id")
+        }
+
+        for field_id in declared_ids:
+            direct_value = merged_inputs.get(field_id)
+            request_has_value = (
+                field_id in request_inputs
+                and request_inputs[field_id] is not None
+            )
+            if (field_id not in merged_inputs or direct_value is None) and request_has_value:
+                merged_inputs[field_id] = request_inputs[field_id]
+
+        return merged_inputs
 
     @staticmethod
     def _assemble_output(inputs: dict, session: Session) -> dict:
