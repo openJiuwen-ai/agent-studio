@@ -359,13 +359,16 @@ class Start(WorkflowComponent):
                 if nested:
                     assembled[sub["id"]] = nested
             else:
-                # 标量/array 子字段:空默认(None/''/[])跳过;
-                # 0/False 是合法默认值,必须显式比较,不能用 falsy 判断
-                converted = Start._transform_type(
-                    sub_type, sub_default, sub["id"]
-                )
-                if converted is not None and converted != [] and converted != "":
-                    assembled[sub["id"]] = converted
+                # 标量/array 子字段:空默认跳过。None/'' 必须转换前拦截——
+                # _transform_type 对 string 不做空值短路,str(None) 会产出
+                # 字面量 'None';'[]'/'{}' 字面量由转换后判空兜住。
+                # 0/False 是合法默认值,显式比较,不能用 falsy 判断
+                if sub_default not in (None, ""):
+                    converted = Start._transform_type(
+                        sub_type, sub_default, sub["id"]
+                    )
+                    if converted is not None and converted != [] and converted != "":
+                        assembled[sub["id"]] = converted
         return assembled
 
     @staticmethod
