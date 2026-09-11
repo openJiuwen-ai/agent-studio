@@ -238,13 +238,23 @@ async def ir_execute(req_json: dict, request: Request):
     runner = _get_runner_by_type(mode)
 
     if req.response_mode == ResponseMode.STREAMING:
+        entry_id = getattr(request.state, "instance_id", "")
+        # entry_id=执行入口，由 app_run 三个执行端点写入 request.state.instance_id
+        # （app_run.py:361-366 workflow 执行=workflow_id / :483-488 agent 执行=agent_id /
+        # :583-593 另一 workflow 端点=workflow_id），作为注册记录 agent_id 供终止接口
+        # 归属校验与回显。绕过 app_run 直调 ir_execute 时为空串：归属校验静默退化，
+        # 记 warning 保证可观测（检视意见：入口校验依赖 instance_id 注入）。
+        if not entry_id:
+            workflow_logger.warning(
+                "ir_execute without entry_id: request.state.instance_id not set "
+                "(bypassed app_run endpoints?), cancel entry-level check will "
+                "degrade, conv=%s",
+                req.conversation_id,
+            )
         return StreamingResponse(
-            # entry_id=执行入口（app_run 侧写入 request.state.instance_id：执行智能体时=agent_id、
-            # 执行工作流时=workflow_id），作为注册记录 agent_id 供终止接口归属校验与回显；
-            # 直调 ir_execute 未设置时兜底空串（归属校验自然跳过）
             content=stream_response(
                 req, execution_id, runner, moderation_engine,
-                entry_id=getattr(request.state, "instance_id", ""),
+                entry_id=entry_id,
             ),
             media_type="text/event-stream",
         )
