@@ -46,8 +46,15 @@ def _patch_request(monkeypatch, request_dict):
     monkeypatch.setattr(start_module, "get_workflow_param", fake_get_workflow_param)
 
 
-def _session():
-    return MagicMock()
+def _session(nesting_depth=0):
+    """构造 mock session,默认模拟根工作流(depth==0)。
+
+    _is_root_workflow 读 session._inner.workflow_nesting_depth()。
+    默认 0 = 根工作流(前置 _request 合并生效);>0 = 子工作流(跳过合并)。
+    """
+    session = MagicMock()
+    session._inner.workflow_nesting_depth.return_value = nesting_depth
+    return session
 
 
 class TestMergeRequestInputsPrecedence:
@@ -145,3 +152,66 @@ class TestMergeRequestInputsPrecedence:
         assert "input" not in merged
         assert "other" not in merged
         assert merged["query"] == "hi"
+
+
+class TestMergeRequestInputsScope:
+    """_merge_request_inputs — 仅根工作流(depth==0)合并,子工作流跳过。"""
+
+    @staticmethod
+    def test_child_workflow_skips_merge(monkeypatch):
+        """§6.2-2:depth=1,直接 None + _request 同名值 → 不合并,保留 None。"""
+        _patch_request(monkeypatch, {"input": "parent-value"})
+        start = _make_start(["input"], defaults={"input": "child-default"})
+        merged = start._merge_request_inputs({"input": None}, _session(nesting_depth=1))
+        assert merged["input"] is None
+
+    @staticmethod
+    def test_child_workflow_mapped_value_preserved(monkeypatch):
+        """§6.2-3:depth=1,已映射非 None 值 → 原值不变(不走 _request)。"""
+        _patch_request(monkeypatch, {"input": "parent-value"})
+        start = _make_start(["input"], defaults={"input": "child-default"})
+        merged = start._merge_request_inputs({"input": "mapped"}, _session(nesting_depth=1))
+        assert merged["input"] == "mapped"
+
+    @staticmethod
+    def test_root_workflow_depth_zero_merges(monkeypatch):
+        """§6.2-1:depth=0,直接 None + _request 有值 → 合并 _request 值。"""
+        _patch_request(monkeypatch, {"input": "studio"})
+        start = _make_start(["input"], defaults={"input": "root-default"})
+        merged = start._merge_request_inputs({"input": None}, _session(nesting_depth=0))
+        assert merged["input"] == "studio"
+
+
+class TestIsRootWorkflow:
+    """_is_root_workflow — 保守判定,无法确定时返回 False(不合并)。"""
+
+    @staticmethod
+    def test_depth_zero_is_root():
+        assert Start._is_root_workflow(_session(nesting_depth=0)) is True
+
+    @staticmethod
+    def test_depth_one_not_root():
+        assert Start._is_root_workflow(_session(nesting_depth=1)) is False
+
+    @staticmethod
+    def test_no_inner_attr_not_root():
+        session = MagicMock()
+        del session._inner  # 无 _inner 属性
+        assert Start._is_root_workflow(session) is False
+
+    @staticmethod
+    def test_no_depth_getter_not_root():
+        """inner 存在但无 workflow_nesting_depth 方法 → False。"""
+        session = MagicMock()
+        inner = MagicMock()
+        del inner.workflow_nesting_depth
+        session._inner = inner
+        assert Start._is_root_workflow(session) is False
+
+    @staticmethod
+    def test_depth_getter_raises_not_root():
+        """workflow_nesting_depth() 抛 catch 范围内异常 → 保守 False。"""
+        session = MagicMock()
+        session._inner.workflow_nesting_depth.side_effect = ValueError("bad depth")
+        assert Start._is_root_workflow(session) is False
+
