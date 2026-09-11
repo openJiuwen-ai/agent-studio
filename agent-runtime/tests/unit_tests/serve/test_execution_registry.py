@@ -206,7 +206,8 @@ class TestUnregister:
     @pytest.mark.asyncio
     async def test_unregister_keeps_redis_key_owned_by_other_instance(self):
         """跨实例晚删保护（检视④）：注册键已归其他实例时，本实例晚到的 finally
-        不得删除它——否则新实例刚写入的注册（归属校验/取消数据源）被误删。"""
+        不得删除它——否则新实例刚写入的注册（归属校验/取消数据源）被误删。
+        """
         client = _make_redis()
         client.hgetall = AsyncMock(return_value={b"instance_id": b"i-other", b"project_id": b"p"})
         registry = ExecutionRegistry()

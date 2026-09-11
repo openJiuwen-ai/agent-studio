@@ -179,7 +179,8 @@ class TestCancelEndpoint200:
     @pytest.mark.asyncio
     async def test_no_inflight_no_suspension_is_noop(self):
         """无在飞且无挂起（从未执行/已结束）→ 200 幂等放行但**不置位标记**
-        （检视①：否则任意 conv id 可跨项目污染 cancel:true，误伤该会话后续挂起恢复）。"""
+        （检视①：否则任意 conv id 可跨项目污染 cancel:true，误伤该会话后续挂起恢复）。
+        """
         registry = _make_registry(None)
 
         with _patch_registry(registry), \
