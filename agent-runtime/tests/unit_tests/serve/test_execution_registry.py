@@ -62,16 +62,18 @@ class TestRegister:
             )
 
         assert registry._records["conv-1"].task is task  # noqa: SLF001 进程内映射写入
-        client.hset.assert_awaited_once_with(
-            "exec:conv-1",
-            mapping={
-                "instance_id": "single",
-                "project_id": "proj-1",
-                "agent_id": "agent-1",
-                "user_id": "user-1",
-            },
-        )
-        client.expire.assert_awaited_once_with("exec:conv-1", EXEC_TTL_SECONDS)
+        # exec 注册与 suspend 挂起归属快照同结构写入（instance_id 每进程唯一）
+        expected_mapping = {
+            "instance_id": registry.instance_id,
+            "project_id": "proj-1",
+            "agent_id": "agent-1",
+            "user_id": "user-1",
+        }
+        assert client.hset.await_count == 2
+        client.hset.assert_any_await("exec:conv-1", mapping=expected_mapping)
+        client.hset.assert_any_await("suspend:conv-1", mapping=expected_mapping)
+        client.expire.assert_any_await("exec:conv-1", EXEC_TTL_SECONDS)
+        client.expire.assert_any_await("suspend:conv-1", EXEC_TTL_SECONDS)
         # nx=True：仅当标记不存在时初始化 false，保留挂起期间 cancel 置位的 true（US3 恢复检测依赖）
         client.set.assert_awaited_once_with(
             "cancel:conv-1", "false", ex=EXEC_TTL_SECONDS, nx=True
@@ -117,6 +119,30 @@ class TestRegistrationQuery:
         registry = ExecutionRegistry()
         with _patch_redis(_make_redis()):
             assert await registry.get_registration("conv-x") == {}
+
+    @pytest.mark.asyncio
+    async def test_get_suspension_decodes_bytes(self):
+        """挂起归属快照读取（cancel 无在飞时的归属校验数据源）。"""
+        client = _make_redis()
+        client.hgetall = AsyncMock(
+            return_value={b"project_id": b"proj-1", b"user_id": b"u-1"}
+        )
+        registry = ExecutionRegistry()
+
+        with _patch_redis(client):
+            susp = await registry.get_suspension("conv-1")
+
+        assert susp == {"project_id": "proj-1", "user_id": "u-1"}
+
+    @pytest.mark.asyncio
+    async def test_clear_suspension_deletes_key(self):
+        client = _make_redis()
+        registry = ExecutionRegistry()
+
+        with _patch_redis(client):
+            await registry.clear_suspension("conv-1")
+
+        client.delete.assert_awaited_once_with("suspend:conv-1")
 
 
 class TestCancelMark:

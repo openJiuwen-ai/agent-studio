@@ -191,6 +191,13 @@ class WorkflowRunner:
         """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
         await get_redis_client().delete(f"cancel:{conversation_id}")
 
+    async def _clear_suspension_snapshot(self, conversation_id: str) -> None:
+        """清除挂起归属快照（新执行开始时调用；键名与 execution_registry.SUSPEND_KEY_PREFIX 一致）。
+
+        旧快照不清理会使会话后续 cancel 按过期归属置位；本次执行的 register 会重写新快照。
+        """
+        await get_redis_client().delete(f"suspend:{conversation_id}")
+
     async def run_streaming(
         self,
         req: ExecutionRequest,
@@ -288,11 +295,14 @@ class WorkflowRunner:
         # 5. 检查会话是否处于中断状态，构建 inputs
         t_checkpoint = time.perf_counter()
         is_interrupted = await self._is_session_interrupted(session_id)
-        # 取消标记检测（终止接口）：中断节点挂起期间被取消 → 清标记、不恢复中断态，
-        # 从入口重新执行（同会话 ID 再次输入从智能体入口重跑，US3）
+        # 取消标记检测（终止接口）：中断节点挂起期间被取消 → 不恢复中断态，
+        # 从入口重新执行（同会话 ID 再次输入从智能体入口重跑，US3）。
+        # 顺序约定：先清 checkpoint、成功后才清取消标记——清理失败时保留标记，
+        # 本次入口重跑撞 CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR 显性报错且下次
+        # 重发仍走入口重跑（取消意图不丢失），而非标记已丢、静默恢复旧中断态
         if is_interrupted and await self._is_session_cancelled(session_id):
-            await self._clear_session_cancelled(session_id)
             is_interrupted = False
+            checkpoint_cleared = False
             # 丢弃中断态 checkpoint：从入口重跑=旧状态作废；否则 pre_workflow_execute
             # 撞 workflow-state-exists 错误（CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR）
             try:
@@ -304,35 +314,48 @@ class WorkflowRunner:
                     await clear_checkpoint(
                         session_id, ir_json.get("workflowId", ""), session
                     )
+                    checkpoint_cleared = True
                 else:
                     # 非 fast checkpointer（如 FAST_CHECKPOINTER_ENABLED=false 时的底层
-                    # 实现）无该清理方法：此处显式降级——入口重跑将在
-                    # pre_workflow_execute 撞 CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR
-                    # 显性报错，而非无声吞掉（检视意见③）
+                    # 实现）无该清理方法：保留取消标记，入口重跑将撞显性报错。可开
+                    # _force_del_workflow_state 开关让 pre_workflow_execute 删旧 state
+                    # 继续执行（openjiuwen persistence 层支持），恢复 US3 语义
                     workflow_logger.warning(
                         "Checkpointer lacks _clear_checkpoint_and_sentinel (non-fast "
                         "checkpointer?): restart-from-entry will hit "
-                        "CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR, conv=%s",
+                        "CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR unless "
+                        "_force_del_workflow_state is enabled, conv=%s",
                         session_id,
                     )
             except Exception as clear_err:
                 workflow_logger.warning(
-                    "Failed to clear interrupted checkpoint after cancel: "
-                    "conv=%s, %s",
+                    "Failed to clear interrupted checkpoint after cancel "
+                    "(cancel flag kept for retry): conv=%s, %s",
                     session_id,
                     clear_err,
                 )
-            workflow_logger.info(
-                "Session cancelled before resume: conv=%s, restart from entry", session_id
-            )
+            if checkpoint_cleared:
+                await self._clear_session_cancelled(session_id)
+                workflow_logger.info(
+                    "Session cancelled before resume: conv=%s, restart from entry",
+                    session_id,
+                )
+            else:
+                workflow_logger.warning(
+                    "Cancel flag kept: checkpoint not cleared, restart-from-entry "
+                    "will fail loudly and retry stays on restart path, conv=%s",
+                    session_id,
+                )
         elif not is_interrupted:
-            # 全新执行（非恢复）开始即清残留取消标记：上次取消遗留的 true 若不清，
-            # 本执行一旦进入中断节点挂起，下次 resume 会被误判为已取消、误清本执行
-            # 的合法 checkpoint（检视意见②）。DEL 不存在键为 no-op；US3 的恢复分支
-            # （is_interrupted=true）不受影响。防御性清理：失败不阻断执行主流程
-            # （残留标记经 TTL 过期兜底）
+            # 全新执行（非恢复）开始即清残留取消标记与挂起归属快照：上次取消遗留的
+            # true 若不清，本执行一旦进入中断节点挂起，下次 resume 会被误判为已取
+            # 消、误清本执行的合法 checkpoint（检视意见②）；旧 suspend 快照若不清，
+            # 会话后续 cancel 会按过期归属误置位。DEL 不存在键为 no-op；US3 的恢复
+            # 分支（is_interrupted=true）不受影响。防御性清理：失败不阻断执行主流程
+            # （残留键经 TTL 过期兜底，suspend 由本次 register 重写）
             try:
                 await self._clear_session_cancelled(session_id)
+                await self._clear_suspension_snapshot(session_id)
             except Exception as stale_clear_err:  # noqa: BLE001
                 workflow_logger.warning(
                     "Failed to clear stale cancel flag on new execution: conv=%s, %s",

@@ -20,6 +20,7 @@ from typing import Optional
 from openjiuwen.core.common.logging import workflow_logger
 
 EXEC_KEY_PREFIX = "exec:"  # hash: instance_id/project_id/agent_id/user_id
+SUSPEND_KEY_PREFIX = "suspend:"  # hash: 挂起归属快照（与 exec 同结构；注销不删）
 CANCEL_KEY_PREFIX = "cancel:"  # string 标记: "true"/"false"
 CANCEL_CHANNEL = "runtime:cancel"  # pub/sub 频道：广播会话取消
 EXEC_TTL_SECONDS = 3600  # 注册记录/标记 TTL 兜底（进程崩溃后键自动过期）
@@ -53,7 +54,9 @@ class ExecutionRegistry:
     def __init__(self):
         self._records: dict = {}
         self._lock = asyncio.Lock()
-        self._instance_id = os.getenv("RUNTIME_INSTANCE_ID", "single")
+        # 默认每进程唯一（pid 后缀）：多实例共享 Redis 且漏配 RUNTIME_INSTANCE_ID 时，
+        # unregister 的跨实例晚删保护仍能天然区分实例（否则所有实例同值退化为例外删）
+        self._instance_id = os.getenv("RUNTIME_INSTANCE_ID", f"single-{os.getpid()}")
 
     @property
     def instance_id(self) -> str:
@@ -90,16 +93,21 @@ class ExecutionRegistry:
             )
         exec_key = f"{EXEC_KEY_PREFIX}{conversation_id}"
         client = self._redis()
-        await client.hset(
-            exec_key,
-            mapping={
-                "instance_id": self._instance_id,
-                "project_id": info.project_id or "",
-                "agent_id": info.agent_id or "",
-                "user_id": info.user_id or "",
-            },
-        )
+        exec_mapping = {
+            "instance_id": self._instance_id,
+            "project_id": info.project_id or "",
+            "agent_id": info.agent_id or "",
+            "user_id": info.user_id or "",
+        }
+        await client.hset(exec_key, mapping=exec_mapping)
         await client.expire(exec_key, EXEC_TTL_SECONDS)
+        # 挂起归属快照：与 exec 同结构但不随注销删除。挂起会话在飞注册已注销、
+        # cancel 无从比对归属时，凭此键校验 project/user 后才允许置位取消标记
+        # （否则知道 conversation_id 即可跨项目终止他人挂起会话）；由新执行开始时
+        # 顺带清理（workflow_runner 非恢复分支）并随本次 register 重写
+        suspend_key = f"{SUSPEND_KEY_PREFIX}{conversation_id}"
+        await client.hset(suspend_key, mapping=exec_mapping)
+        await client.expire(suspend_key, EXEC_TTL_SECONDS)
         # 初始化取消标记仅在键不存在时执行（nx）：挂起期间被取消的执行先置标记 true
         # 后注销，重发时 register 若无条件覆盖会把 true 抹成 false，workflow_runner
         # 恢复分支（_is_session_cancelled）随即失明，US3"从入口重新执行"失效
@@ -159,6 +167,22 @@ class ExecutionRegistry:
             )
             for k, v in raw.items()
         }
+
+    async def get_suspension(self, conversation_id: str) -> dict:
+        """读取挂起归属快照（cancel 无在飞注册时的归属校验数据源）；无返回 {}。"""
+        raw = await self._redis().hgetall(f"{SUSPEND_KEY_PREFIX}{conversation_id}")
+        if not raw:
+            return {}
+        return {
+            (k.decode() if isinstance(k, bytes) else k): (
+                v.decode() if isinstance(v, bytes) else v
+            )
+            for k, v in raw.items()
+        }
+
+    async def clear_suspension(self, conversation_id: str) -> None:
+        """清除挂起归属快照（新执行开始时由恢复路径顺带清理，随后 register 重写）。"""
+        await self._redis().delete(f"{SUSPEND_KEY_PREFIX}{conversation_id}")
 
     async def mark_cancelled(self, conversation_id: str) -> None:
         """置协作式取消标记（幂等，TTL 兜底）+ runtime:cancel 频道广播尽力即时取消。"""

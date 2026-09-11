@@ -50,6 +50,7 @@ def _make_request(headers: dict | None = None):
 def _make_registry(registration: dict | None):
     registry = MagicMock()
     registry.get_registration = AsyncMock(return_value=registration or {})
+    registry.get_suspension = AsyncMock(return_value={})
     registry.mark_cancelled = AsyncMock()
     registry.register = AsyncMock()
     registry.unregister = AsyncMock()
@@ -160,12 +161,13 @@ class TestCancelEndpoint200:
 
     @pytest.mark.asyncio
     async def test_no_inflight_suspended_marks_and_succeeds(self):
-        """无在飞但存在挂起 checkpoint（挂起态取消）→ 200 且标记置位（US3 恢复路径依赖）。"""
+        """无在飞但有挂起归属快照且 project 匹配（挂起态取消）→ 200 且标记置位（US3 依赖）。"""
         registry = _make_registry(None)
+        registry.get_suspension = AsyncMock(return_value={
+            "instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"
+        })
 
-        with _patch_registry(registry), \
-             patch("agent_runtime.serve.apis.orchestration._has_suspended_checkpoint",
-                   AsyncMock(return_value=True)):
+        with _patch_registry(registry):
             resp = await cancel_execution(
                 _make_request(), project_id="proj-1", conversation_id="conv-none", agent_id="agent-9"
             )
@@ -177,15 +179,31 @@ class TestCancelEndpoint200:
         registry.mark_cancelled.assert_awaited_once_with("conv-none")
 
     @pytest.mark.asyncio
+    async def test_no_inflight_suspended_project_mismatch_403(self):
+        """挂起态归属校验（检视 High×3）：快照 project 与路径不符 → 403、不置位。"""
+        registry = _make_registry(None)
+        registry.get_suspension = AsyncMock(return_value={
+            "instance_id": "i-1", "project_id": "proj-owner", "agent_id": "agent-1", "user_id": "u-1"
+        })
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request({"x-language": "zh-cn"}),
+                project_id="proj-1", conversation_id="conv-none",
+            )
+
+        assert resp.status_code == 403
+        registry.mark_cancelled.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_no_inflight_no_suspension_is_noop(self):
-        """无在飞且无挂起（从未执行/已结束）→ 200 幂等放行但**不置位标记**
+        """无在飞且无挂起快照（从未执行/已结束）→ 200 幂等放行但**不置位标记**
         （检视①：否则任意 conv id 可跨项目污染 cancel:true，误伤该会话后续挂起恢复）。
         """
         registry = _make_registry(None)
+        registry.get_suspension = AsyncMock(return_value={})
 
-        with _patch_registry(registry), \
-             patch("agent_runtime.serve.apis.orchestration._has_suspended_checkpoint",
-                   AsyncMock(return_value=False)):
+        with _patch_registry(registry):
             resp = await cancel_execution(
                 _make_request(), project_id="proj-1", conversation_id="conv-none", agent_id="agent-9"
             )

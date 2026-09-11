@@ -364,6 +364,9 @@ async def _execute_workflow_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
+    # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
+    request.state.project_id = ctx.project_id
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
@@ -486,6 +489,9 @@ async def _execute_agent_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
+    # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
+    request.state.project_id = ctx.project_id
 
     # body已携带会话历史时跳过Redis加载
     if body.histories:
@@ -591,6 +597,9 @@ async def _execute_node_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
+    # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
+    request.state.project_id = ctx.project_id
 
     # 加载会话历史
     conversation_history, dialogue_count = await _load_conversation_data(

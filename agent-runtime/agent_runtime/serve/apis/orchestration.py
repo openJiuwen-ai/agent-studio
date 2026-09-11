@@ -255,6 +255,7 @@ async def ir_execute(req_json: dict, request: Request):
             content=stream_response(
                 req, execution_id, runner, moderation_engine,
                 entry_id=entry_id,
+                project_id=getattr(request.state, "project_id", ""),
             ),
             media_type="text/event-stream",
         )
@@ -320,6 +321,7 @@ async def stream_response(
     runner,
     moderation_engine=None,
     entry_id: str = "",
+    project_id: str = "",
 ):
     """
     透传 OutputSchema 格式
@@ -348,12 +350,15 @@ async def stream_response(
             _ctx = _request_ctx.get()
         except LookupError:
             _ctx = None
+        # 注册 project 优先取执行端点注入的路径 project_id（ir_execute 从
+        # request.state 传入，与 cancel 的路径校验同口径）；无注入时回退 token 解析值
+        register_project_id = project_id or (_ctx.project_id if _ctx is not None else "")
         await registry.register(
             req.conversation_id,
             entry_task,
             execution_id,
             info=RegistrationInfo(
-                project_id=(_ctx.project_id if _ctx is not None else ""),
+                project_id=register_project_id,
                 agent_id=entry_id,
                 user_id=(_ctx.user_id if _ctx is not None else ""),
             ),
@@ -426,26 +431,6 @@ async def _check_before_cancel(
     return None
 
 
-async def _has_suspended_checkpoint(conversation_id: str) -> bool:
-    """会话是否存在挂起 checkpoint（fast/底层 checkpointer 均实现 session_exists）。
-
-    checkpointer 探测失败时保守返回 True：挂起态取消是 US3 主路径，探测不可用期间
-    维持"置位"既有行为，宁可多置位（TTL 过期兜底）也不静默丢失取消信号。
-    """
-    try:
-        from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactory
-
-        checkpointer = CheckpointerFactory.get_checkpointer()
-        return bool(await checkpointer.session_exists(conversation_id))
-    except Exception as err:  # noqa: BLE001 探测失败按挂起处理（保守置位）
-        workflow_logger.warning(
-            "Suspend-check probe failed, fall back to mark: conv=%s, %s",
-            conversation_id,
-            err,
-        )
-        return True
-
-
 @execution_app.post("/v1/{project_id}/conversations/{conversation_id}/cancel")
 async def cancel_execution(
     request: Request,
@@ -476,26 +461,39 @@ async def cancel_execution(
 
     registration = await registry.get_registration(conversation_id)
     running = bool(registration)  # 是否检测到在飞执行（仅参考信息）
-    if not running and not await _has_suspended_checkpoint(conversation_id):
-        # 无在飞且无挂起（从未执行/已结束会话）：幂等放行但绝不写取消标记。
-        # 否则任意 conversation_id 可跨项目置位 cancel:true，污染该会话后续的
-        # 挂起恢复（resume 误判为已取消、合法 checkpoint 被清）；标记仅对
-        # 有意义的取消（在飞终止/挂起终止）置位（检视意见①）
-        workflow_logger.info(
-            "Cancel accepted as no-op: no in-flight registration and no suspended "
-            "checkpoint, conv=%s",
-            conversation_id,
-        )
-        return JSONResponse(
-            status_code=200,
-            content={
-                "agent_id": registration.get("agent_id") or agent_id or workflow_id,
-                "conversation_id": conversation_id,
-                "cancelled": True,
-                "running": False,
-                "message": "cancel signal accepted",
-            },
-        )
+    if not running:
+        # 无在飞注册（从未执行/已结束/已挂起注销）：凭挂起归属快照 suspend:{conv}
+        # 校验归属后才置位。仅靠"知道 conversation_id"不得跨项目终止他人挂起会话
+        # （suspend 快照在 register 时写入、不随注销删除，覆盖 workflow 与 agent
+        # 两类挂起；新执行开始时顺带清理并随 register 重写）
+        suspension = await registry.get_suspension(conversation_id)
+        if not suspension:
+            # 无快照=从未执行或已彻底结束：幂等放行但绝不写标记（无意义取消不留痕）
+            workflow_logger.info(
+                "Cancel accepted as no-op: no in-flight registration and no "
+                "suspension snapshot, conv=%s",
+                conversation_id,
+            )
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "agent_id": agent_id or workflow_id,
+                    "conversation_id": conversation_id,
+                    "cancelled": True,
+                    "running": False,
+                    "message": "cancel signal accepted",
+                },
+            )
+        if suspension.get("project_id") != project_id:
+            # 挂起态归属校验（路径 project 与快照不符 → 403，与在飞校验同规格）
+            workflow_logger.info(
+                "Cancel forbidden on suspended session: conv=%s caller_project=%s "
+                "suspended_project=%s",
+                conversation_id,
+                project_id,
+                suspension.get("project_id"),
+            )
+            return _build_error_response(403, _CODE_WORKFLOW_PERMISSION, language)
     await registry.mark_cancelled(conversation_id)
     return JSONResponse(
         status_code=200,
