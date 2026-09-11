@@ -270,7 +270,10 @@ class Start(WorkflowComponent):
             time_type (str): 时间类型，必须是 ASSIGNMENT_SESSION 或 ASSIGNMENT_PERMANENT
 
         Returns:
-            dict: 提取后的变量定义字典，格式为 {var_id: default_value}
+            dict: 提取后的变量定义字典，格式为 {var_id: default_value}。
+            空默认值统一为 None 且 key 保留(values_define 的成员资格是
+            Redis 会话变量存取与 SetVariable 持久化的门控依据,
+            key 缺失会导致跨轮丢值)。
         """
         result = {}
         if isinstance(data, list):
@@ -291,25 +294,31 @@ class Start(WorkflowComponent):
                     default_val = data.get("default_value")
                     if data_type == DataType.ARRAY.value:
                         # 数组的 schema 是元素类型定义(标量或 object 皆同),
-                        # default_value 在本层。空默认保持 key 缺失(渲染为空,
-                        # 与历史行为一致;写入 [] 会让模板渲染出 '[]' 字面量)
-                        if default_val not in (None, ""):
-                            result[var_id] = Start._transform_type(
-                                data_type, default_val, var_id
-                            )
+                        # default_value 在本层。空默认(None/''/'[]' 及各空写法)
+                        # 统一归一为 None:渲染为空且不出现 '[]' 字面量,但 key
+                        # 保留在 values_define —— Redis 会话变量存取与
+                        # SetVariable 持久化都以 values_define 成员为门控,
+                        # key 缺失会导致跨轮丢值;引用解析层 None 与
+                        # key 缺失等价(未命中同返 None)
+                        converted = Start._transform_type(
+                            data_type, default_val, var_id
+                        )
+                        result[var_id] = None if converted == [] else converted
                     elif data_type == DataType.OBJECT.value:
-                        # 对象:整体 default_value 优先;为空时从子字段默认值组装,
+                        # 对象:整体 default_value 优先;空默认(None/''/'{}')
+                        # 时从子字段默认值组装,组装仍空则 None(注册语义同上),
                         # 不再把子字段平铺到顶层(旧 else 递归分支的泄漏问题)
-                        if default_val not in (None, ""):
-                            result[var_id] = Start._transform_type(
-                                data_type, default_val, var_id
+                        converted = Start._transform_type(
+                            data_type, default_val, var_id
+                        )
+                        if not converted:
+                            converted = (
+                                Start._assemble_object_default(
+                                    data.get("schema", [])
+                                )
+                                or None
                             )
-                        else:
-                            assembled = Start._assemble_object_default(
-                                data.get("schema", [])
-                            )
-                            if assembled:
-                                result[var_id] = assembled
+                        result[var_id] = converted
                     elif "default_value" in data and "type" in data:
                         # 基本类型(string/integer/number/boolean)。按 type 分支
                         # 而非 schema 存在性,畸形 IR(标量带 schema)也能提取
@@ -327,9 +336,13 @@ class Start(WorkflowComponent):
     def _assemble_object_default(subfields: list) -> dict:
         """从子字段默认值组装 object 记忆变量的默认值。
 
-        空默认的子字段跳过(引用渲染为空);嵌套 object 递归组装,
-        组装结果为空则该子字段整体跳过。
+        嵌套 object 优先取自身 default_value(与顶层语义一致),为空时才
+        从子字段组装;空默认(None/''/[])的子字段跳过(引用渲染为空);
+        组装结果为空则该子字段整体跳过。schema 非法(None/非 list)
+        容错为无子字段,与旧递归实现的容忍度一致。
         """
+        if not isinstance(subfields, list):
+            return {}
         assembled = {}
         for sub in subfields:
             if not isinstance(sub, dict) or not sub.get("id"):
@@ -337,14 +350,25 @@ class Start(WorkflowComponent):
             sub_type = (sub.get("type") or "string").lower()
             sub_default = sub.get("default_value")
             if sub_type == DataType.OBJECT.value:
-                # 嵌套 object:顶层默认为空时仍从其子字段组装(与顶层语义一致)
-                nested = Start._assemble_object_default(sub.get("schema", []))
+                # 嵌套 object:自身默认优先(对齐顶层),为空才从子字段组装
+                nested = Start._transform_type(sub_type, sub_default, sub["id"])
+                if not nested:
+                    nested = Start._assemble_object_default(
+                        sub.get("schema", [])
+                    )
                 if nested:
                     assembled[sub["id"]] = nested
-            elif sub_default not in (None, ""):
-                assembled[sub["id"]] = Start._transform_type(
-                    sub_type, sub_default, sub["id"]
-                )
+            else:
+                # 标量/array 子字段:空默认跳过。None/'' 必须转换前拦截——
+                # _transform_type 对 string 不做空值短路,str(None) 会产出
+                # 字面量 'None';'[]'/'{}' 字面量由转换后判空兜住。
+                # 0/False 是合法默认值,显式比较,不能用 falsy 判断
+                if sub_default not in (None, ""):
+                    converted = Start._transform_type(
+                        sub_type, sub_default, sub["id"]
+                    )
+                    if converted is not None and converted != [] and converted != "":
+                        assembled[sub["id"]] = converted
         return assembled
 
     @staticmethod
