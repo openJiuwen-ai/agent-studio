@@ -257,7 +257,10 @@ class TestStreamRegistration:
 
         with _patch_registry(registry):
             frames = await self._collect(
-                stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry=StreamEntryContext(entry_id="agent-1"))
+                stream_response(
+                    _req(), "exec-1", self._FakeRunner([_sse("message")]),
+                    entry=StreamEntryContext(entry_id="agent-1"),
+                )
             )
 
         assert len(frames) == 2  # message + 兜底 done
@@ -292,7 +295,10 @@ class TestStreamRegistration:
         try:
             with _patch_registry(registry):
                 await self._collect(
-                    stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry=StreamEntryContext(entry_id="wf-1"))
+                    stream_response(
+                        _req(), "exec-1", self._FakeRunner([_sse("message")]),
+                        entry=StreamEntryContext(entry_id="wf-1"),
+                    )
                 )
         finally:
             orchestration._request_ctx.reset(token)
