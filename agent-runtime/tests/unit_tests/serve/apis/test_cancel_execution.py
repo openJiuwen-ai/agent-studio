@@ -97,7 +97,7 @@ class TestCancelEndpoint403:
             ber.return_value = sentinel
             with _patch_registry(registry):
                 resp = await cancel_execution(
-                    _make_request(), project_id="proj-1", conversation_id="conv-1", agentId="agent-wrong"
+                    _make_request(), project_id="proj-1", conversation_id="conv-1", agent_id="agent-wrong"
                 )
 
         assert resp is sentinel
@@ -115,7 +115,7 @@ class TestCancelEndpoint403:
             ber.return_value = sentinel
             with _patch_registry(registry):
                 resp = await cancel_execution(
-                    _make_request(), project_id="proj-1", conversation_id="conv-1", workflowId="wf-wrong"
+                    _make_request(), project_id="proj-1", conversation_id="conv-1", workflow_id="wf-wrong"
                 )
 
         assert resp is sentinel
@@ -167,7 +167,7 @@ class TestCancelEndpoint200:
              patch("agent_runtime.serve.apis.orchestration._has_suspended_checkpoint",
                    AsyncMock(return_value=True)):
             resp = await cancel_execution(
-                _make_request(), project_id="proj-1", conversation_id="conv-none", agentId="agent-9"
+                _make_request(), project_id="proj-1", conversation_id="conv-none", agent_id="agent-9"
             )
 
         assert resp.status_code == 200
@@ -186,7 +186,7 @@ class TestCancelEndpoint200:
              patch("agent_runtime.serve.apis.orchestration._has_suspended_checkpoint",
                    AsyncMock(return_value=False)):
             resp = await cancel_execution(
-                _make_request(), project_id="proj-1", conversation_id="conv-none", agentId="agent-9"
+                _make_request(), project_id="proj-1", conversation_id="conv-none", agent_id="agent-9"
             )
 
         assert resp.status_code == 200
@@ -204,7 +204,7 @@ class TestCancelEndpoint200:
 
         with _patch_registry(registry):
             resp = await cancel_execution(
-                _make_request(), project_id="proj-1", conversation_id="conv-1", agentId="agent-1"
+                _make_request(), project_id="proj-1", conversation_id="conv-1", agent_id="agent-1"
             )
 
         assert resp.status_code == 200
@@ -222,7 +222,8 @@ class TestStreamRegistration:
     class _BrokenRunner:
         async def run_streaming(self, req, execution_id):
             raise RuntimeError("boom")
-            yield  # pragma: no cover - 使其成为生成器
+            yield  # pragma: no cover - 不可达但语法必需：无 yield 则为 coroutine，
+            # stream_response 的 async for 将抛 TypeError 而非期望的 RuntimeError
 
     async def _collect(self, gen):
         out = []
@@ -244,8 +245,9 @@ class TestStreamRegistration:
         (conv_id, task, exec_id), kwargs = registry.register.await_args
         assert conv_id == "conv-1"
         assert exec_id == "exec-1"
-        assert kwargs["agent_id"] == "agent-1"
-        assert kwargs["project_id"] == ""  # 无 _request_ctx 时防御为空串
+        reg_info = kwargs["info"]  # RegistrationInfo（G.FNM.03 参数封装）
+        assert reg_info.agent_id == "agent-1"
+        assert reg_info.project_id == ""  # 无 _request_ctx 时防御为空串
         registry.unregister.assert_awaited_once_with("conv-1", task=task)
 
     @pytest.mark.asyncio
@@ -276,6 +278,7 @@ class TestStreamRegistration:
             orchestration._request_ctx.reset(token)
 
         _, kwargs = registry.register.await_args
-        assert kwargs["project_id"] == "proj-ctx"
-        assert kwargs["user_id"] == "user-ctx"
-        assert kwargs["agent_id"] == "wf-1"
+        reg_info = kwargs["info"]  # RegistrationInfo（G.FNM.03 参数封装）
+        assert reg_info.project_id == "proj-ctx"
+        assert reg_info.user_id == "user-ctx"
+        assert reg_info.agent_id == "wf-1"

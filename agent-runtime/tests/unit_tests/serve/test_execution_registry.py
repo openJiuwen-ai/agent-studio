@@ -13,6 +13,7 @@ from agent_runtime.serve.execution_registry import (
     CANCEL_CHANNEL,
     EXEC_TTL_SECONDS,
     ExecutionRegistry,
+    RegistrationInfo,
     get_execution_registry,
     reset_execution_registry,
 )
@@ -55,7 +56,9 @@ class TestRegister:
         with _patch_redis(client):
             await registry.register(
                 "conv-1", task, execution_id="exec-1",
-                project_id="proj-1", agent_id="agent-1", user_id="user-1",
+                info=RegistrationInfo(
+                    project_id="proj-1", agent_id="agent-1", user_id="user-1"
+                ),
             )
 
         assert registry._records["conv-1"].task is task  # noqa: SLF001 进程内映射写入

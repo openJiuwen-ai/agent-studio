@@ -8,6 +8,7 @@ import asyncio
 import time
 import uuid
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Union
 
 from agent_runtime.common.config import settings, ModelConfigStrategyType
@@ -51,7 +52,7 @@ from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_w
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
 
-from agent_runtime.serve.execution_registry import get_execution_registry
+from agent_runtime.serve.execution_registry import RegistrationInfo, get_execution_registry
 from agent_runtime.serve.apis.run_check import (
     _CODE_AGENT_PERMISSION,
     _CODE_WORKFLOW_PERMISSION,
@@ -341,9 +342,11 @@ async def stream_response(
             req.conversation_id,
             entry_task,
             execution_id,
-            project_id=(_ctx.project_id if _ctx is not None else ""),
-            agent_id=entry_id,
-            user_id=(_ctx.user_id if _ctx is not None else ""),
+            info=RegistrationInfo(
+                project_id=(_ctx.project_id if _ctx is not None else ""),
+                agent_id=entry_id,
+                user_id=(_ctx.user_id if _ctx is not None else ""),
+            ),
         )
         pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
 
@@ -370,12 +373,19 @@ async def stream_response(
         await registry.unregister(req.conversation_id, task=entry_task)
 
 
+@dataclass
+class CancelCheckContext:
+    """cancel 归属校验上下文：路径 project + 可选入口 query（G.FNM.03 参数封装）。"""
+
+    project_id: str
+    agent_id: str = ""
+    workflow_id: str = ""
+
+
 async def _check_before_cancel(
     registry,
     conversation_id: str,
-    project_id: str,
-    agent_id: str,
-    workflow_id: str,
+    ctx: CancelCheckContext,
     language: str,
 ):
     """终止接口运行时归属校验（与执行接口 run_check"项目匹配 403"同规格）。
@@ -389,14 +399,17 @@ async def _check_before_cancel(
     registration = await registry.get_registration(conversation_id)
     if not registration:
         return None  # 无在飞记录：幂等放行（US9）；是否置位由调用方按挂起态决定
-    if registration.get("project_id") != project_id or (
-        (agent_id or workflow_id) and registration.get("agent_id") != (agent_id or workflow_id)
-    ):
-        code_key = _CODE_AGENT_PERMISSION if agent_id else _CODE_WORKFLOW_PERMISSION
+    provided_entry = ctx.agent_id or ctx.workflow_id
+    project_mismatch = registration.get("project_id") != ctx.project_id
+    entry_mismatch = (
+        bool(provided_entry) and registration.get("agent_id") != provided_entry
+    )
+    if project_mismatch or entry_mismatch:
+        code_key = _CODE_AGENT_PERMISSION if ctx.agent_id else _CODE_WORKFLOW_PERMISSION
         workflow_logger.info(
             "Cancel forbidden: conv=%s provided_entry=%s registered_project=%s",
             conversation_id,
-            agent_id or workflow_id,
+            provided_entry,
             registration.get("project_id"),
         )
         return _build_error_response(403, code_key, language)
@@ -428,8 +441,8 @@ async def cancel_execution(
     request: Request,
     project_id: str,
     conversation_id: str,
-    agentId: str = "",
-    workflowId: str = "",
+    agent_id: str = "",
+    workflow_id: str = "",
 ):
     """执行终止端点（工作流/多智能体/单智能体三类合并 1 接口，定位主键 conversation_id）。
 
@@ -443,7 +456,10 @@ async def cancel_execution(
     registry = get_execution_registry()
 
     forbidden_response = await _check_before_cancel(
-        registry, conversation_id, project_id, agentId, workflowId, language
+        registry,
+        conversation_id,
+        CancelCheckContext(project_id=project_id, agent_id=agent_id, workflow_id=workflow_id),
+        language,
     )
     if forbidden_response is not None:
         return forbidden_response
@@ -463,7 +479,7 @@ async def cancel_execution(
         return JSONResponse(
             status_code=200,
             content={
-                "agent_id": registration.get("agent_id") or agentId or workflowId,
+                "agent_id": registration.get("agent_id") or agent_id or workflow_id,
                 "conversation_id": conversation_id,
                 "cancelled": True,
                 "running": False,
@@ -474,7 +490,7 @@ async def cancel_execution(
     return JSONResponse(
         status_code=200,
         content={
-            "agent_id": registration.get("agent_id") or agentId or workflowId,
+            "agent_id": registration.get("agent_id") or agent_id or workflow_id,
             "conversation_id": conversation_id,
             "cancelled": True,
             "running": running,

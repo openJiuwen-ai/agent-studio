@@ -38,6 +38,15 @@ class ExecutionRecord:
     started_at: float
 
 
+@dataclass
+class RegistrationInfo:
+    """执行归属三元组（Redis ``exec:{conv}`` hash 的数据源，register 参数封装）。"""
+
+    project_id: str = ""
+    agent_id: str = ""  # 契约 v0.6：执行智能体时=agent_id、执行工作流时=workflow_id
+    user_id: str = ""
+
+
 class ExecutionRegistry:
     """执行注册表（进程内单例，经 ``get_execution_registry`` 获取）。"""
 
@@ -62,16 +71,16 @@ class ExecutionRegistry:
         conversation_id: str,
         task: asyncio.Task,
         execution_id: str = "",
-        project_id: str = "",
-        agent_id: str = "",
-        user_id: str = "",
+        info: Optional["RegistrationInfo"] = None,
     ) -> None:
         """注册在飞执行：本地 task 映射 + Redis hash 归属四元组 + 初始化取消标记。
 
         agent_id 语义（契约 v0.6）：执行智能体时=agent_id、执行工作流时=workflow_id。
+        归属三元组经 RegistrationInfo 封装（G.FNM.03：6 参收敛为具名参数组）。
         """
         if not conversation_id:
             return
+        info = info or RegistrationInfo()
         async with self._lock:
             self._records[conversation_id] = ExecutionRecord(
                 task=task,
@@ -85,9 +94,9 @@ class ExecutionRegistry:
             exec_key,
             mapping={
                 "instance_id": self._instance_id,
-                "project_id": project_id or "",
-                "agent_id": agent_id or "",
-                "user_id": user_id or "",
+                "project_id": info.project_id or "",
+                "agent_id": info.agent_id or "",
+                "user_id": info.user_id or "",
             },
         )
         await client.expire(exec_key, EXEC_TTL_SECONDS)
@@ -100,7 +109,7 @@ class ExecutionRegistry:
         workflow_logger.info(
             "Execution registered: conv=%s entry=%s instance=%s exec=%s",
             conversation_id,
-            agent_id,
+            info.agent_id,
             self._instance_id,
             execution_id,
         )
