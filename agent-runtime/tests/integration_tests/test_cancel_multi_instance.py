@@ -25,6 +25,7 @@ from agent_runtime.serve.apis.orchestration import cancel_execution
 from agent_runtime.serve.execution_registry import (
     CANCEL_CHANNEL,
     ExecutionRegistry,
+    RegistrationInfo,
     reset_execution_registry,
 )
 
@@ -81,8 +82,8 @@ class TestCrossInstanceCancelBroadcast:
                 registry_a = ExecutionRegistry()
                 running_task = asyncio.create_task(asyncio.sleep(30))
                 await registry_a.register(
-                    "conv-it-1", running_task,
-                    execution_id="exec-a", project_id="proj-1", agent_id="agent-1", user_id="u-1",
+                    "conv-it-1", running_task, execution_id="exec-a",
+                    info=RegistrationInfo(project_id="proj-1", agent_id="agent-1", user_id="u-1"),
                 )
                 sub_task = asyncio.create_task(registry_a.subscribe_runtime_cancel())
                 assert await _wait_channel_subscribed(client), "pub/sub 订阅未就绪"
@@ -123,7 +124,7 @@ class TestResumeAfterCancelDuringSuspend:
                 registry = ExecutionRegistry()
                 task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(
-                    "conv-it-2", task, execution_id="exec-1", project_id="proj-1"
+                    "conv-it-2", task, execution_id="exec-1", info=RegistrationInfo(project_id="proj-1")
                 )
 
                 # 挂起期间外部终止（流已注销，标记无人删 → 留存至恢复）
@@ -157,8 +158,8 @@ class TestCancelEndpointEndToEnd:
                 registry = ExecutionRegistry()
                 running_task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(
-                    "conv-it-3", running_task,
-                    execution_id="exec-1", project_id="proj-1", agent_id="agent-1", user_id="u-1",
+                    "conv-it-3", running_task, execution_id="exec-1",
+                    info=RegistrationInfo(project_id="proj-1", agent_id="agent-1", user_id="u-1"),
                 )
                 sub_task = asyncio.create_task(registry.subscribe_runtime_cancel())
                 assert await _wait_channel_subscribed(client), "pub/sub 订阅未就绪"
@@ -196,8 +197,8 @@ class TestCancelEndpointEndToEnd:
                 registry = ExecutionRegistry()
                 task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(
-                    "conv-it-4", task,
-                    execution_id="exec-1", project_id="proj-other", agent_id="wf-1", user_id="u-1",
+                    "conv-it-4", task, execution_id="exec-1",
+                    info=RegistrationInfo(project_id="proj-other", agent_id="wf-1", user_id="u-1"),
                 )
 
                 resp = await cancel_execution(

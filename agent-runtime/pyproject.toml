@@ -41,6 +41,9 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    # 集成测试 Redis 替身（tests/integration_tests/test_cancel_multi_instance.py；
+    # 未声明时 CI 干净环境 collect 即 ModuleNotFoundError）
+    "fakeredis>=2.26.0",
 ]
 tracer-otel = [
     "opentelemetry-api>=1.20.0",
