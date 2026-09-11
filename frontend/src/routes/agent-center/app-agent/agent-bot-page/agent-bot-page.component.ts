@@ -484,7 +484,7 @@ export class AgentBotPageComponent implements OnInit, OnDestroy {
         if (status === "loading") {
           this.isLoading = true;
         }
-        if (status === "succeeded") {
+        if (status === "succeeded" || status === "failed") {
           this.isLoading = false;
         }
       });

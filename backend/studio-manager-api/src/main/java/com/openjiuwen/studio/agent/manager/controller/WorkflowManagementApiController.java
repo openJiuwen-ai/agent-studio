@@ -4,6 +4,8 @@
 package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CopyWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -15,6 +17,7 @@ import com.openjiuwen.studio.agent.manager.dto.GetWorkflowVersionQo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsV1Qo;
 import com.openjiuwen.studio.agent.common.dto.agent.ListWorkflowsQo;
@@ -24,6 +27,7 @@ import com.openjiuwen.studio.agent.manager.dto.ValidateWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkFlowEnvs;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFrontParamInfo;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowInfo;
@@ -57,6 +61,13 @@ public class WorkflowManagementApiController implements WorkflowManagementApi {
     public ResponseEntity<TriggerConfig> addTrigger(String projectId, String workflowId, String workspaceId,
         TriggerConfig body) {
         return ResponseModel.success(workflowManagementService.addTrigger(projectId, workflowId, workspaceId, body));
+    }
+
+    @Override
+    public ResponseEntity<BatchDeleteVersionsResponseBody> batchDeleteWorkflowVersions(String projectId,
+        String workflowId, String workspaceId, BatchDeleteVersionsRequestBody body) {
+        return ResponseModel.success(
+            workflowManagementService.batchDeleteWorkflowVersions(projectId, workflowId, workspaceId, body));
     }
 
     @Override
@@ -173,6 +184,14 @@ public class WorkflowManagementApiController implements WorkflowManagementApi {
         ListWorkflowLastVersionsQo listWorkflowLastVersionsQo) {
         return ResponseModel.success(
             workflowManagementService.listWorkflowLastVersions(projectId, listWorkflowLastVersionsQo));
+    }
+
+    @Override
+    public ResponseEntity<VersionReferenceListRsp> listWorkflowVersionReferences(String projectId, String workflowId,
+        ListWorkflowVersionReferencesQo listWorkflowVersionReferencesQo) {
+        return ResponseModel.success(
+            workflowManagementService.listWorkflowVersionReferences(projectId, workflowId,
+                listWorkflowVersionReferencesQo));
     }
 
     @Override

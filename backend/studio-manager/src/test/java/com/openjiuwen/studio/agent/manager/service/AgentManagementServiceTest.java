@@ -50,6 +50,9 @@ import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateVersionReq;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteRsp;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionFailedInfo;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ExportMessagesParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportParams;
 import com.openjiuwen.studio.agent.manager.dto.GetAgentVersionQo;
@@ -58,6 +61,7 @@ import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.KnowledgeBaseListItem;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -78,6 +82,8 @@ import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReference;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkspaceMemberInfo;
 import com.openjiuwen.studio.agent.manager.dto.maas.ImageGenerationRequest;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -156,6 +162,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 功能描述
@@ -2817,5 +2825,103 @@ class AgentManagementServiceTest extends BaseTest {
         assertThrows(AgentStudioException.class,
             () -> agentManagementService.modifyAgent(Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
                 Constants.TEST_WORKSPACE_ID, req));
+    }
+
+    @Test
+    @Sql(scripts = {"classpath:sql/agent_setup_db.sql", "classpath:sql/workflow_setup_db.sql",
+        "classpath:sql/version_setup_db.sql", "classpath:sql/version_reference_setup_db.sql"},
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    void test_list_agent_version_references() {
+        // 未指定版本号：返回该智能体全部版本及各自引用数量
+        VersionReferenceListRsp referenceListRsp = agentManagementService.listAgentVersionReferences(
+            Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
+            new ListAgentVersionReferencesQo().setWorkspaceId(Constants.TEST_WORKSPACE_ID));
+        assertNotNull(referenceListRsp);
+        Map<String, VersionReference> referenceMap = referenceListRsp.getVersionReferences().stream()
+            .collect(Collectors.toMap(VersionReference::getVersionId, Function.identity()));
+        assertEquals(3, referenceMap.size());
+        // test_version_id：本空间agent引用+本空间workflow引用+共享引用共3条；跨空间直接引用与无效引用不计入
+        VersionReference firstReference = referenceMap.get("test_version_id");
+        assertEquals(3L, firstReference.getReferenceCount());
+        assertFalse(firstReference.getIsShared());
+        assertFalse(firstReference.getIsLatest());
+        // test_version_id1：本空间agent引用1条，且为最新版本
+        VersionReference secondReference = referenceMap.get("test_version_id1");
+        assertEquals(1L, secondReference.getReferenceCount());
+        assertFalse(secondReference.getIsShared());
+        assertTrue(secondReference.getIsLatest());
+        // test_shared_version_id：无引用且已共享到资产广场
+        VersionReference sharedReference = referenceMap.get("test_shared_version_id");
+        assertEquals(0L, sharedReference.getReferenceCount());
+        assertTrue(sharedReference.getIsShared());
+        assertFalse(sharedReference.getIsLatest());
+
+        // 指定版本号：仅返回该版本
+        VersionReferenceListRsp filteredRsp = agentManagementService.listAgentVersionReferences(
+            Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
+            new ListAgentVersionReferencesQo().setWorkspaceId(Constants.TEST_WORKSPACE_ID)
+                .setVersionId("test_version_id"));
+        assertEquals(1, filteredRsp.getVersionReferences().size());
+        assertEquals("test_version_id", filteredRsp.getVersionReferences().get(0).getVersionId());
+        assertEquals(3L, filteredRsp.getVersionReferences().get(0).getReferenceCount());
+
+        // workspace下不存在该智能体时抛出异常，防止横向越权
+        assertThrows(AgentStudioException.class, () -> agentManagementService.listAgentVersionReferences(
+            Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
+            new ListAgentVersionReferencesQo().setWorkspaceId("other_workspace")));
+
+        // 无版本的智能体：返回空列表
+        VersionReferenceListRsp emptyRsp = agentManagementService.listAgentVersionReferences(
+            Constants.TEST_PROJECT_ID, "test_agent_id2",
+            new ListAgentVersionReferencesQo().setWorkspaceId(Constants.TEST_WORKSPACE_ID));
+        assertTrue(emptyRsp.getVersionReferences().isEmpty());
+    }
+
+    @Test
+    @Sql(scripts = {"classpath:sql/agent_setup_db.sql", "classpath:sql/workflow_setup_db.sql",
+        "classpath:sql/version_setup_db.sql", "classpath:sql/version_reference_setup_db.sql"},
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    void test_batch_delete_agent_versions_partial_success() {
+        BatchDeleteVersionsRequestBody body = new BatchDeleteVersionsRequestBody()
+            .setVersionIds(List.of("test_version_id", "test_shared_version_id", "not_exist_version_id"));
+        BatchDeleteVersionsResponseBody responseBody = agentManagementService.batchDeleteAgentVersions(
+            Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID, Constants.TEST_WORKSPACE_ID, body);
+
+        // 部分成功：正常版本删除成功，已共享版本与不存在版本进failed
+        assertEquals(3, responseBody.getTotalCount());
+        assertEquals(1, responseBody.getDeletedCount());
+        assertEquals(List.of("test_version_id"), responseBody.getSuccess());
+        Map<String, BatchDeleteVersionFailedInfo> failedMap = responseBody.getFailed().stream()
+            .collect(Collectors.toMap(BatchDeleteVersionFailedInfo::getVersionId, Function.identity()));
+        assertEquals(2, failedMap.size());
+        assertEquals(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY.name(),
+            failedMap.get("test_shared_version_id").getErrorCode());
+        assertNotNull(failedMap.get("not_exist_version_id").getErrorCode());
+
+        // 删除成功的版本已从版本列表移除，其余版本保留
+        VersionListRsp versionListRsp = agentManagementService.listAgentVersions(Constants.TEST_PROJECT_ID,
+            Constants.TEST_AGENT_ID, new ListAgentVersionsQo().setWorkspaceId("default"));
+        assertEquals(2, versionListRsp.getCount());
+    }
+
+    @Test
+    @Sql(scripts = {"classpath:sql/agent_setup_db.sql", "classpath:sql/workflow_setup_db.sql",
+        "classpath:sql/version_setup_db.sql", "classpath:sql/version_reference_setup_db.sql"},
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    void test_batch_delete_agent_versions_all_success() {
+        BatchDeleteVersionsRequestBody body = new BatchDeleteVersionsRequestBody()
+            .setVersionIds(List.of("test_version_id1", "test_version_id"));
+        BatchDeleteVersionsResponseBody responseBody = agentManagementService.batchDeleteAgentVersions(
+            Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID, Constants.TEST_WORKSPACE_ID, body);
+
+        // 全部成功：failed为空，仅共享版本保留
+        assertEquals(2, responseBody.getTotalCount());
+        assertEquals(2, responseBody.getDeletedCount());
+        assertEquals(2, responseBody.getSuccess().size());
+        assertTrue(responseBody.getFailed().isEmpty());
+
+        VersionListRsp versionListRsp = agentManagementService.listAgentVersions(Constants.TEST_PROJECT_ID,
+            Constants.TEST_AGENT_ID, new ListAgentVersionsQo().setWorkspaceId("default"));
+        assertEquals(1, versionListRsp.getCount());
     }
 }

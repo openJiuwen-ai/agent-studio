@@ -16677,6 +16677,105 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CommonDeleteRsp"
+  /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references:
+    get:
+      tags:
+      - workflow-management-api-controller
+      summary: 查询工作流各版本引用数量
+      description: 查询工作流各版本引用数量。
+      operationId: listWorkflowVersionReferences
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workflow_id
+        in: path
+        description: 工作流ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 团队空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      - name: version_id
+        in: query
+        description: 版本ID，不传则返回全部版本。
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[0-9]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionReferenceListRsp"
+  /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete:
+    post:
+      tags:
+      - workflow-management-api-controller
+      summary: 批量删除工作流版本
+      description: 批量删除工作流版本，部分成功模式：已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除。
+      operationId: batchDeleteWorkflowVersions
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workflow_id
+        in: path
+        description: 工作流ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 团队空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteVersionsRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteVersionsResponseBody"
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/envs:
     get:
       tags:
@@ -19114,6 +19213,105 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CommonDeleteRsp"
+  /v1/{project_id}/agent-manager/agents/{agent_id}/versions/references:
+    get:
+      tags:
+      - agent-management-api-controller
+      summary: 查询智能体各版本引用数量
+      description: 查询智能体各版本引用数量。
+      operationId: listAgentVersionReferences
+      parameters:
+      - name: project_id
+        in: path
+        description: 项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: agent_id
+        in: path
+        description: 资源ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      - name: version_id
+        in: query
+        description: 版本ID，不传则返回全部版本。
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[0-9]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionReferenceListRsp"
+  /v1/{project_id}/agent-manager/agents/{agent_id}/versions/batch-delete:
+    post:
+      tags:
+      - agent-management-api-controller
+      summary: 批量删除智能体版本
+      description: 批量删除智能体版本，部分成功模式：已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除。
+      operationId: batchDeleteAgentVersions
+      parameters:
+      - name: project_id
+        in: path
+        description: 项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: agent_id
+        in: path
+        description: 资源ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteVersionsRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteVersionsResponseBody"
   /v1/{project_id}/agent-manager/agents/{agent_id}/recommended-questions:
     get:
       tags:
@@ -33583,6 +33781,101 @@ components:
       properties:
         id:
           type: string
+    VersionReference:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: 版本ID
+          example: "1787901244768"
+          maxLength: 64
+          pattern: "^[0-9]+$"
+        version_name:
+          type: string
+          description: 版本名称
+          example: v1.0.0
+        reference_count:
+          type: integer
+          format: int64
+          description: 引用数量
+          example: 2
+        is_shared:
+          type: boolean
+          description: 是否已共享到资产广场
+          example: false
+        is_latest:
+          type: boolean
+          description: 是否最新版本
+          example: true
+    VersionReferenceListRsp:
+      type: object
+      properties:
+        version_references:
+          type: array
+          description: 版本引用数量列表
+          example: []
+          items:
+            $ref: "#/components/schemas/VersionReference"
+          maxItems: 2147483647
+          minItems: 0
+    BatchDeleteVersionsRequestBody:
+      type: object
+      properties:
+        version_ids:
+          type: array
+          description: 待删除的版本ID列表
+          example: ["1787901244768"]
+          items:
+            type: string
+            maxLength: 64
+            minLength: 1
+            pattern: "^[0-9]+$"
+          maxItems: 20
+          minItems: 1
+      required:
+      - version_ids
+    BatchDeleteVersionFailedInfo:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: 版本ID
+          example: "1787901244768"
+        error_code:
+          type: string
+          description: 错误码
+          example: SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY
+        error_msg:
+          type: string
+          description: 错误信息
+          example: 共享资源版本不允许直接删除
+    BatchDeleteVersionsResponseBody:
+      type: object
+      properties:
+        total_count:
+          type: integer
+          format: int32
+          description: 提交删除的版本总数
+          example: 3
+        deleted_count:
+          type: integer
+          format: int32
+          description: 删除成功的版本数
+          example: 2
+        success:
+          type: array
+          description: 删除成功的版本ID列表
+          example: ["1"]
+          items:
+            type: string
+        failed:
+          type: array
+          description: 删除失败的版本详情列表
+          example: []
+          items:
+            $ref: "#/components/schemas/BatchDeleteVersionFailedInfo"
+          maxItems: 2147483647
+          minItems: 0
   securitySchemes:
     AccessToken:
       type: apiKey

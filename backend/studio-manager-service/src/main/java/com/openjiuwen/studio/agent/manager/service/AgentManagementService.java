@@ -56,6 +56,9 @@ import com.openjiuwen.studio.agent.manager.dto.AgentWorkflowDetail;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionFailedInfo;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
@@ -77,6 +80,7 @@ import com.openjiuwen.studio.agent.manager.dto.KnowledgeRetrievePolicy;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -93,6 +97,7 @@ import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkspaceMemberInfo;
 import com.openjiuwen.studio.agent.manager.dto.maas.ImageGenerationRequest;
@@ -171,6 +176,7 @@ import org.quartz.TriggerKey;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -180,6 +186,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -338,6 +345,13 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Autowired
     private ShareResourceMapper shareResourceMapper;
+
+    /**
+     * 自身代理，用于批量删除时逐版本调用事务方法，避免同类自调用导致事务失效
+     */
+    @Autowired
+    @Lazy
+    private AgentManagementService self;
 
     @Autowired
     private AgentImportService agentImportService;
@@ -2586,6 +2600,10 @@ public class AgentManagementService implements IAgentManagementService {
     public CommonDeleteRsp deleteAgentVersion(String projectId, String agentId, String versionId, String workspaceId) {
         Agent agent = getAgent(projectId, workspaceId, agentId);
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(agent.getAgentId(), versionId);
+        if (releaseVersion == null) {
+            log.error("agent version is not found, agentId = {}, versionId = {}", agentId, versionId);
+            throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+        }
         ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
         if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
             && shareResource.getVersionList().contains(versionId)) {
@@ -2595,12 +2613,15 @@ public class AgentManagementService implements IAgentManagementService {
         if (isSoftDelete) {
             mgObsService.softDeleteObsFile(releaseVersion.getDslPath());
             mgObsService.softDeleteObsFile(releaseVersion.getIrPath());
+            // 多智能体版本发布时会生成环境变量文件，删除版本时同步清理（与deleteWorkflowVersion对齐）
+            mgObsService.softDeleteObsFile(getEnvironmentVariableFilePath(releaseVersion.getIrPath()));
 
             // 处理Agent版本表，迁移到新的表，旧数据删除
             agentCommonService.softDeleteReleaseVersionById(releaseVersion);
         } else {
             mgObsService.deleteObsFile(releaseVersion.getDslPath());
             mgObsService.deleteObsFile(releaseVersion.getIrPath());
+            mgObsService.deleteObsFile(getEnvironmentVariableFilePath(releaseVersion.getIrPath()));
             releaseVersionMapper.deleteByPrimaryKey(releaseVersion.getId());
         }
         // 删除最新发布版本
@@ -2649,6 +2670,110 @@ public class AgentManagementService implements IAgentManagementService {
         }
 
         return new CommonDeleteRsp().setId(versionId);
+    }
+
+    @Override
+    public VersionReferenceListRsp listAgentVersionReferences(String projectId, String agentId,
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo) {
+        // 资源归属校验，防止横向越权（与listAgentVersions对齐）
+        getAgent(projectId, listAgentVersionReferencesQo.getWorkspaceId(), agentId);
+        return relationManagementService.listVersionReferences(projectId, agentId,
+            listAgentVersionReferencesQo.getWorkspaceId(), listAgentVersionReferencesQo.getVersionId());
+    }
+
+    /**
+     * 批量删除智能体版本，部分成功模式：
+     * 已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除
+     */
+    @Override
+    @OperationLog(
+        operationType = OperationType.DELETE,
+        resourceType = "Agent",
+        description = "批量删除智能体版本",
+        resourceId = "agentId",
+        resourceName = ""
+    )
+    public BatchDeleteVersionsResponseBody batchDeleteAgentVersions(String projectId, String agentId,
+        String workspaceId, BatchDeleteVersionsRequestBody body) {
+        // 资源归属校验，防止横向越权（与deleteAgentVersion对齐）
+        getAgent(projectId, workspaceId, agentId);
+
+        // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
+        ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
+
+        List<String> versionIds = body.getVersionIds();
+        List<String> success = new ArrayList<>();
+        List<BatchDeleteVersionFailedInfo> failed = new ArrayList<>();
+        for (String versionId : versionIds) {
+            if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
+                && shareResource.getVersionList().contains(versionId)) {
+                log.error("batch delete agent version, the resource version {} has been shared, you can't delete it",
+                    versionId);
+                failed.add(buildVersionDeleteFailedInfo(versionId,
+                    new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY)));
+                continue;
+            }
+            try {
+                // 通过自身代理调用，保证每版本独立事务，单版本失败不影响其他版本
+                self.deleteAgentVersion(projectId, agentId, versionId, workspaceId);
+                success.add(versionId);
+            } catch (Exception e) {
+                log.error("batch delete agent version failed, agentId={}, versionId={}", agentId, versionId, e);
+                failed.add(buildVersionDeleteFailedInfo(versionId, e));
+            }
+        }
+        return new BatchDeleteVersionsResponseBody()
+            .setTotalCount(versionIds.size())
+            .setDeletedCount(success.size())
+            .setSuccess(success)
+            .setFailed(failed);
+    }
+
+    /**
+     * 构建批量删除版本的失败详情
+     *
+     * @param versionId 版本ID
+     * @param e 删除时抛出的异常
+     * @return 失败详情
+     */
+    private BatchDeleteVersionFailedInfo buildVersionDeleteFailedInfo(String versionId, Exception e) {
+        String errorCode = StudioError.UNEXPECTED_ERROR.name();
+        if (e instanceof AgentStudioException agentStudioException
+            && ObjectUtils.isNotEmpty(agentStudioException.getErrorCode())) {
+            errorCode = agentStudioException.getErrorCode().name();
+        }
+        // 仅AgentStudioException的消息是可控的业务文案，可直接返回；
+        // 其他异常（如NPE）的message可能包含内部类名/方法名，不可暴露给调用方
+        String errorMsg = (e instanceof AgentStudioException && StringUtils.isNotEmpty(e.getMessage()))
+            ? e.getMessage() : errorCode;
+        return new BatchDeleteVersionFailedInfo()
+            .setVersionId(versionId)
+            .setErrorCode(errorCode)
+            .setErrorMsg(errorMsg);
+    }
+
+    /**
+     * 获取版本环境变量文件路径（多智能体发布时生成，与deleteWorkflowVersion对齐）
+     *
+     * @param originalPath 版本IR文件路径
+     * @return 环境变量文件路径
+     */
+    private String getEnvironmentVariableFilePath(String originalPath) {
+        if (StringUtils.isEmpty(originalPath)) {
+            return "";
+        }
+        File originalFile = new File(originalPath);
+        String parentDir = originalFile.getParent();
+        String originalName = originalFile.getName();
+        int lastDotIndex = originalName.lastIndexOf('.');
+        if (lastDotIndex < 0) {
+            return "";
+        }
+        String fileName = originalName.substring(0, lastDotIndex);
+        String suffix = originalName.substring(lastDotIndex);
+        String newFileName = fileName + "_env" + suffix;
+        File newFile = new File(parentDir, newFileName);
+        return newFile.getPath();
     }
 
     /**

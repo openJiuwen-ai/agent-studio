@@ -22,11 +22,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -170,5 +174,58 @@ class MgGlobalExceptionHandlerTest {
 
         assertNotNull(response);
         assertNotNull(response.getBody());
+    }
+
+    @Test
+    void testHandleHttpRequestMethodNotSupportedException() {
+        HttpRequestMethodNotSupportedException ex =
+            new HttpRequestMethodNotSupportedException("POST", List.of("GET"));
+        ErrorInfo errorInfo = new ErrorInfo("method not supported",
+            "the request used an unsupported method", "check request method");
+        when(i18nUtil.getMessage(any(AgentStudioException.class))).thenReturn(errorInfo);
+
+        ResponseEntity<ErrorRsp> response = handler.handleHttpRequestMethodNotSupportedException(ex);
+
+        assertNotNull(response);
+        assertNotNull(response.getBody());
+        assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
+        assertEquals("openjiuwen.02001129", response.getBody().getErrorCode());
+        assertEquals("method not supported", response.getBody().getErrorMsg());
+        assertEquals("the request used an unsupported method", response.getBody().getErrorReason());
+        assertEquals("check request method", response.getBody().getErrorSuggestion());
+    }
+
+    @Test
+    void testHandleHttpMediaTypeNotSupportedException_JsonEndpoint() {
+        // JSON接口收到text/plain时，reason应提示期望application/json而非误导性的multipart
+        HttpMediaTypeNotSupportedException ex =
+            new HttpMediaTypeNotSupportedException(MediaType.TEXT_PLAIN,
+                List.of(MediaType.APPLICATION_JSON), HttpMethod.POST);
+        when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("validation error");
+        when(i18nUtil.getSuggestion(any(StudioError.class))).thenReturn("fix it");
+
+        ResponseEntity<ErrorRsp> response = handler.handleHttpMediaTypeNotSupportedException(ex);
+
+        assertNotNull(response);
+        assertNotNull(response.getBody());
+        assertEquals("请求格式错误，Content-Type 不被该接口支持，期望：application/json",
+            response.getBody().getErrorReason());
+    }
+
+    @Test
+    void testHandleHttpMediaTypeNotSupportedException_MultipartEndpoint() {
+        // 文件上传接口（consumes=multipart/form-data）的提示应如实列出multipart类型
+        HttpMediaTypeNotSupportedException ex =
+            new HttpMediaTypeNotSupportedException(MediaType.APPLICATION_JSON,
+                List.of(MediaType.MULTIPART_FORM_DATA, MediaType.MULTIPART_MIXED), HttpMethod.POST);
+        when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("validation error");
+        when(i18nUtil.getSuggestion(any(StudioError.class))).thenReturn("fix it");
+
+        ResponseEntity<ErrorRsp> response = handler.handleHttpMediaTypeNotSupportedException(ex);
+
+        assertNotNull(response);
+        assertNotNull(response.getBody());
+        assertEquals("请求格式错误，Content-Type 不被该接口支持，期望：multipart/form-data、multipart/mixed",
+            response.getBody().getErrorReason());
     }
 }

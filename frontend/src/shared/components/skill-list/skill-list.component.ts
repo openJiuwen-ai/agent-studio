@@ -101,7 +101,10 @@ export class SkillListComponent implements OnInit {
       this.type === "workflow" &&
       item.app_last_version_obj &&
       item.app_last_version_obj.valid &&
-      item.resource_version &&
+      // resource_latest_version为空说明该工作流已无任何可用版本（如所有版本被删除），此时不存在可升级目标，不应展示升级铃铛
+      item.app_last_version_obj.resource_latest_version &&
+      // resource_version为空（跟随最新，如删除版本后被回退）时同样允许升级到具体版本，
+      // 与后端listAppRelations共享资源分支（resourceVersion为空也提示升级）语义一致
       item.app_last_version_obj.resource_latest_version !== item.resource_version;
   }
 

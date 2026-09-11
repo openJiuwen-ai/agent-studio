@@ -14,6 +14,8 @@
 8. [导入工作流](#8-导入工作流)
 9. [导出工作流](#9-导出工作流)
 10. [解析导入文件](#10-解析导入文件)
+11. [批量查询工作流版本引用数量](#11-批量查询工作流版本引用数量)
+12. [批量删除工作流版本](#12-批量删除工作流版本)
 
 ---
 
@@ -879,6 +881,183 @@ file=@dify_workflow.yml
     "nodes": [],
     "edges": []
   }
+}
+```
+
+---
+
+## 11. 批量查询工作流版本引用数量
+
+**功能介绍**
+
+该接口用于查询指定工作流应用各版本的引用数量，支持按版本号过滤。引用数量统计本空间内直接引用该版本的工作流数量，以及通过共享方式使用该版本的数量。已共享到资产广场的版本会标记 `is_shared` 为 `true`，最新版本会标记 `is_latest` 为 `true`。
+
+**URI**
+
+```
+GET /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references?workspace_id={workspace_id}
+```
+
+**路径参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| project_id | 是 | String | 当前租户项目 ID |
+| workflow_id | 是 | String | 工作流 ID |
+
+**Query 参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| workspace_id | 是 | String | 工作空间 ID |
+| version_id | 否 | String | 版本 ID，不传则返回全部版本的引用数量 |
+
+**请求 Header 参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| X-Auth-Token | 是 | String | 用户 Token |
+
+**响应参数**
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| version_references | Array of VersionReference | 版本引用数量列表 |
+
+**VersionReference**
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| version_id | String | 版本 ID |
+| version_name | String | 版本名称 |
+| reference_count | Long | 引用数量 |
+| is_shared | Boolean | 是否已共享到资产广场 |
+| is_latest | Boolean | 是否最新版本 |
+
+**请求示例**
+
+```
+GET /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references?workspace_id={workspace_id} HTTP/1.1
+Host: api.example.com
+X-Auth-Token: {token}
+```
+
+**响应示例**
+
+```json
+{
+  "version_references": [
+    {
+      "version_id": "1787901244768",
+      "version_name": "v1.0.0",
+      "reference_count": 1,
+      "is_shared": false,
+      "is_latest": true
+    },
+    {
+      "version_id": "1787800848138",
+      "version_name": "v0.9.0",
+      "reference_count": 0,
+      "is_shared": true,
+      "is_latest": false
+    }
+  ]
+}
+```
+
+---
+
+## 12. 批量删除工作流版本
+
+**功能介绍**
+
+该接口用于批量删除指定工作流应用的版本，采用部分成功模式：单个版本删除失败（如版本已共享、版本不存在）时仅该版本计入失败列表并回滚其自身变更，不影响其他版本的删除。已共享到资产广场的版本不允许直接删除，需先取消共享。
+
+**URI**
+
+```
+POST /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete?workspace_id={workspace_id}
+```
+
+**路径参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| project_id | 是 | String | 当前租户项目 ID |
+| workflow_id | 是 | String | 工作流 ID |
+
+**Query 参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| workspace_id | 是 | String | 工作空间 ID |
+
+**请求 Header 参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| X-Auth-Token | 是 | String | 用户 Token |
+
+**请求参数**
+
+| 参数 | 必选 | 类型 | 描述 |
+|------|------|------|------|
+| version_ids | 是 | Array of String | 待删除的版本 ID 列表，1~20 个，每个元素为纯数字字符串 |
+
+**响应参数**
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| total_count | Integer | 提交删除的版本总数 |
+| deleted_count | Integer | 删除成功的版本数 |
+| success | Array of String | 删除成功的版本 ID 列表 |
+| failed | Array of FailedInfo | 删除失败的版本详情列表 |
+
+**FailedInfo**
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| version_id | String | 版本 ID |
+| error_code | String | 错误码，如 `SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY`（共享版本不允许直接删除）、`WORKFLOW_VERSION_NOT_FOUND`（版本不存在） |
+| error_msg | String | 错误信息 |
+
+**状态码**
+
+| 状态码 | 描述 |
+|--------|------|
+| 200 | 请求已受理，各版本的删除结果见响应体中的 success 与 failed |
+| 400 | 请求错误，如 version_ids 为空、超过 20 个或格式非法 |
+| 403 | 没有操作权限 |
+| 404 | 找不到资源，如工作流不存在 |
+| 500 | 服务内部错误 |
+
+**请求示例**
+
+```
+POST /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete?workspace_id={workspace_id} HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+X-Auth-Token: {token}
+
+{
+  "version_ids": ["1787800848138", "1787901244768"]
+}
+```
+
+**响应示例**
+
+```json
+{
+  "total_count": 2,
+  "deleted_count": 1,
+  "success": ["1787901244768"],
+  "failed": [
+    {
+      "version_id": "1787800848138",
+      "error_code": "SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY",
+      "error_msg": "共享资源不允许直接删除"
+    }
+  ]
 }
 ```
 

@@ -42,6 +42,9 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.constant.PromptPath;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionFailedInfo;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CopyWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -58,6 +61,7 @@ import com.openjiuwen.studio.agent.manager.dto.KnowledgeBaseListItem;
 import com.openjiuwen.studio.agent.manager.dto.ListKnowledgeBasesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsV1Qo;
 import com.openjiuwen.studio.agent.common.dto.agent.ListWorkflowsQo;
@@ -70,6 +74,7 @@ import com.openjiuwen.studio.agent.manager.dto.ValidateWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkFlowEnv;
 import com.openjiuwen.studio.agent.manager.dto.WorkFlowEnvs;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowBranchVO;
@@ -481,6 +486,17 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     @Lazy
     private AgentManagementService agentManagementService;
 
+    @Resource
+    @Lazy
+    private RelationManagementService relationManagementService;
+
+    /**
+     * 自身代理，用于批量删除时逐版本调用事务方法，避免同类自调用导致事务失效
+     */
+    @Resource
+    @Lazy
+    private WorkflowManagementService self;
+
     @Autowired
     private WorkflowCommonService workflowCommonService;
 
@@ -549,7 +565,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 = shareResourceManagerService.queryShareResourceEntityByResourceIdList(Collections.singletonList(resourceSplit[0]));
             if (!CollectionUtils.isEmpty(shareResourceEntities)) {
                 ShareResourceEntity shareResourceEntity = shareResourceEntities.get(0);
-                mappingEntity.setReferenceType(getReferenceType(shareResourceEntity));
+                mappingEntity.setReferenceType(getReferenceType(type, shareResourceEntity));
                 mappingEntity.setAppWorkspaceId(RequestContextUtils.getRequestWorkspaceId());
                 mappingEntity.setResourceWorkspaceId(shareResourceEntity.getWorkspaceId());
             } else {
@@ -562,8 +578,11 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         return mappingEntity;
     }
 
-    public String getReferenceType(ShareResourceEntity shareResourceEntity) {
-        if (pluginBaseImpl.isInnerType(shareResourceEntity.getResourceId())) {
+    public String getReferenceType(ResourceTypeEnum type, ShareResourceEntity shareResourceEntity) {
+        // 内置插件为全局资源（不归属具体工作空间），即使存在共享记录也按直接引用处理。
+        // 该判断仅对 TOOL 资源成立：workflow/mcp 的 id 查 t_tool 必然落空而恒返回 true，
+        // 曾导致跨空间共享引用被误记为 direct，使引用计数、取消共享联动失效等逻辑失效。
+        if (TOOL.equals(type) && pluginBaseImpl.isInnerType(shareResourceEntity.getResourceId())) {
             return ReferenceTypeEnum.DIRECT.getValue();
         }
         return RequestContextUtils.getRequestWorkspaceId().equals(shareResourceEntity.getWorkspaceId())
@@ -1804,6 +1823,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         checkWorkflowExist(projectId, workspaceId, workflowId);
 
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(workflowId, versionId);
+        if (releaseVersion == null) {
+            log.error("workflow version is not found, workflowId = {}, versionId = {}", workflowId, versionId);
+            throw new AgentStudioException(StudioError.WORKFLOW_VERSION_NOT_FOUND);
+        }
         WorkflowEntity workflowEntity = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
         if (!Strings.CS.equals(RequestContextUtils.getRequestWorkspaceId(), workflowEntity.getWorkspaceId())) {
             log.error("No permission to delete workflow version.");
@@ -1854,6 +1877,11 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             workflowEntity.setStatus(CommonConstant.WORKFLOW_DEVELOP);
             workflowEntity.setPublishedAt(null);
             workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
+            // 版本已全部删除，若最新版本指针仍指向被删版本则置空，避免悬空引用
+            workflowMapper.updateLastVersionIdIfMatch(projectId, workflowId, versionId, null);
+            // 引用该版本的草稿绑定记录（如agent绑定的工作流版本）同步置空版本号，跟随最新版本，避免悬空引用导致DSL下载404；
+            // 已发布版本快照为不可变历史记录，不改动（与deleteAgentVersion语义一致）
+            mappingMapper.updateResourceVersionIfMatch(workflowId, versionId, null);
         } else {
             // 取现存最新的版本，作为最新发布版本保存
             ReleaseVersion latestReleaseVersion =
@@ -1881,6 +1909,12 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 .safetyBarrier(isSafetyBarrierEnabled)
                 .appType(workflowEntity.getWorkflowType())
                 .build(), Constants.LATEST_PUBLISH_VERSION, obsService);
+
+            // 若被删版本为最新版本，则将最新版本指针回退到现存最新版本（条件更新，删除中间版本时不生效）
+            workflowMapper.updateLastVersionIdIfMatch(projectId, workflowId, versionId,
+                latestReleaseVersion.getVersionId());
+            // 引用被删版本的关联记录同步回退到现存最新版本，与最新版本指针语义保持一致，避免悬空引用导致DSL下载404
+            mappingMapper.updateResourceVersionIfMatch(workflowId, versionId, latestReleaseVersion.getVersionId());
         }
 
         return new CommonDeleteRsp().setId(versionId);
@@ -1902,6 +1936,113 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         String newFileName = fileName + "_env" + suffix;
         File newFile = new File(parentDir, newFileName);
         return newFile.getPath();
+    }
+
+    @Override
+    public VersionReferenceListRsp listWorkflowVersionReferences(String projectId, String workflowId,
+        ListWorkflowVersionReferencesQo listWorkflowVersionReferencesQo) {
+        // 资源归属校验，防止横向越权（与deleteWorkflowVersion对齐）
+        checkWorkflowExist(projectId, listWorkflowVersionReferencesQo.getWorkspaceId(), workflowId);
+        return relationManagementService.listVersionReferences(projectId, workflowId,
+            listWorkflowVersionReferencesQo.getWorkspaceId(), listWorkflowVersionReferencesQo.getVersionId());
+    }
+
+    /**
+     * 批量删除工作流版本，部分成功模式：
+     * 已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除
+     */
+    @Override
+    @OperationLog(
+        operationType = OperationType.DELETE,
+        resourceType = "Workflow",
+        description = "批量删除工作流版本",
+        resourceId = "workflowId",
+        resourceName = ""
+    )
+    public BatchDeleteVersionsResponseBody batchDeleteWorkflowVersions(String projectId, String workflowId,
+        String workspaceId, BatchDeleteVersionsRequestBody body) {
+        // 资源归属校验，防止横向越权（与deleteWorkflowVersion对齐）
+        checkWorkflowExist(projectId, workspaceId, workflowId);
+
+        // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
+        ShareResourceEntity shareResource = shareResourceManagerService.queryShareResourceEntityByResourceId(workflowId);
+
+        List<String> versionIds = body.getVersionIds();
+        List<String> success = new ArrayList<>();
+        List<BatchDeleteVersionFailedInfo> failed = new ArrayList<>();
+        for (String versionId : versionIds) {
+            if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
+                && shareResource.getVersionList().contains(versionId)) {
+                log.error("batch delete workflow version, the resource version {} has been shared, "
+                    + "you can't delete it", versionId);
+                failed.add(buildVersionDeleteFailedInfo(versionId,
+                    new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY)));
+                continue;
+            }
+            try {
+                // 通过自身代理调用，保证每版本独立事务，单版本失败不影响其他版本
+                self.deleteWorkflowVersionInTransaction(projectId, workflowId, versionId, workspaceId);
+                success.add(versionId);
+            } catch (Exception e) {
+                log.error("batch delete workflow version failed, workflowId={}, versionId={}", workflowId, versionId,
+                    e);
+                failed.add(buildVersionDeleteFailedInfo(versionId, e));
+            }
+        }
+        return new BatchDeleteVersionsResponseBody()
+            .setTotalCount(versionIds.size())
+            .setDeletedCount(success.size())
+            .setSuccess(success)
+            .setFailed(failed);
+    }
+
+    /**
+     * 事务包装方法：deleteWorkflowVersion自身无事务（现存问题），批量删除路径通过本方法补上事务，
+     * 与AgentManagementService.deleteAgentVersion（自带@Transactional）保持一致的原子性语义。
+     * 必须经self代理调用，同类直接调用事务不生效。
+     * <p>
+     * 事务内含多次OBS网络IO，属与deleteAgentVersion一致的既有模式。事务边界经过取舍，改造前请先读懂：
+     * <ul>
+     *   <li><b>必须留在事务内</b>：downloadObsFile + savePublish（重算并回写LATEST指针文件）。
+     *       若移到提交后执行且失败，DB的lastVersionId已指向新版本而指针文件仍指向已删版本，运行时读LATEST会404。
+     *       放事务内则savePublish失败可连同lastVersionId一起回滚，保证指针与DB原子一致</li>
+     *   <li><b>不要直接去掉事务</b>：会失去DB原子性（版本记录已删但mapping快照行/channel记录残留），
+     *       且与agent侧不一致</li>
+     *   <li><b>已知缺陷（未修）</b>：文件删除类OBS（softDeleteObsFile/deleteObsFile/deletePublish）位于方法前段
+     *       且不可回滚，若后续DB操作失败触发回滚，会出现“版本记录还在但OBS文件已删”的僵尸版本。
+     *       agent侧deleteAgentVersion同样存在。彻底修复需将删除类OBS改为提交后执行（残留垃圾文件无害），
+     *       同时保留重建类OBS在事务内，涉及两侧方法结构重构，建议单独评估后再动</li>
+     * </ul>
+     * 事务时长由批量上限约束（BatchDeleteVersionsRequestBody.versionIds的@Size(max=20)），
+     * 且逐版本独立事务串行执行，单版本失败仅回滚该版本。
+     */
+    @Transactional
+    public CommonDeleteRsp deleteWorkflowVersionInTransaction(String projectId, String workflowId, String versionId,
+        String workspaceId) {
+        return self.deleteWorkflowVersion(projectId, workflowId, versionId, workspaceId);
+    }
+
+    /**
+     * 构建批量删除版本的失败详情
+     *
+     * @param versionId 版本ID
+     * @param e 删除时抛出的异常
+     * @return 失败详情
+     */
+    private BatchDeleteVersionFailedInfo buildVersionDeleteFailedInfo(String versionId, Exception e) {
+        String errorCode = StudioError.UNEXPECTED_ERROR.name();
+        if (e instanceof AgentStudioException agentStudioException
+            && ObjectUtils.isNotEmpty(agentStudioException.getErrorCode())) {
+            errorCode = agentStudioException.getErrorCode().name();
+        }
+        // 仅AgentStudioException的消息是可控的业务文案，可直接返回；
+        // 其他异常（如NPE）的message可能包含内部类名/方法名，不可暴露给调用方
+        String errorMsg = (e instanceof AgentStudioException && StringUtils.isNotEmpty(e.getMessage()))
+            ? e.getMessage() : errorCode;
+        return new BatchDeleteVersionFailedInfo()
+            .setVersionId(versionId)
+            .setErrorCode(errorCode)
+            .setErrorMsg(errorMsg);
     }
 
     private WorkflowEntity checkWorkflowExist(String projectId, String workspaceId, String workflowId) {

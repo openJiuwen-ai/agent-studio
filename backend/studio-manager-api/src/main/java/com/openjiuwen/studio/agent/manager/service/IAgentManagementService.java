@@ -12,6 +12,8 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -25,6 +27,7 @@ import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -33,6 +36,7 @@ import com.openjiuwen.studio.agent.manager.dto.ModifyChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
@@ -66,6 +70,17 @@ public interface IAgentManagementService {
      */
     AutoAddResultJsonObject autoAddStudioResource(String projectId, String workspaceId, String agentId,
         AutoAddStudioResourceRequestBody body);
+
+    /**
+     * batchDeleteAgentVersions
+     *
+     * @param projectId projectId
+     * @param agentId agentId
+     * @param workspaceId workspaceId
+     * @param body body
+     */
+    BatchDeleteVersionsResponseBody batchDeleteAgentVersions(String projectId, String agentId, String workspaceId,
+        BatchDeleteVersionsRequestBody body);
 
     /**
      * copyAgent
@@ -303,6 +318,16 @@ public interface IAgentManagementService {
      * @param listAgentLastVersionsQo listAgentLastVersionsQo
      */
     AgentVersionListRsp listAgentLastVersions(String projectId, ListAgentLastVersionsQo listAgentLastVersionsQo);
+
+    /**
+     * listAgentVersionReferences
+     *
+     * @param projectId projectId
+     * @param agentId agentId
+     * @param listAgentVersionReferencesQo listAgentVersionReferencesQo
+     */
+    VersionReferenceListRsp listAgentVersionReferences(String projectId, String agentId,
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo);
 
     /**
      * listAgentVersions

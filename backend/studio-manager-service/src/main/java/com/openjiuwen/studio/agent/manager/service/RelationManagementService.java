@@ -37,6 +37,9 @@ import com.openjiuwen.studio.agent.manager.dto.ResourceDependencyResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ResourceVersionResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ResourceVersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
+import com.openjiuwen.studio.agent.manager.dto.VersionReference;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceCount;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.SkillReference;
 import com.openjiuwen.studio.agent.manager.dto.ToolReference;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
@@ -797,9 +800,18 @@ public class RelationManagementService implements IRelationManagementService {
         workflowMapping.setAppWorkspaceId(RequestContextUtils.getRequestWorkspaceId());
         workflowMapping.setResourceId(StringUtils.isNotEmpty(workflow.getId()) ? workflow.getId() : originMapping.getResourceId());
         workflowMapping.setResourceType(CommonConstant.WORKFLOW_TYPE);
-        workflowMapping.setResourceVersion(StringUtils.isEmpty(originMapping.getResourceVersion())
+        String originResourceVersion = originMapping.getResourceVersion();
+        // 防御悬空版本引用：原引用版本已被删除时回退跟随最新版本，避免下载不存在的版本DSL导致OBS 404。
+        // 同时可自愈存量脏数据（删除版本时未同步回退引用的历史记录）
+        if (StringUtils.isNotEmpty(originResourceVersion) && StringUtils.isNotEmpty(workflow.getId())
+            && releaseVersionMapper.selectByAppIdAndVersionId(workflow.getId(), originResourceVersion) == null) {
+            log.warn("referenced workflow version {} does not exist, fallback to latest, workflowId={}",
+                originResourceVersion, workflow.getId());
+            originResourceVersion = null;
+        }
+        workflowMapping.setResourceVersion(StringUtils.isEmpty(originResourceVersion)
             ? workflow.getLastVersionId()
-            : originMapping.getResourceVersion());
+            : originResourceVersion);
         workflowMapping.setResourceName(StringUtils.isEmpty(originMapping.getResourceName())
             ? workflow.getName()
             : originMapping.getResourceName());
@@ -981,6 +993,9 @@ public class RelationManagementService implements IRelationManagementService {
             agentMapping.setResourceName(StringUtils.isEmpty(originMapping.getResourceName())
                 ? item.getName()
                 : originMapping.getResourceName());
+            agentMapping.setReferenceType(originMapping.getReferenceType());
+            agentMapping.setAppWorkspaceId(originMapping.getAppWorkspaceId());
+            agentMapping.setResourceWorkspaceId(originMapping.getResourceWorkspaceId());
             agentSubAgent.add(agentMapping);
         }
         if (!CollectionUtils.isEmpty(agentSubAgent)) {
@@ -1057,6 +1072,9 @@ public class RelationManagementService implements IRelationManagementService {
             agentMapping.setResourceName(StringUtils.isEmpty(originMapping.getResourceName())
                 ? item.getName()
                 : originMapping.getResourceName());
+            agentMapping.setReferenceType(originMapping.getReferenceType());
+            agentMapping.setAppWorkspaceId(originMapping.getAppWorkspaceId());
+            agentMapping.setResourceWorkspaceId(originMapping.getResourceWorkspaceId());
             agentSubAgent.add(agentMapping);
         }
         if (!CollectionUtils.isEmpty(agentSubAgent)) {
@@ -1388,6 +1406,75 @@ public class RelationManagementService implements IRelationManagementService {
     }
 
     /**
+     * 判断映射记录引用的工作流版本是否悬空：版本号非空且该版本已不存在（被删除）。
+     * 版本号为空表示跟随最新版本，不视为悬空。
+     *
+     * @param mapping 映射记录
+     * @return true表示引用的版本已被删除
+     */
+    private boolean isDanglingWorkflowVersion(MappingEntity mapping) {
+        String resourceVersion = mapping.getResourceVersion();
+        return StringUtils.isNotEmpty(resourceVersion)
+            && releaseVersionMapper.selectByAppIdAndVersionId(mapping.getResourceId(), resourceVersion) == null;
+    }
+
+    /**
+     * 自愈agent绑定工作流的悬空版本引用（引用的版本已被删除，历史删除操作未同步回退引用）。
+     * 回退目标优先取该工作流的最新现存版本（last_version_id），无任何版本时才置null（跟随最新）：
+     * 回退到具体版本号可保持"锁定具体版本"语义（与正常绑定的行为一致），工作流后续发布新版本时
+     * 前端可正常提示升级（前端铃铛条件已兼容resource_version为null的跟随最新状态）。
+     * 1）已绑定记录：CAS回退resource_version，随保存操作渐进式修复存量脏数据；
+     * 2）入参记录：内存同步规整。modify路径的updateResourceParameterByAppIDAndResourceId会无条件回写
+     *    resource_version，若沿用前端传入的悬空版本号，会把刚愈合的数据重新写回脏值。
+     * 仅处理当前agent的草稿绑定记录（非全表批量修改），CAS条件更新不误伤并发产生的新版本引用；
+     * 版本存在时跳过，正常路径零行为变化，可重复执行。
+     *
+     * @param projectId 项目ID
+     * @param workspaceId 工作空间ID
+     * @param agentId agent id
+     * @param boundWorkflowMappings 当前agent已绑定的工作流映射（app_version为null的草稿引用）
+     * @param workflows 本次请求传入的工作流映射
+     */
+    private void healDanglingWorkflowVersionReferences(String projectId, String workspaceId, String agentId,
+        List<MappingEntity> boundWorkflowMappings, List<MappingEntity> workflows) {
+        // 收集悬空引用：已绑定记录与入参记录统一处理，共享一次工作流最新版本查询
+        List<MappingEntity> danglingBoundMappings = boundWorkflowMappings.stream()
+            .filter(this::isDanglingWorkflowVersion).toList();
+        List<MappingEntity> danglingIncomingMappings = workflows.stream()
+            .filter(this::isDanglingWorkflowVersion).toList();
+        if (danglingBoundMappings.isEmpty() && danglingIncomingMappings.isEmpty()) {
+            return;
+        }
+        // 查询悬空引用对应工作流的最新现存版本号，作为回退目标（版本全删时为null，跟随最新）。
+        // 悬空引用可能指向跨空间共享的工作流，workspaceId传null跳过空间过滤（与共享资源查询的
+        // 既有模式一致，见createAgentWorkflow/ShareResourceManagerService），避免共享工作流查不到而误退化为null
+        Set<String> danglingResourceIds = new HashSet<>();
+        danglingBoundMappings.forEach(mapping -> danglingResourceIds.add(mapping.getResourceId()));
+        danglingIncomingMappings.forEach(mapping -> danglingResourceIds.add(mapping.getResourceId()));
+        Map<String, String> lastVersionMap = workflowMapper
+            .selectByWorkflowIds(projectId, null, new ArrayList<>(danglingResourceIds)).stream()
+            .filter(workflow -> workflow.getLastVersionId() != null)
+            .collect(Collectors.toMap(WorkflowEntity::getId, WorkflowEntity::getLastVersionId, (a, b) -> a));
+        for (MappingEntity mapping : danglingBoundMappings) {
+            String fallbackVersion = lastVersionMap.get(mapping.getResourceId());
+            log.warn("heal dangling workflow version reference: resource {} version {} does not exist, "
+                + "fallback to {}, agentId={}", mapping.getResourceId(), mapping.getResourceVersion(),
+                fallbackVersion == null ? "latest" : fallbackVersion, agentId);
+            mappingMapper.updateResourceVersionIfMatch(mapping.getResourceId(), mapping.getResourceVersion(),
+                fallbackVersion);
+            // 同步修正内存对象，保证后续版本比较逻辑基于愈合后的数据
+            mapping.setResourceVersion(fallbackVersion);
+        }
+        for (MappingEntity mapping : danglingIncomingMappings) {
+            String fallbackVersion = lastVersionMap.get(mapping.getResourceId());
+            log.warn("normalize dangling workflow version in request: resource {} version {} does not exist, "
+                + "fallback to {}, agentId={}", mapping.getResourceId(), mapping.getResourceVersion(),
+                fallbackVersion == null ? "latest" : fallbackVersion, agentId);
+            mapping.setResourceVersion(fallbackVersion);
+        }
+    }
+
+    /**
      * agent和workflow绑定关系批量处理，根据入参判断绑定或解绑
      *
      * @param agentId agent id
@@ -1404,6 +1491,8 @@ public class RelationManagementService implements IRelationManagementService {
         // 查询所有已经绑定的工作流
         List<MappingEntity> boundWorkflowMappings = mappingMapper.selectByAppIdAndResourceType(agentId,
             CommonConstant.WORKFLOW_TYPE);
+        // 自愈存量悬空版本引用，并同步规整入参，避免modify路径把悬空版本号重新写回
+        healDanglingWorkflowVersionReferences(projectId, workspaceId, agentId, boundWorkflowMappings, workflows);
         List<String> boundWorkflowIds = boundWorkflowMappings.stream().map(MappingEntity::getResourceId).toList();
 
         // 已绑定工作流为空时，直接绑定入参workflows
@@ -1823,6 +1912,64 @@ public class RelationManagementService implements IRelationManagementService {
         List<VersionInfo> shareResourceVersions = JSONObject.parseObject(shareResourceEntity.getVersionList(),
             new TypeReference<>() {});
         return new ResourceVersionResponseBody().setVersions(shareResourceVersions);
+    }
+
+    @Override
+    public VersionReferenceListRsp listVersionReferences(String projectId, String resourceId, String workspaceId,
+        String versionId) {
+        log.info("Start listVersionReferences method. Parameters: projectId={}, resourceId={}, workspaceId={}, "
+            + "versionId={}", projectId, resourceId, workspaceId, versionId);
+
+        // 查询该资源的所有发布版本
+        List<ReleaseVersion> versionList = releaseVersionMapper.selectByAppId(resourceId);
+        if (CollectionUtils.isEmpty(versionList)) {
+            return new VersionReferenceListRsp().setVersionReferences(new ArrayList<>());
+        }
+
+        // 按版本分组统计有效引用数量（一条SQL完成，无需逐版本查询）
+        List<VersionReferenceCount> referenceCountList = mappingMapper.countReferenceByResourceId(resourceId,
+            workspaceId, versionId);
+        Map<String, Long> referenceCountMap = referenceCountList.stream()
+            .collect(Collectors.toMap(VersionReferenceCount::getResourceVersion,
+                VersionReferenceCount::getReferenceCount, Long::sum));
+
+        // 查询共享信息，用于标记已共享版本（删除前需先取消共享）
+        ShareResourceEntity shareResourceEntity = shareResourceMapper.selectShareResourceEntityByResourceId(resourceId);
+
+        // 最新版本取版本列表中version_id最大者
+        String latestVersionId = versionList.stream()
+            .map(ReleaseVersion::getVersionId)
+            .max(String::compareTo)
+            .orElse(null);
+
+        List<VersionReference> versionReferences = new ArrayList<>();
+        for (ReleaseVersion releaseVersion : versionList) {
+            String currentVersionId = releaseVersion.getVersionId();
+            // 指定版本时只返回该版本
+            if (StringUtils.isNotEmpty(versionId) && !StringUtils.equals(versionId, currentVersionId)) {
+                continue;
+            }
+            versionReferences.add(new VersionReference()
+                .setVersionId(currentVersionId)
+                .setVersionName(releaseVersion.getVersionName())
+                .setReferenceCount(referenceCountMap.getOrDefault(currentVersionId, 0L))
+                .setIsShared(isVersionShared(shareResourceEntity, currentVersionId))
+                .setIsLatest(StringUtils.equals(currentVersionId, latestVersionId)));
+        }
+        return new VersionReferenceListRsp().setVersionReferences(versionReferences);
+    }
+
+    /**
+     * 判断版本是否已共享到资产广场（与删除版本时的共享校验语义保持一致）
+     *
+     * @param shareResourceEntity 共享资源信息
+     * @param versionId 版本ID
+     * @return 是否已共享
+     */
+    private boolean isVersionShared(ShareResourceEntity shareResourceEntity, String versionId) {
+        return ObjectUtils.isNotEmpty(shareResourceEntity)
+            && StringUtils.isNotEmpty(shareResourceEntity.getVersionList())
+            && shareResourceEntity.getVersionList().contains(versionId);
     }
 
     @Override
