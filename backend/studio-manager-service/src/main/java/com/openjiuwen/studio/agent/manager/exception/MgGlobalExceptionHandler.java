@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.BadSqlGrammarException;
@@ -27,6 +28,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -41,6 +43,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -291,15 +294,47 @@ public class MgGlobalExceptionHandler {
     }
 
     /**
-     * Content-Type 不匹配（例如直接 POST 未设置 multipart/form-data）。
+     * Content-Type 不匹配。按接口声明的consumes动态提示期望类型：
+     * 大多数接口期望application/json，仅文件上传类接口期望multipart/form-data，
+     * 硬编码multipart提示会对JSON接口调用方产生误导。
      */
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleHttpMediaTypeNotSupportedException(
         HttpMediaTypeNotSupportedException exception) {
-        String reason = "请求格式错误，需要 multipart/form-data 上传文件";
+        String supported = CollectionUtils.isEmpty(exception.getSupportedMediaTypes()) ? "application/json"
+            : exception.getSupportedMediaTypes().stream().map(Object::toString).distinct()
+                .collect(Collectors.joining("、"));
+        String reason = "请求格式错误，Content-Type 不被该接口支持，期望：" + supported;
         log.error("HttpMediaTypeNotSupportedException: {}", exception.getMessage());
         return badRequest(reason);
+    }
+
+    /**
+     * HTTP 方法不支持（如对仅支持 GET 的接口使用 POST 调用），返回 405 而非兜底的 500。
+     * 错误信息统一走 i18n，不向响应体拼接 Spring 解析出的方法列表：
+     * 路径变量映射会匹配出与业务无关的方法（如 /versions/{version_id} 可匹配 "references"），
+     * 拼出来容易误导调用方，仅记录到日志供运维排查。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleHttpRequestMethodNotSupportedException(
+        HttpRequestMethodNotSupportedException exception) {
+        Set<HttpMethod> supportedMethods = exception.getSupportedHttpMethods();
+        String supported = CollectionUtils.isEmpty(supportedMethods) ? "未知"
+            : supportedMethods.stream().map(HttpMethod::name).collect(Collectors.joining("/"));
+        log.error("HttpRequestMethodNotSupportedException: {}, resolved supported methods: {}",
+            exception.getMessage(), supported);
+        ErrorInfo errorInfo = i18nUtil.getMessage(
+            new AgentStudioException(StudioError.METHOD_NOT_SUPPORTED));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(StudioError.METHOD_NOT_SUPPORTED.getFullCode())
+            .setErrorMsg(errorInfo.getMessage())
+            .setErrorReason(errorInfo.getReason())
+            .setErrorSuggestion(errorInfo.getSuggestion());
+        // 透传 Spring 生成的 Allow 响应头（RFC 9110 要求 405 响应携带）
+        return new ResponseEntity<>(errorRsp, exception.getHeaders(),
+            StudioError.METHOD_NOT_SUPPORTED.getHttpStatus());
     }
 
     /** 构造 400 错误响应，error_reason 使用入参 reason（直接中文字面量），绕过 i18n 模板。 */

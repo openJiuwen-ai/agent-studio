@@ -14,6 +14,7 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.manager.entity.*;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
+import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.VisibilityEnum;
 import com.openjiuwen.studio.agent.manager.mapper.AppMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
@@ -1032,6 +1033,163 @@ class WorkflowManagementServiceTest {
         }
     }
 
+    @Test
+    void testDeleteWorkflowVersion_AllVersionsDeleted_ClearLastVersionId() {
+        // 删除唯一版本后，last_version_id 应置空（以被删版本号为期望值的条件更新）
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            entity.setLastVersionId("v1");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-1");
+            releaseVersion.setDslPath("dsl/path");
+            releaseVersion.setIrPath("ir/path");
+            releaseVersion.setAppId("wf-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+            when(releaseVersionMapper.selectByAppId(anyString())).thenReturn(Collections.emptyList());
+
+            workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "v1", "w1");
+
+            verify(workflowMapper).updateLastVersionIdIfMatch("p1", "wf-1", "v1", null);
+        }
+    }
+
+    @Test
+    void testDeleteWorkflowVersion_DeleteLatestVersion_RollbackLastVersionId() {
+        // 删除最新版本后还剩旧版本，last_version_id 应回退到现存最新版本
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            entity.setLastVersionId("200");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-2");
+            releaseVersion.setDslPath("dsl/path");
+            releaseVersion.setIrPath("ir/path");
+            releaseVersion.setAppId("wf-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+
+            ReleaseVersion remaining = new ReleaseVersion();
+            remaining.setAppId("wf-1");
+            remaining.setVersionId("100");
+            remaining.setVersionName("v1");
+            remaining.setReleasedOn(new Date());
+            when(releaseVersionMapper.selectByAppId(anyString())).thenReturn(List.of(remaining));
+
+            workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "200", "w1");
+
+            // 条件更新：期望被删版本号200，回退到现存最新版本100
+            verify(workflowMapper).updateLastVersionIdIfMatch("p1", "wf-1", "200", "100");
+        }
+    }
+
+    @Test
+    void testDeleteWorkflowVersion_DeleteMiddleVersion_LastVersionIdUnchanged() {
+        // 删除中间版本时，回退SQL以中间版本号为期望值，条件不命中即无副作用，last_version_id不受影响
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            entity.setLastVersionId("300");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-1");
+            releaseVersion.setDslPath("dsl/path");
+            releaseVersion.setIrPath("ir/path");
+            releaseVersion.setAppId("wf-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+
+            ReleaseVersion remaining = new ReleaseVersion();
+            remaining.setAppId("wf-1");
+            remaining.setVersionId("300");
+            remaining.setVersionName("v3");
+            remaining.setReleasedOn(new Date());
+            when(releaseVersionMapper.selectByAppId(anyString())).thenReturn(List.of(remaining));
+
+            // 删除中间版本100，现存最新300
+            workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "100", "w1");
+
+            // 期望值为被删版本号100，DB中last_version_id=300不匹配，条件更新不生效
+            verify(workflowMapper).updateLastVersionIdIfMatch("p1", "wf-1", "100", "300");
+        }
+    }
+
+    @Test
+    void testDeleteWorkflowVersion_AllVersionsDeleted_ClearDanglingMappingVersion() {
+        // 删除唯一版本后，引用该版本的mapping记录（agent绑定）应回退为null（跟随最新），避免悬空引用
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            entity.setLastVersionId("v1");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-1");
+            releaseVersion.setDslPath("dsl/path");
+            releaseVersion.setIrPath("ir/path");
+            releaseVersion.setAppId("wf-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+            when(releaseVersionMapper.selectByAppId(anyString())).thenReturn(Collections.emptyList());
+
+            workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "v1", "w1");
+
+            verify(mappingMapper).updateResourceVersionIfMatch("wf-1", "v1", null);
+        }
+    }
+
+    @Test
+    void testDeleteWorkflowVersion_DeleteLatestVersion_RollbackMappingVersion() {
+        // 删除最新版本后还剩旧版本，引用被删版本的mapping应回退到现存最新版本
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            WorkflowEntity entity = new WorkflowEntity();
+            entity.setId("wf-1");
+            entity.setWorkspaceId("w1");
+            entity.setLastVersionId("200");
+            when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setId("rv-2");
+            releaseVersion.setDslPath("dsl/path");
+            releaseVersion.setIrPath("ir/path");
+            releaseVersion.setAppId("wf-1");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(releaseVersion);
+
+            ReleaseVersion remaining = new ReleaseVersion();
+            remaining.setAppId("wf-1");
+            remaining.setVersionId("100");
+            remaining.setVersionName("v1");
+            remaining.setReleasedOn(new Date());
+            when(releaseVersionMapper.selectByAppId(anyString())).thenReturn(List.of(remaining));
+
+            workflowManagementService.deleteWorkflowVersion("p1", "wf-1", "200", "w1");
+
+            // 引用版本回退与last_version_id回退语义一致：期望被删版本号200，回退到现存最新版本100
+            verify(mappingMapper).updateResourceVersionIfMatch("wf-1", "200", "100");
+        }
+    }
+
     // ==================== getWorkflowVersion ====================
 
     @Test
@@ -1178,9 +1336,10 @@ class WorkflowManagementServiceTest {
             ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
 
             ShareResourceEntity shareResource = new ShareResourceEntity();
+            shareResource.setResourceId("wf-1");
             shareResource.setWorkspaceId("w1");
 
-            String result = workflowManagementService.getReferenceType(shareResource);
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.WORKFLOW, shareResource);
 
             assertEquals("direct", result);
         }
@@ -1192,9 +1351,79 @@ class WorkflowManagementServiceTest {
             ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
 
             ShareResourceEntity shareResource = new ShareResourceEntity();
+            shareResource.setResourceId("wf-1");
             shareResource.setWorkspaceId("w2");
 
-            String result = workflowManagementService.getReferenceType(shareResource);
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.WORKFLOW, shareResource);
+
+            assertEquals("share", result);
+        }
+    }
+
+    @Test
+    void testGetReferenceType_WorkflowCrossWorkspace_SkipsInnerTypeCheck() {
+        // 历史bug回归：workflow 的 id 查 t_tool 必然落空（isInnerType 恒为 true），
+        // 修复前跨空间共享引用被误判为 direct；修复后 workflow 不再走 isInnerType 判断
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+
+            ShareResourceEntity shareResource = new ShareResourceEntity();
+            shareResource.setResourceId("wf-1");
+            shareResource.setWorkspaceId("w2");
+
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.WORKFLOW, shareResource);
+
+            assertEquals("share", result);
+            verify(pluginBase, never()).isInnerType(anyString());
+        }
+    }
+
+    @Test
+    void testGetReferenceType_McpCrossWorkspace_SkipsInnerTypeCheck() {
+        // MCP 资源 id 同样不在 t_tool 中，跨空间共享引用不应因 isInnerType 误判为 direct
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+
+            ShareResourceEntity shareResource = new ShareResourceEntity();
+            shareResource.setResourceId("mcp-1");
+            shareResource.setWorkspaceId("w2");
+
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.MCP, shareResource);
+
+            assertEquals("share", result);
+            verify(pluginBase, never()).isInnerType(anyString());
+        }
+    }
+
+    @Test
+    void testGetReferenceType_ToolInnerType_Direct() {
+        // 内置插件为全局资源，即使跨空间存在共享记录也按直接引用处理（保持既有 TOOL 行为）
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            when(pluginBase.isInnerType("tool-1")).thenReturn(true);
+
+            ShareResourceEntity shareResource = new ShareResourceEntity();
+            shareResource.setResourceId("tool-1");
+            shareResource.setWorkspaceId("w2");
+
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.TOOL, shareResource);
+
+            assertEquals("direct", result);
+        }
+    }
+
+    @Test
+    void testGetReferenceType_ToolCustomCrossWorkspace_Share() {
+        // 自定义插件跨空间共享引用按 share 记录（保持既有 TOOL 行为）
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+            when(pluginBase.isInnerType("tool-1")).thenReturn(false);
+
+            ShareResourceEntity shareResource = new ShareResourceEntity();
+            shareResource.setResourceId("tool-1");
+            shareResource.setWorkspaceId("w2");
+
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.TOOL, shareResource);
 
             assertEquals("share", result);
         }

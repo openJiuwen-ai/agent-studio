@@ -102,6 +102,21 @@ public interface WorkflowMapper {
         @Param("workflowEntity") WorkflowEntity workflowEntity);
 
     /**
+     * 删除工作流版本后回退最新版本指针：仅当当前 last_version_id 仍等于被删版本号（expectedLastVersionId）时，
+     * 才将其更新为 newLastVersionId（剩余最新版本号，或版本全部删除时为null）。
+     * 采用条件更新（CAS）语义，删除中间版本或并发发布新版本时条件不匹配，不会产生副作用。
+     *
+     * @param projectId 用戶projectId
+     * @param id workflow id
+     * @param expectedLastVersionId 被删除的版本号
+     * @param newLastVersionId 回退后的版本号，可为null
+     * @return int 更新行数，0表示条件未匹配（无需回退）
+     */
+    int updateLastVersionIdIfMatch(@Param("projectId") String projectId, @Param("id") String id,
+        @Param("expectedLastVersionId") String expectedLastVersionId,
+        @Param("newLastVersionId") String newLastVersionId);
+
+    /**
      * 用于触发事务锁sql
      *
      * @param projectId 用戶projectId

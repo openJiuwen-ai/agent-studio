@@ -278,6 +278,13 @@
             and id = #{id,jdbcType=VARCHAR}
         </if>
     </update>
+    <update id="updateLastVersionIdIfMatch">
+        update t_agent_workflow
+        set last_version_id = #{newLastVersionId,jdbcType=VARCHAR}
+        where project_id = #{projectId,jdbcType=VARCHAR}
+          and id = #{id,jdbcType=VARCHAR}
+          and last_version_id = #{expectedLastVersionId,jdbcType=VARCHAR}
+    </update>
     <update id="updateWorkflowTransactionalId" parameterType="java.lang.String">
         update t_agent_workflow
         set id=#{id,jdbcType=VARCHAR}

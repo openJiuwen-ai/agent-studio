@@ -27,6 +27,7 @@ import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
+import static org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED;
 import static org.springframework.http.HttpStatus.NOT_ACCEPTABLE;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.OK;
@@ -671,6 +672,11 @@ public enum StudioError {
      * 上传大小超出最大限制
      */
     MAX_UPLOAD_SIZE_EXCEEDED(BAD_REQUEST, COMMON, "1128"),
+
+    /**
+     * 请求方法不支持（如对仅支持GET的接口使用POST调用）
+     */
+    METHOD_NOT_SUPPORTED(METHOD_NOT_ALLOWED, COMMON, "1129"),
 
 
     /**
