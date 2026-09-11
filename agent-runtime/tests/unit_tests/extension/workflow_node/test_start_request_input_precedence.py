@@ -210,8 +210,76 @@ class TestIsRootWorkflow:
 
     @staticmethod
     def test_depth_getter_raises_not_root():
-        """workflow_nesting_depth() 抛 catch 范围内异常 → 保守 False。"""
+        """workflow_nesting_depth() 抛异常 → 保守 False(broad except)。"""
         session = MagicMock()
         session._inner.workflow_nesting_depth.side_effect = ValueError("bad depth")
         assert Start._is_root_workflow(session) is False
 
+    @staticmethod
+    def test_depth_returning_false_not_root():
+        """False == 0 在 Python 为 True,必须用 type 严格判定,避免误判为根。"""
+        session = MagicMock()
+        session._inner.workflow_nesting_depth.return_value = False
+        assert Start._is_root_workflow(session) is False
+
+    @staticmethod
+    def test_depth_returning_none_not_root():
+        session = MagicMock()
+        session._inner.workflow_nesting_depth.return_value = None
+        assert Start._is_root_workflow(session) is False
+
+    @staticmethod
+    def test_depth_returning_string_zero_not_root():
+        """"0" 字符串虽 == 0,但非 int,不应判为根。"""
+        session = MagicMock()
+        session._inner.workflow_nesting_depth.return_value = "0"
+        assert Start._is_root_workflow(session) is False
+
+
+class TestMergeRequestFullResolution:
+    """组合 _merge_request_inputs → _fill_default_values 的最终值解析。"""
+
+    @staticmethod
+    def test_child_unmapped_resolves_to_child_default(monkeypatch):
+        """§7.2:子工作流未映射 → merge 保留 None → fill_default 填子默认。"""
+        _patch_request(monkeypatch, {"input": "parent-value"})
+        start = _make_start(["input"], defaults={"input": "child-default"})
+        merged = start._merge_request_inputs({"input": None}, _session(nesting_depth=1))
+        resolved = start._fill_default_values(merged)
+        assert resolved["input"] == "child-default"
+
+    @staticmethod
+    def test_child_field_absent_resolves_to_child_default(monkeypatch):
+        """§7.2:子工作流字段顶层不存在(非 None)→ 仍填子默认。"""
+        _patch_request(monkeypatch, {"input": "parent-value"})
+        start = _make_start(["input"], defaults={"input": "child-default"})
+        merged = start._merge_request_inputs({}, _session(nesting_depth=1))
+        resolved = start._fill_default_values(merged)
+        assert resolved["input"] == "child-default"
+
+    @staticmethod
+    def test_root_request_value_survives_default_fill(monkeypatch):
+        """根工作流:_request 值合并后不被默认值覆盖。"""
+        _patch_request(monkeypatch, {"input": "studio"})
+        start = _make_start(["input"], defaults={"input": "root-default"})
+        merged = start._merge_request_inputs({"input": None}, _session(nesting_depth=0))
+        resolved = start._fill_default_values(merged)
+        assert resolved["input"] == "studio"
+
+    @staticmethod
+    def test_root_no_request_fills_default(monkeypatch):
+        """根工作流:_request 无值 → 默认值生效。"""
+        _patch_request(monkeypatch, {})
+        start = _make_start(["input"], defaults={"input": "root-default"})
+        merged = start._merge_request_inputs({"input": None}, _session(nesting_depth=0))
+        resolved = start._fill_default_values(merged)
+        assert resolved["input"] == "root-default"
+
+    @staticmethod
+    def test_reuse_workflow_standalone_trial_uses_request(monkeypatch):
+        """§7.3:可复用工作流单独试运行(depth=0)→ 真实请求值优先于默认值。"""
+        _patch_request(monkeypatch, {"input": "trial-value"})
+        start = _make_start(["input"], defaults={"input": "reuse-default"})
+        merged = start._merge_request_inputs({"input": None}, _session(nesting_depth=0))
+        resolved = start._fill_default_values(merged)
+        assert resolved["input"] == "trial-value"
