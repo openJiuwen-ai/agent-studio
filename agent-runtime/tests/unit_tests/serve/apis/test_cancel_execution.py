@@ -162,7 +162,7 @@ class TestCancelEndpoint200:
 
     @pytest.mark.asyncio
     async def test_no_inflight_suspended_marks_and_succeeds(self):
-        """无在飞但有挂起归属快照且 project 匹配（挂起态取消）→ 200 且标记置位（US3 依赖）。"""
+        """无在飞但有挂起归属快照且 project/入口匹配（挂起态取消）→ 200 且标记置位（US3 依赖）。"""
         registry = _make_registry(None)
         registry.get_suspension = AsyncMock(return_value={
             "instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"
@@ -170,7 +170,7 @@ class TestCancelEndpoint200:
 
         with _patch_registry(registry):
             resp = await cancel_execution(
-                _make_request(), project_id="proj-1", conversation_id="conv-none", agent_id="agent-9"
+                _make_request(), project_id="proj-1", conversation_id="conv-none", agent_id="agent-1"
             )
 
         assert resp.status_code == 200
@@ -178,6 +178,26 @@ class TestCancelEndpoint200:
         assert body["cancelled"] is True
         assert body["running"] is False
         registry.mark_cancelled.assert_awaited_once_with("conv-none")
+
+    @pytest.mark.asyncio
+    async def test_no_inflight_suspended_entry_mismatch_403(self):
+        """挂起态入口级校验（检视④）：携带 agent_id 与快照入口不符 → 403、不置位。"""
+        registry = _make_registry(None)
+        registry.get_suspension = AsyncMock(return_value={
+            "instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"
+        })
+
+        with patch("agent_runtime.serve.apis.orchestration._build_error_response") as ber:
+            ber.return_value = JSONResponse(status_code=403, content={"error_code": "sentinel"})
+            with _patch_registry(registry):
+                resp = await cancel_execution(
+                    _make_request(), project_id="proj-1", conversation_id="conv-none",
+                    agent_id="agent-wrong",
+                )
+
+        assert resp.status_code == 403
+        ber.assert_called_once_with(403, _CODE_AGENT_PERMISSION, "zh-cn")
+        registry.mark_cancelled.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_no_inflight_suspended_project_mismatch_403(self):

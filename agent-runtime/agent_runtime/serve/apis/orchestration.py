@@ -247,8 +247,9 @@ async def ir_execute(req_json: dict, request: Request):
         if not entry_id:
             workflow_logger.warning(
                 "ir_execute without entry_id: request.state.instance_id not set "
-                "(bypassed app_run endpoints?), cancel entry-level check will "
-                "degrade, conv=%s",
+                "(bypassed app_run endpoints?), cancel with entry query "
+                "(agent_id/workflow_id) will be rejected 403 as no entry to "
+                "compare, conv=%s",
                 req.conversation_id,
             )
         return StreamingResponse(
@@ -425,20 +426,20 @@ class CancelCheckContext:
 
 
 async def _check_before_cancel(
-    registry,
-    conversation_id: str,
+    registration: dict,
     ctx: CancelCheckContext,
     language: str,
 ):
     """终止接口运行时归属校验（与执行接口 run_check"项目匹配 403"同规格）。
 
-    路径 project_id 强校验恒在；可选 query agentId/workflowId 提供任一则做入口级校验
-    （与 exec:{conv} 注册记录的 agent_id 字段比对）。不匹配返回 403 ErrorRsp（403 时
-    取消标记不置位——本函数只读不写）；无在飞注册记录幂等放行返回 None。
-    403 错误码按入口分流复用统一码表两码（零新增 i18n key）：携带 agentId→02101016、
-    其余（携带 workflowId 或仅 project 不匹配）→02201020。
+    路径 project_id 强校验恒在；可选 query agent_id/workflow_id 提供任一则做入口级
+    校验（与 exec:{conv} 注册记录的 agent_id 字段比对）。不匹配返回 403 ErrorRsp
+    （403 时取消标记不置位——本函数只读不写）；无在飞注册记录幂等放行返回 None。
+    403 错误码按入口分流复用统一码表两码（零新增 i18n key）：携带 agent_id→02101016、
+    其余（携带 workflow_id 或仅 project 不匹配）→02201020。
+
+    registration 由调用方读取后传入（只读一次复用，消除校验后重读的 TOCTOU 窗口）。
     """
-    registration = await registry.get_registration(conversation_id)
     if not registration:
         return None  # 无在飞记录：幂等放行（US9）；是否置位由调用方按挂起态决定
     provided_entry = ctx.agent_id or ctx.workflow_id
@@ -449,8 +450,7 @@ async def _check_before_cancel(
     if project_mismatch or entry_mismatch:
         code_key = _CODE_AGENT_PERMISSION if ctx.agent_id else _CODE_WORKFLOW_PERMISSION
         workflow_logger.info(
-            "Cancel forbidden: conv=%s provided_entry=%s registered_project=%s",
-            conversation_id,
+            "Cancel forbidden: provided_entry=%s registered_project=%s",
             provided_entry,
             registration.get("project_id"),
         )
@@ -477,16 +477,17 @@ async def cancel_execution(
     language = request.headers.get("x-language", "zh-cn")
     registry = get_execution_registry()
 
+    # registration 只读一次：校验与回显/置位复用同一份，消除"校验后再读"的
+    # TOCTOU 窗口（两次读取间注册被替换时会绕过已完成的归属校验）
+    registration = await registry.get_registration(conversation_id)
     forbidden_response = await _check_before_cancel(
-        registry,
-        conversation_id,
+        registration,
         CancelCheckContext(project_id=project_id, agent_id=agent_id, workflow_id=workflow_id),
         language,
     )
     if forbidden_response is not None:
         return forbidden_response
 
-    registration = await registry.get_registration(conversation_id)
     running = bool(registration)  # 是否检测到在飞执行（仅参考信息）
     if not running:
         # 无在飞注册（从未执行/已结束/已挂起注销）：凭挂起归属快照 suspend:{conv}
@@ -511,16 +512,24 @@ async def cancel_execution(
                     "message": "cancel signal accepted",
                 },
             )
-        if suspension.get("project_id") != project_id:
-            # 挂起态归属校验（路径 project 与快照不符 → 403，与在飞校验同规格）
+        # 挂起态归属校验（与在飞校验同规格）：路径 project 强校验 + 可选入口级校验
+        provided_entry = agent_id or workflow_id
+        project_mismatch = suspension.get("project_id") != project_id
+        entry_mismatch = (
+            bool(provided_entry) and suspension.get("agent_id") != provided_entry
+        )
+        if project_mismatch or entry_mismatch:
+            code_key = _CODE_AGENT_PERMISSION if agent_id else _CODE_WORKFLOW_PERMISSION
             workflow_logger.info(
                 "Cancel forbidden on suspended session: conv=%s caller_project=%s "
-                "suspended_project=%s",
+                "suspended_project=%s provided_entry=%s suspended_entry=%s",
                 conversation_id,
                 project_id,
                 suspension.get("project_id"),
+                provided_entry,
+                suspension.get("agent_id"),
             )
-            return _build_error_response(403, _CODE_WORKFLOW_PERMISSION, language)
+            return _build_error_response(403, code_key, language)
     await registry.mark_cancelled(conversation_id)
     return JSONResponse(
         status_code=200,
