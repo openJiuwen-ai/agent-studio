@@ -45,11 +45,6 @@ function init_config_file() {
   cd /home/service/
   cp /home/conf/nginx.conf $nginx_conf
 
-  touch /opt/cloud/wiseagent-nginx/logs/access.log
-  chmod 640 /opt/cloud/wiseagent-nginx/logs/access.log
-  touch /opt/cloud/wiseagent-nginx/logs/error.log
-  chmod 640 /opt/cloud/wiseagent-nginx/logs/error.log
-
   export POD_IP=$(ip addr | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | awk -F '/' '{print $1}' | head -1)
   sed -i "s/pod_ip/${POD_IP}/g" $nginx_conf/nginx.conf
 

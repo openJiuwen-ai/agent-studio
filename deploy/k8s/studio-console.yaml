@@ -7,7 +7,7 @@ spec:
   ports:
     - name: cce-service-0
       protocol: TCP
-      # HTTPS启动：将port和targetPort改为443和8443
+      # HTTPS启动：port改为443、targetPort改为8443
       port: 80
       targetPort: 8080
       nodePort: 30001
