@@ -9,7 +9,7 @@ import time
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 from agent_runtime.common.config import settings, ModelConfigStrategyType
 from agent_runtime.common.ir_exceptions import IRBuildException
@@ -254,8 +254,10 @@ async def ir_execute(req_json: dict, request: Request):
         return StreamingResponse(
             content=stream_response(
                 req, execution_id, runner, moderation_engine,
-                entry_id=entry_id,
-                project_id=getattr(request.state, "project_id", ""),
+                entry=StreamEntryContext(
+                    entry_id=entry_id,
+                    project_id=getattr(request.state, "project_id", ""),
+                ),
             ),
             media_type="text/event-stream",
         )
@@ -315,13 +317,24 @@ def _fallback_terminal_done(execution_id: str) -> str:
     return f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
 
+@dataclass
+class StreamEntryContext:
+    """执行入口上下文（ir_execute 从 request.state 注入，注册归属数据源）。
+
+    entry_id：执行智能体时=agent_id、执行工作流时=workflow_id（request.state.instance_id）；
+    project_id：执行端点路径 project（request.state.project_id，与 cancel 校验同口径）。
+    """
+
+    entry_id: str = ""
+    project_id: str = ""
+
+
 async def stream_response(
     req: ExecutionRequest,
     execution_id: str,
     runner,
     moderation_engine=None,
-    entry_id: str = "",
-    project_id: str = "",
+    entry: Optional[StreamEntryContext] = None,
 ):
     """
     透传 OutputSchema 格式
@@ -338,28 +351,42 @@ async def stream_response(
     未发 done 时才构造空兜底。
 
     执行注册（终止接口数据源）：开头注册 current_task + 归属四元组到 ExecutionRegistry
-    （agent_id=entry_id，由 ir_execute 从 request.state.instance_id 传入：执行智能体时=agent_id、
-    执行工作流时=workflow_id）；finally 首行注销，自然结束/异常/被取消三路径均无残留。
+    （agent_id=entry.entry_id、project 优先 entry.project_id，均由 ir_execute 从
+    request.state 注入：执行智能体时 entry_id=agent_id、执行工作流时=workflow_id）；
+    finally 首行注销，自然结束/异常/被取消三路径均无残留。
     运行中被取消时本生成器被 task.cancel() 掐断，末尾无 done（无 done 即中止约定）。
     """
     execution_id = execution_id or str(uuid.uuid4())
     registry = get_execution_registry()
     entry_task = asyncio.current_task()
+    entry = entry or StreamEntryContext()
     try:
+        # 新执行开始：先清旧挂起归属快照（必须在 register 重写之前——否则清掉的是
+        # 本次刚写的；旧快照残留会使会话结束后的 cancel 按过期归属误置位）
+        try:
+            await registry.clear_suspension(req.conversation_id)
+        except Exception as clear_susp_err:  # noqa: BLE001 防御性清理，失败不阻断
+            workflow_logger.warning(
+                "Failed to clear stale suspension snapshot before register: conv=%s, %s",
+                req.conversation_id,
+                clear_susp_err,
+            )
         try:
             _ctx = _request_ctx.get()
         except LookupError:
             _ctx = None
         # 注册 project 优先取执行端点注入的路径 project_id（ir_execute 从
         # request.state 传入，与 cancel 的路径校验同口径）；无注入时回退 token 解析值
-        register_project_id = project_id or (_ctx.project_id if _ctx is not None else "")
+        register_project_id = entry.project_id or (
+            _ctx.project_id if _ctx is not None else ""
+        )
         await registry.register(
             req.conversation_id,
             entry_task,
             execution_id,
             info=RegistrationInfo(
                 project_id=register_project_id,
-                agent_id=entry_id,
+                agent_id=entry.entry_id,
                 user_id=(_ctx.user_id if _ctx is not None else ""),
             ),
         )

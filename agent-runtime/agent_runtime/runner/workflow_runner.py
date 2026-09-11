@@ -191,13 +191,6 @@ class WorkflowRunner:
         """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
         await get_redis_client().delete(f"cancel:{conversation_id}")
 
-    async def _clear_suspension_snapshot(self, conversation_id: str) -> None:
-        """清除挂起归属快照（新执行开始时调用；键名与 execution_registry.SUSPEND_KEY_PREFIX 一致）。
-
-        旧快照不清理会使会话后续 cancel 按过期归属置位；本次执行的 register 会重写新快照。
-        """
-        await get_redis_client().delete(f"suspend:{conversation_id}")
-
     async def run_streaming(
         self,
         req: ExecutionRequest,
@@ -347,15 +340,14 @@ class WorkflowRunner:
                     session_id,
                 )
         elif not is_interrupted:
-            # 全新执行（非恢复）开始即清残留取消标记与挂起归属快照：上次取消遗留的
-            # true 若不清，本执行一旦进入中断节点挂起，下次 resume 会被误判为已取
-            # 消、误清本执行的合法 checkpoint（检视意见②）；旧 suspend 快照若不清，
-            # 会话后续 cancel 会按过期归属误置位。DEL 不存在键为 no-op；US3 的恢复
-            # 分支（is_interrupted=true）不受影响。防御性清理：失败不阻断执行主流程
-            # （残留键经 TTL 过期兜底，suspend 由本次 register 重写）
+            # 全新执行（非恢复）开始即清残留取消标记：上次取消遗留的 true 若不清，
+            # 本执行一旦进入中断节点挂起，下次 resume 会被误判为已取消、误清本执行
+            # 的合法 checkpoint（检视意见②）。DEL 不存在键为 no-op；US3 的恢复分支
+            # （is_interrupted=true）不受影响。防御性清理：失败不阻断执行主流程
+            # （残留标记经 TTL 过期兜底）。旧 suspend 快照的清理在 stream_response
+            # 的 register 之前执行（此处已晚于 register 重写，不能再清）
             try:
                 await self._clear_session_cancelled(session_id)
-                await self._clear_suspension_snapshot(session_id)
             except Exception as stale_clear_err:  # noqa: BLE001
                 workflow_logger.warning(
                     "Failed to clear stale cancel flag on new execution: conv=%s, %s",

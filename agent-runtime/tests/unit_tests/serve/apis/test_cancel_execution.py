@@ -21,6 +21,7 @@ from agent_runtime.serve.apis import orchestration
 from agent_runtime.serve.apis.orchestration import (
     _CODE_AGENT_PERMISSION,
     _CODE_WORKFLOW_PERMISSION,
+    StreamEntryContext,
     _build_error_response,
     cancel_execution,
     stream_response,
@@ -256,7 +257,7 @@ class TestStreamRegistration:
 
         with _patch_registry(registry):
             frames = await self._collect(
-                stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry_id="agent-1")
+                stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry=StreamEntryContext(entry_id="agent-1"))
             )
 
         assert len(frames) == 2  # message + 兜底 done
@@ -276,7 +277,7 @@ class TestStreamRegistration:
 
         with _patch_registry(registry), pytest.raises(RuntimeError):
             await self._collect(
-                stream_response(_req(), "exec-1", self._BrokenRunner(), entry_id="agent-1")
+                stream_response(_req(), "exec-1", self._BrokenRunner(), entry=StreamEntryContext(entry_id="agent-1"))
             )
 
         registry.register.assert_awaited_once()
@@ -291,7 +292,7 @@ class TestStreamRegistration:
         try:
             with _patch_registry(registry):
                 await self._collect(
-                    stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry_id="wf-1")
+                    stream_response(_req(), "exec-1", self._FakeRunner([_sse("message")]), entry=StreamEntryContext(entry_id="wf-1"))
                 )
         finally:
             orchestration._request_ctx.reset(token)
