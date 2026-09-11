@@ -95,7 +95,7 @@ spec:
               value: 'http://studio-runtime:31014'
             # ======== [选填] 功能开关 ========
             - name: front_page_block_nodes
-              value: 'Sql,DataQuery,Agent'
+              value: 'Sql,DataQuery'
             - name: share_knowledge_enabled
               value: 'true'
             - name: workflow_async_enable
