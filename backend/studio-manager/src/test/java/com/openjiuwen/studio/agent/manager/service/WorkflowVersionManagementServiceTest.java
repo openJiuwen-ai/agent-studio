@@ -26,12 +26,14 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
+import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -53,6 +55,8 @@ class WorkflowVersionManagementServiceTest extends BaseTest {
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private MgObsService mgObsService;
+
+    private AutoCloseable mockitoCloseable;
 
     @Autowired
     private WorkflowManagementService workflowManagementService;
@@ -77,7 +81,15 @@ class WorkflowVersionManagementServiceTest extends BaseTest {
 
     @BeforeEach
     void setUp() {
+        // 显式初始化 @Mock 字段，与同包 AgentExportServiceTest 惯例一致，
+        // 不依赖 spring-boot-test 的 MockitoTestExecutionListener（该监听器已标记 4.0.0 移除）
+        mockitoCloseable = MockitoAnnotations.openMocks(this);
         ReflectionTestUtils.setField(workflowManagementService, "obsService", mgObsService);
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        mockitoCloseable.close();
     }
 
     @Test

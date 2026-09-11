@@ -4,7 +4,6 @@ package com.openjiuwen.studio.agent.manager.exception;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -126,7 +125,12 @@ class MgGlobalExceptionHandlerTest {
         AsyncRequestTimeoutException ex = new AsyncRequestTimeoutException();
         when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("timeout error");
 
-        assertThrows(NumberFormatException.class, () -> handler.handleException(ex));
+        ResponseEntity<ErrorRsp> response = handler.handleException(ex);
+
+        assertNotNull(response);
+        assertNotNull(response.getBody());
+        assertEquals(String.valueOf(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getCode()),
+            response.getBody().getErrorCode());
     }
 
     @Test

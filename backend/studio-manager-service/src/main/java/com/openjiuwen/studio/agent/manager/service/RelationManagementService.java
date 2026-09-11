@@ -1426,7 +1426,9 @@ public class RelationManagementService implements IRelationManagementService {
      * 1）已绑定记录：CAS回退resource_version，随保存操作渐进式修复存量脏数据；
      * 2）入参记录：内存同步规整。modify路径的updateResourceParameterByAppIDAndResourceId会无条件回写
      *    resource_version，若沿用前端传入的悬空版本号，会把刚愈合的数据重新写回脏值。
-     * 仅处理当前agent的草稿绑定记录（非全表批量修改），CAS条件更新不误伤并发产生的新版本引用；
+     * 仅处理当前agent绑定的工作流（非全表批量扫描）。CAS回退按resource_id+原版本号匹配，
+     * 会一并修复其他agent引用同一悬空版本的草稿行（它们指向同样已删除的版本，回退目标一致，
+     * 属同一修复动作，加速脏数据收敛）；app_version非null的版本快照行不受影响（不可变历史）。
      * 版本存在时跳过，正常路径零行为变化，可重复执行。
      *
      * @param projectId 项目ID
