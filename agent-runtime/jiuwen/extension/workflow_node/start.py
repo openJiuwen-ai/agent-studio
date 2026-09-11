@@ -586,9 +586,10 @@ class Start(WorkflowComponent):
 
     @staticmethod
     def _is_root_workflow(session: Session) -> bool:
-        """仅根工作流(depth==0)返回 True。
+        """仅根工作流(depth==0 且为整数)返回 True。
 
         复用 flow_message.py 的取法:session._inner.workflow_nesting_depth()。
+        严格限制返回值类型为 int,避免 bool 子类(False == 0)误判为根。
         前置 _request 合并是本次新增行为,无法判定嵌套层级时不扩大生效
         范围(保守返回 False,跳过合并)。
         """
@@ -597,8 +598,9 @@ class Start(WorkflowComponent):
         if not callable(depth_getter):
             return False
         try:
-            return depth_getter() == 0
-        except (AttributeError, TypeError, ValueError):
+            depth = depth_getter()
+            return type(depth) is int and depth == 0
+        except Exception:
             return False
 
     def _merge_request_inputs(self, inputs: dict, session: Session) -> dict:
