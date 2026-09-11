@@ -176,6 +176,21 @@ class WorkflowRunner:
         checkpointer = CheckpointerFactory.get_checkpointer()
         return await checkpointer.session_exists(session_id)
 
+    async def _is_session_cancelled(self, conversation_id: str) -> bool:
+        """查询协作式取消标记（终止接口置位；键名与 serve/execution_registry.py 保持一致）
+
+        直读 Redis，不 import serve 层（依赖方向：runner 不依赖 serve）。
+        Redis 客户端 decode_responses=False，值为 bytes，按 bytes 语义比较。
+        """
+        value = await get_redis_client().get(f"cancel:{conversation_id}")
+        if isinstance(value, bytes):
+            return value == b"true"
+        return value == "true"
+
+    async def _clear_session_cancelled(self, conversation_id: str) -> None:
+        """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
+        await get_redis_client().delete(f"cancel:{conversation_id}")
+
     async def run_streaming(
         self,
         req: ExecutionRequest,
@@ -273,6 +288,72 @@ class WorkflowRunner:
         # 5. 检查会话是否处于中断状态，构建 inputs
         t_checkpoint = time.perf_counter()
         is_interrupted = await self._is_session_interrupted(session_id)
+        # 取消标记检测（终止接口）：中断节点挂起期间被取消 → 不恢复中断态，
+        # 从入口重新执行（同会话 ID 再次输入从智能体入口重跑，US3）。
+        # 顺序约定：先清 checkpoint、成功后才清取消标记——清理失败时保留标记，
+        # 本次入口重跑撞 CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR 显性报错且下次
+        # 重发仍走入口重跑（取消意图不丢失），而非标记已丢、静默恢复旧中断态
+        if is_interrupted and await self._is_session_cancelled(session_id):
+            is_interrupted = False
+            checkpoint_cleared = False
+            # 丢弃中断态 checkpoint：从入口重跑=旧状态作废；否则 pre_workflow_execute
+            # 撞 workflow-state-exists 错误（CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR）
+            try:
+                checkpointer = CheckpointerFactory.get_checkpointer()
+                clear_checkpoint = getattr(
+                    checkpointer, "_clear_checkpoint_and_sentinel", None
+                )
+                if clear_checkpoint:
+                    await clear_checkpoint(
+                        session_id, ir_json.get("workflowId", ""), session
+                    )
+                    checkpoint_cleared = True
+                else:
+                    # 非 fast checkpointer（如 FAST_CHECKPOINTER_ENABLED=false 时的底层
+                    # 实现）无该清理方法：保留取消标记，入口重跑将撞显性报错。可开
+                    # _force_del_workflow_state 开关让 pre_workflow_execute 删旧 state
+                    # 继续执行（openjiuwen persistence 层支持），恢复 US3 语义
+                    workflow_logger.warning(
+                        "Checkpointer lacks _clear_checkpoint_and_sentinel (non-fast "
+                        "checkpointer?): restart-from-entry will hit "
+                        "CHECKPOINTER_PRE_WORKFLOW_EXECUTION_ERROR unless "
+                        "_force_del_workflow_state is enabled, conv=%s",
+                        session_id,
+                    )
+            except Exception as clear_err:
+                workflow_logger.warning(
+                    "Failed to clear interrupted checkpoint after cancel "
+                    "(cancel flag kept for retry): conv=%s, %s",
+                    session_id,
+                    clear_err,
+                )
+            if checkpoint_cleared:
+                await self._clear_session_cancelled(session_id)
+                workflow_logger.info(
+                    "Session cancelled before resume: conv=%s, restart from entry",
+                    session_id,
+                )
+            else:
+                workflow_logger.warning(
+                    "Cancel flag kept: checkpoint not cleared, restart-from-entry "
+                    "will fail loudly and retry stays on restart path, conv=%s",
+                    session_id,
+                )
+        elif not is_interrupted:
+            # 全新执行（非恢复）开始即清残留取消标记：上次取消遗留的 true 若不清，
+            # 本执行一旦进入中断节点挂起，下次 resume 会被误判为已取消、误清本执行
+            # 的合法 checkpoint（检视意见②）。DEL 不存在键为 no-op；US3 的恢复分支
+            # （is_interrupted=true）不受影响。防御性清理：失败不阻断执行主流程
+            # （残留标记经 TTL 过期兜底）。旧 suspend 快照的清理在 stream_response
+            # 的 register 之前执行（此处已晚于 register 重写，不能再清）
+            try:
+                await self._clear_session_cancelled(session_id)
+            except Exception as stale_clear_err:  # noqa: BLE001
+                workflow_logger.warning(
+                    "Failed to clear stale cancel flag on new execution: conv=%s, %s",
+                    session_id,
+                    stale_clear_err,
+                )
         performance_logger.info(
             f"checkpoint_check|{round((time.perf_counter() - t_checkpoint) * 1000)}"
         )

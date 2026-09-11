@@ -121,6 +121,13 @@ class HierarchicalControlAgent(BaseControlAgent):
                             agent_id,
                         )
 
+                except asyncio.CancelledError:
+                    # 上游终止（运行中取消）传播到本层：连带取消在飞的成员执行
+                    # （级联终止，避免 finally 里 await send_task 拖到自然结束），
+                    # 然后继续向上传播，保证 HTTP 流即时掐断且无终态 done
+                    if send_task and not send_task.done():
+                        send_task.cancel()
+                    raise
                 except Exception as e:
                     error_msg = f"Agent execution failed: {str(e)}"
                     yield self._log_and_yield_error(error_msg, agent_id)
