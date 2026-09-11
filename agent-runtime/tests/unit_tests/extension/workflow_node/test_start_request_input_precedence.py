@@ -53,35 +53,40 @@ def _session():
 class TestMergeRequestInputsPrecedence:
     """_merge_request_inputs — 优先级与边界。"""
 
-    def test_direct_none_request_has_value_default_exists_uses_request(self, monkeypatch):
+    @staticmethod
+    def test_direct_none_request_has_value_default_exists_uses_request(monkeypatch):
         """§9.1-1:顶层 None + _request 有值 + 有默认 → 取 _request。"""
         _patch_request(monkeypatch, {"input": "studio"})
         start = _make_start(["input"], defaults={"input": "主工作流默认值"})
         merged = start._merge_request_inputs({"input": None}, _session())
         assert merged["input"] == "studio"
 
-    def test_direct_absent_request_has_value_uses_request(self, monkeypatch):
+    @staticmethod
+    def test_direct_absent_request_has_value_uses_request(monkeypatch):
         """§9.1-2:顶层字段缺失 + _request 有值 → 取 _request。"""
         _patch_request(monkeypatch, {"input": "studio"})
         start = _make_start(["input"], defaults={"input": "default"})
         merged = start._merge_request_inputs({}, _session())
         assert merged["input"] == "studio"
 
-    def test_direct_value_not_overridden_by_request(self, monkeypatch):
+    @staticmethod
+    def test_direct_value_not_overridden_by_request(monkeypatch):
         """§9.1-3:顶层有值 + _request 也有值 → 取顶层。"""
         _patch_request(monkeypatch, {"input": "request-value"})
         start = _make_start(["input"], defaults={"input": "default"})
         merged = start._merge_request_inputs({"input": "direct-value"}, _session())
         assert merged["input"] == "direct-value"
 
-    def test_neither_direct_nor_request_keeps_absent(self, monkeypatch):
+    @staticmethod
+    def test_neither_direct_nor_request_keeps_absent(monkeypatch):
         """§9.1-4:顶层和 _request 都无值 → merge 不引入该字段(留给默认值填充)。"""
         _patch_request(monkeypatch, {})
         start = _make_start(["input"], defaults={"input": "default"})
         merged = start._merge_request_inputs({"input": None}, _session())
         assert merged["input"] is None
 
-    def test_request_none_does_not_override(self, monkeypatch):
+    @staticmethod
+    def test_request_none_does_not_override(monkeypatch):
         """§9.1-5:_request 值为 None → 不覆盖顶层 None(留给默认值填充)。"""
         _patch_request(monkeypatch, {"input": None})
         start = _make_start(["input"], defaults={"input": "default"})
@@ -93,14 +98,16 @@ class TestMergeRequestInputsPrecedence:
         [False, 0, [], {}],
         ids=["false", "zero", "empty_list", "empty_dict"],
     )
-    def test_falsy_request_values_preserved(self, monkeypatch, value):
+    @staticmethod
+    def test_falsy_request_values_preserved(monkeypatch, value):
         """§9.1-6:_request 值为 False/0/[]/{} → 保留实际值(不用真值判断)。"""
         _patch_request(monkeypatch, {"flag": value})
         start = _make_start(["flag"], defaults={"flag": "default"})
         merged = start._merge_request_inputs({"flag": None}, _session())
         assert merged["flag"] == value
 
-    def test_undeclared_request_field_not_merged(self, monkeypatch):
+    @staticmethod
+    def test_undeclared_request_field_not_merged(monkeypatch):
         """§9.1-7:_request 中 Start 未声明字段 → 不进入 merged_inputs。"""
         _patch_request(monkeypatch, {"input": "studio", "undeclared": "leak"})
         start = _make_start(["input"], defaults={"input": "default"})
@@ -108,7 +115,8 @@ class TestMergeRequestInputsPrecedence:
         assert "undeclared" not in merged
         assert merged["input"] == "studio"
 
-    def test_multiple_fields_resolve_independently(self, monkeypatch):
+    @staticmethod
+    def test_multiple_fields_resolve_independently(monkeypatch):
         """§9.1-8:多字段分别按优先级处理。"""
         _patch_request(monkeypatch, {
             "a": "req-a",   # 顶层 None → 取 _request
@@ -128,7 +136,8 @@ class TestMergeRequestInputsPrecedence:
         assert merged["c"] is None
         assert merged["d"] is None
 
-    def test_no_declared_fields_passes_through(self, monkeypatch):
+    @staticmethod
+    def test_no_declared_fields_passes_through(monkeypatch):
         """§9.1-10:无声明字段的 Start,merge 不引入任何 _request 字段。"""
         _patch_request(monkeypatch, {"input": "studio", "other": "x"})
         start = _make_start([], defaults={})
