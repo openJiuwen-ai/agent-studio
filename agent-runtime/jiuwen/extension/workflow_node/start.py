@@ -584,17 +584,40 @@ class Start(WorkflowComponent):
             result[key] = value
         return result
 
+    @staticmethod
+    def _is_root_workflow(session: Session) -> bool:
+        """仅根工作流(depth==0)返回 True。
+
+        复用 flow_message.py 的取法:session._inner.workflow_nesting_depth()。
+        前置 _request 合并是本次新增行为,无法判定嵌套层级时不扩大生效
+        范围(保守返回 False,跳过合并)。
+        """
+        inner_session = getattr(session, "_inner", None)
+        depth_getter = getattr(inner_session, "workflow_nesting_depth", None)
+        if not callable(depth_getter):
+            return False
+        try:
+            return depth_getter() == 0
+        except (AttributeError, TypeError, ValueError):
+            return False
+
     def _merge_request_inputs(self, inputs: dict, session: Session) -> dict:
         """将本轮 _request 中 Start 已声明的入参合并到直接输入。
 
-        在默认值填充之前执行，使本轮请求真实值优先于默认值：
-        直接输入有效值 > _request 同名非 None 值 > Start 配置默认值。
+        仅对根工作流(depth==0)Start 生效。子工作流经 SubWorkflow 作用域
+        继承父 _request 同名值,若在默认值填充前合并,会遮蔽子工作流默认值,
+        故子工作流直接返回原输入深拷贝,不参与前置合并。
 
-        只允许 Start 声明的用户字段从 _request 进入，避免未声明字段泄漏；
+        根工作流优先级:直接输入有效值 > _request 同名非 None 值 > Start 默认值。
+        只允许 Start 声明的用户字段从 _request 进入,避免未声明字段泄漏；
         顶层已有非 None 值时不覆盖；_request 值为 None 时不覆盖；
-        用 is None 判据而非真值判断，保留 False/0/空集合等合法假值。
+        用 is None 判据而非真值判断,保留 False/0/空集合等合法假值。
         """
         merged_inputs = deepcopy(inputs or {})
+
+        if not self._is_root_workflow(session):
+            return merged_inputs
+
         request_inputs = get_workflow_param(session, REQUEST_VARIABLES) or {}
 
         declared_fields = self._config.get(USER_FIELDS, {}).get("inputs", [])
