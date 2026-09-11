@@ -17,8 +17,12 @@ import asyncio
 import time
 from unittest.mock import patch
 
-import fakeredis.aioredis
 import pytest
+
+# 门禁环境未安装 fakeredis（且不按 pyproject dev 组装依赖）：缺包时跳过整个模块
+# 而非 collect 失败；本地/装有 fakeredis 的环境照常执行
+pytest.importorskip("fakeredis.aioredis")
+import fakeredis.aioredis  # noqa: E402 依赖 importorskip 之后，确保缺包先跳过
 
 from agent_runtime.runner.workflow_runner import WorkflowRunner
 from agent_runtime.serve.apis.orchestration import cancel_execution
