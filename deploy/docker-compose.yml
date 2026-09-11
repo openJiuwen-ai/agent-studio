@@ -188,7 +188,7 @@ services:
       agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-runtime:31014}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
-      front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery,Agent}
+      front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}
       # 知识库模式（可选，默认 LakeSearch 行为不变）：LakeSearch/CUSTOM
