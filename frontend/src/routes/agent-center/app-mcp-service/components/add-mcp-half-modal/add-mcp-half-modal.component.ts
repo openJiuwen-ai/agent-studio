@@ -4,12 +4,16 @@ import { HelpDocKey } from '@constants/support-topic.const';
 import { I18nNamespace } from '@i18n';
 import * as mcpInterfaces from '@interfaces/mcp/mcp.interfaces';
 import { McpInterfaces } from '@interfaces/mcp/mcp.interfaces';
+import { PromptType, VariableType, IVariable } from '@interfaces/prompt/prompt-optimize-task.interface';
 import { MonacoEditorConstructionOptions, MonacoEditorModule } from '@materia-ui/ngx-monaco-editor';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
+import { ParamEditorComponent } from '@routes/agent-center/app-plugin/components/param-editor/param-editor.component';
 import { MCPService } from '@services/agent-center/mcp.service';
 import { CommonService } from '@services/common.service';
 import { PromptService } from '@services/prompt.service';
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
+import { EnvironmentVariablesManagementService } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
 import { MCP_DEFAULT_ICON_BASE64_STR } from '@shared/config/default-icons-base64';
 import { MODULES } from '@shared/modules';
 import { HelpLinksService } from '@shared/services/help-links.service';
@@ -32,7 +36,7 @@ enum mapKeys {
   templateUrl: './add-mcp-half-modal.component.html',
   styleUrls: ['./add-mcp-half-modal.component.scss'],
   standalone: true,
-  imports: [MODULES, MonacoEditorModule, NzEmptyModule, NzDrawerModule],
+  imports: [MODULES, MonacoEditorModule, NzEmptyModule, NzDrawerModule, ParamEditorComponent],
   providers: [
     {
       provide: I18NEXT_NAMESPACE,
@@ -87,6 +91,15 @@ export class AddMcpHalfModalComponent implements OnInit {
     headers: [],
     editor: JSON.stringify({}, null, 2),
   };
+  /** 默认环境的环境变量列表，供 URL 引用选择 */
+  public envVarList: { name: string; type: string }[] = [];
+  /** meta-param-editor 变量插入器状态 */
+  public isShowInserter: boolean = false;
+  public variables: Array<IVariable> = [];
+  public initVariables: Array<IVariable> = [];
+  /** 从 URL 中提取的 {varName} 参数列表，每项含 env_var_ref 绑定 */
+  public mcpUrlParams: Array<{ name: string; env_var_ref: string }> = [];
+  protected readonly PromptType = PromptType;
   public editorOptions: MonacoEditorConstructionOptions = {
     theme: 'vs-dark',
     language: 'json',
@@ -108,7 +121,7 @@ export class AddMcpHalfModalComponent implements OnInit {
     SSE: {
       mcpServers: {
         'example-sse': {
-          url: this.i18n.transform('exampleInfo'),
+          url: '',
         },
       },
     },
@@ -124,7 +137,7 @@ export class AddMcpHalfModalComponent implements OnInit {
     STREAMABLE_HTTP: {
       mcpServers: {
         'example-streamable-http': {
-          url: this.i18n.transform('exampleInfo'),
+          url: '',
         },
       },
     },
@@ -213,7 +226,9 @@ export class AddMcpHalfModalComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private configServ: AgentConfigService,
     public promptService: PromptService,
-    public helpLinksService: HelpLinksService
+    public helpLinksService: HelpLinksService,
+    private envManagementService: EnvManagementService,
+    private envVarService: EnvironmentVariablesManagementService,
   ) {
     this.lang = CommonUtils.getLanguage();
     this.isHcs = false;
@@ -225,6 +240,7 @@ export class AddMcpHalfModalComponent implements OnInit {
   }
 
   public ngOnInit() {
+    this.loadEnvVarList();
     if (!this.title) {
       this.title = this.action === 'create' ? this.i18n.transform('createMcp') : this.i18n.transform('editMcp');
     }
@@ -279,6 +295,7 @@ export class AddMcpHalfModalComponent implements OnInit {
         this.mcpModalSelected.icon = this.mcpModalSelected.icon || MCP_DEFAULT_ICON_BASE64_STR;
         this.setMcpModalData();
         this.setMcpAuthConfigData();
+        this.cdr.detectChanges();
       })
       .finally(() => {
         this.mcpModalLoading = false;
@@ -444,6 +461,9 @@ export class AddMcpHalfModalComponent implements OnInit {
     this.mcpModalData.environments.length = 0;
     this.mcpModalData.param.value = '';
     this.mcpModalData.param.isVisible = true;
+    this.mcpUrlParams = [];
+    this.variables = [];
+    this.initVariables = [];
     if (this.mcpModalSelected.id === this.emptyTemplateId) {
       // 此时用户选择的是空白模板
       if (this.mcpModalSelected.org_type === 'NPX') {
@@ -490,7 +510,7 @@ export class AddMcpHalfModalComponent implements OnInit {
       }
       this.processMcpModelDataWithNotEmptyTemplate(innerObj, innerObjKeys);
     } catch (e) {
-      // do something
+      console.error('setMcpModalDataWithNotEmptyTemplate error:', e);
     }
   }
 
@@ -521,7 +541,10 @@ export class AddMcpHalfModalComponent implements OnInit {
     // 添加 STREAMABLE_HTTP 类型
     if (this.mcpModalSelected.org_type === 'SSE' || this.mcpModalSelected.org_type === 'STREAMABLE_HTTP') {
       const innerObjKeys = Object.keys(innerObj);
-      this.mcpModalData.param.value = innerObj[innerObjKeys[0]].url;
+      const savedUrl = innerObj[innerObjKeys[0]]?.url;
+      if (savedUrl) {
+        this.mcpModalData.param.value = this.initUrlFromSaved(savedUrl);
+      }
       if (innerObj[innerObjKeys[0]].headers) {
         Object.keys(innerObj[innerObjKeys[0]].headers).forEach(key => {
           this.mcpModalData.headers.push({
@@ -552,6 +575,107 @@ export class AddMcpHalfModalComponent implements OnInit {
    */
   isZH(): boolean {
     return this.lang === 'zh-cn';
+  }
+
+  /** 加载默认环境的环境变量列表，供 URL 引用选择 */
+  private loadEnvVarList(): void {
+    this.envManagementService.getEnvironmentList({ offset: 0, limit: 99 }).then(res => {
+      const defaultEnv = (res?.env_info || []).find((e: any) => e.isDefault);
+      if (!defaultEnv?.id) {
+        this.envVarList = [];
+        return;
+      }
+      this.envVarService.getEnvVariablesDetail(defaultEnv.id).then(varRes => {
+        this.envVarList = (varRes?.variables || [])
+          .filter(v => v.name)
+          .map(v => ({ name: v.name, type: v.value?.type || 'string' }));
+        this.cdr.detectChanges();
+      }).catch(() => { this.envVarList = []; });
+    }).catch(() => { this.envVarList = []; });
+  }
+
+  /** 切换变量插入器显示 */
+  public showInserter(): void {
+    this.isShowInserter = !this.isShowInserter;
+  }
+
+  /** 隐藏变量插入器 */
+  public hideInserter(): void {
+    this.isShowInserter = false;
+  }
+
+  /** meta-param-editor 变量变更回调 */
+  public updateVariables(variables: IVariable[]): void {
+    this.variables = variables;
+    this.cdr.detectChanges();
+    this.onMcpUrlChange();
+  }
+
+  /** 从 URL 中提取 {varName} 参数，构建 mcpUrlParams（保留已有 env_var_ref 绑定） */
+  public onMcpUrlChange(): void {
+    const url = this.mcpModalData.param.value || '';
+    const matches = url.match(/{[a-zA-Z0-9_$-]+}/g) ?? [];
+    const names = matches.map(m => m.replace(/{|}/g, ''));
+    const newParams: Array<{ name: string; env_var_ref: string }> = [];
+    for (const name of names) {
+      const existing = this.mcpUrlParams.find(p => p.name === name);
+      newParams.push({
+        name,
+        env_var_ref: existing?.env_var_ref || '',
+      });
+    }
+    this.mcpUrlParams = newParams;
+    this.updateConfirmBtnState();
+  }
+
+  /** 环境变量未选全时禁用确认按钮 */
+  public updateConfirmBtnState(): void {
+    if (this.mcpUrlParams.length > 0) {
+      this.isDisabledConfirmBtn = this.mcpUrlParams.some(p => !p.env_var_ref);
+    } else {
+      this.isDisabledConfirmBtn = false;
+    }
+  }
+
+  /** 保存时将 URL 中的 {varName} 转换为 ${_env.plugin_url_params.envVarRef} */
+  private convertUrlForSave(url: string): string {
+    if (!url || !this.mcpUrlParams.length) {
+      return url;
+    }
+    let result = url;
+    for (const param of this.mcpUrlParams) {
+      if (param.env_var_ref) {
+        const escapedName = param.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        result = result.replace(
+          new RegExp(`\\{${escapedName}\\}`, 'g'),
+          `\${_env.plugin_url_params.${param.env_var_ref}}`,
+        );
+      }
+    }
+    return result;
+  }
+
+  /** 加载时将 URL 中的 ${_env.plugin_url_params.VAR} 转换回 {VAR} 并重建 mcpUrlParams */
+  private initUrlFromSaved(url: string): string {
+    if (!url) {
+      return url;
+    }
+    const displayUrl = url.replace(
+      /\$\{_env\.plugin_url_params\.([^}]+)\}/g,
+      '{$1}',
+    );
+    // 重建 mcpUrlParams
+    const matches = displayUrl.match(/{[a-zA-Z0-9_$-]+}/g) ?? [];
+    const names = matches.map(m => m.replace(/{|}/g, ''));
+    this.mcpUrlParams = names.map(name => ({
+      name,
+      env_var_ref: name,
+    }));
+    // 重建 variables 供 meta-param-editor 使用
+    this.variables = names.map(name => ({ type: VariableType.TEXT, value: name }));
+    this.initVariables = [...this.variables];
+    this.updateConfirmBtnState();
+    return displayUrl;
   }
 
   /**
@@ -820,7 +944,7 @@ export class AddMcpHalfModalComponent implements OnInit {
       });
     }
     if (this.mcpModalSelected.org_type === 'SSE' || this.mcpModalSelected.org_type === 'STREAMABLE_HTTP') {
-      this.mcpModalData.param.value = firstKeyValue[keys[0]].url;
+      this.mcpModalData.param.value = this.initUrlFromSaved(firstKeyValue[keys[0]].url);
       this.mcpModalData.param.isVisible = true;
       if (isNeedSwitch) {
         this.mcpModalDataType = value;
@@ -860,7 +984,7 @@ export class AddMcpHalfModalComponent implements OnInit {
       }
     }
     if (this.mcpModalSelected.org_type === 'SSE' || this.mcpModalSelected.org_type === 'STREAMABLE_HTTP') {
-      firstKeyValue[keys[0]].url = this.mcpModalData.param.value;
+      firstKeyValue[keys[0]].url = this.convertUrlForSave(this.mcpModalData.param.value);
       this.mcpModalData.editor = JSON.stringify(data, null, 2);
       if (isNeedSwitch) {
         this.mcpModalDataType = value;

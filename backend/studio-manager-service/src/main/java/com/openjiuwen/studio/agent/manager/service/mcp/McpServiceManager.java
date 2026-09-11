@@ -17,9 +17,11 @@ import com.openjiuwen.studio.agent.common.enums.OperationType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.service.CommonService;
+import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.ThreadLocalUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.CesMetricDataResp;
@@ -45,6 +47,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServiceModifyReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceSkinnyEntity;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceStatisticResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsEntity;
+import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsTestReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsTestResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServicesCesLineChartQo;
@@ -53,6 +56,7 @@ import com.openjiuwen.studio.agent.manager.dto.PageInfoV2;
 import com.openjiuwen.studio.agent.manager.dto.McpFailReasonDetailDto;
 import com.openjiuwen.studio.agent.manager.dto.ListServersQo;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerRatingEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
@@ -60,6 +64,7 @@ import com.openjiuwen.studio.agent.manager.entity.ServerScore;
 import com.openjiuwen.studio.agent.manager.enums.EnumMcpStatus;
 import com.openjiuwen.studio.agent.manager.enums.EnumOrgType;
 import com.openjiuwen.studio.agent.manager.enums.McpNodeType;
+import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.service.IMcpServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.ApiMcpService;
@@ -70,6 +75,7 @@ import com.openjiuwen.studio.agent.manager.service.mcp.local.McpUpdateTask;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerDao;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerRatingDao;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServiceDao;
+import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
 import com.openjiuwen.studio.agent.manager.service.workspace.WorkspaceMappingService;
 import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
@@ -127,6 +133,7 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -170,8 +177,8 @@ public class McpServiceManager implements IMcpServiceManagerService {
     @Autowired
     private OkHttpClientUtils okHttpClientUtils;
 
-    // 【修改点】在最后加上了 "+" 号，允许 Base64 Token 通过
-    private static final Pattern SERVICE_CONFIG_PATTERN = Pattern.compile("^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}@!！*%#+\\s]*$");
+    // 【修改点】在最后加上了 "+" 号，允许 Base64 Token 通过；加上了 "$" 号，允许环境变量引用占位符 ${_env.plugin_url_params.VAR}
+    private static final Pattern SERVICE_CONFIG_PATTERN = Pattern.compile("^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}@!！*%#$+\\s]*$");
 
     private static final Pattern NAME_PATTERN = Pattern.compile("^(?!_)(?!-)(?!\\d)[a-zA-Z0-9_\\-\\u4e00-\\u9fa5()（）\\s.]{2,64}$");
 
@@ -278,6 +285,12 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
     @Autowired
     private UrlCheckUtils urlCheckUtils;
+
+    @Autowired
+    private EnvironmentCacheUtil environmentCacheUtil;
+
+    @Autowired
+    private EnvironmentManagerMapper environmentManagerMapper;
     /**
      * 服务列表
      *
@@ -838,8 +851,13 @@ public class McpServiceManager implements IMcpServiceManagerService {
             Strings.CI.equals(serviceDeployReq.getOrgType(), EnumOrgType.STREAMABLE_HTTP.toString())) {
             JSONObject jsonObject = JSONObject.parseObject(serviceDeployReq.getServerConfig());
             String url = removeQueryParamsFromUrl(CommonUtil.parseUrlFromMcpConfig(jsonObject, 0));
-            urlCheckUtils.checkUrl(null, url);
-            checkSwaggerUrlValid(url, connectorConfigHostBlacklist);
+            // URL 含环境变量占位符时跳过 URI/SSRF 校验，真实地址由运行期解析
+            if (!urlCheckUtils.hasEnvPlaceholder(url)) {
+                urlCheckUtils.checkUrl(null, url);
+                checkSwaggerUrlValid(url, connectorConfigHostBlacklist);
+            } else {
+                log.info("Skip URL check for env-var placeholder. Service name: {}", serviceDeployReq.getName());
+            }
         }
         if (StringUtils.isNotBlank(serviceDeployReq.getIcon())) {
             log.info("Validating service icon.");
@@ -1159,6 +1177,8 @@ public class McpServiceManager implements IMcpServiceManagerService {
             serviceEntity.setAuthType(serviceDetail.getAuthType());
             serviceEntity.setTempToken(RequestContextUtils.getRequestAuthToken());
             serviceEntity.setTenantId(tenantId);
+            serviceEntity.setProjectId(RequestContextUtils.getRequestProjectId());
+            serviceEntity.setWorkspaceId(RequestContextUtils.getRequestWorkspaceId());
             // 异步获取工具列表 (getMcpServiceToolList 方法在第二部分代码中，需要确保 ClientService 支持 streamable_http)
             // 替换旧的手动异步逻辑，调用统一公共方法
 
@@ -1212,6 +1232,8 @@ public class McpServiceManager implements IMcpServiceManagerService {
             serviceEntity.setNodeType(McpNodeType.Mcp.getValue());
             // 补全租户信息，否则异步线程里报错会空指针
             serviceEntity.setTenantId(tenantId);
+            serviceEntity.setProjectId(RequestContextUtils.getRequestProjectId());
+            serviceEntity.setWorkspaceId(RequestContextUtils.getRequestWorkspaceId());
 
             // 初始状态设为 CREATING_STACK
             serviceEntity.setFcInstanceStatus(CREATING_STACK.getValue());
@@ -1342,6 +1364,28 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
 
         String mcpUrl = serviceEntity.getFcInstanceUrl();
+
+        // URL 含环境变量占位符时，使用默认环境变量解析后测试
+        if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+            log.info("Resolving env-var placeholder URL for tool test. Service ID: {}", testInfo.getServiceId());
+            mcpUrl = resolveEnvPlaceholderUrl(mcpUrl, serviceEntity.getProjectId(),
+                serviceEntity.getWorkspaceId());
+            if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+                log.warn("Failed to resolve env-var placeholder URL. Service ID: {}", testInfo.getServiceId());
+                McpServiceDataResp resp = new McpServiceDataResp();
+                McpServiceToolsTestResp testResp = new McpServiceToolsTestResp();
+                testResp.setIsError(true);
+                testResp.setContent(Collections.singletonList(
+                    "URL contains environment variable placeholder, cannot test until runtime resolution"));
+                resp.setData(testResp);
+                return resp;
+            }
+            // 对解析后的真实 URL 补充 SSRF/内网防护校验
+            if (Boolean.TRUE.equals(enableUrlCheck)) {
+                urlCheckUtils.checkUrl(null, mcpUrl);
+                checkSwaggerUrlValid(mcpUrl, connectorConfigHostBlacklist);
+            }
+        }
 
         String query = CommonUtil.getRawQueryString(CommonUtil.parseUrlFromMcpConfig(
             JSONObject.parseObject(encryptionAdapter.decrypt(serviceEntity.getServerConfig())), 0));
@@ -1501,6 +1545,23 @@ public class McpServiceManager implements IMcpServiceManagerService {
         String mcpUrl = serviceEntity.getFcInstanceUrl();
         log.info("FC instance URL: {}", mcpUrl);
 
+        // URL 含环境变量占位符时，使用默认环境变量解析后获取工具列表
+        if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+            log.info("Resolving env-var placeholder URL for service ID: {}", serviceId);
+            mcpUrl = resolveEnvPlaceholderUrl(mcpUrl, serviceEntity.getProjectId(),
+                serviceEntity.getWorkspaceId());
+            if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+                log.warn("Failed to resolve env-var placeholder URL, returning cached tools. Service ID: {}",
+                    serviceId);
+                return serviceEntity.getTools() != null ? serviceEntity.getTools() : "[]";
+            }
+            // 对解析后的真实 URL 补充 SSRF/内网防护校验
+            if (Boolean.TRUE.equals(enableUrlCheck)) {
+                urlCheckUtils.checkUrl(null, mcpUrl);
+                checkSwaggerUrlValid(mcpUrl, connectorConfigHostBlacklist);
+            }
+        }
+
         String query = CommonUtil.getRawQueryString(CommonUtil.parseUrlFromMcpConfig(
             JSONObject.parseObject(encryptionAdapter.decrypt(serviceEntity.getServerConfig())), 0));
         if (!StringUtils.isEmpty(query)) {
@@ -1610,6 +1671,37 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
             handleExceptionWithError(serviceEntity, t, studioError);
         }
+    }
+
+    /**
+     * 工作流导入后刷新MCP工具列表（异步）
+     * 当URL含环境变量占位符时，使用目标空间的默认环境变量解析并获取工具
+     */
+    public void refreshToolsAfterImport(McpServiceEntity serviceEntity) {
+        String fcInstanceUrl = serviceEntity.getFcInstanceUrl();
+        if (StringUtils.isBlank(fcInstanceUrl) || !fcInstanceUrl.contains("${_env.")) {
+            return;
+        }
+        log.info("Refreshing tools after import for service ID: {}", serviceEntity.getId());
+        String authToken = RequestContextUtils.getRequestAuthToken();
+        String projectId = serviceEntity.getProjectId();
+        String tenantId = serviceEntity.getTenantId();
+        String workspaceId = serviceEntity.getWorkspaceId();
+        serviceEntity.setTempToken(authToken);
+
+        mcpTaskExecutor.execute(() -> {
+            try {
+                RequestContextUtils.setContext(authToken, projectId, tenantId);
+                ThreadLocalUtils.setWorkspaceId(workspaceId);
+                this.getMcpServiceToolListAndUpdateStatus(serviceEntity);
+            } catch (Throwable t) {
+                log.error("Fatal error during MCP import tool refresh for service {}", serviceEntity.getId(), t);
+                handleExceptionWithError(serviceEntity, t, StudioError.MCP_NETWORK_CONNECTION_ERROR);
+            } finally {
+                RequestContextUtils.remove();
+                ThreadLocalUtils.clearWorkspaceId();
+            }
+        });
     }
 
 
@@ -1949,6 +2041,65 @@ public class McpServiceManager implements IMcpServiceManagerService {
     }
 
     /**
+     * 使用默认环境的变量值解析 URL 中的 ${_env.plugin_url_params.VAR} 占位符。
+     * 解析失败时返回原始 URL（仍含占位符），调用方可通过 hasEnvPlaceholder 二次检查判断。
+     *
+     * @param url 含占位符的 URL
+     * @param projectId 项目 ID
+     * @param workspaceId 工作空间 ID
+     * @return 解析后的真实 URL，或原始 URL（解析失败时）
+     */
+    private String resolveEnvPlaceholderUrl(String url, String projectId, String workspaceId) {
+        if (StringUtils.isBlank(projectId) || StringUtils.isBlank(workspaceId)) {
+            log.warn("Cannot resolve env placeholder: projectId or workspaceId is null.");
+            return url;
+        }
+        try {
+            List<EnvironmentManagerEntity> defaultEnvs =
+                environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId);
+            if (CollectionUtils.isEmpty(defaultEnvs)) {
+                log.warn("No default environment found for project: {}", projectId);
+                return url;
+            }
+            String envId = defaultEnvs.get(0).getId();
+            String envJson = environmentCacheUtil.getEnvironmentCache(envId, workspaceId);
+            if (StringUtils.isBlank(envJson) || "{}".equals(envJson)) {
+                log.warn("No environment variables cached for env: {}, workspace: {}", envId, workspaceId);
+                return url;
+            }
+            List<EnvironmentVariable> envVars = McpJsonUtils.toList(envJson, EnvironmentVariable.class);
+            if (CollectionUtils.isEmpty(envVars)) {
+                return url;
+            }
+            String resolvedUrl = url;
+            for (EnvironmentVariable var : envVars) {
+                if (var.getName() == null || var.getValue() == null
+                    || var.getValue().getContent() == null) {
+                    continue;
+                }
+                String varValue = var.getValue().getContent().trim();
+                if (Boolean.TRUE.equals(var.getValue().isSecret())) {
+                    try {
+                        varValue = CryptoUtils.decrypt(varValue);
+                    } catch (Exception e) {
+                        log.warn("Failed to decrypt secret env var: {}, skipping", var.getName());
+                        continue;
+                    }
+                }
+                // 正则替换：同时消除占位符前后的空白（ParamEditor 芯片可能插入多余空格）
+                String placeholderRegex = "\\s*\\$\\{_env\\.plugin_url_params\\."
+                    + Pattern.quote(var.getName()) + "\\}\\s*";
+                resolvedUrl = resolvedUrl.replaceAll(placeholderRegex, Matcher.quoteReplacement(varValue));
+            }
+            log.info("Resolved env placeholder URL for project: {}", projectId);
+            return resolvedUrl;
+        } catch (Exception e) {
+            log.error("Failed to resolve env placeholder URL: {}", CommonUtil.maskUrlCredentials(url), e);
+            return url;
+        }
+    }
+
+    /**
      * 获取工具列表 (核心方法：包含智能重试、异常拆包、条件放行侦察兵与智能推断机制)
      *
      */
@@ -1956,6 +2107,24 @@ public class McpServiceManager implements IMcpServiceManagerService {
         log.info("Start to get MCP service tool list. Service ID: {}", serviceEntity.getId());
 
         String mcpUrl = serviceEntity.getFcInstanceUrl();
+
+        // URL 含环境变量占位符 ${_env.plugin_url_params.VAR} 时，使用默认环境变量解析后获取工具列表
+        if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+            log.info("Resolving env-var placeholder URL for service ID: {}", serviceEntity.getId());
+            mcpUrl = resolveEnvPlaceholderUrl(mcpUrl, serviceEntity.getProjectId(),
+                serviceEntity.getWorkspaceId());
+            if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+                log.warn("Failed to resolve env-var placeholder URL, skipping tool fetch. Service ID: {}",
+                    serviceEntity.getId());
+                return "";
+            }
+            // 对解析后的真实 URL 补充 SSRF/内网防护校验
+            if (Boolean.TRUE.equals(enableUrlCheck)) {
+                urlCheckUtils.checkUrl(null, mcpUrl);
+                checkSwaggerUrlValid(mcpUrl, connectorConfigHostBlacklist);
+            }
+        }
+
         // 解密并解析配置中的 URL Query 参数
         String query = CommonUtil.getRawQueryString(CommonUtil.parseUrlFromMcpConfig(
                 JSONObject.parseObject(encryptionAdapter.decrypt(serviceEntity.getServerConfig())), 0));
@@ -2505,6 +2674,22 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         log.info("No tools found in DB. Starting to fetch from MCP.");
         String mcpUrl = serviceEntity.getFcInstanceUrl();
+
+        // URL 含环境变量占位符时，使用默认环境变量解析后获取工具列表
+        if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+            log.info("Resolving env-var placeholder URL for service ID: {}", serviceId);
+            mcpUrl = resolveEnvPlaceholderUrl(mcpUrl, serviceEntity.getProjectId(),
+                serviceEntity.getWorkspaceId());
+            if (urlCheckUtils.hasEnvPlaceholder(mcpUrl)) {
+                log.warn("Failed to resolve env-var placeholder URL. Service ID: {}", serviceId);
+                return mcpServiceToolsEntity;
+            }
+            // 对解析后的真实 URL 补充 SSRF/内网防护校验
+            if (Boolean.TRUE.equals(enableUrlCheck)) {
+                urlCheckUtils.checkUrl(null, mcpUrl);
+                checkSwaggerUrlValid(mcpUrl, connectorConfigHostBlacklist);
+            }
+        }
 
         String query = CommonUtil.getRawQueryString(CommonUtil.parseUrlFromMcpConfig(
             JSONObject.parseObject(encryptionAdapter.decrypt(serviceEntity.getServerConfig())), 0));
