@@ -128,14 +128,19 @@
                   <div class="flex justify-between gap-[48px]">
                     <div class="flex gap-[12px]">
                       <ng-container *ngIf="item.thinking; else completed">
-                        <img alt=""
-                          [src]="
-                            changeUrl(
-                              'assets/agent-center/icons/deep-loading-icon.svg'
-                            )
-                          "
-                        />
-                        <span>{{ 'thinking_deeply' | i18nextEager }}</span>
+                        <ng-container *ngIf="item.terminate === true">
+                          <span>{{ 'stopped_thinking' | i18nextEager }}</span>
+                        </ng-container>
+                        <ng-container *ngIf="item.terminate !== true">
+                          <img alt=""
+                            [src]="
+                              changeUrl(
+                                'assets/agent-center/icons/deep-loading-icon.svg'
+                              )
+                            "
+                          />
+                          <span>{{ 'thinking_deeply' | i18nextEager }}</span>
+                        </ng-container>
                       </ng-container>
                     </div>
 
@@ -240,6 +245,7 @@
                               {{ 'run_time' | i18nextEager }}
                               <span style="color: #191919">{{ item.latency }}</span>
                             </ng-container>
+                            <span *ngIf="item.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                             <div
                               *ngIf="(item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && answer.text?.trim()"
                               class="chat-footer-icon"
