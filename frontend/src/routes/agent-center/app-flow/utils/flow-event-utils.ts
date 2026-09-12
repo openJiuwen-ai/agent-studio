@@ -58,6 +58,8 @@ export const FlowEventUtils = {
 
     let batchNodeEventTimer = null;
 
+    const containerTranslating = new Map<string, any>();
+
     flowComponent.graph.on('render:done', (data: any) => {
       // 画布渲染完成，重新设置连接桩样式
       this.resetNodePort(flowComponent.graph);
@@ -942,9 +944,13 @@ export const FlowEventUtils = {
       const children = node.getChildren();
       if (children && children.length) {
         node.prop('originPosition', node.getPosition());
+        containerTranslating.set(node.id, options);
       }
 
       const parent = node.getParent();
+      if (parent && containerTranslating.get(parent.id) === options) {
+        return;
+      }
       this.resetParentSize(parent);
     });
 
