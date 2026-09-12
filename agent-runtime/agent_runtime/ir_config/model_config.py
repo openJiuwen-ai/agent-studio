@@ -142,7 +142,10 @@ class IRModelConfigProvider(ModelConfigProvider):
         extra_body = None
         thinking = hyper_params.get("thinking")
         if thinking and isinstance(thinking, dict) and "type" in thinking:
-            extra_body = {"thinking": thinking}
+            extra_body = {
+                "thinking": thinking,
+                "enable_thinking": thinking["type"] == "enabled",
+            }
 
         model_request_config = ModelRequestConfig(
             model=model_name,
