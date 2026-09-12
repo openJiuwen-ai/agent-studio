@@ -60,7 +60,7 @@
         <hadoop.version>3.4.2</hadoop.version>
         <http.version>4.5.14</http.version>
         <org.jetbrains.version>26.0.1</org.jetbrains.version>
-        <io-netty-version>4.1.136.Final</io-netty-version>
+        <io-netty-version>4.1.137.Final</io-netty-version>
         <vpc-version>3.1.163</vpc-version>
         <swr-version>3.1.151</swr-version>
         <elb-version>3.1.125</elb-version>
@@ -74,12 +74,12 @@
         <kotlin.version>2.0.21</kotlin.version>
         <avro.version>1.12.1</avro.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
-        <httpclient5.version>5.4.4</httpclient5.version>
+        <httpclient5.version>5.6.3</httpclient5.version>
         <httpcore5.version>5.3</httpcore5.version>
         <nimbus-jose-jwt.version>10.3</nimbus-jose-jwt.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jsqlparser.version>4.7</jsqlparser.version>
-        <postgresql.version>42.7.11</postgresql.version>
+        <postgresql.version>42.7.12</postgresql.version>
     </properties>
     <dependencies>
         <dependency>
