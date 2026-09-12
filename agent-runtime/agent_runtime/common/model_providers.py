@@ -374,7 +374,10 @@ class OBSModelConfigProvider(ModelConfigProvider):
         extra_body = None
         thinking = hyper_params.get("thinking")
         if thinking and isinstance(thinking, dict) and "type" in thinking:
-            extra_body = {"thinking": thinking}
+            extra_body = {
+                "thinking": thinking,
+                "enable_thinking": thinking["type"] == "enabled",
+            }
 
         model_request_config = ModelRequestConfig(
             model=model_service_id,
@@ -454,7 +457,10 @@ class IRModelConfigProvider(ModelConfigProvider):
         extra_body = None
         thinking = hyper_params.get("thinking")
         if thinking and isinstance(thinking, dict) and "type" in thinking:
-            extra_body = {"thinking": thinking}
+            extra_body = {
+                "thinking": thinking,
+                "enable_thinking": thinking["type"] == "enabled",
+            }
 
         # 构建 ModelRequestConfig，传递所有已知的超参数
         # ModelRequestConfig 定义了 model_name(aliased as "model"), temperature, top_p, max_tokens, stop

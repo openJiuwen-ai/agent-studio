@@ -61,7 +61,10 @@ class TestThinkingEnabled:
 
         extra_body = getattr(result.model_config, "extra_body", None)
         assert extra_body is not None
-        assert extra_body == {"thinking": {"type": "enabled"}}
+        assert extra_body == {
+            "thinking": {"type": "enabled"},
+            "enable_thinking": True,
+        }
 
 
 class TestThinkingAbsent:
