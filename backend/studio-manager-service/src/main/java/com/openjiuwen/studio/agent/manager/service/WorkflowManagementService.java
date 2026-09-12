@@ -1122,7 +1122,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
         body.setWorkflowId(workflowId)
             .setStatus(0)
-            .setWorkflowDetails(JSONObject.from(workflowVo))
+            .setWorkflowDetails(JSON.parseObject(JSON.toJSONString(workflowVo)))
             .setCreateTime(currentTime)
             .setUpdateTime(currentTime)
             .setPublishTime(null)
