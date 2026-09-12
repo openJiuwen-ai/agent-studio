@@ -408,11 +408,16 @@
   <div class="call-node-IO" *ngIf="!callItem.collapsed">
     <div
       class="crumb"
-      *ngIf="callItem?.node_type === 'Workflow'"
+      *ngIf="callItem?.node_type === 'Workflow' || callItem?.node_type === 'Loop'"
       (click)="getChildWorkflow(callItem)"
     >
       <nz-icon class="mr-1" nzType="export" nzTheme="outline"></nz-icon>
-      <span>{{ 'view_sub_workflow_call_chain' | i18nextEager }}</span>
+      <span>{{
+        (callItem?.node_type === 'Loop'
+          ? 'view_loop_call_chain'
+          : 'view_sub_workflow_call_chain'
+        ) | i18nextEager
+      }}</span>
     </div>
     <div *ngIf="!callItem.isIOEmptyInputs; else noInputs" class="mb-[12px]">
       <div class="node-inputs-area">

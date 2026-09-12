@@ -257,6 +257,12 @@ class BaseEventsProcessor(ABC):
 
         node_type = data.get(DEBUG_NODE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
+
+        # 循环上下文字段：引擎侧为 int/str，此处做类型防护，
+        # 避免异常类型触发 pydantic ValidationError 中断整条事件流
+        raw_loop_node_id = data.get("loopNodeId")
+        raw_loop_index = data.get("loopIndex")
+
         node_data = WorkflowNodeMessageDataField(
             agent_id=data.get("agentId"),
             node_id=data.get("componentId"),
@@ -271,6 +277,8 @@ class BaseEventsProcessor(ABC):
             start_time=start_time,
             end_time=end_time,
             execution_id=data.get("traceId"),
+            loop_node_id=raw_loop_node_id if isinstance(raw_loop_node_id, str) else None,
+            loop_index=raw_loop_index if isinstance(raw_loop_index, int) and not isinstance(raw_loop_index, bool) else None,
         )
 
         invoke_data = data.get("onInvokeData")
