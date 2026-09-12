@@ -475,9 +475,7 @@ export class ChatFlowPageComponent
     this.chatLoop[lastIndex].thinkLoading = false;
     const end_time = new Date().getTime();
     const currentAns = this.chatLoop[lastIndex].showAnswer[this.index];
-    currentAns.text = `${currentAns.text || ''}${
-      currentAns.text ? '<br>' : ''
-    }${this.i18n.transform('stopped_generating')}`;
+    this.chatLoop[lastIndex].terminate = true;
     currentAns.loading = false;
     this.chatLoop[lastIndex].latency = flowCommonLogic.calcElapsedTime(
       this.start_time,

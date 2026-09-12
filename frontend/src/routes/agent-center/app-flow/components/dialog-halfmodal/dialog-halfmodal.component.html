@@ -394,7 +394,7 @@
                                 (item.execution_id && !isDevelporFlag && supportAnnotation))}"
                               *ngIf="
                             last &&
-                            ((item.latency || (item.execution_id && !answer.loading)) || !isRequesting) &&
+                            ((item.latency || (item.execution_id && !answer.loading)) || item !== chatLoop[chatLoop.length - 1] || !isRequesting) &&
                             !(answer.isError && !answer.loading)
                           "
                             >
@@ -416,12 +416,12 @@
                                 !answer.isError &&
                                 answer.messageId) ||
                                 (item.execution_id && !isDevelporFlag && supportAnnotation) ||
-                                (!isRequesting && !answer.loading && getText(answer.text).length)
+                                (item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && getText(answer.text).length
                             "
                                 class="flex gap-[4px] items-center pl-[16px] split"
                               >
                                 <div
-                                  *ngIf="!isRequesting && !answer.loading && getText(answer.text).length"
+                                  *ngIf="(item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && getText(answer.text).length"
                                   class="chat-footer-icon"
                                   nz-tooltip
                                   [nzTooltipTitle]="'copy' | i18nextEager"
@@ -620,7 +620,7 @@
                                 (item.execution_id && !isDevelporFlag && supportAnnotation))}"
                                 *ngIf="
                              last &&
-                                ((item.latency || (item.execution_id && !answer.loading)) || !isRequesting) &&
+                                ((item.latency || (item.execution_id && !answer.loading)) || item !== chatLoop[chatLoop.length - 1] || !isRequesting) &&
                                 !(answer.isError && !answer.loading)
                             "
                               >
@@ -642,12 +642,12 @@
                                 !answer.isError &&
                                 answer.messageId) ||
                                 (item.execution_id && !isDevelporFlag && supportAnnotation) ||
-                                (!isRequesting && !answer.loading && getText(answer.text).length)
+                                (item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && getText(answer.text).length
                               "
                                   class="flex gap-[4px] items-center pl-[16px] split"
                                 >
                                   <div
-                                    *ngIf="!isRequesting && !answer.loading && getText(answer.text).length"
+                                    *ngIf="(item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && getText(answer.text).length"
                                     class="chat-footer-icon"
                                     nz-tooltip
                                     [nzTooltipTitle]="'copy' | i18nextEager"
