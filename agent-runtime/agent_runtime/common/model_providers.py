@@ -377,6 +377,7 @@ class OBSModelConfigProvider(ModelConfigProvider):
             extra_body = {
                 "thinking": thinking,
                 "enable_thinking": thinking["type"] == "enabled",
+                "chat_template_kwargs": {"enable_thinking": thinking["type"] == "enabled"}
             }
 
         model_request_config = ModelRequestConfig(
@@ -460,6 +461,7 @@ class IRModelConfigProvider(ModelConfigProvider):
             extra_body = {
                 "thinking": thinking,
                 "enable_thinking": thinking["type"] == "enabled",
+                "chat_template_kwargs": {"enable_thinking": thinking["type"] == "enabled"}
             }
 
         # 构建 ModelRequestConfig，传递所有已知的超参数
