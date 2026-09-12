@@ -1,5 +1,5 @@
 ARG GRAFANA_VERSION=11.3.0
-FROM --platform=$BUILDPLATFORM grafana/grafana:${GRAFANA_VERSION} AS plugin-downloader
+FROM grafana/grafana:${GRAFANA_VERSION} AS plugin-downloader
 
 ARG VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0
 
