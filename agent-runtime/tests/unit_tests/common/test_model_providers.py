@@ -64,6 +64,7 @@ class TestThinkingEnabled:
         assert extra_body == {
             "thinking": {"type": "enabled"},
             "enable_thinking": True,
+            "chat_template_kwargs": {"enable_thinking": True},
         }
 
 
