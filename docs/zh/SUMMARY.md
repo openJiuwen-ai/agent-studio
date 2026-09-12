@@ -14,5 +14,6 @@
   - [常见问题 FAQ](../FAQ/faq.md)
 - [参考文档（Reference）](reference/)
   - [REST API 参考](reference/rest-api.md)
+  - [Skill 错误码说明](reference/skill-error-codes.md)
 - [解释文档（Explanation）](explanation/)
   - [架构概述](explanation/architecture-overview.md)
