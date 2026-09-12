@@ -1,0 +1,292 @@
+{
+  "workflowId": "workflow_plugin_repay_credit",
+  "workflowName": "workflow_plugin_repay_credit",
+  "workflowVersion": "0.6.0",
+  "configs": {},
+  "components": [
+    {
+      "id": "node_start",
+      "name": "开始",
+      "type": "jiuwen.start",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {
+          "card_id": ""
+        }
+      },
+      "outputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {
+          "card_id": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "description": "信用卡ID"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "description": "用户输入"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "name": "结束",
+      "type": "jiuwen.end",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "card_id": "${node_plugin.userFields.data.card_id}",
+          "status": "${node_plugin.userFields.data.status}"
+        }
+      },
+      "outputs": {
+        "responseContent": "",
+        "userFields": {
+          "card_id": "${node_plugin.userFields.data.card_id}",
+          "status": "${node_plugin.userFields.data.status}"
+        }
+      },
+      "configs": {
+        "responseTemplate": "还款成功：{{status}}",
+        "responseMode": "directResponse",
+        "isStreamOut": true,
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "status",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "status",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref",
+              "description": "是否成功"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "id": "node_plugin",
+      "name": "plugin_repay_credit",
+      "type": "jiuwen.plugin",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "card_id": "777666"
+        }
+      },
+      "outputs": {
+        "userFields": {
+          "data": ""
+        }
+      },
+      "configs": {
+        "id": "plugin11112",
+        "name": "plugin_repay_credit",
+        "description": "plugin_repay_credit",
+        "url": "http://fakeIp:5003/repay_credit",
+        "method": "POST",
+        "auth": {},
+        "arguments": [
+          {
+            "name": "card_id",
+            "description": "信用卡ID",
+            "type": "String",
+            "method": "Body",
+            "required": true,
+            "defaultValue": ""
+          }
+        ],
+        "pluginDependency": {
+          "paramsWrapper": {
+            "inputList": false,
+            "outputList": false
+          },
+          "hook_function": {}
+        },
+        "response": [],
+        "userFields": {
+          "inputs": [
+            {
+              "id": "card_id",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "data",
+              "type": "Object",
+              "description": "还款结果",
+              "schema": [
+                {
+                  "id": "card_id",
+                  "type": "String",
+                  "description": "还款id"
+                },
+                {
+                  "id": "status",
+                  "type": "String",
+                  "description": "还款结果"
+                }
+              ]
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "STATUS": "",
+          "USER_RESPONSE": ""
+        }
+      },
+      "configs": {
+        "questionContent": "确认还款嘛？",
+        "autoAskTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "fieldNames": [],
+        "withChatHistory": true,
+        "extraPromptForFieldsExtraction": "",
+        "enumVisible": false,
+        "inputComplement": false,
+        "typeComplement": "",
+        "exampleContent": "",
+        "railsConfig": {},
+        "mode": "effect",
+        "assistRecognize": false,
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户最近一轮对话输入",
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "required": false
+            },
+            {
+              "sourceType": "input",
+              "description": "提问器运行状态码",
+              "id": "STATUS",
+              "type": "integer",
+              "required": false
+            }
+          ]
+        },
+        "assistExample": "",
+        "extractFieldsFromResponse": false,
+        "templateAnthropomorphic": false,
+        "allowNodeConfirm": false,
+        "model": {
+          "modelName": "mock_model_name",
+          "modelType": "customer_chat_llm",
+          "hyperParameters": {
+            "temperature": 0.2
+          }
+        },
+        "maxResponse": 10,
+        "allowNodeBreak": false
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "提问器",
+      "id": "node_questioner",
+      "type": "jiuwen.questioner"
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_plugin"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_questioner"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_questioner"
+      },
+      "target": {
+        "componentId": "node_plugin"
+      }
+    }
+  ],
+  "schemaVersion": "0.6",
+  "description": "信用卡还款"
+}

@@ -66,7 +66,7 @@ export class SetSidebarVisibilityService {
     if (state === null || isNeedHideContainer) {
       content?.setAttribute('data-set', 'layout-page');
     }
-    // 资产广场mcp使用vh计算，导致出现双滚动条，待优化
+    // 专家·技能mcp使用vh计算，导致出现双滚动条，待优化
     if(layoutHeaderHeight > 0){
       content?.classList.add('layoutContentHasHeader');
     }else{

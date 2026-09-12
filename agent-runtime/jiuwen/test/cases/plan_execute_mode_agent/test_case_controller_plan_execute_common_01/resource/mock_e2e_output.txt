@@ -1,0 +1,130 @@
+data: {"event":"start","data":{},"createdTime":1776167154145,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"scene_match","data":{"matched":true,"scene_id":"scene_credit_repay","scene_name":"信用卡还款","confidence":1.0},"createdTime":1776167154145,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"plan_end","data":{"plan_id":"plan_a6bf7ed7","total_steps":4,"steps":[{"step_idx":1,"step_name":"查询信用卡账单","description":"调用 query_bill 工具查询信用卡ID为123456的账单"},{"step_idx":2,"step_name":"查询账户余额","description":"调用 query_account 工具查询用户账户余额"},{"step_idx":3,"step_name":"动态判断","description":"根据账户余额是否充足，选择执行转账或还款操作"},{"step_idx":4,"step_name":"确认还款","description":"执行还款操作"}]},"createdTime":1776167154180,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"step_start","data":{"step_idx":1,"step_name":"查询信用卡账单","current_step":1,"total_steps":4},"createdTime":1776167154180,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_start","data":{"workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154189,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154301,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"信用卡账单金额为：500.0，信用卡id为：","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154302,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":1,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154302,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":2,"isStructMessage":false}
+
+data: {"event":"message_end","data":{"answer":"信用卡账单金额为：500.0，信用卡id为：","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"enable_history":true,"workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154303,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_end","data":{"answer":"信用卡账单金额为：500.0，信用卡id为：","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154303,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":1,"isStructMessage":false}
+
+data: {"event":"done","data":{"answer":"信用卡账单金额为：500.0，信用卡id为：","node_id":"node_end","user_fields":{},"node_type":"jiuwen.end","workflow_id":"parent_workflow_plugin_query_bill"},"createdTime":1776167154306,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"step_end","data":{"step_idx":1,"step_name":"查询信用卡账单","status":"completed","result_summary":"步骤执行完成"},"createdTime":1776167154311,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"step_start","data":{"step_idx":2,"step_name":"查询账户余额","current_step":2,"total_steps":4},"createdTime":1776167154311,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_start","data":{"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154320,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"请提供账户id亲","node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","should_interrupt":true,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154322,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"message_end","data":{"answer":"请提供账户id亲","node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","should_interrupt":true,"enable_history":true,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154322,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":1,"isStructMessage":false}
+
+data: {"event":"done","data":{"answer":"","node_id":"node_questioner","user_fields":{"account_id":""},"node_type":"jiuwen.questioner","workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154323,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_blocked","data":{"node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","workflow_name":"workflow_plugin_query_account","workflow_id":"workflow_plugin_query_account","query":"调用 query_account 工具查询用户账户余额","intent_id":"workflow_plugin_query_account","intent_name":"workflow_plugin_query_account","time":1776167154323,"execution_id":"eb655077-17f8-453f-b527-c8e64cd7f0fc"},"createdTime":1776167154323,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"step_end","data":{"step_idx":2,"step_name":"查询账户余额","status":"pending","result_summary":"查询账户余额完成"},"createdTime":1776167154324,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"user","content":"帮我还一下信用卡，信用卡ID是123456"},{"role":"assistant","content":"","function_call":[{"name":"parent_workflow_plugin_query_bill","arguments":"{\"card_id\": \"123456\"}","tool_call_id":"call_aQBmXG3n"}],"tool_calls":[{"type":"function","id":"call_aQBmXG3n","function":{"name":"parent_workflow_plugin_query_bill","arguments":"{\"card_id\": \"123456\"}"}}]},{"role":"tool","content":"信用卡账单金额为：500.0，信用卡id为：","name":"parent_workflow_plugin_query_bill","tool_call_id":"call_aQBmXG3n"},{"role":"assistant","content":"[STEP_DONE]"},{"role":"assistant","content":"","function_call":[{"name":"workflow_plugin_query_account","arguments":"{\"account_id\": \"555444\"}","tool_call_id":"call_9wks0Liw"}],"tool_calls":[{"type":"function","id":"call_9wks0Liw","function":{"name":"workflow_plugin_query_account","arguments":"{\"account_id\": \"555444\"}"}}]},{"role":"tool","content":"WaitingUserInput","name":"workflow_plugin_query_account","tool_call_id":"call_9wks0Liw"}]},"createdTime":1776167154324,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"agent_interrupted","data":{"reason":"waiting_user_input","state":"interrupted","task_id":"eb655077-17f8-453f-b527-c8e64cd7f0fc"},"createdTime":1776167154324,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"start","data":{},"createdTime":1776167154614,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"step_start","data":{"step_idx":2,"step_name":"查询账户余额","current_step":2,"total_steps":4},"createdTime":1776167154614,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_resume","data":{"node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","workflow_name":"workflow_plugin_query_account","workflow_id":"workflow_plugin_query_account","query":"账户ID是777666","intent_id":"workflow_plugin_query_account","intent_name":"workflow_plugin_query_account","time":1776167154614,"execution_id":"eb655077-17f8-453f-b527-c8e64cd7f0fc"},"createdTime":1776167154614,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"账户id为：","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154711,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"777666","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154712,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":1,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"，账户余额为：","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154713,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":2,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"200.0","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154713,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":3,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154713,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":4,"isStructMessage":false}
+
+data: {"event":"message_end","data":{"answer":"账户id为：777666，账户余额为：200.0","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"outputs":{"user_fields":{"account_id":"777666","balance":"200.0"}},"enable_history":true,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154714,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_end","data":{"answer":"账户id为：777666，账户余额为：200.0","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154715,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":1,"isStructMessage":false}
+
+data: {"event":"done","data":{"answer":"账户id为：777666，账户余额为：200.0","node_id":"node_end","user_fields":{"account_id":"777666","balance":"200.0"},"node_type":"jiuwen.end","workflow_id":"workflow_plugin_query_account"},"createdTime":1776167154717,"executionId":"eb655077-17f8-453f-b527-c8e64cd7f0fc","index":0,"isStructMessage":false}
+
+data: {"event":"step_end","data":{"step_idx":2,"step_name":"查询账户余额","status":"completed","result_summary":"步骤执行完成"},"createdTime":1776167154724,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"step_start","data":{"step_idx":3,"step_name":"动态判断","current_step":3,"total_steps":4},"createdTime":1776167154724,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_start","data":{"workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154742,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"转账成功：","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154809,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"success","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154812,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":1,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154813,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":2,"isStructMessage":false}
+
+data: {"event":"message_end","data":{"answer":"转账成功：success","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"outputs":{"user_fields":{"status":"success"}},"enable_history":true,"workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154814,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_end","data":{"answer":"转账成功：success","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154815,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":1,"isStructMessage":false}
+
+data: {"event":"done","data":{"answer":"转账成功：success","node_id":"node_end","user_fields":{"status":"success"},"node_type":"jiuwen.end","workflow_id":"workflow_plugin_transfer"},"createdTime":1776167154817,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"step_end","data":{"step_idx":3,"step_name":"动态判断","status":"completed","result_summary":"余额不足，转账完成"},"createdTime":1776167154822,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"step_start","data":{"step_idx":4,"step_name":"确认还款","current_step":4,"total_steps":4},"createdTime":1776167154822,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_start","data":{"workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167154832,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"确认还款嘛？","node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","should_interrupt":true,"parentNodeId":"node_workflowComposite","workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167154898,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"message_end","data":{"answer":"确认还款嘛？","node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","should_interrupt":true,"enable_history":true,"parentNodeId":"node_workflowComposite","workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167154899,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":1,"isStructMessage":false}
+
+data: {"event":"done","data":{"answer":"","node_id":"node_workflowComposite","user_fields":{"card_id":""},"node_type":"jiuwen.workflowComposite","workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167154901,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_blocked","data":{"node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","workflow_name":"parent_workflow_plugin_repay_credit","workflow_id":"parent_workflow_plugin_repay_credit","query":"执行还款操作","intent_id":"parent_workflow_plugin_repay_credit","intent_name":"parent_workflow_plugin_repay_credit","time":1776167154901,"execution_id":"b0bc18f6-7df4-4e4c-a615-db201830bcc8"},"createdTime":1776167154901,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"user","content":"帮我还一下信用卡，信用卡ID是123456"},{"role":"assistant","content":"[STEP_DONE]"},{"role":"user","content":"账户ID是777666"},{"role":"assistant","content":"继续执行工作流 workflow_plugin_query_account","function_call":{"name":"workflow_plugin_query_account","arguments":"{\"query\": \"账户ID是777666\"}","tool_call_id":"8d8dc8af-cf14-4566-923b-29aca186db03"},"tool_calls":[{"type":"function","id":"8d8dc8af-cf14-4566-923b-29aca186db03","function":{"name":"workflow_plugin_query_account","arguments":"{\"query\": \"账户ID是777666\"}"}}]},{"role":"tool","content":"账户id为：777666，账户余额为：200.0","name":"workflow_plugin_query_account","tool_call_id":"8d8dc8af-cf14-4566-923b-29aca186db03"},{"role":"assistant","content":"[STEP_DONE]"},{"role":"assistant","content":"","function_call":[{"name":"workflow_plugin_transfer","arguments":"{\"from_account\": \"999888\", \"to_account\": \"999888\", \"amount\": 0.1}","tool_call_id":"call_12345678"}],"tool_calls":[{"type":"function","id":"call_12345678","function":{"name":"workflow_plugin_transfer","arguments":"{\"from_account\": \"999888\", \"to_account\": \"999888\", \"amount\": 0.1}"}}]},{"role":"tool","content":"转账成功：success","name":"workflow_plugin_transfer","tool_call_id":"call_12345678"},{"role":"assistant","content":"余额不足，转账完成[STEP_DONE]"},{"role":"assistant","content":"","function_call":[{"name":"parent_workflow_plugin_repay_credit","arguments":"{\"card_id\": \"whatever\"}","tool_call_id":"call_12345677"}],"tool_calls":[{"type":"function","id":"call_12345677","function":{"name":"parent_workflow_plugin_repay_credit","arguments":"{\"card_id\": \"whatever\"}"}}]},{"role":"tool","content":"WaitingUserInput","name":"parent_workflow_plugin_repay_credit","tool_call_id":"call_12345677"}]},"createdTime":1776167154902,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"agent_interrupted","data":{"reason":"waiting_user_input","state":"interrupted","task_id":"b0bc18f6-7df4-4e4c-a615-db201830bcc8"},"createdTime":1776167154902,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"start","data":{},"createdTime":1776167155375,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"step_start","data":{"step_idx":4,"step_name":"确认还款","current_step":4,"total_steps":4},"createdTime":1776167155375,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_resume","data":{"node_id":"node_questioner","node_name":"提问器","node_type":"jiuwen.questioner","workflow_name":"parent_workflow_plugin_repay_credit","workflow_id":"parent_workflow_plugin_repay_credit","query":"确认还款","intent_id":"parent_workflow_plugin_repay_credit","intent_name":"parent_workflow_plugin_repay_credit","time":1776167155375,"execution_id":"b0bc18f6-7df4-4e4c-a615-db201830bcc8"},"createdTime":1776167155375,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167155444,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"还款成功：success","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167155445,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":1,"isStructMessage":false}
+
+data: {"event":"message","data":{"answer":"","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167155445,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":2,"isStructMessage":false}
+
+data: {"event":"message_end","data":{"answer":"还款成功：success","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"enable_history":true,"workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167155446,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"workflow_end","data":{"answer":"还款成功：success","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167155446,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":1,"isStructMessage":false}
+
+data: {"event":"done","data":{"answer":"还款成功：success","node_id":"node_end","user_fields":{},"node_type":"jiuwen.end","workflow_id":"parent_workflow_plugin_repay_credit"},"createdTime":1776167155447,"executionId":"b0bc18f6-7df4-4e4c-a615-db201830bcc8","index":0,"isStructMessage":false}
+
+data: {"event":"step_end","data":{"step_idx":4,"step_name":"确认还款","status":"completed","result_summary":"信用卡还款任务已完成"},"createdTime":1776167155454,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"task_complete","data":{"status":"success","total_steps":4,"completed_steps":4,"final_result":"任务执行完成"},"createdTime":1776167155458,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"statistic_data","data":{"answer":{"total_latency":0.08,"model_latency":null,"wait_latency":null,"overall_latency":0.08}},"createdTime":1776167155458,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"summary_response","data":{"answer":{"role":"assistant","content":"所有步骤已完成"}},"createdTime":1776167155458,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"user","content":"帮我还一下信用卡，信用卡ID是123456"},{"role":"assistant","content":"[STEP_DONE]"},{"role":"user","content":"账户ID是777666"},{"role":"assistant","content":"[STEP_DONE]"},{"role":"assistant","content":"余额不足，转账完成[STEP_DONE]"},{"role":"user","content":"确认还款"},{"role":"assistant","content":"继续执行工作流 parent_workflow_plugin_repay_credit","function_call":{"name":"parent_workflow_plugin_repay_credit","arguments":"{\"query\": \"确认还款\"}","tool_call_id":"8adb0be7-f75f-4821-9bf7-74cba217bc50"},"tool_calls":[{"type":"function","id":"8adb0be7-f75f-4821-9bf7-74cba217bc50","function":{"name":"parent_workflow_plugin_repay_credit","arguments":"{\"query\": \"确认还款\"}"}}]},{"role":"tool","content":"还款成功：success","name":"parent_workflow_plugin_repay_credit","tool_call_id":"8adb0be7-f75f-4821-9bf7-74cba217bc50"},{"role":"assistant","content":"信用卡还款任务已完成"},{"role":"assistant","content":"所有步骤已完成"}]},"createdTime":1776167155459,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+
+data: {"event":"task_end","data":{},"createdTime":1776167155459,"executionId":"fab5167c-92e1-4786-9fdc-17129618b786","index":0,"isStructMessage":false}
+

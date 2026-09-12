@@ -1,0 +1,108 @@
+{
+  "agentId": "935a8125-c836-45f0-95ae-90622cdf0459",
+  "agentName": "ssq_银行智能客服Agent",
+  "agentVersion": "0.6.0",
+  "configs": {
+    "chatHistoryMaxTurn": 10,
+    "global_intents": [],
+    "global_variables": [],
+    "maxIteration": 9,
+    "mode": "Controller",
+    "modelConfig": {
+      "deploymentId": "customer_chat_llm2.5-72b",
+      "extension": {},
+      "hyperParameters": {
+        "temperature": 0.5,
+        "top_p": 0.5
+      },
+      "modelName": "mock_model_name",
+      "modelType": "customer_chat_llm"
+    },
+    "plugins": [],
+    "specify_workflow_order": false,
+    "sysPromptTemplate": "你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"",
+    "workflows": [
+      {
+        "action_after_completion": "WaitUserInput",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "该工作流属于业务工作流，用于客户进行理财产品筛选，根据用户输入的条件，如投资币种、投资风险等级、起投金额、投资期限等条件筛选理财产品，如“请推荐一款理财产品”“我要低风险1元起购的理财产品”。当符合上述意图分类时，进入该工作流。如果无法与该工作流描述及功能精准匹配，不要选取该工作流。",
+        "id": "node_03d65e54-0e42-48ea-863b-e63d669a6055",
+        "ir_path": "workflow/ir/理财工作流.json",
+        "name": "理财产品筛选",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "Normal"
+      },
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "默认工作流：\n当满足以下条件时进入该工作流：\n1、用户回复中的意图无法匹配业务工作流描述及功能时\n2、用户查询“什么是…”、“…的方法”、”…的介绍”等知识\n时\n如果不符合上述条件，不要选取该工作流。",
+        "id": "default_7c8f671d-de6d-43fc-b22d-b0a6ad621913",
+        "ir_path": "workflow/ir/默认工作流.json",
+        "name": "智能客服问答",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "Default"
+      },
+      {
+        "action_after_completion": "Terminal",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "结束工作流",
+        "id": "end_b7000bd3-4e78-4fe9-a703-01d3d4208064",
+        "ir_path": "workflow/ir/结束工作流.json",
+        "name": "结束工作流",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "End"
+      }
+    ]
+  },
+  "description": "银行智能客服Agent，【动态规划模式】\n勿动！！",
+  "metadata": {
+    "projectId": "project_mock",
+    "updatedAt": "1754703988428"
+  },
+  "schemaVersion": "0.6.0"
+}

@@ -1,0 +1,217 @@
+{
+  "agentId": "302a1137-9d59-4c17-b9b6-b6674843c83e",
+  "agentName": "ssq_意图工作流_0805",
+  "agentVersion": "0.6.0",
+  "configs": {
+    "chatHistoryMaxTurn": 10,
+    "global_intents": [],
+    "global_variables": [],
+    "intent_identification": {
+      "id": "intentIdentification_be09c71b-3155-4b48-9a5f-703786edd3d5",
+      "type": "WORKFLOW"
+    },
+    "maxIteration": 9,
+    "mode": "Controller",
+    "modelConfig": {
+      "deploymentId": "customer_chat_llm2.5-72b",
+      "extension": {},
+      "hyperParameters": {
+        "temperature": 0.5,
+        "top_p": 0.5
+      },
+      "modelName": "mock_model_name",
+      "modelType": "customer_chat_llm"
+    },
+    "plugins": [],
+    "specify_workflow_order": false,
+    "sysPromptTemplate": "你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"",
+    "workflows": [
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "",
+            "method": "Body",
+            "name": "messages",
+            "required": true,
+            "schema": {
+              "name": "",
+              "type": "object",
+              "schema": [
+                {
+                  "name": "role",
+                  "type": "string",
+                  "description": "",
+                  "required": true,
+                  "source": "user",
+                  "value": {
+                    "type": "generated",
+                    "hint": "",
+                    "default": ""
+                  }
+                },
+                {
+                  "name": "content",
+                  "type": "string",
+                  "description": "",
+                  "required": true,
+                  "source": "user",
+                  "value": {
+                    "type": "generated",
+                    "hint": "",
+                    "default": ""
+                  }
+                }
+              ]
+            },
+            "type": "array",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "",
+            "method": "Body",
+            "name": "intents",
+            "required": true,
+            "schema": {
+              "name": "",
+              "type": "object",
+              "schema": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "description": "",
+                  "required": true,
+                  "source": "user",
+                  "value": {
+                    "type": "generated",
+                    "hint": "",
+                    "default": ""
+                  }
+                },
+                {
+                  "name": "name",
+                  "type": "string",
+                  "description": "",
+                  "required": true,
+                  "source": "user",
+                  "value": {
+                    "type": "generated",
+                    "hint": "",
+                    "default": ""
+                  }
+                }
+              ]
+            },
+            "type": "array",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "",
+            "method": "Body",
+            "name": "minScore",
+            "required": false,
+            "type": "number",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "",
+            "method": "Body",
+            "name": "testParams",
+            "required": false,
+            "schema": {
+              "name": "",
+              "type": "integer"
+            },
+            "type": "array",
+            "visible": true
+          }
+        ],
+        "description": "斯蒂芬",
+        "id": "intentIdentification_be09c71b-3155-4b48-9a5f-703786edd3d5",
+        "ir_path": "workflow/ir/意图识别工作流.json",
+        "name": "kjy_意图识别_2",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          },
+          {
+            "description": "",
+            "name": "intent_id",
+            "type": "integer"
+          }
+        ],
+        "workflow_type": "IntentIdentification"
+      },
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "智能理财例外场景",
+        "id": "node_8f189544-f741-47b1-8244-f843abff41de",
+        "ir_path": "workflow/ir/智能外呼工作流.json",
+        "name": "远程银行-智能外呼-FAQ",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "Normal"
+      },
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "融e借产品推荐，解决用户有关贷款的需求",
+        "id": "node_86cc71ff-84f5-4a54-83f7-bddbea9e3a62",
+        "ir_path": "workflow/ir/融e借工作流.json",
+        "name": "ssq_融e借产品推荐_1",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "Normal"
+      }
+    ]
+  },
+  "description": "支持自定义意图识别",
+  "metadata": {
+    "projectId": "project_mock",
+    "updatedAt": "1754443974628"
+  },
+  "schemaVersion": "0.6.0"
+}

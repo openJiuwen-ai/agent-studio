@@ -1,0 +1,246 @@
+{
+  "configs": {
+    "model": {
+      "modelName": "mock_model_name",
+      "modelType": "customer_chat_llm",
+      "hyperParameters": {}
+    }
+  },
+  "components": [
+    {
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "{{input}}",
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "input",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "input": "${node_start.systemFields.query}"
+        }
+      },
+      "name": "消息",
+      "id": "node_1764123489825",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "最终输出",
+              "id": "result",
+              "type": "string",
+              "required": false
+            }
+          ],
+          "outputs": []
+        },
+        "responseTemplate": "{{result}}",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {
+          "result": "气温20度"
+        }
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": null,
+    "userId": "testUser",
+    "projectId": "0",
+    "domainId": "0",
+    "updatedAt": 1764135944350,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "react模式多工具调用场景测试",
+  "workflowName": "workflow_react_tools",
+  "workflowVersion": "0.6.0",
+  "workflowId": "1e2c49af-f38b-41b4-9129-af3f694c3f35",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1764123489825"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1764123489825"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ]
+}

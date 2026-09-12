@@ -1,0 +1,293 @@
+{
+  "configs": {
+  },
+  "components": [
+    {
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "STATUS": "",
+          "USER_RESPONSE": ""
+        }
+      },
+      "configs": {
+        "questionContent": "请问你要赎回那一笔理财？1.xxx 2.xxx\n",
+        "autoAskTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "fieldNames": [],
+        "withChatHistory": true,
+        "extraPromptForFieldsExtraction": "",
+        "enumVisible": false,
+        "inputComplement": false,
+        "typeComplement": "",
+        "exampleContent": "",
+        "railsConfig": {},
+        "mode": "effect",
+        "assistRecognize": false,
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户最近一轮对话输入",
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "required": false
+            },
+            {
+              "sourceType": "input",
+              "description": "提问器运行状态码",
+              "id": "STATUS",
+              "type": "integer",
+              "required": false
+            }
+          ]
+        },
+        "assistExample": "",
+        "extractFieldsFromResponse": false,
+        "templateAnthropomorphic": false,
+        "allowNodeConfirm": false,
+        "model": {
+          "modelName": "Qwen/Qwen2.5-72B-Instruct",
+          "modelType": "qwen",
+          "hyperParameters": {
+            "temperature": 0.2
+          }
+        },
+        "maxResponse": 10,
+        "allowNodeBreak": false
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "提问器",
+      "id": "node_1756177438288",
+      "type": "jiuwen.questioner"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "好的，赎回成功，已实时到账。\n\n\n",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "消息",
+      "id": "node_1756177475544",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "理财服务工作流结束",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": null,
+    "userId": "2",
+    "projectId": "project_mock",
+    "domainId": "0",
+    "updatedAt": 1756177489697,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "test_finacial",
+  "workflowName": "test_finacial",
+  "workflowVersion": "0.6.0",
+  "workflowId": "ad21cfff-e864-4af8-be97-2e3fe605322c",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1756177438288"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1756177438288"
+      },
+      "target": {
+        "componentId": "node_1756177475544"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1756177475544"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ]
+}
