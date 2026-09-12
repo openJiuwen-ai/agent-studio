@@ -278,7 +278,11 @@ class BaseEventsProcessor(ABC):
             end_time=end_time,
             execution_id=data.get("traceId"),
             loop_node_id=raw_loop_node_id if isinstance(raw_loop_node_id, str) else None,
-            loop_index=raw_loop_index if isinstance(raw_loop_index, int) and not isinstance(raw_loop_index, bool) else None,
+            loop_index=(
+                raw_loop_index
+                if isinstance(raw_loop_index, int) and not isinstance(raw_loop_index, bool)
+                else None
+            ),
         )
 
         invoke_data = data.get("onInvokeData")
