@@ -148,11 +148,12 @@ class Start(WorkflowComponent):
         workflow_id = self._get_workflow_id(inputs, session)
         conversation_id = self._get_conversation_id(inputs, session)
 
-        # 1. 验证必需变量
-        self._validate_inputs(inputs)
+        # 1. 合并本轮 _request 中已声明的入参（先于默认值，避免默认值遮蔽真实输入）并校验必填字段
+        effective_inputs = self._merge_request_inputs(inputs, session)
+        self._validate_inputs(effective_inputs)
 
         # 2. 填充默认值
-        inputs_with_defaults = self._fill_default_values(inputs)
+        inputs_with_defaults = self._fill_default_values(effective_inputs)
 
         # 3. 获取 preDefinedFields 中定义的会话级变量
         assignment_inputs = self._get_assignment_inputs()
@@ -582,6 +583,62 @@ class Start(WorkflowComponent):
                 continue
             result[key] = value
         return result
+
+    @staticmethod
+    def _is_root_workflow(session: Session) -> bool:
+        """仅根工作流(depth==0 且为整数)返回 True。
+
+        复用 flow_message.py 的取法:session._inner.workflow_nesting_depth()。
+        严格限制返回值类型为 int,避免 bool 子类(False == 0)误判为根。
+        前置 _request 合并是本次新增行为,无法判定嵌套层级时不扩大生效
+        范围(保守返回 False,跳过合并)。
+        """
+        inner_session = getattr(session, "_inner", None)
+        depth_getter = getattr(inner_session, "workflow_nesting_depth", None)
+        if not callable(depth_getter):
+            return False
+        try:
+            depth = depth_getter()
+            return type(depth) is int and depth == 0
+        except Exception:
+            return False
+
+    def _merge_request_inputs(self, inputs: dict, session: Session) -> dict:
+        """将本轮 _request 中 Start 已声明的入参合并到直接输入。
+
+        仅对根工作流(depth==0)Start 生效。子工作流经 SubWorkflow 作用域
+        继承父 _request 同名值,若在默认值填充前合并,会遮蔽子工作流默认值,
+        故子工作流直接返回原输入深拷贝,不参与前置合并。
+
+        根工作流优先级:直接输入有效值 > _request 同名非 None 值 > Start 默认值。
+        只允许 Start 声明的用户字段从 _request 进入,避免未声明字段泄漏；
+        顶层已有非 None 值时不覆盖；_request 值为 None 时不覆盖；
+        用 is None 判据而非真值判断,保留 False/0/空集合等合法假值。
+        """
+        merged_inputs = deepcopy(inputs or {})
+
+        if not self._is_root_workflow(session):
+            return merged_inputs
+
+        request_inputs = get_workflow_param(session, REQUEST_VARIABLES) or {}
+
+        declared_fields = self._config.get(USER_FIELDS, {}).get("inputs", [])
+        declared_ids = {
+            field.get("id")
+            for field in declared_fields
+            if isinstance(field, dict) and field.get("id")
+        }
+
+        for field_id in declared_ids:
+            direct_value = merged_inputs.get(field_id)
+            request_has_value = (
+                field_id in request_inputs
+                and request_inputs[field_id] is not None
+            )
+            if (field_id not in merged_inputs or direct_value is None) and request_has_value:
+                merged_inputs[field_id] = request_inputs[field_id]
+
+        return merged_inputs
 
     @staticmethod
     def _assemble_output(inputs: dict, session: Session) -> dict:
