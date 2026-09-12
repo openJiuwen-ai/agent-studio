@@ -231,7 +231,7 @@
                           class="bottom-container"
                           *ngIf="
                             last &&
-                            (item.latency || !isRequesting) &&
+                            (item.latency || item !== chatLoop[chatLoop.length - 1] || !isRequesting) &&
                             !(answer.isError && !answer.loading)
                           "
                         >
@@ -241,7 +241,7 @@
                               <span style="color: #191919">{{ item.latency }}</span>
                             </ng-container>
                             <div
-                              *ngIf="!isRequesting && !answer.loading && answer.text?.trim()"
+                              *ngIf="(item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && answer.text?.trim()"
                               class="chat-footer-icon"
                               nz-tooltip
                               [nzTooltipTitle]="'copy' | i18nextEager"
