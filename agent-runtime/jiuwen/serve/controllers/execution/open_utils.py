@@ -81,6 +81,17 @@ class CacheUtils:
                 effective_ttl = None if ttl == -1 else ttl
             unique_key = self._generate_unique_key(key)
             self._update_memory_cache(unique_key, value)
+            logger.debug(
+                "L1_MEM_PUT_OK: cache_name=%s, key=%s, value_type=%s, "
+                "value_id=%s, size=%s/%s, will_serialize=%s",
+                self.cache_name, unique_key, type(value).__name__, id(value),
+                self.memory_cache.currsize, self.memory_cache.maxsize,
+                self.should_serialize,
+                simple_log=(
+                    "L1_MEM_PUT_OK: cache_name=%s, key=%s, value_type=%s, "
+                    "value_id=%s, size=%s/%s, will_serialize=%s"
+                ),
+            )
             if self.should_serialize:
                 await self.async_redis_cache.set(
                     unique_key, serialize_object(value), ex=effective_ttl
@@ -90,8 +101,9 @@ class CacheUtils:
                     unique_key, value, ex=effective_ttl
                 )
             logger.info(
-                f"put {key} in {self.cache_name} memory and redis, "
-                f"memory size {self.memory_cache.currsize}/{self.memory_cache.maxsize}"
+                "put %s in %s memory and redis, memory size %s/%s",
+                key, self.cache_name,
+                self.memory_cache.currsize, self.memory_cache.maxsize
             )
         except Exception as e:
             logger.error(f"cache put error, exception {e}", exc_info=True)
@@ -118,8 +130,9 @@ class CacheUtils:
             else:
                 self.redis_cache.set(unique_key, value, ex=effective_ttl)
             logger.info(
-                f"put {key} in {self.cache_name} memory and redis, "
-                f"memory size {self.memory_cache.currsize}/{self.memory_cache.maxsize}"
+                "put %s in %s memory and redis, memory size %s/%s",
+                key, self.cache_name,
+                self.memory_cache.currsize, self.memory_cache.maxsize
             )
         except Exception as e:
             logger.error(f"cache put error, exception {e}", exc_info=True)
@@ -130,10 +143,21 @@ class CacheUtils:
             unique_key = self._generate_unique_key(key)
             value = self._get_from_memory_cache(unique_key)
             if value is not None:
-                logger.info(f"memory hit {key} in {self.cache_name} memory")
+                logger.debug(
+                    "L1_MEM_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s",
+                    self.cache_name, unique_key, type(value).__name__, id(value),
+                    simple_log=(
+                        "L1_MEM_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s"
+                    ),
+                )
                 self._update_memory_cache(unique_key, value)
                 return value
 
+            logger.debug(
+                "L1_MEM_MISS: cache_name=%s, key=%s",
+                self.cache_name, unique_key,
+                simple_log="L1_MEM_MISS: cache_name=%s, key=%s",
+            )
             value = await self.async_redis_cache.get(unique_key)
             if value is not None:
                 if should_refresh_ttl:
@@ -141,8 +165,9 @@ class CacheUtils:
                 value = deserialize_object(value) if self.should_serialize else value
                 self._update_memory_cache(unique_key, value)
                 logger.info(
-                    f"redis hit, put {key} in {self.cache_name} memory, "
-                    f"size {self.memory_cache.currsize}/{self.memory_cache.maxsize}"
+                    "redis hit, put %s in %s memory, size %s/%s",
+                    key, self.cache_name,
+                    self.memory_cache.currsize, self.memory_cache.maxsize
                 )
             return value
         except Exception as e:
@@ -205,26 +230,68 @@ class CacheUtils:
 
     def _update_memory_cache(self, key: str, value: Any):
         """刷新内存缓存"""
+        before_size = self.memory_cache.currsize
+        logger.debug(
+            "MEM_PUT: cache_name=%s, key=%s, value_type=%s, value_id=%s, before_size=%s/%s",
+            self.cache_name, key, type(value).__name__, id(value),
+            before_size, self.memory_cache.maxsize,
+            simple_log=(
+                "MEM_PUT: cache_name=%s, key=%s, value_type=%s, value_id=%s, before_size=%s/%s"
+            ),
+        )
         expire_time = (
             int((time.time() + self.memory_ttl) * 1000)
             if self.memory_ttl > 0
             else -1
         )
         self.memory_cache[key] = {"expire_time": expire_time, "data": value}
+        logger.debug(
+            "MEM_PUT_DONE: cache_name=%s, key=%s, value_id=%s, after_size=%s/%s",
+            self.cache_name, key, id(value),
+            self.memory_cache.currsize, self.memory_cache.maxsize,
+            simple_log=(
+                "MEM_PUT_DONE: cache_name=%s, key=%s, value_id=%s, after_size=%s/%s"
+            ),
+        )
 
     def _get_from_memory_cache(self, key: str) -> Any:
         """从内存读取缓存"""
         cached_value = self.memory_cache.get(key)
-        if cached_value is not None:
-            current_time = int(time.time() * 1000)
-            if cached_value["expire_time"] <= 0:
-                return cached_value["data"]
-            if current_time > cached_value.get("expire_time"):
-                self.memory_cache.pop(key)
-                return None
-            else:
-                return cached_value["data"]
-        return None
+        if cached_value is None:
+            logger.debug(
+                "MEM_GET_MISS: cache_name=%s, key=%s, reason=not_in_lru",
+                self.cache_name, key,
+                simple_log="MEM_GET_MISS: cache_name=%s, key=%s, reason=not_in_lru",
+            )
+            return None
+        current_time = int(time.time() * 1000)
+        if cached_value["expire_time"] <= 0:
+            data = cached_value["data"]
+            logger.debug(
+                "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s, reason=no_expire",
+                self.cache_name, key, type(data).__name__, id(data),
+                simple_log=(
+                    "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s, reason=no_expire"
+                ),
+            )
+            return data
+        if current_time > cached_value.get("expire_time"):
+            self.memory_cache.pop(key)
+            logger.debug(
+                "MEM_GET_MISS: cache_name=%s, key=%s, reason=expired, expire_time=%s",
+                self.cache_name, key, cached_value.get('expire_time'),
+                simple_log="MEM_GET_MISS: cache_name=%s, key=%s, reason=expired, expire_time=%s",
+            )
+            return None
+        data = cached_value["data"]
+        logger.debug(
+            "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s",
+            self.cache_name, key, type(data).__name__, id(data),
+            simple_log=(
+                "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s"
+            ),
+        )
+        return data
 
     def _generate_unique_key(self, key: str) -> str:
         """生成key"""
@@ -280,6 +347,15 @@ cache_agent_queue = CacheUtils(
     capacity=settings.cache.max_agent_cache_num,
     should_serialize=True,
     cache_name="agent",
+    redis_ttl=settings.cache.cache_ttl_seconds,
+)
+# 会话级 AgentConfig 缓存：key=f"{conversation_id}:{ir_path}"
+# AgentConfig 内含会话绑定字段（task_id、model/plugins 层 session_id），
+# 不得跨会话共享，否则会造成会话标识串线（R07-0804）
+cache_agent_config = CacheUtils(
+    capacity=settings.cache.max_agent_cache_num,
+    should_serialize=True,
+    cache_name="agent_config",
     redis_ttl=settings.cache.cache_ttl_seconds,
 )
 cache_agent_group_queue = CacheUtils(

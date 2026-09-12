@@ -46,12 +46,13 @@ class ProcessResult:
 class StandaloneRunner:
     """StandaloneRunner main runner"""
 
-    def __init__(self):
+    def __init__(self, conversation_id: str = ""):
         self._message_queue = AgentMessageQueue()
         self._run_state: Optional[RunState] = None
         self._agent_run_space: Optional[AgentRunSpace] = None
         self._stopped = Event()
-        self._member_instance_manager = MemberInstanceManager()
+        self._conversation_id = conversation_id
+        self._member_instance_manager = MemberInstanceManager(conversation_id)
         self._running_tasks: Set[Task[Any]] = set()
         self._background_exception: Optional[Exception] = None
         self._intervention_handlers: list = []
