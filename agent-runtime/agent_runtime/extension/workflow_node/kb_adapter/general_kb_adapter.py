@@ -148,7 +148,7 @@ class GeneralKBAdapter(KBServiceAdapter):
                         raise RuntimeError(f"General KB API error: status={resp.status}, body={text[:500]}")
 
                     resp_data = await resp.json()
-                    return self.parse_response(resp_data)
+                    return self.parse_response(resp_data, search_mode)
 
         except RuntimeError:
             raise
@@ -158,7 +158,10 @@ class GeneralKBAdapter(KBServiceAdapter):
             ) from e
 
     @staticmethod
-    def parse_response(resp_data: dict) -> List[KBSearchResult]:
+    def parse_response(
+        resp_data: dict,
+        search_mode: str = "doc",
+    ) -> List[KBSearchResult]:
 
         results = []
 
@@ -183,6 +186,11 @@ class GeneralKBAdapter(KBServiceAdapter):
                 if k not in ("content", "score")
             }
 
+            # 结果类型优先取返回字段，缺失时按检索模式回退：faq 检索标记为 faq，其余默认 doc。
+            result_type = item.get("type") or item.get("doc_type")
+            if not result_type:
+                result_type = "faq" if str(search_mode).lower() == "faq" else "doc"
+
             results.append(
                 KBSearchResult(
                     text=text,
@@ -199,8 +207,7 @@ class GeneralKBAdapter(KBServiceAdapter):
                                     item.get("documentName",
                                         item.get("document_name", ""))),
                     subtitle=item.get("subtitle", ""),
-                    type=item.get("type",
-                           item.get("doc_type", "doc")),
+                    type=result_type,
                     metadata=metadata,
                 )
             )
