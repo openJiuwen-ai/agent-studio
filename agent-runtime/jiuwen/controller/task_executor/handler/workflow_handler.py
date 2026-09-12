@@ -513,6 +513,7 @@ class WorkflowHandler(BaseHandler):
         workflow_req_params = self.prepare_workflow_params(
             workflow_req_params, workflow_context
         )
+        self._inject_start_field_defaults(workflow_req_params, workflow_context)
         global_variables = workflow_req_params.get("global_variables")
         logger.info(
             f"task_id: {self.task_id}| Workflow {workflow_context.workflow_name} request params with "
@@ -568,6 +569,7 @@ class WorkflowHandler(BaseHandler):
                     global_variables[key] = value
             workflow_req_params["global_variables"] = global_variables
 
+        self._inject_start_field_defaults(workflow_req_params, workflow_context)
         final_answer = None
         async for exe_res in self._stream_execute_workflow(
             task, workflow_context, workflow_req_params, from_pe=True
@@ -1072,6 +1074,36 @@ class WorkflowHandler(BaseHandler):
         self.context_manager.set_global_variables(
             WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY, workflow_req_params
         )
+
+    @staticmethod
+    def _inject_start_field_defaults(workflow_req_params: dict, workflow_context) -> None:
+        """Inject Start node user field defaults into global_variables.
+
+        ${_request.xxx} resolves against _request built from global_variables.
+        Start node user fields (e.g. optional parameters with default_value)
+        are defined in the sub-workflow IR, not in the request. Without
+        merging defaults, ${_request.test} resolves to None when the user
+        does not pass the field, causing End node output filtering to drop it.
+        """
+        ir_json = getattr(workflow_context, "workflow_ir", None)
+        if not ir_json:
+            return
+        defaults = {}
+        for comp in ir_json.get("components") or []:
+            if comp.get("type") != "jiuwen.start":
+                continue
+            user_fields = (comp.get("configs") or {}).get("userFields", {}) or {}
+            for field in user_fields.get("inputs") or []:
+                field_id = field.get("id")
+                if field_id and field_id not in defaults:
+                    defaults[field_id] = field.get("default_value", "")
+            break
+        if not defaults:
+            return
+        global_variables = workflow_req_params.setdefault("global_variables", {})
+        for k, v in defaults.items():
+            if global_variables.get(k) is None:
+                global_variables[k] = v
 
     def _prepare_global_variables(self, workflow_req_params):
         def _filter_none(d: dict[str, Any] | None) -> dict[str, Any]:

@@ -5,6 +5,7 @@
 无子进程开销，适用于 exec_env=local 且 LOCAL_CODE_EXEC_MODE=inprocess 的场景。
 """
 
+import asyncio
 import copy
 import threading
 import traceback
@@ -62,12 +63,11 @@ class InprocessCodeRunner(CodeRunner):
             BuildError: 返回值非 dict 时抛出
 
         Note:
-            exec() 与 deepcopy 均为同步 CPU 活，此处直接在 event loop 线程同步执行，
-            会阻塞 event loop, 但可以降低代码节点单次执行延迟
-            同步 exec 无法被硬中断，timeout 仍不生效 —— 需硬超时请走
+            exec() 与 deepcopy 均为同步 CPU 活，通过 asyncio.to_thread 卸载到工作线程，
+            不阻塞 event loop。同步 exec 无法被硬中断，timeout 仍不生效 —— 需硬超时请走
             subprocess 模式（LocalCodeRunner）。
         """
-        return self._exec_sync(user_code, inputs)
+        return await asyncio.to_thread(self._exec_sync, user_code, inputs)
 
     def _exec_sync(self, user_code: str, inputs: dict) -> dict:
         """同步执行用户代码（由 run() 在 event loop 线程直接同步调用）"""
