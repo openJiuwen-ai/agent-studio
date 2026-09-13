@@ -1177,7 +1177,9 @@ class LazyWorkflow:
         """instantiate"""
         try:
             # 优先从缓存中读取 WorkflowSpec 重建
-            sub_wf_spec = await cache_workflow_queue.aget(self.ir_path)
+            sub_wf_spec = await cache_workflow_queue.aget(
+                self.ir_path, should_refresh_ttl=True
+            )
             if "is_sub_workflow" not in self._params:
                 self._params["is_sub_workflow"] = self.parent_workflow_id is not None
             if sub_wf_spec is not None:
@@ -1277,7 +1279,9 @@ async def build_workflow(
         )
         return await lwf.instantiate()
     if isinstance(data, dict):
-        cache_workflow_spec = await cache_workflow_queue.aget(data.get("ir_path", ""))
+        cache_workflow_spec = await cache_workflow_queue.aget(
+            data.get("ir_path", ""), should_refresh_ttl=True
+        )
         if cache_workflow_spec:
             data = cache_workflow_spec
     wf = Workflow(**kwargs)
