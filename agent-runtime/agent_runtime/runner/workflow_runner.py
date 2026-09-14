@@ -36,10 +36,14 @@ from openjiuwen.core.session.interaction.interactive_input import InteractiveInp
 from openjiuwen.core.session.stream import BaseStreamMode
 from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 
-from opentelemetry import trace as otel_trace
-from opentelemetry import context as otel_context
-from opentelemetry.trace import SpanContext, TraceFlags, TraceState
-from opentelemetry.trace.span import NonRecordingSpan
+try:
+    from opentelemetry import trace as otel_trace
+    from opentelemetry import context as otel_context
+    from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+    from opentelemetry.trace.span import NonRecordingSpan
+    _HAS_OTEL = True
+except ImportError:
+    _HAS_OTEL = False
 
 
 def _to_otel_trace_id(trace_id_str: str) -> int:
@@ -364,15 +368,16 @@ class WorkflowRunner:
             saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
             if saved_trace_id:
                 # Update current OTel context to use saved_trace_id
-                _otel_span_ctx = SpanContext(
-                    trace_id=_to_otel_trace_id(saved_trace_id),
-                    span_id=int(uuid.uuid4().hex[:16], 16),
-                    is_remote=False,
-                    trace_flags=TraceFlags(TraceFlags.SAMPLED),
-                    trace_state=TraceState(),
-                )
-                _otel_span = NonRecordingSpan(_otel_span_ctx)
-                otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
+                if _HAS_OTEL:
+                    _otel_span_ctx = SpanContext(
+                        trace_id=_to_otel_trace_id(saved_trace_id),
+                        span_id=int(uuid.uuid4().hex[:16], 16),
+                        is_remote=False,
+                        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                        trace_state=TraceState(),
+                    )
+                    _otel_span = NonRecordingSpan(_otel_span_ctx)
+                    otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
                 session = create_workflow_session_with_trace(session_id=session_id, trace_id=saved_trace_id)
             else:
                 session = create_workflow_session_with_trace(session_id=session_id)
