@@ -5,6 +5,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
+from agent_builder.adapter.config_bridge import settings
 from agent_builder.nl_to_agent.nl2 import N2LRequestBody, _n2l_json_wapper, _chat
 
 builder_router = APIRouter(tags=["builder"])
@@ -13,7 +14,11 @@ builder_router = APIRouter(tags=["builder"])
 @builder_router.get("/v1/health", response_class=PlainTextResponse)
 async def health():
     """Restful API for server health."""
-    return "the health is good"
+    return (
+        settings.health_check.custom_rsp
+        if settings.health_check.custom_rsp
+        else "the health is good"
+    )
 
 
 @builder_router.post(
