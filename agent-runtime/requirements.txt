@@ -4,6 +4,7 @@ pydantic==2.13.3
 pydantic-settings==2.14.2
 boto3==1.40.61
 aioboto3==15.5.0
+aiohttp==3.14.3
 httpx==0.28.1
 urllib3==2.7.0
 psycopg2==2.9.12
