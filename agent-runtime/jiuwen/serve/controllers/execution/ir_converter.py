@@ -121,6 +121,21 @@ _WORKFLOW_VERSION = "workflowVersion"
 _USE_AGENT_CORE_MODEL_ENV = "USE_AGENT_CORE_MODEL"
 
 
+def _supports_workflow_comp_name(workflow_type: type) -> bool:
+    """Check whether a workflow implementation supports the optional name argument."""
+    try:
+        return "name" in inspect.signature(
+            workflow_type.add_workflow_comp
+        ).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+# Detect API compatibility once at module import instead of reflecting per node.
+_WORKFLOW_ADD_COMP_SUPPORTS_NAME = _supports_workflow_comp_name(Workflow)
+_LOOP_GROUP_ADD_COMP_SUPPORTS_NAME = _supports_workflow_comp_name(LoopGroup)
+
+
 class _LLMModelIdentifiers(NamedTuple):
     """创建 LLM 模型所需的标识集合（task/agent/conversation 三件套）。"""
 
@@ -3922,9 +3937,12 @@ def _add_workflow_comp_with_exception(
         kwargs["wait_for_all"] = True
     if node_name is not None:
         # Only pass name if the underlying Workflow supports it (openjiuwen >= 0.1.18)
-        import inspect as _inspect
-        _sig = _inspect.signature(workflow.add_workflow_comp)
-        if "name" in _sig.parameters:
+        supports_name = (
+            _LOOP_GROUP_ADD_COMP_SUPPORTS_NAME
+            if isinstance(workflow, LoopGroup)
+            else _WORKFLOW_ADD_COMP_SUPPORTS_NAME
+        )
+        if supports_name:
             kwargs["name"] = node_name
     if isinstance(workflow, LoopGroup):
         workflow.add_workflow_comp(comp_id, component, **kwargs)
