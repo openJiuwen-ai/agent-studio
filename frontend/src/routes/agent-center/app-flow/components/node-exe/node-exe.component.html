@@ -254,8 +254,15 @@
                             [accept]="param.type | fileAcc"
                             (change)="onUploadFile($event, param, 'single')"
                           />
+                          <file-url-input
+                            [type]="param.type"
+                            [(mode)]="param.urlMode"
+                            [disabled]="isUploading"
+                            [existingUrls]="getExistingUrls(param)"
+                            (addUrls)="onAddUrlEntries(param, $event)"
+                          ></file-url-input>
                           <div
-                            *ngIf="!param.file"
+                            *ngIf="param.urlMode !== 'url' && !param.file && !param.uploadData?.url"
                             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
                             (click)="fileInput.click()"
                           >
@@ -280,7 +287,7 @@
                             </div>
                           </div>
                           <div
-                            *ngIf="param.file"
+                            *ngIf="param.file || param.uploadData?.url"
                             class="flex w-full items-center rounded-[8px] border border-solid border-[#DBDBDB] bg-[#fff] p-[16px]"
                           >
                             <nz-spin
@@ -288,8 +295,14 @@
                               nzSimple
                               [nzSize]="'small'"
                             ></nz-spin>
+                            <nz-icon
+                              *ngIf="param.uploadData.progress !== 'loading' && param.uploadData?.url"
+                              nzType="link"
+                              nzTheme="outline"
+                              class="text-[16px]"
+                            ></nz-icon>
                             <meta-upload-file-icon
-                              *ngIf="param.uploadData.progress !== 'loading'"
+                              *ngIf="param.uploadData.progress !== 'loading' && !param.uploadData?.url"
                               [fileName]="param.uploadData.name"
                             ></meta-upload-file-icon>
                             <span
@@ -299,6 +312,8 @@
                                   param.uploadData.progress === 'failed'
                               }"
                               nz-ellipsis
+                              nz-tooltip
+                              [nzTooltipTitle]="param.uploadData?.url || param.uploadData.name"
                             >
                               {{ param.uploadData.name }}</span
                             >
@@ -340,8 +355,15 @@
                             [accept]="param.type | fileAcc"
                             (change)="onUploadFile($event, param)"
                           />
+                          <file-url-input
+                            [type]="param.type"
+                            [(mode)]="param.urlMode"
+                            [disabled]="isUploading"
+                            [existingUrls]="getExistingUrls(param)"
+                            (addUrls)="onAddUrlEntries(param, $event)"
+                          ></file-url-input>
                           <div
-                            *ngIf="!param.uploadDatas?.length"
+                            *ngIf="param.urlMode !== 'url' && !param.uploadDatas?.length"
                             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
                             (click)="fileInput.click()"
                           >
@@ -380,8 +402,14 @@
                                 nzSimple
                                 [nzSize]="'small'"
                               ></nz-spin>
+                              <nz-icon
+                                *ngIf="fileItem.progress !== 'loading' && fileItem.fromUrl"
+                                nzType="link"
+                                nzTheme="outline"
+                                class="text-[16px]"
+                              ></nz-icon>
                               <meta-upload-file-icon
-                                *ngIf="fileItem.progress !== 'loading'"
+                                *ngIf="fileItem.progress !== 'loading' && !fileItem.fromUrl"
                                 [fileName]="fileItem.name"
                               ></meta-upload-file-icon>
                               <span
@@ -391,7 +419,7 @@
                                     fileItem.progress === 'failed'
                                 }"
                                 nz-tooltip
-                                [nzTooltipTitle]="fileItem.name"
+                                [nzTooltipTitle]="fileItem.fromUrl ? fileItem.url : fileItem.name"
                               >
                                 {{ fileItem.name }}</span
                               >

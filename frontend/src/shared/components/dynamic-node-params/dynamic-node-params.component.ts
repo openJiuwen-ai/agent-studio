@@ -42,6 +42,11 @@ import {
 import { NodeUtils } from '@routes/agent-center/app-flow/components/utils';
 import { checkFileTypeAndSize } from '@routes/agent-center/utils';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import {
+  createUrlFileItem,
+  getUrlDisplayName,
+} from '@routes/agent-center/file-url.utils';
+import { FileUrlInputComponent } from '@shared/components/file-url-input/file-url-input.component';
 
 @Component({
   selector: 'dynamic-node-params',
@@ -60,6 +65,7 @@ import { AgentConfigService } from '@routes/agent-center/agent-config.service';
     UploadFileIconComponent,
     UploadFileAccPipe,
     UploadFileDescPipe,
+    FileUrlInputComponent,
   ],
   providers: [
     {
@@ -705,7 +711,9 @@ export class DynamicNodeParamsComponent {
   /** 多文件上传是否展示添加按钮 */
   public isShowMultiBtn(inputItem) {
     return (
-      inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length > 0
+      inputItem.type?.includes('array<file') &&
+      inputItem.uploadDatas?.length > 0 &&
+      inputItem.urlMode !== 'url'
     );
   }
 
@@ -729,6 +737,43 @@ export class DynamicNodeParamsComponent {
     if (element) {
       element.nativeElement.click();
     }
+  }
+
+  /** URL 模式新增条目（file-url-input 已完成协议头/扩展名校验与去重） */
+  public onAddUrlEntries(inputItem: any, urls: string[]): void {
+    if (!urls.length) {
+      return;
+    }
+    inputItem.isEmpty = false;
+    if (inputItem.type?.includes('array<file')) {
+      inputItem.uploadDatas = [
+        ...(inputItem.uploadDatas || []),
+        ...urls.map((url) => createUrlFileItem(url)),
+      ];
+      this.parameterFromGroup.controls[inputItem.name]?.setValue(
+        inputItem.uploadDatas,
+      );
+    } else {
+      // 单文件：对齐上传成功路径（控件值 = inputItem，getDynamicParams 取 uploadData.url）
+      inputItem.uploadData = {
+        name: getUrlDisplayName(urls[0]),
+        progress: 'succeeded',
+        url: urls[0],
+      };
+      inputItem.file = undefined;
+      this.parameterFromGroup.controls[inputItem.name]?.setValue(inputItem);
+      this.appFlowServe.setFileList(inputItem);
+    }
+  }
+
+  /** 供 URL 去重：当前已录入条目的 URL 列表（回填条目无 progress 字段，按 url 非空判断） */
+  public getExistingUrls(inputItem: any): string[] {
+    if (inputItem.type?.includes('array<file')) {
+      return (inputItem.uploadDatas || [])
+        .map((item) => item.url)
+        .filter(Boolean);
+    }
+    return inputItem.uploadData?.url ? [inputItem.uploadData.url] : [];
   }
 
   removeFile(inputItem, fileItem?) {

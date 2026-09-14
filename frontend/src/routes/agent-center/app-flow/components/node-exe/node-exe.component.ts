@@ -77,6 +77,14 @@ import {
 import { CommonUtils } from 'src/utils/common.util';
 import { checkFileTypeAndSize } from '@routes/agent-center/utils';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import {
+  createUrlFileItem,
+  getUrlDisplayName,
+} from '@routes/agent-center/file-url.utils';
+import {
+  FileUrlInputComponent,
+  FileUrlMode,
+} from '@shared/components/file-url-input/file-url-input.component';
 
 type PlainType = string | number | boolean | Record<string, any>;
 
@@ -128,6 +136,8 @@ interface FileItem {
   url?: string;
   isHover?: boolean;
   controller: AbortController;
+  /** URL 模式录入的条目标记（列表用于链接图标等展示区分） */
+  fromUrl?: boolean;
 }
 
 export interface IExeField extends IWorkflowField {
@@ -137,8 +147,11 @@ export interface IExeField extends IWorkflowField {
   uploadData?: {
     progress?: 'loading' | 'succeeded' | 'failed';
     name?: string;
+    url?: string;
   };
   uploadDatas?: Array<FileItem>;
+  /** file 参数录入模式：本地上传 | URL 链接（仅 image/video 子类型可切换） */
+  urlMode?: FileUrlMode;
 }
 
 interface IRunInfo {
@@ -192,6 +205,7 @@ const INIT_VAL_MAP = {
     NzButtonModule,
     NzSpinModule,
     NzInputModule,
+    FileUrlInputComponent,
   ],
   providers: [
     {
@@ -960,7 +974,9 @@ export class NodeExeComponent implements OnChanges {
 
   public isShowMultiBtn(param) {
     return (
-      param.type?.includes('array<file') && param?.uploadDatas?.length > 0
+      param.type?.includes('array<file') &&
+      param?.uploadDatas?.length > 0 &&
+      param.urlMode !== 'url'
     );
   }
 
@@ -969,6 +985,41 @@ export class NodeExeComponent implements OnChanges {
       return;
     }
     param.uploadDatas = [];
+  }
+
+  /** URL 模式新增条目（file-url-input 已完成协议头/扩展名校验与去重） */
+  public onAddUrlEntries(inputItem: IExeField, urls: string[]): void {
+    if (!urls.length) {
+      return;
+    }
+    if (inputItem.type?.includes('array<file')) {
+      inputItem.uploadDatas = [
+        ...(inputItem.uploadDatas || []),
+        ...urls.map((url) => createUrlFileItem(url)),
+      ];
+    } else {
+      // 单文件：值契约与上传成功一致（val 持有 URL）
+      inputItem.val = urls[0];
+      inputItem.uploadData = {
+        name: getUrlDisplayName(urls[0]),
+        progress: 'succeeded',
+        url: urls[0],
+      };
+    }
+    this.cdr.detectChanges();
+  }
+
+  /** 供 URL 去重：当前已录入条目的 URL 列表 */
+  public getExistingUrls(inputItem: IExeField): string[] {
+    if (inputItem.type?.includes('array<file')) {
+      return (inputItem.uploadDatas || [])
+        .filter((item) => item.progress === 'succeeded')
+        .map((item) => item.url)
+        .filter(Boolean);
+    }
+    return typeof inputItem.val === 'string' && inputItem.val
+      ? [inputItem.val]
+      : [];
   }
 
   public addMultiFile(index): void {
@@ -1117,6 +1168,10 @@ export class NodeExeComponent implements OnChanges {
 
   removeFile(inputItem, fileItem?) {
     if (!fileItem) {
+      // URL 条目删除后同步清空值，避免运行时残留已删除的 URL
+      if (inputItem.uploadData?.url) {
+        inputItem.val = '';
+      }
       inputItem.file = '';
       inputItem.uploadData = {};
       return;

@@ -69,8 +69,16 @@
             [accept]="inputItem.type | fileAcc"
             (change)="onUploadFile($event, inputItem, 'single')"
           />
+          <file-url-input
+            *ngIf="disabled !== 'confirmed'"
+            [type]="inputItem.type"
+            [(mode)]="inputItem.urlMode"
+            [disabled]="isUploading"
+            [existingUrls]="getExistingUrls(inputItem)"
+            (addUrls)="onAddUrlEntries(inputItem, $event)"
+          ></file-url-input>
           <div
-            *ngIf="!inputItem.file"
+            *ngIf="inputItem.urlMode !== 'url' && !inputItem.file && !inputItem.uploadData?.url"
             (click)="fileInput.click()"
             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dashed border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
             [ngClass]="{
@@ -93,21 +101,22 @@
             </div>
           </div>
           <div
-            *ngIf="inputItem.file"
+            *ngIf="inputItem.file || inputItem.uploadData?.url"
             class="flex w-full items-center rounded-[8px] border border-solid border-[#DBDBDB] bg-[#fff] p-[16px]"
             [ngClass]="{
               'disabled-file': disabled === 'confirmed',
             }"
           >
             <nz-spin *ngIf="inputItem.uploadData.progress === 'loading'" nzSimple [nzSize]="'small'"></nz-spin>
-            <meta-upload-file-icon *ngIf="inputItem.uploadData.progress !== 'loading'" [fileName]="inputItem.uploadData.name"></meta-upload-file-icon>
+            <nz-icon *ngIf="inputItem.uploadData.progress !== 'loading' && inputItem?.uploadData?.url" nzType="link" nzTheme="outline" class="text-[16px]"></nz-icon>
+            <meta-upload-file-icon *ngIf="inputItem.uploadData.progress !== 'loading' && !inputItem?.uploadData?.url" [fileName]="inputItem.uploadData.name"></meta-upload-file-icon>
             <span
               class="ml-[12px]"
               [ngClass]="{
                 'text-[#F23030]': inputItem.uploadData.progress === 'failed',
               }"
               nz-tooltip
-              [nzTooltipTitle]="inputItem.uploadData.name"
+              [nzTooltipTitle]="inputItem?.uploadData?.url || inputItem.uploadData.name"
             >
               {{ inputItem.uploadData.name }}
             </span>
@@ -140,8 +149,16 @@
             [accept]="inputItem.type | fileAcc"
             (change)="onUploadFile($event, inputItem)"
           />
+          <file-url-input
+            *ngIf="disabled !== 'confirmed'"
+            [type]="inputItem.type"
+            [(mode)]="inputItem.urlMode"
+            [disabled]="isUploading"
+            [existingUrls]="getExistingUrls(inputItem)"
+            (addUrls)="onAddUrlEntries(inputItem, $event)"
+          ></file-url-input>
           <div
-            *ngIf="!inputItem.uploadDatas?.length"
+            *ngIf="inputItem.urlMode !== 'url' && !inputItem.uploadDatas?.length"
             (click)="fileInput.click()"
             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dashed border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
           >
@@ -173,14 +190,15 @@
               (mouseleave)="fileItem.isHover = false"
             >
               <nz-spin *ngIf="fileItem.progress === 'loading'" nzSimple [nzSize]="'small'"></nz-spin>
-              <meta-upload-file-icon *ngIf="fileItem.progress !== 'loading'" [fileName]="fileItem.name"></meta-upload-file-icon>
+              <nz-icon *ngIf="fileItem.progress !== 'loading' && fileItem.fromUrl" nzType="link" nzTheme="outline" class="text-[16px]"></nz-icon>
+              <meta-upload-file-icon *ngIf="fileItem.progress !== 'loading' && !fileItem.fromUrl" [fileName]="fileItem.name"></meta-upload-file-icon>
               <span
                 class="ml-[12px] min-w-0 flex-1 truncate"
                 [ngClass]="{
                   'text-[#F23030]': fileItem.progress === 'failed',
                 }"
                 nz-tooltip
-                [nzTooltipTitle]="fileItem.name"
+                [nzTooltipTitle]="fileItem.fromUrl ? fileItem.url : fileItem.name"
               >
                 {{ fileItem.name }}
               </span>

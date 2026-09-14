@@ -14,6 +14,11 @@ import {AgentConfigService} from '@routes/agent-center/agent-config.service';
 import {formatUploadSizeMb} from '@routes/agent-center/utils';
 import {UploadFileIconComponent} from '../upload-file-icon/upload-file-icon.component';
 import {UploadFileAccPipe, UploadFileDescPipe,} from 'src/pipes/upload-file.pipe';
+import {
+  createUrlFileItem,
+  getUrlDisplayName,
+} from '@routes/agent-center/file-url.utils';
+import {FileUrlInputComponent} from '@shared/components/file-url-input/file-url-input.component';
 import type {InputChatItem, InputParamConfig} from './input-node-params.interface';
 
 @Component({
@@ -30,6 +35,7 @@ import type {InputChatItem, InputParamConfig} from './input-node-params.interfac
     UploadFileIconComponent,
     UploadFileAccPipe,
     UploadFileDescPipe,
+    FileUrlInputComponent,
   ],
   providers: [
     {
@@ -286,6 +292,7 @@ export class InputNodeParamsComponent {
     return (
       inputItem.type.includes('array<file') &&
       inputItem.uploadDatas?.length > 0 &&
+      inputItem.urlMode !== 'url' &&
       this.disabled !== 'confirmed'
     );
   }
@@ -308,6 +315,51 @@ export class InputNodeParamsComponent {
     if (element) {
       element.nativeElement.click();
     }
+  }
+
+  /** URL 模式新增条目（file-url-input 已完成协议头/扩展名校验与去重） */
+  public onAddUrlEntries(inputItem: InputParamConfig, urls: string[]): void {
+    if (this.disabled === 'confirmed' || !urls.length) {
+      return;
+    }
+    inputItem.isEmpty = false;
+    if (inputItem.type.includes('array<file')) {
+      inputItem.uploadDatas = [
+        ...(inputItem.uploadDatas || []),
+        ...urls.map((url) => createUrlFileItem(url)),
+      ];
+      // 与上传路径同契约：控件值 = FileItem 对象数组（消费方按 url 字段取值）
+      this.parameterFromGroup.controls[inputItem.uniqueId]?.setValue(
+        inputItem.uploadDatas,
+      );
+    } else {
+      // 单文件：与上传成功路径同契约（控件值 = URL 字符串）
+      inputItem.uploadData = {
+        name: getUrlDisplayName(urls[0]),
+        progress: 'succeeded',
+        url: urls[0],
+      };
+      inputItem.file = undefined;
+      this.parameterFromGroup.controls[inputItem.uniqueId]?.setValue(
+        urls[0],
+      );
+    }
+  }
+
+  /** 供 URL 去重：当前已录入条目的 URL 列表 */
+  public getExistingUrls(inputItem: InputParamConfig): string[] {
+    if (inputItem.type.includes('array<file')) {
+      return (inputItem.uploadDatas || [])
+        .map((item) => item.url)
+        .filter(Boolean);
+    }
+    if (inputItem.uploadData?.url) {
+      return [inputItem.uploadData.url];
+    }
+    // 上传成功路径的 URL 存于控件值（uploadData 无 url 字段）
+    const controlVal = this.parameterFromGroup.controls[inputItem.uniqueId]
+      ?.value;
+    return typeof controlVal === 'string' && controlVal ? [controlVal] : [];
   }
 
   /** 初始化动态表单 */

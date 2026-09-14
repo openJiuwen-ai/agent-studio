@@ -42,6 +42,11 @@ import {
   validateFileSize,
   FileItem,
 } from '@routes/agent-center/multiUpload.utils';
+import { createUrlFileItem } from '@routes/agent-center/file-url.utils';
+import {
+  FileUrlInputComponent,
+  FileUrlMode,
+} from '@shared/components/file-url-input/file-url-input.component';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { formatUploadSizeMb } from '@routes/agent-center/utils';
 import { UploadFileIconComponent } from '@shared/components/upload-file-icon/upload-file-icon.component';
@@ -91,6 +96,7 @@ interface IFormObj {
     NzIconModule,
     NzToolTipModule,
     NzSpinModule,
+    FileUrlInputComponent,
   ],
   providers: [
     {
@@ -155,6 +161,9 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
 
   public display = '';
 
+  /** file 参数录入模式：本地上传 | URL 链接（仅 image/video 子类型可切换） */
+  public urlMode: FileUrlMode = 'upload';
+
   constructor(
     public cdr: ChangeDetectorRef,
     public i18n: I18NextEagerPipe,
@@ -177,6 +186,7 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
       this.value = this.param.value.default ?? ''; // 开始节点设置默认值，显示value.default
     }
     this.desc = this.param.description ?? '';
+    this.urlMode = 'upload';
     this.initParam();
   }
 
@@ -351,6 +361,25 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
     this.fileList = [];
     this.saveFile();
     this.cdr.detectChanges();
+  }
+
+  /** URL 模式新增条目（file-url-input 已完成协议头/扩展名校验与去重） */
+  public onAddUrlEntries(urls: string[]): void {
+    if (!urls.length) {
+      return;
+    }
+    const newItems = urls.map((url) => createUrlFileItem(url));
+    this.fileList = this.isMulti ? [...this.fileList, ...newItems] : newItems;
+    this.saveFile();
+    this.cdr.detectChanges();
+  }
+
+  /** 供 URL 去重：当前已录入条目的 URL 列表 */
+  public getExistingUrls(): string[] {
+    return this.fileList
+      .filter((item) => item.progress === 'succeeded')
+      .map((item) => item.url)
+      .filter(Boolean);
   }
 
   saveFile() {

@@ -9,6 +9,8 @@ export interface FileItem {
   type: string;
   url: string;
   controller: AbortController;
+  /** URL 模式录入的条目标记（宿主列表用于链接图标等展示区分） */
+  fromUrl?: boolean;
 }
 
 export interface FileSizeError {
