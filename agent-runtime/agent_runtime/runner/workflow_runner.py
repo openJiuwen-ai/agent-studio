@@ -25,6 +25,7 @@ from agent_runtime.schemas.orchestration_mgr import (
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.utils import WorkflowAbortException
 from openjiuwen.core.common.exception.errors import ExecutionError, Termination, BaseError
 from openjiuwen.core.common.logging import workflow_logger
@@ -738,6 +739,11 @@ class WorkflowRunner:
         request. Without merging defaults, ${_request.test} resolves to None
         when the user does not pass the field, causing End node output filtering
         (v is not None) to drop it entirely.
+
+        所有类型字段都注入默认值,默认值按声明类型归一(空默认:object -> {},
+        array -> [],integer -> 0,number -> 0.0,boolean -> False,string -> '');
+        直接注入 '' 会让 Start 输出 userFields 通过不了 openjiuwen IR 输出校验
+        (json.loads('')/int('') 失败,报 Incorrect type for key)。
         """
         defaults = {}
         for comp in ir_json.get("components") or []:
@@ -747,7 +753,13 @@ class WorkflowRunner:
             for field in user_fields.get("inputs") or []:
                 field_id = field.get("id")
                 if field_id and field_id not in defaults:
-                    defaults[field_id] = field.get("default_value", "")
+                    converted = Start.convert_user_field_default(
+                        (field.get("type") or "").lower(),
+                        field.get("default_value", ""),
+                        field.get("schema"),
+                    )
+                    if converted is not None:
+                        defaults[field_id] = converted
             break
         return defaults
 
