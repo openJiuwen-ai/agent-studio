@@ -37,6 +37,7 @@ from jiuwen.controller.task_executor.constants import (
 from jiuwen.controller.task_executor.handler.base_handler import BaseHandler
 from jiuwen.controller.utils.utils import MessageConverter
 from jiuwen.controller.workflow.workflow import SpiffWorkflowControllerWorkflow
+from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.wrapper.workflow_instance_layer import (
     OpenJiuWenWorkflowInstanceLayer,
 )
@@ -1087,6 +1088,11 @@ class WorkflowHandler(BaseHandler):
         are defined in the sub-workflow IR, not in the request. Without
         merging defaults, ${_request.test} resolves to None when the user
         does not pass the field, causing End node output filtering to drop it.
+
+        所有类型字段都注入默认值,默认值按声明类型归一(空默认:object -> {},
+        array -> [],integer -> 0,number -> 0.0,boolean -> False,string -> '');
+        直接注入 '' 会让 Start 输出 userFields 通过不了 openjiuwen IR 输出校验
+        (json.loads('')/int('') 失败,报 Incorrect type for key)。
         """
         ir_json = getattr(workflow_context, "workflow_ir", None)
         if not ir_json:
@@ -1099,7 +1105,13 @@ class WorkflowHandler(BaseHandler):
             for field in user_fields.get("inputs") or []:
                 field_id = field.get("id")
                 if field_id and field_id not in defaults:
-                    defaults[field_id] = field.get("default_value", "")
+                    converted = Start.convert_user_field_default(
+                        (field.get("type") or "").lower(),
+                        field.get("default_value", ""),
+                        field.get("schema"),
+                    )
+                    if converted is not None:
+                        defaults[field_id] = converted
             break
         if not defaults:
             return
