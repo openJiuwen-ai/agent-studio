@@ -16,7 +16,7 @@ from typing import Optional
 
 from agent_runtime.common.config import settings
 from agent_runtime.common.ir_interfaces import ModelConfigProvider
-from agent_runtime.context.request_context import _request_ctx
+from agent_runtime.context.request_context import _request_ctx, inject_traceparent
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
@@ -80,6 +80,9 @@ def _extract_auth_headers(headers: dict) -> dict:
     ctx = _request_ctx.get()
     if ctx and ctx.request_id:
         custom_headers["X-Request-Id"] = ctx.request_id
+
+    # W3C traceparent: enable cross-service distributed tracing
+    inject_traceparent(custom_headers)
 
     return custom_headers
 
@@ -173,6 +176,8 @@ class Nl2ModelConfigProvider:
         # X-Request-Id: propagate from request context for trace correlation
         if ctx and ctx.request_id:
             custom_headers["X-Request-Id"] = ctx.request_id
+        # W3C traceparent: enable cross-service distributed tracing
+        inject_traceparent(custom_headers)
 
         model_client_config = ModelClientConfig(
             client_provider="openai",
@@ -452,6 +457,8 @@ class IRModelConfigProvider(ModelConfigProvider):
         # X-Request-Id: propagate from request context for trace correlation
         if ctx and ctx.request_id:
             custom_headers["X-Request-Id"] = ctx.request_id
+        # W3C traceparent: enable cross-service distributed tracing
+        inject_traceparent(custom_headers)
 
         # Build client config
         model_client_config = ModelClientConfig(
