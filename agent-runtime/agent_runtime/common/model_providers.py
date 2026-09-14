@@ -17,6 +17,7 @@ from typing import Optional
 from agent_runtime.common.config import settings
 from agent_runtime.common.ir_interfaces import ModelConfigProvider
 from agent_runtime.context.request_context import _request_ctx, inject_traceparent
+from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
@@ -84,6 +85,7 @@ def _extract_auth_headers(headers: dict) -> dict:
     # W3C traceparent: enable cross-service distributed tracing
     inject_traceparent(custom_headers)
 
+    workflow_logger.debug(f"LLM custom_headers: {custom_headers}")
     return custom_headers
 
 
@@ -179,6 +181,7 @@ class Nl2ModelConfigProvider:
         # W3C traceparent: enable cross-service distributed tracing
         inject_traceparent(custom_headers)
 
+        workflow_logger.debug(f"LLM custom_headers (EnvVar): {custom_headers}")
         model_client_config = ModelClientConfig(
             client_provider="openai",
             api_key=base.api_key,
@@ -460,6 +463,7 @@ class IRModelConfigProvider(ModelConfigProvider):
         # W3C traceparent: enable cross-service distributed tracing
         inject_traceparent(custom_headers)
 
+        workflow_logger.debug(f"LLM custom_headers (IR): {custom_headers}")
         # Build client config
         model_client_config = ModelClientConfig(
             client_provider="openai",

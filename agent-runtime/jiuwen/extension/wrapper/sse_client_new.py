@@ -134,6 +134,7 @@ class SSEClientNew(McpClient):
         request_params.headers[X_REQUEST_ID] = get_x_request_id()
         request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
         inject_traceparent(request_params.headers)
+        logger.debug(f"MCP SSE request headers: {request_params.headers}")
 
         self._replace_mcp_headers_extra(request_params, **kwargs)
 

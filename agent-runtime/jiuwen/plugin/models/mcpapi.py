@@ -124,6 +124,7 @@ class McpAPI(Invokable, ABC):
             request_params.headers[X_REQUEST_ID] = get_x_request_id()
             request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
             inject_traceparent(request_params.headers)
+            logger.debug(f"MCP API request headers: {request_params.headers}")
 
             # 处理自定义鉴权的请求头
             self.replace_mcp_headers_extra(request_params, **kwargs)
@@ -337,6 +338,7 @@ class McpServer(McpAPI, ABC):
             request_params.headers[X_REQUEST_ID] = get_x_request_id()
             request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
             inject_traceparent(request_params.headers)
+            logger.debug(f"MCP API request headers: {request_params.headers}")
 
             # 处理自定义鉴权的请求头
             self.replace_mcp_headers_extra(request_params, **kwargs)
