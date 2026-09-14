@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import time
+import uuid
 from enum import Enum
 from typing import AsyncGenerator
 
@@ -33,6 +35,11 @@ from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactor
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 from openjiuwen.core.session.stream import BaseStreamMode
 from agent_runtime.common.trace_compat import create_workflow_session_with_trace
+
+from opentelemetry import trace as otel_trace
+from opentelemetry import context as otel_context
+from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+from opentelemetry.trace.span import NonRecordingSpan
 
 
 def _to_otel_trace_id(trace_id_str: str) -> int:
@@ -357,10 +364,9 @@ class WorkflowRunner:
             saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
             if saved_trace_id:
                 # Update current OTel context to use saved_trace_id
-                import uuid as _uuid
                 _otel_span_ctx = SpanContext(
                     trace_id=_to_otel_trace_id(saved_trace_id),
-                    span_id=int(_uuid.uuid4().hex[:16], 16),
+                    span_id=int(uuid.uuid4().hex[:16], 16),
                     is_remote=False,
                     trace_flags=TraceFlags(TraceFlags.SAMPLED),
                     trace_state=TraceState(),
@@ -636,6 +642,10 @@ class WorkflowRunner:
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
             }
+        finally:
+            # Detach OTel context token if we attached one (QA resume)
+            if otel_token is not None:
+                otel_context.detach(otel_token)
 
     async def run_blocking(self, req: ExecutionRequest) -> str:
         """执行 IR 工作流并返回完整结果"""
