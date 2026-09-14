@@ -103,6 +103,7 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   override ngOnInit(): void {
+    this.ensureHttpInputContainers();
     this.setNodeBase(this.nodeInfo);
     this.configs = cloneDeep(this.nodeInfo.configs);
     super.ngOnInit();
@@ -169,10 +170,39 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
     this.onSave();
   }
 
+  /**
+   * 自愈：确保 nodeInfo.inputs 里存在 query / headers 两个容器条目。
+   * 背景（FB-1）：历史上把某个分区的行删光后，容器条目会连同 schema 一起从
+   * 已存 DSL 中丢失；此后 handelSave 用 find('query'/'headers') 找不到容器便
+   * 静默跳过写回，导致请求头/请求参数再也存不上（节点进入终态损坏）。
+   * 打开面板时按工厂默认补回缺失容器，坏节点即可恢复可保存。
+   */
+  ensureHttpInputContainers(): void {
+    if (!Array.isArray(this.nodeInfo.inputs)) {
+      this.nodeInfo.inputs = [];
+    }
+    const defaults = this.appFlowServ.getInitHttpContainerInputs();
+    defaults.forEach((container) => {
+      const exist = this.nodeInfo.inputs.find(
+        (item) => item.name === container.name,
+      );
+      if (!exist) {
+        this.nodeInfo.inputs.push(cloneDeep(container));
+      } else if (!Array.isArray(exist.schema)) {
+        exist.schema = [];
+      }
+    });
+  }
+
   handelSave(): void {
     if (this.tagCompareNoChange()) {
       return;
     }
+
+    // FB-1 自愈：容器缺失会导致下面 find 静默跳过、行参数永远存不上，先确保容器存在。
+    // 行数据本身如实保存（含空白行），与代码/大模型节点的单层结构行为约定一致：
+    // 空白行落 DSL 后由试运行时后端校验报错，提醒用户填写或删除。
+    this.ensureHttpInputContainers();
 
     const queryParams = this.nodeInfo.inputs.find(
       (item) => item.name === 'query',
