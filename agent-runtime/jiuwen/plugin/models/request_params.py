@@ -10,6 +10,7 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger, get_x_request_id, get_x_execution_id
 from jiuwen.common.types import ValueTypeEnum
 from jiuwen.orchestration.flow.constant import X_REQUEST_ID, X_EXECUTION_ID
+from agent_runtime.context.request_context import inject_traceparent
 from jiuwen.plugin.common import exception, constant
 from jiuwen.plugin.handlers.handler_manager import HandlerManager
 from jiuwen.plugin.models.api_utils import ApiUtils
@@ -140,6 +141,8 @@ class RequestParamsCreator:
 
         request_params.headers[X_REQUEST_ID] = get_x_request_id()
         request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
+        inject_traceparent(request_params.headers)
+        logger.debug(f"Plugin request headers: {request_params.headers}")
 
         return request_params
 
