@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.workflow.convert.adapt.difyadapter;
 
 import static com.openjiuwen.studio.agent.manager.workflow.convert.adapt.difyadapter.EnvVariablesConverter.parseEnvVariables;
 
+import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -101,7 +102,9 @@ public class DifyDSLAdapter implements AdapterService {
         WorkflowVO workflowVo = new WorkflowVO();
         workflowVo.setDescription(metadata.getDescription()).setName(metadata.getName());
         workflowVo = mapToWorkflow(immutableData, workflowVo);
-        metadata.setWorkflowDetails(JSONObject.from(workflowVo));
+        // 注意: 不用 JSONObject.from(workflowVo) —— fastjson2 2.0.58+ 的 JSON.toJSON 树转换路径存在
+        // 访问器错配缺陷,序列化含 Object 字段(bean图)时会 JVM 级崩溃(hs_err),toJSONString+parseObject 路径安全
+        metadata.setWorkflowDetails(JSONObject.parseObject(JSON.toJSONString(workflowVo)));
         log.info("DSL imported successfully.");
         return metadata;
     }
