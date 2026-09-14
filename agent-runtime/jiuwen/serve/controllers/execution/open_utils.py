@@ -157,8 +157,13 @@ class CacheUtils:
                     # 独立防御：续期失败不能影响已取到的数据返回
                     # （外层 except 会把整个 aget 变成 None，导致上层误判 MISS 回源）
                     try:
-                        await self.async_redis_cache.expire(unique_key, self.redis_ttl)
-                        refreshed = True
+                        # expire 对不存在的 key 返回 False（非异常）：仅在真正续期
+                        # 成功时才标记，False 留给后台重写路径自愈
+                        refreshed = bool(
+                            await self.async_redis_cache.expire(
+                                unique_key, self.redis_ttl
+                            )
+                        )
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
@@ -363,8 +368,13 @@ class CacheUtils:
             if should_refresh_ttl:
                 # 独立防御：续期失败不影响已取到的数据（与 aget 同款）
                 try:
-                    await self.async_redis_cache.expire(unique_key, self.redis_ttl)
-                    refreshed = True
+                    # expire 对不存在的 key 返回 False（非异常）：仅在真正续期
+                    # 成功时才标记，False 留给后台重写路径自愈
+                    refreshed = bool(
+                        await self.async_redis_cache.expire(
+                            unique_key, self.redis_ttl
+                        )
+                    )
                 except Exception as e:
                     logger.warning(f"cache ttl refresh failed for {key}: {e}")
             self._update_memory_cache(unique_key, value)
@@ -374,6 +384,38 @@ class CacheUtils:
             return value, "redis"
 
         return None, ""
+
+
+def drain_background_ttl_tasks(loop) -> bool:
+    """在指定事件循环上运行其挂起的后台续期任务，返回是否有任务被执行。
+
+    供同步桥接函数（如 sync_build_workflow）在关闭临时事件循环前调用：
+    后台续期任务绑定创建时的循环，若循环在任务执行前停止，任务会悬挂且
+    被 _BACKGROUND_TTL_TASKS 持强引用（阻止循环对象及其 fd 被 GC 回收），
+    重复同步构建会持续累积。本函数只处理属于该循环的任务，不影响其他循环。
+    """
+    pending = None
+    for _ in range(3):
+        try:
+            pending = [
+                task
+                for task in _BACKGROUND_TTL_TASKS
+                if not task.done() and task.get_loop() is loop
+            ]
+            break
+        except RuntimeError:
+            # 其他线程并发 add/discard 使集合在遍历中变化，重试
+            continue
+    if not pending:
+        return False
+    for task in pending:
+        try:
+            # 逐个运行而非 gather：本函数常在非主线程（如 APS worker）被调用，
+            # 无默认事件循环，gather 会触发 get_event_loop 报错
+            loop.run_until_complete(task)
+        except Exception:
+            pass  # 后台续期失败不影响调用方
+    return True
 
 
 # 缓存队列实例

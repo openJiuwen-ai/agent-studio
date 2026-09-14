@@ -74,6 +74,7 @@ from jiuwen.orchestration.flow.stream.base import StreamCode, StreamData
 from jiuwen.serve.controllers.execution.open_utils import (
     cache_workflow_queue,
     async_ir_load,
+    drain_background_ttl_tasks,
 )
 
 # 多次使用的变量名以常量定义
@@ -1293,4 +1294,15 @@ def sync_build_workflow(
     data: Union[dict, WorkflowState, WorkflowSpec], **kwargs
 ) -> Workflow:
     """sync build workflow"""
-    return asyncio.new_event_loop().run_until_complete(build_workflow(data, **kwargs))
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(build_workflow(data, **kwargs))
+    finally:
+        # 运行本临时循环上挂起的后台续期任务（含构建异常路径），避免其随循环
+        # 悬挂（悬挂任务会持引用阻止循环对象及其 fd 被 GC，长期累积导致泄漏）；
+        # drain 自身失败不得掩盖构建结果或异常
+        try:
+            drain_background_ttl_tasks(loop)
+        except Exception:
+            pass
+        loop.close()

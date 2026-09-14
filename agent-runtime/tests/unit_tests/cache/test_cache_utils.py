@@ -586,3 +586,124 @@ class TestCorruptedEntrySelfHealing:
         assert ex_val == 60
         assert call_args[0][0] == "agent_runtime:test:key1"
 
+
+class TestDirectExpireReturnValue:
+    """Redis 命中直接续期路径检查 expire 布尔返回值的测试。"""
+
+    @pytest.mark.asyncio
+    async def test_aget_expire_false_not_marked(self, cache_utils, mock_async_redis):
+        """GET 命中但 expire 返回 False（两命令间 key 被删）时不误标已刷新。"""
+        mock_async_redis.get.return_value = pickle.dumps(
+            {"data": "v1"}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        mock_async_redis.expire.return_value = False
+        result = await cache_utils.aget("key1", should_refresh_ttl=True)
+        assert result == {"data": "v1"}  # 数据仍正确返回
+        # 未标记 → 下次内存命中立即走后台续期（发现 False 后 aput 重写自愈）
+        assert (
+            cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] == -1.0
+        )
+
+    @pytest.mark.asyncio
+    async def test_aget_with_source_expire_false_not_marked(
+        self, cache_utils, mock_async_redis
+    ):
+        """aget_with_source 同款：expire False 不误标。"""
+        mock_async_redis.get.return_value = pickle.dumps(
+            {"data": "v1"}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        mock_async_redis.expire.return_value = False
+        value, source = await cache_utils.aget_with_source(
+            "key1", should_refresh_ttl=True
+        )
+        assert value == {"data": "v1"}
+        assert source == "redis"
+        assert (
+            cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] == -1.0
+        )
+
+
+class TestSyncBuildWorkflowDrainsBackgroundTasks:
+    """sync_build_workflow 临时事件循环的后台任务回收测试。"""
+
+    @staticmethod
+    def test_background_task_drained_and_loop_closed(mock_async_redis):
+        """临时循环上创建的后台续期任务在返回前被执行，不随循环悬挂。
+
+        修复回归点：sync_build_workflow 用 new_event_loop 包裹 build_workflow，
+        若返回前不运行后台任务，任务会悬挂在已停止的循环上（且持引用阻止
+        循环对象及其 fd 被 GC），重复同步构建持续累积。
+        """
+        from unittest.mock import patch as mock_patch
+
+        from jiuwen.orchestration.flow import workflow as wf_mod
+        from jiuwen.serve.controllers.execution.open_utils import CacheUtils
+
+        cu = CacheUtils(
+            capacity=3, should_serialize=True, cache_name="t_sync",
+            memory_ttl=3600, redis_ttl=60,
+        )
+        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
+
+        async def fake_build(data, **kwargs):
+            await cu.aput("k", {"v": 1})
+            # 模拟距上次刷新超节流窗口，使 aget 内存命中时创建后台续期任务
+            cu.memory_cache["agent_runtime:t_sync:k"]["last_refresh"] = (
+                time.time() - 400
+            )
+            value = await cu.aget("k", should_refresh_ttl=True)
+            assert value == {"v": 1}
+            return "BUILT"
+
+        mock_async_redis.expire.reset_mock()
+        with mock_patch.object(wf_mod, "build_workflow", fake_build):
+            result = wf_mod.sync_build_workflow({"ir_path": "x"})
+        assert result == "BUILT"
+        # drain 生效：后台任务在临时循环上执行完毕（修复前任务悬挂、expire 不被调用）
+        mock_async_redis.expire.assert_called_once_with(
+            "agent_runtime:t_sync:k", 60
+        )
+
+    @staticmethod
+    def test_drain_from_worker_thread(mock_async_redis):
+        """非主线程（APS worker 场景）调用 drain 不因 get_event_loop 失败。
+
+        修复回归点：drain 若用 asyncio.gather，会在无默认事件循环的
+        工作线程触发 RuntimeError。
+        """
+        import threading
+
+        from jiuwen.serve.controllers.execution.open_utils import (
+            CacheUtils,
+            drain_background_ttl_tasks,
+        )
+
+        cu = CacheUtils(
+            capacity=3, should_serialize=True, cache_name="t_thread",
+            memory_ttl=3600, redis_ttl=60,
+        )
+        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
+        key = "agent_runtime:t_thread:k"
+        result = {}
+
+        def worker():
+            async def fake_build():
+                await cu.aput("k", {"v": 1})
+                cu.memory_cache[key]["last_refresh"] = time.time() - 400
+                return await cu.aget("k", should_refresh_ttl=True)
+
+            loop = asyncio.new_event_loop()
+            try:
+                result["value"] = loop.run_until_complete(fake_build())
+                result["drained"] = drain_background_ttl_tasks(loop)
+            finally:
+                loop.close()
+
+        mock_async_redis.expire.reset_mock()
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join(timeout=10)
+        assert result["value"] == {"v": 1}
+        assert result["drained"] is True
+        mock_async_redis.expire.assert_called_once_with(key, 60)
+
