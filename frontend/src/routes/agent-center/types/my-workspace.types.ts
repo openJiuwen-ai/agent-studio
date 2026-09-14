@@ -151,7 +151,8 @@ export type ConversationContent = {
   timeConsumptionStr?: any;
   isConfirmed?: string,
   dialogId?:string,
-  hasSummary?:boolean
+  hasSummary?:boolean,
+  terminate?: boolean
 };
 
 export type FuncCallItem = {

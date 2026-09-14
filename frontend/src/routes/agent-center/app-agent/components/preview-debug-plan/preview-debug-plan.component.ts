@@ -81,6 +81,14 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
       if (this.dialogHistory[currentIndex]?.[0]) {
         this.dialogHistory[currentIndex][0].isFinished = true;
       }
+      // super 只标记了第一条 assistant（sceneMessage），带 plans 的消息不走 summary 底部，
+      // 这里补齐本轮全部 assistant 消息，确保最终答案消息也能展示"已停止生成"
+      this.dialogHistory[currentIndex].forEach((item) => {
+        if (item?.role === "assistant") {
+          item.terminate = true;
+        }
+      });
+      this.dialogHistory[currentIndex] = [...this.dialogHistory[currentIndex]];
     }
   }
 

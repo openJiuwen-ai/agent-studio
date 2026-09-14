@@ -96,7 +96,7 @@
 
                 <div
                   class="cv-time"
-                  *ngIf="content.time_consumption || isFinished"
+                  *ngIf="content.time_consumption || isFinished || content.terminate"
                 >
                   <div *ngIf="sourceFiles?.length > 0" id="agent-base-source-detail">
                     <div *ngFor="let file of (sourceFiles | slice:0:5); let i = index"
@@ -127,8 +127,9 @@
                     >
                       <div [innerHTML]="content?.timeConsumptionStr?.overall_str | safeHtml"></div>
                     </div>
+                    <span *ngIf="content.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                     <div *ngIf="!isError" class="flex gap-[4px] split items-center">
-                      <ng-container *ngIf="content.content && isFinished">
+                      <ng-container *ngIf="content.content && (isFinished || content.terminate)">
                         <div class="chat-footer-icon" nz-tooltip [nzTooltipTitle]="'copy' | i18nextEager" (click)="copy(content.content)">
                           <span nz-icon nzType="copy" nzTheme="outline"></span>
                         </div>

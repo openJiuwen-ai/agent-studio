@@ -408,6 +408,7 @@
                               >
                                 {{ 'run_time' | i18nextEager }}
                                 <span style="color: #191919">{{ item.latency }}</span>
+                                <span *ngIf="item.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                               </div>
 
                               <div
@@ -634,6 +635,7 @@
                                 >
                                   {{ 'run_time' | i18nextEager }}
                                   <span style="color: #191919">{{ item.latency }}</span>
+                                  <span *ngIf="item.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                                 </div>
 
                                 <div

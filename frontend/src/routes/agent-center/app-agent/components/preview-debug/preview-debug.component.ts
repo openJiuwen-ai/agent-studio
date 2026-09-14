@@ -913,6 +913,22 @@ export class PreviewDebugComponent {
     this.isLoading = false;
     this.isShowStopIcon = false;
     this.isStopped = true;
+    // 标记本轮终止，用于展示"已停止生成"提示
+    const currentIndex = this.dialogHistory.length - 1;
+    if (currentIndex >= 0) {
+      const assistantMessage = this.dialogHistory[currentIndex].find(
+        (item) => item.role === "assistant"
+      );
+      if (assistantMessage) {
+        assistantMessage.terminate = true;
+      } else {
+        this.dialogHistory[currentIndex] = [
+          ...this.dialogHistory[currentIndex],
+          { role: "assistant", terminate: true }
+        ];
+      }
+      this.endThink(currentIndex);
+    }
     this.scrollToBottom();
     this.cdr.markForCheck();
   }
