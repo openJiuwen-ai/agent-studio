@@ -1122,7 +1122,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
         body.setWorkflowId(workflowId)
             .setStatus(0)
-            .setWorkflowDetails(JSONObject.from(workflowVo))
+            // 注意: 不用 JSONObject.from(workflowVo) —— fastjson2 2.0.58+ 的 JSON.toJSON 树转换路径存在
+            // 访问器错配缺陷,序列化含 Object 字段(bean图)时会 JVM 级崩溃(hs_err),toJSONString+parseObject 路径安全
+            .setWorkflowDetails(JSONObject.parseObject(JSON.toJSONString(workflowVo)))
             .setCreateTime(currentTime)
             .setUpdateTime(currentTime)
             .setPublishTime(null)
