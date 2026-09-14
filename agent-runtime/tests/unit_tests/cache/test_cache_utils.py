@@ -392,7 +392,8 @@ class TestCacheTTLConfigDefaults:
     config→队列的接线无法用单测覆盖，只能靠 review 把关。
     """
 
-    def test_default_ttl_values(self, monkeypatch):
+    @staticmethod
+    def test_default_ttl_values(monkeypatch):
         from agent_runtime.common.config import CacheSettings
 
         for var in (
@@ -406,7 +407,8 @@ class TestCacheTTLConfigDefaults:
         assert cs.workflow_cache_ttl_seconds == 24 * 60 * 60
         assert cs.agent_cache_ttl_seconds == 24 * 60 * 60
 
-    def test_ttl_rejects_non_positive(self, monkeypatch):
+    @staticmethod
+    def test_ttl_rejects_non_positive(monkeypatch):
         """TTL 配置为 0 时应校验失败，防止 set(ex=0) 写入即删的静默失效。"""
         from pydantic import ValidationError
 
