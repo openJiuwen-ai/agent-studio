@@ -34,6 +34,22 @@ from openjiuwen.core.session.interaction.interactive_input import InteractiveInp
 from openjiuwen.core.session.stream import BaseStreamMode
 from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 
+
+def _to_otel_trace_id(trace_id_str: str) -> int:
+    """Convert a string to a valid OTel 128-bit trace_id.
+
+    OTel trace_id must be 32 hex chars (128-bit). If the input is already
+    32 hex, use it directly; otherwise hash with md5 to get 32 hex chars.
+    """
+    _HEX_CHARS = set("0123456789abcdefABCDEF")
+    if len(trace_id_str) == 32 and all(ch in _HEX_CHARS for ch in trace_id_str):
+        val = int(trace_id_str, 16)
+        if val != 0:
+            return val
+    return int(hashlib.md5(trace_id_str.encode()).hexdigest(), 16)
+
+
+
 from agent_runtime.common.logging_context import apply_template_masking_patch
 
 apply_template_masking_patch()
@@ -125,6 +141,67 @@ class ExecutionIdStore:
             workflow_logger.warning("Failed to delete execution_id from Redis: {}", e)
             return False
 
+
+
+
+class TraceIdStore:
+    """trace_id 的 Redis 存储管理，用于工作流中断恢复时保持 trace_id 一致
+
+    与 ExecutionIdStore 配合使用：工作流因 QA 节点中断时，保存当次的
+    trace_id；恢复执行时复用同一个 trace_id，使 OTel span 继续挂在同
+    一条 trace 上，从而保持 openjiuwen.trace.id 与 OTel trace_id 一致。
+    """
+
+    KEY_PREFIX = "agentBuilder:trace_id"
+    DEFAULT_TTL = 86400  # 24 hours
+
+    @classmethod
+    def _build_key(cls, workflow_id: str, session_id: str) -> str:
+        return f"{cls.KEY_PREFIX}:{workflow_id}:{session_id}"
+
+    @classmethod
+    async def save(
+        cls, workflow_id: str, session_id: str, trace_id: str, ttl: int = None
+    ) -> bool:
+        try:
+            redis_client = get_redis_client()
+            key = cls._build_key(workflow_id, session_id)
+            expire = ttl if ttl is not None else cls.DEFAULT_TTL
+            await redis_client.set(key, trace_id, ex=expire)
+            workflow_logger.debug("Saved trace_id: key={}, trace_id={}", key, trace_id)
+            return True
+        except Exception as e:
+            workflow_logger.warning("Failed to save trace_id to Redis: {}", e)
+            return False
+
+    @classmethod
+    async def get(cls, workflow_id: str, session_id: str) -> str | None:
+        try:
+            redis_client = get_redis_client()
+            key = cls._build_key(workflow_id, session_id)
+            trace_id = await redis_client.get(key)
+            if trace_id:
+                # Redis client uses decode_responses=False, so get() returns bytes.
+                if isinstance(trace_id, bytes):
+                    trace_id = trace_id.decode("utf-8")
+                workflow_logger.debug("Got saved trace_id: key={}, trace_id={}", key, trace_id)
+                return trace_id
+            return None
+        except Exception as e:
+            workflow_logger.warning("Failed to get trace_id from Redis: {}", e)
+            return None
+
+    @classmethod
+    async def delete(cls, workflow_id: str, session_id: str) -> bool:
+        try:
+            redis_client = get_redis_client()
+            key = cls._build_key(workflow_id, session_id)
+            await redis_client.delete(key)
+            workflow_logger.debug("Deleted trace_id: key={}", key)
+            return True
+        except Exception as e:
+            workflow_logger.warning("Failed to delete trace_id from Redis: {}", e)
+            return False
 
 class ModelConfigStrategy(Enum):
     """模型配置来源策略"""
@@ -271,9 +348,30 @@ class WorkflowRunner:
 
         workflow_id = ir_json.get("workflowId", "")
 
-        # 5. 创建 session
+        # 5. 创建 session，中断恢复时复用上一轮的 trace_id
         t_session = time.perf_counter()
-        session = create_workflow_session_with_trace(session_id=session_id)
+        otel_token = None
+        if is_interrupted:
+            # QA resume: reuse the trace_id from the first execution of this
+            # round so the OTel handler keeps the cached root context.
+            saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
+            if saved_trace_id:
+                # Update current OTel context to use saved_trace_id
+                import uuid as _uuid
+                _otel_span_ctx = SpanContext(
+                    trace_id=_to_otel_trace_id(saved_trace_id),
+                    span_id=int(_uuid.uuid4().hex[:16], 16),
+                    is_remote=False,
+                    trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                    trace_state=TraceState(),
+                )
+                _otel_span = NonRecordingSpan(_otel_span_ctx)
+                otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
+                session = create_workflow_session_with_trace(session_id=session_id, trace_id=saved_trace_id)
+            else:
+                session = create_workflow_session_with_trace(session_id=session_id)
+        else:
+            session = create_workflow_session_with_trace(session_id=session_id)
         performance_logger.info(
             f"session_creation|{round((time.perf_counter() - t_session) * 1000)}"
         )
@@ -299,9 +397,13 @@ class WorkflowRunner:
                 "query": req.query or "",
                 **self._build_global_state_params(req.params.model_dump(), node_defs),
             }
-            # 保存 exec_id 到 Redis，以便中断恢复时使用
+            # 保存 exec_id 和 trace_id 到 Redis，以便中断恢复时使用
             t_redis_save = time.perf_counter()
             await ExecutionIdStore.save(workflow_id, session_id, exec_id)
+            # Save the current trace_id so QA resume reuses the same OTel trace
+            current_trace_id = session.get_trace_id() if hasattr(session, "get_trace_id") else None
+            if current_trace_id:
+                await TraceIdStore.save(workflow_id, session_id, current_trace_id)
             performance_logger.info(
                 f"redis_save_exec_id|{round((time.perf_counter() - t_redis_save) * 1000)}"
             )
