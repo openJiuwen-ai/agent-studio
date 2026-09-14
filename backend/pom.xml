@@ -75,7 +75,7 @@
         <avro.version>1.12.1</avro.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <httpclient5.version>5.6.3</httpclient5.version>
-        <httpcore5.version>5.3</httpcore5.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
         <nimbus-jose-jwt.version>10.3</nimbus-jose-jwt.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jsqlparser.version>4.7</jsqlparser.version>
