@@ -76,6 +76,11 @@ def _extract_auth_headers(headers: dict) -> dict:
     if deployment_id:
         custom_headers["X-Deployment-Id"] = deployment_id
 
+    # X-Request-Id: propagate from request context for trace correlation
+    ctx = _request_ctx.get()
+    if ctx and ctx.request_id:
+        custom_headers["X-Request-Id"] = ctx.request_id
+
     return custom_headers
 
 
@@ -164,6 +169,10 @@ class Nl2ModelConfigProvider:
         deployment_id = headers.get("deployment_id", "")
         if deployment_id:
             custom_headers["X-Deployment-Id"] = deployment_id
+
+        # X-Request-Id: propagate from request context for trace correlation
+        if ctx and ctx.request_id:
+            custom_headers["X-Request-Id"] = ctx.request_id
 
         model_client_config = ModelClientConfig(
             client_provider="openai",
@@ -440,6 +449,9 @@ class IRModelConfigProvider(ModelConfigProvider):
         ctx = _request_ctx.get()
         auth_token = ctx.headers.get("X-Auth-Token", "") if ctx else ""
         custom_headers = {"X-Auth-Id": auth_id, "X-Auth-Token": auth_token}
+        # X-Request-Id: propagate from request context for trace correlation
+        if ctx and ctx.request_id:
+            custom_headers["X-Request-Id"] = ctx.request_id
 
         # Build client config
         model_client_config = ModelClientConfig(
