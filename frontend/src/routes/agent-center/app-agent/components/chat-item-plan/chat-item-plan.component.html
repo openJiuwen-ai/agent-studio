@@ -62,9 +62,11 @@
           </ng-container>
         </div>
       </ng-container>
+      <!-- 带 plans 的消息不走 summary 底部，本轮无答案时停止提示展示在计划区下方 -->
+      <div *ngIf="content.terminate && content.plans?.length && !roundHasAnswer" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</div>
       <ng-template #summary>
         <div
-          *ngIf="isConversationContent(content)  && ( content?.content || content?.inputList?.length || content?.cards?.length) && (!isError ||content.event !=='error'); else error"
+          *ngIf="isConversationContent(content)  && ( content?.content || content?.inputList?.length || content?.cards?.length || content?.terminate) && (!isError ||content.event !=='error'); else error"
           class="assistant-content chat-content"
         >
           <div class="cv-content"  [ngClass]="{'no-border':!hasTool || content.hasSummary}">
@@ -134,7 +136,7 @@
 
                 <div
                   class="cv-time"
-                  *ngIf="content.time_consumption || isFinished"
+                  *ngIf="content.time_consumption || isFinished || content.terminate"
                 >
                   <div *ngIf="sourceFiles?.length > 0" id="agent-base-source-detail">
                     <div *ngFor="let file of (sourceFiles | slice:0:5); let i = index"
@@ -165,8 +167,9 @@
                     >
                       <div [innerHTML]="content?.timeConsumptionStr?.overall_str | safeHtml"></div>
                     </div>
+                    <span *ngIf="content.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                     <div *ngIf="!isError" class="flex gap-[4px] split items-center">
-                      <ng-container *ngIf="content.content && isFinished">
+                      <ng-container *ngIf="content.content && (isFinished || content.terminate)">
                         <div class="chat-footer-icon" nz-tooltip [nzTooltipTitle]="'copy' | i18nextEager" (click)="copy(content.content)">
                           <span nz-icon nzType="copy" nzTheme="outline" style="font-size: 16px;"></span>
                         </div>

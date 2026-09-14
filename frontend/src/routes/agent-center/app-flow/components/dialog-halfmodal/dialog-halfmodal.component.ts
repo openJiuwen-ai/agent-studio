@@ -600,22 +600,12 @@ export class DialogHalfmodalComponent
     })
 
     const currentAns = this.chatLoop[lastIndex].showAnswer[this.index];
-    if (this.type === 'multi') {
-      const end_time = new Date().getTime();
-      currentAns.loading = false;
-      this.chatLoop[lastIndex].latency = flowCommonLogic.calcElapsedTime(
-        this.start_time,
-        end_time,
-      );
-    } else {
-      const end_time = new Date()?.getTime();
-      currentAns.text = `${currentAns.text || ''}${currentAns.text ? '<br>': ''}${this.i18n.transform('stopped_generating')}`;
-      currentAns.loading = false;
-      this.chatLoop[lastIndex].latency = flowCommonLogic?.calcElapsedTime(
-        this.start_time,
-        end_time,
-      );
-    }
+    const end_time = new Date().getTime();
+    currentAns.loading = false;
+    this.chatLoop[lastIndex].latency = flowCommonLogic.calcElapsedTime(
+      this.start_time,
+      end_time,
+    );
     this?.scrollToBottom();
     this.cdr.markForCheck();
   }
