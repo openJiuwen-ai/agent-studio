@@ -113,6 +113,44 @@ DATA_TYPE_CONVERSION = {
     DataType.ARRAY.value: _to_array,       # 原 list() 会把 JSON 字符串拆成字符列表
 }
 
+# 非 string 类型空默认(None/'')归一为合法类型值:直接注入 '' 会让 Start 输出
+# userFields 通过不了 openjiuwen IR 输出校验(json.loads('')/int('') 失败,
+# 报 Incorrect type for key),object/array 空默认注入 {} / [] 后 End 节点
+# _apply_type_conversion 会把空 dict/list 再转为空串输出。
+_NON_STRING_EMPTY_DEFAULT = {
+    DataType.INTEGER.value: 0,
+    DataType.NUMBER.value: 0.0,
+    DataType.BOOLEAN.value: False,
+    DataType.OBJECT.value: {},
+    DataType.ARRAY.value: [],
+}
+
+
+def _fill_object_default(schema: Any) -> dict:
+    """按 object schema 递归填充子字段类型空值。
+
+    对齐 openjiuwen 对节点输出的 _convert_object 行为:空 dict 会被按 schema
+    递归填充(string -> '',integer -> 0,number -> 0.0,boolean -> False,
+    array -> [],嵌套 object 递归)。保证 ${_request.obj} 与
+    ${node_start.userFields.obj} 两种引用得到相同结构。
+    """
+    if not isinstance(schema, list):
+        return {}
+    result = {}
+    for sub in schema:
+        if not isinstance(sub, dict) or not sub.get("id"):
+            continue
+        sub_type = (sub.get("type") or "").lower()
+        if sub_type == DataType.OBJECT.value:
+            result[sub["id"]] = _fill_object_default(sub.get("schema"))
+        elif sub_type == DataType.ARRAY.value:
+            result[sub["id"]] = []
+        elif sub_type == DataType.STRING.value:
+            result[sub["id"]] = ""
+        else:
+            result[sub["id"]] = _NON_STRING_EMPTY_DEFAULT.get(sub_type, "")
+    return result
+
 
 class Start(WorkflowComponent):
     """
@@ -399,6 +437,30 @@ class Start(WorkflowComponent):
                 f"Failed to transform start node vars type: {e}", exc_info=True
             )
         return res
+
+    @staticmethod
+    def convert_user_field_default(
+        data_type: str, default_value: Any, schema: Any = None
+    ) -> Any:
+        """将 Start 用户字段默认值按声明类型归一为可注入 _request 的值。
+
+        供 runner/handler 注入 Start 用户字段默认值前调用:所有类型字段都注入,
+        用户未传时 End 节点 `${_request.xxx}` 能解析到类型正确的值而非 None
+        (328d4923 修复本意,不区分字段类型)。
+        空默认(None/'')按类型归一:string -> '',object -> 按 schema 填充子字段,
+        array -> [],integer -> 0,number -> 0.0,boolean -> False;
+        非空默认按类型转换(object/array 的 JSON 字符串解析为 dict/list)。
+        """
+        if data_type == DataType.STRING.value:
+            return "" if default_value is None else default_value
+        converted = Start._transform_type(data_type, default_value, "")
+        if data_type == DataType.OBJECT.value:
+            if converted is None or converted == {}:
+                return _fill_object_default(schema)
+            return converted
+        if converted is not None:
+            return converted
+        return _NON_STRING_EMPTY_DEFAULT.get(data_type, "")
 
     @staticmethod
     async def _get_redis_session_vars(
