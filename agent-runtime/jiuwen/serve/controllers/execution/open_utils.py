@@ -149,6 +149,9 @@ class CacheUtils:
 
             value = await self.async_redis_cache.get(unique_key)
             if value is not None:
+                # deserialize 先于续期：其失败落入外层 except 返回 None（上层回源
+                # 重建并覆盖），且损坏条目不被续命
+                value = deserialize_object(value) if self.should_serialize else value
                 refreshed = False
                 if should_refresh_ttl:
                     # 独立防御：续期失败不能影响已取到的数据返回
@@ -158,8 +161,6 @@ class CacheUtils:
                         refreshed = True
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
-                # deserialize 必须留在防御 try 之外：其失败应落入外层 except 返回 None
-                value = deserialize_object(value) if self.should_serialize else value
                 self._update_memory_cache(unique_key, value)
                 # 回填之后再标记（此刻条目必存在）；expire 失败不标记，下次命中重试
                 if refreshed:
@@ -280,10 +281,18 @@ class CacheUtils:
         try:
             # 超时保护：防 Redis 半开连接（TCP 建立但不应答）导致后台任务
             # 长期挂起、_BACKGROUND_TTL_TASKS 缓慢累积
-            await asyncio.wait_for(
+            refreshed = await asyncio.wait_for(
                 self.async_redis_cache.expire(unique_key, self.redis_ttl),
                 timeout=5,
             )
+            if not refreshed:
+                # expire 返回 False = key 已不存在（被外部删除/淘汰），expire 本身
+                # 无法恢复；用内存中的值整体重写以重建 Redis 条目
+                entry = self.memory_cache.get(unique_key)
+                if entry is not None:
+                    await asyncio.wait_for(
+                        self.aput(key, entry["data"]), timeout=10
+                    )
         except Exception as e:
             logger.warning(f"cache ttl refresh failed for {key}: {e}")
             entry = self.memory_cache.get(unique_key)
@@ -338,6 +347,18 @@ class CacheUtils:
                 StatusCode.REDIS_SERVICE_NOT_FOUND.errmsg,
             ) from e
         if value is not None:
+            # deserialize 必须先于续期：损坏数据不得续命（否则条目被无限刷新、永不自愈）
+            try:
+                value = deserialize_object(value) if self.should_serialize else value
+            except Exception:
+                # 损坏条目：删除以使下次读取回源重建，再抛出原异常（异常契约不变）
+                try:
+                    await self.async_redis_cache.delete(unique_key)
+                except Exception as del_err:
+                    logger.warning(
+                        f"failed to drop corrupted cache entry {key}: {del_err}"
+                    )
+                raise
             refreshed = False
             if should_refresh_ttl:
                 # 独立防御：续期失败不影响已取到的数据（与 aget 同款）
@@ -346,7 +367,6 @@ class CacheUtils:
                     refreshed = True
                 except Exception as e:
                     logger.warning(f"cache ttl refresh failed for {key}: {e}")
-            value = deserialize_object(value) if self.should_serialize else value
             self._update_memory_cache(unique_key, value)
             # 回填之后再标记（此刻条目必存在）；expire 失败不标记，下次命中重试
             if refreshed:

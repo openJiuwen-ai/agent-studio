@@ -529,3 +529,60 @@ class TestBackgroundTTLRefresh:
         await asyncio.sleep(0.05)
         mock_async_redis.expire.assert_not_called()
 
+
+class TestCorruptedEntrySelfHealing:
+    """损坏缓存条目与 Redis 条目丢失的自愈行为测试。"""
+
+    @pytest.mark.asyncio
+    async def test_corrupted_pickle_deleted_and_raised(
+        self, cache_utils, mock_async_redis
+    ):
+        """aget_with_source 命中损坏 pickle 时：删除该 key、抛出原异常，且不续期。
+
+        修复回归点：若先续期再 deserialize，损坏条目会被无限刷新而永不自愈。
+        """
+        from jiuwen.common.exception.base import JiuWenBaseException
+
+        mock_async_redis.get.return_value = b"corrupted-pickle"
+        with pytest.raises(JiuWenBaseException):
+            await cache_utils.aget_with_source("key1", should_refresh_ttl=True)
+        # 损坏条目被删除（下次读取 miss → 回源重建）
+        mock_async_redis.delete.assert_called_once_with("agent_runtime:test:key1")
+        # 损坏条目不得被续命
+        mock_async_redis.expire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_corrupted_pickle_aget_returns_none(
+        self, cache_utils, mock_async_redis
+    ):
+        """aget 命中损坏 pickle 时返回 None（上层回源重建），且不续期。"""
+        mock_async_redis.get.return_value = b"corrupted-pickle"
+        result = await cache_utils.aget("key1", should_refresh_ttl=True)
+        assert result is None
+        mock_async_redis.expire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_expire_false_triggers_rewrite(
+        self, cache_utils, mock_async_redis
+    ):
+        """后台 EXPIRE 返回 False（key 被外部删除）时，用内存值重写重建条目。
+
+        修复回归点：expire 对不存在的 key 返回 False 而非抛异常，若不检查
+        返回值，Redis 条目丢失后在内存存活期间永远无法重建。
+        """
+        await cache_utils.aput("key1", {"data": "v1"})
+        cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] = (
+            time.time() - 400
+        )
+        # expire 返回 False：模拟 key 已被外部删除/淘汰
+        mock_async_redis.expire.return_value = False
+        mock_async_redis.set.reset_mock()
+        await cache_utils.aget("key1", should_refresh_ttl=True)
+        await asyncio.sleep(0.05)
+        # 验证用内存值整体重写（set 被再次调用，携带新 TTL）
+        mock_async_redis.set.assert_called_once()
+        call_args = mock_async_redis.set.call_args
+        ex_val = call_args[1].get("ex") if call_args[1] else None
+        assert ex_val == 60
+        assert call_args[0][0] == "agent_runtime:test:key1"
+
