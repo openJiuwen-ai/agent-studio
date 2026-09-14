@@ -80,11 +80,18 @@ export class ConfigRequestComponent extends ModalBaseComponent {
 
   onRefUpdate(info: IParamRef[]): void {
     this.nameRefOptions = info;
-    const inputs = this.nodeInfo.inputs;
+    const inputs = this.nodeInfo.inputs ?? [];
     const querySchema = inputs.find((item) => item.name === 'query')?.schema as IWorkflowField[];
     this.queryParams = NodeUtils.initInputs(querySchema, this.nameRefOptions);
     const headerSchema = inputs.find((item) => item.name === 'headers')?.schema as IWorkflowField[];
     this.headerParams = NodeUtils.initInputs(headerSchema, this.nameRefOptions);
+  }
+
+  private createBlankRow(): IWorkflowField {
+    return {
+      ...getInitInputParamConfig('pre_defined'),
+      refs: cloneDeep(this.nameRefOptions),
+    };
   }
 
   ngOnChanges(): void {
@@ -97,10 +104,7 @@ export class ConfigRequestComponent extends ModalBaseComponent {
   }
 
   addQueryParam(): void {
-    this.queryParams.push({
-      ...getInitInputParamConfig('pre_defined'),
-      refs: cloneDeep(this.nameRefOptions),
-    });
+    this.queryParams.push(this.createBlankRow());
     this.onSaveChange();
   }
 
@@ -110,10 +114,7 @@ export class ConfigRequestComponent extends ModalBaseComponent {
   }
 
   addHeaderParam(): void {
-    this.headerParams.push({
-      ...getInitInputParamConfig('pre_defined'),
-      refs: cloneDeep(this.nameRefOptions),
-    });
+    this.headerParams.push(this.createBlankRow());
     this.onSaveChange();
   }
 

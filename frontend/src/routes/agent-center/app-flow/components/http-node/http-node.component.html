@@ -73,12 +73,35 @@
     <node-card-description *ngIf="isExpand" [description]="nodeInfo.configs?.descriptionText" [nodeInfo]="nodeInfo"></node-card-description>
 
     <div *ngIf="isExpand" class="node-groups">
+      <!-- 卡片只展示请求摘要（FB-3）：query/headers 是内部双层容器，铺在输入参数列会
+           常驻误导性的"未配置"；改为只展示请求方式与请求地址，输入参数不上卡片 -->
       <div class="node-group">
         <div class="flex">
-          <div class="w-[calc(100%-120px)]">{{ 'input_params' | i18nextEager }}</div>
-          <div class="w-[120px]">{{ 'value' | i18nextEager }}</div>
+          <div class="w-1/2">{{ 'request_method' | i18nextEager }}</div>
+          <div class="w-1/2">{{ 'address_api_interface' | i18nextEager }}</div>
         </div>
-        <meta-input-params [inputs]="nodeInfo.inputs" />
+        <div class="flex">
+          <div class="w-1/2">
+            <span class="node-param-shallow" *ngIf="nodeInfo.configs?.method">
+              {{ nodeInfo.configs.method }}
+            </span>
+            <span class="text-[#808080]" *ngIf="!nodeInfo.configs?.method">
+              {{ 'not_configured' | i18nextEager }}
+            </span>
+          </div>
+          <div class="w-1/2">
+            <div
+              class="node-param-shallow break-words"
+              *ngIf="nodeInfo.configs?.endpoint"
+              [lineClamp]="2"
+            >
+              {{ nodeInfo.configs.endpoint }}{{ nodeInfo.configs?.path }}
+            </div>
+            <span class="text-[#808080]" *ngIf="!nodeInfo.configs?.endpoint">
+              {{ 'not_configured' | i18nextEager }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div class="node-group">
