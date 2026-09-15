@@ -804,7 +804,8 @@ export class NodeExeComponent implements OnChanges {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
-    if (this.isUploading) return;
+    // 兜底守卫只拦多文件批次（防并发竞态）；单文件分支不置 isUploading，恢复原有行为
+    if (uploadType !== 'single' && this.isUploading) return;
     if (uploadType === 'single') {
       const file: File = files[0];
       if (!file) {
@@ -1122,10 +1123,6 @@ export class NodeExeComponent implements OnChanges {
       inputItem.file = '';
       inputItem.uploadData = {};
       return;
-    }
-    // 如果删除的文件还未上传完成，则中止请求
-    if (fileItem.progress === 'loading') {
-      fileItem.controller.abort();
     }
     inputItem.uploadDatas = inputItem.uploadDatas.filter(
       (item) => item.fileId !== fileItem.fileId,

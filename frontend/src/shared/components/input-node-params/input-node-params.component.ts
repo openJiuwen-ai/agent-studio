@@ -139,10 +139,6 @@ export class InputNodeParamsComponent {
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
       return;
     }
-    // 如果删除的文件还未上传完成，则中止请求
-    if (fileItem.progress === 'loading') {
-      fileItem.controller.abort();
-    }
     inputItem.uploadDatas = inputItem.uploadDatas.filter(
       (item) => item.fileId !== fileItem.fileId,
     );
@@ -160,7 +156,8 @@ export class InputNodeParamsComponent {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
-    if (this.isUploading) return;
+    // 兜底守卫只拦多文件批次（防并发批次竞态）；单文件与批次互不干扰，保持可用
+    if (uploadType !== 'single' && this.isUploading) return;
     if (uploadType === 'single') {
       const file: File = files[0];
       if (!file) {
