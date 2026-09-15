@@ -972,6 +972,10 @@ export class NodeExeComponent implements OnChanges {
   }
 
   public addMultiFile(index): void {
+    // 上传中禁止追加新批次，避免与进行中的串行上传循环产生并发竞态
+    if (this.isUploading) {
+      return;
+    }
     let element = this.fileInputs.find((el) =>
       el.nativeElement.className.includes(`input${index}`),
     );

@@ -724,6 +724,10 @@ export class DynamicNodeParamsComponent {
 
   /** 多文件上传添加按钮点击事件 */
   public addMultiFile(index): void {
+    // 上传中禁止追加新批次，避免与进行中的串行上传循环产生并发竞态
+    if (this.isUploading) {
+      return;
+    }
     let element = this.fileInputs.find((el) =>
       el.nativeElement.className.includes(`input${index}`),
     );

@@ -297,7 +297,8 @@ export class InputNodeParamsComponent {
   }
 
   public addMultiFile(index): void {
-    if (this.disabled === 'confirmed') {
+    // 上传中禁止追加新批次，避免与进行中的串行上传循环产生并发竞态
+    if (this.isUploading || this.disabled === 'confirmed') {
       return;
     }
     let element = this.fileInputs.find((el) =>

@@ -352,6 +352,10 @@ export class SenderComponent implements OnDestroy {
     if (this.uploadData.length >= 20) {
       return;
     }
+    // 上传中禁止追加新批次，避免并发上传导致清空按钮提前解禁
+    if (this.uploading) {
+      return;
+    }
     this.fileInput.nativeElement.click();
   }
 

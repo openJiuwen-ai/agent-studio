@@ -26,7 +26,7 @@
             nz-button
             class="flex !w-[96px] justify-center"
             nzSize="small"
-            [disabled]="inputItem.uploadDatas?.length >= 20"
+            [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
             (click)="addMultiFile(i)"
           >
             <span class="flex items-center gap-[4px]">
