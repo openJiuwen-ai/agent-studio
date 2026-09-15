@@ -10,6 +10,7 @@ logging:
   performance_log_file: "performance/jiuwen_performance.log" # Request performance logging, used to record performance cost.
   interface_output: log # output type, including: console and log. Supports simultaneous configuration: console,log.
   performance_output: console # output type, including: console and log. Supports simultaneous configuration: console,log.
+  performance_level: WARNING  # Performance log level, default WARNING (silent in normal operation)
   log_path: "./logs/"
 
 plugin:

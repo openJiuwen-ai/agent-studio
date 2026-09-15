@@ -664,7 +664,7 @@ class Agent(BaseAgent):
         plan_mode = self.control_mode.plan_config.plan_mode
 
         if plan_mode == "Controller":
-            async for item in self._handle_controller_mode_stream(yield_res):
+            async for item in self._handle_controller_mode_stream(yield_res, trace_manager):
                 yield item
         elif plan_mode == "ReAct":
             async for item in self._handle_react_mode_stream(yield_res, trace_manager):
@@ -675,13 +675,16 @@ class Agent(BaseAgent):
             ):
                 yield item
         else:
-            async for item in self._handle_default_mode_stream(yield_res):
+            async for item in self._handle_default_mode_stream(yield_res, trace_manager):
                 yield item
 
-    async def _handle_controller_mode_stream(self, yield_res):
+    async def _handle_controller_mode_stream(self, yield_res, trace_manager):
         """处理Controller模式的流式输出"""
         async for item in yield_res:
             yield item
+        if trace_manager:
+            await trace_manager.on_chain_end(self.result)
+        yield self.result
 
     async def _handle_react_mode_stream(self, yield_res, trace_manager):
         """处理ReAct模式的流式输出"""
@@ -699,10 +702,13 @@ class Agent(BaseAgent):
             await trace_manager.on_chain_end(self.result)
         yield self.result
 
-    async def _handle_default_mode_stream(self, yield_res):
+    async def _handle_default_mode_stream(self, yield_res, trace_manager):
         """处理默认模式的流式输出"""
         async for item in yield_res:
             yield item
+        if trace_manager:
+            await trace_manager.on_chain_end(self.result)
+        yield self.result
 
     async def _inject_skills_if_needed(self, runtime_context, plugins):
         """根据计划模式决定是否进行动态技能注入，返回 (plugins, SkillInjectionContext)
