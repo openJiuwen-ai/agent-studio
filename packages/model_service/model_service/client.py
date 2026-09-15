@@ -30,7 +30,7 @@ from openjiuwen.core.runner.callback import trigger
 from openjiuwen.core.runner.callback.events import LLMCallEvents
 
 from common_utils.customer_header import resolve, get_capture_keys, get_config
-from . import authz, dispatch, policy, resolver
+from . import authz, dispatch, env_resolver, policy, resolver
 
 logger = logging.getLogger(__name__)
 
@@ -493,7 +493,9 @@ class StudioModelClient(OpenAIModelClient):
                     await resp.aclose()
                     raise resolver.ModelServiceError(
                         "MD_INVOKE_MODEL_SERVICE_FAIL",
-                        f"upstream {url} returned {resp.status_code}: {text}",
+                        f"upstream {url} returned {resp.status_code}: {text}"
+                        + env_resolver.env_url_error_hint(
+                            detail.model.api_url_env_placeholders),
                     )
 
                 async def _parsed():
@@ -548,7 +550,9 @@ class StudioModelClient(OpenAIModelClient):
             if resp.status_code >= 300:
                 raise resolver.ModelServiceError(
                     "MD_INVOKE_MODEL_SERVICE_FAIL",
-                    f"upstream {url} returned {resp.status_code}: {resp.text}",
+                    f"upstream {url} returned {resp.status_code}: {resp.text}"
+                    + env_resolver.env_url_error_hint(
+                        detail.model.api_url_env_placeholders),
                 )
             data = resp.json()
             assistant_message = await self._parse_response(_wrap(data), output_parser)

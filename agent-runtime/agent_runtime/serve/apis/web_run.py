@@ -10,6 +10,7 @@ Web Run API — 网页执行接口
 """
 
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -88,6 +89,7 @@ async def run_web_agent(
     request: Request,
     workspace_id: str = "",
     conversation_id: str = "",
+    environment_id: Optional[str] = None,
 ):
     """网页智能体执行接口 — 通过 short_code 查询发布信息后复用试运行执行链。
 
@@ -96,6 +98,12 @@ async def run_web_agent(
     3. 用 ReleaseInfo 的 appId/versionId/projectId 构造 AgentRunContext
     4. 复用 _execute_agent_run（IR 路径→校验→会话→ir_execute→EventHandler 封装）
        handler_type 由 IR 的 mode 决定（ReAct/Controller/PlanExecute）
+
+    environment_id 由 manager 侧回填（按 short_code 所属发布通道解析的项目默认
+    环境），用于解析模型 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符；
+    回填默认环境时 manager 同步以发布通道 workspace 覆盖 workspace_id（入口
+    无鉴权，请求 workspace 不可信，环境变量按 (environment_id, workspace_id)
+    维度存储），保证加载发布方预期的变量值。
     """
     short_code = request.path_params["short_code"]
     language = request.headers.get("x-language", "zh-cn")
@@ -105,10 +113,11 @@ async def run_web_agent(
         conversation_id = str(uuid.uuid4())
 
     workflow_logger.info(
-        "Web agent run request: short_code=%s, conversation=%s, workspace=%s",
+        "Web agent run request: short_code=%s, conversation=%s, workspace=%s, environment=%s",
         short_code,
         conversation_id,
         workspace_id,
+        environment_id,
     )
 
     # 1. 查询 ReleaseInfo（含 agent_id=app_id, version=version_id, project_id）
@@ -122,6 +131,8 @@ async def run_web_agent(
         agent_id=release_info.app_id,
         conversation_id=conversation_id,
         version=str(release_info.version_id) if release_info.version_id else None,
+        environment_id=environment_id,
+        workspace_id=workspace_id,
     )
 
     # 3. 复用试运行核心执行逻辑（handler_type 由 IR mode 决定）

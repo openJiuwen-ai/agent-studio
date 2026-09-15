@@ -577,9 +577,9 @@ export class AddMcpHalfModalComponent implements OnInit {
     return this.lang === 'zh-cn';
   }
 
-  /** 加载默认环境的环境变量列表，供 URL 引用选择 */
+  /** 加载默认环境的环境变量列表，供 URL 引用选择（is_default 过滤避免分页截断漏判） */
   private loadEnvVarList(): void {
-    this.envManagementService.getEnvironmentList({ offset: 0, limit: 99 }).then(res => {
+    this.envManagementService.getEnvironmentList({ offset: 0, limit: 99, isDefault: true }).then(res => {
       const defaultEnv = (res?.env_info || []).find((e: any) => e.isDefault);
       if (!defaultEnv?.id) {
         this.envVarList = [];

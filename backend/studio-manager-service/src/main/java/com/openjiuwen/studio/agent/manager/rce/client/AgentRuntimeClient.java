@@ -330,6 +330,7 @@ public interface AgentRuntimeClient {
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("short_code") String shortCode,
         @RequestParam("workspace_id") String workspaceId, @RequestHeader("stream") Boolean stream,
+        @RequestParam(value = "environment_id", required = false) String environmentId,
         @RequestBody AgentRunReq body);
 
     @DeleteMapping(value = "/v1/{project_id}/agent-runtime/resource/{resource_id}/clear")

@@ -87,6 +87,7 @@ import { AddPluginAuthComponent } from "@routes/plugin-market/add-plugin/add-plu
 import { ModelConfigTipComponent } from "@routes/agent-center/app-agent/components/model-config-tip/model-config-tip.component";
 import { ModelConfigTipService } from "@routes/agent-center/app-agent/components/model-config-tip/model-config-tip.service";
 import { LLMSelectComponent } from "@routes/agent-center/app-flow/components/llm-select/llm-select.component";
+import { EnvManagementService } from "@routes/platform-management/environment-management/env-management.service";
 import { AddToolsComponent } from "../add-tools/add-tools.component";
 import { TaskPlanningComponent } from "./components/task-planning/task-planning.component";
 import {
@@ -171,6 +172,10 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() availableModels: any[] = [];
   @Input() modelConfig: any = {};
   @Input() showModelConfigTip: boolean = false;
+
+  /** 是否已配置默认环境：单智能体无环境选择，占位符模型运行时按默认环境解析 URL，
+   *  无默认环境时保持置灰（llm-select 的 disableEnvPlaceholderModels 传 !hasDefaultEnv）。 */
+  public hasDefaultEnv = false;
 
   // 独立模式相关属性
   @Input() curAgentModeCode: AGENT_MODE_CODE;
@@ -475,6 +480,7 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
     public kbAbilitiesService: KbAbilitiesService,
     private windowResizeService: WindowResizeService,
     public modelConfigTipService: ModelConfigTipService,
+    private envManagementService: EnvManagementService,
     private scenarioGuideModalServ: ScenarioGuideModalService,
     private nzModal: NzModalService,
     private viewContainerRef: ViewContainerRef,
@@ -666,6 +672,19 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
     this.setShowSettingContentReview();
 
     this.probeInfo.collapsed = false;
+
+    // 查询是否存在默认环境，决定占位符模型是否可选（运行时由 manager 兜底回填默认环境 id）。
+    // is_default 过滤由服务端单条返回，避免环境数超过单页上限时默认环境漏判（前后端判断不一致）
+    this.envManagementService
+      .getEnvironmentList({ offset: 0, limit: 99, isDefault: true })
+      .then((res) => {
+        this.hasDefaultEnv = (res?.env_info || []).some(
+          (env: any) => env.isDefault
+        );
+      })
+      .catch(() => {
+        this.hasDefaultEnv = false;
+      });
   }
 
   ngOnDestroy() {

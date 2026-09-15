@@ -201,6 +201,8 @@ public class AgentServiceProxyController {
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,
         String conversationId, String version, String type, Boolean stream, ServiceRunAgentReq body,
         HttpHeaders httpHeaders, String environmentId) {
+        // 默认环境兜底不在本共享方法做：该路由同时服务单智能体与多智能体（IR mode
+        // 决定），且被百宝箱试用入口复用；environment_id 由各入口按需解析后传入
         if (stream == null || stream) {
             String url = "%s/v1/%s/agents/%s/conversations/%s?workspace_id=%s";
             url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, agentId, conversationId, workspaceId);
@@ -248,6 +250,7 @@ public class AgentServiceProxyController {
                     .modelDeploymentId(body.getModelDeploymentId())
                     .toolSwitchDict(body.getToolSwitchDict())
                     .type(type)
+                    .environmentId(environmentId)
                     .token(RequestContextUtils.getRequestAuthToken())
                     .build();
                 return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
@@ -303,6 +306,8 @@ public class AgentServiceProxyController {
         httpHeaders.add(Constants.Header.X_ASSET_APP_ID, agentId);
         httpHeaders.add(Constants.Header.X_ASSET_APP_CONVERSATION_ID, conversationId);
 
+        // 百宝箱试用运行第三方发布 IR：不做默认环境兜底，避免把本项目默认环境
+        // 变量注入发布方智能体（发布方占位符 api_url 可能指向发布方自选端点）
         return runningAgent(projectId, workspaceId, agentType, agentId, conversationId, version, type, stream, body,
             httpHeaders, environmentId);
     }
@@ -339,6 +344,9 @@ public class AgentServiceProxyController {
         @Parameter(in = ParameterIn.QUERY, description = "环境id", schema = @Schema())
         @RequestParam(value = "environment_id", required = false) String environmentId) {
         checkAgentPermission(projectId, workspaceId, agentId, version);
+        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url
+        // 占位符按默认环境解析（仅单智能体；多智能体保持既有不带参行为）
+        environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
         return runningAgent(projectId, workspaceId, agentType, agentId, conversationId, version, type, stream, body,
             httpHeaders, environmentId);
     }
@@ -372,6 +380,9 @@ public class AgentServiceProxyController {
         @RequestParam(value = "environment_id", required = false) String environmentId) {
         checkAgentPermission(projectId, workspaceId, agentId, version);
 
+        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url
+        // 占位符按默认环境解析（仅单智能体；多智能体保持既有不带参行为）
+        environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
         if (apiKeyEnable) {
             httpHeaders.set(CommonConstant.AUTHORIZATION, getApiCode(projectId, workspaceId));
         }
@@ -410,6 +421,7 @@ public class AgentServiceProxyController {
                     .versionId(version)
                     .modelDeploymentId(body.getModelDeploymentId())
                     .toolSwitchDict(body.getToolSwitchDict())
+                    .environmentId(environmentId)
                     .token(RequestContextUtils.getRequestAuthToken())
                     .build();
                 return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
