@@ -201,6 +201,8 @@ public class AgentServiceProxyController {
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,
         String conversationId, String version, String type, Boolean stream, ServiceRunAgentReq body,
         HttpHeaders httpHeaders, String environmentId) {
+        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url 占位符按默认环境解析
+        environmentId = agentServiceProxyService.resolveEnvironmentId(projectId, environmentId);
         if (stream == null || stream) {
             String url = "%s/v1/%s/agents/%s/conversations/%s?workspace_id=%s";
             url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, agentId, conversationId, workspaceId);
@@ -248,6 +250,7 @@ public class AgentServiceProxyController {
                     .modelDeploymentId(body.getModelDeploymentId())
                     .toolSwitchDict(body.getToolSwitchDict())
                     .type(type)
+                    .environmentId(environmentId)
                     .token(RequestContextUtils.getRequestAuthToken())
                     .build();
                 return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
@@ -372,6 +375,8 @@ public class AgentServiceProxyController {
         @RequestParam(value = "environment_id", required = false) String environmentId) {
         checkAgentPermission(projectId, workspaceId, agentId, version);
 
+        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url 占位符按默认环境解析
+        environmentId = agentServiceProxyService.resolveEnvironmentId(projectId, environmentId);
         if (apiKeyEnable) {
             httpHeaders.set(CommonConstant.AUTHORIZATION, getApiCode(projectId, workspaceId));
         }
@@ -410,6 +415,7 @@ public class AgentServiceProxyController {
                     .versionId(version)
                     .modelDeploymentId(body.getModelDeploymentId())
                     .toolSwitchDict(body.getToolSwitchDict())
+                    .environmentId(environmentId)
                     .token(RequestContextUtils.getRequestAuthToken())
                     .build();
                 return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);

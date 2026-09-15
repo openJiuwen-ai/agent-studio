@@ -56,11 +56,13 @@ import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
+import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
+import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
@@ -133,6 +135,8 @@ public class AgentServiceProxyService {
     private final FreeModelServiceMapper freeModelServiceMapper;
 
     private final ToolMapper toolMapper;
+
+    private final EnvironmentManagerMapper environmentManagerMapper;
 
     private final AgentRuntimeService agentRuntimeService;
 
@@ -222,7 +226,8 @@ public class AgentServiceProxyService {
     public AgentServiceProxyService(AgentRuntimeClient runtimeClient, AgentBuilderClient agentBuilderClient, RedisClient redisClient, AgentMapper agentMapper,
         WorkflowMapper workflowMapper, ModelServiceMapper modelServiceMapper, OkHttpClientUtils okHttpClientUtils,
         RouterStrategyMapper routerStrategyMapper, FreeModelServiceMapper freeModelServiceMapper,
-        ToolMapper toolMapper, AgentRuntimeService agentRuntimeService,
+        ToolMapper toolMapper, EnvironmentManagerMapper environmentManagerMapper,
+        AgentRuntimeService agentRuntimeService,
         ControllerDebuggingMgmtService controllerDebuggingMgmtService, MgObsService mgObsService) {
         this.runtimeClient = runtimeClient;
         this.builderClient = agentBuilderClient;
@@ -234,6 +239,7 @@ public class AgentServiceProxyService {
         this.routerStrategyMapper = routerStrategyMapper;
         this.freeModelServiceMapper = freeModelServiceMapper;
         this.toolMapper = toolMapper;
+        this.environmentManagerMapper = environmentManagerMapper;
         this.agentRuntimeService = agentRuntimeService;
         this.controllerDebuggingMgmtService = controllerDebuggingMgmtService;
         this.mgObsService = mgObsService;
@@ -591,14 +597,44 @@ public class AgentServiceProxyService {
         return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, workspaceId, body, false).getBody();
     }
 
+    /**
+     * 智能体运行 environment_id 兜底：入参非空原样返回；
+     * 为空时回填项目默认环境 id（单智能体无环境选择，模型 api_url 占位符按默认环境解析）。
+     * 查不到默认环境或查询异常返回 null，转发 URL 不带参，行为与不兜底时一致。
+     *
+     * @param projectId 项目 id
+     * @param environmentId 请求携带的 environment_id，可为空
+     * @return 实际使用的 environment_id，可能为 null
+     */
+    public String resolveEnvironmentId(String projectId, String environmentId) {
+        if (StringUtils.hasText(environmentId)) {
+            return environmentId;
+        }
+        try {
+            List<EnvironmentManagerEntity> defaults = environmentManagerMapper
+                .findByProjectIdAndIsDefaultTrue(projectId);
+            if (defaults == null || defaults.isEmpty()) {
+                return null;
+            }
+            return defaults.get(0).getId();
+        } catch (Exception e) {
+            log.error("resolve default environment failed, projectId: {}", projectId, e);
+            return null;
+        }
+    }
+
     public Object runWebAgent(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
         Boolean stream, AgentRunReq body) {
+        // 网页短链入口无环境概念，统一用项目默认环境解析模型 api_url 占位符
+        String environmentId = resolveEnvironmentId(projectId, null);
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + workspaceId;
-
+            if (StringUtils.hasText(environmentId)) {
+                url = url + "&environment_id=" + environmentId;
+            }
             return stream(url, httpHeaders, JsonUtils.encode(body));
         }
-        return runtimeClient.runWebAgent(getToken(), shortCode, workspaceId, false, body).getBody();
+        return runtimeClient.runWebAgent(getToken(), shortCode, workspaceId, false, environmentId, body).getBody();
     }
 
     public void checkToolsPermission(ToolEntity tool, String projectId, String workspaceId) {

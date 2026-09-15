@@ -8,13 +8,16 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
+import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
+import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
@@ -31,6 +34,7 @@ import feign.Request;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -45,12 +49,18 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -87,6 +97,9 @@ class AgentServiceProxyServiceTest {
     private ToolMapper toolMapper;
 
     @Mock
+    private EnvironmentManagerMapper environmentManagerMapper;
+
+    @Mock
     private AgentRuntimeService agentRuntimeService;
 
     @Mock
@@ -100,7 +113,8 @@ class AgentServiceProxyServiceTest {
     @BeforeEach
     void setUp() {
         proxyService = new AgentServiceProxyService(runtimeClient, builderClient, redisClient, agentMapper, workflowMapper,
-            modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
+            modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper,
+            environmentManagerMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");
@@ -369,7 +383,7 @@ class AgentServiceProxyServiceTest {
 
             com.alibaba.fastjson.JSONObject expectedResult = new com.alibaba.fastjson.JSONObject();
             expectedResult.put("data", "embedding-result");
-            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(), anyString(),
+            when(builderClient.textEmbeddings(anyString(), isNull(), anyString(), anyString(),
                 any(EmbeddingRequest.class), any(), any())).thenReturn(expectedResult);
 
             EmbeddingRequest request = new EmbeddingRequest();
@@ -420,7 +434,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.InternalServerError(
                 "internal error", mockFeignRequest(), errorBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(), anyString(),
+            when(builderClient.textEmbeddings(anyString(), isNull(), anyString(), anyString(),
                 any(EmbeddingRequest.class), any(), any())).thenThrow(feignException);
 
             EmbeddingRequest request = new EmbeddingRequest();
@@ -467,7 +481,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.BadGateway(
                 "bad gateway", mockFeignRequest(), badBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.textEmbeddings(anyString(), anyString(), anyString(), anyString(),
+            when(builderClient.textEmbeddings(anyString(), isNull(), anyString(), anyString(),
                 any(EmbeddingRequest.class), any(), any())).thenThrow(feignException);
 
             EmbeddingRequest request = new EmbeddingRequest();
@@ -501,7 +515,7 @@ class AgentServiceProxyServiceTest {
 
             com.alibaba.fastjson.JSONObject expectedResult = new com.alibaba.fastjson.JSONObject();
             expectedResult.put("results", "rerank-result");
-            when(builderClient.rerank(anyString(), anyString(), anyString(), anyString(),
+            when(builderClient.rerank(anyString(), isNull(), anyString(), anyString(),
                 any(RankDocumentsRequest.class), any(), any())).thenReturn(expectedResult);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
@@ -556,7 +570,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.InternalServerError(
                 "internal error", mockFeignRequest(), errorBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.rerank(anyString(), anyString(), anyString(), anyString(),
+            when(builderClient.rerank(anyString(), isNull(), anyString(), anyString(),
                 any(RankDocumentsRequest.class), any(), any())).thenThrow(feignException);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
@@ -605,7 +619,7 @@ class AgentServiceProxyServiceTest {
             FeignException feignException = new FeignException.ServiceUnavailable(
                 "service unavailable", mockFeignRequest(), badBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
-            when(builderClient.rerank(anyString(), anyString(), anyString(), anyString(),
+            when(builderClient.rerank(anyString(), isNull(), anyString(), anyString(),
                 any(RankDocumentsRequest.class), any(), any())).thenThrow(feignException);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
@@ -623,6 +637,130 @@ class AgentServiceProxyServiceTest {
             ErrorRsp errorRsp = (ErrorRsp) responseEntity.getBody();
             assertNotNull(errorRsp);
             assertEquals(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode(), errorRsp.getErrorCode());
+        }
+    }
+
+    // ==================== 单智能体默认环境兜底测试 ====================
+
+    /**
+     * resolveEnvironmentId — 入参非空原样透传，不触发默认环境查询
+     */
+    @Test
+    void testResolveEnvironmentId_NonBlankPassthrough() {
+        assertEquals("env-explicit", proxyService.resolveEnvironmentId("proj-1", "env-explicit"));
+
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * resolveEnvironmentId — 入参为空且默认环境存在，返回默认环境 id
+     */
+    @Test
+    void testResolveEnvironmentId_BlankWithDefaultEnv() {
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-default");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+
+        assertEquals("env-default", proxyService.resolveEnvironmentId("proj-1", null));
+    }
+
+    /**
+     * resolveEnvironmentId — 入参为空（含空白串）且无默认环境，返回 null
+     */
+    @Test
+    void testResolveEnvironmentId_BlankNoDefaultEnv() {
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(Collections.emptyList());
+
+        assertNull(proxyService.resolveEnvironmentId("proj-1", " "));
+    }
+
+    /**
+     * resolveEnvironmentId — mapper 查询异常时兜底返回 null，不上抛
+     */
+    @Test
+    void testResolveEnvironmentId_MapperThrows() {
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1"))
+            .thenThrow(new RuntimeException("db down"));
+
+        assertNull(proxyService.resolveEnvironmentId("proj-1", null));
+    }
+
+    /**
+     * runWebAgent 流式 — 默认环境存在：转发 URL 追加 environment_id
+     */
+    @Test
+    void testRunWebAgent_StreamWithDefaultEnv() {
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-default");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1&environment_id=env-default",
+            urlCaptor.getValue());
+    }
+
+    /**
+     * runWebAgent 流式（stream 缺省按 true）— 无默认环境：转发 URL 不带 environment_id，行为同现状
+     */
+    @Test
+    void testRunWebAgent_StreamNoDefaultEnv() {
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(Collections.emptyList());
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+    }
+
+    /**
+     * runWebAgent 非流式 — 默认环境存在：Feign 调用携带默认环境 id
+     */
+    @Test
+    void testRunWebAgent_NonStreamWithDefaultEnv() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
+            mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+            env.setId("env-default");
+            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+
+            AgentRunReq body = new AgentRunReq().setQuery("hello");
+            ResponseEntity<Object> expected = ResponseEntity.ok("ok");
+            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, "env-default", body))
+                .thenReturn(expected);
+
+            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
+
+            assertEquals("ok", result);
+        }
+    }
+
+    /**
+     * runWebAgent 非流式 — 无默认环境：Feign 调用 environment_id 为 null，行为同现状
+     */
+    @Test
+    void testRunWebAgent_NonStreamNoDefaultEnv() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
+            mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(Collections.emptyList());
+
+            AgentRunReq body = new AgentRunReq().setQuery("hello");
+            ResponseEntity<Object> expected = ResponseEntity.ok("ok");
+            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, null, body))
+                .thenReturn(expected);
+
+            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
+
+            assertEquals("ok", result);
         }
     }
 
