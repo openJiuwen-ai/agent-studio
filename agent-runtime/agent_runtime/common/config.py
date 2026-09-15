@@ -264,6 +264,15 @@ class CacheSettings(BaseSettings):
     mem_cache_ttl_seconds: int = Field(
         default=3600, validation_alias="MEM_CACHE_TTL_SECONDS"
     )
+    ir_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="IR_CACHE_TTL_SECONDS", ge=1
+    )
+    workflow_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
+    )
+    agent_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1
+    )
     max_cache_data_size: int = Field(
         default=2 * 1024 * 1024, validation_alias="MAX_CACHE_DATA_SIZE"
     )
