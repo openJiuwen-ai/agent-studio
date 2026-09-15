@@ -99,7 +99,8 @@ class IntentionOperator:
             str: 模型输出的意图信息（经过清理）。
 
         Raises:
-            JiuWenException: 当模型服务出错时抛出异常。
+            JiuWenBaseException: 当模型返回内容为空时，
+                以 102309 错误码抛出。
         """
         prompt = (
             REFINE_INTENTION_PROMPT.replace("{{mermaid_code}}", mermaid_code).replace(
@@ -121,9 +122,9 @@ class IntentionOperator:
             if item.content:
                 return self.clean_intent(item.content)
         raise JiuWenBaseException(
-            StatusCode.NL2AGENT_LLM_SERVICE_ERROR.code,
-            StatusCode.NL2AGENT_LLM_SERVICE_ERROR.errmsg.format(
-                error_msg="大模型服务请求失败"
+            StatusCode.NL2AGENT_LLM_PARSE_FAILED.code,
+            StatusCode.NL2AGENT_LLM_PARSE_FAILED.errmsg.format(
+                error_msg="模型返回内容为空，无法解析为预期的JSON格式"
             ),
         )
 
@@ -142,7 +143,8 @@ class IntentionOperator:
             collections. AsyncIterable : 模型输出的意图信息（经过清理）。
 
         Raises:
-            JiuWenException: 当模型服务出错时抛出异常。
+            JiuWenBaseException: 当模型返回内容为空时，
+                以 102309 错误码抛出。
         """
         prompt = (
             REFINE_INTENTION_PROMPT.replace("{{mermaid_code}}", mermaid_code).replace(
@@ -166,9 +168,9 @@ class IntentionOperator:
                 yield self.clean_intent(item.content)
                 return
         raise JiuWenBaseException(
-            StatusCode.NL2AGENT_LLM_SERVICE_ERROR.code,
-            StatusCode.NL2AGENT_LLM_SERVICE_ERROR.errmsg.format(
-                error_msg="大模型服务请求失败"
+            StatusCode.NL2AGENT_LLM_PARSE_FAILED.code,
+            StatusCode.NL2AGENT_LLM_PARSE_FAILED.errmsg.format(
+                error_msg="模型返回内容为空，无法解析为预期的JSON格式"
             ),
         )
 
@@ -223,6 +225,52 @@ class WorkflowAgentBuilder:
                 "工作流构造阶段失败：",
             ),
         }
+
+    @staticmethod
+    def _parse_json_or_raise(raw_text, field_name):
+        """解析意图判断的JSON结果，解析失败时抛出友好异常。
+
+        当模型对提示词遵从性不佳、返回了非JSON文本或空内容时，
+        避免底层 JSONDecodeError 直接泄漏给用户。
+
+        Args:
+            raw_text (str): 模型返回并经过 clean_intent 清理后的文本。
+            field_name (str): 期望从JSON中提取的字段名
+                （如 provide_process / need_refined）。
+
+        Returns:
+            对应字段的值。
+
+        Raises:
+            JiuWenBaseException: 当文本为空、JSON解析失败
+                或目标字段缺失时，以 102309 错误码抛出。
+        """
+        if not raw_text:
+            raise JiuWenBaseException(
+                StatusCode.NL2AGENT_LLM_PARSE_FAILED.code,
+                StatusCode.NL2AGENT_LLM_PARSE_FAILED.errmsg.format(
+                    error_msg="模型返回内容为空，无法解析为预期的JSON格式"
+                ),
+            )
+        try:
+            result = json.loads(raw_text)
+        except (json.JSONDecodeError, TypeError) as e:
+            raise JiuWenBaseException(
+                StatusCode.NL2AGENT_LLM_PARSE_FAILED.code,
+                StatusCode.NL2AGENT_LLM_PARSE_FAILED.errmsg.format(
+                    error_msg=f"模型返回内容无法解析为JSON格式，"
+                    f"模型输出: {raw_text[:200]}"
+                ),
+            ) from e
+        if not isinstance(result, dict) or field_name not in result:
+            raise JiuWenBaseException(
+                StatusCode.NL2AGENT_LLM_PARSE_FAILED.code,
+                StatusCode.NL2AGENT_LLM_PARSE_FAILED.errmsg.format(
+                    error_msg=f"模型返回结果中缺少字段 {field_name}，"
+                    f"模型输出: {raw_text[:200]}"
+                ),
+            )
+        return result[field_name]
 
     @staticmethod
     def transform_to_generator(string):
@@ -341,9 +389,9 @@ class WorkflowAgentBuilder:
         formatted_history = context_manager.get_formatted_history(
             session_id=task_id, intent="分类1"
         )
-        provide_process = json.loads(
-            self.intention_operator.operate(formatted_history)
-        ).get("provide_process")
+        provide_process = self._parse_json_or_raise(
+            self.intention_operator.operate(formatted_history), "provide_process"
+        )
         if provide_process:
             sop_content = SopGenerator(
                 self.model, self.controller, SopMode.TRANSFORM
@@ -362,9 +410,9 @@ class WorkflowAgentBuilder:
         formatted_history = context_manager.get_formatted_history(
             session_id=task_id, intent="分类1"
         )
-        provide_process = json.loads(
-            self.intention_operator.operate(formatted_history)
-        ).get("provide_process")
+        provide_process = self._parse_json_or_raise(
+            self.intention_operator.operate(formatted_history), "provide_process"
+        )
         if provide_process:
             inputs.query = formatted_history
             sop_content = SopGenerator(
@@ -400,8 +448,8 @@ class WorkflowAgentBuilder:
             session_id=task_id, intent="分类1"
         )
         mermaid_code = history.split(RESPONSE_CONTENT)[-1].split("用户: ")[0].strip()
-        if json.loads(self.intention_operator.operate(history, mermaid_code)).get(
-            "need_refined"
+        if self._parse_json_or_raise(
+            self.intention_operator.operate(history, mermaid_code), "need_refined"
         ):
             return AgentRefiner(self.model, self.input_adapter, self.controller).invoke(
                 inputs
@@ -495,7 +543,7 @@ class WorkflowAgentBuilder:
         yield HD0_SOP_JUDGE
         async for item in self.intention_operator.aoperate(formatted_history):
             last_item = item
-        provide_process = json.loads(last_item).get("provide_process")
+        provide_process = self._parse_json_or_raise(last_item, "provide_process")
         if provide_process:
             yield HD0_TRANSFORM_SOP
             async for chunk in SopGenerator(
@@ -526,7 +574,7 @@ class WorkflowAgentBuilder:
         last_item = None
         async for item in self.intention_operator.aoperate(formatted_history):
             last_item = item
-        provide_process = json.loads(last_item).get("provide_process")
+        provide_process = self._parse_json_or_raise(last_item, "provide_process")
         sop_content = ""
         if provide_process:
             async for chunk in SopGenerator(
@@ -575,7 +623,7 @@ class WorkflowAgentBuilder:
         last_item = None
         async for item in self.intention_operator.aoperate(history, mermaid_code):
             last_item = item
-        need_refined = json.loads(last_item).get("need_refined")
+        need_refined = self._parse_json_or_raise(last_item, "need_refined")
         if need_refined:
             yield HD3_MODIFY_MERMAID
             refiner = AgentRefiner(self.model, self.input_adapter, self.controller)
