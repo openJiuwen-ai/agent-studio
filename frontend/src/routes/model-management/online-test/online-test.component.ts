@@ -613,7 +613,8 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       return;
     }
     this.defaultEnvChecking = true;
-    this.envManagementServ.getEnvironmentList({ offset: 0, limit: 99 }).then((res: any) => {
+    // is_default 过滤由服务端单条返回，避免环境数超过单页上限时默认环境漏判
+    this.envManagementServ.getEnvironmentList({ offset: 0, limit: 99, isDefault: true }).then((res: any) => {
       const defaultEnv = (res?.env_info || []).find((e: any) => e.isDefault);
       this.defaultEnvId = defaultEnv?.id;
       if (!this.defaultEnvId) {

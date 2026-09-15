@@ -58,10 +58,65 @@ paths:
         content:
           application/json:
             schema:
-              additionalProperties: true
-              type: object
-              title: Req Json
+              $ref: '#/components/schemas/DeleteExecutionInstanceRequest'
         required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/{project_id}/conversations/{conversation_id}/cancel:
+    post:
+      tags:
+      - execution_app
+      summary: Cancel Execution
+      description: '执行终止端点（工作流/多智能体/单智能体三类合并 1 接口，定位主键 conversation_id）。
+
+
+        归属校验（_check_before_cancel）→ 置协作式取消标记（所有实例可见，幂等 TTL）
+
+        + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段。
+
+        cancelled=取消信号已受理（除 4xx/5xx 外恒 true，不代表终止完成）；running=调用时
+
+        是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，不视为失败）。
+
+        运行中被终止的原 SSE 流末尾无 done（无 done 即中止，零改动约定）。'
+      operationId: cancel_execution_v1__project_id__conversations__conversation_id__cancel_post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Agent Id
+      - name: workflow_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Workflow Id
       responses:
         '200':
           description: Successful Response
@@ -145,15 +200,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
-              title: Req Json
+              $ref: '#/components/schemas/AdditionalQuestionsRequest'
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/AdditionalQuestionsResponse'
         '422':
           description: Validation Error
           content:
@@ -197,15 +251,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
-              title: Req Json
+              $ref: '#/components/schemas/AdditionalQuestionsRequest'
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/AdditionalQuestionsResponse'
         '422':
           description: Validation Error
           content:
@@ -221,6 +274,30 @@ paths:
         可切换为非流式响应。version=latest 时使用最新发布版本的 IR。
       operationId: run_workflow_app_v1__project_id__workflows__workflow_id__conversations__conversation_id__post
       parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 项目ID
+          title: Project Id
+        description: 项目ID
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 工作流ID
+          title: Workflow Id
+        description: 工作流ID
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 会话ID
+          title: Conversation Id
+        description: 会话ID
       - name: version
         in: query
         required: false
@@ -228,7 +305,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          description: 发布版本号
           title: Version
+        description: 发布版本号
       - name: environment_id
         in: query
         required: false
@@ -236,7 +315,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          description: 环境ID
           title: Environment Id
+        description: 环境ID
       - name: workspace_id
         in: query
         required: false
@@ -244,7 +325,18 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          description: 工作空间ID
           title: Workspace Id
+        description: 工作空间ID
+      - name: stream
+        in: header
+        required: false
+        schema:
+          type: string
+          description: 是否流式响应
+          default: 'true'
+          title: Stream
+        description: 是否流式响应
       requestBody:
         required: true
         content:
@@ -253,10 +345,13 @@ paths:
               $ref: '#/components/schemas/WorkflowAppRunRequest'
       responses:
         '200':
-          description: Successful Response
+          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
           content:
             application/json:
               schema: {}
+            text/event-stream:
+              schema:
+                type: string
         '422':
           description: Validation Error
           content:
@@ -273,6 +368,30 @@ paths:
         IR。
       operationId: run_agent_app_v1__project_id__agents__agent_id__conversations__conversation_id__post
       parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 项目ID
+          title: Project Id
+        description: 项目ID
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 智能体ID
+          title: Agent Id
+        description: 智能体ID
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 会话ID
+          title: Conversation Id
+        description: 会话ID
       - name: version
         in: query
         required: false
@@ -280,7 +399,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          description: 发布版本号
           title: Version
+        description: 发布版本号
       - name: environment_id
         in: query
         required: false
@@ -288,7 +409,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          description: 环境ID
           title: Environment Id
+        description: 环境ID
       - name: workspace_id
         in: query
         required: false
@@ -296,7 +419,18 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          description: 工作空间ID
           title: Workspace Id
+        description: 工作空间ID
+      - name: stream
+        in: header
+        required: false
+        schema:
+          type: string
+          description: 是否流式响应
+          default: 'true'
+          title: Stream
+        description: 是否流式响应
       requestBody:
         required: true
         content:
@@ -305,10 +439,13 @@ paths:
               $ref: '#/components/schemas/AgentAppRunRequest'
       responses:
         '200':
-          description: Successful Response
+          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
           content:
             application/json:
               schema: {}
+            text/event-stream:
+              schema:
+                type: string
         '422':
           description: Validation Error
           content:
@@ -320,20 +457,57 @@ paths:
       tags:
       - app_run
       summary: 工作流单节点执行
-      description: 对指定工作流中的单个节点进行独立调试执行，使用开发版 IR（无 version）。
+      description: 对指定工作流中的单个节点进行独立调试执行，使用开发版 IR（无 version）。固定 SSE 流式响应，忽略 stream
+        请求头。
       operationId: run_node_execute_v1__project_id__workflows__workflow_id__conversations__conversation_id__node_execute__node_id__post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 项目ID
+          title: Project Id
+        description: 项目ID
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 工作流ID
+          title: Workflow Id
+        description: 工作流ID
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 会话ID
+          title: Conversation Id
+        description: 会话ID
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 节点ID
+          title: Node Id
+        description: 节点ID
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/NodeExecuteRequest'
-        required: true
       responses:
         '200':
-          description: Successful Response
+          description: 流式响应（Server-Sent Events）
           content:
             application/json:
               schema: {}
+            text/event-stream:
+              schema:
+                type: string
         '422':
           description: Validation Error
           content:
@@ -348,18 +522,56 @@ paths:
       description: 通过 short_code 查询发布信息后复用工作流执行链。先从 Redis 查询 release_web_rel_{short_code}
         获取 ReleaseInfo，再用其中的 appId/versionId/projectId 构造执行上下文。
       operationId: run_web_workflow_v1_workflows_chat__short_code__conversations__conversation_id__post
+      parameters:
+      - name: short_code
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 发布短码
+          title: Short Code
+        description: 发布短码
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 会话ID
+          title: Conversation Id
+        description: 会话ID
+      - name: x-language
+        in: header
+        required: false
+        schema:
+          type: string
+          description: 语言
+          default: zh-cn
+          title: X-Language
+        description: 语言
+      - name: stream
+        in: header
+        required: false
+        schema:
+          type: string
+          description: 是否流式响应
+          default: 'true'
+          title: Stream
+        description: 是否流式响应
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/WorkflowAppRunRequest'
-        required: true
       responses:
         '200':
-          description: Successful Response
+          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
           content:
             application/json:
               schema: {}
+            text/event-stream:
+              schema:
+                type: string
         '422':
           description: Validation Error
           content:
@@ -375,20 +587,60 @@ paths:
         由 IR 的 mode 决定（ReAct/Controller/PlanExecute）。
       operationId: run_web_agent_v1_agents_chat__short_code__post
       parameters:
+      - name: short_code
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 发布短码
+          title: Short Code
+        description: 发布短码
       - name: workspace_id
         in: query
         required: false
         schema:
           type: string
+          description: 工作空间ID
           default: ''
           title: Workspace Id
+        description: 工作空间ID
       - name: conversation_id
         in: query
         required: false
         schema:
           type: string
+          description: 会话ID
           default: ''
           title: Conversation Id
+        description: 会话ID
+      - name: environment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 环境ID（manager 回填）
+          title: Environment Id
+        description: 环境ID（manager 回填）
+      - name: x-language
+        in: header
+        required: false
+        schema:
+          type: string
+          description: 语言
+          default: zh-cn
+          title: X-Language
+        description: 语言
+      - name: stream
+        in: header
+        required: false
+        schema:
+          type: string
+          description: 是否流式响应
+          default: 'true'
+          title: Stream
+        description: 是否流式响应
       requestBody:
         required: true
         content:
@@ -397,10 +649,13 @@ paths:
               $ref: '#/components/schemas/AgentAppRunRequest'
       responses:
         '200':
-          description: Successful Response
+          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
           content:
             application/json:
               schema: {}
+            text/event-stream:
+              schema:
+                type: string
         '422':
           description: Validation Error
           content:
@@ -445,7 +700,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ConversationVariableRsp'
         '422':
           description: Validation Error
           content:
@@ -495,7 +751,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/VariableInfo'
         '422':
           description: Validation Error
           content:
@@ -838,10 +1095,17 @@ paths:
               $ref: '#/components/schemas/ReleaseInfo'
       responses:
         '200':
-          description: Successful Response
+          description: 操作成功
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: 操作结果消息
+                required:
+                - message
         '422':
           description: Validation Error
           content:
@@ -875,10 +1139,17 @@ paths:
           title: Release Id
       responses:
         '200':
-          description: Successful Response
+          description: 操作成功
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: 操作结果消息
+                required:
+                - message
         '422':
           description: Validation Error
           content:
@@ -1059,6 +1330,44 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    AdditionalQuestionsRequest:
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Name
+          description: 应用名称
+        enable:
+          type: boolean
+          title: Enable
+          description: 追问是否启用
+          default: true
+        prompt:
+          type: string
+          title: Prompt
+          description: 追问自定义 prompt 规则
+          default: ''
+        version_id:
+          type: string
+          title: Version Id
+          description: 版本号
+          default: ''
+      type: object
+      required:
+      - name
+      title: AdditionalQuestionsRequest
+      description: 追问请求体 — 精简版，模型配置统一从 IR 读取，不依赖前端传入。
+    AdditionalQuestionsResponse:
+      properties:
+        questions:
+          items:
+            type: string
+          type: array
+          title: Questions
+          description: 追问列表
+      type: object
+      title: AdditionalQuestionsResponse
+      description: 追问响应体 — 与 Java AutoAddResultJsonObject.questions 一致。
     AgentAppRunRequest:
       properties:
         query:
@@ -1237,6 +1546,20 @@ components:
       - role
       title: ConversationHistoryMessage
       description: Defines the structure of one conversation history message.
+    ConversationVariableRsp:
+      properties:
+        status:
+          type: string
+          title: Status
+          default: success
+        data:
+          items:
+            $ref: '#/components/schemas/VariableInfo'
+          type: array
+          title: Data
+      type: object
+      title: ConversationVariableRsp
+      description: 获取会话变量响应
     CreateDocumentRequest:
       properties:
         input:
@@ -1305,6 +1628,28 @@ components:
       type: object
       title: DeleteDocumentsRequest
       description: 删除文档请求。
+    DeleteExecutionInstanceRequest:
+      properties:
+        conversationId:
+          type: string
+          minLength: 1
+          title: Conversationid
+        irPath:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Irpath
+          default: ''
+      type: object
+      required:
+      - conversationId
+      title: DeleteExecutionInstanceRequest
+      description: '执行管理器用户删除执行请求模型。
+
+
+        功能描述：
+
+        此类用于表示执行管理器的删除执行请求，包含请求的必要信息。'
     DeleteKBRequest:
       properties:
         kb_id:
@@ -1638,6 +1983,20 @@ components:
       - msg
       - type
       title: ValidationError
+    VariableInfo:
+      properties:
+        name:
+          type: string
+          title: Name
+          default: ''
+        value:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Value
+      type: object
+      title: VariableInfo
+      description: 变量信息
     WorkflowAppRunRequest:
       properties:
         inputs:

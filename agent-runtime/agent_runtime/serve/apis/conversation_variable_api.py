@@ -95,6 +95,7 @@ def _parse_variables_from_json(raw_json: str) -> list[VariableInfo]:
 @conversation_variable_router.get(
     "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/variables",
     summary="获取会话全局变量",
+    response_model=ConversationVariableRsp,
 )
 async def get_conversation_variables(
     project_id: str,
@@ -140,6 +141,7 @@ async def get_conversation_variables(
 @conversation_variable_router.put(
     "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/variables/{var_id}",
     summary="更新会话全局变量",
+    response_model=VariableInfo,
 )
 async def update_conversation_variable(
     body: UpdateVariableReq,

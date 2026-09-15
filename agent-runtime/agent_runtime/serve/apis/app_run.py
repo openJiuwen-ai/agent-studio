@@ -8,6 +8,7 @@ App Run API — 试运行接口
 """
 
 import os
+from dataclasses import dataclass
 from typing import Optional
 
 from agent_runtime.serve.apis.app_run_request import (
@@ -38,7 +39,7 @@ from agent_runtime.event_handler.base.conversation import (
     ConversationManager,
 )
 from agent_runtime.context.request_context import _request_ctx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Header, Path, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
@@ -57,6 +58,185 @@ _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
 _VIDEO_EXTENSIONS = frozenset({".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"})
 
 app_run_app = APIRouter(tags=["app_run"])
+
+# 对话类接口：默认 SSE 流式，stream=false 时返回非流式 JSON
+_STREAMING_RESPONSES_200 = {
+    200: {
+        "description": "流式响应（Server-Sent Events），stream=false 时返回 JSON",
+        "content": {
+            "text/event-stream": {"schema": {"type": "string"}},
+            "application/json": {"schema": {}},
+        },
+    },
+}
+
+# 单节点执行：固定 SSE 流式
+_NODE_EXECUTE_RESPONSES_200 = {
+    200: {
+        "description": "流式响应（Server-Sent Events）",
+        "content": {
+            "text/event-stream": {"schema": {"type": "string"}},
+        },
+    },
+}
+
+
+@dataclass
+class WorkflowRunPathParams:
+    """工作流对话接口 path 参数封装."""
+
+    project_id: str
+    workflow_id: str
+    conversation_id: str
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        project_id: str = Path(..., description="项目ID"),
+        workflow_id: str = Path(..., description="工作流ID"),
+        conversation_id: str = Path(..., description="会话ID"),
+    ) -> "WorkflowRunPathParams":
+        return cls(project_id=project_id, workflow_id=workflow_id, conversation_id=conversation_id)
+
+
+@dataclass
+class WorkflowRunQueryParams:
+    """工作流对话接口 query 参数封装."""
+
+    version: Optional[str] = None
+    environment_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        version: Optional[str] = Query(default=None, description="发布版本号"),
+        environment_id: Optional[str] = Query(default=None, description="环境ID"),
+        workspace_id: Optional[str] = Query(default=None, description="工作空间ID"),
+    ) -> "WorkflowRunQueryParams":
+        return cls(version=version, environment_id=environment_id, workspace_id=workspace_id)
+
+
+@dataclass
+class WorkflowRunParams:
+    """工作流对话接口路由参数（path + query + stream header）封装."""
+
+    project_id: str
+    workflow_id: str
+    conversation_id: str
+    version: Optional[str] = None
+    environment_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    stream: str = "true"
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        path: WorkflowRunPathParams = Depends(WorkflowRunPathParams.as_dependency),
+        query: WorkflowRunQueryParams = Depends(WorkflowRunQueryParams.as_dependency),
+        stream: str = Header(default="true", description="是否流式响应"),
+    ) -> "WorkflowRunParams":
+        return cls(
+            project_id=path.project_id,
+            workflow_id=path.workflow_id,
+            conversation_id=path.conversation_id,
+            version=query.version,
+            environment_id=query.environment_id,
+            workspace_id=query.workspace_id,
+            stream=stream,
+        )
+
+
+@dataclass
+class AgentRunPathParams:
+    """智能体对话接口 path 参数封装."""
+
+    project_id: str
+    agent_id: str
+    conversation_id: str
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        project_id: str = Path(..., description="项目ID"),
+        agent_id: str = Path(..., description="智能体ID"),
+        conversation_id: str = Path(..., description="会话ID"),
+    ) -> "AgentRunPathParams":
+        return cls(project_id=project_id, agent_id=agent_id, conversation_id=conversation_id)
+
+
+@dataclass
+class AgentRunQueryParams:
+    """智能体对话接口 query 参数封装."""
+
+    version: Optional[str] = None
+    environment_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        version: Optional[str] = Query(default=None, description="发布版本号"),
+        environment_id: Optional[str] = Query(default=None, description="环境ID"),
+        workspace_id: Optional[str] = Query(default=None, description="工作空间ID"),
+    ) -> "AgentRunQueryParams":
+        return cls(version=version, environment_id=environment_id, workspace_id=workspace_id)
+
+
+@dataclass
+class AgentRunParams:
+    """智能体对话接口路由参数（path + query + stream header）封装."""
+
+    project_id: str
+    agent_id: str
+    conversation_id: str
+    version: Optional[str] = None
+    environment_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    stream: str = "true"
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        path: AgentRunPathParams = Depends(AgentRunPathParams.as_dependency),
+        query: AgentRunQueryParams = Depends(AgentRunQueryParams.as_dependency),
+        stream: str = Header(default="true", description="是否流式响应"),
+    ) -> "AgentRunParams":
+        return cls(
+            project_id=path.project_id,
+            agent_id=path.agent_id,
+            conversation_id=path.conversation_id,
+            version=query.version,
+            environment_id=query.environment_id,
+            workspace_id=query.workspace_id,
+            stream=stream,
+        )
+
+
+@dataclass
+class NodeRunParams:
+    """单节点执行接口路由参数（path）封装."""
+
+    project_id: str
+    workflow_id: str
+    conversation_id: str
+    node_id: str
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        project_id: str = Path(..., description="项目ID"),
+        workflow_id: str = Path(..., description="工作流ID"),
+        conversation_id: str = Path(..., description="会话ID"),
+        node_id: str = Path(..., description="节点ID"),
+    ) -> "NodeRunParams":
+        return cls(
+            project_id=project_id,
+            workflow_id=workflow_id,
+            conversation_id=conversation_id,
+            node_id=node_id,
+        )
+
 
 _conv_manager = ConversationManager()
 
@@ -320,6 +500,7 @@ async def _execute_workflow_run(
     ctx: WorkflowRunContext,
     body: WorkflowAppRunRequest,
     request: Request,
+    stream_header: str = "true",
 ):
     """工作流试运行核心逻辑."""
     # 中间件在路由匹配前执行、拿不到 path_params，trace_id 会回退成 execution_id；
@@ -378,7 +559,7 @@ async def _execute_workflow_run(
         )
 
     # 从请求头读取stream参数，默认为True
-    stream = request.headers.get("stream", "true").lower() == "true"
+    stream = stream_header.lower() == "true"
 
     exec_ctx = ExecutionContext(
         conversation_id=ctx.conversation_id,
@@ -414,32 +595,30 @@ async def _execute_workflow_run(
     description="通过 workflow_id 和 conversation_id 发起工作流对话（流式响应）。"
                 "设置请求头 stream=false 可切换为非流式响应。"
                 "version=latest 时使用最新发布版本的 IR。",
+    responses=_STREAMING_RESPONSES_200,
 )
 async def run_workflow_app(
     body: WorkflowAppRunRequest,
     request: Request,
-    version: Optional[str] = None,
-    environment_id: Optional[str] = None,
-    workspace_id: Optional[str] = None,
+    params: WorkflowRunParams = Depends(WorkflowRunParams.as_dependency),
 ):
     """工作流试运行接口"""
-    # 从路径参数提取上下文
-    path_params = request.path_params
     ctx = WorkflowRunContext(
-        project_id=path_params["project_id"],
-        workflow_id=path_params["workflow_id"],
-        conversation_id=path_params["conversation_id"],
-        version=version,
-        environment_id=environment_id,
-        workspace_id=workspace_id,
+        project_id=params.project_id,
+        workflow_id=params.workflow_id,
+        conversation_id=params.conversation_id,
+        version=params.version,
+        environment_id=params.environment_id,
+        workspace_id=params.workspace_id,
     )
-    return await _execute_workflow_run(ctx, body, request)
+    return await _execute_workflow_run(ctx, body, request, params.stream)
 
 
 async def _execute_agent_run(
     ctx: AgentRunContext,
     body: AgentAppRunRequest,
     request: Request,
+    stream_header: str = "true",
 ):
     """智能体试运行核心逻辑."""
     # 同 _execute_workflow_run：路由匹配后用 path 的 conversation_id 覆盖 trace_id
@@ -503,7 +682,7 @@ async def _execute_agent_run(
         )
 
     # 从请求头读取stream参数，默认为True
-    stream = request.headers.get("stream", "true").lower() == "true"
+    stream = stream_header.lower() == "true"
 
     exec_ctx = ExecutionContext(
         conversation_id=ctx.conversation_id,
@@ -549,26 +728,23 @@ async def _execute_agent_run(
                 "支持单智能体（ReAct）和多智能体（Controller），由 IR 文件的 mode 字段自动决定执行模式。"
                 "设置请求头 stream=false 可切换为非流式响应。"
                 "version=latest 时使用最新发布版本的 IR。",
+    responses=_STREAMING_RESPONSES_200,
 )
 async def run_agent_app(
     body: AgentAppRunRequest,
     request: Request,
-    version: Optional[str] = None,
-    environment_id: Optional[str] = None,
-    workspace_id: Optional[str] = None,
+    params: AgentRunParams = Depends(AgentRunParams.as_dependency),
 ):
     """智能体试运行接口"""
-    # 从路径参数提取上下文
-    path_params = request.path_params
     ctx = AgentRunContext(
-        project_id=path_params["project_id"],
-        agent_id=path_params["agent_id"],
-        conversation_id=path_params["conversation_id"],
-        version=version,
-        environment_id=environment_id,
-        workspace_id=workspace_id,
+        project_id=params.project_id,
+        agent_id=params.agent_id,
+        conversation_id=params.conversation_id,
+        version=params.version,
+        environment_id=params.environment_id,
+        workspace_id=params.workspace_id,
     )
-    return await _execute_agent_run(ctx, body, request)
+    return await _execute_agent_run(ctx, body, request, params.stream)
 
 
 async def _execute_node_run(
@@ -638,19 +814,21 @@ async def _execute_node_run(
 @app_run_app.post(
     "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/node_execute/{node_id}",
     summary="工作流单节点执行",
-    description="对指定工作流中的单个节点进行独立调试执行，使用开发版 IR（无 version）。",
+    description="对指定工作流中的单个节点进行独立调试执行，使用开发版 IR（无 version）。"
+                "固定 SSE 流式响应，忽略 stream 请求头。",
+    responses=_NODE_EXECUTE_RESPONSES_200,
 )
 async def run_node_execute(
     body: NodeExecuteRequest,
     request: Request,
+    params: NodeRunParams = Depends(NodeRunParams.as_dependency),
 ):
     """工作流单节点执行接口"""
-    path_params = request.path_params
     ctx = NodeRunContext(
-        project_id=path_params["project_id"],
-        workflow_id=path_params["workflow_id"],
-        conversation_id=path_params["conversation_id"],
-        node_id=path_params["node_id"],
+        project_id=params.project_id,
+        workflow_id=params.workflow_id,
+        conversation_id=params.conversation_id,
+        node_id=params.node_id,
     )
     return await _execute_node_run(ctx, body, request)
 

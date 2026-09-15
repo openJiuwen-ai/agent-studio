@@ -15,6 +15,7 @@ from typing import Optional
 from common_utils.customer_header import get_config, get_capture_keys, resolve
 
 from .resolver import InterfaceProtocol, ModelServiceBase, ModelServiceError, ProviderAuth
+from .env_resolver import env_url_error_hint
 
 # OBS 原始 interfaceProtocol 字符串 → 两值归一。当前仅 OPENAI；ANTHROPIC 预留。
 _PROTOCOL_MAP = {
@@ -202,7 +203,8 @@ async def rerank(model, auth, request, projected_headers: Optional[dict] = None)
         if resp.status_code >= 300:
             raise ModelServiceError(
                 "MD_INVOKE_MODEL_SERVICE_FAIL",
-                f"rerank upstream {conn.api_base} returned {resp.status_code}: {resp.text}",
+                f"rerank upstream {conn.api_base} returned {resp.status_code}: {resp.text}"
+                + env_url_error_hint(model.api_url_env_placeholders),
                 upstream_status=resp.status_code,
                 upstream_body=resp.text,
             )

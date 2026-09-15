@@ -569,6 +569,119 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeleteMemoryRepoResponseBody"
+  /v2/{project_id}/agent-manager/memory-repositories/{memory_repo_id}/memories:
+    get:
+      tags:
+      - memory-item-management-api-controller
+      summary: 查询记忆条目列表
+      description: 查询指定记忆库下的记忆条目列表
+      operationId: listMemoryItems
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: memory_repo_id
+        in: path
+        description: 记忆库id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: page_num
+        in: query
+        description: 页码
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 1
+      - name: page_size
+        in: query
+        description: 每页条数
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      - name: memory_type
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMemoryItemResponseBody"
+    put:
+      tags:
+      - memory-item-management-api-controller
+      summary: 批量修改记忆条目
+      description: 批量修改指定记忆库下当前用户的记忆条目内容；任一条失败则整体失败并记录失败条目id
+      operationId: updateMemoryItems
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: memory_repo_id
+        in: path
+        description: 记忆库id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemoryItemRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+    delete:
+      tags:
+      - memory-item-management-api-controller
+      summary: 清空当前用户记忆条目
+      description: 清空指定记忆库下当前用户的全部记忆条目
+      operationId: clearUserMemoryItems
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: memory_repo_id
+        in: path
+        description: 记忆库id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      responses:
+        "200":
+          description: OK
   /v2/{project_id}/agent-manager/knowledge-bases/{knowledge_base_id}/permissions:
     put:
       tags:
@@ -957,10 +1070,6 @@ paths:
       responses:
         "200":
           description: OK
-          content:
-            application/json:
-              schema:
-                type: object
     delete:
       tags:
       - model-service-mgmt-api-controller
@@ -1552,6 +1661,8 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
       responses:
         "200":
@@ -1999,6 +2110,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -2034,6 +2146,7 @@ paths:
           type: string
           description: 排序方式
           example: desc
+          maxLength: 5
         example: desc
       - name: name
         in: query
@@ -2043,6 +2156,7 @@ paths:
           type: string
           description: 名称
           example: 测试消息
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: 测试消息
       - name: category
@@ -2053,6 +2167,7 @@ paths:
           type: string
           description: 分类
           example: general
+          maxLength: 16
         example: general
       - name: import_method
         in: query
@@ -2062,6 +2177,7 @@ paths:
           type: string
           description: 导入方式
           example: manual
+          maxLength: 16
         example: manual
       - name: status
         in: query
@@ -2071,6 +2187,7 @@ paths:
           type: string
           description: 状态
           example: active
+          maxLength: 32
         example: active
       - name: creator
         in: query
@@ -2080,6 +2197,7 @@ paths:
           type: string
           description: 创建者
           example: user001
+          maxLength: 32
         example: user001
       - name: updater
         in: query
@@ -2089,6 +2207,7 @@ paths:
           type: string
           description: 更新者
           example: user002
+          maxLength: 32
         example: user002
       responses:
         "200":
@@ -2980,6 +3099,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -3700,6 +3820,90 @@ paths:
             application/json:
               schema:
                 type: boolean
+  /v1/{project_id}/agent-manager/datasource/{datasource_id}:
+    get:
+      tags:
+      - datasource-controller
+      operationId: retrieveDatasource
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: datasource_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceInfoRsp"
+    put:
+      tags:
+      - datasource-controller
+      operationId: modifyDatasource
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: datasource_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasourceInfoReq"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceBriefRsp"
+    delete:
+      tags:
+      - datasource-controller
+      operationId: deleteDatasource
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: datasource_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
   /v1/{project_id}/agent-manager/complex-intent/{intent_id}:
     get:
       tags:
@@ -4550,6 +4754,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -4585,6 +4790,7 @@ paths:
           type: string
           description: ID
           example: tool_001
+          maxLength: 64
         example: tool_001
       - name: ids
         in: query
@@ -4609,6 +4815,7 @@ paths:
           type: string
           description: 英文名称
           example: my_tool
+          maxLength: 64
         example: my_tool
       - name: cn_name
         in: query
@@ -4618,6 +4825,7 @@ paths:
           type: string
           description: 中文名称
           example: 我的工具
+          maxLength: 64
         example: 我的工具
       - name: desc
         in: query
@@ -4627,6 +4835,7 @@ paths:
           type: string
           description: 描述
           example: 工具描述
+          maxLength: 256
         example: 工具描述
       - name: type
         in: query
@@ -4636,6 +4845,7 @@ paths:
           type: string
           description: 类型
           example: plugin
+          maxLength: 32
         example: plugin
       - name: intf_type
         in: query
@@ -4654,6 +4864,7 @@ paths:
           type: string
           description: 创建者
           example: user_001
+          maxLength: 64
         example: user_001
       - name: creator_id
         in: query
@@ -4663,6 +4874,7 @@ paths:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 64
         example: user_001
       responses:
         "200":
@@ -4744,6 +4956,7 @@ paths:
           type: string
           description: 连接名称
           example: 我的知识库连接
+          maxLength: 50
         example: 我的知识库连接
       - name: status
         in: query
@@ -4762,6 +4975,7 @@ paths:
           type: string
           description: 连接器ID
           example: connector-001
+          maxLength: 100
         example: connector-001
       - name: offset
         in: query
@@ -4888,6 +5102,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws001
@@ -4923,6 +5138,8 @@ paths:
           type: string
           description: 记忆仓库名称
           example: conversation_history
+          maxLength: 50
+          minLength: 1
         example: conversation_history
       - name: ids
         in: query
@@ -5087,6 +5304,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws001
+          maxLength: 100
           minLength: 1
         example: ws001
       - name: knowledge_base_name
@@ -5097,6 +5315,7 @@ paths:
           type: string
           description: 知识库名称
           example: 产品知识库
+          maxLength: 100
         example: 产品知识库
       - name: knowledge_base_connection_id
         in: query
@@ -5106,6 +5325,7 @@ paths:
           type: string
           description: 知识库连接ID
           example: conn001
+          maxLength: 100
           minLength: 1
         example: conn001
       - name: offset
@@ -5597,6 +5817,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -5734,6 +5955,7 @@ paths:
           type: string
           description: 查询关键词
           example: 搜索
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9._ /:|\\\\-]{0,64}$"
         example: 搜索
       - name: sort_by
@@ -5744,6 +5966,7 @@ paths:
           type: string
           description: 排序字段
           example: name
+          maxLength: 32
         example: name
       responses:
         "200":
@@ -5989,6 +6212,7 @@ paths:
           type: string
           description: 提供商ID
           example: provider-001
+          maxLength: 80
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: provider-001
       - name: service_name
@@ -5999,6 +6223,7 @@ paths:
           type: string
           description: 服务名称
           example: gpt-service
+          maxLength: 64
         example: gpt-service
       - name: model_name
         in: query
@@ -6008,6 +6233,7 @@ paths:
           type: string
           description: 模型名称
           example: gpt-4
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9:. _/|\\\\-]{1,64}$"
         example: gpt-4
       - name: model_type
@@ -6038,6 +6264,7 @@ paths:
           type: string
           description: 服务ID
           example: service-001
+          maxLength: 80
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: service-001
       - name: context_length
@@ -6147,7 +6374,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                type: string
   /v1/{project_id}/model-manager/model-services/{id}/online:
     post:
       tags:
@@ -6409,6 +6636,7 @@ paths:
           type: string
           description: 查询关键词
           example: gpt
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_ :./\\\\|-]{1,64}$"
         example: gpt
       - name: page_num
@@ -6463,6 +6691,7 @@ paths:
           type: string
           description: 模型名称
           example: gpt-4
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\/:|\\\
             \ -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$"
         example: gpt-4
@@ -6474,6 +6703,7 @@ paths:
           type: string
           description: 供应商ID
           example: provider_001
+          maxLength: 80
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: provider_001
       responses:
@@ -6971,6 +7201,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -7263,6 +7494,7 @@ paths:
         required: true
         schema:
           type: string
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
       - name: offset
@@ -7286,37 +7518,44 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 128
       - name: name
         in: query
         required: false
         schema:
           type: string
+          maxLength: 192
           pattern: "^.{0,64}$"
       - name: code
         in: query
         required: false
         schema:
           type: string
+          maxLength: 128
       - name: description
         in: query
         required: false
         schema:
           type: string
+          maxLength: 512
       - name: creator
         in: query
         required: false
         schema:
           type: string
+          maxLength: 128
       - name: group
         in: query
         required: false
         schema:
           type: string
+          maxLength: 128
       - name: type
         in: query
         required: false
         schema:
           type: string
+          maxLength: 128
       - name: status
         in: query
         required: false
@@ -7398,6 +7637,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -7478,6 +7718,54 @@ paths:
             application/json:
               schema:
                 type: string
+  /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete:
+    post:
+      tags:
+      - workflow-management-api-controller
+      summary: 批量删除工作流版本
+      description: 批量删除工作流版本。
+      operationId: batchDeleteWorkflowVersions
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workflow_id
+        in: path
+        description: 工作流ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 团队空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteVersionsRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteVersionsResponseBody"
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/triggers/edit:
     post:
       tags:
@@ -7604,11 +7892,13 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       - name: type
         in: query
         required: false
         schema:
           type: string
+          maxLength: 64
       - name: sort
         in: query
         required: false
@@ -7624,6 +7914,8 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
       responses:
         "200":
@@ -7944,6 +8236,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -8363,6 +8656,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -8398,6 +8692,7 @@ paths:
           type: string
           description: ID
           example: tool_001
+          maxLength: 64
         example: tool_001
       - name: ids
         in: query
@@ -8422,6 +8717,7 @@ paths:
           type: string
           description: 英文名称
           example: my_tool
+          maxLength: 64
         example: my_tool
       - name: cn_name
         in: query
@@ -8431,6 +8727,7 @@ paths:
           type: string
           description: 中文名称
           example: 我的工具
+          maxLength: 64
         example: 我的工具
       - name: desc
         in: query
@@ -8440,6 +8737,7 @@ paths:
           type: string
           description: 描述
           example: 工具描述
+          maxLength: 256
         example: 工具描述
       - name: type
         in: query
@@ -8449,6 +8747,7 @@ paths:
           type: string
           description: 类型
           example: plugin
+          maxLength: 32
         example: plugin
       - name: intf_type
         in: query
@@ -8458,6 +8757,7 @@ paths:
           type: string
           description: 接口类型
           example: rest
+          maxLength: 32
         example: rest
       - name: creator
         in: query
@@ -8467,6 +8767,7 @@ paths:
           type: string
           description: 创建者
           example: user_001
+          maxLength: 64
         example: user_001
       - name: creator_id
         in: query
@@ -8476,6 +8777,7 @@ paths:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 64
         example: user_001
       responses:
         "200":
@@ -9090,6 +9392,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
@@ -9206,6 +9509,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
@@ -9241,6 +9545,7 @@ paths:
           type: string
           description: 插件ID
           example: plugin-001
+          maxLength: 64
         example: plugin-001
       - name: ids
         in: query
@@ -9265,6 +9570,7 @@ paths:
           type: string
           description: 英文名称
           example: my-plugin
+          maxLength: 64
         example: my-plugin
       - name: cn_name
         in: query
@@ -9274,6 +9580,7 @@ paths:
           type: string
           description: 中文名称
           example: 我的插件
+          maxLength: 64
         example: 我的插件
       - name: desc
         in: query
@@ -9283,6 +9590,7 @@ paths:
           type: string
           description: 描述
           example: 插件描述信息
+          maxLength: 256
         example: 插件描述信息
       - name: type
         in: query
@@ -9292,6 +9600,7 @@ paths:
           type: string
           description: 插件类型
           example: tool
+          maxLength: 32
         example: tool
       - name: intf_type
         in: query
@@ -9301,6 +9610,7 @@ paths:
           type: string
           description: 接口类型
           example: rest
+          maxLength: 32
         example: rest
       - name: call_mode
         in: query
@@ -9310,6 +9620,7 @@ paths:
           type: string
           description: 调用方式
           example: sync
+          maxLength: 32
         example: sync
       - name: creator
         in: query
@@ -9319,6 +9630,7 @@ paths:
           type: string
           description: 创建者
           example: admin
+          maxLength: 64
         example: admin
       - name: creator_id
         in: query
@@ -9328,6 +9640,7 @@ paths:
           type: string
           description: 创建者ID
           example: user-001
+          maxLength: 64
         example: user-001
       - name: entry_point
         in: query
@@ -9346,6 +9659,7 @@ paths:
           type: string
           description: 标签
           example: utility
+          maxLength: 32
         example: utility
       - name: category
         in: query
@@ -9520,6 +9834,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -9874,6 +10189,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -9909,6 +10225,7 @@ paths:
           type: string
           description: 自定义对象名称
           example: custom_object_1
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: custom_object_1
       responses:
@@ -10005,6 +10322,7 @@ paths:
           type: string
           description: MCP服务名称
           example: mcp-server
+          maxLength: 64
         example: mcp-server
       - name: type
         in: query
@@ -10014,6 +10332,7 @@ paths:
           type: string
           description: 类型
           example: stdio
+          maxLength: 32
         example: stdio
       - name: active_status
         in: query
@@ -10023,6 +10342,7 @@ paths:
           type: string
           description: 激活状态
           example: active
+          maxLength: 32
         example: active
       responses:
         "200":
@@ -10322,6 +10642,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
@@ -10357,6 +10678,8 @@ paths:
           type: string
           description: 任务类型
           example: parse
+          maxLength: 16
+          minLength: 1
         example: parse
       - name: task_status
         in: query
@@ -10366,6 +10689,8 @@ paths:
           type: string
           description: 任务状态
           example: success
+          maxLength: 64
+          minLength: 1
         example: success
       - name: file_name
         in: query
@@ -10375,6 +10700,8 @@ paths:
           type: string
           description: 文件名称
           example: doc.pdf
+          maxLength: 255
+          minLength: 1
         example: doc.pdf
       responses:
         "200":
@@ -10508,6 +10835,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -10622,6 +10950,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
@@ -10657,6 +10986,7 @@ paths:
           type: string
           description: 文件名称
           example: knowledge.pdf
+          maxLength: 1024
         example: knowledge.pdf
       - name: type
         in: query
@@ -10666,6 +10996,7 @@ paths:
           type: string
           description: 文件类型
           example: "pdf,docx"
+          maxLength: 128
           pattern: "^[a-zA-Z,]*$"
         example: "pdf,docx"
       - name: status
@@ -10676,6 +11007,7 @@ paths:
           type: string
           description: 文件状态
           example: ready
+          maxLength: 128
         example: ready
       responses:
         "200":
@@ -10811,6 +11143,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -10957,6 +11290,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -10992,6 +11326,7 @@ paths:
           type: string
           description: FAQ问题内容
           example: 如何重置密码
+          maxLength: 1000
         example: 如何重置密码
       responses:
         "200":
@@ -11128,6 +11463,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
@@ -11181,6 +11517,7 @@ paths:
           type: string
           description: 文件名称
           example: faq.xlsx
+          maxLength: 1024
         example: faq.xlsx
       - name: status
         in: query
@@ -11190,6 +11527,7 @@ paths:
           type: string
           description: 文件状态
           example: ready
+          maxLength: 128
         example: ready
       responses:
         "200":
@@ -11291,6 +11629,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -11840,6 +12179,109 @@ paths:
               schema:
                 type: string
                 format: binary
+  /v1/{project_id}/agent-manager/datasource:
+    get:
+      tags:
+      - datasource-controller
+      operationId: listDatasource
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: name
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceListRsp"
+    post:
+      tags:
+      - datasource-controller
+      operationId: createDatasource
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasourceInfoReq"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceBriefRsp"
+  /v1/{project_id}/agent-manager/datasource/batch-delete:
+    post:
+      tags:
+      - datasource-controller
+      operationId: batchDeleteDatasource
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasourceBatchDeleteReq"
+        required: true
+      responses:
+        "200":
+          description: OK
   /v1/{project_id}/agent-manager/complex-intent:
     get:
       tags:
@@ -11865,6 +12307,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -11900,6 +12343,7 @@ paths:
           type: string
           description: 意图名称
           example: 用户咨询意图
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: 用户咨询意图
       responses:
@@ -11981,6 +12425,7 @@ paths:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: 示例名称
       - name: workspace_id
@@ -11991,6 +12436,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -12473,6 +12919,7 @@ paths:
           type: string
           description: 应用名称
           example: my-agent
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: my-agent
       - name: id
@@ -12483,6 +12930,8 @@ paths:
           type: string
           description: 应用ID
           example: app-001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         example: app-001
       - name: status
@@ -12502,6 +12951,8 @@ paths:
           type: string
           description: 应用类型
           example: chat
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z,]+$"
         example: chat
       responses:
@@ -12563,6 +13014,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -12598,6 +13050,8 @@ paths:
           type: string
           description: Agent ID
           example: agent_001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         example: agent_001
       - name: name
@@ -12608,6 +13062,7 @@ paths:
           type: string
           description: Agent名称
           example: 智能客服
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: 智能客服
       - name: type
@@ -12627,6 +13082,8 @@ paths:
           type: string
           description: Agent描述
           example: 用于智能问答的客服Agent
+          maxLength: 256
+          minLength: 1
         example: 用于智能问答的客服Agent
       - name: creator
         in: query
@@ -12636,6 +13093,8 @@ paths:
           type: string
           description: 创建者
           example: user001
+          maxLength: 64
+          minLength: 1
         example: user001
       - name: status
         in: query
@@ -12724,6 +13183,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -12798,6 +13258,54 @@ paths:
       responses:
         "200":
           description: OK
+  /v1/{project_id}/agent-manager/agents/{agent_id}/versions/batch-delete:
+    post:
+      tags:
+      - agent-management-api-controller
+      summary: 批量删除智能体版本
+      description: 批量删除智能体版本。
+      operationId: batchDeleteAgentVersions
+      parameters:
+      - name: project_id
+        in: path
+        description: 项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: agent_id
+        in: path
+        description: 资源ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteVersionsRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteVersionsResponseBody"
   /v1/{project_id}/agent-manager/agents/{agent_id}/uploadDeepResearchTemplate:
     post:
       tags:
@@ -13093,6 +13601,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 32
       - name: workspace_id
         in: query
         required: false
@@ -13386,6 +13895,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -14184,6 +14694,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PePromptTemplateListVo"
+  /v1/studio/datasources/{datasource_id}/execute:
+    post:
+      tags:
+      - datasource-execute-controller
+      operationId: executeSql
+      parameters:
+      - name: datasource_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasourceExecuteReq"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceExecuteResp"
   /v1/common-intern/license/report:
     post:
       tags:
@@ -14297,6 +14831,7 @@ paths:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 64
         example: 示例名称
       - name: status
         in: query
@@ -14578,54 +15113,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestConnectionThirdPartyKnowledgeBaseResponseBody"
-  /v2/{project_id}/agent-manager/memory-repositories/{memory_repo_id}/memories:
-    get:
-      tags:
-      - memory-item-management-api-controller
-      summary: 查询记忆条目列表
-      description: 查询指定记忆库下的记忆条目列表
-      operationId: listMemoryItems
-      parameters:
-      - name: project_id
-        in: path
-        description: 租户项目id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: memory_repo_id
-        in: path
-        description: 记忆库id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: page_num
-        in: query
-        description: 页码
-        required: false
-        schema:
-          type: integer
-          format: int32
-          default: 1
-      - name: page_size
-        in: query
-        description: 每页条数
-        required: false
-        schema:
-          type: integer
-          format: int32
-          default: 10
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListMemoryItemResponseBody"
   /v2/{project_id}/agent-manager/knowledge-bases:
     get:
       tags:
@@ -14651,6 +15138,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -14695,6 +15183,7 @@ paths:
           type: string
           description: 知识库名称
           example: 我的知识库
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: 我的知识库
       - name: type
@@ -14714,6 +15203,7 @@ paths:
           type: string
           description: 知识库连接ID
           example: conn_001
+          maxLength: 100
         example: conn_001
       - name: status
         in: query
@@ -14808,6 +15298,8 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
+          minLength: 1
         example: example-id-123
       responses:
         "200":
@@ -14857,6 +15349,8 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
+          minLength: 1
         example: example-id-123
       responses:
         "200":
@@ -14891,6 +15385,8 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
       - name: model_name
@@ -14901,6 +15397,8 @@ paths:
           type: string
           description: 模型名称
           example: embedding-001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         example: embedding-001
       - name: repo_id
@@ -14911,6 +15409,8 @@ paths:
           type: string
           description: 知识库ID
           example: repo-001
+          maxLength: 64
+          minLength: 1
         example: repo-001
       - name: model_type
         in: query
@@ -14920,6 +15420,8 @@ paths:
           type: string
           description: 模型类型
           example: embedding
+          maxLength: 64
+          minLength: 1
         example: embedding
       - name: offset
         in: query
@@ -15017,6 +15519,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
         example: example-id-123
       - name: connector_type
@@ -15027,6 +15530,7 @@ paths:
           type: string
           description: 连接器类型
           example: example-type
+          maxLength: 64
         example: example-type
       - name: connection_id
         in: query
@@ -15036,6 +15540,7 @@ paths:
           type: string
           description: 连接ID
           example: example-id-123
+          maxLength: 64
         example: example-id-123
       responses:
         "200":
@@ -15222,6 +15727,7 @@ paths:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 255
         example: 示例名称
       responses:
         "200":
@@ -15285,6 +15791,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       responses:
         "200":
           description: OK
@@ -15350,6 +15857,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       responses:
         "200":
           description: OK
@@ -15424,6 +15932,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       responses:
         "200":
           description: OK
@@ -15582,6 +16091,7 @@ paths:
           type: string
           description: 查询关键词
           example: gpt
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_ /:.|\\\\-]{1,64}$"
         example: gpt
       - name: page_num
@@ -15647,6 +16157,7 @@ paths:
           type: string
           description: 供应商标识
           example: provider_001
+          maxLength: 80
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: provider_001
       responses:
@@ -15819,6 +16330,7 @@ paths:
           type: string
           description: 供应商ID
           example: provider_001
+          maxLength: 50
           pattern: "^[a-zA-Z0-9_-]{1,40}$"
         example: provider_001
       - name: workspace_id
@@ -15840,6 +16352,7 @@ paths:
           type: string
           description: 服务名称
           example: my_service
+          maxLength: 1000
         example: my_service
       - name: model_name
         in: query
@@ -15870,6 +16383,7 @@ paths:
           type: string
           description: 模型服务ID
           example: model_001
+          maxLength: 80
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: model_001
       - name: publish_status
@@ -15880,6 +16394,7 @@ paths:
           type: string
           description: 发布状态
           example: all
+          maxLength: 7
           pattern: ^(all|online)$
         example: all
       - name: groupby
@@ -16016,6 +16531,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -16088,6 +16604,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -16348,6 +16865,8 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
       - name: language
@@ -16367,6 +16886,7 @@ paths:
           type: string
           description: 服务名称
           example: my-server
+          maxLength: 255
         example: my-server
       - name: category
         in: query
@@ -16619,6 +17139,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -16705,22 +17226,28 @@ paths:
           pattern: "^[a-zA-Z0-9_-]+$"
       - name: workspace_id
         in: query
-        description: 团队空间ID。
+        description: 工作空间ID
         required: true
         schema:
           type: string
+          description: 工作空间ID
+          example: example-id-123
           maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
+        example: example-id-123
       - name: version_id
         in: query
-        description: 版本ID，不传则返回全部版本。
+        description: 版本ID，不传则返回全部版本
         required: false
         schema:
           type: string
+          description: 版本ID，不传则返回全部版本
+          example: 1787901244768
           maxLength: 64
           minLength: 1
           pattern: "^[0-9]+$"
+        example: 1787901244768
       responses:
         "200":
           description: OK
@@ -16728,54 +17255,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VersionReferenceListRsp"
-  /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete:
-    post:
-      tags:
-      - workflow-management-api-controller
-      summary: 批量删除工作流版本
-      description: 批量删除工作流版本，部分成功模式：已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除。
-      operationId: batchDeleteWorkflowVersions
-      parameters:
-      - name: project_id
-        in: path
-        description: 租户项目ID。
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: workflow_id
-        in: path
-        description: 工作流ID。
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: workspace_id
-        in: query
-        description: 团队空间ID。
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-          pattern: "^[a-zA-Z0-9_()\\-]+$"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchDeleteVersionsRequestBody"
-        required: true
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BatchDeleteVersionsResponseBody"
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/envs:
     get:
       tags:
@@ -16802,6 +17281,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -16855,6 +17335,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -16988,6 +17469,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -17052,6 +17534,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       - name: workspace_id
         in: query
         required: false
@@ -17098,6 +17581,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -17109,6 +17593,7 @@ paths:
           type: string
           description: 工作空间
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -17176,6 +17661,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       - name: workspace_id
         in: query
         required: false
@@ -17254,6 +17740,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 64
       - name: workspace_id
         in: query
         required: false
@@ -17332,6 +17819,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -17385,6 +17873,7 @@ paths:
           type: string
           description: 工作流名称
           example: my_workflow
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: my_workflow
       - name: description
@@ -17395,6 +17884,7 @@ paths:
           type: string
           description: 工作流描述
           example: 天气查询流程
+          maxLength: 512
         example: 天气查询流程
       - name: creator
         in: query
@@ -17404,6 +17894,7 @@ paths:
           type: string
           description: 创建者
           example: user_001
+          maxLength: 128
         example: user_001
       - name: type
         in: query
@@ -17413,6 +17904,7 @@ paths:
           type: string
           description: 类型
           example: workflow
+          maxLength: 128
         example: workflow
       responses:
         "200":
@@ -17458,6 +17950,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -17932,6 +18425,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws-001
@@ -17953,6 +18447,7 @@ paths:
           type: string
           description: 资源名称
           example: resource-name
+          maxLength: 64
         example: resource-name
       - name: offset
         in: query
@@ -18019,6 +18514,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -18220,6 +18716,7 @@ paths:
           type: string
           description: 资源类型
           example: plugin
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: plugin
@@ -18253,6 +18750,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws001
@@ -18296,6 +18794,7 @@ paths:
           type: string
           description: 资源类型
           example: agent
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: agent
@@ -18307,6 +18806,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -18342,6 +18842,7 @@ paths:
           type: string
           description: 版本号
           example: v1.0.0
+          maxLength: 64
         example: v1.0.0
       - name: app_type
         in: query
@@ -18351,6 +18852,7 @@ paths:
           type: string
           description: 应用类型
           example: chat
+          maxLength: 64
         example: chat
       - name: reference_type
         in: query
@@ -18400,6 +18902,7 @@ paths:
           type: string
           description: 版本号
           example: 1.0.0
+          maxLength: 64
         example: 1.0.0
       - name: resourceType
         in: query
@@ -18409,6 +18912,7 @@ paths:
           type: string
           description: 资源类型
           example: plugin
+          maxLength: 20
         example: plugin
       - name: workspace_id
         in: query
@@ -18418,6 +18922,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws001
@@ -18494,6 +18999,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -18569,6 +19075,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -18621,6 +19128,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -18864,6 +19372,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -18898,6 +19407,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnvironmentVariablesResp"
+  /v1/{project_id}/agent-manager/datasource/{datasource_id}/tables:
+    get:
+      tags:
+      - datasource-controller
+      operationId: retrieveTables
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: datasource_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceTablesRsp"
+  /v1/{project_id}/agent-manager/datasource/{datasource_id}/tables/{table_name}/columns:
+    get:
+      tags:
+      - datasource-controller
+      operationId: retrieveTableColumns
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: datasource_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DatasourceTableColumnsRsp"
   /v1/{project_id}/agent-manager/controller/{agent_id}/executions/{execution_id}:
     get:
       tags:
@@ -18957,7 +19527,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/ControllerExecutionDetail"
   /v1/{project_id}/agent-manager/controller/{agent_id}/conversations/{conversation_id}/executions:
     get:
       tags:
@@ -19017,7 +19587,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/ListControllerExecutionsResp"
   /v1/{project_id}/agent-manager/apps:
     get:
       tags:
@@ -19067,6 +19637,7 @@ paths:
           type: string
           description: 名称
           example: my_agent
+          maxLength: 64
         example: my_agent
       - name: tag_id
         in: query
@@ -19076,6 +19647,7 @@ paths:
           type: string
           description: 标签ID
           example: tag_001
+          maxLength: 64
         example: tag_001
       - name: source
         in: query
@@ -19154,6 +19726,7 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
@@ -19241,22 +19814,28 @@ paths:
           pattern: "^[a-zA-Z0-9_-]+$"
       - name: workspace_id
         in: query
-        description: 项目空间ID。
+        description: 工作空间ID
         required: true
         schema:
           type: string
+          description: 工作空间ID
+          example: example-id-123
           maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
+        example: example-id-123
       - name: version_id
         in: query
-        description: 版本ID，不传则返回全部版本。
+        description: 版本ID，不传则返回全部版本
         required: false
         schema:
           type: string
+          description: 版本ID，不传则返回全部版本
+          example: 1787901244768
           maxLength: 64
           minLength: 1
           pattern: "^[0-9]+$"
+        example: 1787901244768
       responses:
         "200":
           description: OK
@@ -19264,54 +19843,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VersionReferenceListRsp"
-  /v1/{project_id}/agent-manager/agents/{agent_id}/versions/batch-delete:
-    post:
-      tags:
-      - agent-management-api-controller
-      summary: 批量删除智能体版本
-      description: 批量删除智能体版本，部分成功模式：已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除。
-      operationId: batchDeleteAgentVersions
-      parameters:
-      - name: project_id
-        in: path
-        description: 项目ID。
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: agent_id
-        in: path
-        description: 资源ID。
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: workspace_id
-        in: query
-        description: 项目空间ID。
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-          pattern: "^[a-zA-Z0-9_()\\-]+$"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchDeleteVersionsRequestBody"
-        required: true
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BatchDeleteVersionsResponseBody"
   /v1/{project_id}/agent-manager/agents/{agent_id}/recommended-questions:
     get:
       tags:
@@ -19572,6 +20103,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 32
       responses:
         "200":
           description: OK
@@ -19621,6 +20153,7 @@ paths:
         required: false
         schema:
           type: string
+          maxLength: 32
       - name: workspace_id
         in: query
         description: 项目空间id
@@ -19780,6 +20313,7 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: ws_001
@@ -19815,6 +20349,8 @@ paths:
           type: string
           description: 唯一标识
           example: agent_001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         example: agent_001
       - name: name
@@ -19825,6 +20361,7 @@ paths:
           type: string
           description: 名称
           example: my_agent
+          maxLength: 192
           pattern: "^.{0,64}$"
         example: my_agent
       - name: type
@@ -19835,6 +20372,7 @@ paths:
           type: string
           description: 类型
           example: agent
+          maxLength: 16
         example: agent
       - name: sub_type
         in: query
@@ -19844,6 +20382,7 @@ paths:
           type: string
           description: 子类型
           example: workflow
+          maxLength: 32
         example: workflow
       responses:
         "200":
@@ -19997,6 +20536,8 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         example: example-id-123
       - name: marker
@@ -20692,6 +21233,7 @@ components:
           type: string
           description: 模型名称
           example: gpt-4
+          maxLength: 128
         exec_type:
           type: string
           description: 执行类型
@@ -20729,11 +21271,13 @@ components:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 34
           minLength: 1
         desc:
           type: string
           description: 描述
           example: 示例描述
+          maxLength: 256
         promptId:
           type: string
           description: 提示词ID
@@ -20755,10 +21299,12 @@ components:
           type: string
           description: 提示词文本
           example: 示例文本
+          maxLength: 10000
         ptVars:
           type: string
           description: 提示词变量
           example: 示例文本
+          maxLength: 1200
         dataSetId:
           type: string
           description: 数据集ID
@@ -20795,10 +21341,12 @@ components:
           type: string
           description: 评分标准
           example: 示例文本
+          maxLength: 5000
         backKnowledge:
           type: string
           description: 背景知识
           example: 示例文本
+          maxLength: 5000
         algorithm:
           type: string
           description: 优化算法
@@ -20833,6 +21381,7 @@ components:
           type: string
           description: 内容
           example: 示例内容
+          maxLength: 40000
     AuthInfo:
       type: object
       properties:
@@ -20874,13 +21423,17 @@ components:
       properties:
         target_name:
           type: string
+          maxLength: 64
           minLength: 1
         source_name:
           type: string
+          maxLength: 64
         auth_key:
           type: string
+          maxLength: 20000
         desc:
           type: string
+          maxLength: 128
       required:
       - target_name
     CreatePluginToolReq:
@@ -20890,6 +21443,7 @@ components:
           type: string
           description: 插件ID
           example: my-plugin-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         tool_display_name:
           type: string
@@ -20900,11 +21454,14 @@ components:
           type: string
           description: 工具中文名称
           example: 天气查询工具
+          maxLength: 64
           minLength: 1
         tool_desc:
           type: string
           description: 工具描述
           example: 查询指定城市的天气信息
+          maxLength: 600
+          minLength: 1
         call_mode:
           type: string
           description: 调用模式
@@ -20925,6 +21482,7 @@ components:
           type: string
           description: 可见性
           example: private
+          maxLength: 32
         intf_type:
           type: string
           description: 接口类型
@@ -20933,6 +21491,7 @@ components:
           type: string
           description: 输入参数Schema
           example: 输入参数JSON Schema
+          maxLength: 200000
         is_input_list:
           type: boolean
           description: 是否为输入列表
@@ -20941,6 +21500,7 @@ components:
           type: string
           description: 输出参数Schema
           example: 输出参数JSON Schema
+          maxLength: 200000
         is_output_list:
           type: boolean
           description: 是否为输出列表
@@ -20949,6 +21509,7 @@ components:
           type: string
           description: 元数据
           example: 元数据信息
+          maxLength: 4096
         auth_required:
           type: boolean
           description: 是否需要认证
@@ -20966,19 +21527,29 @@ components:
           type: string
         iam_account:
           type: string
+          maxLength: 255
+          minLength: 1
         iam_project:
           type: string
+          maxLength: 255
+          minLength: 1
         iam_secret:
           type: string
+          minLength: 1
         iam_enterprise:
           type: string
+          maxLength: 255
+          minLength: 1
     HisSgov:
       type: object
       properties:
         app_id:
           type: string
+          maxLength: 255
+          minLength: 1
         credential:
           type: string
+          minLength: 1
         sgov_url:
           type: string
     OauthInfo:
@@ -20997,18 +21568,26 @@ components:
       properties:
         iam_url:
           type: string
+          maxLength: 255
+          minLength: 1
         iam_domain:
           type: string
+          maxLength: 255
         iam_project:
           type: string
+          maxLength: 255
         iam_user:
           type: string
+          maxLength: 255
         iam_password:
           type: string
+          maxLength: 255
         iam_ak:
           type: string
+          maxLength: 255
         iam_sk:
           type: string
+          maxLength: 255
     RequestInfo:
       type: object
       properties:
@@ -21016,6 +21595,7 @@ components:
           type: string
           description: 请求地址
           example: https://example.com/api
+          maxLength: 256
           minLength: 1
           pattern: "^(http|https)://(?![^/]*@)(?!.*\\.\\.)[^ ]*$"
         method:
@@ -21036,10 +21616,12 @@ components:
           type: string
           description: 路径参数
           example: {}
+          maxLength: 2000
         input_schema:
           type: string
           description: 输入Schema
           example: {}
+          maxLength: 200000
       required:
       - method
       - url
@@ -21065,10 +21647,12 @@ components:
           type: string
           description: 状态码
           example: 200
+          maxLength: 100
         value:
           type: string
           description: 值
           example: 示例字符串
+          maxLength: 1000
     UpdateThirdPartyKnowledgeBaseConnectionRequestBody:
       type: object
       properties:
@@ -21076,10 +21660,12 @@ components:
           type: string
           description: 知识库名称
           example: 我的知识库
+          maxLength: 50
         description:
           type: string
           description: 知识库描述
           example: 这是一个第三方知识库
+          maxLength: 100
         icon:
           type: string
           description: 知识库图标
@@ -21099,6 +21685,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     LongTermMemoryStrategy:
       type: object
@@ -21114,6 +21701,7 @@ components:
           type: string
           description: 提示词
           example: 请输入...
+          maxLength: 1000
     ModifyMemoryRepoRequestBody:
       type: object
       properties:
@@ -21121,6 +21709,7 @@ components:
           type: string
           description: 记忆库名称
           example: 我的记忆库
+          maxLength: 50
           minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!](?:[\\u4e00-\\u9fa5a-zA-Z0-9_\\\
             -（）()！! ]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!])?$"
@@ -21128,6 +21717,7 @@ components:
           type: string
           description: 记忆库描述
           example: 用于存储用户对话记忆
+          maxLength: 1000
         icon:
           type: string
           description: 记忆库图标
@@ -21160,6 +21750,29 @@ components:
           type: string
           description: 记忆仓ID
           example: example-id-123
+          maxLength: 64
+    UpdateMemoryItem:
+      type: object
+      properties:
+        memory_id:
+          type: string
+          minLength: 1
+        content:
+          type: string
+          minLength: 1
+      required:
+      - content
+      - memory_id
+    UpdateMemoryItemRequestBody:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpdateMemoryItem"
+          minItems: 1
+      required:
+      - memories
     PermissionsRequestBody:
       type: object
       properties:
@@ -21187,6 +21800,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     UpdateDefaultKnowledgeBaseConnectionRequestBody:
       type: object
@@ -21214,6 +21828,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     PePromptTemplateNewVo:
       type: object
@@ -21234,6 +21849,7 @@ components:
           type: string
           description: 内容
           example: 示例内容
+          maxLength: 10000
           minLength: 1
         creator:
           type: string
@@ -21251,6 +21867,7 @@ components:
           type: string
           description: 描述
           example: 示例描述
+          maxLength: 255
         industry_id:
           type: string
           description: 行业ID
@@ -21490,15 +22107,18 @@ components:
           type: string
           description: 策略名称
           example: 默认路由策略
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5a-zA-Z0-9_.:/|\\\\ -]{1,35}$"
         strategy_key:
           type: string
           description: 策略唯一标识
           example: strategy-key-001
+          maxLength: 128
         strategy_description:
           type: string
           description: 策略描述
           example: 根据用户意图路由到不同模型服务
+          maxLength: 4096
         model_service_list:
           type: array
           description: 模型服务列表
@@ -21525,6 +22145,7 @@ components:
           type: string
           description: 供应商ID
           example: provider_001
+          maxLength: 40
         service_name:
           type: string
           description: 服务名称
@@ -21546,14 +22167,17 @@ components:
           type: string
           description: 模型标签
           example: "tag1,tag2"
+          maxLength: 1024
         model_description:
           type: string
           description: 模型描述
           example: 这是一个大语言模型
+          maxLength: 1024
         api_url:
           type: string
           description: API地址
           example: https://api.example.com/v1
+          maxLength: 255
         is_support_function:
           type: boolean
           description: 是否支持函数调用
@@ -21625,6 +22249,7 @@ components:
           type: string
           description: 描述
           example: 华为云模型服务
+          maxLength: 1000
         logo:
           type: string
           description: Logo
@@ -21633,10 +22258,12 @@ components:
           type: string
           description: 标签
           example: "AI,大模型"
+          maxLength: 1000
         provider_url:
           type: string
           description: 服务商URL
           example: https://www.huaweicloud.com
+          maxLength: 255
         auth_type:
           type: string
           description: 认证类型
@@ -21648,6 +22275,7 @@ components:
           description: 认证信息
           example:
             api_key: sk-xxx
+          maxLength: 5000
       required:
       - auth_type
       - provider_name
@@ -21659,6 +22287,7 @@ components:
           type: string
           description: 服务ID
           example: svc_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9-]+$"
         name:
           type: string
@@ -21674,10 +22303,14 @@ components:
           type: string
           description: 服务描述
           example: 提供天气查询功能
+          maxLength: 1024
+          minLength: 1
         description_en:
           type: string
           description: 服务英文描述
           example: Provide weather query
+          maxLength: 2048
+          minLength: 1
         icon:
           type: string
           description: 服务图标
@@ -21688,7 +22321,7 @@ components:
           example:
             port: 8080
           pattern: "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！\
-            *%# \\s]*$"
+            *%#$ \\s]*$"
         readme:
           type: string
           description: 服务说明文档
@@ -21729,10 +22362,12 @@ components:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
         mappingId:
           type: string
           description: 映射ID
           example: map-001
+          maxLength: 128
         extensionContent:
           type: array
           description: 扩展内容列表
@@ -21753,12 +22388,14 @@ components:
           type: string
           description: 工作空间ID
           example: ws001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         name:
           type: string
           description: 工作空间名称
           example: 我的工作空间
+          maxLength: 64
           minLength: 1
           pattern: "^[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！!](?:[\\\\u4e00-\\\\\
             u9fa5a-zA-Z0-9_\\\\-（）()！! ]*[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！\
@@ -21771,6 +22408,7 @@ components:
           type: string
           description: 描述
           example: 用于团队协作的工作空间
+          maxLength: 256
         externalMappingInfo:
           $ref: "#/components/schemas/ExternalMappingInfo"
           description: 外部映射信息
@@ -21785,21 +22423,29 @@ components:
           type: string
           description: 工作空间ID
           example: ws001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         name:
           type: string
           description: 工作空间名称
           example: default
+          maxLength: 64
+          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         projectId:
           type: string
           description: 项目ID
           example: proj001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         flag:
           type: string
           description: 标识
           example: flag001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         icon:
           type: string
@@ -21809,19 +22455,26 @@ components:
           type: string
           description: 描述
           example: 团队空间描述信息
+          maxLength: 256
         tenantId:
           type: string
           description: 租户ID
           example: tenant001
+          maxLength: 128
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         type:
           type: string
           description: 类型
           example: team
+          maxLength: 32
+          minLength: 1
         status:
           type: string
           description: 状态
           example: active
+          maxLength: 64
+          minLength: 1
         creator:
           type: string
           description: 创建者
@@ -21830,6 +22483,8 @@ components:
           type: string
           description: 创建者ID
           example: user001
+          maxLength: 128
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         createdOn:
           type: string
@@ -21844,6 +22499,8 @@ components:
           type: string
           description: 更新者ID
           example: user002
+          maxLength: 128
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         updatedOn:
           type: string
@@ -21904,31 +22561,37 @@ components:
           type: string
           description: 触发器ID
           example: trigger_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         name:
           type: string
           description: 触发器名称
           example: 定时触发器
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z\\u4e00-\\u9fa5][a-zA-Z0-9_\\u4e00-\\u9fa5]{1,19}$"
         type:
           type: string
           description: 触发器类型
           example: cron
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         cron:
           type: string
           description: Cron表达式
           example: 0
+          maxLength: 64
         prompt:
           type: string
           description: 触发提示词
           example: 请执行定时任务
+          maxLength: 5000
         invocation:
           type: string
           description: 调用方式
           example: http://example.com/webhook
+          maxLength: 500
         params:
           type: array
           description: 触发器参数列表
@@ -21941,6 +22604,7 @@ components:
           type: string
           description: 回调URL
           example: http://example.com/hook
+          maxLength: 500
         created_on:
           type: string
           format: date-time
@@ -21956,11 +22620,13 @@ components:
           type: string
           description: 参数名称
           example: prompt
+          maxLength: 500
           minLength: 1
         description:
           type: string
           description: 参数描述
           example: 触发器提示词参数
+          maxLength: 500
       required:
       - name
     WorkflowInfo:
@@ -21970,28 +22636,37 @@ components:
           type: string
           description: 工作流ID
           example: workflow-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         trace_id:
           type: string
           description: 链路追踪ID
           example: trace-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         name:
           type: string
           description: 工作流名称
           example: 我的工作流
+          maxLength: 64
+          minLength: 2
         code:
           type: string
           description: 工作流编码
           example: workflow-code-01
+          maxLength: 64
+          minLength: 2
         description:
           type: string
           description: 工作流描述
           example: 用于自动回复的工作流
+          maxLength: 1024
+          minLength: 1
         avatar:
           type: string
           description: 工作流头像
           example: "data:image/png;base64,iVBORw0KGgo="
+          maxLength: 1024
         status:
           type: integer
           format: int32
@@ -22029,29 +22704,35 @@ components:
           type: string
           description: 创建者
           example: user001
+          maxLength: 64
         updater:
           type: string
           description: 更新者
           example: user002
+          maxLength: 64
         project_id:
           type: string
           description: 项目ID
           example: project-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         workspace_id:
           type: string
           description: 工作空间ID
           example: workspace-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         domain_id:
           type: string
           description: 领域ID
           example: domain-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         dsl_path:
           type: string
           description: DSL文件路径
           example: /workflows/example.dsl
+          maxLength: 256
         is_drag:
           type: boolean
           description: 是否为拖拽创建
@@ -22060,11 +22741,13 @@ components:
           type: string
           description: 创建者ID
           example: creator-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         type:
           type: string
           description: 工作流类型
           example: chat
+          maxLength: 32
         ref_workflows:
           type: array
           description: 引用的工作流列表
@@ -22102,6 +22785,7 @@ components:
       properties:
         name:
           type: string
+          maxLength: 64
         timeout:
           type: integer
           format: int32
@@ -22110,10 +22794,13 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
         name:
           type: string
+          maxLength: 64
         conversation_id:
           type: string
+          maxLength: 64
         is_published:
           type: boolean
         workflow:
@@ -22148,10 +22835,13 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
         type:
           type: string
+          maxLength: 64
         version_id:
           type: string
+          maxLength: 64
     ModifyChannelReq:
       type: object
       properties:
@@ -22159,6 +22849,7 @@ components:
           type: string
           description: 版本ID
           example: example-id-123
+          maxLength: 128
           minLength: 1
         visibility_scope:
           type: string
@@ -22254,15 +22945,19 @@ components:
           type: string
           description: 工具显示名称
           example: my_tool
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_]+$"
         tool_chinese_name:
           type: string
           description: 工具中文名称
           example: 我的工具
+          maxLength: 64
+          minLength: 1
         tool_desc:
           type: string
           description: 工具描述
           example: 用于数据处理的工具
+          maxLength: 600
         icon:
           type: string
           description: 图标
@@ -22271,6 +22966,7 @@ components:
           type: string
           description: 接口类型
           example: rest
+          maxLength: 64
         request_info:
           $ref: "#/components/schemas/RequestInfo"
           description: 请求信息
@@ -22281,6 +22977,7 @@ components:
           type: string
           description: 输入Schema
           example: {}
+          maxLength: 200000
         is_input_list:
           type: boolean
           description: 输入是否为列表
@@ -22289,6 +22986,7 @@ components:
           type: string
           description: 输出Schema
           example: {}
+          maxLength: 200000
         is_output_list:
           type: boolean
           description: 输出是否为列表
@@ -22301,6 +22999,7 @@ components:
           type: string
           description: 元数据
           example: {}
+          maxLength: 4096
         customize_node:
           type: boolean
           description: 是否自定义节点
@@ -22312,6 +23011,7 @@ components:
           type: string
           description: 工具ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
@@ -22323,22 +23023,26 @@ components:
           type: string
           description: 结构化信息ID
           example: msg001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         name:
           type: string
           description: 结构化信息名称
           example: 问候语
+          maxLength: 64
           minLength: 1
         category:
           type: string
           description: 分类
           example: greeting
+          maxLength: 64
         content:
           type: object
           additionalProperties: {}
           description: 内容
           example:
             key: value
+          maxItems: 10
         visibility:
           type: string
           description: 可见范围
@@ -22357,15 +23061,18 @@ components:
           type: string
           description: 结构化信息ID
           example: msg001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         name:
           type: string
           description: 结构化信息名称
           example: 问候语
+          maxLength: 500
         category:
           type: string
           description: 分类
           example: greeting
+          maxLength: 500
         content:
           type: object
           additionalProperties: {}
@@ -22376,6 +23083,7 @@ components:
           type: string
           description: 可见范围
           example: personal
+          maxLength: 500
     ModifyPluginReq:
       type: object
       properties:
@@ -22388,10 +23096,13 @@ components:
           type: string
           description: 工具中文名称
           example: 我的工具
+          maxLength: 64
+          minLength: 1
         tool_desc:
           type: string
           description: 工具描述
           example: 这是一个示例工具
+          maxLength: 600
         icon:
           type: string
           description: 工具图标
@@ -22431,6 +23142,7 @@ components:
           type: string
           description: 工具ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
@@ -22451,6 +23163,7 @@ components:
           type: string
           description: 插件ID
           example: plugin_001
+          maxLength: 64
         isNewlyPublished:
           type: boolean
           description: 是否为新发布
@@ -22459,10 +23172,12 @@ components:
           type: string
           description: 版本ID
           example: v1.0.0
+          maxLength: 64
         message:
           type: string
           description: 响应消息
           example: 操作成功
+          maxLength: 256
     ObjectInfoReq:
       type: object
       properties:
@@ -22470,6 +23185,7 @@ components:
           type: string
           description: 对象名称
           example: 自定义对象1
+          maxLength: 64
           minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         schemas:
@@ -22482,10 +23198,12 @@ components:
           type: string
           description: 对象描述
           example: 对象描述信息
+          maxLength: 1024
         id:
           type: string
           description: 对象ID
           example: obj-001
+          maxLength: 64
       required:
       - name
       - schemas
@@ -22496,6 +23214,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
     McpServerReq:
       type: object
       properties:
@@ -22503,19 +23222,23 @@ components:
           type: string
           description: MCP服务ID
           example: mcp_001
+          maxLength: 64
         name:
           type: string
           description: MCP服务名称
           example: 天气查询服务
+          maxLength: 64
         name_en:
           type: string
           description: MCP服务英文名称
           example: weather_service
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         desc:
           type: string
           description: MCP服务描述
           example: 提供天气信息查询服务
+          maxLength: 1000
         icon:
           type: string
           description: MCP服务图标
@@ -22524,10 +23247,12 @@ components:
           type: string
           description: 可见性
           example: private
+          maxLength: 32
         url:
           type: string
           description: MCP服务URL
           example: https://mcp.example.com/api
+          maxLength: 256
         auth:
           $ref: "#/components/schemas/AuthInfo"
           description: 认证信息
@@ -22624,14 +23349,17 @@ components:
           type: string
           description: 唯一标识
           example: config_001
+          maxLength: 64
         server_id:
           type: string
           description: 服务ID
           example: server_001
+          maxLength: 64
         project_id:
           type: string
           description: 项目ID
           example: project_001
+          maxLength: 64
         auth_keys:
           type: array
           description: 认证密钥列表
@@ -22646,6 +23374,7 @@ components:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 64
         create_time:
           type: string
           format: date-time
@@ -22663,18 +23392,22 @@ components:
           type: string
           description: 服务ID
           example: 550e8400-e29b-41d4-a716-446655440000
+          maxLength: 64
         project_id:
           type: string
           description: 项目ID
           example: project-001
+          maxLength: 64
         workspace_id:
           type: string
           description: 工作空间ID
           example: workspace-001
+          maxLength: 64
         name:
           type: string
           description: 服务名称
           example: my-mcp-server
+          maxLength: 64
         name_en:
           type: string
           description: 服务英文名称
@@ -22683,6 +23416,7 @@ components:
           type: string
           description: 服务描述
           example: 这是一个MCP服务
+          maxLength: 1000
         icon:
           type: string
           description: 图标
@@ -22701,10 +23435,12 @@ components:
           type: string
           description: 可见性
           example: public
+          maxLength: 32
         url:
           type: string
           description: 服务URL
           example: https://example.com/mcp
+          maxLength: 256
         auth:
           $ref: "#/components/schemas/AuthInfo"
           description: 认证信息
@@ -22713,10 +23449,12 @@ components:
           type: string
           description: 服务类型
           example: mcp
+          maxLength: 32
         category:
           type: string
           description: 服务分类
           example: tool
+          maxLength: 32
         configs:
           $ref: "#/components/schemas/McpServerConfig"
           description: 服务配置
@@ -22725,6 +23463,7 @@ components:
           type: string
           description: 配置状态
           example: configured
+          maxLength: 32
         binding:
           type: boolean
           description: 是否绑定
@@ -22733,10 +23472,12 @@ components:
           type: string
           description: 创建者
           example: user001
+          maxLength: 64
         creator_id:
           type: string
           description: 创建者ID
           example: user-001
+          maxLength: 64
         create_time:
           type: string
           format: date-time
@@ -22751,10 +23492,12 @@ components:
           type: string
           description: 服务配置
           example: {}
+          maxLength: 30000
         mcp_tool:
           type: string
           description: MCP工具
           example: []
+          maxLength: 500000
         org_type:
           type: string
           description: 组织类型
@@ -22767,6 +23510,7 @@ components:
           type: string
           description: 链路追踪ID
           example: trace-001
+          maxLength: 64
         share_info:
           $ref: "#/components/schemas/ShareInfo"
           description: 分享信息
@@ -22927,10 +23671,12 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
         name:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 32
           minLength: 1
           pattern: "^[a-zA-Z0-9][a-zA-Z0-9-_]{0,31}$"
       required:
@@ -22942,16 +23688,19 @@ components:
           type: string
           description: 显示名称
           example: 我的知识库
+          maxLength: 50
           minLength: 1
         description:
           type: string
           description: 描述
           example: 知识库描述
+          maxLength: 100
           minLength: 1
         icon:
           type: string
           description: 图标
           example: base64encodedimage
+          maxLength: 1024000
         rerank_model:
           $ref: "#/components/schemas/ModelConf"
           description: 重排序模型配置
@@ -22968,6 +23717,7 @@ components:
           type: string
           description: 元数据
           example: {}
+          maxLength: 4096
         rag_chunk_parser_conf:
           $ref: "#/components/schemas/RagChunkParserConf"
           description: RAG分块解析配置
@@ -23049,6 +23799,8 @@ components:
           minItems: 1
         rule_regex_id:
           type: string
+          maxLength: 256
+          minLength: 1
         chunk_size:
           type: integer
           format: int32
@@ -23066,6 +23818,7 @@ components:
           type: string
           description: 知识仓ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     StopKnowledgeRepoResponseBody:
       type: object
@@ -23074,6 +23827,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - id
@@ -23084,6 +23838,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - id
@@ -23114,10 +23869,12 @@ components:
           type: string
           description: 标题
           example: 文档标题
+          maxLength: 10000
         content:
           type: string
           description: 内容
           example: 文档内容
+          maxLength: 10000
           minLength: 1
         page_num:
           type: integer
@@ -23138,6 +23895,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - id
@@ -23148,36 +23906,44 @@ components:
           type: string
           description: 问题
           example: 如何重置密码？
+          maxLength: 1000
           minLength: 1
         answer:
           type: string
           description: 答案
           example: 请点击设置中的重置密码按钮。
+          maxLength: 10000
           minLength: 1
         question1:
           type: string
           description: 相似问题1
           example: 密码怎么重置？
+          maxLength: 1000
         question2:
           type: string
           description: 相似问题2
           example: 忘记密码怎么办？
+          maxLength: 1000
         question3:
           type: string
           description: 相似问题3
           example: 如何修改密码？
+          maxLength: 1000
         question4:
           type: string
           description: 相似问题4
           example: 密码如何找回？
+          maxLength: 1000
         category:
           type: string
           description: 分类
           example: 账号管理
+          maxLength: 255
         tags:
           type: string
           description: 标签
           example: "密码,账号"
+          maxLength: 4096
       required:
       - answer
       - question
@@ -23188,6 +23954,7 @@ components:
           type: string
           description: FAQ ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - faq_id
@@ -23198,10 +23965,12 @@ components:
           type: string
           description: 标题
           example: 常见问题
+          maxLength: 10000
         content:
           type: string
           description: 内容
           example: FAQ内容
+          maxLength: 10000
           minLength: 1
         page_num:
           type: integer
@@ -23235,6 +24004,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - id
@@ -23266,24 +24036,75 @@ components:
           type: string
           description: 安全组ID
           example: sg-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         description:
           type: string
           description: 安全组描述
           example: 用于Agent运行的安全组
+          maxLength: 128
           pattern: "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$"
         vpcId:
           type: string
           description: VPC ID
           example: vpc-001
+          maxLength: 64
+          minLength: 1
         subnetId:
           type: string
           description: 子网ID
           example: subnet-001
+          maxLength: 64
+          minLength: 1
         isDefault:
           type: boolean
           description: 是否为默认安全组
           example: false
+    DatasourceConnectionInfo:
+      type: object
+      properties:
+        host:
+          type: string
+        port:
+          type: string
+        databaseName:
+          type: string
+        user:
+          type: string
+        password:
+          type: string
+        sslEnabled:
+          type: boolean
+        sqlVersion:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    DatasourceInfoReq:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        desc:
+          type: string
+        connectionInfo:
+          $ref: "#/components/schemas/DatasourceConnectionInfo"
+    DatasourceBriefRsp:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        lastErrorMessage:
+          type: string
     ComplexIntentBranchInfoReq:
       type: object
       properties:
@@ -23291,12 +24112,14 @@ components:
           type: string
           description: 分支名称
           example: 意图分支1
+          maxLength: 64
           minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         description:
           type: string
           description: 分支描述
           example: 处理用户查询意图
+          maxLength: 1024
         examples:
           type: array
           description: 示例列表
@@ -23310,6 +24133,7 @@ components:
           type: string
           description: 分支ID
           example: branch-001
+          maxLength: 64
       required:
       - name
     ComplexIntentInfoReq:
@@ -23319,16 +24143,19 @@ components:
           type: string
           description: 意图包名称
           example: 用户咨询意图
+          maxLength: 64
           minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         description:
           type: string
           description: 意图包描述
           example: 处理用户咨询相关意图
+          maxLength: 1024
         id:
           type: string
           description: 意图包ID
           example: intent_001
+          maxLength: 64
         branches:
           type: array
           description: 意图分支列表
@@ -23346,10 +24173,12 @@ components:
           type: string
           description: 意图ID
           example: example-id-123
+          maxLength: 64
         branch_id:
           type: string
           description: 分支ID
           example: example-id-123
+          maxLength: 64
     ComplexIntentBranchBriefRsp:
       type: object
       properties:
@@ -23357,6 +24186,7 @@ components:
           type: string
           description: 分支ID
           example: example-id-123
+          maxLength: 64
     AdditionalQuestionsConfig:
       type: object
       properties:
@@ -23373,6 +24203,7 @@ components:
           type: string
           description: 追问提示词
           example: 请根据用户回答继续追问
+          maxLength: 512
       required:
       - enable
     AgentMcpDetail:
@@ -23394,14 +24225,18 @@ components:
           type: string
           description: 记忆仓库ID
           example: mem_repo_001
+          maxLength: 64
         name:
           type: string
           description: 记忆配置名称
           example: 用户记忆
+          maxLength: 50
+          minLength: 1
         description:
           type: string
           description: 记忆配置描述
           example: 存储用户偏好和历史对话记忆
+          maxLength: 1000
     AgentSkillDetail:
       type: object
       properties:
@@ -23436,15 +24271,18 @@ components:
           type: string
           description: 变量键名
           example: user_name
+          maxLength: 100
           pattern: "^[^\\^]*$"
         description:
           type: string
           description: 变量描述
           example: 用户名称
+          maxLength: 200
         default_value:
           type: string
           description: 变量默认值
           example: 张三
+          maxLength: 100
     AgentWorkflowDetail:
       type: object
       properties:
@@ -23626,6 +24464,7 @@ components:
           type: string
           description: 入参变量键名
           example: user_name
+          maxLength: 100
           pattern: "^[^\\^]*$"
         required:
           type: boolean
@@ -23635,6 +24474,7 @@ components:
           type: string
           description: 变量描述
           example: 用户名称
+          maxLength: 200
         default_value:
           description: 变量默认值
           example: 张三
@@ -23642,6 +24482,7 @@ components:
           type: string
           description: 入参类型，可选值：string、integer、number、boolean
           example: string
+          maxLength: 100
           pattern: ^(string|integer|number|boolean)$
     KnowledgeRetrievePolicy:
       type: object
@@ -23757,6 +24598,8 @@ components:
           type: string
           description: 智能体名称，2~64个字符
           example: 智能助手
+          maxLength: 64
+          minLength: 2
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!](?:[\\u4e00-\\u9fa5a-zA-Z0-9_\\\
             -（）()！! ]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!])?$"
         type:
@@ -23772,6 +24615,8 @@ components:
           type: string
           description: 智能体描述，1~256个字符
           example: 这是一个智能助手
+          maxLength: 256
+          minLength: 1
         icon:
           type: string
           description: 智能体图标，支持base64或URL
@@ -23783,14 +24628,17 @@ components:
           type: string
           description: 提示词指令内容，最大10000字符
           example: 你是一个专业的智能助手
+          maxLength: 10000
         model_deployment_id:
           type: string
           description: 模型部署ID
           example: dep-1234567890
+          maxLength: 128
         model_name:
           type: string
           description: 模型名称
           example: gpt-4
+          maxLength: 256
         model_endpoint:
           type: string
           description: 模型推理端点URL
@@ -23806,6 +24654,7 @@ components:
           type: string
           description: 模型类型标识
           example: openai
+          maxLength: 32
         strategy_flag:
           type: boolean
           description: 是否启用策略模式
@@ -23814,6 +24663,7 @@ components:
           type: string
           description: 模型标识符
           example: gpt-4-turbo
+          maxLength: 64
         plan_qa_independent:
           type: boolean
           description: 计划QA是否独立执行
@@ -23822,14 +24672,17 @@ components:
           type: string
           description: 规划模型标识符
           example: gpt-4
+          maxLength: 64
         plan_model_deployment_id:
           type: string
           description: 规划模型部署ID
           example: dep-plan-1234567890
+          maxLength: 128
         plan_model_name:
           type: string
           description: 规划模型名称
           example: gpt-4
+          maxLength: 256
         plan_model_config:
           $ref: "#/components/schemas/ModelConfig"
           description: 规划模型参数配置
@@ -23837,6 +24690,7 @@ components:
           type: string
           description: 规划模型类型标识
           example: openai
+          maxLength: 32
         tools:
           type: array
           description: 工具ID列表
@@ -23922,6 +24776,7 @@ components:
           type: string
           description: 开场白，最大512字符
           example: 你好，我是智能助手，有什么可以帮助你的吗？
+          maxLength: 512
         is_template:
           type: boolean
           description: 是否为模板
@@ -24106,18 +24961,22 @@ components:
           type: string
           description: 搜索引擎ID
           example: engine_001
+          maxLength: 1000
         name:
           type: string
           description: 搜索引擎名称
           example: Google
+          maxLength: 500
         url:
           type: string
           description: 搜索引擎URL
           example: https://www.google.com
+          maxLength: 1000
         extension:
           type: string
           description: 搜索引擎扩展配置
           example: search_ext
+          maxLength: 1000
     SkillReference:
       type: object
       properties:
@@ -24133,6 +24992,8 @@ components:
           type: string
           description: 技能描述
           example: 查询指定城市的天气信息
+          maxLength: 1024
+          minLength: 1
         icon:
           type: string
           description: 技能图标
@@ -24632,6 +25493,8 @@ components:
           type: string
           description: 工作空间 ID
           example: ws-001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         search_engine:
           $ref: "#/components/schemas/ToolReference"
@@ -24723,10 +25586,14 @@ components:
           type: string
           description: 状态
           example: active
+          maxLength: 16
+          minLength: 1
         desc:
           type: string
           description: 描述
           example: 产品相关知识库
+          maxLength: 100
+          minLength: 1
     McpServerReference:
       type: object
       properties:
@@ -24836,6 +25703,8 @@ components:
           type: string
           description: 描述
           example: 工具描述信息
+          maxLength: 600
+          minLength: 1
         auth_info:
           $ref: "#/components/schemas/AuthInfo"
           description: 认证信息
@@ -24879,6 +25748,8 @@ components:
           type: string
           description: 描述
           example: 这是一个工作流
+          maxLength: 256
+          minLength: 1
         last_version_id:
           type: string
           description: 最新版本ID
@@ -24894,6 +25765,7 @@ components:
           type: string
           description: 任务ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
@@ -24932,6 +25804,7 @@ components:
           type: string
           description: 工具ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
@@ -24943,14 +25816,17 @@ components:
           type: string
           description: 知识库名称
           example: my-knowledge-base
+          maxLength: 50
         description:
           type: string
           description: 描述
           example: 知识库描述
+          maxLength: 100
         icon:
           type: string
           description: 图标
           example: "data:image/png;base64,iVBORw0KGgo="
+          maxLength: 1024000
         connector_id:
           type: string
           description: 连接器ID
@@ -24970,6 +25846,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     TestConnectionThirdPartyKnowledgeBaseConnectionRequestBody:
       type: object
@@ -24978,6 +25855,7 @@ components:
           type: string
           description: 连接器ID
           example: example-id-123
+          maxLength: 50
           minLength: 1
         params:
           type: array
@@ -25004,6 +25882,7 @@ components:
           type: string
           description: 记忆库名称
           example: 我的记忆库
+          maxLength: 50
           minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!](?:[\\u4e00-\\u9fa5a-zA-Z0-9_\\\
             -（）()！! ]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!])?$"
@@ -25011,6 +25890,7 @@ components:
           type: string
           description: 记忆库描述
           example: 用于存储用户对话记忆
+          maxLength: 1000
         icon:
           type: string
           description: 记忆库图标
@@ -25043,6 +25923,7 @@ components:
           type: string
           description: 记忆仓ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     SearchMemoryItemRequestBody:
       type: object
@@ -25104,6 +25985,10 @@ components:
           type: string
           description: 记忆内容
           example: 用户偏好设置
+        type:
+          type: string
+        last_update_time:
+          type: string
         score:
           type: number
           format: float
@@ -25136,6 +26021,7 @@ components:
           type: string
           description: 知识库
           example: example-id-123
+          maxLength: 100
           minLength: 1
         knowledge_base_external_ids:
           type: array
@@ -25165,10 +26051,13 @@ components:
           type: string
           description: 知识库ID
           example: kb-001
+          maxLength: 100
+          minLength: 1
         knowledge_base_external_id:
           type: string
           description: 外部知识库ID
           example: ext-kb-001
+          maxLength: 100
         result:
           type: boolean
           description: 创建结果
@@ -25177,6 +26066,7 @@ components:
           type: string
           description: 错误信息
           example: 创建成功
+          maxLength: 1000
     CreateDefaultKnowledgeBaseConnectionRequestBody:
       type: object
       properties:
@@ -25184,6 +26074,7 @@ components:
           type: string
           description: 连接器ID
           example: example-id-123
+          maxLength: 128
         params:
           type: array
           description: 参数
@@ -25213,6 +26104,7 @@ components:
           type: string
           description: 连接器ID
           example: example-id-123
+          maxLength: 50
           minLength: 1
         params:
           type: array
@@ -25343,10 +26235,13 @@ components:
       properties:
         name:
           type: string
+          maxLength: 200
         description:
           type: string
+          maxLength: 200
         knowledge_base_id:
           type: string
+          maxLength: 200
       required:
       - knowledge_base_id
       - name
@@ -25356,6 +26251,7 @@ components:
         model:
           type: object
           additionalProperties: {}
+          maxItems: 10
         query:
           type: string
         resource:
@@ -25376,8 +26272,10 @@ components:
       properties:
         tool_id:
           type: string
+          maxLength: 200
         input_schema:
           type: string
+          maxLength: 20000
       required:
       - input_schema
       - tool_id
@@ -25395,8 +26293,10 @@ components:
       properties:
         tool_id:
           type: string
+          maxLength: 200
         output_schema:
           type: string
+          maxLength: 20000
       required:
       - output_schema
       - tool_id
@@ -25406,6 +26306,7 @@ components:
         basic_info:
           type: object
           additionalProperties: {}
+          maxItems: 10
         tool_info:
           type: array
           items:
@@ -25417,12 +26318,16 @@ components:
       properties:
         plugin_id:
           type: string
+          maxLength: 200
         plugin_display_name:
           type: string
+          maxLength: 200
         plugin_chinese_name:
           type: string
+          maxLength: 200
         plugin_desc:
           type: string
+          maxLength: 200
         request_info:
           $ref: "#/components/schemas/PluginRequestInfo"
         input_schema:
@@ -25439,6 +26344,7 @@ components:
           minItems: 0
         last_version_id:
           type: string
+          maxLength: 200
       required:
       - plugin_id
       - request_info
@@ -25447,16 +26353,22 @@ components:
       properties:
         tool_id:
           type: string
+          maxLength: 200
         tool_display_name:
           type: string
+          maxLength: 200
         tool_chinese_name:
           type: string
+          maxLength: 200
         tool_desc:
           type: string
+          maxLength: 200
         method:
           type: string
+          maxLength: 200
         path:
           type: string
+          maxLength: 200
       required:
       - path
       - tool_display_name
@@ -25475,20 +26387,28 @@ components:
       properties:
         name:
           type: string
+          maxLength: 200
         code:
           type: string
+          maxLength: 200
         description:
           type: string
+          maxLength: 200
         type:
           type: string
+          maxLength: 200
         url:
           type: string
+          maxLength: 200
         workflow_id:
           type: string
+          maxLength: 200
         last_version_id:
           type: string
+          maxLength: 200
         resource_id:
           type: string
+          maxLength: 200
       required:
       - name
       - workflow_id
@@ -25499,10 +26419,12 @@ components:
           type: string
           description: 版本名称
           example: 示例名称
+          maxLength: 64
         version_note:
           type: string
           description: 版本号
           example: 1.0.0
+          maxLength: 1024
     RouterStrategyBaseInfo:
       type: object
       properties:
@@ -25606,10 +26528,12 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
         name:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 64
     ImportRes:
       type: object
       properties:
@@ -25617,18 +26541,22 @@ components:
           type: string
           description: 唯一标识
           example: res-001
+          maxLength: 64
         name:
           type: string
           description: 名称
           example: 知识库导入
+          maxLength: 64
         type:
           type: string
           description: 类型
           example: knowledge_base
+          maxLength: 64
         version:
           type: string
           description: 版本
           example: 1.0.0
+          maxLength: 64
         status:
           type: string
           description: 状态
@@ -25828,6 +26756,7 @@ components:
           type: string
           description: 服务ID
           example: example-id-123
+          maxLength: 64
         toolName:
           type: string
           description: 工具名称
@@ -25898,6 +26827,7 @@ components:
           type: string
           description: MCP服务ID
           example: mcp_001
+          maxLength: 64
         name:
           type: string
           description: MCP服务名称
@@ -25949,6 +26879,7 @@ components:
           type: string
           description: 唯一标识ID
           example: mcp-001
+          maxLength: 64
         icon:
           type: string
           description: 图标
@@ -26053,11 +26984,13 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         score:
           type: string
           description: 分数
           example: 示例字符串
+          maxLength: 2
     McpServerDetailReq:
       type: object
       properties:
@@ -26065,6 +26998,7 @@ components:
           type: string
           description: MCP服务ID
           example: mcp_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9-]+$"
         icon:
           type: string
@@ -26088,10 +27022,12 @@ components:
           type: string
           description: 描述
           example: 这是一个MCP服务
+          maxLength: 1024
         description_en:
           type: string
           description: 英文描述
           example: This is an MCP server
+          maxLength: 2048
         url:
           type: string
           description: 服务地址
@@ -26110,7 +27046,7 @@ components:
           description: 服务配置
           example: {}
           pattern: "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！\
-            *%# \\s]*$"
+            *%#$ \\s]*$"
         tools:
           type: string
           description: 工具列表
@@ -26122,6 +27058,7 @@ components:
           type: string
           description: MCP服务ID
           example: mcp_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9-]+$"
         name:
           type: string
@@ -26136,10 +27073,12 @@ components:
           type: string
           description: MCP服务描述
           example: 这是一个MCP服务
+          maxLength: 1024
         description_en:
           type: string
           description: MCP服务英文描述
           example: This is an MCP service
+          maxLength: 2048
         org_type:
           type: string
           description: 组织类型
@@ -26167,6 +27106,7 @@ components:
           type: string
           description: 第三方ID
           example: third_001
+          maxLength: 64
         third_version_id:
           type: string
           description: 第三方版本ID
@@ -26284,6 +27224,7 @@ components:
           type: string
           description: 服务ID
           example: dp-001
+          maxLength: 64
         name:
           type: string
           description: 服务名称
@@ -26400,11 +27341,13 @@ components:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 64
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5a-zA-Z0-9_.-]{1,35}$"
         apikey_description:
           type: string
           description: 描述
           example: 示例描述
+          maxLength: 1024
     ApikeyResponse:
       type: object
       properties:
@@ -26412,11 +27355,13 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_()\\-]{1,64}$"
         apikey:
           type: string
           description: apikey
           example: example-token-value
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_()\\-]{1,64}$"
     CreateWorkspaceReq:
       type: object
@@ -26425,11 +27370,14 @@ components:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         name:
           type: string
           description: 工作空间名称
           example: 我的工作空间
+          maxLength: 64
           minLength: 1
           pattern: "^[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！!](?:[\\\\u4e00-\\\\\
             u9fa5a-zA-Z0-9_\\\\-（）()！! ]*[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！\
@@ -26442,6 +27390,7 @@ components:
           type: string
           description: 工作空间描述
           example: 用于开发测试的工作空间
+          maxLength: 256
         type:
           type: string
           description: 工作空间类型
@@ -26460,16 +27409,22 @@ components:
           type: string
           description: 成员ID
           example: user_001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         member_name:
           type: string
           description: 成员名称
           example: 张三
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9\\u4e00-\\u9fa5._-][a-zA-Z0-9\\u4e00-\\u9fa5._\\- ]{0,63}$"
         member_source:
           type: string
           description: 成员来源
           example: IAM
+          maxLength: 128
+          minLength: 1
         role:
           type: string
           description: 成员角色
@@ -26508,15 +27463,78 @@ components:
             $ref: "#/components/schemas/WorkspaceInfo"
           maxItems: 2147483647
           minItems: 0
+    BatchDeleteVersionsRequestBody:
+      type: object
+      properties:
+        version_ids:
+          type: array
+          description: 待删除的版本ID列表
+          example:
+          - "1787901244768"
+          items:
+            type: string
+            pattern: "^[0-9]+$"
+          maxItems: 20
+          minItems: 1
+      required:
+      - version_ids
+    BatchDeleteVersionFailedInfo:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: 版本ID
+          example: 1787901244768
+        error_code:
+          type: string
+          description: 错误码
+          example: SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY
+        error_msg:
+          type: string
+          description: 错误信息
+          example: 共享资源版本不允许直接删除
+      required:
+      - version_id
+    BatchDeleteVersionsResponseBody:
+      type: object
+      properties:
+        total_count:
+          type: integer
+          format: int32
+          description: 提交删除的版本总数
+          example: 3
+        deleted_count:
+          type: integer
+          format: int32
+          description: 删除成功的版本数
+          example: 2
+        success:
+          type: array
+          description: 删除成功的版本ID列表
+          example: []
+          items:
+            type: string
+        failed:
+          type: array
+          description: 删除失败的版本详情列表
+          example: []
+          items:
+            $ref: "#/components/schemas/BatchDeleteVersionFailedInfo"
+      required:
+      - deleted_count
+      - total_count
     CreateTaskReq:
       type: object
       properties:
         type:
           type: string
+          maxLength: 64
         name:
           type: string
+          maxLength: 64
         mode:
           type: string
+          maxLength: 64
         inputs:
           type: object
           additionalProperties: {}
@@ -26562,6 +27580,7 @@ components:
           minItems: 1
         content:
           type: string
+          maxLength: 256
       required:
       - tags
     LongTermMemoryRuntime:
@@ -26579,6 +27598,7 @@ components:
           type: string
           description: 记忆仓ID
           example: example-id-123
+          maxLength: 64
     PluginConfig:
       type: object
       properties:
@@ -26667,6 +27687,8 @@ components:
           type: string
           description: 消息角色
           example: user
+          maxLength: 64
+          minLength: 1
         content:
           type: string
           description: 消息内容
@@ -26730,6 +27752,8 @@ components:
           type: string
           description: 角色
           example: admin
+          maxLength: 64
+          minLength: 1
         content:
           type: string
           description: 内容
@@ -26861,6 +27885,7 @@ components:
           format: int32
         desc:
           type: string
+          maxLength: 1024
           minLength: 1
       required:
       - code
@@ -26872,15 +27897,18 @@ components:
           type: string
           description: 版本ID
           example: v1.0
+          maxLength: 10000
         channel_type:
           type: string
           description: 通道类型
           example: WEB
+          maxLength: 10000
           minLength: 1
         sub_type:
           type: string
           description: 子类型
           example: chat
+          maxLength: 100
         metadata:
           type: array
           description: 元数据列表
@@ -26910,6 +27938,7 @@ components:
           type: string
           description: 开场白
           example: 你好，有什么可以帮您？
+          maxLength: 1000000
         suggest_queries:
           type: array
           description: 推荐问题列表
@@ -26940,22 +27969,27 @@ components:
           type: string
           description: 参数名称
           example: input_param
+          maxLength: 1000
         front_name:
           type: string
           description: 前端展示名称
           example: 输入参数
+          maxLength: 1000
         front_content:
           type: string
           description: 前端内容
           example: 请输入参数值
+          maxLength: 100000
         type:
           type: string
           description: 参数类型
           example: string
+          maxLength: 1000
         description:
           type: string
           description: 参数描述
           example: 用户输入的参数
+          maxLength: 100000
         required:
           type: boolean
           description: 是否必填
@@ -26964,6 +27998,7 @@ components:
           type: string
           description: 参数来源
           example: user_input
+          maxLength: 1000
         schema:
           description: 参数Schema定义
           example:
@@ -27064,16 +28099,20 @@ components:
           type: string
           description: 工具显示名称
           example: my_tool
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_]+$"
         tool_chinese_name:
           type: string
           description: 工具中文名称
           example: 我的工具
+          maxLength: 64
+          minLength: 1
         tool_desc:
           type: string
           description: 工具描述
           example: 用于数据处理的工具
+          maxLength: 600
           minLength: 1
         icon:
           type: string
@@ -27089,14 +28128,17 @@ components:
           type: string
           description: 可见性
           example: private
+          maxLength: 32
         intf_type:
           type: string
           description: 接口类型
           example: rest
+          maxLength: 64
         input_schema:
           type: string
           description: 输入Schema
           example: {}
+          maxLength: 200000
         is_input_list:
           type: boolean
           description: 输入是否为列表
@@ -27105,6 +28147,7 @@ components:
           type: string
           description: 输出Schema
           example: {}
+          maxLength: 200000
         is_output_list:
           type: boolean
           description: 输出是否为列表
@@ -27113,6 +28156,7 @@ components:
           type: string
           description: 元数据
           example: {}
+          maxLength: 4096
         auth_required:
           type: boolean
           description: 是否需要认证
@@ -27127,6 +28171,7 @@ components:
           type: string
           description: 工具ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
@@ -27136,6 +28181,7 @@ components:
       properties:
         parameter:
           type: string
+          maxLength: 10000000
         tool_obs_key:
           type: string
     RunToolResponseBody:
@@ -27150,12 +28196,14 @@ components:
             type: string
         raw_request_body:
           type: string
+          maxLength: 10000000
           minLength: 1
         raw_response_code:
           type: integer
           format: int32
         raw_response:
           type: string
+          maxLength: 100000
           minLength: 1
         success:
           type: boolean
@@ -27212,14 +28260,17 @@ components:
           type: string
           description: 凭证ID
           example: cred_001
+          maxLength: 64
         tool_id:
           type: string
           description: 工具ID
           example: tool_001
+          maxLength: 84
         project_id:
           type: string
           description: 项目ID
           example: proj_001
+          maxLength: 64
         auth_keys:
           type: array
           description: 鉴权密钥列表
@@ -27232,6 +28283,7 @@ components:
           type: string
           description: 创建者ID
           example: user001
+          maxLength: 64
         create_time:
           type: string
           format: date-time
@@ -27264,6 +28316,7 @@ components:
           type: string
           description: 消息ID
           example: msg-001
+          maxLength: 64
         name:
           type: string
           description: 消息名称
@@ -27272,6 +28325,7 @@ components:
           type: string
           description: 消息分类
           example: greeting
+          maxLength: 64
         content:
           type: object
           additionalProperties: {}
@@ -27343,16 +28397,20 @@ components:
           type: string
           description: OBS下载地址
           example: https://obs.example.com/skill.zip
+          maxLength: 1024
           minLength: 1
         skill_name:
           type: string
           description: 技能名称
           example: 导出技能
+          maxLength: 64
           minLength: 1
         version_name:
           type: string
           description: 版本名称
           example: 1.0.0
+          maxLength: 32
+          minLength: 1
         skill_id:
           type: string
           description: 技能ID
@@ -27375,20 +28433,26 @@ components:
           type: string
           description: 技能名称
           example: 代码生成
+          maxLength: 64
+          minLength: 1
         description:
           type: string
           description: 技能描述
           example: 自动生成代码
+          maxLength: 1024
           minLength: 1
         obs_url:
           type: string
           description: OBS存储地址
           example: https://obs.example.com/skill
+          maxLength: 1024
           minLength: 1
         version_name:
           type: string
           description: 版本名称
           example: v1.0.0
+          maxLength: 32
+          minLength: 1
         status:
           type: string
           description: 技能状态
@@ -27414,12 +28478,14 @@ components:
           type: string
           description: 资源ID
           example: res001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         resource_name:
           type: string
           description: 资源名称
           example: 搜索插件
+          maxLength: 64
           minLength: 1
         resource_type:
           type: string
@@ -27503,6 +28569,7 @@ components:
       properties:
         url:
           type: string
+          maxLength: 256
           minLength: 1
         auth:
           $ref: "#/components/schemas/AuthInfo"
@@ -27563,11 +28630,13 @@ components:
           type: string
           description: 知识库名称
           example: 我的知识库
+          maxLength: 50
           minLength: 1
         description:
           type: string
           description: 知识库描述
           example: 用于存储技术文档
+          maxLength: 100
           minLength: 1
         embedding_model:
           $ref: "#/components/schemas/ModelConf"
@@ -27589,6 +28658,7 @@ components:
           type: string
           description: 图标
           example: base64_icon
+          maxLength: 1024000
         rag_chunk_parser_conf:
           $ref: "#/components/schemas/RagChunkParserConf"
           description: RAG分块解析配置
@@ -27603,6 +28673,7 @@ components:
           type: string
           description: 知识仓ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
     CreateKnowledgeTaskRequestBody:
       type: object
@@ -27674,6 +28745,8 @@ components:
           type: string
           description: 名称
           example: 示例名称
+          maxLength: 100
+          minLength: 1
           pattern: "^[a-zA-Z0-9\\u4e00-\\u9fa5][a-zA-Z0-9\\u4e00-\\u9fa5:\\-\\_/\\\
             .?&=@#%+~!\\$'\\(\\),;\\*\\[\\]]{0,254}$"
     CreateKnowledgeRepoTagsRsp:
@@ -27690,6 +28763,7 @@ components:
           type: string
           description: 文件ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - file_id
@@ -27700,6 +28774,7 @@ components:
           type: string
           description: 标题
           example: 标题示例
+          maxLength: 10000
           minLength: 1
       required:
       - title
@@ -27740,36 +28815,44 @@ components:
           type: string
           description: 问题
           example: 如何重置密码？
+          maxLength: 1000
           minLength: 1
         answer:
           type: string
           description: 答案
           example: 请点击设置中的重置密码按钮。
+          maxLength: 10000
           minLength: 1
         question1:
           type: string
           description: 相似问题1
           example: 密码怎么重置？
+          maxLength: 1000
         question2:
           type: string
           description: 相似问题2
           example: 忘记密码怎么办？
+          maxLength: 1000
         question3:
           type: string
           description: 相似问题3
           example: 如何修改密码？
+          maxLength: 1000
         question4:
           type: string
           description: 相似问题4
           example: 密码如何找回？
+          maxLength: 1000
         category:
           type: string
           description: 分类
           example: 账号管理
+          maxLength: 255
         tags:
           type: string
           description: 标签
           example: "密码,账号"
+          maxLength: 4096
       required:
       - answer
       - question
@@ -27780,6 +28863,7 @@ components:
           type: string
           description: FAQ ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - faq_id
@@ -27820,6 +28904,7 @@ components:
           type: string
           description: 文件ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - file_id
@@ -27830,12 +28915,14 @@ components:
           type: string
           description: 知识仓ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         query:
           type: string
           description: 查询内容
           example: 查询内容示例
+          maxLength: 4096
           minLength: 1
         search_mode:
           type: string
@@ -27857,35 +28944,51 @@ components:
           type: string
           description: 文件ID
           example: file_001
+          maxLength: 64
+          minLength: 1
         chunk_id:
           type: string
           description: 分块ID
           example: chunk_001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         title:
           type: string
           description: 标题
           example: 用户手册
+          maxLength: 65535
+          minLength: 1
         content:
           type: string
           description: 内容
           example: 这是一个文档内容
+          maxLength: 65535
+          minLength: 1
         update_date_time:
           type: string
           description: 更新日期时间
           example: 2026-01-01T00:00:00Z
+          maxLength: 64
+          minLength: 1
         doc_type:
           type: string
           description: 文档类型
           example: pdf
+          maxLength: 64
+          minLength: 1
         file_path:
           type: string
           description: 文件路径
           example: /docs/manual.pdf
+          maxLength: 64
+          minLength: 1
         category:
           type: string
           description: 分类
           example: 技术文档
+          maxLength: 255
+          minLength: 4
         tags:
           type: array
           description: 标签列表
@@ -27903,10 +29006,14 @@ components:
           type: string
           description: 副标题
           example: 第一章
+          maxLength: 65535
+          minLength: 1
         repo_id:
           type: string
           description: 仓库ID
           example: repo_001
+          maxLength: 64
+          minLength: 1
         image_ids:
           type: array
           description: 图片ID列表
@@ -27956,6 +29063,8 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 100
+          minLength: 1
       required:
       - rule_regexs
     CreateKnowledgeSegmentRuleResponseBody:
@@ -27965,6 +29074,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
       required:
       - id
@@ -27994,6 +29104,7 @@ components:
           type: string
           description: 内容
           example: 内容示例
+          maxLength: 2000
         secret:
           type: boolean
           description: 是否为密钥
@@ -28063,6 +29174,13 @@ components:
             pattern: "^[a-zA-Z0-9_-]+$"
           maxItems: 50
           minItems: 0
+    DatasourceBatchDeleteReq:
+      type: object
+      properties:
+        datasourceIds:
+          type: array
+          items:
+            type: string
     ComplexIntentImportRsp:
       type: object
       properties:
@@ -28181,11 +29299,13 @@ components:
           type: string
           description: 工作空间ID
           example: ws-12345678
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         id:
           type: string
           description: 唯一标识ID
           example: abc-123-def
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         ids:
           type: array
@@ -28199,46 +29319,57 @@ components:
           type: string
           description: 名称
           example: search-name
+          maxLength: 64
         call_mode:
           type: string
           description: 调用模式
           example: sync
+          maxLength: 64
         tool_chinese_name:
           type: string
           description: 工具中文名称
           example: 搜索工具
+          maxLength: 64
         tool_desc:
           type: string
           description: 工具描述
           example: 用于搜索的工具
+          maxLength: 64
         creator:
           type: string
           description: 创建者
           example: user001
+          maxLength: 256
         type:
           type: string
           description: 类型
           example: agent
+          maxLength: 64
         sub_type:
           type: string
           description: 子类型
           example: chat
+          maxLength: 64
         intf_type:
           type: string
           description: 接口类型
           example: rest
+          maxLength: 64
         tag_id:
           type: string
           description: 标签ID
           example: tag-001
+          maxLength: 256
         user_id:
           type: string
           description: 用户ID
           example: user123
+          maxLength: 256
         source:
           type: string
           description: 来源
           example: platform
+          maxLength: 64
         exclude_ids:
           type: array
           description: 排除的ID列表，最多100个
@@ -28251,6 +29382,7 @@ components:
           type: string
           description: 工作流类型
           example: standard
+          maxLength: 16
         published:
           type: boolean
           description: 是否已发布
@@ -28263,14 +29395,17 @@ components:
           type: string
           description: 状态
           example: active
+          maxLength: 64
         description:
           type: string
           description: 描述
           example: 搜索条件描述
+          maxLength: 1000
         label:
           type: string
           description: 标签
           example: label-001
+          maxLength: 32
         category:
           type: string
           description: 分类
@@ -28342,6 +29477,7 @@ components:
       properties:
         app_name:
           type: string
+          maxLength: 64
           minLength: 1
         rating:
           type: integer
@@ -28367,6 +29503,8 @@ components:
           type: string
           description: 智能体名称
           example: my_agent
+          maxLength: 64
+          minLength: 1
         type:
           type: array
           description: 智能体类型列表
@@ -28456,6 +29594,7 @@ components:
           type: string
           description: 智能体名称，1~64 个字符
           example: 我的助手
+          maxLength: 64
           minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!，。、？：；\"\"''《》【】,.?:;\"\"\
             ''<>\\[\\]@#$%&*+= \\n](?:[\\s\\S]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！\
@@ -28464,11 +29603,14 @@ components:
           type: string
           description: 智能体描述，1~256 个字符
           example: 一个帮助回答问题的助手
+          maxLength: 256
           minLength: 1
         icon:
           type: string
           description: 智能体图标，支持 base64 或 URL，1~64 个字符
           example: "data:image/png;base64,..."
+          maxLength: 64
+          minLength: 1
         type:
           type: string
           description: 智能体类型：agent-单智能体，controller-多智能体
@@ -28507,6 +29649,7 @@ components:
           type: string
           description: 查询内容
           example: 你好
+          maxLength: 1000000
         inputs:
           type: object
           additionalProperties: {}
@@ -28524,6 +29667,7 @@ components:
           type: string
           description: 模型部署ID
           example: dep_001
+          maxLength: 100
         enable_history:
           type: boolean
           description: 是否启用历史记录
@@ -28563,14 +29707,18 @@ components:
       properties:
         event_type:
           type: string
+          maxLength: 32
           minLength: 1
         app_type:
           type: string
+          maxLength: 32
           minLength: 1
         channel:
           type: string
+          maxLength: 128
         event_id:
           type: string
+          maxLength: 128
       required:
       - app_type
       - event_type
@@ -28653,6 +29801,7 @@ components:
           type: string
           description: 下载URL
           example: https://example.com
+          maxLength: 2048
         export_result:
           description: 导出结果
           example: {}
@@ -28663,6 +29812,7 @@ components:
           type: string
           description: 查询内容
           example: 查询内容示例
+          maxLength: 8192
           minLength: 1
         version:
           type: integer
@@ -28856,6 +30006,7 @@ components:
           additionalProperties:
             type: integer
             format: int32
+          maxItems: 1000
         tool_choice:
           type: string
           maxLength: 1000
@@ -28922,6 +30073,7 @@ components:
           type: string
           description: 内容
           example: 示例内容
+          maxLength: 10000
           minLength: 1
         source:
           type: string
@@ -29143,6 +30295,26 @@ components:
           format: date-time
           description: 更新时间
           example: 2024-01-01T00:00:00.000Z
+    DatasourceExecuteReq:
+      type: object
+      properties:
+        query:
+          type: string
+        conditions:
+          type: array
+          items:
+            type: string
+    DatasourceExecuteResp:
+      type: object
+      properties:
+        outputList:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        rowNum:
+          type: integer
+          format: int32
     LicenseReport:
       type: object
       properties:
@@ -29170,11 +30342,14 @@ components:
           type: string
           description: 域名
           example: example-id-123
+          maxLength: 64
+          minLength: 2
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         task_id:
           type: string
           description: 任务ID
           example: example-id-123
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
     NotifyResp:
       type: object
@@ -29183,22 +30358,27 @@ components:
           type: string
           description: 响应码
           example: 0
+          maxLength: 64
         res_msg:
           type: string
           description: 响应消息
           example: success
+          maxLength: 64
         result:
           type: string
           description: 结果
           example: success
+          maxLength: 64
         status:
           type: string
           description: 状态
           example: success
+          maxLength: 64
         module_name:
           type: string
           description: 模块名称
           example: module-1
+          maxLength: 64
     UpdateWorkspaceMemberReq:
       type: object
       properties:
@@ -29206,6 +30386,8 @@ components:
           type: string
           description: 成员ID
           example: example-id-123
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         role:
           type: string
@@ -29283,18 +30465,22 @@ components:
           type: string
           description: 工作空间ID
           example: workspace-001
+          maxLength: 100
         domain_name:
           type: string
           description: 域名
           example: example.com
+          maxLength: 100
         create_user_id:
           type: string
           description: 创建用户ID
           example: user-001
+          maxLength: 100
         create_user_name:
           type: string
           description: 创建用户名称
           example: 张三
+          maxLength: 100
         create_time:
           type: integer
           format: int64
@@ -29304,10 +30490,12 @@ components:
           type: string
           description: 更新用户ID
           example: user-002
+          maxLength: 100
         update_user_name:
           type: string
           description: 更新用户名称
           example: 李四
+          maxLength: 100
         update_time:
           type: integer
           format: int64
@@ -29357,10 +30545,12 @@ components:
           type: string
           description: 参数备注
           example: 用于API认证的密钥
+          maxLength: 2000
         pattern:
           type: string
           description: 参数校验正则
           example: "^[a-zA-Z0-9]+$"
+          maxLength: 200
     ListThirdPartyKnowledgeBaseConnectionsResponse:
       type: object
       properties:
@@ -29415,18 +30605,22 @@ components:
           type: string
           description: 工作空间ID
           example: workspace-001
+          maxLength: 100
         domain_name:
           type: string
           description: 域名
           example: example.com
+          maxLength: 100
         create_user_id:
           type: string
           description: 创建用户ID
           example: user-001
+          maxLength: 100
         create_user_name:
           type: string
           description: 创建用户名称
           example: 张三
+          maxLength: 100
         create_time:
           type: integer
           format: int64
@@ -29436,10 +30630,12 @@ components:
           type: string
           description: 更新用户ID
           example: user-002
+          maxLength: 100
         update_user_name:
           type: string
           description: 更新用户名称
           example: 李四
+          maxLength: 100
         update_time:
           type: integer
           format: int64
@@ -29498,18 +30694,22 @@ components:
           type: string
           description: 工作空间ID
           example: workspace-001
+          maxLength: 100
         domain_name:
           type: string
           description: 域名
           example: example.com
+          maxLength: 100
         create_user_id:
           type: string
           description: 创建用户ID
           example: user-001
+          maxLength: 100
         create_user_name:
           type: string
           description: 创建用户名称
           example: 张三
+          maxLength: 100
         update_time:
           type: integer
           format: int64
@@ -29519,10 +30719,12 @@ components:
           type: string
           description: 更新用户ID
           example: user-002
+          maxLength: 100
         update_user_name:
           type: string
           description: 更新用户名称
           example: 李四
+          maxLength: 100
     ListMemoryReposResponseBody:
       type: object
       properties:
@@ -29546,15 +30748,18 @@ components:
           type: string
           description: 记忆库ID
           example: mem_001
+          maxLength: 64
         workspace_id:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         name:
           type: string
           description: 记忆库名称
           example: 我的记忆库
+          maxLength: 64
         description:
           type: string
           description: 描述
@@ -29575,10 +30780,12 @@ components:
           type: string
           description: 创建者用户ID
           example: user_001
+          maxLength: 100
         created_user_name:
           type: string
           description: 创建者用户名
           example: 张三
+          maxLength: 100
         create_time:
           type: string
           format: date-time
@@ -29588,10 +30795,12 @@ components:
           type: string
           description: 最后更新者用户ID
           example: user_002
+          maxLength: 100
         last_update_user_name:
           type: string
           description: 最后更新者用户名
           example: 李四
+          maxLength: 100
         update_time:
           type: string
           format: date-time
@@ -29604,10 +30813,14 @@ components:
           type: string
           description: 记忆库ID
           example: repo-123456
+          maxLength: 64
+          minLength: 1
         name:
           type: string
           description: 记忆库名称
           example: 我的记忆库
+          maxLength: 64
+          minLength: 1
         description:
           type: string
           description: 记忆库描述
@@ -29628,10 +30841,12 @@ components:
           type: string
           description: 创建者用户ID
           example: user-123
+          maxLength: 100
         created_user_name:
           type: string
           description: 创建者用户名
           example: 张三
+          maxLength: 100
         create_time:
           type: string
           format: date-time
@@ -29641,10 +30856,12 @@ components:
           type: string
           description: 最后更新者用户ID
           example: user-456
+          maxLength: 100
         last_update_user_name:
           type: string
           description: 最后更新者用户名
           example: 李四
+          maxLength: 100
         update_time:
           type: string
           format: date-time
@@ -29667,18 +30884,24 @@ components:
           type: string
           description: 知识库连接器ID
           example: conn-001
+          maxLength: 100
+          minLength: 1
         knowledge_base_connection_id:
           type: string
           description: 知识库连接ID
           example: kb-conn-001
+          maxLength: 100
+          minLength: 1
         knowledge_base_connection_name:
           type: string
           description: 知识库连接名称
           example: 外部知识库连接
+          maxLength: 100
         detail_page_url:
           type: string
           description: 详情页地址
           example: https://example.com/detail
+          maxLength: 1000
     KnowledgeBaseListItem:
       type: object
       properties:
@@ -29686,10 +30909,12 @@ components:
           type: string
           description: 知识库ID
           example: kb-001
+          maxLength: 64
         icon:
           type: string
           description: 知识库图标
           example: "data:image/png;base64,..."
+          maxLength: 1024000
         repo_type:
           type: string
           description: 知识库类型，share-共享，exclusive-专享
@@ -29708,6 +30933,7 @@ components:
           type: string
           description: 工作空间ID
           example: ws-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         share_scope:
           type: string
@@ -29726,10 +30952,12 @@ components:
           type: string
           description: 知识库名称
           example: 产品知识库
+          maxLength: 64
         description:
           type: string
           description: 知识库描述
           example: 存储产品相关文档和FAQ
+          maxLength: 100
         status:
           type: string
           description: 知识库状态，OPEN-启用，CLOSE-停用
@@ -29741,10 +30969,12 @@ components:
           type: string
           description: 创建者用户ID
           example: user-001
+          maxLength: 100
         created_user_name:
           type: string
           description: 创建者用户名
           example: 张三
+          maxLength: 100
         create_time:
           type: integer
           format: int64
@@ -29754,10 +30984,12 @@ components:
           type: string
           description: 最后更新者用户ID
           example: user-002
+          maxLength: 100
         last_update_user_name:
           type: string
           description: 最后更新者用户名
           example: 李四
+          maxLength: 100
         update_time:
           type: integer
           format: int64
@@ -29767,6 +30999,7 @@ components:
           type: string
           description: 知识库连接ID
           example: conn-001
+          maxLength: 64
     ListKnowledgeBasesResponseBody:
       type: object
       properties:
@@ -29806,19 +31039,26 @@ components:
           type: string
           description: 模型名称
           example: gpt-4
+          maxLength: 32
+          minLength: 1
         id:
           type: string
           description: 模型ID
           example: model-001
+          maxLength: 64
         type:
           type: string
           description: 模型类型
           example: chat
+          maxLength: 64
+          minLength: 1
           pattern: ^.*$
         status:
           type: string
           description: 模型状态
           example: active
+          maxLength: 16
+          minLength: 1
     ExternalKnowledgeItem:
       type: object
       properties:
@@ -29826,14 +31066,17 @@ components:
           type: string
           description: 知识库ID
           example: kb-001
+          maxLength: 100
         knowledge_base_name:
           type: string
           description: 知识库名称
           example: 外部知识库
+          maxLength: 1000
         description:
           type: string
           description: 知识库描述
           example: 外部知识库描述
+          maxLength: 1000
         present:
           type: boolean
           description: 是否存在
@@ -29861,26 +31104,32 @@ components:
           type: string
           description: 能力ID
           example: abc123
+          maxLength: 50
         code:
           type: string
           description: 能力编码
           example: search
+          maxLength: 50
         name:
           type: string
           description: 能力名称
           example: 搜索能力
+          maxLength: 500
         connector_id:
           type: string
           description: 连接器ID
           example: conn001
+          maxLength: 50
         sub_ability:
           type: string
           description: 子能力
           example: sub_search
+          maxLength: 10000
         description:
           type: string
           description: 能力描述
           example: 用于搜索知识库
+          maxLength: 500
     ShowKnowledgeBaseConnectorAbilitiesResponseBody:
       type: object
       properties:
@@ -29935,18 +31184,22 @@ components:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 100
         domain_name:
           type: string
           description: 域名
           example: example.com
+          maxLength: 100
         create_user_id:
           type: string
           description: 创建者用户ID
           example: user_001
+          maxLength: 100
         create_user_name:
           type: string
           description: 创建者用户名
           example: 张三
+          maxLength: 100
         create_time:
           type: integer
           format: int64
@@ -29961,10 +31214,12 @@ components:
           type: string
           description: 更新者用户ID
           example: user_002
+          maxLength: 100
         update_user_name:
           type: string
           description: 更新者用户名
           example: 李四
+          maxLength: 100
     ShowDefaultKnowledgeBaseConnectionDetailResponseBody:
       type: object
       properties:
@@ -30009,9 +31264,11 @@ components:
       properties:
         variable_key:
           type: string
+          maxLength: 100
           minLength: 1
         variable_value:
           type: string
+          maxLength: 500
         update_time:
           type: integer
           format: int64
@@ -30091,10 +31348,13 @@ components:
       properties:
         agent_id:
           type: string
+          maxLength: 128
         node_id:
           type: string
+          maxLength: 128
         parent_node_id:
           type: string
+          maxLength: 128
         node_status:
           type: string
           enum:
@@ -30103,19 +31363,24 @@ components:
           - node_finished
         parent_workflow_id:
           type: string
+          maxLength: 128
         loop_index:
           type: integer
           format: int32
         loop_node_id:
           type: string
+          maxLength: 128
         status:
           $ref: "#/components/schemas/Status"
         node_name:
           type: string
+          maxLength: 128
         node_type:
           type: string
+          maxLength: 32
         error_message:
           type: string
+          maxLength: 4096
         inputs:
           type: object
           additionalProperties: {}
@@ -30145,6 +31410,7 @@ components:
           format: int64
         execution_id:
           type: string
+          maxLength: 128
         inner_error:
           $ref: "#/components/schemas/NodeRunInfoInnerError"
         memory:
@@ -30230,6 +31496,7 @@ components:
           type: string
           description: 服务ID
           example: service-001
+          maxLength: 64
         totalInvokingTimes:
           type: number
           format: double
@@ -30609,6 +31876,7 @@ components:
           type: string
           description: MCP服务ID
           example: mcp-001
+          maxLength: 64
         name:
           type: string
           description: 服务名称
@@ -30756,6 +32024,7 @@ components:
           type: string
           description: 服务ID
           example: mcp-server-001
+          maxLength: 64
         name:
           type: string
           description: 服务名称
@@ -30833,6 +32102,7 @@ components:
           type: string
           description: 服务ID
           example: 550e8400-e29b-41d4-a716-446655440000
+          maxLength: 64
         name:
           type: string
           description: 服务名称
@@ -30962,6 +32232,7 @@ components:
           type: string
           description: 服务ID
           example: mcp-server-001
+          maxLength: 64
         icon:
           type: string
           description: 图标
@@ -31050,6 +32321,7 @@ components:
           type: string
           description: 服务ID
           example: mcp-server-001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9-]+$"
         icon:
           type: string
@@ -31101,7 +32373,7 @@ components:
           description: 服务配置
           example: 服务配置JSON
           pattern: "^[\\u4e00-\\u9fa5_a-zA-Z0-9\\-,.?:;\"'：=；“”‘’//，。？、()（）\\[\\]{}/@!！\
-            *%# \\s]*$"
+            *%#$ \\s]*$"
         tools:
           type: string
           description: 工具列表
@@ -31185,35 +32457,49 @@ components:
           type: string
           description: 成员记录ID
           example: member-record-123
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         workspaceId:
           type: string
           description: 工作空间ID
           example: workspace-123
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         memberName:
           type: string
           description: 成员名称
           example: 张三
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9\\u4e00-\\u9fa5._-][a-zA-Z0-9\\u4e00-\\u9fa5._\\- ]{0,63}$"
         memberId:
           type: string
           description: 成员ID
           example: user-123
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         memberSource:
           type: string
           description: 成员来源
           example: iam
+          maxLength: 128
+          minLength: 1
         domainId:
           type: string
           description: 域ID
           example: domain-123
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         role:
           type: string
           description: 成员角色
           example: admin
+          maxLength: 64
+          minLength: 1
         createdOn:
           type: string
           format: date-time
@@ -31228,18 +32514,26 @@ components:
           type: string
           description: 创建者名称
           example: 管理员
+          maxLength: 128
+          minLength: 1
         updater:
           type: string
           description: 更新者名称
           example: 管理员
+          maxLength: 128
+          minLength: 1
         creatorId:
           type: string
           description: 创建者ID
           example: user-456
+          maxLength: 128
+          minLength: 1
         updaterId:
           type: string
           description: 更新者ID
           example: user-456
+          maxLength: 128
+          minLength: 1
     GetWorkspaceMemberRoleRsp:
       type: object
       properties:
@@ -31311,6 +32605,44 @@ components:
             $ref: "#/components/schemas/WorkflowListItem"
           maxItems: 2147483647
           minItems: 0
+    VersionReference:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: 版本ID
+          example: 1787901244768
+        version_name:
+          type: string
+          description: 版本名称
+          example: v1.0.0
+        reference_count:
+          type: integer
+          format: int64
+          description: 引用数量
+          example: 2
+        is_shared:
+          type: boolean
+          description: 是否已共享到资产广场
+          example: false
+        is_latest:
+          type: boolean
+          description: 是否最新版本
+          example: true
+      required:
+      - is_latest
+      - is_shared
+      - reference_count
+      - version_id
+    VersionReferenceListRsp:
+      type: object
+      properties:
+        version_references:
+          type: array
+          description: 版本引用数量列表
+          example: []
+          items:
+            $ref: "#/components/schemas/VersionReference"
     WorkFlowEnv:
       type: object
       properties:
@@ -31380,10 +32712,13 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
         name:
           type: string
+          maxLength: 64
         type:
           type: string
+          maxLength: 64
         is_published:
           type: boolean
         status:
@@ -31406,6 +32741,7 @@ components:
       properties:
         workflow_id:
           type: string
+          maxLength: 64
         count:
           type: integer
           format: int64
@@ -31494,11 +32830,13 @@ components:
           type: string
           description: 名称
           example: 智能客服
+          maxLength: 64
           minLength: 1
         desc:
           type: string
           description: 描述
           example: 智能客服场景应用
+          maxLength: 128
           minLength: 1
         workflow_id:
           type: string
@@ -31723,6 +33061,8 @@ components:
           type: string
           description: 技能名称
           example: 天气查询
+          maxLength: 64
+          minLength: 1
         icon:
           type: string
           description: 图标地址
@@ -31745,6 +33085,8 @@ components:
           type: string
           description: 技能描述
           example: 查询天气信息的技能
+          maxLength: 1024
+          minLength: 1
         created_time:
           type: integer
           format: int64
@@ -31754,6 +33096,8 @@ components:
           type: string
           description: 创建者名称
           example: 张三
+          maxLength: 64
+          minLength: 1
         updated_time:
           type: integer
           format: int64
@@ -31763,10 +33107,14 @@ components:
           type: string
           description: OBS地址
           example: https://obs.example.com/skill
+          maxLength: 1024
+          minLength: 1
         obs_path:
           type: string
           description: OBS路径
           example: /skills/weather
+          maxLength: 1024
+          minLength: 1
         domain_id:
           type: string
           description: 域ID
@@ -31775,14 +33123,20 @@ components:
           type: string
           description: 最新版本
           example: v1.0.0
+          maxLength: 64
+          minLength: 1
         used_version:
           type: string
           description: 使用版本
           example: v1.0.0
+          maxLength: 64
+          minLength: 1
         used_version_name:
           type: string
           description: 使用版本名称
           example: 1.0.0
+          maxLength: 32
+          minLength: 1
     GetStudioSkillDetailsResponseBody:
       type: object
       properties:
@@ -31849,6 +33203,7 @@ components:
           type: string
           description: 资源ID
           example: res_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         resource_type:
           type: string
@@ -31872,23 +33227,28 @@ components:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         workspace_name:
           type: string
           description: 工作空间名称
           example: 我的工作空间
+          maxLength: 64
         resource_name_ch:
           type: string
           description: 资源中文名称
           example: 我的工作流
+          maxLength: 128
         resource_name_en:
           type: string
           description: 资源英文名称
           example: My Workflow
+          maxLength: 128
         resource_desc:
           type: string
           description: 资源描述
           example: 这是一个共享资源
+          maxLength: 256
         resource_icon:
           type: string
           description: 资源图标
@@ -31940,11 +33300,13 @@ components:
           type: string
           description: 资源ID
           example: res001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         resource_name:
           type: string
           description: 资源名称
           example: 天气查询插件
+          maxLength: 64
         resource_type:
           type: string
           description: 资源类型
@@ -31981,11 +33343,13 @@ components:
           type: string
           description: 项目ID
           example: proj001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         tenant_id:
           type: string
           description: 租户ID
           example: tenant001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         creator:
           type: string
@@ -32070,6 +33434,7 @@ components:
           type: string
           description: 应用子类型
           example: chat
+          maxLength: 100
         name:
           type: string
           description: 应用名称
@@ -32209,10 +33574,12 @@ components:
           type: string
           description: 关联关系ID
           example: rel001
+          maxLength: 64
         app_id:
           type: string
           description: 应用ID
           example: app001
+          maxLength: 64
         app_version:
           type: string
           description: 应用版本
@@ -32221,14 +33588,17 @@ components:
           type: string
           description: 应用类型
           example: agent
+          maxLength: 32
         latest_version_app_sub_type:
           type: string
           description: 最新版本应用子类型
           example: workflow
+          maxLength: 32
         app_name:
           type: string
           description: 应用名称
           example: 天气助手
+          maxLength: 64
         is_controller:
           type: boolean
           description: 是否为控制器
@@ -32237,6 +33607,7 @@ components:
           type: string
           description: 资源ID
           example: res001
+          maxLength: 64
         resource_version:
           type: string
           description: 资源版本
@@ -32249,6 +33620,7 @@ components:
           type: string
           description: 资源类型
           example: plugin
+          maxLength: 32
         resource_name:
           type: string
           description: 资源名称
@@ -32331,22 +33703,27 @@ components:
           type: string
           description: 对象ID
           example: obj_001
+          maxLength: 64
         project_id:
           type: string
           description: 项目ID
           example: proj_001
+          maxLength: 64
         workspace_id:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
         name:
           type: string
           description: 对象名称
           example: my_object
+          maxLength: 64
         description:
           type: string
           description: 对象描述
           example: 自定义对象
+          maxLength: 1024
         schemas:
           type: string
           description: 对象Schema定义
@@ -32355,6 +33732,7 @@ components:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 1024
         update_time:
           type: string
           format: date-time
@@ -32383,23 +33761,31 @@ components:
           type: string
           description: 知识库ID
           example: knowledge-repo-001
+          maxLength: 64
+          minLength: 1
         project_id:
           type: string
           description: 项目ID
           example: project-001
+          maxLength: 64
+          minLength: 1
         display_name:
           type: string
           description: 知识库显示名称
           example: 我的知识库
+          maxLength: 64
           minLength: 1
         workspace_id:
           type: string
           description: 工作空间ID
           example: workspace-001
+          maxLength: 64
+          minLength: 1
         description:
           type: string
           description: 知识库描述
           example: 用于存储产品文档的知识库
+          maxLength: 100
         type:
           type: string
           description: 知识库类型，external表示外部引用，internal表示平台内部创建
@@ -32411,6 +33797,8 @@ components:
           type: string
           description: 知识库来源类型
           example: external
+          maxLength: 32
+          minLength: 1
         size:
           type: integer
           format: int64
@@ -32430,10 +33818,12 @@ components:
           type: string
           description: 创建者
           example: user001
+          maxLength: 64
         update_user_name:
           type: string
           description: 最近更新者用户名
           example: user002
+          maxLength: 64
         parse_conf:
           $ref: "#/components/schemas/ParseConf"
           description: 文档解析配置
@@ -32446,27 +33836,33 @@ components:
           type: string
           description: 向量化模型名称
           example: text-embedding-ada-002
+          maxLength: 32
         rerank_model:
           type: string
           description: 重排序模型名称
           example: rerank-model-001
+          maxLength: 32
         icon:
           type: string
           description: 知识库图标数据
           example: "data:image/png;base64,iVBORw0KGgo="
+          maxLength: 1024000
         icon_name:
           type: string
           description: 知识库图标名称
           example: icon.png
+          maxLength: 64
         status:
           type: string
           description: 知识库状态
           example: active
+          maxLength: 16
         metadata:
           type: string
           description: 知识库元数据
           example:
             key: value
+          maxLength: 4096
         create_time:
           type: integer
           format: int64
@@ -32503,18 +33899,24 @@ components:
           type: string
           description: 知识任务ID
           example: task_001
+          maxLength: 64
+          minLength: 1
         name:
           type: string
           description: 知识任务名称
           example: 知识库构建任务
+          maxLength: 255
+          minLength: 1
         type:
           type: string
           description: 任务类型
           example: knowledge
+          maxLength: 64
         status:
           type: string
           description: 任务状态
           example: running
+          maxLength: 64
         process:
           type: number
           format: float
@@ -32529,6 +33931,8 @@ components:
           type: string
           description: 任务描述
           example: 构建知识库
+          maxLength: 255
+          minLength: 1
     ListKnowledgeTasksResponseBody:
       type: object
       properties:
@@ -32573,16 +33977,19 @@ components:
           type: string
           description: 标签ID
           example: tag_001
+          maxLength: 64
           minLength: 1
         name:
           type: string
           description: 标签名称
           example: 重要文档
+          maxLength: 64
           minLength: 1
         color:
           type: string
           description: 标签颜色
           example: red
+          maxLength: 10
           minLength: 1
         create_time:
           type: integer
@@ -32619,12 +34026,14 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         query:
           type: string
           description: 查询内容
           example: 查询内容示例
+          maxLength: 65535
           minLength: 1
         create_time:
           type: integer
@@ -32661,21 +34070,27 @@ components:
           type: string
           description: 文件ID
           example: file_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         project_id:
           type: string
           description: 项目ID
           example: proj_001
+          maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
         file_name:
           type: string
           description: 文件名称
           example: document.pdf
+          maxLength: 64
+          minLength: 1
         file_type:
           type: string
           description: 文件类型
           example: pdf
+          maxLength: 16
+          minLength: 1
         file_size:
           type: integer
           format: int64
@@ -32685,10 +34100,12 @@ components:
           type: string
           description: 文件状态
           example: READY
+          maxLength: 64
         failure_reason:
           type: string
           description: 失败原因
           example: 解析失败
+          maxLength: 65535
         file_tags:
           type: array
           description: 文件标签列表
@@ -32702,6 +34119,7 @@ components:
           type: string
           description: 元数据
           example: {}
+          maxLength: 4096
         create_time:
           type: integer
           format: int64
@@ -32737,17 +34155,20 @@ components:
           type: string
           description: 分片ID
           example: chunk_001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         content:
           type: string
           description: 分片内容
           example: 这是分片文本内容
+          maxLength: 65535
           minLength: 1
         title:
           type: string
           description: 分片标题
           example: 第一章 概述
+          maxLength: 65535
           minLength: 1
         page_num:
           type: integer
@@ -32763,10 +34184,13 @@ components:
           type: string
           description: 时间戳
           example: 1717200000000
+          maxLength: 13
         knowledge_repo_id:
           type: string
           description: 知识库ID
           example: repo_001
+          maxLength: 64
+          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         image_ids:
           type: array
@@ -32811,26 +34235,34 @@ components:
       properties:
         faq_id:
           type: string
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         knowledge_repo_id:
           type: string
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         question:
           type: string
+          maxLength: 1000
           minLength: 1
         answer:
           type: string
+          maxLength: 10000
           minLength: 1
         question1:
           type: string
+          maxLength: 1000
         question2:
           type: string
+          maxLength: 1000
         question3:
           type: string
+          maxLength: 1000
         question4:
           type: string
+          maxLength: 1000
         create_time:
           type: integer
           format: int64
@@ -32839,8 +34271,10 @@ components:
           format: int64
         category:
           type: string
+          maxLength: 255
         tags:
           type: string
+          maxLength: 4096
       required:
       - answer
       - faq_id
@@ -32904,6 +34338,8 @@ components:
           type: string
           description: 唯一标识
           example: rule_001
+          maxLength: 64
+          minLength: 1
         rule_regexs:
           type: array
           description: 规则正则表达式列表
@@ -32918,14 +34354,18 @@ components:
           type: string
           description: 项目ID
           example: project_001
+          maxLength: 64
+          minLength: 1
         creator:
           type: string
           description: 创建者名称
           example: 张三
+          maxLength: 64
         creator_id:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 64
         create_time:
           type: integer
           format: int64
@@ -33177,6 +34617,264 @@ components:
           format: int32
           description: 总数
           example: 100
+    DatasourceInfoRsp:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        desc:
+          type: string
+        connectionInfo:
+          $ref: "#/components/schemas/DatasourceConnectionInfo"
+        status:
+          type: string
+        lastErrorMessage:
+          type: string
+        createdBy:
+          type: string
+        createdOn:
+          type: string
+        updatedBy:
+          type: string
+        updatedOn:
+          type: string
+    DatasourceListRsp:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int32
+        datasources:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasourceInfoRsp"
+    DatasourceTablesRsp:
+      type: object
+      properties:
+        tables:
+          type: array
+          items:
+            type: string
+    ColumnInfo:
+      type: object
+      properties:
+        columnName:
+          type: string
+        dataType:
+          type: string
+    DatasourceTableColumnsRsp:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ColumnInfo"
+    ControllerExecutionDetail:
+      type: object
+      properties:
+        conversation_id:
+          type: string
+          description: 会话ID
+          example: conv_001
+        execution_id:
+          type: string
+          description: 执行ID
+          example: exec_001
+        inputs:
+          type: string
+          description: 输入信息
+          example: {}
+        outputs:
+          type: string
+          description: 输出信息
+          example: {}
+        error_info:
+          type: string
+          description: 错误信息
+        invocations:
+          type: array
+          description: 调用信息列表
+          example: []
+          items:
+            $ref: "#/components/schemas/ControllerInvokeInfo"
+          maxItems: 2147483647
+          minItems: 0
+        status:
+          type: string
+          description: 执行状态
+          example: SUCCESS
+        start_time:
+          type: integer
+          format: int64
+          description: 开始时间
+          example: 1700000000000
+        end_time:
+          type: integer
+          format: int64
+          description: 结束时间
+          example: 1700000001000
+        nestedWorkflows:
+          type: array
+          description: 嵌套工作流列表
+          example: []
+          items:
+            $ref: "#/components/schemas/WorkflowBaseData"
+          maxItems: 2147483647
+          minItems: 0
+    ControllerInvokeInfo:
+      type: object
+      properties:
+        invoke_id:
+          type: string
+          description: 调用ID
+          example: invoke-001
+          maxLength: 128
+        parent_invoke_id:
+          type: string
+          description: 父调用ID
+          example: parent-invoke-001
+          maxLength: 128
+        node_id:
+          type: string
+          description: 节点ID
+          example: node-001
+          maxLength: 128
+        node_name:
+          type: string
+          description: 节点名称
+          example: 开始节点
+          maxLength: 128
+        node_type:
+          type: string
+          description: 节点类型
+          example: START
+          maxLength: 32
+        node_status:
+          type: string
+          description: 节点状态
+          example: RUNNING
+        parent_node_id:
+          type: string
+          description: 父节点ID
+          example: parent-node-001
+          maxLength: 128
+        model_deployment_id:
+          type: string
+          description: 模型部署ID
+          example: deployment-001
+        error_message:
+          type: string
+          description: 错误信息
+          example: 调用失败
+          maxLength: 4096
+        status:
+          $ref: "#/components/schemas/ControllerInvokeInfoStatus"
+          description: 调用状态
+          example: {}
+        messages:
+          type: array
+          description: 消息列表
+          example: []
+          items:
+            $ref: "#/components/schemas/Message"
+          maxItems: 2147483647
+          minItems: 0
+        inputs:
+          description: 输入参数
+          example: {}
+        outputs:
+          description: 输出结果
+          example: {}
+        start_time:
+          type: integer
+          format: int64
+          description: 开始时间
+          example: 1700000000000
+        end_time:
+          type: integer
+          format: int64
+          description: 结束时间
+          example: 1700000001000
+        application_id:
+          type: string
+          description: 应用ID
+          example: app-001
+          maxLength: 128
+        application_type:
+          type: string
+          description: 应用类型
+          enum:
+          - AGENT
+          - WORKFLOW
+          - LLM
+          - CONTROLLER
+          example: AGENT
+        parent_application_id:
+          type: string
+          description: 父应用ID
+          example: parent-app-001
+          maxLength: 128
+        metadata:
+          type: object
+          additionalProperties: {}
+          description: 元数据
+          example: {}
+    ControllerInvokeInfoStatus:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+          description: 状态码
+          example: 200
+        desc:
+          type: string
+          description: 描述
+          example: 示例描述
+          maxLength: 1024
+    WorkflowBaseData:
+      type: object
+      properties:
+        flow_id:
+          type: string
+          description: ID
+          example: example-id-123
+          maxLength: 64
+        flow_name:
+          type: string
+          description: 名称
+          example: 示例名称
+          maxLength: 1000
+    ControllerExecution:
+      type: object
+      properties:
+        execution_id:
+          type: string
+        query:
+          type: string
+        status:
+          type: string
+        error_info:
+          type: string
+        start_time:
+          type: integer
+          format: int64
+    ListControllerExecutionsResp:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int32
+        executions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ControllerExecution"
+          maxItems: 2147483647
+          minItems: 0
     ComplexIntentListRsp:
       type: object
       properties:
@@ -33202,22 +34900,27 @@ components:
           type: string
           description: 意图ID
           example: intent_001
+          maxLength: 64
         project_id:
           type: string
           description: 项目ID
           example: proj_001
+          maxLength: 64
         workspace_id:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
         name:
           type: string
           description: 名称
           example: 我的意图
+          maxLength: 64
         description:
           type: string
           description: 描述
           example: 意图描述
+          maxLength: 1024
         branches_cnt:
           type: integer
           format: int32
@@ -33227,6 +34930,7 @@ components:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 1024
         create_time:
           type: string
           format: date-time
@@ -33257,34 +34961,42 @@ components:
           type: string
           description: 分支ID
           example: branch_001
+          maxLength: 64
         intent_id:
           type: string
           description: 意图ID
           example: intent_001
+          maxLength: 64
         project_id:
           type: string
           description: 项目ID
           example: proj_001
+          maxLength: 64
         workspace_id:
           type: string
           description: 工作空间ID
           example: ws_001
+          maxLength: 64
         branch_index:
           type: string
           description: 分支索引
           example: 0
+          maxLength: 64
         name:
           type: string
           description: 分支名称
           example: 天气查询
+          maxLength: 64
         description:
           type: string
           description: 分支描述
           example: 查询天气信息
+          maxLength: 1024
         creator_id:
           type: string
           description: 创建者ID
           example: user_001
+          maxLength: 1024
         examples:
           type: array
           description: 示例列表
@@ -33383,14 +35095,17 @@ components:
           type: string
           description: 节点ID
           example: node-001
+          maxLength: 128
         node_name:
           type: string
           description: 节点名称
           example: LLM调用节点
+          maxLength: 128
         node_type:
           type: string
           description: 节点类型
           example: llm
+          maxLength: 32
         node_status:
           type: string
           description: 节点状态
@@ -33403,6 +35118,7 @@ components:
           type: string
           description: 错误信息
           example: null
+          maxLength: 4096
         inputs:
           description: 输入信息
           example: {}
@@ -33655,6 +35371,7 @@ components:
           type: string
           description: 记忆仓ID
           example: example-id-123
+          maxLength: 64
     DeleteWorkspaceReq:
       type: object
       properties:
@@ -33662,6 +35379,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]+$"
         externalMappingInfo:
@@ -33688,10 +35406,13 @@ components:
       properties:
         id:
           type: string
+          maxLength: 64
         name:
           type: string
+          maxLength: 64
         workflow_id:
           type: string
+          maxLength: 64
         status:
           type: string
           enum:
@@ -33703,6 +35424,7 @@ components:
           - CANCELLED
         message:
           type: string
+          maxLength: 2048
     StructuredInfoRequestDelete:
       type: object
       properties:
@@ -33710,22 +35432,27 @@ components:
           type: string
           description: 结构化信息ID
           example: msg001
+          maxLength: 64
           minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         name:
           type: string
           description: 结构化信息名称
           example: 问候语
+          maxLength: 64
+          minLength: 2
         category:
           type: string
           description: 分类
           example: greeting
+          maxLength: 64
         content:
           type: object
           additionalProperties: {}
           description: 内容
           example:
             key: value
+          maxItems: 10
         visibility:
           type: string
           description: 可见范围
@@ -33762,6 +35489,7 @@ components:
           type: string
           description: ID
           example: example-id-123
+          maxLength: 64
     DeleteKnowledgeRepoTagsReq:
       type: object
       properties:
@@ -33781,101 +35509,6 @@ components:
       properties:
         id:
           type: string
-    VersionReference:
-      type: object
-      properties:
-        version_id:
-          type: string
-          description: 版本ID
-          example: "1787901244768"
-          maxLength: 64
-          pattern: "^[0-9]+$"
-        version_name:
-          type: string
-          description: 版本名称
-          example: v1.0.0
-        reference_count:
-          type: integer
-          format: int64
-          description: 引用数量
-          example: 2
-        is_shared:
-          type: boolean
-          description: 是否已共享到资产广场
-          example: false
-        is_latest:
-          type: boolean
-          description: 是否最新版本
-          example: true
-    VersionReferenceListRsp:
-      type: object
-      properties:
-        version_references:
-          type: array
-          description: 版本引用数量列表
-          example: []
-          items:
-            $ref: "#/components/schemas/VersionReference"
-          maxItems: 2147483647
-          minItems: 0
-    BatchDeleteVersionsRequestBody:
-      type: object
-      properties:
-        version_ids:
-          type: array
-          description: 待删除的版本ID列表
-          example: ["1787901244768"]
-          items:
-            type: string
-            maxLength: 64
-            minLength: 1
-            pattern: "^[0-9]+$"
-          maxItems: 20
-          minItems: 1
-      required:
-      - version_ids
-    BatchDeleteVersionFailedInfo:
-      type: object
-      properties:
-        version_id:
-          type: string
-          description: 版本ID
-          example: "1787901244768"
-        error_code:
-          type: string
-          description: 错误码
-          example: SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY
-        error_msg:
-          type: string
-          description: 错误信息
-          example: 共享资源版本不允许直接删除
-    BatchDeleteVersionsResponseBody:
-      type: object
-      properties:
-        total_count:
-          type: integer
-          format: int32
-          description: 提交删除的版本总数
-          example: 3
-        deleted_count:
-          type: integer
-          format: int32
-          description: 删除成功的版本数
-          example: 2
-        success:
-          type: array
-          description: 删除成功的版本ID列表
-          example: ["1"]
-          items:
-            type: string
-        failed:
-          type: array
-          description: 删除失败的版本详情列表
-          example: []
-          items:
-            $ref: "#/components/schemas/BatchDeleteVersionFailedInfo"
-          maxItems: 2147483647
-          minItems: 0
   securitySchemes:
     AccessToken:
       type: apiKey

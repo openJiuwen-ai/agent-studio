@@ -20,6 +20,8 @@ export class EnvManagementService {
         offset: params.offset,
         limit: params.limit,
         ...(params?.name && { name: params.name }),
+        // 按默认环境过滤（服务端单条返回，避免首页分页截断导致默认环境漏判）
+        ...(params?.isDefault !== undefined && { is_default: params.isDefault }),
       },
     });
   }

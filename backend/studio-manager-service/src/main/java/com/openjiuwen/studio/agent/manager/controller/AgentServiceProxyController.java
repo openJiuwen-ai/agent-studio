@@ -35,6 +35,7 @@ import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
+import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsResp;
 import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ResetUserVariableMemoryResponseBody;
@@ -62,6 +63,7 @@ import com.openjiuwen.studio.agent.manager.dto.runtime.AgentRunRsp;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
+import com.openjiuwen.studio.agent.manager.dto.ControllerExecutionDetail;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.dto.runtime.interfaces.SecurityCheck;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -201,6 +203,8 @@ public class AgentServiceProxyController {
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,
         String conversationId, String version, String type, Boolean stream, ServiceRunAgentReq body,
         HttpHeaders httpHeaders, String environmentId) {
+        // 默认环境兜底不在本共享方法做：该路由同时服务单智能体与多智能体（IR mode
+        // 决定），且被百宝箱试用入口复用；environment_id 由各入口按需解析后传入
         if (stream == null || stream) {
             String url = "%s/v1/%s/agents/%s/conversations/%s?workspace_id=%s";
             url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, agentId, conversationId, workspaceId);
@@ -248,6 +252,7 @@ public class AgentServiceProxyController {
                     .modelDeploymentId(body.getModelDeploymentId())
                     .toolSwitchDict(body.getToolSwitchDict())
                     .type(type)
+                    .environmentId(environmentId)
                     .token(RequestContextUtils.getRequestAuthToken())
                     .build();
                 return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
@@ -303,6 +308,8 @@ public class AgentServiceProxyController {
         httpHeaders.add(Constants.Header.X_ASSET_APP_ID, agentId);
         httpHeaders.add(Constants.Header.X_ASSET_APP_CONVERSATION_ID, conversationId);
 
+        // 百宝箱试用运行第三方发布 IR：不做默认环境兜底，避免把本项目默认环境
+        // 变量注入发布方智能体（发布方占位符 api_url 可能指向发布方自选端点）
         return runningAgent(projectId, workspaceId, agentType, agentId, conversationId, version, type, stream, body,
             httpHeaders, environmentId);
     }
@@ -339,6 +346,9 @@ public class AgentServiceProxyController {
         @Parameter(in = ParameterIn.QUERY, description = "环境id", schema = @Schema())
         @RequestParam(value = "environment_id", required = false) String environmentId) {
         checkAgentPermission(projectId, workspaceId, agentId, version);
+        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url
+        // 占位符按默认环境解析（仅单智能体；多智能体保持既有不带参行为）
+        environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
         return runningAgent(projectId, workspaceId, agentType, agentId, conversationId, version, type, stream, body,
             httpHeaders, environmentId);
     }
@@ -372,6 +382,9 @@ public class AgentServiceProxyController {
         @RequestParam(value = "environment_id", required = false) String environmentId) {
         checkAgentPermission(projectId, workspaceId, agentId, version);
 
+        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url
+        // 占位符按默认环境解析（仅单智能体；多智能体保持既有不带参行为）
+        environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
         if (apiKeyEnable) {
             httpHeaders.set(CommonConstant.AUTHORIZATION, getApiCode(projectId, workspaceId));
         }
@@ -410,6 +423,7 @@ public class AgentServiceProxyController {
                     .versionId(version)
                     .modelDeploymentId(body.getModelDeploymentId())
                     .toolSwitchDict(body.getToolSwitchDict())
+                    .environmentId(environmentId)
                     .token(RequestContextUtils.getRequestAuthToken())
                     .build();
                 return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
@@ -1218,7 +1232,7 @@ public class AgentServiceProxyController {
     @RequestMapping(
         value = "/v1/{project_id}/agent-manager/controller/{agent_id}/conversations/{conversation_id}/executions",
         produces = {"application/json"}, method = RequestMethod.GET)
-    Object listControllerExecutions(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
+    ListControllerExecutionsResp listControllerExecutions(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
@@ -1238,7 +1252,7 @@ public class AgentServiceProxyController {
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/controller/{agent_id}/executions/{execution_id}",
         produces = {"application/json"}, method = RequestMethod.GET)
-    Object getControllerExecutionDetail(
+    ControllerExecutionDetail getControllerExecutionDetail(
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)

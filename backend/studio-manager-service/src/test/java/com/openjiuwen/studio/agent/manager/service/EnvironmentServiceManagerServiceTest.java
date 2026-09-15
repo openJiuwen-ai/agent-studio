@@ -158,6 +158,43 @@ public class EnvironmentServiceManagerServiceTest {
     }
 
     @Test
+    void testQueryEnvironmentsList_FilterDefault() {
+        testEnvironmentEntity.setIsDefault(true);
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(TEST_PROJECT_ID))
+            .thenReturn(List.of(testEnvironmentEntity));
+
+        QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
+        qo.setOffset(0);
+        qo.setLimit(10);
+        qo.setIsDefault(true);
+
+        Environments result = environmentServiceManagerService.queryEnvironmentsList(TEST_PROJECT_ID, qo);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotal());
+        assertEquals(Boolean.TRUE, result.getEnvInfo().get(0).isIsDefault());
+        // 过滤路径不走分页查询
+        Mockito.verify(environmentManagerMapper, Mockito.never())
+            .selectAll(anyString(), anyInt(), anyInt());
+    }
+
+    @Test
+    void testQueryEnvironmentsList_FilterDefaultEmpty() {
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(TEST_PROJECT_ID))
+            .thenReturn(new ArrayList<>());
+
+        QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
+        qo.setIsDefault(true);
+
+        Environments result = environmentServiceManagerService.queryEnvironmentsList(TEST_PROJECT_ID, qo);
+
+        assertNotNull(result);
+        assertEquals(0, result.getTotal());
+        Mockito.verify(environmentManagerMapper, Mockito.never())
+            .selectAll(anyString(), anyInt(), anyInt());
+    }
+
+    @Test
     void testQueryEnvironmentsList_LimitExceedsMax() {
         List<EnvironmentManagerEntity> entities = new ArrayList<>();
         entities.add(testEnvironmentEntity);

@@ -483,7 +483,16 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         if (offset < 0) {
             offset = 0;
         }
-        List<EnvironmentManagerEntity> environmentManagerEntities = environmentManagerMapper.selectAll(projectId, offset, limit);
+        List<EnvironmentManagerEntity> environmentManagerEntities;
+        if (Boolean.TRUE.equals(queryEnvironmentsListQo.getIsDefault())) {
+            // 按默认环境过滤：与运行时默认环境兜底解析（AgentServiceProxyService.resolveEnvironmentId
+            // 走的 findByProjectIdAndIsDefaultTrue）同源，前端据此判断"是否存在默认环境"时
+            // 不受分页截断影响（列表按 created_on 倒序分页，默认环境可能不在第一页）；
+            // 默认环境项目内唯一，忽略 offset/limit
+            environmentManagerEntities = environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId);
+        } else {
+            environmentManagerEntities = environmentManagerMapper.selectAll(projectId, offset, limit);
+        }
         List<Environment> envInfoList = null;
         if (!environmentManagerEntities.isEmpty()) {
             envInfoList = environmentManagerEntities.stream().map(entity -> {
