@@ -37,7 +37,7 @@ public class CreateWorkspaceReq implements Serializable {
     @JsonProperty("name")
     @Schema(description = "工作空间名称", example = "我的工作空间", required = true)
     @Pattern(
-        regexp = "^[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！!](?:[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！! ]*[\\\\u4e00-\\\\u9fa5a-zA-Z0-9_\\\\-（）()！!])?$")
+        regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9_（）()！!-](?:[\\u4e00-\\u9fa5a-zA-Z0-9_（）()！! -]*[\\u4e00-\\u9fa5a-zA-Z0-9_（）()！!-])?$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String name = null;

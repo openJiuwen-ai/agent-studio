@@ -134,7 +134,7 @@ export class CreateSpaceComponent implements OnInit, OnDestroy {
         };
       }
       if (
-        /^[\u4e00-\u9fa5a-zA-Z0-9_\-（）()！!](?:[\u4e00-\u9fa5a-zA-Z0-9_\-（）()！! ]*[\u4e00-\u9fa5a-zA-Z0-9_\-（）()！!])?$/.test(
+        /^[\u4e00-\u9fa5a-zA-Z0-9_（）()！!-](?:[\u4e00-\u9fa5a-zA-Z0-9_（）()！! -]*[\u4e00-\u9fa5a-zA-Z0-9_（）()！!-])?$/.test(
           _val,
         )
       ) {
