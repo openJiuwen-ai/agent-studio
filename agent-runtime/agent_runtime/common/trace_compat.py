@@ -42,9 +42,12 @@ def create_agent_session_with_trace(session_id: str = None, **kwargs):
     return _create_agent_session(session_id=session_id, **kwargs)
 
 
-def create_workflow_session_with_trace(session_id: str = None, **kwargs):
+def create_workflow_session_with_trace(session_id: str = None, trace_id: str = None, **kwargs):
     """创建 workflow session，底层支持时透传 trace_id。"""
-    trace_id = get_x_request_id()
+    # 优先使用显式传入的 trace_id（如 QA 恢复时从 Redis 读取的）
+    if trace_id is None:
+        trace_id = get_x_request_id()
+    
     if _wf_accepts_trace_id and trace_id:
         kwargs["trace_id"] = trace_id
     return _create_workflow_session(session_id=session_id, **kwargs)
