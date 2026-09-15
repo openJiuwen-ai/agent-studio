@@ -144,8 +144,10 @@ public class EnvironmentServiceManagerServiceTest {
     void testQueryEnvironmentsList_Success() {
         List<EnvironmentManagerEntity> entities = new ArrayList<>();
         entities.add(testEnvironmentEntity);
-        when(environmentManagerMapper.selectAll(TEST_PROJECT_ID, 0, 10))
+        when(environmentManagerMapper.selectByConditionWithPage(null, TEST_PROJECT_ID, 0, 10))
             .thenReturn(entities);
+        when(environmentManagerMapper.countByCondition(null, TEST_PROJECT_ID))
+            .thenReturn(1);
 
         QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
         qo.setOffset(0);
@@ -155,6 +157,28 @@ public class EnvironmentServiceManagerServiceTest {
 
         assertNotNull(result);
         assertEquals(1, result.getTotal());
+    }
+
+    @Test
+    void testQueryEnvironmentsList_WithNameFilter() {
+        List<EnvironmentManagerEntity> entities = new ArrayList<>();
+        entities.add(testEnvironmentEntity);
+        when(environmentManagerMapper.selectByConditionWithPage("test", TEST_PROJECT_ID, 0, 10))
+            .thenReturn(entities);
+        when(environmentManagerMapper.countByCondition("test", TEST_PROJECT_ID))
+            .thenReturn(1);
+
+        QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
+        qo.setOffset(0);
+        qo.setLimit(10);
+        qo.setName("test");
+
+        Environments result = environmentServiceManagerService.queryEnvironmentsList(TEST_PROJECT_ID, qo);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotal());
+        verify(environmentManagerMapper).selectByConditionWithPage("test", TEST_PROJECT_ID, 0, 10);
+        verify(environmentManagerMapper).countByCondition("test", TEST_PROJECT_ID);
     }
 
     @Test
@@ -176,6 +200,8 @@ public class EnvironmentServiceManagerServiceTest {
         // 过滤路径不走分页查询
         Mockito.verify(environmentManagerMapper, Mockito.never())
             .selectAll(anyString(), anyInt(), anyInt());
+        Mockito.verify(environmentManagerMapper, Mockito.never())
+            .selectByConditionWithPage(any(), anyString(), anyInt(), anyInt());
     }
 
     @Test
@@ -192,13 +218,15 @@ public class EnvironmentServiceManagerServiceTest {
         assertEquals(0, result.getTotal());
         Mockito.verify(environmentManagerMapper, Mockito.never())
             .selectAll(anyString(), anyInt(), anyInt());
+        Mockito.verify(environmentManagerMapper, Mockito.never())
+            .selectByConditionWithPage(any(), anyString(), anyInt(), anyInt());
     }
 
     @Test
     void testQueryEnvironmentsList_LimitExceedsMax() {
         List<EnvironmentManagerEntity> entities = new ArrayList<>();
         entities.add(testEnvironmentEntity);
-        when(environmentManagerMapper.selectAll(TEST_PROJECT_ID, 0, 10))
+        when(environmentManagerMapper.selectByConditionWithPage(null, TEST_PROJECT_ID, 0, 10))
             .thenReturn(entities);
 
         QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
@@ -212,8 +240,10 @@ public class EnvironmentServiceManagerServiceTest {
 
     @Test
     void testQueryEnvironmentsList_EmptyList() {
-        when(environmentManagerMapper.selectAll(TEST_PROJECT_ID, 0, 10))
+        when(environmentManagerMapper.selectByConditionWithPage(null, TEST_PROJECT_ID, 0, 10))
             .thenReturn(new ArrayList<>());
+        when(environmentManagerMapper.countByCondition(null, TEST_PROJECT_ID))
+            .thenReturn(0);
 
         QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
         qo.setOffset(0);
@@ -227,7 +257,7 @@ public class EnvironmentServiceManagerServiceTest {
 
     @Test
     void testQueryEnvironmentsList_NegativeOffset() {
-        when(environmentManagerMapper.selectAll(TEST_PROJECT_ID, 0, 10))
+        when(environmentManagerMapper.selectByConditionWithPage(null, TEST_PROJECT_ID, 0, 10))
             .thenReturn(new ArrayList<>());
 
         QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();

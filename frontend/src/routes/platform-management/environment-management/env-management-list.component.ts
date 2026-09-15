@@ -340,6 +340,11 @@ export class EnvManagementListComponent implements OnInit, OnDestroy {
     this.getEnvironmentListData();
   }
 
+  handleClickClearSearch() {
+    this.searchValue = '';
+    this.searchList();
+  }
+
   validateUserInput(userInput: string): boolean {
     const regex = /^[a-zA-Z][a-zA-Z0-9-]*$/;
     return regex.test(userInput);

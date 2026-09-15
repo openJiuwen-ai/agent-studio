@@ -169,6 +169,34 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
         queryEnvironmentsListQo.setOffset(-1);
         Environments result = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, queryEnvironmentsListQo);
         Assertions.assertNotNull(result);
+        // 夹具共 10 条环境，total 应为真实总数而非当前页条数
+        Assertions.assertEquals(10, result.getTotal());
+        Assertions.assertEquals(10, result.getEnvInfo().size());
+    }
+
+    @Test
+    @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    void testQueryEnvironmentsListWithNameFilter() {
+        // 精确前缀过滤：3 条 test_environment2
+        QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
+        qo.setLimit(10);
+        qo.setOffset(0);
+        qo.setName("test_environment2");
+        Environments result = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, qo);
+        Assertions.assertEquals(3, result.getTotal());
+        Assertions.assertEquals(3, result.getEnvInfo().size());
+        result.getEnvInfo().forEach(env -> Assertions.assertEquals("test_environment2", env.getName()));
+
+        // 模糊匹配：片段 "environment2" 同样命中 3 条
+        qo.setName("environment2");
+        Environments fuzzyResult = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, qo);
+        Assertions.assertEquals(3, fuzzyResult.getTotal());
+
+        // 无匹配：空列表 + total 0
+        qo.setName("no-such-env");
+        Environments emptyResult = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, qo);
+        Assertions.assertEquals(0, emptyResult.getTotal());
+        Assertions.assertTrue(emptyResult.getEnvInfo() == null || emptyResult.getEnvInfo().isEmpty());
     }
 
     @Test
