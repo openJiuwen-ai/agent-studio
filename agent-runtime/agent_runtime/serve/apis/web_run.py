@@ -99,9 +99,11 @@ async def run_web_agent(
     4. 复用 _execute_agent_run（IR 路径→校验→会话→ir_execute→EventHandler 封装）
        handler_type 由 IR 的 mode 决定（ReAct/Controller/PlanExecute）
 
-    environment_id 由 manager 侧回填（项目默认环境），用于解析模型 apiUrl 中的
-    ${_env.plugin_url_params.VAR} 占位符；workspace_id 同步透传给执行上下文，
-    供按 (environment_id, workspace_id) 维度加载环境变量。
+    environment_id 由 manager 侧回填（按 short_code 所属发布通道解析的项目默认
+    环境），用于解析模型 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符；
+    回填默认环境时 manager 同步以发布通道 workspace 覆盖 workspace_id（入口
+    无鉴权，请求 workspace 不可信，环境变量按 (environment_id, workspace_id)
+    维度存储），保证加载发布方预期的变量值。
     """
     short_code = request.path_params["short_code"]
     language = request.headers.get("x-language", "zh-cn")

@@ -785,13 +785,16 @@ class AgentServiceProxyServiceTest {
         channel.setShortCode("code-1");
         channel.setProjectId(projectId);
         channel.setAppType(appType);
+        channel.setWorkspaceId("ws-owner");
         return channel;
     }
 
     /**
      * runWebAgent 流式 — 通道存在且有默认环境：转发 URL 追加 environment_id，
-     * 且默认环境按通道所属项目解析（通道项目与路径 project_id 故意不同，
-     * 断言路径 project_id 不参与解析 —— 短链入口无鉴权的信任边界）
+     * 默认环境按通道所属项目解析、workspace 取发布通道 workspace（通道项目与路径
+     * project_id 故意不同，断言路径 project_id 与请求 workspace_id 均不参与
+     * 解析 —— 短链入口无鉴权的信任边界；环境变量按 (env, workspace) 维度存储，
+     * 请求 workspace 可换成发布项目其它空间选取不同变量值）
      */
     @Test
     void testRunWebAgent_StreamWithDefaultEnv() {
@@ -808,7 +811,7 @@ class AgentServiceProxyServiceTest {
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
-        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1&environment_id=env-default",
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-owner&environment_id=env-default",
             urlCaptor.getValue());
         verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue("proj-1");
     }
@@ -848,7 +851,7 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, "env-default", body))
+            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", body))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -921,7 +924,7 @@ class AgentServiceProxyServiceTest {
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
-        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1&environment_id=env-cloud",
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-owner&environment_id=env-cloud",
             urlCaptor.getValue());
     }
 
@@ -970,6 +973,32 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_ChannelAppTypeNotAgent_NoEnv() {
         when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
             eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", "controller"));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * runWebAgent — 通道存在且为单智能体但通道 workspace 缺失：fail-closed 不注入
+     * 默认环境（不回退到请求 workspace 加载，请求 workspace 无鉴权不可信），
+     * 转发 URL 保持请求 workspace、不带 environment_id
+     */
+    @Test
+    void testRunWebAgent_ChannelWorkspaceBlank_NoEnv() {
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setShortCode("code-1");
+        channel.setProjectId("proj-owner");
+        channel.setAppType(CommonConstant.AGENT_TYPE);
+        channel.setWorkspaceId(" ");
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(channel);
 
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());

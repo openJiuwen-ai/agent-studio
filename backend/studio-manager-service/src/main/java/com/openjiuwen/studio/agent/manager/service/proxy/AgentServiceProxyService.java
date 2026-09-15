@@ -671,33 +671,39 @@ public class AgentServiceProxyService {
 
     public Object runWebAgent(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
         Boolean stream, AgentRunReq body) {
-        // 网页短链入口无鉴权，路径 project_id 不可信（可被替换成调用者自己的项目并配好
-        // 默认环境，使发布智能体的占位符 api_url 按调用者的环境变量解析、模型请求被重定向）：
-        // 默认环境一律按 short_code 所属发布通道的 project 解析，与 runtime 侧按 Redis
-        // release_web_rel_{short_code} 中的 project_id 构造执行上下文的做法一致
-        String environmentId = resolveWebAgentEnvironmentId(shortCode);
+        // 网页短链入口无鉴权：路径 project_id 与请求 workspace_id 均不可信
+        // - 默认环境按 short_code 所属发布通道的 project 解析，与 runtime 侧按 Redis
+        //   release_web_rel_{short_code} 中的 project_id 构造执行上下文的做法一致
+        // - 环境变量按 (environment_id, workspace_id) 维度存储，加载 workspace 同样
+        //   取发布通道 workspace：请求 workspace_id 可被换成发布项目下其它 workspace，
+        //   选取该项目其它空间写入的变量值，使占位符 api_url 解析到非发布方预期端点
+        // - workspace_id 在本执行链仅用于环境变量加载：未解析到默认环境时
+        //   environment_id 缺省、runtime 不加载变量，请求 workspace 原样转发
+        ReleaseChannel channel = lookupWebReleaseChannel(shortCode);
+        String environmentId = resolveChannelDefaultEnvironment(channel, shortCode);
+        String forwardWorkspaceId = workspaceId;
+        if (StringUtils.hasText(environmentId)) {
+            forwardWorkspaceId = channel.getWorkspaceId();
+        }
         if (stream == null || stream) {
-            String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + workspaceId;
+            String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
             if (StringUtils.hasText(environmentId)) {
                 url = url + "&environment_id=" + environmentId;
             }
             return stream(url, httpHeaders, JsonUtils.encode(body));
         }
-        return runtimeClient.runWebAgent(getToken(), shortCode, workspaceId, false, environmentId, body).getBody();
+        return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId, body).getBody();
     }
 
     /**
-     * 网页短链运行的默认环境解析：以 short_code 反查发布通道所属 project 为准，
-     * 不信任请求路径 project_id（短链入口无鉴权）。WEB_PAGE / CLOUD_STORE 两类
-     * 网页渠道均生成 short_code，逐类反查。通道不存在、发布应用非单智能体
-     * （appType != agent，多智能体发布不走本兜底）或查表异常返回 null，转发
-     * 不带 environment_id，行为与项目未配置默认环境一致（占位符模型报
-     * MD_ENV_VAR_UNRESOLVED，不会借用其它项目的环境变量）。
+     * 以 short_code 反查网页发布通道：WEB_PAGE / CLOUD_STORE 两类网页渠道均生成
+     * short_code，逐类反查（channelType 是 SQL 硬等值，不能传 null；projectId/id
+     * 传 null 走 if 跳过）。通道不存在或查表异常返回 null。
      *
      * @param shortCode 网页短链码
-     * @return 默认环境 id，可能为 null
+     * @return 发布通道，可能为 null
      */
-    private String resolveWebAgentEnvironmentId(String shortCode) {
+    private ReleaseChannel lookupWebReleaseChannel(String shortCode) {
         try {
             ReleaseChannel channel = releaseChannelMapper.selectByChannelIdOrShortCode(
                 null, null, shortCode, CommonConstant.WEB_PAGE_CHANNEL);
@@ -705,21 +711,41 @@ public class AgentServiceProxyService {
                 channel = releaseChannelMapper.selectByChannelIdOrShortCode(
                     null, null, shortCode, CommonConstant.CLOUD_STORE_CHANNEL);
             }
-            if (channel == null || !StringUtils.hasText(channel.getProjectId())) {
-                log.warn("web release channel not found or missing project, skip default environment, shortCode: {}",
-                    shortCode);
-                return null;
-            }
-            if (!CommonConstant.AGENT_TYPE.equals(channel.getAppType())) {
-                log.warn("web release channel app is not single agent, skip default environment, shortCode: {}, "
-                    + "appType: {}", shortCode, channel.getAppType());
-                return null;
-            }
-            return resolveEnvironmentId(channel.getProjectId(), null);
+            return channel;
         } catch (Exception e) {
-            log.error("resolve web agent default environment failed, shortCode: {}", shortCode, e);
+            log.error("lookup web release channel failed, shortCode: {}", shortCode, e);
             return null;
         }
+    }
+
+    /**
+     * 按网页发布通道解析单智能体默认环境：以通道所属 project 为准（不信任请求路径
+     * project_id）。通道不存在、发布应用非单智能体（appType != agent，多智能体发布
+     * 不走本兜底）、通道 workspace 缺失（无法安全确定环境变量加载维度，宁可不放行
+     * 也不回退到请求 workspace）或项目无默认环境时返回 null，转发不带
+     * environment_id，行为与项目未配置默认环境一致（占位符模型报
+     * MD_ENV_VAR_UNRESOLVED，不会借用其它项目/其它空间的环境变量）。
+     *
+     * @param channel 网页发布通道，可为 null
+     * @param shortCode 网页短链码（仅用于日志）
+     * @return 默认环境 id，可能为 null
+     */
+    private String resolveChannelDefaultEnvironment(ReleaseChannel channel, String shortCode) {
+        if (channel == null || !StringUtils.hasText(channel.getProjectId())) {
+            log.warn("web release channel not found or missing project, skip default environment, shortCode: {}",
+                shortCode);
+            return null;
+        }
+        if (!CommonConstant.AGENT_TYPE.equals(channel.getAppType())) {
+            log.warn("web release channel app is not single agent, skip default environment, shortCode: {}, "
+                + "appType: {}", shortCode, channel.getAppType());
+            return null;
+        }
+        if (!StringUtils.hasText(channel.getWorkspaceId())) {
+            log.warn("web release channel missing workspace, skip default environment, shortCode: {}", shortCode);
+            return null;
+        }
+        return resolveEnvironmentId(channel.getProjectId(), null);
     }
 
     public void checkToolsPermission(ToolEntity tool, String projectId, String workspaceId) {
