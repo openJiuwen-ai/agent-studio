@@ -179,7 +179,9 @@
           <div
             *ngIf="isMulti || !fileList.length"
             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
-            (click)="fileInput.click()"
+            [class.opacity-50]="isUploading"
+            [class.pointer-events-none]="isUploading"
+            (click)="triggerFileSelect()"
           >
             <div class="flex items-center">
               <img alt=""
@@ -260,7 +262,7 @@
                 <span nz-icon class="mr-[6px] text-[#F23030]" nzType="close-circle" nzTheme="outline"></span>
                 {{ 'a_file_upload_failed' | i18nextEager }}
                 <div
-                  (click)="fileInput.click()"
+                  (click)="triggerFileSelect()"
                   class="cursor-pointer text-[#1476ff] hover:underline"
                 >
                   {{ 'reupload' | i18nextEager }}

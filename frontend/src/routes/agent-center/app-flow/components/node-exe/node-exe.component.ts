@@ -804,6 +804,8 @@ export class NodeExeComponent implements OnChanges {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
+    // 兜底守卫只拦多文件批次（防并发竞态）；单文件分支不置 isUploading，恢复原有行为
+    if (uploadType !== 'single' && this.isUploading) return;
     if (uploadType === 'single') {
       const file: File = files[0];
       if (!file) {
@@ -876,6 +878,7 @@ export class NodeExeComponent implements OnChanges {
         );
         return;
       }
+      this.isUploading = true;
       for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -889,16 +892,13 @@ export class NodeExeComponent implements OnChanges {
         const fileItem = createFileItem(file);
         inputItem.uploadDatas.push(fileItem);
         this.cdr.detectChanges();
-        this.isUploading = true;
         await new Promise(resolve => setTimeout(resolve));
-        uploadFile(this.repoServ, file, isImage, fileItem, () => {
+        await uploadFile(this.repoServ, file, isImage, fileItem, () => {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
           this.cdr.detectChanges();
-        }).finally(() => {
-          this.cdr.detectChanges();
-          this.isUploading = false;
         });
       }
+      this.isUploading = false;
       input.value = '';
     }
   }
@@ -974,6 +974,7 @@ export class NodeExeComponent implements OnChanges {
   }
 
   public addMultiFile(index): void {
+    // 上传中禁止追加新批次，避免与进行中的串行上传循环产生并发竞态
     if (this.isUploading) {
       return;
     }
@@ -1123,13 +1124,7 @@ export class NodeExeComponent implements OnChanges {
       inputItem.uploadData = {};
       return;
     }
-    if (
-      this.isUploading &&
-      this.params[this.inputIndex].name !== inputItem.name
-    ) {
-      return;
-    }
-    // 如果删除的文件还未上传完成，则中止请求
+    // 如果删除的文件还未上传完成，则中止请求（signal 由 HttpService.postAsync 桥接生效）
     if (fileItem.progress === 'loading') {
       fileItem.controller.abort();
     }

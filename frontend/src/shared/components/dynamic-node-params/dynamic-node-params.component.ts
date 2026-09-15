@@ -596,6 +596,8 @@ export class DynamicNodeParamsComponent {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
+    // 兜底守卫只拦多文件批次（防并发竞态）；单文件分支不置 isUploading，恢复原有行为
+    if (uploadType !== 'single' && this.isUploading) return;
     if (uploadType === 'single') {
       const file: File = files[0];
       if (!file) {
@@ -680,6 +682,7 @@ export class DynamicNodeParamsComponent {
         (item) => item.name === inputItem.name,
       );
 
+      this.isUploading = true;
       for (const file of files as any) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -697,6 +700,7 @@ export class DynamicNodeParamsComponent {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
         });
       }
+      this.isUploading = false;
       this.parameterFromGroup.controls[inputItem.name].setValue(
         inputItem.uploadDatas,
       );
@@ -722,6 +726,7 @@ export class DynamicNodeParamsComponent {
 
   /** 多文件上传添加按钮点击事件 */
   public addMultiFile(index): void {
+    // 上传中禁止追加新批次，避免与进行中的串行上传循环产生并发竞态
     if (this.isUploading) {
       return;
     }
@@ -748,15 +753,7 @@ export class DynamicNodeParamsComponent {
       return;
     }
 
-    // Array<File>类型删除
-    if (
-      this.isUploading &&
-      this.inputList[this.inputIndex].name !== inputItem.name
-    ) {
-      return;
-    }
-
-    // 如果删除的文件还未上传完成，则中止请求
+    // 如果删除的文件还未上传完成，则中止请求（signal 由 HttpService.postAsync 桥接生效）
     if (fileItem.progress === 'loading') {
       fileItem.controller.abort();
     }

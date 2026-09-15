@@ -1,6 +1,7 @@
 import {
   ChangeDetectorRef,
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   OnDestroy,
@@ -114,6 +115,8 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
   @ViewChild('valueForm') valueForm: NgForm;
 
   @ViewChild('editorCmp') editorCmp: MonacoEditorComponent;
+
+  @ViewChild('fileInput') fileInputRef: ElementRef<HTMLInputElement>;
 
   @Input() close: (state: IFormObj) => void;
   @Input() valueChange: (state: any) => void;
@@ -235,6 +238,14 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
       this.value = urls[0] ?? '';
     }
     this.display = names.join(',');
+  }
+
+  /** 触发文件选择框（上传中禁止追加新批次，避免并发上传导致清空按钮提前解禁） */
+  public triggerFileSelect(): void {
+    if (this.isUploading) {
+      return;
+    }
+    this.fileInputRef.nativeElement.click();
   }
 
   public async onUploadFile(e: Event) {
@@ -373,7 +384,7 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
   removeFile(event: Event, index: number) {
     event.stopPropagation();
     const fileItem = this.fileList[index];
-    // 如果删除的文件还未上传完成，则中止请求
+    // 如果删除的文件还未上传完成，则中止请求（signal 由 HttpService.postAsync 桥接生效）
     if (fileItem.progress === 'loading') {
       fileItem.controller.abort();
     }

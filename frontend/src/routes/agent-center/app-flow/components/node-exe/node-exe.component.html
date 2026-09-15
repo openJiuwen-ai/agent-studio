@@ -74,7 +74,7 @@
                         nz-button
                         class="flex !w-[96px] justify-center ml-2"
                         nzSize="small"
-                        [disabled]="isUploading || param.uploadDatas?.length >= 20"
+                        [disabled]="param.uploadDatas?.length >= 20 || isUploading"
                         (click)="addMultiFile(i)"
                       >
                         <span class="flex items-center gap-[4px]"
@@ -343,7 +343,7 @@
                           <div
                             *ngIf="!param.uploadDatas?.length"
                             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
-                            (click)="fileInput.click()"
+                            (click)="addMultiFile(i)"
                           >
                             <div class="flex items-center">
                               <img alt=""
@@ -398,10 +398,6 @@
                               <span
                                 class="ml-auto cursor-pointer text-[16px]"
                                 (click)="removeFile(param, fileItem)"
-                                [ngClass]="{
-                                  'disabled-delete':
-                                    isUploading && inputIndex !== i
-                                }"
                                 [ngStyle]="{
                                   display: fileItem.isHover
                                     ? 'inline-block'

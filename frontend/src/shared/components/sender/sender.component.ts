@@ -352,6 +352,10 @@ export class SenderComponent implements OnDestroy {
     if (this.uploadData.length >= 20) {
       return;
     }
+    // 上传中禁止追加新批次，避免并发上传导致清空按钮提前解禁
+    if (this.uploading) {
+      return;
+    }
     this.fileInput.nativeElement.click();
   }
 
@@ -450,6 +454,12 @@ export class SenderComponent implements OnDestroy {
   }
 
   public removeFile(i: number) {
+    const fileItem = this.uploadData[i];
+    // 删除上传中的附件时中止请求（signal 由 HttpService.postAsync 桥接生效）；
+    // 排队中的附件 abort 后，轮到它时 postAsync 会直接拒绝，不再发出请求
+    if (fileItem?.progress === 'loading') {
+      fileItem.controller?.abort();
+    }
     this.uploadData.splice(i, 1);
     if (!this.uploadData.length) {
       this.checkContentWidth();

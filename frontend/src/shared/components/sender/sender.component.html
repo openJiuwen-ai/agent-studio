@@ -159,7 +159,7 @@
             <meta-inline-svg
               src="assets/agent-center/icons/attachment.svg"
               class="text-[20px] text-[#595959]"
-              [ngClass]="{ 'disabled-upload-icon': uploadData.length >= 20 }"
+              [ngClass]="{ 'disabled-upload-icon': uploadData.length >= 20 || uploading }"
               [isInline]="false"
               nz-tooltip
               [nzTooltipTitle]="uploadData.length < 20 ? ('preview_debug_upload_support_type' | i18nextEager) + ('upload_max_files' | i18nextEager) : ''"

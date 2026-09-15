@@ -139,13 +139,7 @@ export class InputNodeParamsComponent {
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
       return;
     }
-    if (
-      this.isUploading &&
-      this.inputList[this.inputIndex].name !== inputItem.name
-    ) {
-      return;
-    }
-    // 如果删除的文件还未上传完成，则中止请求
+    // 如果删除的文件还未上传完成，则中止请求（signal 由 HttpService.postAsync 桥接生效）
     if (fileItem.progress === 'loading') {
       fileItem.controller.abort();
     }
@@ -166,6 +160,8 @@ export class InputNodeParamsComponent {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
+    // 兜底守卫只拦多文件批次（防并发批次竞态）；单文件与批次互不干扰，保持可用
+    if (uploadType !== 'single' && this.isUploading) return;
     if (uploadType === 'single') {
       const file: File = files[0];
       if (!file) {
@@ -249,6 +245,7 @@ export class InputNodeParamsComponent {
       this.inputIndex = this.inputList.findIndex(
         (item) => item.name === inputItem.name,
       );
+      this.isUploading = true;
       for (const file of files as any) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -266,9 +263,13 @@ export class InputNodeParamsComponent {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
         });
       }
+      this.isUploading = false;
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue(
         inputItem.uploadDatas,
       );
+      // 批次结束后补偿上报状态：上传中删除文件会跳过 removeFile 里的 updateUploadStatus，
+      // 不补偿会使 fileUploadStatus 停留在 loading，父组件按钮无法恢复
+      this.updateUploadStatus();
       input.value = '';
     }
   }
@@ -301,6 +302,7 @@ export class InputNodeParamsComponent {
   }
 
   public addMultiFile(index): void {
+    // 上传中禁止追加新批次，避免与进行中的串行上传循环产生并发竞态
     if (this.isUploading || this.disabled === 'confirmed') {
       return;
     }

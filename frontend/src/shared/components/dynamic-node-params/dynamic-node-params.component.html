@@ -214,7 +214,7 @@
           />
           <div
             *ngIf="!inputItem.uploadDatas?.length"
-            (click)="fileInput.click()"
+            (click)="addMultiFile(i)"
             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
           >
             <div class="flex items-center">
@@ -266,9 +266,6 @@
                 display: fileItem.isHover ? 'inline-block' : 'none'
               }"
                 (click)="removeFile(inputItem, fileItem)"
-                [ngClass]="{
-                'disabled-delete': isUploading && inputIndex !== i
-              }"
               />
             </div>
           </div>
