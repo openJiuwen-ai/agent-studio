@@ -35,6 +35,7 @@ import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
+import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsResp;
 import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ResetUserVariableMemoryResponseBody;
@@ -62,6 +63,7 @@ import com.openjiuwen.studio.agent.manager.dto.runtime.AgentRunRsp;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
+import com.openjiuwen.studio.agent.manager.dto.ControllerExecutionDetail;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.dto.runtime.interfaces.SecurityCheck;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -1230,7 +1232,7 @@ public class AgentServiceProxyController {
     @RequestMapping(
         value = "/v1/{project_id}/agent-manager/controller/{agent_id}/conversations/{conversation_id}/executions",
         produces = {"application/json"}, method = RequestMethod.GET)
-    Object listControllerExecutions(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
+    ListControllerExecutionsResp listControllerExecutions(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
@@ -1250,7 +1252,7 @@ public class AgentServiceProxyController {
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/controller/{agent_id}/executions/{execution_id}",
         produces = {"application/json"}, method = RequestMethod.GET)
-    Object getControllerExecutionDetail(
+    ControllerExecutionDetail getControllerExecutionDetail(
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)

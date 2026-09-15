@@ -59,7 +59,7 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
     }
 
     @Override
-    public ResponseEntity<Object> createModelService(String projectId, String workspaceId, Boolean availableCheck,
+    public ResponseEntity<String> createModelService(String projectId, String workspaceId, Boolean availableCheck,
         ModelServiceReq body) {
         return ResponseModel.success(
             modelServiceMgmtService.createModelService(projectId, workspaceId, availableCheck, body));
@@ -115,7 +115,7 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
     }
 
     @Override
-    public ResponseEntity<Object> updateModelService(String projectId, String workspaceId, Boolean availableCheck,
+    public ResponseEntity<Void> updateModelService(String projectId, String workspaceId, Boolean availableCheck,
         String id, ModelServiceReq body) {
         return ResponseModel.success(
             modelServiceMgmtService.updateModelService(projectId, workspaceId, availableCheck, id, body));
