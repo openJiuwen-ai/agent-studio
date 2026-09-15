@@ -1,0 +1,319 @@
+{
+  "configs": {
+    "model": {
+      "modelName": "Qwen/Qwen2.5-72B-Instruct",
+      "hyperParameters": {},
+      "modelType": "qwen"
+    }
+  },
+  "components": [
+    {
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "我行智能风控检测到您的账户可能存在风险，为保障您的资金安全，我行对您账户使用进行了限制。此类情况手机银行和电话银行等渠道无法处理，请您本人携带有效身份证件及交易银行卡前往我行本异地任意营业网点核实解决，感谢您的理解与配合！",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "消息_1",
+      "id": "node_1749295771589",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "STATUS": "",
+          "USER_RESPONSE": "",
+          "cardID": ""
+        }
+      },
+      "configs": {
+        "questionContent": "请选择要查询的银行卡卡号：\n1、****0001\n2、****0002\n3、****0003",
+        "autoAskTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "fieldNames": [
+          {
+            "reflection": true,
+            "description": "提取银行卡号，分别是“6210000000000000001”,“6210000000000000002”,“6210000000000000003”，参数务必从以上3个选项中选取，并完整输出",
+            "cn_field_name": "银行卡号",
+            "default_value": "",
+            "required": true,
+            "field_name": "cardID"
+          }
+        ],
+        "withChatHistory": true,
+        "extraPromptForFieldsExtraction": "",
+        "enumVisible": false,
+        "inputComplement": false,
+        "typeComplement": "",
+        "exampleContent": "",
+        "railsConfig": {},
+        "mode": "effect",
+        "assistRecognize": false,
+        "userFields": {
+          "inputs": [],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户最近一轮对话输入",
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "required": false
+            },
+            {
+              "sourceType": "input",
+              "description": "提问器运行状态码",
+              "id": "STATUS",
+              "type": "integer",
+              "required": false
+            },
+            {
+              "sourceType": "null",
+              "description": "提取银行卡号，分别是“6210000000000000001”,“6210000000000000002”,“6210000000000000003”，参数务必从以上3个选项中选取，并完整输出",
+              "id": "cardID",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        "assistExample": "",
+        "extractFieldsFromResponse": true,
+        "templateAnthropomorphic": false,
+        "allowNodeConfirm": false,
+        "model": {
+          "modelName": "Qwen/Qwen2.5-72B-Instruct",
+          "extension": {
+            "deploymentId": "qwen2.5-72b"
+          },
+          "hyperParameters": {
+            "top_p": 0.5,
+            "temperature": 0.2
+          },
+          "modelType": "qwen"
+        },
+        "maxResponse": 10,
+        "allowNodeBreak": false
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "提问器",
+      "id": "node_1749295261051",
+      "type": "jiuwen.questioner"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": null,
+    "userId": "2",
+    "projectId": "project_mock",
+    "domainId": "0",
+    "updatedAt": 1753498871145,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "交易受阻类：该工作流属于业务工作流，用于客户查询储蓄卡交易受阻情况，如“储蓄卡无法使用”，“我的卡被冻结了”，“我的卡为什么无法交易”；当符合上述意图分类时，进入该工作流。如果无法与该工作流描述及功能精准匹配，不要选取该工作流。",
+  "workflowName": "YHActBlock0607_1",
+  "workflowVersion": "0.6.0",
+  "workflowId": "fcde5452-858c-4a71-b9b3-cda35a910f78",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_1749295771589"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1749295261051"
+      },
+      "target": {
+        "componentId": "node_1749295771589"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1749295261051"
+      }
+    }
+  ]
+}

@@ -23,7 +23,7 @@ export enum SkillSource {
 }
  
 export enum SkillPublishedAsset {
-  // 资产广场预置数据
+  // 专家·技能预置数据
   PUBLISHED = 1,
   // 组件库自定义数据
   NOT_PUBLISHED = 0,

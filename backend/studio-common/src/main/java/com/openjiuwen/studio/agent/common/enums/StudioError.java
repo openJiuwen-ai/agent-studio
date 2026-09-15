@@ -807,6 +807,16 @@ public enum StudioError {
     SCHEDULER_EXCEPTION_RUN_JOB(BAD_REQUEST, AGENT, "1026"),
 
     /**
+     * 自动化任务不存在
+     */
+    SCHEDULED_TASK_NOT_EXIST(NOT_FOUND, AGENT, "1060"),
+
+    /**
+     * 自动化任务调度表达式非法
+     */
+    SCHEDULE_EXPRESSION_INVALID(BAD_REQUEST, AGENT, "1061"),
+
+    /**
      * itep接口调用异常
      */
     CALL_GET_AGENCY_TOKEN_API_EXCEPTION(INTERNAL_SERVER_ERROR, AGENT, "1027"),

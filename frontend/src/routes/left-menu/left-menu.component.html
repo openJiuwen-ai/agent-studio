@@ -170,10 +170,16 @@
                 [class]="{ 'is-selected': menuChildItem.isSelected }"
                 [style]="{'padding-left': isLeafNode(menuItem) ? '' : '12px'}"
               >
-                <div style="display: inline-flex; align-items: center; gap: 8px">
+                <div class="secondMenu-label">
                   <img alt="" class="menu-icon" [src]="getIcon(menuChildItem)" *ngIf="getIcon(menuChildItem)"/>
                   {{ menuChildItem.label }}
                 </div>
+                <span
+                  *ngIf="menuChildItem.queryParams?.conversation_id"
+                  class="session-delete"
+                  title="删除"
+                  (click)="deleteConversation($event, menuChildItem)"
+                >×</span>
               </div>
               <div
                 class="welcome-model-btn"

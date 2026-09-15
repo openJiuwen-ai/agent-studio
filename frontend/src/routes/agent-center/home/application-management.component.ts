@@ -117,7 +117,7 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
       id: ApplicationType.SINGLE_AGENT,
       title: this.i18n.transform("single_agent"),
       hash: "#/home/agent-center/single",
-      active: false,
+      active: true,
       disabledImport: false,
       disabledExport: false
     },
@@ -126,7 +126,7 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
       id: ApplicationType.WORKFLOW,
       title: this.i18n.transform("workflow"),
       hash: "#/home/agent-center/workflow",
-      active: true,
+      active: false,
       disabledImport: false,
       disabledExport: false
     },
@@ -143,6 +143,10 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
   ];
 
   get visibleTabs() {
+    // 当嵌入到专家页面时（appType 有值），隐藏工作流 Tab
+    if (this.appType) {
+      return this.tabs.filter(t => t.show && t.id !== ApplicationType.WORKFLOW);
+    }
     return this.tabs.filter(t => t.show);
   }
 
@@ -464,7 +468,8 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
     }
 
     if (this.appType) {
-      this.sidebarVisibilityServ.setSidebarsVisibilityByState("init");
+      // 嵌入到专家页面时，不隐藏侧边栏
+      this.sidebarVisibilityServ.setSidebarsVisibilityByState(null);
     } else {
       this.sidebarVisibilityServ.setSidebarsVisibilityByState(null);
     }
@@ -478,7 +483,7 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
     let index = this.getIndexOfTab();
     this.tabs[index].active = true;
     // 从详情页返回时恢复搜索条件，从其它 agent-center tab 切换时则重置
-    if (!isFromAgentCenterTab && curHashFlag) {
+    if (!this.appType && !isFromAgentCenterTab && curHashFlag) {
       this.restoreSearchState(index);
     } else {
       this.handleTabChange(index);
@@ -525,7 +530,14 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
 
   getIndexOfTab() {
     let index = 0;
-    if (!this.appType) {
+    if (this.appType) {
+      // 当嵌入到专家页面时，根据 appType 设置正确的 Tab
+      if (this.appType === 'controller') {
+        index = 1; // MULTI_AGENT（隐藏工作流后，多智能体是第 2 个）
+      } else {
+        index = 0; // SINGLE_AGENT
+      }
+    } else {
       const tempIndex = this.router.url.indexOf('workflow') > -1 ? 1 : 2;
       index = this.router.url.indexOf('single') > -1 ? 0 : tempIndex;
     }
@@ -533,8 +545,10 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.saveSearchParamsToStorage();
-    this.sidebarVisibilityServ.setSidebarsVisibilityByState("destroy");
+    if (!this.appType) {
+      this.saveSearchParamsToStorage();
+      this.sidebarVisibilityServ.setSidebarsVisibilityByState("destroy");
+    }
     this.destroy$.next();
     this.destroy$.complete();
     this.ppServ.setImportRes();

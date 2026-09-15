@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "whatever",
+  "agentId": "0b34fea30e2a41b5af35b9b375edab99",
+  "agentVersion": "0.6.0",
+  "description": "这是一个专注服务用户出行场景的助理，可以帮助用户进行机票、酒店、火车票查询和预订。",
+  "agentName": "agent的名称",
+  "configs": {
+    "sysPromptTemplate": "## 人设\n我将扮演一个知识问答助手的角色。\n\n## 输出格式\n输出答案时，应遵循以下格式要求：\n- 使用“您好您好”开头",
+    "plugins": [
+      {
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "auth": {},
+        "response": [
+          {
+            "name": "result",
+            "description": "result",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "pluginDependency": {
+          "paramsWrapper": {
+            "outputList": false,
+            "inputList": false
+          }
+        },
+        "name": "mock_plugin_add",
+        "description": "mock_plugin_add，加上啦啦啦",
+        "arguments": [
+          {
+            "validateType": "CHAR",
+            "validateRule": "",
+            "validated": false,
+            "method": "Body",
+            "name": "query",
+            "description": "query",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "id": "78446531-cc3d-48d0-bb86-04b8dfb0d3f3",
+        "url": "http://fakeIp:5003/add"
+      },
+      {
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "auth": {},
+        "response": [
+          {
+            "name": "result",
+            "description": "result",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "pluginDependency": {
+          "paramsWrapper": {
+            "outputList": false,
+            "inputList": false
+          }
+        },
+        "name": "calculator_tool",
+        "description": "calculator_tool",
+        "arguments": [
+          {
+            "validateType": "CHAR",
+            "validateRule": "",
+            "validated": false,
+            "method": "Body",
+            "name": "expression",
+            "description": "expression",
+            "type": "string",
+            "required": true
+          }
+        ],
+        "id": "95f5b153-13f6-4660-9575-7837e3135e78",
+        "url": "http://fakeIp:5003/calculator"
+      }
+    ],
+    "workflows": [
+      {
+        "ir_path": "workflow_react_tools.json"
+      },
+      {
+        "ir_path": "workflow_react_tools.json"
+      }
+    ],
+    "modelConfig": {
+      "modelName": "mock_model_name",
+      "modelType": "customer_chat_llm",
+      "hyperParameters": {
+        "temperature": 0.5,
+        "top_p": 0.5
+      },
+      "extension": {},
+      "historySize": 10
+    },
+    "workflowSwitchEnabled": true,
+    "mode": "ReAct",
+    "maxIteration": 9
+  }
+}

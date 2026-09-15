@@ -1,0 +1,429 @@
+{
+  "configs": {
+    "model": {
+      "modelName": "Qwen/Qwen2.5-72B-Instruct",
+      "hyperParameters": {},
+      "modelType": "qwen"
+    }
+  },
+  "components": [
+    {
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "note": "",
+          "amount": "",
+          "modelFlag": "",
+          "endDate": "",
+          "userName": "",
+          "numSize": "",
+          "trxsite": "",
+          "startDate": "",
+          "inOutFlag": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "raw_output",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "null",
+              "description": "交易开始时间",
+              "id": "startDate",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "交易结束时间",
+              "id": "endDate",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "业务摘要",
+              "id": "inOutFlag",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "交易金额",
+              "id": "amount",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "交易场所",
+              "id": "trxsite",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "对方户名",
+              "id": "userName",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "note",
+              "id": "note",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "笔数",
+              "id": "numSize",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "null",
+              "description": "标志位",
+              "id": "modelFlag",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        "code": "def main(args: dict) -> dict:\n    import json\n    startDate = \"\"\n    endDate = \"\"\n    inOutFlag = \"\"\n    amount = \"\"\n    trxsite = \"\"\n    userName = \"\"\n    note = \"\"\n    numSize = 0\n    numSizeTemp = \"\"\n    modelFlag = \"1\"\n    try:\n        result = json.loads(args.get('raw_output'))\n        startDate = result.get(\"交易开始时间\")\n        endDate = result.get(\"交易结束时间\")\n        inOutFlag = result.get(\"业务摘要\")\n        amount = str(result.get(\"交易金额\")).split('.')[0]\n        if amount == \"None\":\n            amount = \"\"\n        numSizeTemp = str(result.get(\"笔数\")).split(' ')[0]\n        if numSizeTemp == \"None\":\n            numSize = 0\n        else:\n            numSize = int(numSizeTemp)\n        trxsite = result.get(\"交易场所\")\n        userName = result.get(\"对方户名\")\n        modelFlag = \"2\"\n    except:\n        startDate = \"\"\n        endDate = \"\"\n        inOutFlag = \"\"\n        amount = \"\"\n        trxsite = \"\"\n        userName = \"\"\n        note = \"\"\n        numSize = 0\n        modelFlag = \"1\"\n\n    if startDate == \"\" and endDate == \"\" and inOutFlag == \"\" and inOutFlag == \"\" and trxsite == \"\" and userName == \"\" and numSize ==0:\n        modelFlag = \"1\"\n\n    ret = {\n        \"startDate\": startDate,\n        \"endDate\": endDate,\n        \"inOutFlag\": inOutFlag,\n        \"amount\": amount,\n        \"trxsite\": trxsite,\n        \"userName\": userName,\n        \"note\": \"\",\n        \"numSize\": numSize,\n        \"modelFlag\": modelFlag\n    }\n\n    return ret",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "raw_output": "${node_1749345056090.userFields.raw_output}"
+        }
+      },
+      "name": "代码",
+      "id": "node_1749347204493",
+      "type": "jiuwen.code"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "您尾号0001的卡/账户{{startDate}} 至 {{endDate}}交易明细：\n日期                 摘要           金额        币种              场所               对方户名\n2025-06-20     支出         223.2      人民币     某银行         ***A\n2025-06-22     支出         668.5      人民币     某银行         ***B\n2025-06-23     支出         5000       人民币     某银行         ******",
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "startDate",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "endDate",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "endDate": "2025-12-31",
+          "startDate": "2025-01-01"
+        }
+      },
+      "name": "消息_1",
+      "id": "node_1749297282926",
+      "type": "jiuwen.message"
+    },
+    {
+      "outputs": {
+        "userFields": {
+          "raw_output": ""
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "question",
+              "type": "string",
+              "required": false
+            },
+            {
+              "sourceType": "ref",
+              "description": "",
+              "id": "date",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "模型原始输出",
+              "id": "raw_output",
+              "type": "string",
+              "required": false
+            }
+          ]
+        },
+        "stream": true,
+        "deployMode": "workflow",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "enableHistory": false,
+        "templateContent": [
+        ],
+        "responseFormat": {
+          "type": "text"
+        },
+        "model": {
+          "modelName": "Qwen/Qwen2.5-72B-Instruct",
+          "extension": {
+            "deploymentId": "qwen2.5-72b"
+          },
+          "hyperParameters": {
+            "top_p": 0.5,
+            "frequency_penalty": 0,
+            "temperature": 0.5
+          },
+          "modelType": "qwen"
+        },
+        "historySize": 3
+      },
+      "inputs": {
+        "userFields": {
+          "date": "${node_start.systemFields.sys.currentTime}",
+          "question": "${node_start.systemFields.query}"
+        }
+      },
+      "name": "大模型",
+      "id": "node_1749345056090",
+      "type": "jiuwen.LLMComponent"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": null,
+    "userId": "2",
+    "projectId": "project_mock",
+    "domainId": "0",
+    "updatedAt": 1753498669121,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "该工作流属于业务工作流，用于客户进行账户明细查询，如咨询”查明细”、“为什么扣了我三块钱”，“我的卡怎么老是乱扣钱呢“等问题。当符合上述意图分类时，进入该工作流。如果无法与该工作流描述及功能精准匹配，不要选取该工作流。",
+  "workflowName": "YHSearchActDetail0607_1",
+  "workflowVersion": "0.6.0",
+  "workflowId": "4692a481-a539-4afe-bf6c-801721ec664d",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_1749297282926"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1749345056090"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1749345056090"
+      },
+      "target": {
+        "componentId": "node_1749297282926"
+      }
+    }
+  ]
+}
+

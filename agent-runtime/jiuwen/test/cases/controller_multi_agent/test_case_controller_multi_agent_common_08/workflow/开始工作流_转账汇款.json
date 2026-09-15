@@ -1,0 +1,298 @@
+{
+  "configs": {
+    "model": {
+      "modelName": "Qwen/Qwen2.5-72B-Instruct",
+      "extension": {
+        "deploymentId": "qwen2.5-72b"
+      },
+      "hyperParameters": {},
+      "modelType": "qwen"
+    },
+    "prologue": "你好啊，我是银行智能客服"
+  },
+  "components": [
+    {
+      "outputs": {
+        "userFields": {
+          "name": ""
+        },
+        "memory": {
+          "action_after_completion": ""
+        },
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [
+            {
+              "sourceType": "null",
+              "description": "名字",
+              "default_value": "",
+              "id": "name",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "null",
+              "description": "名字",
+              "default_value": "",
+              "id": "name",
+              "type": "string",
+              "required": true
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        },
+        "preDefinedFields": {
+          "inputs": [
+            {
+              "schema": [
+                {
+                  "storage_method": "assignment",
+                  "aging_level": "session",
+                  "description": "",
+                  "default_value": "Continue",
+                  "id": "action_after_completion",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "null",
+              "description": null,
+              "id": "memory",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "schema": [
+                {
+                  "storage_method": "assignment",
+                  "aging_level": "session",
+                  "description": "",
+                  "default_value": "Continue",
+                  "id": "action_after_completion",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "null",
+              "description": null,
+              "id": "memory",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "name": ""
+        },
+        "memory": {
+          "action_after_completion": ""
+        },
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "## 开始工作流_转账汇款流程结束",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "开始工作流_转账汇款执行中",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "消息",
+      "id": "node_1748098633016",
+      "type": "jiuwen.message"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": 1753080378354,
+    "userId": "2",
+    "projectId": "project_mock",
+    "domainId": "0",
+    "updatedAt": 1753093484544,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "开始工作流_转账汇款",
+  "workflowName": "开始工作流_转账汇款",
+  "workflowVersion": "0.6.0",
+  "workflowId": "b6cd4421-bae8-4b6a-a71b-d651da04fe4d",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1748098633016"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_1748098633016"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ]
+}

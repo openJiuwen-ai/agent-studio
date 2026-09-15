@@ -60,7 +60,8 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
             "/v2/*/agent-manager/knowledge-bases/images/*",
             "/v1/open/developer/agent-manager/agents/exist/published", "/v1/agent-manager/health",
             "/v1/agent-manager/*/cleannotify", "/v1/model-manager/model-services/subscribe","/v1/*/mcp/server/list",
-            "/v1/*/agent-builder/prompt/industry/list", "/v1/*/model-manager/maas-model-services"));
+            "/v1/*/agent-builder/prompt/industry/list", "/v1/*/model-manager/maas-model-services",
+            "/v1/*/conversation/sessions/**"));
 
     @Autowired
     private WorkspaceMapper workspaceMapper;

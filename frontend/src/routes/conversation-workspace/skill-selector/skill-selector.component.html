@@ -1,0 +1,50 @@
+<div class="skill-selector">
+  <div *ngIf="selectedSkills.length" class="skill-chips" aria-label="已推荐技能">
+    <span *ngFor="let skill of selectedSkills" class="skill-chip">
+      <span class="skill-chip-name">{{ skill.name }}</span>
+      <button
+        type="button"
+        class="skill-chip-remove"
+        [disabled]="disabled"
+        [attr.aria-label]="'移除技能 ' + skill.name"
+        (click)="removeSkill(skill.skillId)"
+      >×</button>
+    </span>
+  </div>
+
+  <textarea
+    #textarea
+    nz-input
+    class="skill-input"
+    [value]="value"
+    [disabled]="disabled"
+    placeholder="输入消息，/ 选择技能，Enter 发送，Shift+Enter 换行"
+    role="combobox"
+    aria-autocomplete="list"
+    [attr.aria-expanded]="menuOpen"
+    [attr.aria-controls]="menuOpen ? menuId : null"
+    [attr.aria-activedescendant]="menuOpen && activeSkillIndex >= 0 ? optionId(activeSkillIndex) : null"
+    (input)="onTextareaInput($event)"
+    (compositionstart)="onCompositionStart()"
+    (compositionend)="onCompositionEnd($event)"
+    (keydown)="onKeydown($event)"
+  ></textarea>
+
+  <div *ngIf="menuOpen" class="skill-menu" [id]="menuId" role="listbox" aria-label="技能目录">
+    <button
+      *ngFor="let skill of filteredSkills; let index = index"
+      type="button"
+      class="skill-menu-item"
+      [id]="optionId(index)"
+      role="option"
+      [attr.aria-selected]="index === activeSkillIndex"
+      [class.active]="index === activeSkillIndex"
+      (mousedown)="$event.preventDefault()"
+      (click)="selectSkill(skill)"
+    >
+      <span class="skill-menu-name">{{ skill.name }}</span>
+      <span class="skill-menu-description">{{ skill.description }}</span>
+    </button>
+    <div *ngIf="!filteredSkills.length" class="skill-menu-empty">没有匹配的技能</div>
+  </div>
+</div>

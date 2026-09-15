@@ -1,0 +1,408 @@
+.conversation-workspace {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  padding: 24px;
+  overflow: hidden;
+  background: #f5f5f7;
+}
+
+.chat-area {
+  width: 100%;
+  max-width: 960px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e8e8e8;
+    font-weight: 600;
+  }
+
+  .message-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+
+    .chat-empty {
+      text-align: center;
+      color: #999;
+      margin-top: 80px;
+    }
+
+    .turn-card {
+      margin-bottom: 16px;
+
+      .turn-user {
+        display: table;
+        margin: 0 0 8px auto;
+        max-width: 75%;
+        width: fit-content;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #1677ff;
+        color: #fff;
+
+        .message-role {
+          color: rgba(255, 255, 255, 0.75);
+        }
+
+        .turn-user-content {
+          white-space: pre-wrap;
+          word-break: break-word;
+          line-height: 1.6;
+        }
+
+        .user-file-names {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 8px;
+        }
+
+        .user-file-name {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          max-width: 260px;
+          padding: 4px 8px;
+          border-radius: 5px;
+          background: rgba(255, 255, 255, 0.16);
+          font-size: 12px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      .message-bubble {
+        max-width: 75%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #f5f5f5;
+
+        .message-role {
+          font-size: 11px;
+          color: #999;
+          margin-bottom: 4px;
+        }
+
+        .message-content {
+          word-break: break-word;
+          line-height: 1.45;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+
+          .markdown-segment {
+            display: block;
+            min-width: 0;
+
+            ::ng-deep .answer,
+            ::ng-deep .markdown-body {
+              margin: 0;
+              padding: 0;
+              background: transparent;
+              border: 0;
+              box-shadow: none;
+              font-size: 14px;
+              line-height: 1.55;
+            }
+
+            ::ng-deep .markdown-body h1,
+            ::ng-deep .markdown-body h2,
+            ::ng-deep .markdown-body h3,
+            ::ng-deep .markdown-body h4 {
+              margin: 10px 0 5px;
+              line-height: 1.35;
+            }
+
+            ::ng-deep .markdown-body p,
+            ::ng-deep .markdown-body ul,
+            ::ng-deep .markdown-body ol,
+            ::ng-deep .markdown-body blockquote,
+            ::ng-deep .markdown-body pre,
+            ::ng-deep .markdown-body table {
+              margin-top: 5px;
+              margin-bottom: 5px;
+            }
+
+            ::ng-deep .markdown-body p:first-child,
+            ::ng-deep .markdown-body h1:first-child,
+            ::ng-deep .markdown-body h2:first-child,
+            ::ng-deep .markdown-body h3:first-child {
+              margin-top: 0;
+            }
+          }
+        }
+
+        .turn-details {
+          margin-top: 8px;
+          border-top: 1px solid #e8e8e8;
+          padding-top: 6px;
+          color: #666;
+
+          summary {
+            cursor: pointer;
+            font-size: 12px;
+            color: #8c8c8c;
+            user-select: none;
+          }
+        }
+
+        .sub-agent-detail {
+          margin-top: 8px;
+          padding: 8px;
+          background: #f0f7ff;
+          border-left: 3px solid #91caff;
+          border-radius: 4px;
+        }
+
+        .segment-reasoning {
+          background: rgba(0, 0, 0, 0.04);
+          border-left: 3px solid #d9d9d9;
+          border-radius: 4px;
+          padding: 4px 8px;
+          font-size: 12px;
+          color: #666;
+
+          .segment-reasoning-title {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 2px;
+          }
+        }
+
+        .segment-reasoning-content {
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-size: 12px;
+          color: #666;
+        }
+
+        .segment-tool {
+          display: flex;
+          align-items: baseline;
+          gap: 6px;
+          font-size: 12px;
+          color: #666;
+
+          .segment-tool-name {
+            color: #1677ff;
+            background: rgba(22, 119, 255, 0.08);
+            border-radius: 4px;
+            padding: 1px 6px;
+            white-space: nowrap;
+          }
+
+          .segment-tool-result {
+            color: #999;
+          }
+        }
+
+        .message-error {
+          color: #ff4d4f;
+          font-size: 12px;
+          margin-top: 4px;
+        }
+
+        .loading-dots {
+          animation: blink 1s infinite;
+        }
+      }
+    }
+
+  }
+
+  .chat-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+    border-top: 1px solid #e8e8e8;
+
+    .conversation-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .conversation-attachment {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      max-width: 280px;
+      min-height: 32px;
+      padding: 4px 6px 4px 8px;
+      border: 1px solid #e8e8e8;
+      border-radius: 6px;
+      background: #fafafa;
+      color: #595959;
+      font-size: 12px;
+
+      .attachment-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .attachment-status {
+        flex: 0 0 auto;
+        color: #ff4d4f;
+      }
+
+      .attachment-remove {
+        flex: 0 0 auto;
+        width: 24px;
+        height: 24px;
+        color: #8c8c8c;
+      }
+    }
+
+    .attachment-failed {
+      border-color: #ffccc7;
+      background: #fff2f0;
+    }
+
+
+    .activated-skills {
+      color: #595959;
+      font-size: 12px;
+    }
+
+    .composer-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      .composer-tools {
+        display: flex;
+        gap: 4px;
+
+        .tool-btn {
+          color: #595959;
+          cursor: pointer;
+          border: none;
+          box-shadow: none;
+
+          &:disabled {
+            color: #bfbfbf;
+            cursor: not-allowed;
+          }
+        }
+      }
+
+      .composer-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .execution-target-picker,
+        .model-pill {
+          width: 176px;
+          height: 28px;
+          line-height: 28px;
+
+          ::ng-deep .ant-select-selector,
+          ::ng-deep .ant-cascader-picker {
+            box-sizing: border-box;
+            width: 100%;
+            height: 28px;
+            min-height: 28px;
+            padding-top: 0;
+            padding-bottom: 0;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.15s ease;
+          }
+
+          &:hover {
+            ::ng-deep .ant-select-selector,
+            ::ng-deep .ant-cascader-picker {
+              background: #f5f5f5;
+            }
+          }
+
+          ::ng-deep .ant-select-selection-item,
+          ::ng-deep .ant-select-selection-placeholder,
+          ::ng-deep .ant-cascader-picker-label {
+            display: block;
+            box-sizing: border-box;
+            height: 28px;
+            line-height: 28px;
+            margin: 0;
+          }
+        }
+
+        .execution-target-picker {
+          ::ng-deep .ant-cascader-picker-label {
+            padding-right: 24px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          ::ng-deep .ant-cascader-picker-arrow {
+            right: 8px;
+            line-height: 28px;
+          }
+        }
+
+        .model-pill {
+          ::ng-deep {
+            .ant-select-selection-item,
+            .ant-select-selection-placeholder {
+              min-width: 0;
+              padding-right: 24px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .ant-select-arrow {
+              right: 8px;
+              line-height: 28px;
+            }
+          }
+        }
+
+        ::ng-deep .ant-cascader-menus {
+          min-width: 220px;
+        }
+
+        .model-empty {
+          font-size: 12px;
+          color: #999;
+        }
+
+        .send-btn {
+          width: 36px;
+          height: 36px;
+        }
+      }
+    }
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}

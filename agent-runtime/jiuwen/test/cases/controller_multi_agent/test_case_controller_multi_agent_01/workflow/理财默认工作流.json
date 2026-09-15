@@ -1,0 +1,229 @@
+{
+  "configs": {
+    "model": {
+      "modelName": "824cef2a-545e-4941-a146-8bd7046c7b83",
+      "extension": {
+        "deploymentId": "824cef2a-545e-4941-a146-8bd7046c7b83"
+      },
+      "hyperParameters": {},
+      "modelType": "openai"
+    }
+  },
+  "components": [
+    {
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "用户输入",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "schema": [
+                {
+                  "schema": {
+                    "schema": [
+                      {
+                        "description": "角色",
+                        "id": "role",
+                        "type": "string"
+                      },
+                      {
+                        "description": "消息内容",
+                        "id": "content",
+                        "type": "string"
+                      }
+                    ],
+                    "id": "",
+                    "type": "object"
+                  },
+                  "description": "会话历史消息",
+                  "id": "conversationHistory",
+                  "type": "array"
+                },
+                {
+                  "description": "当前系统时间",
+                  "id": "currentTime",
+                  "type": "string"
+                },
+                {
+                  "description": "使用该工作流的唯一标识",
+                  "id": "userId",
+                  "type": "string"
+                },
+                {
+                  "description": "工作流对话id",
+                  "id": "conversationId",
+                  "type": "string"
+                }
+              ],
+              "sourceType": "input",
+              "description": "系统变量",
+              "id": "sys",
+              "type": "object",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "name": "开始",
+      "id": "node_start",
+      "type": "jiuwen.start"
+    },
+    {
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "默认工作流结束",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "结束",
+      "id": "node_end",
+      "type": "jiuwen.end"
+    },
+    {
+      "outputs": {
+        "result": "",
+        "userFields": {}
+      },
+      "configs": {
+        "template": "这是默认工作流",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      },
+      "inputs": {
+        "userFields": {}
+      },
+      "name": "消息",
+      "id": "node_1746876027294",
+      "type": "jiuwen.message"
+    }
+  ],
+  "metadata": {
+    "visibility": "project",
+    "publishedAt": 1748589637333,
+    "userId": "2",
+    "projectId": "project_mock",
+    "domainId": "0",
+    "updatedAt": 1756523685618,
+    "status": "draft"
+  },
+  "schemaVersion": "0.6.0",
+  "description": "默认工作流",
+  "workflowName": "baixin_default_1",
+  "workflowVersion": "0.6.0",
+  "workflowId": "33d0e157-318d-4b35-96a3-0674a48c9a9f",
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_1746876027294"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_1746876027294"
+      }
+    }
+  ]
+}

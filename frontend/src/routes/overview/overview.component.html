@@ -158,7 +158,9 @@
                 *ngFor="let tags of userBItem.showTags"
                 class="new-overview-samestyle-content-card-t-r-content-tip-t"
               >
-                {{ lang === 'zh-cn' ? tags.name : tags.name_en }}
+                <!-- [FIX] 修复 overview 首页卡死：showTags 可能含 find 未命中的 undefined（t_app.tags 存中文名
+                     匹配不上 t_tag.tag_id 的 UUID），直接 {{ tags.name }} 抛 TypeError → CD 死循环。空值显示空串。 -->
+                {{ tags ? (lang === 'zh-cn' ? tags.name : tags.name_en) : '' }}
               </div>
             </div>
           </div>
