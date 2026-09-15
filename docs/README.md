@@ -28,6 +28,7 @@
 - [开发指南](zh/how-to/development-guide.md) — 加解密扩展、SSO 鉴权、存储配置
 - [资产广场预置](zh/how-to/asset-plaza-preset.md) — 应用模板、模型、MCP、插件等资产预置
 - [可观测性部署](zh/how-to/configure-opentelemetry.md) — OpenTelemetry 链路追踪接入
+- [Agent Runtime 性能优化](zh/how-to/agent-runtime-performance.md) — 热路径优化、依赖基线与回退开关
 - [运行问题排查](zh/how-to/troubleshooting.md) — 工作流与智能体运行问题定位
 
 ### Reference 参考文档（我想查）

@@ -28,6 +28,7 @@ Guides for solving specific tasks, using semantic names.
 - [Development Guide](how-to/development-guide.md) — Encryption extension, SSO auth, storage configuration
 - [Asset Plaza Preset](how-to/asset-plaza-preset.md) — Application template, model, MCP, plugin and other asset presetting
 - [Observability Deployment](how-to/configure-opentelemetry.md) — OpenTelemetry trace pipeline integration
+- [Agent Runtime Performance](how-to/agent-runtime-performance.md) — Hot-path optimizations, dependency baseline, and rollback switch
 - [Troubleshooting](how-to/troubleshooting.md) — Workflow and agent runtime issue locating
 
 ### Reference (I want to look up)

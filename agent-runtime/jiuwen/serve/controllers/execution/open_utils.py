@@ -29,6 +29,9 @@ from openjiuwen.core.common.logging import workflow_logger
 from jiuwen.serve.common.logger.request_logger import log_function_timing
 
 
+_IR_LOAD_SLOW_CACHE_HIT_MS = 50
+
+
 class CacheUtils:
     """内存+Redis二级缓存
 
@@ -334,23 +337,38 @@ async def async_ir_load(path: str) -> dict:
     from openjiuwen.core.common.logging import performance_logger
 
     t_start = time.perf_counter()
-    # 每次 IR 加载都打 INFO 过于频繁（621 次/10k 行），内存缓存命中是预期行为，降级为 DEBUG
+    # 每次 IR 加载都打 INFO 过于频繁（621 次/10k 行），普通命中只保留 DEBUG。
     logger.debug("Async Loading IR content from %s", path)
 
     ir_value, source = await cache_ir_queue.aget_with_source(path)
     if ir_value is not None:
+        source_label = "OBS" if source == "obs" else source.capitalize()
         if source == "memory":
-            # 内存缓存命中（0ms），降级为 DEBUG；Redis/OBS 命中保留 INFO
+            # 内存缓存命中（0ms）为预期路径，降级为 DEBUG。
             logger.debug("Cache HIT! Process %d async got cached data: %s", os.getpid(), path)
         else:
-            logger.info(
-                "Redis HIT! Process %d async got cached data: %s, "
+            # Redis/OBS 命中同样是常态路径，先用 DEBUG 记录；慢命中在计时后补 INFO。
+            logger.debug(
+                "%s HIT! Process %d async got cached data: %s, "
                 "memory size %d/%d",
-                os.getpid(), path,
+                source_label, os.getpid(), path,
                 cache_ir_queue.memory_cache.currsize, cache_ir_queue.memory_cache.maxsize,
             )
+        cache_elapsed_ms = (
+            round((time.perf_counter() - t_start) * 1000)
+            if source != "memory"
+            else None
+        )
         _log_ir_content(source, path, ir_value)
-        performance_logger.info(f"ir_load|{round((time.perf_counter() - t_start) * 1000)}|{source}")
+        elapsed_ms = round((time.perf_counter() - t_start) * 1000)
+        if cache_elapsed_ms is not None and cache_elapsed_ms > _IR_LOAD_SLOW_CACHE_HIT_MS:
+            logger.info(
+                "Slow %s HIT! Process %d async got cached data: %s in %d ms, "
+                "memory size %d/%d",
+                source_label, os.getpid(), path, cache_elapsed_ms,
+                cache_ir_queue.memory_cache.currsize, cache_ir_queue.memory_cache.maxsize,
+            )
+        performance_logger.info(f"ir_load|{elapsed_ms}|{source}")
         return ir_value
 
     # obs 存储
