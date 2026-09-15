@@ -7,7 +7,7 @@ import threading
 from typing import Dict, Any, List
 
 from jiuwen.common.configs.base import config
-from jiuwen.common.configs.env_constants import JIUWEN_LOG_LEVEL_KEY
+from jiuwen.common.configs.env_constants import JIUWEN_PERF_LOG_LEVEL_KEY
 from jiuwen.common.log.base import performance_logger, get_thread_session
 
 TOTAL_LOG_TAG = "total"
@@ -35,7 +35,7 @@ class PerformanceLogBuffer:
         self._lock = threading.Lock()
         log_config = config.get("logging", {})
         perf_log_level = logging.getLevelName(
-            os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "INFO"))
+            os.environ.get(JIUWEN_PERF_LOG_LEVEL_KEY, log_config.get("level", "INFO"))
         )
         if not isinstance(perf_log_level, int):
             perf_log_level = logging.INFO
