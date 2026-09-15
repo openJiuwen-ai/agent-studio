@@ -50,6 +50,7 @@ import com.openjiuwen.studio.agent.manager.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.common.dto.run.ResetUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
+import com.openjiuwen.studio.agent.manager.dto.ControllerExecutionDetail;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
@@ -493,8 +494,8 @@ public class AgentServiceProxyService {
     }
     //  MCP\rerank\Embedding 待确认鉴权方式
 
-    public ResponseEntity<Object> listControllerExecutions(String projectId, String agentId, String conversationId,
-        ListControllerExecutionsQo listControllerExecutionsQo, String workspaceId) {
+    public ResponseEntity<ListControllerExecutionsResp> listControllerExecutions(String projectId, String agentId,
+        String conversationId, ListControllerExecutionsQo listControllerExecutionsQo, String workspaceId) {
         List<ControllerExecutionBriefModel> briefModels = controllerDebuggingMgmtService.queryCtrlExecutions(
             agentId, conversationId, listControllerExecutionsQo);
 
@@ -514,13 +515,13 @@ public class AgentServiceProxyService {
         return ResponseEntity.ok(resp);
     }
 
-    public ResponseEntity<Object> getControllerExecutionDetail(String projectId, String agentId, String executionId,
-        GetControllerExecutionDetailQo body, String workspaceId) {
+    public ResponseEntity<ControllerExecutionDetail> getControllerExecutionDetail(String projectId, String agentId,
+        String executionId, GetControllerExecutionDetailQo body, String workspaceId) {
 
         ControllerExecutionDetailModel detailModel = controllerDebuggingMgmtService.queryCtrlExecutionDetail(
             agentId, executionId);
         if (detailModel == null || detailModel.getExecutionId() == null) {
-            return ResponseEntity.ok(new JSONObject());
+            return ResponseEntity.ok(new ControllerExecutionDetail());
         }
 
         try {
@@ -556,7 +557,7 @@ public class AgentServiceProxyService {
             return ResponseEntity.ok(detail);
         } catch (Exception e) {
             log.error("Failed to get controller execution detail", e);
-            return ResponseEntity.ok(new JSONObject());
+            return ResponseEntity.ok(new ControllerExecutionDetail());
         }
     }
 

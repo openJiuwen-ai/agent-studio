@@ -659,18 +659,10 @@ async def _load_ir_json(ir_path: str) -> dict:
 
 
 @execution_app.delete("/v1/orchestration/ir/execute", summary="删除执行实例")
-async def delete_ir_execution_instance(req_json: dict):
+async def delete_ir_execution_instance(req: DeleteExecutionInstanceRequest):
     """
     Restful API for delete Agent instance and Workflow instance by executionId.
     """
-    # Verifying and preprocessing the user request
-    try:
-        req = DeleteExecutionInstanceRequest.model_validate(req_json)
-    except ValidationError as e:
-        raise JiuWenBaseException(
-            error_code=StatusCode.PARAM_CHECK_FAILED_ERROR.code,
-            message=StatusCode.PARAM_CHECK_FAILED_ERROR.errmsg,
-        ) from e
     try:
         await AsyncStateManager().delete_state(key=req.conversation_id)
         # 清除 WorkFlow spec缓存
@@ -708,13 +700,14 @@ def _get_additional_questions_service() -> AdditionalQuestionsService:
 @execution_app.post(
     "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions",
     summary="生成追问（智能体场景）",
+    response_model=AdditionalQuestionsResponse,
 )
 async def agent_additional_questions(
     project_id: str,
     agent_id: str,
     conversation_id: str,
     workspace_id: str = Query(...),
-    req_json: dict = Body(...),
+    req: AdditionalQuestionsRequest = Body(...),
 ):
     """自动生成追问（Agent 场景）。"""
     ctx = AdditionalQuestionsContext(
@@ -724,19 +717,20 @@ async def agent_additional_questions(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
     )
-    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+    return await _handle_additional_questions(ctx=ctx, req=req)
 
 
 @execution_app.post(
     "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions",
     summary="生成追问（工作流场景）",
+    response_model=AdditionalQuestionsResponse,
 )
 async def workflow_additional_questions(
     project_id: str,
     workflow_id: str,
     conversation_id: str,
     workspace_id: str = Query(...),
-    req_json: dict = Body(...),
+    req: AdditionalQuestionsRequest = Body(...),
 ):
     """自动生成追问（Workflow 场景）。"""
     ctx = AdditionalQuestionsContext(
@@ -746,12 +740,12 @@ async def workflow_additional_questions(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
     )
-    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+    return await _handle_additional_questions(ctx=ctx, req=req)
 
 
 async def _handle_additional_questions(
     ctx: AdditionalQuestionsContext,
-    req_json: dict,
+    req: AdditionalQuestionsRequest,
 ):
     """追问接口统一处理入口 — 解析请求、调用 Service、返回响应。"""
     workflow_logger.debug(
@@ -759,14 +753,6 @@ async def _handle_additional_questions(
         "conversation_id=%s, workspace_id=%s",
         ctx.resource_type, ctx.resource_id, ctx.conversation_id, ctx.workspace_id,
     )
-    try:
-        req = AdditionalQuestionsRequest.model_validate(req_json)
-    except ValidationError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "validation_failed", "details": str(e)},
-        )
-
     service = _get_additional_questions_service()
     try:
         from agent_runtime.context.request_context import _request_ctx
@@ -777,7 +763,7 @@ async def _handle_additional_questions(
             request=req,
             headers=headers,
         )
-        return JSONResponse(content=result.model_dump())
+        return result
     except JiuWenBaseException as e:
         workflow_logger.error(
             "Additional questions error: code=%s, message=%s",

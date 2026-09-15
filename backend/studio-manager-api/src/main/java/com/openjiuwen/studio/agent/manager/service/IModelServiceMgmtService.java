@@ -36,7 +36,7 @@ public interface IModelServiceMgmtService {
      * @param availableCheck availableCheck
      * @param body body
      */
-    Object createModelService(String projectId, String workspaceId, Boolean availableCheck, ModelServiceReq body);
+    String createModelService(String projectId, String workspaceId, Boolean availableCheck, ModelServiceReq body);
 
     /**
      * deleteModelService
@@ -126,7 +126,7 @@ public interface IModelServiceMgmtService {
      * @param id id
      * @param body body
      */
-    Object updateModelService(String projectId, String workspaceId, Boolean availableCheck, String id,
+    Void updateModelService(String projectId, String workspaceId, Boolean availableCheck, String id,
         ModelServiceReq body);
 
     /**
