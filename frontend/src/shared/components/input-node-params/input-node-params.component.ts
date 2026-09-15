@@ -158,8 +158,10 @@ export class InputNodeParamsComponent {
 
   public async onUploadFile(e: Event, inputItem: InputParamConfig, uploadType = 'multi'): Promise<void> {
     const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
     if (uploadType === 'single') {
-      const file: File = input.files[0];
+      const file: File = files[0];
       if (!file) {
         return;
       }
@@ -211,7 +213,7 @@ export class InputNodeParamsComponent {
           this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
         });
     } else {
-      const len = input?.files?.length;
+      const len = files?.length;
       if (!len) {
         return;
       }
@@ -227,7 +229,7 @@ export class InputNodeParamsComponent {
       }
       // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
       if (
-        Array.from(input.files as any as File[]).some((f) =>
+        Array.from(files as any as File[]).some((f) =>
           inputItem.uploadDatas.some(
             (u) => u.name.toLowerCase() === f.name.toLowerCase(),
           ),
@@ -242,7 +244,7 @@ export class InputNodeParamsComponent {
         (item) => item.name === inputItem.name,
       );
       this.isUploading = true;
-      for (const file of input.files as any) {
+      for (const file of files as any) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
           extension,

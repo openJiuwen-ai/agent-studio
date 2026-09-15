@@ -47,3 +47,23 @@ class RequestContext:
 _request_ctx: ContextVar[RequestContext] = ContextVar(
     "request_ctx", default=RequestContext()
 )
+
+
+try:
+    from opentelemetry.propagators.tracecontext import TraceContextTextMapPropagator
+    _tp_propagator = TraceContextTextMapPropagator()
+except ImportError:
+    _tp_propagator = None
+
+
+def inject_traceparent(headers: dict) -> None:
+    """Inject W3C traceparent header from current OTel context into headers dict.
+
+    This enables downstream services (plugins, MCP servers, LLM gateways)
+    with their own OTel SDK to continue the same trace, achieving
+    cross-service distributed tracing.
+
+    No-op when opentelemetry is not installed or no active span exists.
+    """
+    if _tp_propagator is not None:
+        _tp_propagator.inject(headers)

@@ -357,7 +357,8 @@ export class SenderComponent implements OnDestroy {
 
   public onUploadFile(e: Event) {
     const input = e.target as HTMLInputElement;
-    const files = input.files;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
     const len = files?.length;
     if (len <= 0) {
       return;

@@ -802,8 +802,10 @@ export class NodeExeComponent implements OnChanges {
     uploadType = 'multi',
   ): Promise<void> {
     const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
     if (uploadType === 'single') {
-      const file: File = input.files[0];
+      const file: File = files[0];
       if (!file) {
         return;
       }
@@ -845,7 +847,7 @@ export class NodeExeComponent implements OnChanges {
           this.cdr.detectChanges();
         });
     } else {
-      const len = input?.files?.length;
+      const len = files?.length;
       if (!len) {
         return;
       }
@@ -863,7 +865,7 @@ export class NodeExeComponent implements OnChanges {
       }
       // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
       if (
-        Array.from(input.files).some((f) =>
+        Array.from(files).some((f) =>
           inputItem.uploadDatas.some(
             (u) => u.name.toLowerCase() === f.name.toLowerCase(),
           ),
@@ -875,7 +877,7 @@ export class NodeExeComponent implements OnChanges {
         return;
       }
       this.isUploading = true;
-      for (const file of input.files) {
+      for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
           extension,
