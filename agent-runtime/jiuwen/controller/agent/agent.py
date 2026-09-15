@@ -680,12 +680,13 @@ class Agent(BaseAgent):
 
     async def _handle_controller_mode_stream(self, yield_res, trace_manager):
         """处理Controller模式的流式输出"""
-        async for item in yield_res:
-            yield item
-            if isinstance(item, dict) and item.get(self.ret_code_key_word) == RetCode.SUCCESS.value:
-                self.result = item
-        if trace_manager:
-            await trace_manager.on_chain_end(self.result)
+        try:
+            async for item in yield_res:
+                yield item
+        finally:
+            if trace_manager:
+                await trace_manager.on_chain_end(None)
+
         if self.result is not None:
             yield self.result
 
@@ -707,12 +708,13 @@ class Agent(BaseAgent):
 
     async def _handle_default_mode_stream(self, yield_res, trace_manager):
         """处理默认模式的流式输出"""
-        async for item in yield_res:
-            yield item
-            if isinstance(item, dict) and item.get(self.ret_code_key_word) == RetCode.SUCCESS.value:
-                self.result = item
-        if trace_manager:
-            await trace_manager.on_chain_end(self.result)
+        try:
+            async for item in yield_res:
+                yield item
+        finally:
+            if trace_manager:
+                await trace_manager.on_chain_end(None)
+
         if self.result is not None:
             yield self.result
 

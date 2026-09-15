@@ -335,7 +335,7 @@ class SingletonLogger:
     @classmethod
     def _get_logger(cls, log_type, log_config, output, log_file):
         if log_type == "performance":
-            level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("performance_level", "WARNING"))
+            level = os.environ.get(JIUWEN_PERF_LOG_LEVEL_KEY, log_config.get("performance_level", "WARNING"))
         else:
             level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
         max_bytes = (
