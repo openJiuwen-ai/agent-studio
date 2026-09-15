@@ -1,3 +1,4 @@
+# coding: utf-8
 # Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 
 """
@@ -31,7 +32,7 @@ Applied once at import from ir_converter / sub_workflow.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable
+from typing import Iterable
 
 from openjiuwen.core.common.constants.constant import LOOP_ID
 from openjiuwen.core.graph.executable import Input, Output
@@ -45,18 +46,12 @@ _orig_loop_group_on_invoke = None
 
 def _loop_comp_workflow_session(session: BaseSession) -> BaseSession:
     """Session that owns workflow_state (executed_nodes) for the loop component vertex."""
-    if (
-        hasattr(session, "node_id")
-        and session.node_id() == "body"
-        and session.parent() is not None
-    ):
+    if hasattr(session, "node_id") and session.node_id() == "body" and session.parent() is not None:
         return session.parent()
     return session
 
 
-def clear_loop_body_round_marks(
-    session: BaseSession, body_node_ids: Iterable[str]
-) -> None:
+def clear_loop_body_round_marks(session: BaseSession, body_node_ids: Iterable[str]) -> None:
     """Drop loop-body component ids from executed_nodes / finished_stream_nodes."""
     body_set = {node_id for node_id in body_node_ids if node_id}
     if not body_set:
@@ -65,16 +60,10 @@ def clear_loop_body_round_marks(
     updates: dict[str, list[str]] = {}
     executed_nodes = workflow_state.get_workflow_state("executed_nodes") or []
     if executed_nodes:
-        updates["executed_nodes"] = [
-            nid for nid in executed_nodes if nid not in body_set
-        ]
-    finished_stream_nodes = (
-        workflow_state.get_workflow_state("finished_stream_nodes") or []
-    )
+        updates["executed_nodes"] = [nid for nid in executed_nodes if nid not in body_set]
+    finished_stream_nodes = workflow_state.get_workflow_state("finished_stream_nodes") or []
     if finished_stream_nodes:
-        updates["finished_stream_nodes"] = [
-            nid for nid in finished_stream_nodes if nid not in body_set
-        ]
+        updates["finished_stream_nodes"] = [nid for nid in finished_stream_nodes if nid not in body_set]
     if updates:
         workflow_state.update_and_commit_workflow_state(updates)
 
@@ -200,9 +189,7 @@ async def _patched_advanced_loop_on_invoke(
         loop_state.commit()
 
     if loop_session.tracer() is not None:
-        loop_session.tracer().register_workflow_span_manager(
-            loop_session.executable_id()
-        )
+        loop_session.tracer().register_workflow_span_manager(loop_session.executable_id())
     compiled = self._graph.compile(loop_session, **kwargs)
     await compiled.invoke(inputs, loop_session)
     result = node_session.state().get_outputs(node_id)
