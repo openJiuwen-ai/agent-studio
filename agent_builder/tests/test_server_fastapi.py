@@ -38,6 +38,15 @@ def test_health_returns_200_without_lifespan():
     assert r.text == "the health is good"
 
 
+def test_health_returns_custom_rsp_when_configured(monkeypatch):
+    from agent_builder.adapter.config_bridge import settings
+
+    monkeypatch.setattr(settings.health_check, "custom_rsp", "custom-healthy")
+    r = _client().get("/v1/health")
+    assert r.status_code == 200
+    assert r.text == "custom-healthy"
+
+
 def test_n2l_route_is_registered():
     routes = _all_paths(app.routes)
     assert "/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat" in routes
