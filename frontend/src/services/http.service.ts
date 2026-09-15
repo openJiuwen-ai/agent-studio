@@ -287,10 +287,26 @@ export class HttpService {
 
   public postAsync<T>(httpConfig: IHttpConfig): Promise<T> {
     return new Promise((resolve, reject) => {
-      this.post<T>(httpConfig).subscribe({
+      const subscription = this.post<T>(httpConfig).subscribe({
         next: (data) => resolve(data),
         error: (err) => reject(err),
       });
+      // 当前版本 HttpClient 不支持 AbortSignal，在此桥接：
+      // abort 时取消订阅（teardown 会调用底层 xhr.abort 真正中止请求），并以 AbortError 拒绝 Promise；
+      // signal 已中止时直接拒绝，请求不会发出（用于跳过队列中已删除的文件）
+      const signal = httpConfig.signal;
+      if (!signal) {
+        return;
+      }
+      const onAbort = () => {
+        subscription.unsubscribe();
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      };
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 

@@ -753,6 +753,10 @@ export class DynamicNodeParamsComponent {
       return;
     }
 
+    // 如果删除的文件还未上传完成，则中止请求（signal 由 HttpService.postAsync 桥接生效）
+    if (fileItem.progress === 'loading') {
+      fileItem.controller.abort();
+    }
     inputItem.uploadDatas = inputItem.uploadDatas.filter(
       (item) => item.fileId !== fileItem.fileId,
     );

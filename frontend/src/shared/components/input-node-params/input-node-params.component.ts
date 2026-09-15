@@ -139,6 +139,10 @@ export class InputNodeParamsComponent {
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
       return;
     }
+    // 如果删除的文件还未上传完成，则中止请求（signal 由 HttpService.postAsync 桥接生效）
+    if (fileItem.progress === 'loading') {
+      fileItem.controller.abort();
+    }
     inputItem.uploadDatas = inputItem.uploadDatas.filter(
       (item) => item.fileId !== fileItem.fileId,
     );
@@ -263,6 +267,9 @@ export class InputNodeParamsComponent {
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue(
         inputItem.uploadDatas,
       );
+      // 批次结束后补偿上报状态：上传中删除文件会跳过 removeFile 里的 updateUploadStatus，
+      // 不补偿会使 fileUploadStatus 停留在 loading，父组件按钮无法恢复
+      this.updateUploadStatus();
       input.value = '';
     }
   }
