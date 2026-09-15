@@ -222,47 +222,49 @@
                 </span>
               </button>
             </div>
-            <div
-              *ngFor="let fileItem of fileList; index as i"
-              class="mb-[8px] flex w-[100%] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
-            >
-              <nz-spin
-                *ngIf="fileItem.progress === 'loading'"
-                nzSimple
-              ></nz-spin>
-              <meta-upload-file-icon
-                *ngIf="fileItem.progress !== 'loading'"
-                [fileName]="fileItem.name"
-              ></meta-upload-file-icon>
-              <span
-                class="ml-[12px] min-w-0 flex-1 truncate"
-                [ngClass]="{
-                  'text-[#F23030]': fileItem.progress === 'failed'
-                }"
-                nz-tooltip
-                [nzTooltipTitle]="fileItem.name"
-              >
-                {{ fileItem.name }}</span
-              >
-              <span
-                class="ml-auto cursor-pointer text-[16px]"
-                nz-icon
-                nzType="delete"
-                nzTheme="outline"
-                (click)="removeFile($event, i)"
-              ></span>
-            </div>
-            <div
-              class="error-tip flex w-full items-center"
-              *ngIf="!isMulti && fileList[0]?.progress === 'failed'"
-            >
-              <span nz-icon class="mr-[6px] text-[#F23030]" nzType="close-circle" nzTheme="outline"></span>
-              {{ 'a_file_upload_failed' | i18nextEager }}
+            <div class="flex max-h-[50vh] w-full flex-col items-center overflow-y-auto pr-[4px]">
               <div
-                (click)="fileInput.click()"
-                class="cursor-pointer text-[#1476ff] hover:underline"
+                *ngFor="let fileItem of fileList; index as i"
+                class="mb-[8px] flex w-[100%] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
               >
-                {{ 'reupload' | i18nextEager }}
+                <nz-spin
+                  *ngIf="fileItem.progress === 'loading'"
+                  nzSimple
+                ></nz-spin>
+                <meta-upload-file-icon
+                  *ngIf="fileItem.progress !== 'loading'"
+                  [fileName]="fileItem.name"
+                ></meta-upload-file-icon>
+                <span
+                  class="ml-[12px] min-w-0 flex-1 truncate"
+                  [ngClass]="{
+                    'text-[#F23030]': fileItem.progress === 'failed'
+                  }"
+                  nz-tooltip
+                  [nzTooltipTitle]="fileItem.name"
+                >
+                  {{ fileItem.name }}</span
+                >
+                <span
+                  class="ml-auto cursor-pointer text-[16px]"
+                  nz-icon
+                  nzType="delete"
+                  nzTheme="outline"
+                  (click)="removeFile($event, i)"
+                ></span>
+              </div>
+              <div
+                class="error-tip flex w-full items-center"
+                *ngIf="!isMulti && fileList[0]?.progress === 'failed'"
+              >
+                <span nz-icon class="mr-[6px] text-[#F23030]" nzType="close-circle" nzTheme="outline"></span>
+                {{ 'a_file_upload_failed' | i18nextEager }}
+                <div
+                  (click)="fileInput.click()"
+                  class="cursor-pointer text-[#1476ff] hover:underline"
+                >
+                  {{ 'reupload' | i18nextEager }}
+                </div>
               </div>
             </div>
           </div>
