@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 
 """
@@ -32,7 +31,7 @@ Applied once at import from ir_converter / sub_workflow.
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 from openjiuwen.core.common.constants.constant import LOOP_ID
 from openjiuwen.core.graph.executable import Input, Output
@@ -46,12 +45,18 @@ _orig_loop_group_on_invoke = None
 
 def _loop_comp_workflow_session(session: BaseSession) -> BaseSession:
     """Session that owns workflow_state (executed_nodes) for the loop component vertex."""
-    if hasattr(session, "node_id") and session.node_id() == "body" and session.parent() is not None:
+    if (
+        hasattr(session, "node_id")
+        and session.node_id() == "body"
+        and session.parent() is not None
+    ):
         return session.parent()
     return session
 
 
-def clear_loop_body_round_marks(session: BaseSession, body_node_ids: Iterable[str]) -> None:
+def clear_loop_body_round_marks(
+    session: BaseSession, body_node_ids: Iterable[str]
+) -> None:
     """Drop loop-body component ids from executed_nodes / finished_stream_nodes."""
     body_set = {node_id for node_id in body_node_ids if node_id}
     if not body_set:
@@ -60,10 +65,16 @@ def clear_loop_body_round_marks(session: BaseSession, body_node_ids: Iterable[st
     updates: dict[str, list[str]] = {}
     executed_nodes = workflow_state.get_workflow_state("executed_nodes") or []
     if executed_nodes:
-        updates["executed_nodes"] = [nid for nid in executed_nodes if nid not in body_set]
-    finished_stream_nodes = workflow_state.get_workflow_state("finished_stream_nodes") or []
+        updates["executed_nodes"] = [
+            nid for nid in executed_nodes if nid not in body_set
+        ]
+    finished_stream_nodes = (
+        workflow_state.get_workflow_state("finished_stream_nodes") or []
+    )
     if finished_stream_nodes:
-        updates["finished_stream_nodes"] = [nid for nid in finished_stream_nodes if nid not in body_set]
+        updates["finished_stream_nodes"] = [
+            nid for nid in finished_stream_nodes if nid not in body_set
+        ]
     if updates:
         workflow_state.update_and_commit_workflow_state(updates)
 
@@ -143,6 +154,9 @@ _orig_advanced_loop_on_invoke = None
 _LOOP_STATE_DIRECT_COMMIT_ENABLED = (
     os.getenv("LOOP_STATE_DIRECT_COMMIT_ENABLED", "false").strip().lower() == "true"
 )
+_NODE_ID_ATTR = "_node_id"
+_NODE_SESSION_ATTR = "_node_session"
+_IO_STATE_ATTR = "_io_state"
 
 
 async def _patched_advanced_loop_on_invoke(
@@ -150,16 +164,18 @@ async def _patched_advanced_loop_on_invoke(
 ) -> Output:
     loop_session = session
     loop_state = loop_session.state()
-    self._node_id = loop_session.node_id()
-    self._node_session = NodeSession(loop_session, self._node_id)
-    io_state = loop_state._io_state
+    node_id = loop_session.node_id()
+    setattr(self, _NODE_ID_ATTR, node_id)
+    node_session = NodeSession(loop_session, node_id)
+    setattr(self, _NODE_SESSION_ATTR, node_session)
+    io_state = getattr(loop_state, _IO_STATE_ATTR)
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
         io_state.update_by_id_and_commit(
-            self._node_id,
-            {self._node_id: {LOOP_ID: self._node_id}},
+            node_id,
+            {node_id: {LOOP_ID: node_id}},
         )
     else:
-        loop_state.set_outputs({LOOP_ID: self._node_id})
+        loop_state.set_outputs({LOOP_ID: node_id})
 
     raw_io = (
         io_state.get_state(copied=False)
@@ -172,26 +188,28 @@ async def _patched_advanced_loop_on_invoke(
         state = dict(scoped) if isinstance(scoped, dict) else {}
     else:
         state = dict(raw_io)
-    if state and self._node_id in state:
-        del state[self._node_id]
+    if state and node_id in state:
+        del state[node_id]
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
         io_state.update_by_id_and_commit(
-            self._node_id,
-            {self._node_id: state},
+            node_id,
+            {node_id: state},
         )
     else:
         loop_state.set_outputs(state)
         loop_state.commit()
 
     if loop_session.tracer() is not None:
-        loop_session.tracer().register_workflow_span_manager(loop_session.executable_id())
+        loop_session.tracer().register_workflow_span_manager(
+            loop_session.executable_id()
+        )
     compiled = self._graph.compile(loop_session, **kwargs)
     await compiled.invoke(inputs, loop_session)
-    result = self._node_session.state().get_outputs(self._node_id)
+    result = node_session.state().get_outputs(node_id)
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
-        io_state.update_by_id_and_commit(self._node_id, {self._node_id: None})
+        io_state.update_by_id_and_commit(node_id, {node_id: None})
     else:
-        io_state.update_by_id(self._node_id, {self._node_id: None})
+        io_state.update_by_id(node_id, {node_id: None})
     return result
 
 
