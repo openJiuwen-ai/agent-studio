@@ -74,7 +74,7 @@
                         nz-button
                         class="flex !w-[96px] justify-center ml-2"
                         nzSize="small"
-                        [disabled]="isUploading || param.uploadDatas?.length >= 20"
+                        [disabled]="param.uploadDatas?.length >= 20"
                         (click)="addMultiFile(i)"
                       >
                         <span class="flex items-center gap-[4px]"
@@ -398,10 +398,6 @@
                               <span
                                 class="ml-auto cursor-pointer text-[16px]"
                                 (click)="removeFile(param, fileItem)"
-                                [ngClass]="{
-                                  'disabled-delete':
-                                    isUploading && inputIndex !== i
-                                }"
                                 [ngStyle]="{
                                   display: fileItem.isHover
                                     ? 'inline-block'

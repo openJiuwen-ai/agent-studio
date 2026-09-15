@@ -449,6 +449,10 @@ export class SenderComponent implements OnDestroy {
   }
 
   public removeFile(i: number) {
+    const fileItem = this.uploadData[i];
+    if (fileItem?.progress === 'loading') {
+      fileItem.controller?.abort();
+    }
     this.uploadData.splice(i, 1);
     if (!this.uploadData.length) {
       this.checkContentWidth();

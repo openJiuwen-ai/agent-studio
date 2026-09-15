@@ -139,12 +139,6 @@ export class InputNodeParamsComponent {
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
       return;
     }
-    if (
-      this.isUploading &&
-      this.inputList[this.inputIndex].name !== inputItem.name
-    ) {
-      return;
-    }
     // 如果删除的文件还未上传完成，则中止请求
     if (fileItem.progress === 'loading') {
       fileItem.controller.abort();
@@ -247,6 +241,7 @@ export class InputNodeParamsComponent {
       this.inputIndex = this.inputList.findIndex(
         (item) => item.name === inputItem.name,
       );
+      this.isUploading = true;
       for (const file of input.files as any) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -264,6 +259,7 @@ export class InputNodeParamsComponent {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
         });
       }
+      this.isUploading = false;
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue(
         inputItem.uploadDatas,
       );
@@ -299,7 +295,7 @@ export class InputNodeParamsComponent {
   }
 
   public addMultiFile(index): void {
-    if (this.isUploading || this.disabled === 'confirmed') {
+    if (this.disabled === 'confirmed') {
       return;
     }
     let element = this.fileInputs.find((el) =>
