@@ -488,11 +488,15 @@ export abstract class WorkflowChatBaseComponent {
         this.previousNodeId = '';
         const prevAns = this.chatLoop[curIndex].showAnswer?.[this.index];
         // 修复消息节点返回空输出的情况：结构化信息走 summary 字段，非 text
+        // Input 节点的 summary 是表单构造元数据（inputs 定义），不是输出内容，不能写入 text
         if (prevAns && (!prevAns?.text || !text)) {
-          prevAns.text = prevAns?.text || summary || ' ';
+          if (node_type !== 'Input') {
+            prevAns.text = prevAns?.text || summary || ' ';
+            prevAns.messageId = createdTime;
+          }
+          // Input 的 loading 由下方 is_finished 处理器置 false，此处保留无害
           prevAns.loading = false;
-          prevAns.messageId = createdTime;
-        } else if (!text) {
+        } else if (!text && node_type !== 'Input') {
           this.chatLoop[curIndex].showAnswer.push({
             text: summary || ' ',
             loading: false,
