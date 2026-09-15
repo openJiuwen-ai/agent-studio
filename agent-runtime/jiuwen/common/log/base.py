@@ -28,6 +28,7 @@ from jiuwen.common.configs.env_constants import (
     JIUWEN_LOG_MAX_BYTES_KEY,
     JIUWEN_LOG_LEVEL_KEY,
     JIUWEN_LOG_PATH_KEY,
+    JIUWEN_PERF_LOG_LEVEL_KEY,
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
