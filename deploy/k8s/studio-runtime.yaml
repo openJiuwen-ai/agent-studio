@@ -190,6 +190,9 @@ spec:
             # 模型调用详情日志开关，true时打印模型请求体/响应内容/token用量/延迟/tool_calls；错误日志不受此开关影响，始终输出
             - name: MODEL_CALL_LOGGING_ENABLED
               value: 'false'
+            # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
+            - name: PERFORMANCE_LOG_ENABLED
+              value: 'true'
             # 意图识别工作流开关
             - name: ENABLE_INTENT_WORKFLOW
               value: 'true'

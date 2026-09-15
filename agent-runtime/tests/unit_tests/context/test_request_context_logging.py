@@ -243,6 +243,34 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(get_log_format("workflow"), COMMON_LOG_FORMAT)
         self.assertEqual(get_log_format("llm"), COMMON_LOG_FORMAT)
 
+    def test_performance_logger_disabled_when_switch_false(self):
+        """PERFORMANCE_LOG_ENABLED=false 时 install_log_formatter_patch 应禁用 performance logger。"""
+        import agent_runtime.common.logging_context as lc
+        from agent_runtime.common.config import settings
+        from unittest.mock import patch
+
+        perf_logger = logging.getLogger("performance")
+        with patch("agent_runtime.common.logging_context._FORMATTER_PATCH_INSTALLED", False), \
+             patch("agent_runtime.common.logging_context._OPENJIUWEN_LOGGING_MANAGED", False), \
+             patch.object(settings.server, "performance_log_enabled", False), \
+             patch.object(perf_logger, "disabled", False):
+            lc.install_log_formatter_patch()
+            self.assertTrue(perf_logger.disabled)
+
+    def test_performance_logger_enabled_when_switch_true(self):
+        """PERFORMANCE_LOG_ENABLED=true（默认）时 install_log_formatter_patch 不应禁用 performance logger。"""
+        import agent_runtime.common.logging_context as lc
+        from agent_runtime.common.config import settings
+        from unittest.mock import patch
+
+        perf_logger = logging.getLogger("performance")
+        with patch("agent_runtime.common.logging_context._FORMATTER_PATCH_INSTALLED", False), \
+             patch("agent_runtime.common.logging_context._OPENJIUWEN_LOGGING_MANAGED", False), \
+             patch.object(settings.server, "performance_log_enabled", True), \
+             patch.object(perf_logger, "disabled", False):
+            lc.install_log_formatter_patch()
+            self.assertFalse(perf_logger.disabled)
+
     def test_default_logger_uses_log_type_specific_format(self):
         install_log_formatter_patch()
 
