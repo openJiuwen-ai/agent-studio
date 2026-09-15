@@ -1156,8 +1156,8 @@ class IRConverter:
         agent_id_in_config = f"{agent_id}_{agent_version}"
         plugin_irs = ir_data.get("configs", {}).get("plugins")
         plugins = None
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
                 f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
                 f"agent_id={agent_id}, "
                 f"configs keys="
@@ -1169,8 +1169,8 @@ class IRConverter:
                 try:
                     plugin = PluginIRConverter.ir_to_plugin(plugin_ir, agent_id, conversation_id)
                     plugins.append(plugin)
-                    if logger.isEnabledFor(logging.INFO):
-                        logger.info(
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
                             f"[PluginLoad] create_agent_config: "
                             f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
                         )
@@ -1285,10 +1285,11 @@ class IRConverter:
                     child_metadata_list.append(child_config.metadata)
 
             task_id = str(secrets.token_hex(24))
-            logger.info(
-                f"conversation_id: {conversation_id} generate task_id: {task_id} for this request",
-                simple_log="conversation generate task",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"conversation_id: {conversation_id} generate task_id: {task_id} for this request",
+                    simple_log="conversation generate task",
+                )
             task_model, model_configs = AgentIrUtils().get_task_model(
                 current_ir_data, task_id
             )
@@ -1306,17 +1307,19 @@ class IRConverter:
                 )
             else:
                 llm = None
-            logger.info(
-                f"processing agent config of {current_metadata.id}",
-                simple_log="processing agent config",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"processing agent config of {current_metadata.id}",
+                    simple_log="processing agent config",
+                )
             current_config = await IRConverter.create_agent_config(
                 current_ir_data, llm, task_model, task_id
             )
-            logger.info(
-                f"get agent config of {current_metadata.id} success",
-                simple_log="get agent config",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"get agent config of {current_metadata.id} success",
+                    simple_log="get agent config",
+                )
             current_config.metadata = current_metadata
             current_config.parent_agent_metadata = parent_metadata
             current_config.child_agents_metadata = child_metadata_list
