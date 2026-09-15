@@ -596,6 +596,7 @@ export class DynamicNodeParamsComponent {
     const input = e.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
+    if (this.isUploading) return;
     if (uploadType === 'single') {
       const file: File = files[0];
       if (!file) {
