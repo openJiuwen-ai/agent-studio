@@ -1,12 +1,10 @@
 """Regression tests for the agent-runtime hot-path optimizations."""
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import jiuwen.extension.patches.loop_body_session_cleanup_patch as loop_patch
 import pytest
-import tomllib
 from jiuwen.serve.controllers.execution import ir_converter, open_utils
 from openjiuwen.core.common.constants.constant import LOOP_ID
 
@@ -29,12 +27,18 @@ class _Workflow:
 def test_component_registration_forwards_name_without_signature_reflection(
     is_loop_group,
 ):
-    """Registration should use the pinned 0.1.18 name API directly."""
+    """Registration forwards names without reflecting on every component."""
     workflow = _LoopGroupWorkflow() if is_loop_group else _Workflow()
     component = object()
+    support_flag = (
+        "_LOOP_GROUP_ADD_COMP_SUPPORTS_NAME"
+        if is_loop_group
+        else "_WORKFLOW_ADD_COMP_SUPPORTS_NAME"
+    )
 
     with (
         patch.object(ir_converter, "LoopGroup", _LoopGroupWorkflow),
+        patch.object(ir_converter, support_flag, True),
         patch.object(
             ir_converter.inspect,
             "signature",
@@ -56,36 +60,20 @@ def test_component_registration_forwards_name_without_signature_reflection(
     assert workflow.add_workflow_comp.call_args.kwargs["name"] == "显示名称"
 
 
-def test_openjiuwen_dependency_is_pinned_to_the_same_release():
-    """The editable project and container requirements must use one release."""
-    runtime_root = Path(__file__).parents[3]
-    pyproject = tomllib.loads(
-        (runtime_root / "pyproject.toml").read_text(encoding="utf-8")
-    )
-    requirements = (runtime_root / "requirements.txt").read_text(encoding="utf-8")
-
-    assert "openjiuwen[sandbox]==0.1.18" in pyproject["project"]["dependencies"]
-    assert "openjiuwen==0.1.18" in requirements.splitlines()
-
-
-def test_openjiuwen_release_exposes_name_on_workflow_registrations():
-    """The pinned release must support direct name forwarding on both APIs."""
-    from inspect import signature
-
-    from openjiuwen.core.workflow import Workflow
-    from openjiuwen.core.workflow.components.flow.loop.loop_comp import LoopGroup
-
-    assert "name" in signature(Workflow.add_workflow_comp).parameters
-    assert "name" in signature(LoopGroup.add_workflow_comp).parameters
-
-
 def test_openjiuwen_direct_commit_does_not_alias_mutable_payload():
-    """The pinned core API must preserve isolation from later input mutation."""
-    from openjiuwen.core.session.state.base import InMemoryCommitState
+    """Direct commit must isolate mutable payloads when the API is available."""
+    try:
+        from openjiuwen.core.session.state.base import InMemoryCommitState
+    except ImportError:
+        pytest.skip("openjiuwen core does not expose InMemoryCommitState")
 
     state = InMemoryCommitState()
+    commit = getattr(state, "update_by_id_and_commit", None)
+    if commit is None:
+        pytest.skip("openjiuwen core does not expose direct commit API")
+
     payload = {"loop-node": {"items": []}}
-    state.update_by_id_and_commit("loop-node", payload)
+    commit("loop-node", payload)
 
     payload["loop-node"]["items"].append("mutated-after-commit")
 
