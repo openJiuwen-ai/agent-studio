@@ -141,7 +141,7 @@ def apply_loop_body_session_cleanup_patch() -> bool:
 _PATCH_STATE_APPLIED = False
 _orig_advanced_loop_on_invoke = None
 _LOOP_STATE_DIRECT_COMMIT_ENABLED = (
-    os.getenv("LOOP_STATE_DIRECT_COMMIT_ENABLED", "false").strip().lower() == "true"
+    os.getenv("LOOP_STATE_DIRECT_COMMIT_ENABLED", "true").strip().lower() == "true"
 )
 _NODE_ID_ATTR = "_node_id"
 _NODE_SESSION_ATTR = "_node_session"

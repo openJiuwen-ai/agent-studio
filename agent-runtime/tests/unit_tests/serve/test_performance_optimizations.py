@@ -1,12 +1,14 @@
 """Regression tests for the agent-runtime hot-path optimizations."""
 
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-import jiuwen.extension.patches.loop_body_session_cleanup_patch as loop_patch
 import pytest
-from jiuwen.serve.controllers.execution import ir_converter, open_utils
 from openjiuwen.core.common.constants.constant import LOOP_ID
+
+import jiuwen.extension.patches.loop_body_session_cleanup_patch as loop_patch
+from jiuwen.serve.controllers.execution import ir_converter, open_utils
 
 
 class _LoopGroupWorkflow:
@@ -78,6 +80,14 @@ def test_openjiuwen_direct_commit_does_not_alias_mutable_payload():
     payload["loop-node"]["items"].append("mutated-after-commit")
 
     assert state.get_state()["loop-node"]["items"] == []
+
+
+def test_loop_state_direct_commit_defaults_to_enabled(monkeypatch):
+    """Direct commit is enabled when the rollout variable is not set."""
+    monkeypatch.delenv("LOOP_STATE_DIRECT_COMMIT_ENABLED", raising=False)
+    importlib.reload(loop_patch)
+
+    assert loop_patch._LOOP_STATE_DIRECT_COMMIT_ENABLED is True
 
 
 @pytest.mark.asyncio
