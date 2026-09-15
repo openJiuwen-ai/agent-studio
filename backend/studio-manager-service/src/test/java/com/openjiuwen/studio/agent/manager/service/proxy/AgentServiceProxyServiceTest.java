@@ -710,12 +710,31 @@ class AgentServiceProxyServiceTest {
     void testResolveEnvironmentIdForSingleAgent_SingleAgentWithDefaultEnv() {
         Agent agent = new Agent();
         agent.setType(CommonConstant.AGENT_TYPE);
+        agent.setProjectId("proj-1");
         when(agentMapper.selectById("agent-1")).thenReturn(agent);
         EnvironmentManagerEntity env = new EnvironmentManagerEntity();
         env.setId("env-default");
         when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
 
         assertEquals("env-default", proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-1", null));
+    }
+
+    /**
+     * resolveEnvironmentIdForSingleAgent — 共享智能体（归属项目≠请求项目，opSvc 发布态
+     * 跨项目调用可达）：不兜底返回 null，不查默认环境——调用方项目默认环境变量不能
+     * 注入归属其它项目的智能体（runtime 按请求 workspace 加载变量，会把发布方
+     * 占位符 api_url 解析到调用方环境配置的端点）
+     */
+    @Test
+    void testResolveEnvironmentIdForSingleAgent_SharedAgentCrossProject_NoFallback() {
+        Agent agent = new Agent();
+        agent.setType(CommonConstant.AGENT_TYPE);
+        agent.setProjectId("op-svc-project");
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
+
+        assertNull(proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-1", null));
+
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
     }
 
     /**

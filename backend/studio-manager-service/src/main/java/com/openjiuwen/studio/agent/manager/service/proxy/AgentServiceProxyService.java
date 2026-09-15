@@ -631,11 +631,12 @@ public class AgentServiceProxyService {
 
     /**
      * 单智能体运行的 environment_id 兜底：入参非空原样返回；为空且目标智能体为
-     * 单智能体（t_agent.type = agent）时回填项目默认环境 id。
-     * 多智能体（controller）/高代码（agent_new）/智能体不存在/查询异常一律返回
-     * null，转发不带 environment_id，保持既有运行行为——runtime 会话路由同时服务
-     * 单智能体与多智能体（百宝箱试用也复用），默认环境兜底只应作用于无环境选择的
-     * 单智能体链路，不向其他类型应用注入项目默认环境变量。
+     * 归属请求项目的单智能体（t_agent.type = agent 且 project_id 一致）时回填项目
+     * 默认环境 id。多智能体（controller）/高代码（agent_new）/智能体不存在/跨项目
+     * 共享智能体（opSvc 归属，checkAgentPermission 允许跨项目调用发布态）/查询
+     * 异常一律返回 null，转发不带 environment_id，保持既有运行行为——runtime 会话
+     * 路由同时服务单智能体与多智能体（百宝箱试用也复用），默认环境兜底只应作用于
+     * 无环境选择的单智能体链路，不向其他类型/归属其它项目的应用注入项目默认环境变量。
      *
      * @param projectId 项目 id
      * @param agentId 智能体 id
@@ -649,6 +650,15 @@ public class AgentServiceProxyService {
         try {
             Agent agent = agentMapper.selectById(agentId);
             if (agent == null || !CommonConstant.AGENT_TYPE.equals(agent.getType())) {
+                return null;
+            }
+            // 共享智能体（归属项目与请求项目不一致，仅 opSvc 发布态可达）不做兜底：
+            // runtime 按 environment:{envId}:workspaceId:{请求workspace} 加载变量，
+            // 回填调用方项目默认环境会把发布方占位符 api_url 解析到调用方环境配置的
+            // 端点（模型请求重定向、调用方变量值外流）
+            if (!Objects.equals(projectId, agent.getProjectId())) {
+                log.warn("agent {} belongs to project {}, not request project {}, skip default environment",
+                    agentId, agent.getProjectId(), projectId);
                 return null;
             }
             return resolveEnvironmentId(projectId, null);
