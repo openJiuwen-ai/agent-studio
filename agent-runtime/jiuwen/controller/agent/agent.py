@@ -682,9 +682,12 @@ class Agent(BaseAgent):
         """处理Controller模式的流式输出"""
         async for item in yield_res:
             yield item
+            if isinstance(item, dict) and item.get(self.ret_code_key_word) == RetCode.SUCCESS.value:
+                self.result = item
         if trace_manager:
             await trace_manager.on_chain_end(self.result)
-        yield self.result
+        if self.result is not None:
+            yield self.result
 
     async def _handle_react_mode_stream(self, yield_res, trace_manager):
         """处理ReAct模式的流式输出"""
@@ -706,9 +709,12 @@ class Agent(BaseAgent):
         """处理默认模式的流式输出"""
         async for item in yield_res:
             yield item
+            if isinstance(item, dict) and item.get(self.ret_code_key_word) == RetCode.SUCCESS.value:
+                self.result = item
         if trace_manager:
             await trace_manager.on_chain_end(self.result)
-        yield self.result
+        if self.result is not None:
+            yield self.result
 
     async def _inject_skills_if_needed(self, runtime_context, plugins):
         """根据计划模式决定是否进行动态技能注入，返回 (plugins, SkillInjectionContext)
