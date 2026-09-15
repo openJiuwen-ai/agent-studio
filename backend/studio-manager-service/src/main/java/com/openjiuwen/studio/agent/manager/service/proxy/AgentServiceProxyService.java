@@ -57,12 +57,14 @@ import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
+import com.openjiuwen.studio.agent.manager.entity.ReleaseChannel;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ReleaseChannelMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
@@ -137,6 +139,8 @@ public class AgentServiceProxyService {
     private final ToolMapper toolMapper;
 
     private final EnvironmentManagerMapper environmentManagerMapper;
+
+    private final ReleaseChannelMapper releaseChannelMapper;
 
     private final AgentRuntimeService agentRuntimeService;
 
@@ -227,6 +231,7 @@ public class AgentServiceProxyService {
         WorkflowMapper workflowMapper, ModelServiceMapper modelServiceMapper, OkHttpClientUtils okHttpClientUtils,
         RouterStrategyMapper routerStrategyMapper, FreeModelServiceMapper freeModelServiceMapper,
         ToolMapper toolMapper, EnvironmentManagerMapper environmentManagerMapper,
+        ReleaseChannelMapper releaseChannelMapper,
         AgentRuntimeService agentRuntimeService,
         ControllerDebuggingMgmtService controllerDebuggingMgmtService, MgObsService mgObsService) {
         this.runtimeClient = runtimeClient;
@@ -240,6 +245,7 @@ public class AgentServiceProxyService {
         this.freeModelServiceMapper = freeModelServiceMapper;
         this.toolMapper = toolMapper;
         this.environmentManagerMapper = environmentManagerMapper;
+        this.releaseChannelMapper = releaseChannelMapper;
         this.agentRuntimeService = agentRuntimeService;
         this.controllerDebuggingMgmtService = controllerDebuggingMgmtService;
         this.mgObsService = mgObsService;
@@ -623,10 +629,43 @@ public class AgentServiceProxyService {
         }
     }
 
+    /**
+     * 单智能体运行的 environment_id 兜底：入参非空原样返回；为空且目标智能体为
+     * 单智能体（t_agent.type = agent）时回填项目默认环境 id。
+     * 多智能体（controller）/高代码（agent_new）/智能体不存在/查询异常一律返回
+     * null，转发不带 environment_id，保持既有运行行为——runtime 会话路由同时服务
+     * 单智能体与多智能体（百宝箱试用也复用），默认环境兜底只应作用于无环境选择的
+     * 单智能体链路，不向其他类型应用注入项目默认环境变量。
+     *
+     * @param projectId 项目 id
+     * @param agentId 智能体 id
+     * @param environmentId 请求携带的 environment_id，可为空
+     * @return 实际使用的 environment_id，可能为 null
+     */
+    public String resolveEnvironmentIdForSingleAgent(String projectId, String agentId, String environmentId) {
+        if (StringUtils.hasText(environmentId)) {
+            return environmentId;
+        }
+        try {
+            Agent agent = agentMapper.selectById(agentId);
+            if (agent == null || !CommonConstant.AGENT_TYPE.equals(agent.getType())) {
+                return null;
+            }
+            return resolveEnvironmentId(projectId, null);
+        } catch (Exception e) {
+            log.error("resolve single agent default environment failed, projectId: {}, agentId: {}",
+                projectId, agentId, e);
+            return null;
+        }
+    }
+
     public Object runWebAgent(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
         Boolean stream, AgentRunReq body) {
-        // 网页短链入口无环境概念，统一用项目默认环境解析模型 api_url 占位符
-        String environmentId = resolveEnvironmentId(projectId, null);
+        // 网页短链入口无鉴权，路径 project_id 不可信（可被替换成调用者自己的项目并配好
+        // 默认环境，使发布智能体的占位符 api_url 按调用者的环境变量解析、模型请求被重定向）：
+        // 默认环境一律按 short_code 所属发布通道的 project 解析，与 runtime 侧按 Redis
+        // release_web_rel_{short_code} 中的 project_id 构造执行上下文的做法一致
+        String environmentId = resolveWebAgentEnvironmentId(shortCode);
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + workspaceId;
             if (StringUtils.hasText(environmentId)) {
@@ -635,6 +674,42 @@ public class AgentServiceProxyService {
             return stream(url, httpHeaders, JsonUtils.encode(body));
         }
         return runtimeClient.runWebAgent(getToken(), shortCode, workspaceId, false, environmentId, body).getBody();
+    }
+
+    /**
+     * 网页短链运行的默认环境解析：以 short_code 反查发布通道所属 project 为准，
+     * 不信任请求路径 project_id（短链入口无鉴权）。WEB_PAGE / CLOUD_STORE 两类
+     * 网页渠道均生成 short_code，逐类反查。通道不存在、发布应用非单智能体
+     * （appType != agent，多智能体发布不走本兜底）或查表异常返回 null，转发
+     * 不带 environment_id，行为与项目未配置默认环境一致（占位符模型报
+     * MD_ENV_VAR_UNRESOLVED，不会借用其它项目的环境变量）。
+     *
+     * @param shortCode 网页短链码
+     * @return 默认环境 id，可能为 null
+     */
+    private String resolveWebAgentEnvironmentId(String shortCode) {
+        try {
+            ReleaseChannel channel = releaseChannelMapper.selectByChannelIdOrShortCode(
+                null, null, shortCode, CommonConstant.WEB_PAGE_CHANNEL);
+            if (channel == null) {
+                channel = releaseChannelMapper.selectByChannelIdOrShortCode(
+                    null, null, shortCode, CommonConstant.CLOUD_STORE_CHANNEL);
+            }
+            if (channel == null || !StringUtils.hasText(channel.getProjectId())) {
+                log.warn("web release channel not found or missing project, skip default environment, shortCode: {}",
+                    shortCode);
+                return null;
+            }
+            if (!CommonConstant.AGENT_TYPE.equals(channel.getAppType())) {
+                log.warn("web release channel app is not single agent, skip default environment, shortCode: {}, "
+                    + "appType: {}", shortCode, channel.getAppType());
+                return null;
+            }
+            return resolveEnvironmentId(channel.getProjectId(), null);
+        } catch (Exception e) {
+            log.error("resolve web agent default environment failed, shortCode: {}", shortCode, e);
+            return null;
+        }
     }
 
     public void checkToolsPermission(ToolEntity tool, String projectId, String workspaceId) {

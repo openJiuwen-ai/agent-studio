@@ -8,16 +8,19 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
+import com.openjiuwen.studio.agent.manager.entity.ReleaseChannel;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ReleaseChannelMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
@@ -54,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
@@ -100,6 +104,9 @@ class AgentServiceProxyServiceTest {
     private EnvironmentManagerMapper environmentManagerMapper;
 
     @Mock
+    private ReleaseChannelMapper releaseChannelMapper;
+
+    @Mock
     private AgentRuntimeService agentRuntimeService;
 
     @Mock
@@ -114,7 +121,7 @@ class AgentServiceProxyServiceTest {
     void setUp() {
         proxyService = new AgentServiceProxyService(runtimeClient, builderClient, redisClient, agentMapper, workflowMapper,
             modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper,
-            environmentManagerMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
+            environmentManagerMapper, releaseChannelMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");
@@ -686,13 +693,94 @@ class AgentServiceProxyServiceTest {
     }
 
     /**
-     * runWebAgent 流式 — 默认环境存在：转发 URL 追加 environment_id
+     * resolveEnvironmentIdForSingleAgent — 入参非空原样透传，不查智能体也不查默认环境
      */
     @Test
-    void testRunWebAgent_StreamWithDefaultEnv() {
+    void testResolveEnvironmentIdForSingleAgent_NonBlankPassthrough() {
+        assertEquals("env-explicit", proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-1", "env-explicit"));
+
+        verify(agentMapper, never()).selectById(anyString());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * resolveEnvironmentIdForSingleAgent — 单智能体（type=agent）且默认环境存在：返回默认环境 id
+     */
+    @Test
+    void testResolveEnvironmentIdForSingleAgent_SingleAgentWithDefaultEnv() {
+        Agent agent = new Agent();
+        agent.setType(CommonConstant.AGENT_TYPE);
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
         EnvironmentManagerEntity env = new EnvironmentManagerEntity();
         env.setId("env-default");
         when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+
+        assertEquals("env-default", proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-1", null));
+    }
+
+    /**
+     * resolveEnvironmentIdForSingleAgent — 多智能体（type=controller）：不兜底返回 null，
+     * 不触发默认环境查询（runtime 会话路由同时服务单智能体与多智能体）
+     */
+    @Test
+    void testResolveEnvironmentIdForSingleAgent_ControllerType_NoFallback() {
+        Agent agent = new Agent();
+        agent.setType("controller");
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
+
+        assertNull(proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-1", null));
+
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * resolveEnvironmentIdForSingleAgent — 智能体不存在：fail-closed 返回 null，不查默认环境
+     */
+    @Test
+    void testResolveEnvironmentIdForSingleAgent_AgentNotFound_NoFallback() {
+        when(agentMapper.selectById("agent-x")).thenReturn(null);
+
+        assertNull(proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-x", null));
+
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * resolveEnvironmentIdForSingleAgent — 智能体查询异常：fail-closed 返回 null，不上抛
+     */
+    @Test
+    void testResolveEnvironmentIdForSingleAgent_AgentMapperThrows() {
+        when(agentMapper.selectById("agent-1")).thenThrow(new RuntimeException("db down"));
+
+        assertNull(proxyService.resolveEnvironmentIdForSingleAgent("proj-1", "agent-1", null));
+    }
+
+    /** 构造网页发布通道 stub：short_code=code-1，所属项目可指定；appType 默认单智能体 */
+    private ReleaseChannel webChannel(String projectId) {
+        return webChannel(projectId, CommonConstant.AGENT_TYPE);
+    }
+
+    /** 构造网页发布通道 stub：short_code=code-1，所属项目与发布应用类型可指定 */
+    private ReleaseChannel webChannel(String projectId, String appType) {
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setShortCode("code-1");
+        channel.setProjectId(projectId);
+        channel.setAppType(appType);
+        return channel;
+    }
+
+    /**
+     * runWebAgent 流式 — 通道存在且有默认环境：转发 URL 追加 environment_id，
+     * 且默认环境按通道所属项目解析（通道项目与路径 project_id 故意不同，
+     * 断言路径 project_id 不参与解析 —— 短链入口无鉴权的信任边界）
+     */
+    @Test
+    void testRunWebAgent_StreamWithDefaultEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-default");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(List.of(env));
 
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
@@ -703,14 +791,18 @@ class AgentServiceProxyServiceTest {
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
         assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1&environment_id=env-default",
             urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue("proj-1");
     }
 
     /**
-     * runWebAgent 流式（stream 缺省按 true）— 无默认环境：转发 URL 不带 environment_id，行为同现状
+     * runWebAgent 流式（stream 缺省按 true）— 通道存在但项目无默认环境：
+     * 转发 URL 不带 environment_id，行为同现状
      */
     @Test
     void testRunWebAgent_StreamNoDefaultEnv() {
-        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(Collections.emptyList());
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(Collections.emptyList());
 
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
@@ -723,15 +815,17 @@ class AgentServiceProxyServiceTest {
     }
 
     /**
-     * runWebAgent 非流式 — 默认环境存在：Feign 调用携带默认环境 id
+     * runWebAgent 非流式 — 通道存在且有默认环境：Feign 调用携带默认环境 id
      */
     @Test
     void testRunWebAgent_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+                eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
             env.setId("env-default");
-            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(List.of(env));
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
@@ -745,13 +839,15 @@ class AgentServiceProxyServiceTest {
     }
 
     /**
-     * runWebAgent 非流式 — 无默认环境：Feign 调用 environment_id 为 null，行为同现状
+     * runWebAgent 非流式 — 通道存在但项目无默认环境：Feign 调用 environment_id 为 null，行为同现状
      */
     @Test
     void testRunWebAgent_NonStreamNoDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
-            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(Collections.emptyList());
+            when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+                eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
+            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(Collections.emptyList());
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
@@ -762,6 +858,109 @@ class AgentServiceProxyServiceTest {
 
             assertEquals("ok", result);
         }
+    }
+
+    /**
+     * runWebAgent — 两类网页渠道均查不到通道（short_code 无效）：不带 environment_id，
+     * 也不触发默认环境查询（不能借用路径 project_id 的环境）
+     */
+    @Test
+    void testRunWebAgent_ChannelNotFound_NoEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(null);
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.CLOUD_STORE_CHANNEL))).thenReturn(null);
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * runWebAgent — WEB_PAGE 渠道查不到时回退 CLOUD_STORE 渠道：按云商店通道所属项目解析默认环境
+     */
+    @Test
+    void testRunWebAgent_CloudStoreChannelFallback() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(null);
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.CLOUD_STORE_CHANNEL))).thenReturn(webChannel("proj-cloud"));
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-cloud");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-cloud")).thenReturn(List.of(env));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1&environment_id=env-cloud",
+            urlCaptor.getValue());
+    }
+
+    /**
+     * runWebAgent — 通道查表异常：兜底不带 environment_id，不上抛
+     */
+    @Test
+    void testRunWebAgent_ChannelLookupThrows_NoEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenThrow(new RuntimeException("db down"));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+    }
+
+    /**
+     * runWebAgent — 通道存在但所属项目为空白：视为无法解析，不带 environment_id
+     */
+    @Test
+    void testRunWebAgent_ChannelProjectBlank_NoEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel(" "));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * runWebAgent — 通道存在但发布应用非单智能体（appType=controller）：
+     * 不兜底默认环境，转发 URL 不带 environment_id（多智能体发布不走本兜底）
+     */
+    @Test
+    void testRunWebAgent_ChannelAppTypeNotAgent_NoEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", "controller"));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
     }
 
     /**

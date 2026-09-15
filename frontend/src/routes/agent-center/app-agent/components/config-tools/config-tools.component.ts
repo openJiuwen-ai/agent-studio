@@ -673,9 +673,10 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.probeInfo.collapsed = false;
 
-    // 查询是否存在默认环境，决定占位符模型是否可选（运行时由 manager 兜底回填默认环境 id）
+    // 查询是否存在默认环境，决定占位符模型是否可选（运行时由 manager 兜底回填默认环境 id）。
+    // is_default 过滤由服务端单条返回，避免环境数超过单页上限时默认环境漏判（前后端判断不一致）
     this.envManagementService
-      .getEnvironmentList({ offset: 0, limit: 99 })
+      .getEnvironmentList({ offset: 0, limit: 99, isDefault: true })
       .then((res) => {
         this.hasDefaultEnv = (res?.env_info || []).some(
           (env: any) => env.isDefault

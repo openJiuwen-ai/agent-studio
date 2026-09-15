@@ -2555,8 +2555,8 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           if (this.type !== 'multi') { this.updateOutputsMap(); }
         });
       } else {
-        // 未绑定环境时使用默认环境
-        this.envManagementService.getEnvironmentList({ offset: 0, limit: 99 }).then(envRes => {
+        // 未绑定环境时使用默认环境（is_default 过滤由服务端单条返回，避免分页截断漏判默认环境）
+        this.envManagementService.getEnvironmentList({ offset: 0, limit: 99, isDefault: true }).then(envRes => {
           const defaultEnv = (envRes?.env_info || []).find((e: any) => e.isDefault);
           if (defaultEnv?.id) {
             this.defaultEnvId = defaultEnv.id;
