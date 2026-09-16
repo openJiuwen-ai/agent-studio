@@ -653,12 +653,12 @@ async def get_agent_deploy_detail(
     if client is None:
         client = get_agent_client()
 
-        deploy_detail = await client.get_deploy_detail(deployment_id, user_id, space_id)
-        if isinstance(deploy_detail, dict) and deploy_detail:
-            logger.info(f"Get deploy detail successfully: deployment_id={deployment_id}")
-            return deploy_detail
-        elif deploy_detail.status_code == 202:
-            _ = await unregister_deploy_info(space_id=space_id, deployment_id=deployment_id)
-            logger.info(f"Delete deploy detail for runtime server not found: deployment_id={deployment_id}")
-    else:
-        return {}
+    deploy_detail = await client.get_deploy_detail(deployment_id, user_id, space_id)
+    if isinstance(deploy_detail, dict) and deploy_detail:
+        logger.info(f"Get deploy detail successfully: deployment_id={deployment_id}")
+        return deploy_detail
+    elif deploy_detail.status_code == 202:
+        _ = await unregister_deploy_info(space_id=space_id, deployment_id=deployment_id)
+        logger.info(f"Delete deploy detail for runtime server not found: deployment_id={deployment_id}")
+
+    return {}
