@@ -249,6 +249,8 @@ export class InputNodeParamsComponent {
       this.inputIndex = this.inputList.findIndex(
         (item) => item.name === inputItem.name,
       );
+      // 批次开始置位、整批结束复位，驱动一键清空/添加按钮的上传中禁用
+      this.isUploading = true;
       for (const file of files as any) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -266,6 +268,7 @@ export class InputNodeParamsComponent {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
         });
       }
+      this.isUploading = false;
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue(
         inputItem.uploadDatas,
       );
