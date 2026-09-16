@@ -470,8 +470,10 @@ async def cancel_execution(
 
     归属校验（_check_before_cancel）→ 置协作式取消标记（所有实例可见，幂等 TTL）
     + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段。
-    cancelled=取消信号已受理（除 4xx/5xx 外恒 true，不代表终止完成）；running=调用时
-    是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，不视为失败）。
+    cancelled=取消标记真实置位时 true；会话无任何痕迹（从未执行/打错会话 ID/
+    快照过期）时 false 且 message 明示，防调用方把"打错 ID"误判为终止成功；
+    running=调用时是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，
+    不视为失败）。
     运行中被终止的原 SSE 流末尾无 done（无 done 即中止，零改动约定）。
     """
     language = request.headers.get("x-language", "zh-cn")
@@ -496,7 +498,10 @@ async def cancel_execution(
         # 两类挂起；新执行开始时顺带清理并随 register 重写）
         suspension = await registry.get_suspension(conversation_id)
         if not suspension:
-            # 无快照=从未执行或已彻底结束：幂等放行但绝不写标记（无意义取消不留痕）
+            # 无快照=从未执行或已彻底结束（打错会话 ID 也在此列）：幂等放行但绝不写
+            # 标记（无意义取消不留痕）。cancelled=false + message 明示"会话不存在，
+            # 未做任何终止"——防止调用方把打错 ID 的 200 误判为终止成功（cancelled=true
+            # 仅在标记真实置位时返回，三分语义：置位生效 / 无事发生 / 403 无权限）
             workflow_logger.info(
                 "Cancel accepted as no-op: no in-flight registration and no "
                 "suspension snapshot, conv=%s",
@@ -507,9 +512,9 @@ async def cancel_execution(
                 content={
                     "agent_id": agent_id or workflow_id,
                     "conversation_id": conversation_id,
-                    "cancelled": True,
+                    "cancelled": False,
                     "running": False,
-                    "message": "cancel signal accepted",
+                    "message": "conversation not found, nothing cancelled",
                 },
             )
         # 挂起态归属校验（与在飞校验同规格）：路径 project 强校验 + 可选入口级校验
