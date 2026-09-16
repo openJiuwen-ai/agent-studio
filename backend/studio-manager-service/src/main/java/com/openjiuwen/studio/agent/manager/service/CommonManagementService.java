@@ -193,9 +193,6 @@ public class CommonManagementService implements ICommonManagementService {
     @Value("${space-service-display:false}")
     private boolean spaceServiceDisplay;
 
-    @Value("${apikey.enable:false}")
-    private boolean apiKeyEnable;
-
     @Value("${display.mutilagent.max_iteration:30}")
     private int maxIteration;
 
@@ -355,7 +352,6 @@ public class CommonManagementService implements ICommonManagementService {
         defConfigJsonObject.put("long_term_memory_enabled", longTermMemoryEnable); // 是否启用长期记忆
         defConfigJsonObject.put("agent_tool_priority_enable", agentToolPriorityEnable); // 是否开启工具优先
         defConfigJsonObject.put("his_openai_enable", hisModelProtocolEnable); // 是否开启HIS 定制的模型接入能力 鉴权
-        defConfigJsonObject.put("apikey_enable", apiKeyEnable); // 是否开启apieky功能
         defConfigJsonObject.put("knowledge_file_types", supportedKnowledgeType);
         defConfigJsonObject.put("prompt_max_length", promptContentLength);
         defConfigJsonObject.put("hmac_auth_enabled", HMACAuthEnabled); // 是否开启HMAC鉴权

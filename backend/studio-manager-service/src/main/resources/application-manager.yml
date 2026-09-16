@@ -820,10 +820,6 @@ saml:
   projectId: ${saml_projectId:0}
   redirectUrl: ${saml_redirectUrl:https://127.0.0.1:30001/modelarts/agent-builder/#/home/overview}
 
-apikey:
-  enable: ${apikey_enable:false}
-  sync:
-    interval: ${apikey_sync_interval:300000}
 # =============== space =========================
 space-service-display: ${space_service_display:false}
 allow-plugin-cross-permission-query: ${allow_plugin_cross_permission_query:false}

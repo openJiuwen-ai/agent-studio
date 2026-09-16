@@ -10,7 +10,6 @@ import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
-import com.openjiuwen.studio.agent.common.dto.mcp.McpCallToolResp;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
 import com.openjiuwen.studio.agent.common.dto.run.*;
@@ -21,7 +20,6 @@ import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.manager.dto.openjiuwen.*;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
-import com.openjiuwen.studio.agent.manager.rce.models.McpCallToolRequest;
 import com.openjiuwen.studio.prompt.engineering.dto.IndustryVo;
 import io.swagger.annotations.ApiParam;
 import jakarta.validation.Valid;
@@ -65,30 +63,6 @@ public interface AgentRuntimeClient {
         @NotNull @ApiParam(value = "发布通道类型", required = true)
         @RequestParam(value = "channel_type", required = true) String channelType,
         @ApiParam(value = "版本ID") @RequestParam(value = "version_id", required = false) String versionId);
-
-    /**
-     * 查询 mcp 服务工具列表
-     *
-     * @param authToken 认证 token
-     * @param projectId project id
-     * @param body      mcp 服务信息
-     * @return mcp 服务工具列表
-     */
-    @PostMapping("/v1/{project_id}/mcp-servers/tools")
-    ResponseEntity<McpServerTools> queryMcpServerTools(@RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @RequestBody McpServerReq body);
-
-    /**
-     * 运行 mcp 服务指定工具
-     *
-     * @param authToken 认证 token
-     * @param projectId project id
-     * @param body      工具运行信息
-     * @return mcp 工具运行结果
-     */
-    @PostMapping("/v1/{project_id}/mcp-servers/tools/run")
-    ResponseEntity<McpCallToolResp> callMcpServerTool(@RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @RequestBody McpCallToolRequest body);
 
     /**
      * 运行 agent，带会话 id

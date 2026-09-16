@@ -56,6 +56,7 @@ import com.openjiuwen.studio.agent.manager.dto.PageInfoV2;
 import com.openjiuwen.studio.agent.manager.dto.McpFailReasonDetailDto;
 import com.openjiuwen.studio.agent.manager.dto.ListServersQo;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerRatingEntity;
@@ -990,6 +991,49 @@ public class McpServiceManager implements IMcpServiceManagerService {
             }
             throw e;
         }
+    }
+
+    /**
+     * 恢复认证信息：从加密的 serverConfig 中解析 header，写回 authInfo（供 IR 生成时透传）
+     *
+     * @param serviceEntity MCP 服务实体
+     */
+    public void recoveryAuthInfo(McpServiceEntity serviceEntity) {
+        log.info("Start to recovery auth info for service: {}", serviceEntity.getId());
+
+        if (StringUtils.isBlank(serviceEntity.getServerConfig())) {
+            log.warn("Server config is blank, skip recovery. Service ID: {}", serviceEntity.getId());
+            return;
+        }
+
+        Map<String, String> headerInfo;
+        try {
+            String decrypted = encryptionAdapter.decrypt(serviceEntity.getServerConfig());
+            headerInfo = CommonUtil.parseMcpConfigHeaderInfo(decrypted);
+        } catch (Exception e) {
+            log.error(">>>recoveryAuthInfo decrypt failed!, error: {}", e.getMessage());
+            headerInfo = new HashMap<>();
+        }
+
+        AuthInfo authInfo = null == serviceEntity.getAuth() ? new AuthInfo() : serviceEntity.getAuth();
+
+        if (CollectionUtils.isEmpty(headerInfo)) {
+            log.warn("Header info is empty, no auth keys to recover. Service ID: {}", serviceEntity.getId());
+            return;
+        }
+
+        List<AuthKeyInfo> authKeyInfos = null == authInfo.getAuthKeys() ? new ArrayList<>() : authInfo.getAuthKeys();
+
+        headerInfo.forEach((key, value) -> {
+            AuthKeyInfo authKeyInfo = new AuthKeyInfo();
+            authKeyInfo.setTargetName(key);
+            authKeyInfo.setAuthKey(value);
+            authKeyInfos.add(authKeyInfo);
+        });
+
+        authInfo.setAuthKeys(authKeyInfos);
+        authInfo.setScope(AuthInfo.ScopeEnum.USER);
+        serviceEntity.setAuth(authInfo);
     }
 
     /**
