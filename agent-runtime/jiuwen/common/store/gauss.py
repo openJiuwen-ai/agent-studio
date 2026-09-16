@@ -36,7 +36,26 @@ class DBUtil:
 
         """
         cls.db_config = cls.db_config or GaussDBConfig()
-        cls.ctx_pool = cls.ctx_pool
+        if cls.ctx_pool is None:
+            from psycopg2.pool import SimpleConnectionPool
+            cls.ctx_pool = SimpleConnectionPool(
+                minconn=cls.db_config.minconn,
+                maxconn=cls.db_config.maxconn,
+                host=cls.db_config.host,
+                port=cls.db_config.port,
+                user=cls.db_config.user,
+                password=cls.db_config.password,
+                dbname=cls.db_config.dbname,
+                sslmode=cls.db_config.ssl_mode,
+                sslrootcert=cls.db_config.ssl_root_cert,
+                sslcert=cls.db_config.ssl_cert,
+                sslkey=cls.db_config.ssl_key,
+                connect_timeout=10,
+                keepalives=cls.db_config.keepalives,
+                keepalives_idle=cls.db_config.keepalives_idle,
+                keepalives_interval=cls.db_config.keepalives_interval,
+                keepalives_count=cls.db_config.keepalives_count,
+            )
 
     @classmethod
     @contextmanager
