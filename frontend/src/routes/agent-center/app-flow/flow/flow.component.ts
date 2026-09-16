@@ -738,10 +738,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
                     (node as IControllerNode).configs.agents[index] = {
                       id: agents.id,
                       node_id: agents.node_id,
+                      type: agents.type,
                       mode: agents.mode,
                       name: new_sub_detail.name,
                       configs: new_sub_detail.configs,
-                    };
+                    } as any;
                   }
                 },
               );
@@ -2327,7 +2328,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.testBtnLoading = false;
       this.appFlowServ.setSaveNodeTestInfo(null);
       if (this.type === 'multi') {
-        this.showRunModal = true;
+        // 预览状态下，不会调用校验接口
+        if (this.isFlowReadonly) {
+          this.showRunModal = true;
+        } else {
+          this.isStartCheckErrorWorkFlow = true;
+          await this.checkErrorMultiAgentFlow(true);
+        }
       } else {
         // 预览状态下，不会调用校验接口
         if (this.isFlowReadonly) {
@@ -3670,13 +3677,62 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           this.checkErrorWorkflowIcon = new Set(
             errors.map((error) => error.id),
           ).size;
-          if (showModal && this.checkErrorWorkflowIcon > 0) {
+          if ((showModal || isPublish) && this.checkErrorWorkflowIcon > 0) {
             this.showCheckWorkflowModal();
           }
         }
         this.appFlowServ.setValidateWorkflowList(this.validateWorkflowList);
       }, 10);
     }
+  }
+
+  /** 多智能体试运行前校验：检查下挂子工作流的版本是否存在 */
+  async checkErrorMultiAgentFlow(showModal, isPublish?: boolean) {
+    if (this.checkErrorWorkflowSetTime) {
+      clearTimeout(this.checkErrorWorkflowSetTime);
+      this.checkErrorWorkflowSetTime = null;
+    }
+
+    this.checkErrorWorkflowSetTime = setTimeout(async () => {
+      try {
+        const validateRes = await this.appFlowRepoServ.validateControllerAgent(this.workflowId);
+        const {success, errors} = validateRes;
+        if (success) {
+          this.checkErrorWorkflowIcon = 0;
+          this.appFlowServ.testRunVerificationError = false;
+          this.validateWorkflowList = [];
+          this.checkErrorWorkflowHalfModalRef = false;
+          if (showModal) {
+            this.showRunModal = true;
+          } else if (isPublish) {
+            // 多智能体发布版本
+            this.handelPublish();
+          }
+          this.isStartCheckErrorWorkFlow = false;
+        } else {
+          this.validateWorkflowList = errors;
+          this.appFlowServ.testRunVerificationError = true;
+          this.checkErrorWorkflowIcon = new Set(
+            errors.map((error) => error.id),
+          ).size;
+          if ((showModal || isPublish) && this.checkErrorWorkflowIcon > 0) {
+            this.showCheckWorkflowModal();
+          }
+        }
+        this.appFlowServ.setValidateWorkflowList(this.validateWorkflowList);
+      } catch (error) {
+        // 校验接口异常（网络错误、响应结构非预期等）：复位校验态并统一提示，
+        // 避免试运行/发布停留在无反馈状态（如 isStartCheckErrorWorkFlow 卡在 true）
+        this.checkErrorWorkflowIcon = 0;
+        this.appFlowServ.testRunVerificationError = false;
+        this.validateWorkflowList = [];
+        this.checkErrorWorkflowHalfModalRef = false;
+        this.isStartCheckErrorWorkFlow = false;
+        this.appFlowServ.setRunBtnClicked(false);
+        this.appFlowServ.setValidateWorkflowList(this.validateWorkflowList);
+        handleCommonReqError(error);
+      }
+    }, 10);
   }
 
   showCheckWorkflowModal() {
@@ -4520,7 +4576,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public publishAgent() {
     if (this.type === 'multi') {
-      this.handelPublish();
+      this.coloseAllWindow();
+      // 调用校验接口，有问题改问题，没问题发布版本（与工作流发布逻辑对齐）
+      MaskComponent.show();
+      setTimeout(async () => {
+        MaskComponent.hide();
+        this.isStartCheckErrorWorkFlow = true;
+        await this.checkErrorMultiAgentFlow(false, true);
+      }, 2000);
     } else {
       this.coloseAllWindow();
       // 调用校验接口,有问题改问题,没问题发布版本
@@ -5864,7 +5927,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     const resourceNodes = nodes.filter(
       (node) =>
         versionedResNodes.includes(node?.type) ||
-        node?.type === 'ParamExtraction',
+        node?.type === 'ParamExtraction' ||
+        // 多智能体画布上的单智能体成员节点（type='Agent'，shape op-single-agent-node）
+        // 也参与升级标记计算，与工作流/子多智能体节点保持一致。
+        // 注意不能把 'Agent' 加进 versionedResNodes 常量：工作流画布同样存在
+        // type='Agent' 的智能体节点（agent-node 组件，走 boundFlowVersionList 独立升级机制），
+        // 必须限定 type === 'multi' 以免波及工作流画布
+        (this.type === 'multi' && node?.type === 'Agent'),
     );
 
     resourceNodes.forEach((item: any) => {
@@ -5895,10 +5964,16 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           item.parent_node_type = ag_wf_list.find((wf) => wf.node_id === item?.id)
             ?.parent_node_type ?? 'controller';
         }
+        // 单智能体节点：与编排弹窗 isNeedUpdate 判定对齐，最新版本须为
+        // planexecute 类型才提示升级（否则升级后成员 mode='PlanExecute' 与实际版本类型不符）
+        const isSubAgentUpdatable =
+          item.type !== 'Agent' ||
+          matchedFlow?.latest_version_app_sub_type === 'planexecute';
         // 新增!version_id，用于兼容存量数据。绑定的资源是开发态，没有版本号
         if (
           matchedFlow &&
           matchedFlow.last_version_id &&
+          isSubAgentUpdatable &&
           (Number(matchedFlow.last_version_id) > Number(version_id) ||
             !version_id)
         ) {

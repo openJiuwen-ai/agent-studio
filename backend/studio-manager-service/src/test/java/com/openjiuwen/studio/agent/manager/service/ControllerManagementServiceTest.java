@@ -1,7 +1,9 @@
 /* Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved. */
 package com.openjiuwen.studio.agent.manager.service;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVO;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVOAgents;
@@ -10,7 +12,12 @@ import com.openjiuwen.studio.agent.manager.dto.ControllerNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
 import com.openjiuwen.studio.agent.manager.dto.ModelConfigVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeConfigVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
+import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
+import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
 import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.controller.AgentMode;
 import com.openjiuwen.studio.agent.manager.enums.controller.AgentNodeType;
@@ -23,6 +30,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
 
+import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +41,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -51,6 +60,8 @@ class ControllerManagementServiceTest {
     private RelationManagementService relationManagementService;
     private AgentMemoryConfigService agentMemoryConfigService;
     private IrAdapterService irAdapterService;
+    private I18nUtil i18nUtil;
+    private ShareResourceManagerService shareResourceManagerService;
 
     private ControllerManagementService controllerManagementService;
 
@@ -68,6 +79,8 @@ class ControllerManagementServiceTest {
         relationManagementService = mock(RelationManagementService.class);
         agentMemoryConfigService = mock(AgentMemoryConfigService.class);
         irAdapterService = mock(IrAdapterService.class);
+        i18nUtil = mock(I18nUtil.class);
+        shareResourceManagerService = mock(ShareResourceManagerService.class);
 
         MockitoAnnotations.openMocks(this);
         controllerManagementService = new ControllerManagementService();
@@ -83,6 +96,8 @@ class ControllerManagementServiceTest {
         ReflectionTestUtils.setField(controllerManagementService, "relationManagementService", relationManagementService);
         ReflectionTestUtils.setField(controllerManagementService, "agentMemoryConfigService", agentMemoryConfigService);
         ReflectionTestUtils.setField(controllerManagementService, "irAdapterService", irAdapterService);
+        ReflectionTestUtils.setField(controllerManagementService, "i18nUtil", i18nUtil);
+        ReflectionTestUtils.setField(controllerManagementService, "shareResourceManagerService", shareResourceManagerService);
         ReflectionTestUtils.setField(controllerManagementService, "showIntentParamEnable", false);
         ReflectionTestUtils.setField(controllerManagementService, "controllerInitIntentDsl", "{}");
         ReflectionTestUtils.setField(controllerManagementService, "controllerInitIntentDslEn", "{}");
@@ -435,5 +450,224 @@ class ControllerManagementServiceTest {
         assertNotNull(captured);
         assertFalse(captured.isEmpty());
         assertEquals(CommonConstant.CONTROLLER, captured.get(0).getAppType());
+    }
+
+    // ==================== validateSubWorkflowVersions tests ====================
+
+    @Test
+    void testValidateSubWorkflowVersions_DistinguishesReasonByNodeType() {
+        // Controller 节点：同时引用一个工作流节点、一个子多智能体节点和一个单智能体节点
+        ControllerNodeConfigVO configVo = new ControllerNodeConfigVO();
+        ControllerNodeConfigVOWorkflows wfConfig = new ControllerNodeConfigVOWorkflows();
+        wfConfig.setNodeId("wf-node-1");
+        wfConfig.setType("business");
+        ControllerNodeConfigVOAgents subControllerConfig = new ControllerNodeConfigVOAgents();
+        subControllerConfig.setNodeId("sub-controller-node-1");
+        subControllerConfig.setMode(AgentMode.CONTROLLER.getMode());
+        ControllerNodeConfigVOAgents agentConfig = new ControllerNodeConfigVOAgents();
+        agentConfig.setNodeId("agent-node-1");
+        agentConfig.setMode(AgentMode.PLANEXECUTE.getMode());
+        configVo.setWorkflows(List.of(wfConfig));
+        configVo.setAgents(List.of(subControllerConfig, agentConfig));
+
+        ControllerNodeVO controllerNode = new ControllerNodeVO();
+        controllerNode.setId("controller-node-1");
+        controllerNode.setType(AgentNodeType.CONTROLLER.getType());
+        controllerNode.setConfigs(configVo);
+
+        // 工作流节点：引用已删除的版本
+        ControllerNodeVO wfNode = new ControllerNodeVO();
+        wfNode.setId("wf-node-1");
+        wfNode.setType(AgentNodeType.WORKFLOW.getType());
+        wfNode.setConfigs(Map.of("id", "wf-id-1", "version_id", "v-missing"));
+
+        // 子多智能体节点：引用已删除的版本（导入历史包场景）
+        ControllerNodeVO subControllerNode = new ControllerNodeVO();
+        subControllerNode.setId("sub-controller-node-1");
+        subControllerNode.setType(AgentNodeType.SUB_CONTROLLER.getType());
+        subControllerNode.setConfigs(Map.of("id", "sub-agent-id-1", "version_id", "v-missing"));
+
+        // 单智能体节点：引用已删除的版本
+        ControllerNodeVO agentNode = new ControllerNodeVO();
+        agentNode.setId("agent-node-1");
+        agentNode.setType(AgentNodeType.AGENT.getType());
+        agentNode.setConfigs(Map.of("id", "agent-resource-id-1", "version_id", "v-missing"));
+
+        ControllerVO controllerVo = new ControllerVO();
+        controllerVo.setNodes(List.of(controllerNode, wfNode, subControllerNode, agentNode));
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-id");
+        agent.setDslPath("dsl-path");
+
+        when(mgObsService.downloadObsFile("dsl-path")).thenReturn(JSON.toJSONString(controllerVo));
+        // 工作流版本、子多智能体版本与单智能体版本均不存在
+        when(releaseVersionMapper.selectByAppIdAndVersionId(any(), any())).thenReturn(null);
+        when(i18nUtil.getMessage("workflow.validate.workflow.node")).thenReturn("子工作流节点版本不存在");
+        when(i18nUtil.getMessage("workflow.validate.sub.agent.node")).thenReturn("子智能体节点版本不存在");
+
+        WorkflowValidationVO result = controllerManagementService.validateSubWorkflowVersions(agent);
+
+        assertFalse(result.isSuccess());
+        assertNotNull(result.getErrors());
+        assertEquals(3, result.getErrors().size());
+        Map<String, String> reasonByType = result.getErrors().stream()
+            .collect(Collectors.toMap(WorkflowValidationVOErrors::getType, WorkflowValidationVOErrors::getReason));
+        assertEquals("子工作流节点版本不存在", reasonByType.get(AgentNodeType.WORKFLOW.getType()));
+        // 子多智能体与单智能体版本缺失时统一报"子智能体"文案，不得报子工作流文案误导定位方向
+        assertEquals("子智能体节点版本不存在",
+            reasonByType.get(AgentNodeType.SUB_CONTROLLER.getType()));
+        assertEquals("子智能体节点版本不存在",
+            reasonByType.get(AgentNodeType.AGENT.getType()));
+    }
+
+    // ==================== sub agent version usability tests ====================
+
+    /**
+     * 构造含一个子多智能体节点（SUB_CONTROLLER）的 DSL：controller 节点 agents 列表引用子节点，
+     * 版本信息记录在子节点自身 configs（与前端保存结构一致）。
+     */
+    private ControllerVO buildControllerVoWithSubAgent(String subAgentId, String versionId) {
+        ControllerNodeConfigVO configVo = new ControllerNodeConfigVO();
+        ControllerNodeConfigVOAgents agentConfig = new ControllerNodeConfigVOAgents();
+        agentConfig.setNodeId("sub-controller-node-1");
+        agentConfig.setId(subAgentId);
+        agentConfig.setMode(AgentMode.CONTROLLER.getMode());
+        configVo.setAgents(List.of(agentConfig));
+        // dslToIr 校验链路的前置条件：workflows 非空对象（valid 中直接取 size）、model 与 intent 至少其一
+        configVo.setWorkflows(List.of());
+        configVo.setModel(new ModelConfigVO().setModelDeploymentId("md-1"));
+
+        ControllerNodeVO controllerNode = new ControllerNodeVO();
+        controllerNode.setId("controller-node-1");
+        controllerNode.setType(AgentNodeType.CONTROLLER.getType());
+        controllerNode.setConfigs(configVo);
+
+        ControllerNodeVO subControllerNode = new ControllerNodeVO();
+        subControllerNode.setId("sub-controller-node-1");
+        subControllerNode.setType(AgentNodeType.SUB_CONTROLLER.getType());
+        subControllerNode.setConfigs(Map.of("id", subAgentId, "version_id", versionId));
+
+        ControllerVO controllerVo = new ControllerVO();
+        controllerVo.setNodes(List.of(controllerNode, subControllerNode));
+        return controllerVo;
+    }
+
+    /**
+     * 跨空间且未共享授权的子智能体引用应被试运行/发布预校验拦截：
+     * 版本全局存在但子智能体归属其他空间、又未共享给当前空间时，若无可见性判定会放行，
+     * 运行时按 OBS 路径直接加载原空间 IR 越权执行。
+     */
+    @Test
+    void testValidateSubWorkflowVersions_SubAgentCrossWorkspaceNotShared_Blocked() {
+        ControllerVO controllerVo = buildControllerVoWithSubAgent("sub-agent-id-1", "v-1");
+        Agent agent = new Agent();
+        agent.setAgentId("agent-id");
+        agent.setDslPath("dsl-path");
+        agent.setProjectId("proj-1");
+        agent.setWorkspaceId("ws-1");
+
+        when(mgObsService.downloadObsFile("dsl-path")).thenReturn(JSON.toJSONString(controllerVo));
+        when(releaseVersionMapper.selectByAppIdAndVersionId("sub-agent-id-1", "v-1")).thenReturn(new ReleaseVersion());
+        // 子智能体归属其他空间，且未共享授权给当前空间
+        Agent subAgent = new Agent();
+        subAgent.setProjectId("proj-2");
+        subAgent.setWorkspaceId("ws-2");
+        when(agentMapper.selectById("sub-agent-id-1")).thenReturn(subAgent);
+        when(shareResourceManagerService.queryShareResourceEntityByResourceIdAndVersionId("sub-agent-id-1", "ws-1",
+            "v-1")).thenReturn(null);
+        when(i18nUtil.getMessage("workflow.validate.sub.agent.node")).thenReturn("子智能体节点版本不存在");
+
+        WorkflowValidationVO result = controllerManagementService.validateSubWorkflowVersions(agent);
+
+        assertFalse(result.isSuccess());
+        assertNotNull(result.getErrors());
+        assertEquals(1, result.getErrors().size());
+        assertEquals(AgentNodeType.SUB_CONTROLLER.getType(), result.getErrors().get(0).getType());
+        assertEquals("子智能体节点版本不存在", result.getErrors().get(0).getReason());
+    }
+
+    /**
+     * 子智能体归属当前空间时校验通过（版本存在 + 本空间资源）。
+     */
+    @Test
+    void testValidateSubWorkflowVersions_SubAgentSameWorkspace_Passes() {
+        ControllerVO controllerVo = buildControllerVoWithSubAgent("sub-agent-id-1", "v-1");
+        Agent agent = new Agent();
+        agent.setAgentId("agent-id");
+        agent.setDslPath("dsl-path");
+        agent.setProjectId("proj-1");
+        agent.setWorkspaceId("ws-1");
+
+        when(mgObsService.downloadObsFile("dsl-path")).thenReturn(JSON.toJSONString(controllerVo));
+        when(releaseVersionMapper.selectByAppIdAndVersionId("sub-agent-id-1", "v-1")).thenReturn(new ReleaseVersion());
+        Agent subAgent = new Agent();
+        subAgent.setProjectId("proj-1");
+        subAgent.setWorkspaceId("ws-1");
+        when(agentMapper.selectById("sub-agent-id-1")).thenReturn(subAgent);
+
+        WorkflowValidationVO result = controllerManagementService.validateSubWorkflowVersions(agent);
+
+        assertTrue(result.isSuccess());
+    }
+
+    /**
+     * 跨空间子智能体已共享授权（scope 授权 + 版本在共享版本列表内）时校验通过。
+     */
+    @Test
+    void testValidateSubWorkflowVersions_SubAgentSharedVersion_Passes() {
+        ControllerVO controllerVo = buildControllerVoWithSubAgent("sub-agent-id-1", "v-1");
+        Agent agent = new Agent();
+        agent.setAgentId("agent-id");
+        agent.setDslPath("dsl-path");
+        agent.setProjectId("proj-1");
+        agent.setWorkspaceId("ws-1");
+
+        when(mgObsService.downloadObsFile("dsl-path")).thenReturn(JSON.toJSONString(controllerVo));
+        when(releaseVersionMapper.selectByAppIdAndVersionId("sub-agent-id-1", "v-1")).thenReturn(new ReleaseVersion());
+        Agent subAgent = new Agent();
+        subAgent.setProjectId("proj-2");
+        subAgent.setWorkspaceId("ws-2");
+        when(agentMapper.selectById("sub-agent-id-1")).thenReturn(subAgent);
+        when(shareResourceManagerService.queryShareResourceEntityByResourceIdAndVersionId("sub-agent-id-1", "ws-1",
+            "v-1")).thenReturn(new ShareResourceEntity());
+
+        WorkflowValidationVO result = controllerManagementService.validateSubWorkflowVersions(agent);
+
+        assertTrue(result.isSuccess());
+    }
+
+    /**
+     * 保存链路（dslToIr flag=true）：子智能体引用的版本不存在时抛出明确错误阻断保存；
+     * 导入链路（flag=false）：跳过该校验，保持导入行为与校验引入前一致。
+     */
+    @Test
+    void testDslToIr_SubAgentVersionMissing_SaveBlocked_ImportSkipped() {
+        ControllerVO controllerVo = buildControllerVoWithSubAgent("sub-agent-id-1", "v-missing");
+        controllerVo.setId("controller-agent-id");
+        controllerVo.setName("controller-agent");
+        controllerVo.setProjectId("proj-1");
+        controllerVo.setWorkspaceId("ws-1");
+        controllerVo.setInputs(List.of());
+        controllerVo.setGlobalVariables(List.of());
+        when(releaseVersionMapper.selectByAppIdAndVersionId("sub-agent-id-1", "v-missing")).thenReturn(null);
+
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId =
+            controllerManagementService.groupDslNodes(controllerVo);
+
+        // 导入链路：不校验子智能体版本；IR 构建阶段可能因最小化 DSL 报其他错误（兜底捕获），
+        // 但不能是子智能体版本错误，且不触发版本查询
+        try {
+            controllerManagementService.dslToIr(controllerVo, nodesGroupByTypeId, false);
+        } catch (AgentStudioException e) {
+            assertNotEquals(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND, e.getErrorCode());
+        }
+        verify(releaseVersionMapper, never()).selectByAppIdAndVersionId("sub-agent-id-1", "v-missing");
+
+        // 保存链路：版本不存在时抛出明确错误
+        AgentStudioException exception = assertThrows(AgentStudioException.class,
+            () -> controllerManagementService.dslToIr(controllerVo, nodesGroupByTypeId, true));
+        assertEquals(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND, exception.getErrorCode());
+        verify(releaseVersionMapper, times(1)).selectByAppIdAndVersionId("sub-agent-id-1", "v-missing");
     }
 }

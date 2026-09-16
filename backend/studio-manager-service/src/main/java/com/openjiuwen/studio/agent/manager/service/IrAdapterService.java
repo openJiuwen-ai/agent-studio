@@ -1370,7 +1370,7 @@ public class IrAdapterService {
             // 其他的包括走FG的，都是SSE
             result.put(TYPE, CommonConstant.MCP_SERVER_TYPE.SSE);
         }
-        McpServerManagerService.recoveryAuthInfo(serviceEntity);
+        mcpServiceManager.recoveryAuthInfo(serviceEntity);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(serviceEntity.getOrgType(),
             encryptionAdapter.decrypt(serviceEntity.getServerConfig()), serviceEntity.getAuthInfo()));
         result.put(HEADERS, WorkflowUtils.parseHeadersOfServerConfig(serviceEntity.getOrgType(),
@@ -1808,7 +1808,7 @@ public class IrAdapterService {
             result.put(URL, CommonUtil.parseUrlFromMcpConfig(jsonObject, 0));
         }
 
-        McpServerManagerService.recoveryAuthInfo(mcpServerInfo);
+        mcpServiceManager.recoveryAuthInfo(mcpServerInfo);
         String serverConfig = getServiceConfig(mcpServerInfo);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(mcpServerInfo.getOrgType(), serverConfig, mcpServerInfo.getAuthInfo()));
         result.put(HEADERS, WorkflowUtils.parseHeadersOfServerConfig(mcpServerInfo.getOrgType(),

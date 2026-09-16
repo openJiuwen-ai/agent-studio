@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
@@ -78,7 +79,7 @@ public class AgentImportServiceMockTest {
         
         // Mock controllerManagementService.dslToIr
         ControllerIR ir = mock(ControllerIR.class);
-        when(controllerManagementService.dslToIr(any(ControllerVO.class), any())).thenReturn(ir);
+        when(controllerManagementService.dslToIr(any(ControllerVO.class), any(), anyBoolean())).thenReturn(ir);
         
         // Mock agentCommonService methods - void methods, use doNothing()
         doNothing().when(agentCommonService).uploadToObsWithVersion(any(Agent.class), any(Object.class), anyString(), anyString());
@@ -112,7 +113,7 @@ public class AgentImportServiceMockTest {
         
         // Mock controllerManagementService.dslToIr
         ControllerIR ir = mock(ControllerIR.class);
-        when(controllerManagementService.dslToIr(any(ControllerVO.class), any())).thenReturn(ir);
+        when(controllerManagementService.dslToIr(any(ControllerVO.class), any(), anyBoolean())).thenReturn(ir);
         
         // Mock agentCommonService methods - void methods, use doNothing()
         doNothing().when(agentCommonService).uploadToObsWithVersion(any(Agent.class), any(Object.class), anyString(), anyString());
