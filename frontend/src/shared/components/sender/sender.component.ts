@@ -275,7 +275,8 @@ export class SenderComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // 释放未发送附件的本地预览 blob URL（已发送消息的 blob 归聊天历史所有，不在此时释放）
+    // 释放未发送附件的本地预览 blob URL；已发送消息的 blob 归聊天历史（dialogHistory）所有，
+    // 由 preview-debug 在清空对话（clearChat）/面板销毁（ngOnDestroy）时统一释放
     this.uploadData.forEach((item) => this.revokeImg(item));
     this.destroy$.next();
     this.destroy$.complete();
