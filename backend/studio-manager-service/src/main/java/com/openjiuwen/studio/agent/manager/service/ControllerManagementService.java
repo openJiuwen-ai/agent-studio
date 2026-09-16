@@ -374,9 +374,10 @@ public class ControllerManagementService {
     /**
      * dsl转IR
      *
-     * @param validateSubWorkflowVersion 是否校验业务子工作流引用版本的存在性。创建/编辑保存传 true，
-     *        版本被删时给出明确报错；导入链路传 false，保持导入行为与该校验引入前一致——
-     *        导入不因历史导出缺陷（导出文件缺子工作流行）整体失败，版本缺失仍由运行时暴露
+     * @param validateSubWorkflowVersion 是否校验业务子工作流/子智能体引用的版本存在性与可用性。
+     *        创建/编辑保存传 true，版本被删或跨空间不可见时给出明确报错；导入链路传 false，
+     *        保持导入行为与该校验引入前一致——导入不因历史导出缺陷（导出文件缺子工作流/子智能体行）
+     *        整体失败，版本缺失仍由试运行/发布校验暴露
      * @return 返回IR内容
      */
     public ControllerIR dslToIr(ControllerVO controllerVo,
@@ -534,6 +535,14 @@ public class ControllerManagementService {
                     throw new AgentStudioException(StudioError.MULTI_AGENT_HAVE_DUPLICATE_SON_AGENT, agent.getName());
                 }
             });
+
+            // 校验子智能体（含子多智能体与单智能体）引用的版本仍然存在且对当前空间可用：
+            // 与子工作流校验同受导入开关控制（导入链路保持宽容），保存时提前暴露，
+            // 避免 IR 的 irPath 指向已删版本或跨空间不可见资源，试运行/发布才报错
+            if (validateSubWorkflowVersion) {
+                validateSubAgentVersion(nodesGroupByTypeId, agents, controllerVo.getProjectId(),
+                    controllerVo.getWorkspaceId());
+            }
         }
     }
 
@@ -656,6 +665,25 @@ public class ControllerManagementService {
     }
 
     /**
+     * 校验子智能体（含子多智能体与单智能体）引用的版本仍然存在且对当前空间可用，缺失时抛异常阻断保存。
+     * 处理方式与 {@link #validateSubWorkflowVersion} 一致，且同受 dslToIr 开关控制：
+     * 导入链路必须跳过，否则历史导出缺陷（导出文件缺子智能体行）会让整条导入失败。
+     */
+    private void validateSubAgentVersion(Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,
+        List<ControllerNodeConfigVOAgents> agents, String projectId, String workspaceId) {
+        List<ControllerNodeVO> missingNodes = findMissingVersionSubAgentNodes(nodesGroupByTypeId, agents, projectId,
+            workspaceId);
+        if (missingNodes.isEmpty()) {
+            return;
+        }
+        ControllerNodeVO missingNode = missingNodes.get(0);
+        String versionId = readSubWorkflowVersionId(missingNode);
+        log.error("sub agent version not found or not usable, nodeId: {}, versionId: {}", missingNode.getId(),
+            versionId);
+        throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND, versionId);
+    }
+
+    /**
      * 多智能体试运行前的预校验：检查下挂业务子工作流引用的版本是否存在。
      * 对齐工作流侧 WorkflowValidationService#validateSubWorkflowNode 的处理方式——不抛异常，
      * 而是返回节点级错误列表，由前端标红节点并阻止进入试运行。
@@ -692,10 +720,11 @@ public class ControllerManagementService {
             missingNodes.addAll(findMissingVersionWorkflowNodes(nodesGroupByTypeId,
                 controllerNodeConfigVo.getWorkflows(), agent.getProjectId(), agent.getWorkspaceId()));
         }
-        // 子智能体（含子多智能体 SubController 节点与单智能体 Agent 节点）引用的版本同样校验：
-        // 导入历史包后版本可能不存在，缺校验时试运行/发布都能通过，运行时才报 IR 文件不存在，无法定位
+        // 子智能体（含子多智能体 SubController 节点与单智能体 Agent 节点）引用的版本同样校验
+        // （含可见性判定）：导入历史包后版本可能不存在或跨空间不可见，缺校验时试运行/发布都能
+        // 通过，运行时才报 IR 文件不存在，或直接按 OBS 路径加载原空间 IR 越权执行，无法定位
         missingNodes.addAll(findMissingVersionSubAgentNodes(nodesGroupByTypeId,
-            controllerNodeConfigVo.getAgents()));
+            controllerNodeConfigVo.getAgents(), agent.getProjectId(), agent.getWorkspaceId()));
         if (missingNodes.isEmpty()) {
             return result;
         }
@@ -788,16 +817,20 @@ public class ControllerManagementService {
     }
 
     /**
-     * 找出引用版本已不存在的子智能体节点（含子多智能体 SubController 与单智能体 Agent）。
+     * 找出引用版本已不存在或对当前空间不可用的子智能体节点（含子多智能体 SubController 与单智能体 Agent）。
      * 判定逻辑与 {@link #findMissingVersionWorkflowNodes} 对齐：只校验绑定了具体版本的引用，
      * version_id 为空（跟随最新）不视为悬空。二者的版本都记录在节点自身 configs
      * （由前端添加子智能体时写入），而非 controller 节点的 agents 列表；mode 分流与保存链路
      * （recordRefSubController/recordRefAgent）一致：Controller 模式挂 SubController 节点，
      * PlanExecute 模式挂 Agent 节点。校验文案统一报"子智能体节点版本不存在"。
+     *
+     * <p>版本可用性含可见性判定（对齐 {@link #isSubWorkflowVersionUsable}）：版本查询无
+     * project/workspace 过滤，跨空间导入残留的引用（版本全局存在但本空间不可见/未共享授权）
+     * 同样视为不可用，否则试运行/发布校验通过、运行时直接按 OBS 路径加载原空间 IR 越权执行。
      */
     private List<ControllerNodeVO> findMissingVersionSubAgentNodes(
         Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,
-        List<ControllerNodeConfigVOAgents> agents) {
+        List<ControllerNodeConfigVOAgents> agents, String projectId, String workspaceId) {
         if (CollectionUtils.isEmpty(agents)) {
             return Collections.emptyList();
         }
@@ -836,11 +869,38 @@ public class ControllerManagementService {
             if (StringUtils.isEmpty(subAgentId)) {
                 continue;
             }
-            if (releaseVersionMapper.selectByAppIdAndVersionId(subAgentId, versionId) == null) {
+            if (!isSubAgentVersionUsable(subAgentId, versionId, projectId, workspaceId)) {
                 missingNodes.add(node);
             }
         }
         return missingNodes;
+    }
+
+    /**
+     * 判定子智能体引用的版本是否可用：版本存在，且该智能体对指定空间可见
+     * （本空间资源，或已共享授权给该空间且该版本在共享版本列表内）。
+     *
+     * <p>判定结构与 {@link #isSubWorkflowVersionUsable} 一致；空间归属取自调用链的显式上下文
+     * （保存链路为 controllerVo、试运行/发布链路为 agent），而非请求 ThreadLocal。
+     * selectById 已过滤 deleted，行缺失时保守放行（版本存在性已由上一步保证，
+     * 与工作流侧行缺失处理一致），避免历史数据误报阻断保存。
+     */
+    private boolean isSubAgentVersionUsable(String subAgentId, String versionId, String projectId,
+        String workspaceId) {
+        if (releaseVersionMapper.selectByAppIdAndVersionId(subAgentId, versionId) == null) {
+            return false;
+        }
+        Agent agentEntity = agentMapper.selectById(subAgentId);
+        if (agentEntity == null) {
+            return true;
+        }
+        if (Strings.CS.equals(agentEntity.getProjectId(), projectId)
+            && Strings.CS.equals(agentEntity.getWorkspaceId(), workspaceId)) {
+            return true;
+        }
+        // 共享引用为二维授权：scope 授权 + versionList 含该版本
+        return shareResourceManagerService
+            .queryShareResourceEntityByResourceIdAndVersionId(subAgentId, workspaceId, versionId) != null;
     }
 
     private String readSubWorkflowVersionId(ControllerNodeVO workflowNode) {

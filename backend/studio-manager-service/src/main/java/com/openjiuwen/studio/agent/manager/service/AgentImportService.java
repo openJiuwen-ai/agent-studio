@@ -440,9 +440,10 @@ public class AgentImportService {
             || !subWorkflowIds.stream().allMatch(id -> isWorkflowVisible(projectId, workspaceId, id))) {
             return;
         }
-        // 查全部草稿行（valid 传 null 不过滤）：正常导入 handleMapping 写入的是 valid=true 行，
-        // 若传 false 只查失效行会漏看，导致每次导入都误判"整条缺失"而触发重建
-        List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(workflowId, null, null, null);
+        // 只看草稿行（valid 传 null 不过滤，正常导入 handleMapping 写入的是 valid=true 行，
+        // 若传 false 只查失效行会漏看而误判"整条缺失"）；已发布行不参与缺失判定，
+        // 否则仅有已发布 WORKFLOW 行时会误判"不缺失"而漏触发重建
+        List<MappingEntity> draftMappings = selectDraftMappings(workflowId);
         boolean missingWorkflowRef = draftMappings.stream()
             .noneMatch(m -> ResourceTypeEnum.WORKFLOW.toString().equals(m.getResourceType()));
         if (!missingWorkflowRef) {
@@ -455,9 +456,11 @@ public class AgentImportService {
         } catch (Exception e) {
             log.error("import rebuild workflow reference mappings failed, workflowId: {}", workflowId, e);
             // updateRefResources 为先删后插，重建中断可能已清空草稿映射；
-            // 确认已被清空时回插导入阶段建立的映射，保证导入结果不劣化
-            if (!CollectionUtils.isEmpty(draftMappings) && CollectionUtils.isEmpty(
-                mappingMapper.selectByAppIdAndAppVersion(workflowId, null, null, null))) {
+            // 确认草稿行已被清空时回插导入阶段建立的草稿映射，保证导入结果不劣化。
+            // 回滚判定同样只看草稿行：已发布行（app_version 非空）不会被 updateRefResources
+            // 删除，混入判定会导致"草稿已清空但已发布行仍在"时误判非空而漏回插
+            if (!CollectionUtils.isEmpty(draftMappings)
+                && CollectionUtils.isEmpty(selectDraftMappings(workflowId))) {
                 mappingMapper.insertBatch(draftMappings);
             }
         }
@@ -478,8 +481,9 @@ public class AgentImportService {
                 return;
             }
             // 只处理"整条 WORKFLOW 映射缺失"的情况（与工作流侧兜底的判定一致），部分缺失不干预。
-            // valid 传 null 查全部草稿行：handleMapping 正常写入 valid=true 行，传 false 会漏看而误判缺失
-            List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(agentId, null, null, null);
+            // 只看草稿行（valid 传 null 不过滤）：handleMapping 正常写入的是 valid=true 行，
+            // 已发布行不参与缺失判定，否则仅有已发布 WORKFLOW 行时会误判"不缺失"而漏触发重建
+            List<MappingEntity> draftMappings = selectDraftMappings(agentId);
             boolean missingWorkflowRef = draftMappings.stream()
                 .noneMatch(m -> ResourceTypeEnum.WORKFLOW.toString().equals(m.getResourceType()));
             if (!missingWorkflowRef) {
@@ -577,9 +581,9 @@ public class AgentImportService {
                 return;
             }
             // 各类型独立判断"整条映射缺失"（与工作流/单智能体侧兜底一致），部分缺失不干预。
-            // valid 传 null 查全部草稿行：handleMapping 正常写入 valid=true 行，传 false 会漏看而误判缺失
-            List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(controllerId, null, null,
-                null);
+            // 只看草稿行（valid 传 null 不过滤）：handleMapping 正常写入的是 valid=true 行，
+            // 已发布行不参与缺失判定，否则仅有已发布引用行时会误判"不缺失"而漏触发重建
+            List<MappingEntity> draftMappings = selectDraftMappings(controllerId);
             boolean missingWorkflowRef = !workflowNodes.isEmpty() && draftMappings.stream()
                 .noneMatch(m -> ResourceTypeEnum.WORKFLOW.toString().equals(m.getResourceType()));
             boolean missingSubControllerRef = !subControllerNodes.isEmpty() && draftMappings.stream()
@@ -667,7 +671,8 @@ public class AgentImportService {
 
     /**
      * 按 SubController 节点重建 controller→子多智能体映射（resource_type=controller）。
-     * 字段语义与保存链路 recordRefSubController 一致：app_type=controller、共享判定走 t_share_resource。
+     * 字段语义与保存链路 recordRefSubController 一致：app_type=controller；跨空间准入走共享
+     * 二维授权（checkWorkspaceAuthByResourceOrNot：共享行存在 + scope 授权目标空间）。
      * 子多智能体引用的版本可能不存在（导出残留版本号），此时铃铛会提示升级、发布校验会拦截，
      * 映射本身保留原版本号以暴露问题，与保存链路行为一致。
      */
@@ -705,18 +710,15 @@ public class AgentImportService {
             mapping.setResourceVersion(StringUtils.isEmpty(refVersion) ? null : refVersion);
             mapping.setResourceName(subAgent.getName());
             mapping.setResourceWorkspaceId(subAgent.getWorkspaceId());
-            // 与 nodeToMapping 的共享判定一致：t_share_resource 存在共享行即标 SHARE，否则 direct
+            // 跨空间准入必须为共享二维授权（共享行存在 + scope 授权目标空间或 'all'），
+            // 与 isWorkflowVisible 的 checkWorkspaceAuthByResourceOrNot 同一入口：导入链路无前端
+            // 可见性过滤，仅查共享行存在会把共享给其他空间的资源误放行，建出未授权的无效映射。
+            // 授权通过即标 SHARE 引用；resource_workspace_id 保持为上面已设置的资源原属空间
             if (!Strings.CS.equals(subAgent.getWorkspaceId(), workspaceId)) {
-                List<ShareResourceEntity> shareResources = shareResourceMapper.selectShareResourceByResourceIds(
-                    Collections.singletonList(subControllerId));
-                if (CollectionUtils.isEmpty(shareResources)) {
-                    // 跨空间且无共享记录，不可见，跳过
+                if (!shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, subControllerId)) {
                     continue;
                 }
-                mapping.setReferenceType(
-                    Strings.CS.equals(shareResources.get(0).getWorkspaceId(), workspaceId)
-                        ? ReferenceTypeEnum.DIRECT.getValue() : ReferenceTypeEnum.SHARE.getValue());
-                mapping.setResourceWorkspaceId(shareResources.get(0).getWorkspaceId());
+                mapping.setReferenceType(ReferenceTypeEnum.SHARE.getValue());
             }
             mapping.setValid(true);
             mapping.setCreatedOn(now);
@@ -731,7 +733,7 @@ public class AgentImportService {
      * 被引用单智能体发布新版本后（新版本时间戳必然大于悬空的历史时间戳），前端原有升级铃铛
      * （resource_latest_version > 节点版本号）即出现，客户点击升级即可修复，
      * 与工作流/子多智能体引用的处理语义一致。
-     * 单智能体跨空间时需共享行存在（否则不可见），判定方式与 rebuildSubControllerRefMappings 一致。
+     * 单智能体跨空间时需共享二维授权（否则不可见），判定方式与 rebuildSubControllerRefMappings 一致。
      * 映射字段语义与保存链路 recordRefAgent 一致：app_type=controller。
      */
     private void rebuildAgentRefMappings(String workspaceId, ControllerVO controllerVO,
@@ -750,13 +752,11 @@ public class AgentImportService {
             if (subAgent == null || Boolean.TRUE.equals(subAgent.getDeleted())) {
                 continue;
             }
-            // 跨空间：需共享行存在才可见，判定与 rebuildSubControllerRefMappings 一致
-            if (!Strings.CS.equals(subAgent.getWorkspaceId(), workspaceId)) {
-                List<ShareResourceEntity> shareResources = shareResourceMapper.selectShareResourceByResourceIds(
-                    Collections.singletonList(subAgentId));
-                if (CollectionUtils.isEmpty(shareResources)) {
-                    continue;
-                }
+            // 跨空间：需共享二维授权（共享行存在 + scope 授权目标空间）才可见，
+            // 判定与 rebuildSubControllerRefMappings 一致
+            if (!Strings.CS.equals(subAgent.getWorkspaceId(), workspaceId)
+                && !shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, subAgentId)) {
+                continue;
             }
             MappingEntity mapping = new MappingEntity();
             mapping.setMappingId(UUID.randomUUID().toString());
@@ -780,6 +780,20 @@ public class AgentImportService {
             mapping.setCreatedOn(now);
             rebuildList.add(mapping);
         }
+    }
+
+    /**
+     * 查询 appId 的草稿映射行（app_version 为空）。
+     * selectByAppIdAndAppVersion 传 null 时 SQL 不加 app_version 条件，返回的是草稿+已发布全部行，
+     * 而导入兜底的缺失判定与回滚兜底只应关注草稿行（handleMapping 正常写入的是 valid=true 草稿行，
+     * updateRefResources 先删后插删的也只是草稿行）：已发布行混入判定会造成两类错误——
+     * 已发布引用行存在时缺失判定误判"不缺失"导致兜底漏生效；重建中断回滚时
+     * "草稿是否已清空"因已发布行仍在而误判非空，草稿映射无法回插。
+     */
+    private List<MappingEntity> selectDraftMappings(String appId) {
+        return mappingMapper.selectByAppIdAndAppVersion(appId, null, null, null).stream()
+            .filter(m -> m.getAppVersion() == null)
+            .collect(Collectors.toList());
     }
 
     /**
