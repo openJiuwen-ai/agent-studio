@@ -1969,9 +1969,7 @@ public class RelationManagementService implements IRelationManagementService {
      * @return 是否已共享
      */
     private boolean isVersionShared(ShareResourceEntity shareResourceEntity, String versionId) {
-        return ObjectUtils.isNotEmpty(shareResourceEntity)
-            && StringUtils.isNotEmpty(shareResourceEntity.getVersionList())
-            && shareResourceEntity.getVersionList().contains(versionId);
+        return ObjectUtils.isNotEmpty(shareResourceEntity) && shareResourceEntity.containsVersion(versionId);
     }
 
     @Override

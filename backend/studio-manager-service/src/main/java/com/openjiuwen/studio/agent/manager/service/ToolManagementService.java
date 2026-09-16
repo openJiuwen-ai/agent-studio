@@ -550,7 +550,7 @@ public class ToolManagementService implements IToolManagementService {
                 // 检查工作流是否被授权
                 ShareResourceEntity shareResourceEntity = shareResourceMapper.selectShareResourceEntityByResourceId(
                     toolId);
-                if (!shareResourceEntity.getVersionList().contains(versionId)) {
+                if (!shareResourceEntity.containsVersion(versionId)) {
                     log.error(
                         "getToolVersion, request project id: {} workspace id: {}, tool project id {} workspace id {}",
                         projectId, getToolVersionQo.getWorkspaceId(), toolEntity.getProjectId(),
