@@ -42,6 +42,8 @@ class RequestContext:
     customer_headers: dict = field(default_factory=dict)
     # 平台 header（X-Auth-Token 等），独立分仓
     platform_headers: dict = field(default_factory=dict)
+    # 请求内 IR 加载 memo；仅由 HTTP 请求中间件初始化，避免跨请求复用。
+    ir_load_cache: dict[str, Any] | None = None
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(

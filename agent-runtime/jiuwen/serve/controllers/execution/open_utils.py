@@ -327,8 +327,58 @@ def _log_ir_content(source: str, path: str, ir_data: dict):
         logger.warning("Failed to log IR content: source=%s, path=%s, error=%s", source, path, e)
 
 
+def _get_request_ir_load_cache() -> Optional[dict[str, asyncio.Task]]:
+    """Return the current request's in-flight/completed IR load cache."""
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+
+        cache = getattr(_request_ctx.get(), "ir_load_cache", None)
+    except (AttributeError, LookupError):
+        return None
+    return cache if isinstance(cache, dict) else None
+
+
+def _discard_failed_request_ir_load(
+    request_cache: dict[str, asyncio.Task],
+    path: str,
+    load_task: asyncio.Task,
+) -> None:
+    """Evict failed request-local loads while keeping successful results memoized."""
+    if not load_task.done():
+        return
+
+    try:
+        failed = load_task.cancelled() or load_task.exception() is not None
+    except asyncio.CancelledError:
+        failed = True
+
+    if failed and request_cache.get(path) is load_task:
+        request_cache.pop(path, None)
+
+
 @log_function_timing
 async def async_ir_load(path: str) -> dict:
+    """Load one IR at most once per request for a given path."""
+    request_cache = _get_request_ir_load_cache()
+    if request_cache is None:
+        return await _async_ir_load_uncached(path)
+
+    load_task = request_cache.get(path)
+    if load_task is None:
+        load_task = asyncio.create_task(_async_ir_load_uncached(path))
+        request_cache[path] = load_task
+        load_task.add_done_callback(
+            lambda task: _discard_failed_request_ir_load(request_cache, path, task)
+        )
+
+    try:
+        return await asyncio.shield(load_task)
+    except BaseException:
+        _discard_failed_request_ir_load(request_cache, path, load_task)
+        raise
+
+
+async def _async_ir_load_uncached(path: str) -> dict:
     """异步加载IR内容，支持任意Python对象缓存。
 
     查找顺序：memory → redis → obs
