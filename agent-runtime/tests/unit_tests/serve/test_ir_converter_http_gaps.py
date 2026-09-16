@@ -16,6 +16,8 @@
 
 import ast
 
+import pytest
+
 from jiuwen.serve.controllers.execution.ir_converter import (
     _parse_exception_config,
     _pythonize_json_literals,
@@ -189,3 +191,55 @@ def test_non_http_outputs_schema_still_converted():
     }
     cfg = _parse_exception_config(node)
     assert cfg.outputs_schema == {"result": "plain"}
+
+
+# ─── MR 检视意见 #1：单组件调试路径同样需要 inputs 重排 ────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_single_component_http_inputs_remapped(monkeypatch):
+    """create_single_component（单节点调试路径）返回的 inputs_schema 必须与
+    _add_component 注册路径一样经过 _remap_http_inputs_schema（G1/G2/G4），
+    否则单节点调试时 query/用户参数/鉴权全部无法按组件预期读取。"""
+    from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+    node = {
+        "id": "node_http_1",
+        "type": "EI.http",
+        "name": "HTTP请求_1",
+        "inputs": {
+            "query": {"page": "1"},
+            "headers": {"X-A": "1"},
+            "userFields": {"uid": "42"},
+        },
+        "configs": {
+            "auth": {
+                "scope": "SERVICE",
+                "headers": {"X-Api-Key": "secret123"},
+                "query": {},
+            },
+        },
+    }
+    ir_data = {
+        "workflowId": "wf_test",
+        "workflowVersion": "0.6.0",
+        "components": [node],
+        "connections": [],
+    }
+
+    async def fake_create_component(n, global_model, **kwargs):
+        return object(), "EI.http", n.get("configs") or {}
+
+    monkeypatch.setattr(
+        IRConverter, "_create_component", staticmethod(fake_create_component)
+    )
+    info = await IRConverter.create_single_component(ir_data, "node_http_1")
+    schema = info.inputs_schema
+    # G1：query → query_parameters
+    assert schema["query_parameters"] == {"page": "1"}
+    assert "query" not in schema
+    # G2：userFields 平铺顶层
+    assert schema["uid"] == "42"
+    assert "userFields" not in schema
+    # G4：auth 并入 headers 货架
+    assert schema["headers"]["X-Api-Key"] == "secret123"
