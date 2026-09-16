@@ -4,7 +4,6 @@
 
 package com.openjiuwen.studio.agent.manager.controller;
 
-import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
@@ -116,9 +115,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -155,9 +152,6 @@ public class AgentServiceProxyController {
 
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
-
-    @Value("${apikey.enable:false}")
-    private boolean apiKeyEnable;
 
     @Value("${conversations.abort.enable:false}")
     private boolean abortEnable;
@@ -224,9 +218,6 @@ public class AgentServiceProxyController {
             if (ObjectUtils.isEmpty(httpHeaders.get("X-Execution-Id"))) {
                 httpHeaders.set("X-Execution-Id", UUID.randomUUID().toString());
             }
-            if (apiKeyEnable) {
-                httpHeaders.set(CommonConstant.AUTHORIZATION, getApiCode(projectId, workspaceId));
-            }
             if (CommonConstant.DEEPRESEARCH_TYPE.equals(agentType)) {
                 return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body), 7200000L);
             }
@@ -260,7 +251,7 @@ public class AgentServiceProxyController {
 
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
-            return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), getApiCode(projectId, workspaceId), projectId,
+            return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null, projectId,
                 agentId, conversationId, workspaceId, agentType, version, type, environmentId, body).getBody();
         }
     }
@@ -385,9 +376,6 @@ public class AgentServiceProxyController {
         // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url
         // 占位符按默认环境解析（仅单智能体；多智能体保持既有不带参行为）
         environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
-        if (apiKeyEnable) {
-            httpHeaders.set(CommonConstant.AUTHORIZATION, getApiCode(projectId, workspaceId));
-        }
         if (stream == null || stream) {
             String url = "%s/v1/%s/agents/%s/conversations?workspace_id=%s";
             url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, agentId, workspaceId);
@@ -440,9 +428,6 @@ public class AgentServiceProxyController {
         String conversationId, String version, Boolean stream, ServiceWorkflowRunReq body, HttpHeaders httpHeaders) {
         // 去掉x-user-profile,以防后续接口使用pdp5鉴权
         httpHeaders.remove(X_USER_PROFILE);
-        if (apiKeyEnable) {
-            httpHeaders.set(CommonConstant.AUTHORIZATION, getApiCode(projectId, workspaceId));
-        }
 
         if (stream == null || stream) {
             String url = "%s/v1/%s/workflows/%s/conversations/%s?workspace_id=%s";
@@ -1264,20 +1249,6 @@ public class AgentServiceProxyController {
         @RequestParam(value = "workspace_id", required = false) String workspaceId) {
         return agentServiceProxyService.getControllerExecutionDetail(projectId, agentId, executionId,
             getControllerExecutionDetailQo, workspaceId).getBody();
-    }
-
-    private String getApiCode(String projectId, String workspaceId) {
-        if (!apiKeyEnable) {
-            return null;
-        }
-        String apiCode = UUID.randomUUID().toString();
-        Map<String, String> redisData = new HashMap<>();
-        redisData.put("projectId", projectId);
-        redisData.put("workspaceId", workspaceId);
-        redisData.put("domainId", RequestContextUtils.getRequestUserDomainId());
-        redisData.put("userId", RequestContextUtils.getRequestUserId());
-        redisClient.set(apiCode, JSON.toJSONString(redisData), Duration.ofSeconds(30));
-        return Constants.Header.AUTHORIZATION_PREFIX + apiCode;
     }
 
     private void checkAgentPermission(String projectId, String workspaceId, String agentId) {
