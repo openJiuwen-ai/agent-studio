@@ -23,9 +23,10 @@
             ></meta-upload-file-icon>
             <span nz-tooltip [nzTooltipTitle]="fileItem.name">{{ fileItem.name }}</span>
           </div>
-          <!-- 展示上传的图片 -->
-          <div class="uploaded-image" *ngIf="fileItem.type === 'image'">
-            <img alt="" [src]="fileItem.url || fileItem.img"/>
+          <!-- 展示上传的图片：仅在有可用图片地址时渲染，避免无 src 的 img 仍占一行行高 -->
+          <div class="uploaded-image" *ngIf="fileItem.type === 'image' && (fileItem.url || fileItem.img)">
+            <!-- 优先本地预览（blob 必定可加载），服务端 url 可能受签名/网络影响加载失败；历史消息无本地预览时回退 url -->
+            <img alt="" [src]="fileItem.img || fileItem.url"/>
           </div>
         </ng-container>
         <!-- 此处不能自动格式化保存，否则发送的用户问题开头会多一个空格，且使用trim无效 -->
