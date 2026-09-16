@@ -275,8 +275,18 @@ export class SenderComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // 释放未发送附件的本地预览 blob URL（已发送消息的 blob 归聊天历史所有，不在此时释放）
+    this.uploadData.forEach((item) => this.revokeImg(item));
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /** 释放附件的本地预览 blob URL，防止长会话内存泄漏 */
+  private revokeImg(item?: FileItem): void {
+    if (item?.img) {
+      URL.revokeObjectURL(item.img);
+      item.img = undefined;
+    }
   }
 
   private getSenderTip() {
@@ -436,6 +446,7 @@ export class SenderComponent implements OnDestroy {
                 item.url = res.url;
               }),
               catchError(() => {
+                this.revokeImg(item);
                 this.uploadData = this.uploadData.filter((f) => f.fileId !== item.fileId);
                 this.checkContentWidth();
                 return of(null);
@@ -453,6 +464,7 @@ export class SenderComponent implements OnDestroy {
   }
 
   public removeFile(i: number) {
+    this.revokeImg(this.uploadData[i]);
     this.uploadData.splice(i, 1);
     if (!this.uploadData.length) {
       this.checkContentWidth();
@@ -464,6 +476,7 @@ export class SenderComponent implements OnDestroy {
     if (this.uploading) {
       return;
     }
+    this.uploadData.forEach((item) => this.revokeImg(item));
     this.uploadData = [];
     this.checkContentWidth();
   }
