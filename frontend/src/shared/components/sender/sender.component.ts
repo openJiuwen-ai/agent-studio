@@ -46,6 +46,8 @@ interface FileItem {
   progress: string;
   name: string;
   url: string;
+  // 图片本地预览地址（blob URL），服务端 url 缺失/未返回时用于消息气泡内展示
+  img?: string;
   file?: File;
   fileId?: string;
   isImage?: boolean;
@@ -407,6 +409,7 @@ export class SenderComponent implements OnDestroy {
           type: isImage ? 'image' : 'file',
           name: file.name,
           url: '',
+          img: isImage ? URL.createObjectURL(file) : undefined,
           file,
           isImage,
           fileId: uuidV4(),
