@@ -876,6 +876,8 @@ export class NodeExeComponent implements OnChanges {
         );
         return;
       }
+      // 批次开始置位、整批结束复位，驱动一键清空/添加按钮的上传中禁用
+      this.isUploading = true;
       for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
@@ -889,16 +891,13 @@ export class NodeExeComponent implements OnChanges {
         const fileItem = createFileItem(file);
         inputItem.uploadDatas.push(fileItem);
         this.cdr.detectChanges();
-        this.isUploading = true;
         await new Promise(resolve => setTimeout(resolve));
-        uploadFile(this.repoServ, file, isImage, fileItem, () => {
+        await uploadFile(this.repoServ, file, isImage, fileItem, () => {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
           this.cdr.detectChanges();
-        }).finally(() => {
-          this.cdr.detectChanges();
-          this.isUploading = false;
         });
       }
+      this.isUploading = false;
       input.value = '';
     }
   }
