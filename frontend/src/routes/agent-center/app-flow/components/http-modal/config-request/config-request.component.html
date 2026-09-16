@@ -220,7 +220,7 @@
         style="width: 100%"
         [name]="'bodyFormType'"
         [(ngModel)]="configs.request_type"
-        (ngModelChange)="onSaveChange()"
+        (ngModelChange)="onBodyTypeChange()"
       >
         <nz-option *ngFor="let opt of bodyOptions" [nzLabel]="opt.label" [nzValue]="opt.value"></nz-option>
       </nz-select>
@@ -230,10 +230,13 @@
         [ngModelOptions]="{ standalone: true }"
         [(ngModel)]="configs.request_body"
         [variants]="tipVals"
-        (ngModelChange)="changeUpdate()"
+        (ngModelChange)="onBodyChange()"
         (blur)="onInputSave()"
         [placeholder]="'request_body_placeholder' | i18nextEager"
       ></meta-cmd-textarea>
+      <div *ngIf="bodyJsonInvalid" class="error-tip">
+        {{ 'invalid_json_format' | i18nextEager }}
+      </div>
     </ng-template>
   </meta-acc-block>
 </form>

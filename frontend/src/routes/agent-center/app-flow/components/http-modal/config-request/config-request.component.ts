@@ -64,6 +64,9 @@ export class ConfigRequestComponent extends ModalBaseComponent {
 
   tipVals: string[] = [];
 
+  /** FB-4 ②：JSON 类型 body 模板合法性标志（仅显示层，非阻断）。 */
+  bodyJsonInvalid = false;
+
   override ngOnInit(): void {
     this.setNodeBase(this.nodeInfo);
     const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
@@ -76,6 +79,7 @@ export class ConfigRequestComponent extends ModalBaseComponent {
         .pipe(takeUntil(this.destroy$))
         .subscribe((info) => this.onRefUpdate(info));
     }
+    this.validateBody();
   }
 
   onRefUpdate(info: IParamRef[]): void {
@@ -161,5 +165,45 @@ export class ConfigRequestComponent extends ModalBaseComponent {
 
   changeUpdate(): void {
     this.timeChange.emit();
+  }
+
+  /** FB-4 ②：body 内容变化时先校验 JSON 合法性，再触发原 changeUpdate。 */
+  onBodyChange(): void {
+    this.validateBody();
+    this.changeUpdate();
+  }
+
+  /** FB-4 ②：body 类型切换时先校验，再触发原 onSaveChange。 */
+  onBodyTypeChange(): void {
+    this.validateBody();
+    this.onSaveChange();
+  }
+
+  /**
+   * FB-4 ②：JSON 类型 body 模板合法性校验（仅显示层，非阻断；与 FB-2 预期提示理念一致）。
+   * body 含 {{var}} 占位符，本身不是合法 JSON，先替换成合法占位再 JSON.parse：
+   *   - "{{var}}"（整段被引号包裹）→ "__ph__"（保持字符串，覆盖占位符即整个串值的场景）
+   *   - 裸 {{var}}（可能是数组/对象/数字/布尔值）→ null（合法 JSON 字面量）
+   * 这样 "{{x}}" / {"a": {{x}}} / "pre{{x}}post" 均能通过，而坏模板（占位符落到引号外、
+   * 逗号重复等）会 JSON.parse 失败 → 显示提示。刻意不阻断：试运行门在后端 validateFlow，
+   * 前端硬阻断会因启发式局限误伤合法占位符形态。
+   */
+  validateBody(): void {
+    this.bodyJsonInvalid = false;
+    if (this.configs?.request_type !== 'JSON') {
+      return;
+    }
+    const raw = (this.configs.request_body ?? '').trim();
+    if (!raw) {
+      return;
+    }
+    const probe = raw
+      .replace(/"\{\{[^{}\n\r]+?\}\}"/g, '"__ph__"')
+      .replace(/\{\{[^{}\n\r]+?\}\}/g, 'null');
+    try {
+      JSON.parse(probe);
+    } catch {
+      this.bodyJsonInvalid = true;
+    }
   }
 }
