@@ -115,7 +115,7 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
         ctx.interrupt(int_answer or int_think, chunk)
         return None
 
-    data["think"] = safe_think
+    data["think"] = safe_think if isinstance(think_raw, str) else think_raw
     data["answer"] = safe_answer if isinstance(answer_raw, str) else answer_raw
 
     # message_end 的 origin_answer 也需审核（含 REPLY 阻断检查）
