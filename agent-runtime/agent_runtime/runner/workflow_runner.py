@@ -27,6 +27,7 @@ from agent_runtime.schemas.orchestration_mgr import (
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.utils import WorkflowAbortException
 from openjiuwen.core.common.exception.errors import ExecutionError, Termination, BaseError
 from openjiuwen.core.common.logging import workflow_logger
@@ -493,9 +494,14 @@ class WorkflowRunner:
                 is_resuming = True
             else:
                 # 首次执行：使用普通 query 输入
+                start_field_defaults = self._extract_start_user_field_defaults(ir_json)
                 inputs = {
                     "query": req.query or "",
-                    **self._build_global_state_params(req.params.model_dump(), node_defs),
+                    **self._build_global_state_params(
+                        req.params.model_dump(),
+                        node_defs,
+                        start_field_defaults=start_field_defaults,
+                    ),
                 }
                 # 保存 exec_id 和 trace_id 到 Redis，以便中断恢复时使用
                 t_redis_save = time.perf_counter()
@@ -882,7 +888,9 @@ class WorkflowRunner:
         for event in formatter.finalize():
             yield event
 
-    def _build_global_state_params(self, params: dict, node_defs: dict) -> dict:
+    def _build_global_state_params(
+        self, params: dict, node_defs: dict, start_field_defaults: dict = None
+    ) -> dict:
         """构建需要通过 inputs → commit_user_inputs 写入 global_state 的参数。
 
         这些参数同时存在于 envs（由 _build_envs 生成），但 envs 不被 checkpoint 保存。
@@ -898,6 +906,10 @@ class WorkflowRunner:
                 for k, v in params["global_variables"].items()
                 if k not in excluded_keys
             }
+            if start_field_defaults:
+                for k, v in start_field_defaults.items():
+                    if result["_request"].get(k) is None:
+                        result["_request"][k] = v
             result["global_variables"] = params["global_variables"]
 
         runtime_keys = [
@@ -924,6 +936,39 @@ class WorkflowRunner:
 
         return result
 
+    @staticmethod
+    def _extract_start_user_field_defaults(ir_json: dict) -> dict:
+        """Extract Start node user field default values from IR.
+
+        ${_request.xxx} resolves against the io_state _request dict, which is
+        built from global_variables. Start node user fields (e.g. optional
+        parameters with default_value) are defined in the IR, not in the
+        request. Without merging defaults, ${_request.test} resolves to None
+        when the user does not pass the field, causing End node output filtering
+        (v is not None) to drop it entirely.
+
+        所有类型字段都注入默认值,默认值按声明类型归一(空默认:object -> {},
+        array -> [],integer -> 0,number -> 0.0,boolean -> False,string -> '');
+        直接注入 '' 会让 Start 输出 userFields 通过不了 openjiuwen IR 输出校验
+        (json.loads('')/int('') 失败,报 Incorrect type for key)。
+        """
+        defaults = {}
+        for comp in ir_json.get("components") or []:
+            if comp.get("type") != "jiuwen.start":
+                continue
+            user_fields = (comp.get("configs") or {}).get("userFields", {}) or {}
+            for field in user_fields.get("inputs") or []:
+                field_id = field.get("id")
+                if field_id and field_id not in defaults:
+                    converted = Start.convert_user_field_default(
+                        (field.get("type") or "").lower(),
+                        field.get("default_value", ""),
+                        field.get("schema"),
+                    )
+                    if converted is not None:
+                        defaults[field_id] = converted
+            break
+        return defaults
 
     async def _retrieve_memory(
         self,

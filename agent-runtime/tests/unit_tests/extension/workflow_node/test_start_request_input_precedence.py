@@ -105,8 +105,7 @@ class TestMergeRequestInputsPrecedence:
         [False, 0, [], {}],
         ids=["false", "zero", "empty_list", "empty_dict"],
     )
-    @staticmethod
-    def test_falsy_request_values_preserved(monkeypatch, value):
+    def test_falsy_request_values_preserved(self, monkeypatch, value):
         """§9.1-6:_request 值为 False/0/[]/{} → 保留实际值(不用真值判断)。"""
         _patch_request(monkeypatch, {"flag": value})
         start = _make_start(["flag"], defaults={"flag": "default"})
