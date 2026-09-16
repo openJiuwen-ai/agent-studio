@@ -189,4 +189,23 @@ class WorkflowVersionManagementServiceTest extends BaseTest {
             new ListWorkflowVersionReferencesQo().setWorkspaceId(Constants.TEST_WORKSPACE_ID));
         assertEquals(2, referenceListRsp.getVersionReferences().size());
     }
+
+    @Test
+    @Sql(scripts = {"classpath:sql/agent_setup_db.sql", "classpath:sql/workflow_setup_db.sql",
+        "classpath:sql/version_setup_db.sql", "classpath:sql/version_reference_setup_db.sql"},
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    void test_batch_delete_workflow_versions_shared_substring_not_misjudged() {
+        // 版本号仅为已共享版本号（test_version_id3）的子串时，不应误判为已共享，应按版本不存在处理进failed
+        BatchDeleteVersionsRequestBody body = new BatchDeleteVersionsRequestBody()
+            .setVersionIds(List.of("test_version_id"));
+        BatchDeleteVersionsResponseBody responseBody = workflowManagementService.batchDeleteWorkflowVersions(
+            Constants.TEST_PROJECT_ID, Constants.TEST_WORKFLOW_ID, Constants.TEST_WORKSPACE_ID, body);
+
+        assertEquals(1, responseBody.getTotalCount());
+        assertEquals(0, responseBody.getDeletedCount());
+        assertTrue(responseBody.getSuccess().isEmpty());
+        assertEquals(1, responseBody.getFailed().size());
+        assertEquals(StudioError.WORKFLOW_VERSION_NOT_FOUND.name(),
+            responseBody.getFailed().get(0).getErrorCode());
+    }
 }

@@ -2744,8 +2744,7 @@ public class AgentManagementService implements IAgentManagementService {
             throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
         }
         ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
-        if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
-            && shareResource.getVersionList().contains(versionId)) {
+        if (ObjectUtils.isNotEmpty(shareResource) && shareResource.containsVersion(versionId)) {
             log.error("the resource version has been shared,you can't delete it");
             throw new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY);
         }
@@ -2844,8 +2843,7 @@ public class AgentManagementService implements IAgentManagementService {
         List<String> success = new ArrayList<>();
         List<BatchDeleteVersionFailedInfo> failed = new ArrayList<>();
         for (String versionId : versionIds) {
-            if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
-                && shareResource.getVersionList().contains(versionId)) {
+            if (ObjectUtils.isNotEmpty(shareResource) && shareResource.containsVersion(versionId)) {
                 log.error("batch delete agent version, the resource version {} has been shared, you can't delete it",
                     versionId);
                 failed.add(buildVersionDeleteFailedInfo(versionId,

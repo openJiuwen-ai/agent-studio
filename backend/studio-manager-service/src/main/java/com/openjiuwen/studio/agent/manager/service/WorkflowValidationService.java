@@ -1738,8 +1738,7 @@ public class WorkflowValidationService {
                 // 检查工作流是否被授权
                 ShareResourceEntity shareResourceEntity
                         = shareResourceMapper.selectShareResourceEntityByResourceId(pluginId);
-                if (StringUtils.isNotEmpty(versionId) && shareResourceEntity.getVersionList()
-                        .contains(versionId)) {
+                if (StringUtils.isNotEmpty(versionId) && shareResourceEntity.containsVersion(versionId)) {
                     shareWorkspaceId = shareResourceEntity.getWorkspaceId();
                 }
             }

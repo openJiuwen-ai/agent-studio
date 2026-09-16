@@ -1973,8 +1973,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         List<String> success = new ArrayList<>();
         List<BatchDeleteVersionFailedInfo> failed = new ArrayList<>();
         for (String versionId : versionIds) {
-            if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
-                && shareResource.getVersionList().contains(versionId)) {
+            if (ObjectUtils.isNotEmpty(shareResource) && shareResource.containsVersion(versionId)) {
                 log.error("batch delete workflow version, the resource version {} has been shared, "
                     + "you can't delete it", versionId);
                 failed.add(buildVersionDeleteFailedInfo(versionId,
