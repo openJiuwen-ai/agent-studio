@@ -251,6 +251,11 @@ export abstract class WorkflowChatBaseComponent {
     };
   }
 
+  /** 判断流式分片的 text 是否有效：0/false 等 falsy 值是合法分片，仅排除 null/undefined/空串 */
+  protected hasValidText(text: any): boolean {
+    return text !== undefined && text !== null && text !== '';
+  }
+
   protected onMessage(curIndex: number, token: any) {
     const chunkObj = token.data && flowCommonLogic.stringToObject(token.data);
     const chunkObjAddFrom = {...chunkObj, fromType:'onMessage'};
@@ -406,7 +411,7 @@ export abstract class WorkflowChatBaseComponent {
     if(event === 'message' && this.isStartFlowRunning) {
       const plan = this.chatLoop[curIndex].plans?.find(item => item.id === 'startFlow');
 
-      if (plan && text && node_type !== 'Input') {
+      if (plan && this.hasValidText(text) && node_type !== 'Input') {
         const step = plan.steps[0];
         step.description += text;
       }
@@ -455,7 +460,7 @@ export abstract class WorkflowChatBaseComponent {
       this.chatLoop[curIndex].thinkValue =
         this.chatLoop[curIndex].thinkValue + reasoning_content;
       this.chatLoop[curIndex].thinking = true;
-    } else if (text || message) {
+    } else if (this.hasValidText(text) || message) {
       this.chatLoop[curIndex].thinking = false;
       this.chatLoop[curIndex].collapsed = !this.isPlanMode;
     }
@@ -531,7 +536,7 @@ export abstract class WorkflowChatBaseComponent {
       this.nodeIdBlock[node_id] = ENodeStatus.NOTFINISHED; // 表示正在流式打印中
     }
 
-    if (event === 'message' && text && node_type !== 'Input' && !this.isStartFlowRunning
+    if (event === 'message' && this.hasValidText(text) && node_type !== 'Input' && !this.isStartFlowRunning
       && (node_type !== 'End' && node_type !== 'Message' || !this.isPlanMode)
     ) {
       this.chatLoop[curIndex].thinkLoading = false;

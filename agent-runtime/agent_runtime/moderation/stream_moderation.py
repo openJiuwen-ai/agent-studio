@@ -101,8 +101,12 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
     origin_answer 使用全量审核（非流式）。
     """
     data = chunk.get("data", {})
-    think_chunk = data.get("think", "") or ""
-    answer_chunk = data.get("answer", "") or ""
+    # 仅字符串参与审核；非字符串分段（如 int 0 / float / bool）原样透传，
+    # 不能用 `or ""` 兜底，否则 falsy 值会被吞成空串（FB-6）
+    think_raw = data.get("think", "")
+    answer_raw = data.get("answer", "")
+    think_chunk = think_raw if isinstance(think_raw, str) else ""
+    answer_chunk = answer_raw if isinstance(answer_raw, str) else ""
 
     safe_think, int_think = ctx.mods["think"].process_chunk(think_chunk)
     safe_answer, int_answer = ctx.mods["answer"].process_chunk(answer_chunk)
@@ -112,7 +116,7 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
         return None
 
     data["think"] = safe_think
-    data["answer"] = safe_answer
+    data["answer"] = safe_answer if isinstance(answer_raw, str) else answer_raw
 
     # message_end 的 origin_answer 也需审核（含 REPLY 阻断检查）
     origin_answer = data.get("origin_answer")
@@ -128,13 +132,15 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
 def _handle_workflow_end(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _ModerationCtx) -> dict | None:
     """审核 workflow_end 事件的 answer/origin_answer（全量审核）。"""
     data = chunk.get("data", {})
-    answer_text = data.get("answer", "") or ""
+    # 同 _handle_message：非字符串 answer（如 End 直出 int 0）不参与审核、原样透传（FB-6）
+    answer_raw = data.get("answer", "")
+    answer_text = answer_raw if isinstance(answer_raw, str) else ""
     origin_answer = data.get("origin_answer", "")
 
     safe_answer = _clean_text_and_check_interrupt(engine, answer_text, ctx, chunk)
     if safe_answer is None:
         return None
-    data["answer"] = safe_answer
+    data["answer"] = safe_answer if isinstance(answer_raw, str) else answer_raw
 
     if origin_answer:
         safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx, chunk)
