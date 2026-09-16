@@ -235,6 +235,8 @@ export class NodeExeComponent implements OnChanges {
 
   public showOutputsCopySuccess = false;
 
+  public showAnswerCopySuccess = false;
+
   public tabs = [
     {
       id: 'conf',
@@ -745,7 +747,7 @@ export class NodeExeComponent implements OnChanges {
 
   public handleCopy(
     content: string | Record<string, any>,
-    type: 'inputs' | 'outputs',
+    type: 'inputs' | 'outputs' | 'answer',
   ) {
     if (typeof content === 'string') {
       this.clipboard.copy(content);
@@ -753,19 +755,24 @@ export class NodeExeComponent implements OnChanges {
       this.clipboard.copy(JSON.stringify(content));
     }
 
-    if (type === 'inputs') {
-      this.showInputsCopySuccess = true;
-    } else {
-      this.showOutputsCopySuccess = true;
-    }
-
+    this.setCopySuccessFlag(type, true);
     window.setTimeout(() => {
-      if (type === 'inputs') {
-        this.showInputsCopySuccess = false;
-      } else {
-        this.showOutputsCopySuccess = false;
-      }
+      this.setCopySuccessFlag(type, false);
     }, 2000);
+  }
+
+  /** 按复制目标切换对应的成功图标标记 */
+  private setCopySuccessFlag(
+    type: 'inputs' | 'outputs' | 'answer',
+    value: boolean,
+  ) {
+    if (type === 'inputs') {
+      this.showInputsCopySuccess = value;
+    } else if (type === 'answer') {
+      this.showAnswerCopySuccess = value;
+    } else {
+      this.showOutputsCopySuccess = value;
+    }
   }
 
   handleCopyErrorCode(code) {
