@@ -265,6 +265,16 @@ export class AppFlowRepoService {
     });
   }
 
+  /** 校验多智能体（试运行前预校验：子工作流版本存在性） */
+  public validateControllerAgent(agentId: string): Promise<any> {
+    // 不显式传 workspace_id：ctxServ.workspaceId 是登录会话空间，不感知 URL 参数，
+    // 通过 URL 打开其他空间（如共享空间导入的 agent）时会查错空间报"应用不存在"。
+    // 与上方 validateFlow 一致，由 http 层 mergeConfig 自动注入 URL 优先的 workspace_id。
+    return this.http.getAsync({
+      url: `${this.prefix}/agents/${agentId}/validate`,
+    });
+  }
+
   public getModelList(): Promise<IModel[]> {
     return this.http.getAsync({
       url: `${this.prefix}/models`,

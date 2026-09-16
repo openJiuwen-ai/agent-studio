@@ -539,10 +539,15 @@ public class AgentCommonService {
      * @param releaseVersion 版本详情
      */
     public void softDeleteReleaseVersionById(ReleaseVersion releaseVersion) {
-        HistoryReleaseVersionEntity historyReleaseVersion = new HistoryReleaseVersionEntity();
-        BeanUtils.copyProperties(releaseVersion, historyReleaseVersion);
-        historyReleaseVersion.setHistoryId(UUID.randomUUID().toString());
-        historyReleaseVersionMapper.insert(historyReleaseVersion);
+        HistoryReleaseVersionEntity existingHistory = historyReleaseVersionMapper
+            .findByAppIdAndVersionId(releaseVersion.getAppId(), releaseVersion.getVersionId());
+        // 防止重复导入资源时，由于id与version相同，历史表已有归档记录导致唯一索引冲突
+        if (existingHistory == null) {
+            HistoryReleaseVersionEntity historyReleaseVersion = new HistoryReleaseVersionEntity();
+            BeanUtils.copyProperties(releaseVersion, historyReleaseVersion);
+            historyReleaseVersion.setHistoryId(UUID.randomUUID().toString());
+            historyReleaseVersionMapper.insert(historyReleaseVersion);
+        }
         releaseVersionMapper.deleteByPrimaryKey(releaseVersion.getId());
     }
 
