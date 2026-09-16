@@ -2518,6 +2518,10 @@ class IRConverter:
             method = (configs.get("method") or "GET").upper()
             request_type = configs.get("requestType") or configs.get("request_type") or "NONE"
             request_body = configs.get("requestBody") or configs.get("request_body") or ""
+            # G3：组件用 ast.literal_eval 解析 body 模板，JSON 小写 true/false/null
+            # 非合法 Python 字面量 → 解析失败 → 整个 body 静默不发（status 仍 200）。
+            # 发送前经 json.dumps 还原，故预处理成 Python 字面量不改变线上语义。
+            request_body = _pythonize_json_literals(request_body)
 
             body_config = None
             if request_type.upper() == "JSON" and request_body:
@@ -2643,6 +2647,13 @@ class IRConverter:
             ir_connections=ir_connections,
         )
         _attach_node_def(component, node, configs)
+
+        if resolved_type == "EI.http":
+            # G1/G2/G4：组件读 inputs['query_parameters']（IR 给的是 query）、
+            # {{}} 替换只查顶层 inputs（IR 把用户字段挂在 userFields 键下）、
+            # 鉴权 configs.auth 无人消费（组件自带 auth 通道未实现 query 域）。
+            # 在注册前重排 inputs 货架一次补齐三者。
+            inputs_schema = _remap_http_inputs_schema(inputs_schema, configs)
 
         if resolved_type == "jiuwen.start":
             _start_kwargs = dict(inputs_schema=_build_start_inputs_schema(node))
@@ -4005,9 +4016,121 @@ _NO_EXCEPTION_TYPES = frozenset({"jiuwen.loop", "jiuwen.exception"})
 _NO_RETRY_TYPES = frozenset({"jiuwen.subWorkflow", "jiuwen.workflowComposite"})
 
 
+# handle_type 规范值（与 jiuwen.orchestration.flow.constant 的 EXCEPTION_HANDLE_* 同值），
+# 键为小写形态供大小写不敏感归一。注意：下游 bpmn_workflow 以驼峰常量比较 handle_type，
+# 历史上此处 .lower() 后直接存储，导致 defaultOutputs 分支在 IR 注册路径上永不可达。
+_CANONICAL_EXCEPTION_HANDLE_TYPES = {
+    "interrupt": "interrupt",
+    "defaultoutputs": "defaultOutputs",
+    "default_outputs": "defaultOutputs",
+    "errorbranch": "errorbranch",
+    "error_branch": "errorbranch",
+}
+
+# HTTP 节点默认输出模板键（snake_case）→ 组件输出键（驼峰）别名，
+# 不别名则兜底路径上 End 引用 statusCode/errorMessage 取空。
+_HTTP_OUTPUT_KEY_ALIASES = {
+    "status_code": "statusCode",
+    "error_message": "errorMessage",
+}
+
+# 组件 process_inputs 保留键：用户字段平铺到顶层时避让，防覆盖组件读取通道。
+# （query/headers 已由前端 H7 校验拦截，此处防御 query_parameters 等同名极端配置）
+_HTTP_RESERVED_INPUT_KEYS = frozenset(
+    {"query_parameters", "headers", "authentication", "body", "method", "url"}
+)
+
+# 匹配"双引号字符串（含转义）"或"裸 true/false/null 令牌"：字符串整体被第一分支
+# 消费，故串内内容不受替换影响（{"msg": "true story"} 不会被改写）。
+_JSON_LITERAL_TOKEN_RE = re.compile(r'("(?:[^"\\]|\\.)*")|\b(true|false|null)\b')
+_JSON_LITERAL_TO_PYTHON = {"true": "True", "false": "False", "null": "None"}
+
+
+def _pythonize_json_literals(template: Any) -> Any:
+    """把 JSON body 模板中裸写的 true/false/null 改写为 Python 字面量。
+
+    组件以 ast.literal_eval 解析 body 模板（G3）：JSON 小写布尔/null 非法 →
+    解析失败返回 {} → 整个 body 静默不发且无告警。body 发出前经 json.dumps
+    序列化回 true/false/null，故该预处理不改变线上语义。
+    """
+    if not isinstance(template, str):
+        return template
+    return _JSON_LITERAL_TOKEN_RE.sub(
+        lambda m: m.group(0) if m.group(1) else _JSON_LITERAL_TO_PYTHON[m.group(2)],
+        template,
+    )
+
+
+def _remap_http_inputs_schema(inputs_schema: Any, configs: dict | None) -> Any:
+    """重排 EI.http 的 inputs 货架，补齐三个消费缺口：
+
+    - G1：组件读 inputs['query_parameters']，IR 货架键为 query → 改名；
+    - G2：组件 {{}} 替换只遍历顶层 inputs，IR 把用户字段挂在 userFields 键下 → 平铺；
+    - G4：configs.auth（Java 产出 {scope, headers:{k:v}, query:{k:v}}）无人消费，
+      组件自带 authentication 通道未实现 query 域 → 直接并入两个货架；
+      用户手配行优先（setdefault），auth 不覆盖用户显式配置。
+    """
+    if not isinstance(inputs_schema, dict):
+        return inputs_schema
+    query = inputs_schema.get("query")
+    headers = inputs_schema.get("headers")
+    remapped: dict[str, Any] = {
+        "query_parameters": dict(query) if isinstance(query, dict) else {},
+        "headers": dict(headers) if isinstance(headers, dict) else {},
+    }
+    user_fields = inputs_schema.get("userFields")
+    if isinstance(user_fields, dict):
+        for key, value in user_fields.items():
+            if key in _HTTP_RESERVED_INPUT_KEYS:
+                logger.warning(
+                    f"EI.http user field {key!r} collides with component reserved "
+                    "input key; skipped in inputs remap"
+                )
+                continue
+            remapped[key] = value
+    auth = (configs or {}).get("auth")
+    if isinstance(auth, dict):
+        for key, value in (auth.get("headers") or {}).items():
+            remapped["headers"].setdefault(key, value)
+        for key, value in (auth.get("query") or {}).items():
+            remapped["query_parameters"].setdefault(key, value)
+    for key, value in inputs_schema.items():
+        if key not in ("query", "headers", "userFields") and key not in remapped:
+            remapped[key] = value
+    return remapped
+
+
+def _synthesize_exception_process(node: dict) -> dict | None:
+    """为只写 exceptionEnable/exceptionSuppression 的 IR 节点（HTTP 节点前端）
+    合成等价 exceptionProcess。缺此fallback时 HTTP 节点开启异常处理仍直接中断（G5）。
+    """
+    configs = node.get("configs") or {}
+    if not configs.get("exceptionEnable") or not configs.get("exceptionSuppression"):
+        return None
+    suppression = configs.get("exceptionSuppression")
+    try:
+        default_outputs = json.loads(suppression)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"node {node.get('id')} exceptionSuppression 非合法 JSON，"
+            "按开启异常处理语义回退空默认输出"
+        )
+        default_outputs = {}
+    if node.get("type") == "EI.http" and isinstance(default_outputs, dict):
+        default_outputs = {
+            _HTTP_OUTPUT_KEY_ALIASES.get(key, key): value
+            for key, value in default_outputs.items()
+        }
+    return {"handleType": "defaultOutputs", "defaultOutputs": default_outputs}
+
+
 def _parse_exception_config(node: dict) -> ExceptionConfig | None:
-    """从 IR 节点的 configs.exceptionProcess 中解析异常处理配置。"""
+    """从 IR 节点的 configs.exceptionProcess 中解析异常处理配置。
+    无 exceptionProcess 时尝试 exceptionEnable/exceptionSuppression 合成（见上）。
+    """
     ep = (node.get("configs") or {}).get("exceptionProcess")
+    if not ep:
+        ep = _synthesize_exception_process(node)
     if not ep:
         return None
 
@@ -4020,7 +4143,8 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     # MCP 节点的 outputs_schema 使用类型描述符（如 {"type": "array"}），
     # 不适合作为 get_by_schema 的提取模板。置空后 _post_invoke 跳过 schema 提取，
     # 错误恢复结果（defaultOutputs）直接通过。
-    if node_type in ("jiuwen.mcp", "jiuwen.flowMcp"):
+    # EI.http 输出为扁平 kv 同款道理：置空让兜底输出键原样通过。
+    if node_type in ("jiuwen.mcp", "jiuwen.flowMcp", "EI.http"):
         outputs_schema = {}
     else:
         outputs_schema = _convert_schema(node.get("outputs") or {})
@@ -4033,8 +4157,12 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     if not isinstance(retry_times, int) or retry_times < 0:
         retry_times = 0
 
+    handle_type = _CANONICAL_EXCEPTION_HANDLE_TYPES.get(
+        str(ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT)).strip().lower(),
+        EXCEPTION_HANDLE_INTERRUPT,
+    )
     return ExceptionConfig(
-        handle_type=ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT).lower(),
+        handle_type=handle_type,
         timeout=timeout,
         retry_times=retry_times,
         default_outputs=ep.get("defaultOutputs", {}),
