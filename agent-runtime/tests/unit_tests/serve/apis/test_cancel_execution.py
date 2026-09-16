@@ -220,6 +220,8 @@ class TestCancelEndpoint200:
     async def test_no_inflight_no_suspension_is_noop(self):
         """无在飞且无挂起快照（从未执行/已结束）→ 200 幂等放行但**不置位标记**
         （检视①：否则任意 conv id 可跨项目污染 cancel:true，误伤该会话后续挂起恢复）。
+        cancelled=false + message 明示"会话不存在"——打错会话 ID 的调用方可凭此
+        识别"什么都没终止"，不误判为成功（cancelled=true 仅在真实置位时返回）。
         """
         registry = _make_registry(None)
         registry.get_suspension = AsyncMock(return_value={})
@@ -231,8 +233,9 @@ class TestCancelEndpoint200:
 
         assert resp.status_code == 200
         body = json.loads(resp.body)
-        assert body["cancelled"] is True
+        assert body["cancelled"] is False
         assert body["running"] is False
+        assert body["message"] == "conversation not found, nothing cancelled"
         assert body["agent_id"] == "agent-9"  # 无注册记录时回显调用方传入的入口 ID
         registry.mark_cancelled.assert_not_awaited()  # 关键断言：无意义取消不留痕
 
