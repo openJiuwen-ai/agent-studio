@@ -198,7 +198,8 @@ class TestCancelRestartFromEntry:
     @pytest.mark.asyncio
     async def test_non_fast_checkpointer_keeps_cancel_flag(self):
         """checkpointer 无 _clear_checkpoint_and_sentinel（非 FastRedisCheckpointer）：
-        走显式 warning 分支、不抛异常，标记保留。"""
+        走显式 warning 分支、不抛异常，标记保留。
+        """
         runner = self._make_runner()
         # spec=[] 使任意属性访问抛 AttributeError → getattr(..., None) 回退 None
         fake_checkpointer = MagicMock(spec=[])
