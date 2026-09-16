@@ -385,7 +385,12 @@ class WorkflowRunner:
                 )
                 if clear_checkpoint:
                     await clear_checkpoint(
-                        session_id, ir_json.get("workflowId", ""), session
+                        # session 此时尚未创建（0996eb84 merge 后创建点后移到本块
+                        # 之后的 try/finally 内），传 None：FastRedisCheckpointer
+                        # 精确删除主路径（ns 索引 SMEMBERS + batch_delete + SREM）
+                        # 不依赖 session，仅精确删除失败时的 delegate 兜底降级为
+                        # 告警（同 release_workflow 传 None 先例）
+                        session_id, ir_json.get("workflowId", ""), None
                     )
                     checkpoint_cleared = True
                 else:
