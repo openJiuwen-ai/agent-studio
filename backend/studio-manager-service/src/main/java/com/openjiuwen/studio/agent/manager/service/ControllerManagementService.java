@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.openjiuwen.studio.agent.common.enums.NodeType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.LanguageUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.StrUtils;
@@ -44,6 +45,8 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeConfigVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeConfigVOIntent;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
@@ -104,6 +107,11 @@ import javax.annotation.Resource;
 @Service
 @Slf4j
 public class ControllerManagementService {
+
+    /**
+     * 宽松导入时工作流版本号的"跟随最新"占位符，运行时按最新发布版本解析
+     */
+    private static final String LATEST_VERSION_PLACEHOLDER = "{{latest}}";
 
     @Value("${controller.show-intent-param.enable}")
     private boolean showIntentParamEnable;
@@ -173,6 +181,9 @@ public class ControllerManagementService {
     private MgObsService mgObsService;
 
     @Autowired
+    private I18nUtil i18nUtil;
+
+    @Autowired
     private ModelServiceManager modelServiceManager;
 
     @Autowired
@@ -189,6 +200,9 @@ public class ControllerManagementService {
 
     @Autowired
     private MemoryRepoMapper memoryRepoMapper;
+
+    @Autowired
+    private ShareResourceManagerService shareResourceManagerService;
 
     /**
      * 获取控制器主节点
@@ -348,16 +362,29 @@ public class ControllerManagementService {
     }
 
     /**
-     * dsl转IR
+     * dsl转IR（校验业务子工作流引用版本的存在性）
      *
      * @return 返回IR内容
      */
     public ControllerIR dslToIr(ControllerVO controllerVo,
         Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId) {
+        return dslToIr(controllerVo, nodesGroupByTypeId, true);
+    }
+
+    /**
+     * dsl转IR
+     *
+     * @param validateSubWorkflowVersion 是否校验业务子工作流引用版本的存在性。创建/编辑保存传 true，
+     *        版本被删时给出明确报错；导入链路传 false，保持导入行为与该校验引入前一致——
+     *        导入不因历史导出缺陷（导出文件缺子工作流行）整体失败，版本缺失仍由运行时暴露
+     * @return 返回IR内容
+     */
+    public ControllerIR dslToIr(ControllerVO controllerVo,
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId, boolean validateSubWorkflowVersion) {
         ControllerIR controllerIr;
         try {
             // 数据校验
-            valid(controllerVo, nodesGroupByTypeId);
+            valid(controllerVo, nodesGroupByTypeId, validateSubWorkflowVersion);
 
             controllerIr = JSONObject.parseObject(controllerInitIr, ControllerIR.class);
             controllerIr.setAgentId(controllerVo.getId());
@@ -410,7 +437,8 @@ public class ControllerManagementService {
         return inputs;
     }
 
-    private void valid(ControllerVO controllerVo, Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId) {
+    private void valid(ControllerVO controllerVo, Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,
+        boolean validateSubWorkflowVersion) {
         log.debug("Entering valid with controllerVo={}, nodesGroupByTypeId={}", controllerVo, nodesGroupByTypeId);
 
         if (controllerVo == null || CollectionUtils.isEmpty(controllerVo.getNodes())) {
@@ -483,6 +511,12 @@ public class ControllerManagementService {
                     throw new AgentStudioException(StudioError.MULTI_AGENT_HAVE_DUPLICATE_SON_WORKFLOW);
                 }
             });
+
+            // 校验业务子工作流引用的版本仍然存在（版本被删除时提前暴露，避免运行时才报 IR 文件不存在）
+            if (validateSubWorkflowVersion) {
+                validateSubWorkflowVersion(nodesGroupByTypeId, workflows, controllerVo.getProjectId(),
+                    controllerVo.getWorkspaceId());
+            }
 
             // 校验意图工作流以及子工作流不能包含交互类节点
             validateIntentWorkflow(nodesGroupByTypeId, workflows);
@@ -595,6 +629,228 @@ public class ControllerManagementService {
                 }
             }
         }
+    }
+
+    /**
+     * 校验业务子工作流（非意图识别工作流）引用的版本仍然存在。
+     * 版本被删除后（如删除版本后导入历史导出文件），IR 中的 ir_path 会指向已删除版本的
+     * OBS 文件，运行时才报 "S3 object not found"，错误信息难以定位。此处在校验阶段
+     * 提前暴露（与工作流编辑器校验子工作流节点版本的行为一致），意图识别工作流由
+     * validateIntentWorkflow 单独校验，此处跳过避免重复查询。
+     *
+     * <p>仅在创建/编辑保存链路生效（由 {@link #dslToIr(ControllerVO, Map, boolean)} 的开关控制）：
+     * 导入链路必须跳过，否则历史导出缺陷（导出文件缺子工作流行）会让整条导入失败，
+     * 或因异常被吞导致控制器 IR 未上传，反而把运行时报错指向控制器自身 IR，比原状更难定位。
+     */
+    private void validateSubWorkflowVersion(Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,
+        List<ControllerNodeConfigVOWorkflows> workflows, String projectId, String workspaceId) {
+        List<ControllerNodeVO> missingNodes = findMissingVersionWorkflowNodes(nodesGroupByTypeId, workflows, projectId,
+            workspaceId);
+        if (missingNodes.isEmpty()) {
+            return;
+        }
+        ControllerNodeVO missingNode = missingNodes.get(0);
+        String versionId = readSubWorkflowVersionId(missingNode);
+        log.error("sub workflow version not found, nodeId: {}, versionId: {}", missingNode.getId(), versionId);
+        throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND, versionId);
+    }
+
+    /**
+     * 多智能体试运行前的预校验：检查下挂业务子工作流引用的版本是否存在。
+     * 对齐工作流侧 WorkflowValidationService#validateSubWorkflowNode 的处理方式——不抛异常，
+     * 而是返回节点级错误列表，由前端标红节点并阻止进入试运行。
+     *
+     * <p>多智能体原先没有任何试运行前校验（前端 checkErrorWorkFlow 对 multi 直接跳过），
+     * 版本缺失时要等到运行时加载 IR 才失败，错误码为 103104、文案是"意图识别错误"，
+     * 完全无法定位真实原因；工作流侧因为有 validate 预校验所以能直接报"版本不存在"。
+     *
+     * @param agent 多智能体
+     * @return 校验结果，success=false 时 errors 为版本缺失的节点列表
+     */
+    public WorkflowValidationVO validateSubWorkflowVersions(Agent agent) {
+        WorkflowValidationVO result = new WorkflowValidationVO().setSuccess(true);
+        if (agent == null || StringUtils.isEmpty(agent.getDslPath())) {
+            return result;
+        }
+        String controllerJson = mgObsService.downloadObsFile(agent.getDslPath());
+        ControllerVO controllerVo = JSONObject.parseObject(controllerJson, ControllerVO.class);
+        if (controllerVo == null || CollectionUtils.isEmpty(controllerVo.getNodes())) {
+            return result;
+        }
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId = groupDslNodes(controllerVo);
+        // DSL 缺少 controller 节点属于数据异常，交由保存链路的 valid() 报错，预校验不拦截
+        if (MapUtils.isEmpty(nodesGroupByTypeId.get(AgentNodeType.CONTROLLER.getType()))) {
+            return result;
+        }
+        ControllerNodeConfigVO controllerNodeConfigVo = JsonUtils.objectToClassRef(
+            getControllerNode(nodesGroupByTypeId).getConfigs(), new TypeReference<ControllerNodeConfigVO>() {});
+        if (controllerNodeConfigVo == null) {
+            return result;
+        }
+        List<ControllerNodeVO> missingNodes = new ArrayList<>();
+        if (!CollectionUtils.isEmpty(controllerNodeConfigVo.getWorkflows())) {
+            missingNodes.addAll(findMissingVersionWorkflowNodes(nodesGroupByTypeId,
+                controllerNodeConfigVo.getWorkflows(), agent.getProjectId(), agent.getWorkspaceId()));
+        }
+        // 子智能体（含子多智能体 SubController 节点与单智能体 Agent 节点）引用的版本同样校验：
+        // 导入历史包后版本可能不存在，缺校验时试运行/发布都能通过，运行时才报 IR 文件不存在，无法定位
+        missingNodes.addAll(findMissingVersionSubAgentNodes(nodesGroupByTypeId,
+            controllerNodeConfigVo.getAgents()));
+        if (missingNodes.isEmpty()) {
+            return result;
+        }
+        // 校验文案按节点类型区分：工作流节点报子工作流文案，子多智能体与单智能体节点
+        // 统一报"子智能体"文案；与工作流版本混用同一提示会误导定位方向
+        List<WorkflowValidationVOErrors> errors = missingNodes.stream()
+            .map(node -> new WorkflowValidationVOErrors().setId(node.getId()).setType(node.getType())
+                .setReason(i18nUtil.getMessage(AgentNodeType.WORKFLOW.getType().equals(node.getType())
+                    ? "workflow.validate.workflow.node" : "workflow.validate.sub.agent.node")))
+            .collect(Collectors.toList());
+        log.error("controller agent {} has sub nodes with missing version: {}", agent.getAgentId(),
+            missingNodes.stream().map(node -> node.getType() + ":" + node.getId()).collect(Collectors.toList()));
+        return result.setSuccess(false).setErrors(errors);
+    }
+
+    /**
+     * 找出引用版本已不存在的业务子工作流节点。意图识别工作流由 validateIntentWorkflow 单独校验，
+     * 此处跳过避免重复查询；version_id 为空（未绑定具体版本）或为宽松导入残留的 {{latest}}
+     * 占位符时同样跳过——二者都不是"引用了已删除的具体版本"，避免误报阻断保存/试运行。
+     *
+     * <p>版本可用性含可见性判定：getWorkflowById/selectByAppIdAndVersionId 均无 project/workspace
+     * 过滤，跨空间导入残留的引用（版本全局存在但本空间不可见/未共享授权）同样视为不可用，否则
+     * 试运行/发布能通过、运行时才报 IR 文件不存在。
+     */
+    private List<ControllerNodeVO> findMissingVersionWorkflowNodes(
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,
+        List<ControllerNodeConfigVOWorkflows> workflows, String projectId, String workspaceId) {
+        Map<String, ControllerNodeVO> workflowNodeMap = nodesGroupByTypeId.get(AgentNodeType.WORKFLOW.getType());
+        if (MapUtils.isEmpty(workflowNodeMap) || CollectionUtils.isEmpty(workflows)) {
+            return Collections.emptyList();
+        }
+        List<ControllerNodeVO> missingNodes = new ArrayList<>();
+        for (ControllerNodeConfigVOWorkflows workflow : workflows) {
+            if (Strings.CS.equals(workflow.getType(), WorkflowType.INTENT.getType())) {
+                continue;
+            }
+            ControllerNodeVO workflowNode = workflowNodeMap.get(workflow.getNodeId());
+            if (workflowNode == null) {
+                continue;
+            }
+            String versionId = readSubWorkflowVersionId(workflowNode);
+            if (StringUtils.isEmpty(versionId) || LATEST_VERSION_PLACEHOLDER.equals(versionId)) {
+                continue;
+            }
+            String workflowId = readSubWorkflowId(workflowNode);
+            if (StringUtils.isEmpty(workflowId)) {
+                continue;
+            }
+            if (!isSubWorkflowVersionUsable(workflowId, versionId, projectId, workspaceId)) {
+                missingNodes.add(workflowNode);
+            }
+        }
+        return missingNodes;
+    }
+
+    /**
+     * 判定子工作流引用的版本是否可用：版本存在，且该工作流对指定空间可见
+     * （本空间资源，或已共享授权给该空间且该版本在共享版本列表内）。
+     *
+     * <p>空间归属取自调用链的显式上下文（保存链路为 controllerVo、试运行/发布链路为 agent），
+     * 而非请求 ThreadLocal：后者在内部调用/异步链路可能缺失，且校验对象应是资源自身归属空间。
+     * 本空间判定为 project_id + workspace_id 双维度，与 selectByWorkflowSearchCriteria 一致。
+     *
+     * <p>工作流行缺失时不叠加可见性判定（保守放行）：此时无空间归属信息可判，版本存在性
+     * 已由上一步保证，与修改前行为一致，避免历史数据误报阻断保存。
+     */
+    private boolean isSubWorkflowVersionUsable(String workflowId, String versionId, String projectId,
+        String workspaceId) {
+        if (releaseVersionMapper.selectByAppIdAndVersionId(workflowId, versionId) == null) {
+            return false;
+        }
+        WorkflowEntity workflowEntity = workflowMapper.getWorkflowById(workflowId);
+        if (workflowEntity == null) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(workflowEntity.getDeleted())) {
+            return false;
+        }
+        if (Strings.CS.equals(workflowEntity.getProjectId(), projectId)
+            && Strings.CS.equals(workflowEntity.getWorkspaceId(), workspaceId)) {
+            return true;
+        }
+        // 共享引用为二维授权：scope 授权 + versionList 含该版本
+        return shareResourceManagerService
+            .queryShareResourceEntityByResourceIdAndVersionId(workflowId, workspaceId, versionId) != null;
+    }
+
+    private String readSubWorkflowId(ControllerNodeVO workflowNode) {
+        return readSubWorkflowConfigValue(workflowNode, "id");
+    }
+
+    /**
+     * 找出引用版本已不存在的子智能体节点（含子多智能体 SubController 与单智能体 Agent）。
+     * 判定逻辑与 {@link #findMissingVersionWorkflowNodes} 对齐：只校验绑定了具体版本的引用，
+     * version_id 为空（跟随最新）不视为悬空。二者的版本都记录在节点自身 configs
+     * （由前端添加子智能体时写入），而非 controller 节点的 agents 列表；mode 分流与保存链路
+     * （recordRefSubController/recordRefAgent）一致：Controller 模式挂 SubController 节点，
+     * PlanExecute 模式挂 Agent 节点。校验文案统一报"子智能体节点版本不存在"。
+     */
+    private List<ControllerNodeVO> findMissingVersionSubAgentNodes(
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,
+        List<ControllerNodeConfigVOAgents> agents) {
+        if (CollectionUtils.isEmpty(agents)) {
+            return Collections.emptyList();
+        }
+        Map<String, ControllerNodeVO> subControllerNodeMap =
+            nodesGroupByTypeId.get(AgentNodeType.SUB_CONTROLLER.getType());
+        Map<String, ControllerNodeVO> agentNodeMap = nodesGroupByTypeId.get(AgentNodeType.AGENT.getType());
+        if (MapUtils.isEmpty(subControllerNodeMap) && MapUtils.isEmpty(agentNodeMap)) {
+            return Collections.emptyList();
+        }
+        // 按 mode 分流取节点并按节点 id 去重（与保存链路一致：Controller 挂子多智能体，PlanExecute 挂单智能体）
+        Map<String, ControllerNodeVO> nodesToCheck = new HashMap<>();
+        for (ControllerNodeConfigVOAgents agent : agents) {
+            Map<String, ControllerNodeVO> nodeMap;
+            if (AgentMode.CONTROLLER.getMode().equals(agent.getMode())) {
+                nodeMap = subControllerNodeMap;
+            } else if (AgentMode.PLANEXECUTE.getMode().equals(agent.getMode())) {
+                nodeMap = agentNodeMap;
+            } else {
+                continue;
+            }
+            if (MapUtils.isEmpty(nodeMap) || StringUtils.isEmpty(agent.getNodeId())) {
+                continue;
+            }
+            ControllerNodeVO node = nodeMap.get(agent.getNodeId());
+            if (node != null) {
+                nodesToCheck.put(node.getId(), node);
+            }
+        }
+        List<ControllerNodeVO> missingNodes = new ArrayList<>();
+        for (ControllerNodeVO node : nodesToCheck.values()) {
+            String versionId = readSubWorkflowVersionId(node);
+            if (StringUtils.isEmpty(versionId) || LATEST_VERSION_PLACEHOLDER.equals(versionId)) {
+                continue;
+            }
+            String subAgentId = readSubWorkflowId(node);
+            if (StringUtils.isEmpty(subAgentId)) {
+                continue;
+            }
+            if (releaseVersionMapper.selectByAppIdAndVersionId(subAgentId, versionId) == null) {
+                missingNodes.add(node);
+            }
+        }
+        return missingNodes;
+    }
+
+    private String readSubWorkflowVersionId(ControllerNodeVO workflowNode) {
+        return readSubWorkflowConfigValue(workflowNode, "version_id");
+    }
+
+    private String readSubWorkflowConfigValue(ControllerNodeVO workflowNode, String key) {
+        Map<String, Object> nodeConfig = JsonUtils.objectToClass(workflowNode.getConfigs());
+        Object value = nodeConfig == null ? null : nodeConfig.get(key);
+        return value == null ? null : value.toString();
     }
 
     private void validateIntentWorkflow(Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId,

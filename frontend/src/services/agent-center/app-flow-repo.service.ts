@@ -265,6 +265,16 @@ export class AppFlowRepoService {
     });
   }
 
+  /** 校验多智能体（试运行前预校验：子工作流版本存在性） */
+  public validateControllerAgent(agentId: string): Promise<any> {
+    return this.http.getAsync({
+      url: `${this.prefix}/agents/${agentId}/validate`,
+      query: {
+        workspace_id: this.ctxServ.workspaceId,
+      },
+    });
+  }
+
   public getModelList(): Promise<IModel[]> {
     return this.http.getAsync({
       url: `${this.prefix}/models`,

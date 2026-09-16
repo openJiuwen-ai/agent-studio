@@ -1471,7 +1471,8 @@ public class AgentImportExportService {
                 // 上传IR
                 Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId
                     = controllerManagementService.groupDslNodes(entityDsl);
-                ControllerIR ir = controllerManagementService.dslToIr(entityDsl, nodesGroupByTypeId);
+                // 导入链路跳过业务子工作流版本存在性校验，版本缺失交由运行时暴露
+                ControllerIR ir = controllerManagementService.dslToIr(entityDsl, nodesGroupByTypeId, false);
                 agentCommonService.uploadToObsNoNullWithVersion(agentExportEntity.getMetadata(), ir,
                     CommonConstant.Workflow.IR, versionId);
                 log.info("Succeed to refresh subController ir, controller id = {}", agentId);
@@ -1638,7 +1639,9 @@ public class AgentImportExportService {
             // 上传IR
             Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId =
                 controllerManagementService.groupDslNodes(dsl);
-            ControllerIR ir = controllerManagementService.dslToIr(dsl, nodesGroupByTypeId);
+            // 导入链路跳过业务子工作流版本存在性校验：本方法异常会被 importAgentHandler 捕获并 return false，
+            // 校验抛出会让整条智能体导入失败（原行为是导入成功、仅试运行报错），故保持与校验引入前一致
+            ControllerIR ir = controllerManagementService.dslToIr(dsl, nodesGroupByTypeId, false);
             agentCommonService.uploadToObsNoNull(metadata, ir, CommonConstant.Workflow.IR);
             modelDeploymentId = dsl.getNodes()
                 .stream()

@@ -38,6 +38,7 @@ import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 import com.openjiuwen.studio.agent.manager.service.IAgentManagementService;
 
 import org.slf4j.Logger;
@@ -285,6 +286,11 @@ public class AgentManagementApiController implements AgentManagementApi {
     @Override
     public ResponseEntity<AgentInfo> retrieveAgent(String projectId, String agentId, String workspaceId) {
         return ResponseModel.success(agentManagementService.retrieveAgent(projectId, agentId, workspaceId));
+    }
+
+    @Override
+    public ResponseEntity<WorkflowValidationVO> validateAgent(String projectId, String agentId, String workspaceId) {
+        return ResponseModel.success(agentManagementService.validateAgent(projectId, agentId, workspaceId));
     }
 
     @Override

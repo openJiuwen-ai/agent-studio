@@ -2,6 +2,7 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVO;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVOAgents;
@@ -10,6 +11,9 @@ import com.openjiuwen.studio.agent.manager.dto.ControllerNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
 import com.openjiuwen.studio.agent.manager.dto.ModelConfigVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeConfigVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
+import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.controller.AgentMode;
@@ -23,6 +27,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
 
+import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +38,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -51,6 +57,7 @@ class ControllerManagementServiceTest {
     private RelationManagementService relationManagementService;
     private AgentMemoryConfigService agentMemoryConfigService;
     private IrAdapterService irAdapterService;
+    private I18nUtil i18nUtil;
 
     private ControllerManagementService controllerManagementService;
 
@@ -68,6 +75,7 @@ class ControllerManagementServiceTest {
         relationManagementService = mock(RelationManagementService.class);
         agentMemoryConfigService = mock(AgentMemoryConfigService.class);
         irAdapterService = mock(IrAdapterService.class);
+        i18nUtil = mock(I18nUtil.class);
 
         MockitoAnnotations.openMocks(this);
         controllerManagementService = new ControllerManagementService();
@@ -83,6 +91,7 @@ class ControllerManagementServiceTest {
         ReflectionTestUtils.setField(controllerManagementService, "relationManagementService", relationManagementService);
         ReflectionTestUtils.setField(controllerManagementService, "agentMemoryConfigService", agentMemoryConfigService);
         ReflectionTestUtils.setField(controllerManagementService, "irAdapterService", irAdapterService);
+        ReflectionTestUtils.setField(controllerManagementService, "i18nUtil", i18nUtil);
         ReflectionTestUtils.setField(controllerManagementService, "showIntentParamEnable", false);
         ReflectionTestUtils.setField(controllerManagementService, "controllerInitIntentDsl", "{}");
         ReflectionTestUtils.setField(controllerManagementService, "controllerInitIntentDslEn", "{}");
@@ -435,5 +444,74 @@ class ControllerManagementServiceTest {
         assertNotNull(captured);
         assertFalse(captured.isEmpty());
         assertEquals(CommonConstant.CONTROLLER, captured.get(0).getAppType());
+    }
+
+    // ==================== validateSubWorkflowVersions tests ====================
+
+    @Test
+    void testValidateSubWorkflowVersions_DistinguishesReasonByNodeType() {
+        // Controller 节点：同时引用一个工作流节点、一个子多智能体节点和一个单智能体节点
+        ControllerNodeConfigVO configVo = new ControllerNodeConfigVO();
+        ControllerNodeConfigVOWorkflows wfConfig = new ControllerNodeConfigVOWorkflows();
+        wfConfig.setNodeId("wf-node-1");
+        wfConfig.setType("business");
+        ControllerNodeConfigVOAgents subControllerConfig = new ControllerNodeConfigVOAgents();
+        subControllerConfig.setNodeId("sub-controller-node-1");
+        subControllerConfig.setMode(AgentMode.CONTROLLER.getMode());
+        ControllerNodeConfigVOAgents agentConfig = new ControllerNodeConfigVOAgents();
+        agentConfig.setNodeId("agent-node-1");
+        agentConfig.setMode(AgentMode.PLANEXECUTE.getMode());
+        configVo.setWorkflows(List.of(wfConfig));
+        configVo.setAgents(List.of(subControllerConfig, agentConfig));
+
+        ControllerNodeVO controllerNode = new ControllerNodeVO();
+        controllerNode.setId("controller-node-1");
+        controllerNode.setType(AgentNodeType.CONTROLLER.getType());
+        controllerNode.setConfigs(configVo);
+
+        // 工作流节点：引用已删除的版本
+        ControllerNodeVO wfNode = new ControllerNodeVO();
+        wfNode.setId("wf-node-1");
+        wfNode.setType(AgentNodeType.WORKFLOW.getType());
+        wfNode.setConfigs(Map.of("id", "wf-id-1", "version_id", "v-missing"));
+
+        // 子多智能体节点：引用已删除的版本（导入历史包场景）
+        ControllerNodeVO subControllerNode = new ControllerNodeVO();
+        subControllerNode.setId("sub-controller-node-1");
+        subControllerNode.setType(AgentNodeType.SUB_CONTROLLER.getType());
+        subControllerNode.setConfigs(Map.of("id", "sub-agent-id-1", "version_id", "v-missing"));
+
+        // 单智能体节点：引用已删除的版本
+        ControllerNodeVO agentNode = new ControllerNodeVO();
+        agentNode.setId("agent-node-1");
+        agentNode.setType(AgentNodeType.AGENT.getType());
+        agentNode.setConfigs(Map.of("id", "agent-resource-id-1", "version_id", "v-missing"));
+
+        ControllerVO controllerVo = new ControllerVO();
+        controllerVo.setNodes(List.of(controllerNode, wfNode, subControllerNode, agentNode));
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-id");
+        agent.setDslPath("dsl-path");
+
+        when(mgObsService.downloadObsFile("dsl-path")).thenReturn(JSON.toJSONString(controllerVo));
+        // 工作流版本、子多智能体版本与单智能体版本均不存在
+        when(releaseVersionMapper.selectByAppIdAndVersionId(any(), any())).thenReturn(null);
+        when(i18nUtil.getMessage("workflow.validate.workflow.node")).thenReturn("子工作流节点版本不存在");
+        when(i18nUtil.getMessage("workflow.validate.sub.agent.node")).thenReturn("子智能体节点版本不存在");
+
+        WorkflowValidationVO result = controllerManagementService.validateSubWorkflowVersions(agent);
+
+        assertFalse(result.isSuccess());
+        assertNotNull(result.getErrors());
+        assertEquals(3, result.getErrors().size());
+        Map<String, String> reasonByType = result.getErrors().stream()
+            .collect(Collectors.toMap(WorkflowValidationVOErrors::getType, WorkflowValidationVOErrors::getReason));
+        assertEquals("子工作流节点版本不存在", reasonByType.get(AgentNodeType.WORKFLOW.getType()));
+        // 子多智能体与单智能体版本缺失时统一报"子智能体"文案，不得报子工作流文案误导定位方向
+        assertEquals("子智能体节点版本不存在",
+            reasonByType.get(AgentNodeType.SUB_CONTROLLER.getType()));
+        assertEquals("子智能体节点版本不存在",
+            reasonByType.get(AgentNodeType.AGENT.getType()));
     }
 }
