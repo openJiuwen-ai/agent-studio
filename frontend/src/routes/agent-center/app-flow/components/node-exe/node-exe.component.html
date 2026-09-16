@@ -601,9 +601,20 @@
                   *ngIf="isAnswerValid(runInfo)"
                   class="flex shrink-0 flex-col gap-[8px] rounded-lg bg-[#fafafa] p-[16px]"
                 >
-                  <span class="font-semibold text-[#191919]">{{
+                  <div class="flex items-center justify-between">
+                    <span class="font-semibold text-[#191919]">{{
                       'output_result' | i18nextEager
                     }}</span>
+                    <asset-copy-icon
+                      *ngIf="!showAnswerCopySuccess"
+                      class="cursor-pointer"
+                      (click)="handleCopy(runInfo.answer, 'answer')"
+                    ></asset-copy-icon>
+                    <asset-copy-success-icon
+                      *ngIf="showAnswerCopySuccess"
+                      class="cursor-pointer"
+                    ></asset-copy-success-icon>
+                  </div>
                   <div class="break-words whitespace-pre-wrap">
                     {{ runInfo.answer }}
                   </div>

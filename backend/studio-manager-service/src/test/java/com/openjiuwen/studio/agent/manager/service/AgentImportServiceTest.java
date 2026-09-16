@@ -23,6 +23,7 @@ import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapter;
 import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapterFactory;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Answers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -56,6 +58,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
@@ -63,6 +66,8 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -82,6 +87,15 @@ class AgentImportServiceTest {
 
     @Mock
     private MappingMapper mappingMapper;
+
+    @Mock
+    private ShareResourceMapper shareResourceMapper;
+
+    @Mock
+    private ShareResourceManagerService shareResourceManagerService;
+
+    @Mock
+    private WorkflowManagementService workflowManagementService;
 
     @Mock
     private I18nUtil i18nUtil;
@@ -105,6 +119,9 @@ class AgentImportServiceTest {
         ReflectionTestUtils.setField(agentImportService, "agentMapper", agentMapper);
         ReflectionTestUtils.setField(agentImportService, "releaseVersionMapper", releaseVersionMapper);
         ReflectionTestUtils.setField(agentImportService, "mappingMapper", mappingMapper);
+        ReflectionTestUtils.setField(agentImportService, "shareResourceMapper", shareResourceMapper);
+        ReflectionTestUtils.setField(agentImportService, "shareResourceManagerService", shareResourceManagerService);
+        ReflectionTestUtils.setField(agentImportService, "workflowManagementService", workflowManagementService);
         ReflectionTestUtils.setField(agentImportService, "i18nUtil", i18nUtil);
         ReflectionTestUtils.setField(agentImportService, "skuManageService", skuManageService);
         ReflectionTestUtils.setField(agentImportService, "resourceAdapterFactory", resourceAdapterFactory);
@@ -927,6 +944,610 @@ class AgentImportServiceTest {
     }
 
     /**
+     * 用例描述：rebuildControllerWorkflowMappings 在画布 DSL 含 Agent 节点（单智能体）、草稿映射缺
+     * agent 引用行时，重建 controller→agent 映射；引用版本不存在（导出残留源空间版本号）时
+     * 保留悬空版本号不重绑、不改写 DSL（不查版本表），由试运行/发布校验报
+     * "子智能体节点版本不存在"；被引用单智能体升级后铃铛出现，客户升级即修复
+     * 预制条件：RequestContextUtils 已 mock；草稿映射只返回 model 行；sub-agent-1 属本空间
+     * 输入参数：controller DSL 含一个 Agent 节点（configs.id=sub-agent-1, version_id=1789465490264）
+     * 预期结果：insertBatch 插入一条映射，app_type=controller、resource_type=agent、
+     * resource_version 原样保留 1789465490264；DSL 不改写（importInfo.getDsl() 仍为原 Map）
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testRebuildControllerWorkflowMappingsShouldKeepDanglingAgentRefVersion() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-1");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("name", "test0910");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            // 草稿映射只有 model 行，缺 agent 引用行
+            MappingEntity modelMapping = new MappingEntity();
+            modelMapping.setResourceId("model-1");
+            modelMapping.setResourceType("model");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(modelMapping));
+
+            Agent subAgent = new Agent();
+            subAgent.setAgentId("sub-agent-1");
+            subAgent.setName("test0910-in-db");
+            subAgent.setProjectId(projectId);
+            subAgent.setWorkspaceId(workspaceId);
+            when(agentMapper.selectById("sub-agent-1")).thenReturn(subAgent);
+
+            invokeRebuildControllerWorkflowMappings(projectId, workspaceId, importInfo, importResult);
+
+            ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(mappingMapper).insertBatch(captor.capture());
+            List<MappingEntity> inserted = captor.getValue();
+            assertEquals(1, inserted.size());
+            MappingEntity agentMapping = inserted.get(0);
+            assertEquals("controller-1", agentMapping.getAppId());
+            // 与保存链路 recordRefAgent 的覆写一致：单智能体映射 app_type=controller
+            assertEquals(CommonConstant.CONTROLLER, agentMapping.getAppType());
+            assertEquals(CommonConstant.AGENT_TYPE, agentMapping.getResourceType());
+            assertEquals("sub-agent-1", agentMapping.getResourceId());
+            // 悬空版本号原样保留：不查版本表、不重绑，靠校验拦截 + 铃铛升级
+            assertEquals("1789465490264", agentMapping.getResourceVersion());
+            assertEquals("test0910", agentMapping.getResourceName());
+            assertEquals("multi-0915", agentMapping.getAppName());
+            assertEquals(workspaceId, agentMapping.getAppWorkspaceId());
+            assertNull(agentMapping.getAppVersion());
+            assertTrue(agentMapping.isValid());
+
+            // DSL 不改写
+            assertTrue(importInfo.getDsl() instanceof Map);
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 在草稿映射已存在 agent 引用行时不重建
+     * 预制条件：草稿映射返回一条 resource_type=agent 的行
+     * 输入参数：controller DSL 含一个 Agent 节点
+     * 预期结果：不调用 insertBatch
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldSkipWhenAgentRefExists() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-1");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            MappingEntity existingAgentMapping = new MappingEntity();
+            existingAgentMapping.setResourceId("sub-agent-1");
+            existingAgentMapping.setResourceType(CommonConstant.AGENT_TYPE);
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(existingAgentMapping));
+
+            invokeRebuildControllerWorkflowMappings("test-project", workspaceId, importInfo, importResult);
+
+            verify(mappingMapper, never()).insertBatch(any());
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 在草稿映射已含 valid=true 的 WORKFLOW 引用行
+     * （正常导入 handleMapping 写入的场景）时不重建。回归防护：缺失判断查询 valid 传 null
+     * 查全部草稿行，若误传 false 只查失效行会漏看有效行，导致每次正常导入都误判缺失而重复插入
+     * 预制条件：草稿映射返回一条 resource_type=workflow、valid=true 的行
+     * 输入参数：controller DSL 含一个 Workflow 节点
+     * 预期结果：不调用 insertBatch
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldSkipWhenValidWorkflowRefExists() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> workflowConfigs = new HashMap<>();
+            workflowConfigs.put("id", "wf-1");
+            workflowConfigs.put("name", "sub-flow");
+            workflowConfigs.put("version_id", "1744203795942");
+            Map<String, Object> workflowNode = new HashMap<>();
+            workflowNode.put("id", "node_wf_1");
+            workflowNode.put("type", "Workflow");
+            workflowNode.put("configs", workflowConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(workflowNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            // 正常导入写入的 valid=true 工作流引用行：缺失判断必须能查到它（valid 传 null 不过滤）
+            MappingEntity existingWorkflowMapping = new MappingEntity();
+            existingWorkflowMapping.setResourceId("wf-1");
+            existingWorkflowMapping.setResourceType(CommonConstant.WORKFLOW_TYPE);
+            existingWorkflowMapping.setValid(true);
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(existingWorkflowMapping));
+
+            invokeRebuildControllerWorkflowMappings("test-project", workspaceId, importInfo, importResult);
+
+            verify(mappingMapper, never()).insertBatch(any());
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 在单智能体在库中不存在时（跨空间导入且未共享）跳过重建
+     * 预制条件：草稿映射缺 agent 引用行；agentMapper.selectById 返回 null
+     * 输入参数：controller DSL 含一个 Agent 节点（configs.id 指向不存在的单智能体）
+     * 预期结果：不调用 insertBatch，避免写入无效映射
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldSkipWhenSubAgentMissing() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-missing");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            MappingEntity modelMapping = new MappingEntity();
+            modelMapping.setResourceId("model-1");
+            modelMapping.setResourceType("model");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(modelMapping));
+            when(agentMapper.selectById("sub-agent-missing")).thenReturn(null);
+
+            invokeRebuildControllerWorkflowMappings("test-project", workspaceId, importInfo, importResult);
+
+            verify(mappingMapper, never()).insertBatch(any());
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 在单智能体在本空间存在但无任何发布版本时
+     * 仍重建映射并保留节点引用的版本号（悬空保留，不查版本表），由试运行/发布校验报
+     * "子智能体节点版本不存在"
+     * 预制条件：sub-agent-1 属本空间；无任何发布版本
+     * 预期结果：insertBatch 插入一条映射，resource_version 原样保留 1789465490264；DSL 不改写
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldKeepVersionWhenNoReleaseVersion() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-1");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            MappingEntity modelMapping = new MappingEntity();
+            modelMapping.setResourceId("model-1");
+            modelMapping.setResourceType("model");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(modelMapping));
+
+            Agent subAgent = new Agent();
+            subAgent.setAgentId("sub-agent-1");
+            subAgent.setProjectId(projectId);
+            subAgent.setWorkspaceId(workspaceId);
+            when(agentMapper.selectById("sub-agent-1")).thenReturn(subAgent);
+
+            invokeRebuildControllerWorkflowMappings(projectId, workspaceId, importInfo, importResult);
+
+            ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(mappingMapper).insertBatch(captor.capture());
+            List<MappingEntity> inserted = captor.getValue();
+            assertEquals(1, inserted.size());
+            // 单智能体存在即可见即建行，版本悬空保留，靠校验拦截 + 铃铛升级
+            assertEquals("1789465490264", inserted.get(0).getResourceVersion());
+            assertTrue(importInfo.getDsl() instanceof Map);
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 在单智能体属于其他空间且共享二维授权
+     * （共享行存在 + scope 授权目标空间）通过时重建映射并保留引用版本号（悬空保留）；
+     * 共享方发布新版本后铃铛出现可升级，与本空间悬空版本语义一致
+     * 预制条件：sub-agent-1 属 other-project/other-workspace；
+     * checkWorkspaceAuthByResourceOrNot 对目标空间授权通过
+     * 预期结果：insertBatch 插入一条映射，resource_version 原样保留 1789465490264，
+     * app_workspace_id 为目标空间
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldKeepVersionWhenShared() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-1");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            MappingEntity modelMapping = new MappingEntity();
+            modelMapping.setResourceId("model-1");
+            modelMapping.setResourceType("model");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(modelMapping));
+
+            // 单智能体属其他空间，共享二维授权（共享行存在 + scope 授权目标空间）通过
+            Agent subAgent = new Agent();
+            subAgent.setAgentId("sub-agent-1");
+            subAgent.setProjectId("other-project");
+            subAgent.setWorkspaceId("other-workspace");
+            when(agentMapper.selectById("sub-agent-1")).thenReturn(subAgent);
+            when(shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, "sub-agent-1"))
+                .thenReturn(true);
+
+            invokeRebuildControllerWorkflowMappings(projectId, workspaceId, importInfo, importResult);
+
+            ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(mappingMapper).insertBatch(captor.capture());
+            List<MappingEntity> inserted = captor.getValue();
+            assertEquals(1, inserted.size());
+            // 二维授权通过即建行，版本悬空保留，靠校验拦截 + 共享新版本出现后铃铛升级
+            assertEquals("1789465490264", inserted.get(0).getResourceVersion());
+            assertEquals(workspaceId, inserted.get(0).getAppWorkspaceId());
+            assertTrue(importInfo.getDsl() instanceof Map);
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 在单智能体属于其他空间且共享二维授权
+     * 未通过（无共享行或 scope 未授权目标空间）时跳过，节点保持原样，
+     * 由发布/试运行校验提示"子智能体节点版本不存在"，客户重建引用
+     * 预制条件：sub-agent-1 属 other-project/other-workspace；
+     * checkWorkspaceAuthByResourceOrNot 对目标空间授权不通过
+     * 预期结果：不调用 insertBatch
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldSkipWhenCrossWorkspaceNotAuthorized() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-1");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            MappingEntity modelMapping = new MappingEntity();
+            modelMapping.setResourceId("model-1");
+            modelMapping.setResourceType("model");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(modelMapping));
+
+            Agent subAgent = new Agent();
+            subAgent.setAgentId("sub-agent-1");
+            subAgent.setProjectId("other-project");
+            subAgent.setWorkspaceId("other-workspace");
+            when(agentMapper.selectById("sub-agent-1")).thenReturn(subAgent);
+            // 跨空间且共享二维授权未通过（无共享行或 scope 未授权目标空间），不可见
+            when(shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, "sub-agent-1"))
+                .thenReturn(false);
+
+            invokeRebuildControllerWorkflowMappings(projectId, workspaceId, importInfo, importResult);
+
+            verify(mappingMapper, never()).insertBatch(any());
+        }
+    }
+
+    /**
+     * 用例描述：rebuildControllerWorkflowMappings 的缺失判定只看草稿行（app_version 为空），
+     * 已发布映射行（app_version 非空）不参与判定：仅有已发布 agent 引用行时仍判定整条缺失
+     * 并触发重建，避免兜底漏生效
+     * 预制条件：mapping 查询只返回一条 app_version 非空的已发布 agent 引用行；sub-agent-1 属本空间
+     * 预期结果：insertBatch 插入一条草稿映射（app_version 为空），resource_version 原样保留节点版本号
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldRebuildWhenOnlyPublishedAgentRefExists() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> agentConfigs = new HashMap<>();
+            agentConfigs.put("id", "sub-agent-1");
+            agentConfigs.put("name", "test0910");
+            agentConfigs.put("version_id", "1789465490264");
+            Map<String, Object> agentNode = new HashMap<>();
+            agentNode.put("id", "node_agent_1");
+            agentNode.put("type", "Agent");
+            agentNode.put("configs", agentConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(agentNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            // 已发布 agent 引用行（app_version 非空）：不应让缺失判定误判"不缺失"
+            MappingEntity publishedAgentMapping = new MappingEntity();
+            publishedAgentMapping.setResourceId("sub-agent-1");
+            publishedAgentMapping.setResourceType("agent");
+            publishedAgentMapping.setAppVersion("1789465490264");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(publishedAgentMapping));
+
+            Agent subAgent = new Agent();
+            subAgent.setAgentId("sub-agent-1");
+            subAgent.setProjectId(projectId);
+            subAgent.setWorkspaceId(workspaceId);
+            when(agentMapper.selectById("sub-agent-1")).thenReturn(subAgent);
+
+            invokeRebuildControllerWorkflowMappings(projectId, workspaceId, importInfo, importResult);
+
+            ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(mappingMapper).insertBatch(captor.capture());
+            List<MappingEntity> inserted = captor.getValue();
+            assertEquals(1, inserted.size());
+            assertEquals("1789465490264", inserted.get(0).getResourceVersion());
+            assertNull(inserted.get(0).getAppVersion());
+        }
+    }
+
+    /**
+     * 用例描述：rebuildSubControllerRefMappings 在子多智能体属于其他空间且共享二维授权
+     * （共享行存在 + scope 授权目标空间）通过时重建映射：reference_type 标记 share，
+     * resource_workspace_id 保持资源原属空间
+     * 预制条件：sub-controller-1 属 other-project/other-workspace；
+     * checkWorkspaceAuthByResourceOrNot 对目标空间授权通过
+     * 预期结果：insertBatch 插入一条 controller 类型映射，resource_version 原样保留，
+     * reference_type=share，resource_workspace_id=other-workspace（资源原属空间）
+     */
+    @Test
+    void testRebuildControllerWorkflowMappingsShouldMarkShareWhenSubControllerAuthorized() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> subControllerConfigs = new HashMap<>();
+            subControllerConfigs.put("id", "sub-controller-1");
+            subControllerConfigs.put("name", "sub-multi");
+            subControllerConfigs.put("version_id", "1789465490264");
+            Map<String, Object> subControllerNode = new HashMap<>();
+            subControllerNode.put("id", "node_sc_1");
+            subControllerNode.put("type", "SubController");
+            subControllerNode.put("configs", subControllerConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "multi-0915");
+            dsl.put("nodes", List.of(subControllerNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("controller");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+
+            MappingEntity modelMapping = new MappingEntity();
+            modelMapping.setResourceId("model-1");
+            modelMapping.setResourceType("model");
+            when(mappingMapper.selectByAppIdAndAppVersion("controller-1", null, null, null))
+                .thenReturn(List.of(modelMapping));
+
+            // 子多智能体属其他空间，共享二维授权通过
+            Agent subController = new Agent();
+            subController.setAgentId("sub-controller-1");
+            subController.setName("sub-multi");
+            subController.setProjectId("other-project");
+            subController.setWorkspaceId("other-workspace");
+            when(agentMapper.selectById("sub-controller-1")).thenReturn(subController);
+            when(shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, "sub-controller-1"))
+                .thenReturn(true);
+
+            invokeRebuildControllerWorkflowMappings(projectId, workspaceId, importInfo, importResult);
+
+            ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(mappingMapper).insertBatch(captor.capture());
+            List<MappingEntity> inserted = captor.getValue();
+            assertEquals(1, inserted.size());
+            assertEquals("controller", inserted.get(0).getResourceType());
+            assertEquals("1789465490264", inserted.get(0).getResourceVersion());
+            // 授权通过标 SHARE，resource_workspace_id 保持资源原属空间
+            assertEquals("share", inserted.get(0).getReferenceType());
+            assertEquals("other-workspace", inserted.get(0).getResourceWorkspaceId());
+            assertNull(inserted.get(0).getAppVersion());
+        }
+    }
+
+    /**
+     * 用例描述：rebuildWorkflowSubFlowMappings 的缺失判定只看草稿行；updateRefResources
+     * 重建失败（先删后插中断）时，已发布行仍存在不影响"草稿已清空"的判定，
+     * 导入阶段建立的草稿映射应被回插
+     * 预制条件：mapping 首查返回草稿 model 行 + 已发布 workflow 行；重建抛异常后
+     * 二查只剩已发布 workflow 行（草稿行已被清空）；子工作流 sub-wf-1 对本空间可见
+     * 预期结果：缺失判定触发重建（已发布 workflow 行不误判"不缺失"）；
+     * 回插 insertBatch 只含导入阶段建立的草稿 model 行
+     */
+    @Test
+    void testRebuildWorkflowSubFlowMappingsShouldRollbackDraftWhenRebuildFailed() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+
+            Map<String, Object> workflowConfigs = new HashMap<>();
+            workflowConfigs.put("id", "sub-wf-1");
+            workflowConfigs.put("name", "sub-flow");
+            workflowConfigs.put("version_id", "1744203795942");
+            Map<String, Object> workflowNode = new HashMap<>();
+            workflowNode.put("id", "node_wf_1");
+            workflowNode.put("type", "Workflow");
+            workflowNode.put("configs", workflowConfigs);
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "wf-parent-1");
+            dsl.put("name", "parent-wf");
+            dsl.put("nodes", List.of(workflowNode));
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("wf-parent-1");
+            importInfo.setResourceType("workflow");
+            importInfo.setDsl(dsl);
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("wf-parent-1");
+
+            // 子工作流对本空间可见
+            WorkflowEntity subWorkflow = new WorkflowEntity();
+            subWorkflow.setId("sub-wf-1");
+            subWorkflow.setName("sub-flow");
+            subWorkflow.setProjectId(projectId);
+            subWorkflow.setWorkspaceId(workspaceId);
+            when(workflowMapper.getWorkflowById("sub-wf-1")).thenReturn(subWorkflow);
+
+            // 首查：草稿 model 行 + 已发布 workflow 行（草稿缺 WORKFLOW 行 → 触发重建）；
+            // 重建中断后二查：草稿行已被清空，仅剩已发布 workflow 行
+            MappingEntity draftModelMapping = new MappingEntity();
+            draftModelMapping.setResourceId("model-1");
+            draftModelMapping.setResourceType("model");
+            draftModelMapping.setValid(true);
+            MappingEntity publishedWorkflowMapping = new MappingEntity();
+            publishedWorkflowMapping.setResourceId("sub-wf-1");
+            publishedWorkflowMapping.setResourceType("workflow");
+            publishedWorkflowMapping.setAppVersion("1744203795942");
+            when(mappingMapper.selectByAppIdAndAppVersion("wf-parent-1", null, null, null))
+                .thenReturn(List.of(draftModelMapping, publishedWorkflowMapping))
+                .thenReturn(List.of(publishedWorkflowMapping));
+
+            doThrow(new RuntimeException("rebuild failed"))
+                .when(workflowManagementService).updateRefResources(any(), any());
+
+            invokeRebuildWorkflowSubFlowMappings(projectId, workspaceId, importInfo, importResult);
+
+            // 已发布 workflow 行存在时缺失判定仍触发重建
+            verify(workflowManagementService).updateRefResources(any(), any());
+            // 草稿已清空（仅剩已发布行）时回插导入阶段建立的草稿映射
+            ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(mappingMapper).insertBatch(captor.capture());
+            List<MappingEntity> rollback = captor.getValue();
+            assertEquals(1, rollback.size());
+            assertEquals("model-1", rollback.get(0).getResourceId());
+            assertNull(rollback.get(0).getAppVersion());
+        }
+    }
+
+    /**
      * 使用反射调用私有方法handleSpaciousImport
      */
     @SuppressWarnings("unchecked")
@@ -939,6 +1560,36 @@ class AgentImportServiceTest {
             method.invoke(agentImportService, projectId, workspaceId, resourceList, result);
         } catch (Exception e) {
             throw new AgentStudioException("Failed to invoke handleSpaciousImport: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 使用反射调用私有方法rebuildControllerWorkflowMappings
+     */
+    private void invokeRebuildControllerWorkflowMappings(String projectId, String workspaceId,
+        ImportInfo importInfo, ImportResourceResult importResult) {
+        try {
+            Method method = AgentImportService.class.getDeclaredMethod("rebuildControllerWorkflowMappings",
+                String.class, String.class, ImportInfo.class, ImportResourceResult.class);
+            method.setAccessible(true);
+            method.invoke(agentImportService, projectId, workspaceId, importInfo, importResult);
+        } catch (Exception e) {
+            throw new AgentStudioException("Failed to invoke rebuildControllerWorkflowMappings: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 使用反射调用私有方法rebuildWorkflowSubFlowMappings
+     */
+    private void invokeRebuildWorkflowSubFlowMappings(String projectId, String workspaceId,
+        ImportInfo importInfo, ImportResourceResult importResult) {
+        try {
+            Method method = AgentImportService.class.getDeclaredMethod("rebuildWorkflowSubFlowMappings",
+                String.class, String.class, ImportInfo.class, ImportResourceResult.class);
+            method.setAccessible(true);
+            method.invoke(agentImportService, projectId, workspaceId, importInfo, importResult);
+        } catch (Exception e) {
+            throw new AgentStudioException("Failed to invoke rebuildWorkflowSubFlowMappings: " + e.getMessage());
         }
     }
 

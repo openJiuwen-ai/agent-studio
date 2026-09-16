@@ -46,6 +46,8 @@ interface FileItem {
   progress: string;
   name: string;
   url: string;
+  // 图片本地预览地址（blob URL），服务端 url 缺失/未返回时用于消息气泡内展示
+  img?: string;
   file?: File;
   fileId?: string;
   isImage?: boolean;
@@ -107,6 +109,13 @@ export class SenderComponent implements OnDestroy {
   };
 
   @Input() placeholder?: string = ''; //根据任务状态对话框展示不同的提示
+
+  /**
+   * 是否为图片附件生成本地预览 blob URL（img 字段）。
+   * blob 需要消费方在聊天历史销毁时调用 URL.revokeObjectURL 闭环生命周期，
+   * 仅在已实现释放逻辑的页面（如单智能体预览调试）开启，避免其他页面泄漏。
+   */
+  @Input() enableImageLocalPreview = false;
 
   @Input() aiDisclaimer?: string = this.i18n.transform('ai_generated_disclaimer_three');
 
@@ -273,8 +282,19 @@ export class SenderComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // 释放未发送附件的本地预览 blob URL；已发送消息的 blob 归聊天历史（dialogHistory）所有，
+    // 由 preview-debug 在清空对话（clearChat）/面板销毁（ngOnDestroy）时统一释放
+    this.uploadData.forEach((item) => this.revokeImg(item));
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /** 释放附件的本地预览 blob URL，防止长会话内存泄漏 */
+  private revokeImg(item?: FileItem): void {
+    if (item?.img) {
+      URL.revokeObjectURL(item.img);
+      item.img = undefined;
+    }
   }
 
   private getSenderTip() {
@@ -407,6 +427,7 @@ export class SenderComponent implements OnDestroy {
           type: isImage ? 'image' : 'file',
           name: file.name,
           url: '',
+          img: isImage && this.enableImageLocalPreview ? URL.createObjectURL(file) : undefined,
           file,
           isImage,
           fileId: uuidV4(),
@@ -433,6 +454,7 @@ export class SenderComponent implements OnDestroy {
                 item.url = res.url;
               }),
               catchError(() => {
+                this.revokeImg(item);
                 this.uploadData = this.uploadData.filter((f) => f.fileId !== item.fileId);
                 this.checkContentWidth();
                 return of(null);
@@ -450,6 +472,7 @@ export class SenderComponent implements OnDestroy {
   }
 
   public removeFile(i: number) {
+    this.revokeImg(this.uploadData[i]);
     this.uploadData.splice(i, 1);
     if (!this.uploadData.length) {
       this.checkContentWidth();
@@ -461,6 +484,7 @@ export class SenderComponent implements OnDestroy {
     if (this.uploading) {
       return;
     }
+    this.uploadData.forEach((item) => this.revokeImg(item));
     this.uploadData = [];
     this.checkContentWidth();
   }

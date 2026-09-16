@@ -37,6 +37,7 @@ import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
@@ -406,6 +407,17 @@ public interface IAgentManagementService {
      * @param workspaceId workspaceId
      */
     AgentInfo retrieveAgent(String projectId, String agentId, String workspaceId);
+
+    /**
+     * 智能体试运行前预校验。多智能体校验下挂业务子工作流引用的版本是否存在，
+     * 与工作流 /workflows/{id}/validate 的机制保持一致
+     *
+     * @param projectId projectId
+     * @param agentId agentId
+     * @param workspaceId workspaceId
+     * @return 校验结果，success=false 时 errors 为出错节点列表
+     */
+    WorkflowValidationVO validateAgent(String projectId, String agentId, String workspaceId);
 
     /**
      * retrieveAgentApp

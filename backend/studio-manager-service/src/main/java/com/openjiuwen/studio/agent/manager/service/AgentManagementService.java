@@ -52,6 +52,7 @@ import com.openjiuwen.studio.agent.manager.dto.AgentToolDetail;
 import com.openjiuwen.studio.agent.manager.dto.AgentVariable;
 import com.openjiuwen.studio.agent.manager.dto.AgentVersionListItem;
 import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowReference;
 import com.openjiuwen.studio.agent.manager.dto.AgentWorkflowDetail;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
@@ -99,6 +100,7 @@ import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkspaceMemberInfo;
 import com.openjiuwen.studio.agent.manager.dto.maas.ImageGenerationRequest;
 import com.openjiuwen.studio.agent.manager.dto.maas.ImageGenerationResponse;
@@ -1150,6 +1152,127 @@ public class AgentManagementService implements IAgentManagementService {
             agentInfo.setFromShare(true);
         }
         return agentInfo;
+    }
+
+    /**
+     * 智能体试运行前预校验。多智能体校验下挂业务子工作流引用的版本是否存在，
+     * 机制与工作流 /workflows/{id}/validate 一致：不抛异常，返回节点级错误列表由前端标红并阻止运行。
+     * 其他类型智能体没有对应的预校验项，直接返回成功。
+     *
+     * @param projectId 项目ID
+     * @param agentId agentId
+     * @param workspaceId 空间ID
+     * @return 校验结果，success=false 时 errors 为出错节点列表
+     */
+    @Override
+    public WorkflowValidationVO validateAgent(String projectId, String agentId, String workspaceId) {
+        Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId);
+        if (agent == null) {
+            log.error("agent does not exist, projectId = {}, workspaceId = {}, agentId = {}", projectId, workspaceId,
+                agentId);
+            throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
+        }
+        if (AgentType.naValueOf(agent.getType()) != AgentType.CONTROLLER) {
+            return new WorkflowValidationVO().setSuccess(true);
+        }
+        return controllerManagementService.validateSubWorkflowVersions(agent);
+    }
+
+    /**
+     * 发布前校验单智能体的子工作流引用（两个维度，不可用即拦截发布）：
+     * 1) t_mapping（草稿态）中已绑定的引用：resource_version 指向的版本必须存在；
+     *    共享类映射（reference_type=SHARE）还要求该版本仍共享授权给本空间
+     *    （共享是二维授权：scope 授权 + versionList 含该版本），防止"保存后共享被收回"仍放行。
+     *    版本号为空表示跟随最新，不视为悬空。
+     * 2) DSL（AgentInfo.workflows）中存在、但 mapping 缺失的引用：跨空间导入时可见性判定
+     *    （本空间存在 or 共享授权）会正确跳过建 mapping，若只校验 mapping 则这类悬空引用
+     *    零校验、发布直接放行（对应缺陷：导入引用他空间工作流的智能体后发布仍成功）。
+     *    不可见 → 拦截；可见但快照版本已被删除/未共享 → 拦截。
+     *
+     * @param projectId 项目 id（本空间判定为 project_id + workspace_id 双维度，同保存链路）
+     * @param agentId agent id
+     * @param workspaceId 当前空间
+     * @param agentInfo 发布链路上游已解析的智能体 DSL 信息
+     */
+    private void validateAgentWorkflowVersionMappings(String projectId, String agentId, String workspaceId,
+        AgentInfo agentInfo) {
+        // 维度1：mapping 中已绑定引用的版本存在性（含共享二维判定）
+        List<MappingEntity> boundWorkflowMappings = mappingMapper.selectByAppIdAndResourceType(agentId,
+            CommonConstant.WORKFLOW_TYPE);
+        Set<String> mappedResourceIds = new HashSet<>();
+        if (CollectionUtils.isNotEmpty(boundWorkflowMappings)) {
+            for (MappingEntity mapping : boundWorkflowMappings) {
+                mappedResourceIds.add(mapping.getResourceId());
+                String resourceVersion = mapping.getResourceVersion();
+                if (StringUtils.isEmpty(resourceVersion)) {
+                    continue;
+                }
+                boolean versionUsable;
+                if (ReferenceTypeEnum.SHARE.getValue().equals(mapping.getReferenceType())) {
+                    // 共享引用：版本存在且仍共享授权给本空间（scope + versionList）。
+                    // 以 reference_type 判定而非 resource_workspace_id：保存链路建的
+                    // SHARE 映射不回填 resource_workspace_id，按字段路由会漏判
+                    versionUsable = shareResourceManagerService
+                        .queryShareResourceEntityByResourceIdAndVersionId(mapping.getResourceId(), workspaceId,
+                            resourceVersion) != null;
+                } else {
+                    // 本空间引用：版本全局存在即可
+                    versionUsable =
+                        releaseVersionMapper.selectByAppIdAndVersionId(mapping.getResourceId(), resourceVersion)
+                            != null;
+                }
+                if (!versionUsable) {
+                    log.error("agent {} bound workflow {} version {} not found or not shared, publish blocked",
+                        agentId, mapping.getResourceId(), resourceVersion);
+                    throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND,
+                        resourceVersion);
+                }
+            }
+        }
+
+        // 维度2：DSL 中存在但 mapping 缺失的引用（导入兜底正确跳过建 mapping 的悬空引用）
+        if (agentInfo == null || CollectionUtils.isEmpty(agentInfo.getWorkflows())) {
+            return;
+        }
+        for (WorkflowReference workflowRef : agentInfo.getWorkflows()) {
+            String subWorkflowId = workflowRef.getWorkflowId();
+            // 已有 mapping 的引用由维度1校验；workflowId 为空的残留跳过
+            if (StringUtils.isEmpty(subWorkflowId) || mappedResourceIds.contains(subWorkflowId)) {
+                continue;
+            }
+            WorkflowEntity workflowEntity = workflowMapper.getWorkflowById(subWorkflowId);
+            boolean workflowExists = workflowEntity != null && !Boolean.TRUE.equals(workflowEntity.getDeleted());
+            // 本空间判定与保存链路 selectByWorkflowSearchCriteria 一致：project_id + workspace_id 双维度
+            boolean localWorkflow = workflowExists
+                && Strings.CS.equals(workflowEntity.getProjectId(), projectId)
+                && Strings.CS.equals(workflowEntity.getWorkspaceId(), workspaceId);
+            // 可见性：本空间存在且未删除，或已共享授权给本空间。getWorkflowById 按 id 全库查询、
+            // 无 project/workspace 过滤，跨空间残留的引用同样能查到，须叠加空间判定
+            if (!localWorkflow && !(workflowExists
+                && shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, subWorkflowId))) {
+                log.error("agent {} references workflow {} which is not visible in workspace {}, publish blocked",
+                    agentId, subWorkflowId, workspaceId);
+                throw new AgentStudioException(StudioError.SUB_WORKFLOW_CANNOT_USE, subWorkflowId);
+            }
+            // 可见但引用版本不可用：发布拦截（共享引用为二维判定，与维度1口径一致）
+            String refVersion = workflowRef.getLastVersionId();
+            if (StringUtils.isEmpty(refVersion)) {
+                continue;
+            }
+            boolean versionUsable;
+            if (localWorkflow) {
+                versionUsable = releaseVersionMapper.selectByAppIdAndVersionId(subWorkflowId, refVersion) != null;
+            } else {
+                versionUsable = shareResourceManagerService
+                    .queryShareResourceEntityByResourceIdAndVersionId(subWorkflowId, workspaceId, refVersion) != null;
+            }
+            if (!versionUsable) {
+                log.error("agent {} references workflow {} version {} not found or not shared, publish blocked",
+                    agentId, subWorkflowId, refVersion);
+                throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND,
+                    refVersion);
+            }
+        }
     }
 
     /**
@@ -2316,6 +2439,22 @@ public class AgentManagementService implements IAgentManagementService {
         String versionId = String.valueOf(System.currentTimeMillis());
 
         AgentType agentType = AgentType.naValueOf(agent.getType());
+
+        // 发布前校验：多智能体下挂子工作流引用的版本必须存在（与编辑保存链路的校验一致，
+        // 前端 publishAgent 已有预校验弹错误列表，此处为后端兜底，防止绕过前端直接调接口）
+        if (Objects.requireNonNull(agentType) == AgentType.CONTROLLER) {
+            WorkflowValidationVO validationVo = controllerManagementService.validateSubWorkflowVersions(agent);
+            if (!Boolean.TRUE.equals(validationVo.isSuccess())) {
+                log.error("agent {} publish blocked, sub workflow version not found: {}", agentId,
+                    validationVo.getErrors());
+                throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND);
+            }
+        } else {
+            // 发布前校验：单智能体的子工作流引用必须可用。
+            // 既有链路发布时只做 JSON 快照、不校验引用，可发布出引用悬空版本/跨空间不可见
+            // 工作流的坏版本，运行时才报错（mapping 校验 + DSL 兜底双维度）
+            validateAgentWorkflowVersionMappings(projectId, agentId, workspaceId, agentInfo);
+        }
 
         // 创建DSL文件的版本快照
         if (Objects.requireNonNull(agentType) == AgentType.CONTROLLER) {

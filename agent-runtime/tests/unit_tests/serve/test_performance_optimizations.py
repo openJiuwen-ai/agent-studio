@@ -1,10 +1,12 @@
 """Regression tests for the agent-runtime hot-path optimizations."""
 
+import asyncio
 import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
+from agent_runtime.context.request_context import RequestContext, _request_ctx
 from openjiuwen.core.common.constants.constant import LOOP_ID
 
 import jiuwen.extension.patches.loop_body_session_cleanup_patch as loop_patch
@@ -150,6 +152,130 @@ async def test_async_slow_redis_hit_keeps_info_diagnostic():
         item.args[0].startswith("Slow %s HIT!") and item.args[1] == "Redis"
         for item in runtime_logger.info.call_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_async_ir_load_deduplicates_concurrent_same_path_within_request():
+    """Concurrent callers for one IR path share one underlying load."""
+    cached_ir = {"components": {"node": {"type": "jiuwen.message"}}}
+    started = asyncio.Event()
+    release = asyncio.Event()
+    load_calls = 0
+
+    async def load(_path):
+        nonlocal load_calls
+        load_calls += 1
+        started.set()
+        await release.wait()
+        return cached_ir, "redis"
+
+    cache = MagicMock()
+    cache.aget_with_source = load
+    cache.memory_cache.currsize = 3
+    cache.memory_cache.maxsize = 10
+    token = _request_ctx.set(RequestContext(ir_load_cache={}))
+    try:
+        with patch.object(open_utils, "cache_ir_queue", cache), patch.object(
+            open_utils, "_log_ir_content"
+        ):
+            first = asyncio.create_task(open_utils.async_ir_load("workflow.json"))
+            await started.wait()
+            second = asyncio.create_task(open_utils.async_ir_load("workflow.json"))
+            await asyncio.sleep(0)
+            release.set()
+            results = await asyncio.gather(first, second)
+    finally:
+        _request_ctx.reset(token)
+
+    assert results == [cached_ir, cached_ir]
+    assert load_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_async_ir_load_waiter_cancellation_does_not_duplicate_load():
+    """Cancelling one waiter does not cancel or duplicate the shared load."""
+    cached_ir = {"components": {"node": {"type": "jiuwen.message"}}}
+    started = asyncio.Event()
+    release = asyncio.Event()
+    load_calls = 0
+
+    async def load(_path):
+        nonlocal load_calls
+        load_calls += 1
+        started.set()
+        await release.wait()
+        return cached_ir, "redis"
+
+    cache = MagicMock()
+    cache.aget_with_source = load
+    cache.memory_cache.currsize = 3
+    cache.memory_cache.maxsize = 10
+    token = _request_ctx.set(RequestContext(ir_load_cache={}))
+    try:
+        with patch.object(open_utils, "cache_ir_queue", cache), patch.object(
+            open_utils, "_log_ir_content"
+        ):
+            first = asyncio.create_task(open_utils.async_ir_load("workflow.json"))
+            await started.wait()
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+
+            second = asyncio.create_task(open_utils.async_ir_load("workflow.json"))
+            await asyncio.sleep(0)
+            assert load_calls == 1
+            release.set()
+            assert await second is cached_ir
+    finally:
+        release.set()
+        _request_ctx.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_async_ir_load_request_memo_does_not_cross_request_boundaries():
+    """The same path is loaded independently in two request contexts."""
+    cached_ir = {"components": {"node": {"type": "jiuwen.message"}}}
+    cache = MagicMock()
+    cache.aget_with_source = AsyncMock(return_value=(cached_ir, "memory"))
+    token = _request_ctx.set(RequestContext(ir_load_cache={}))
+    try:
+        with patch.object(open_utils, "cache_ir_queue", cache), patch.object(
+            open_utils, "_log_ir_content"
+        ):
+            assert await open_utils.async_ir_load("workflow.json") is cached_ir
+            assert await open_utils.async_ir_load("workflow.json") is cached_ir
+
+            second_token = _request_ctx.set(RequestContext(ir_load_cache={}))
+            try:
+                assert await open_utils.async_ir_load("workflow.json") is cached_ir
+            finally:
+                _request_ctx.reset(second_token)
+    finally:
+        _request_ctx.reset(token)
+
+    assert cache.aget_with_source.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_async_ir_load_failed_memoized_load_can_retry():
+    """A failed in-flight load is removed so a later caller can retry."""
+    cached_ir = {"components": {"node": {"type": "jiuwen.message"}}}
+    cache = MagicMock()
+    cache.aget_with_source = AsyncMock(
+        side_effect=[RuntimeError("temporary failure"), (cached_ir, "memory")]
+    )
+    token = _request_ctx.set(RequestContext(ir_load_cache={}))
+    try:
+        with patch.object(open_utils, "cache_ir_queue", cache), patch.object(
+            open_utils, "_log_ir_content"
+        ):
+            with pytest.raises(RuntimeError, match="temporary failure"):
+                await open_utils.async_ir_load("workflow.json")
+            assert await open_utils.async_ir_load("workflow.json") is cached_ir
+    finally:
+        _request_ctx.reset(token)
+
+    assert cache.aget_with_source.await_count == 2
 
 
 class _FakeIoState:

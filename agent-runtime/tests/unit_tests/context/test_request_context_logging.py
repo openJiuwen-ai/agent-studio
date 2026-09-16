@@ -5,6 +5,7 @@ import unittest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from agent_runtime.context.request_context import _request_ctx
 from agent_runtime.context.middleware import RequestContextMiddleware, _to_otel_trace_id
 from agent_runtime.common.logging_context import (
     COMMON_LOG_FORMAT,
@@ -39,6 +40,7 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
             captured["trace_id"] = record.trace_id
             captured["execution_id"] = record.execution_id
             captured["request_id"] = record.request_id
+            captured["ir_load_cache"] = _request_ctx.get().ir_load_cache
             return Response("ok")
 
         request = Request(
@@ -63,6 +65,7 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(captured["execution_id"], "exec-1")
         self.assertEqual(captured["request_id"], "00957491")
+        self.assertEqual(captured["ir_load_cache"], {})
 
     async def test_jiuwen_context_receives_request_id_and_execution_id(self):
         """中间件 dispatch 后，jiuwen 上下文的 get_x_request_id / get_x_execution_id 应返回 header 值。"""

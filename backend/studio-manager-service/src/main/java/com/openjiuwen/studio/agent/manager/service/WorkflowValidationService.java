@@ -1828,6 +1828,13 @@ public class WorkflowValidationService {
                 if (Objects.isNull(workflowEntity)) {
                     throw new AgentStudioException(StudioError.CHILD_WORKFLOW_NOT_EXIST, workflowId);
                 }
+                // 引用了具体版本且该版本已不存在时，优先报"版本不存在"（如导入包缺子工作流导致的残留引用，
+                // 版本已被删除但工作流本身仍在其他空间存在），避免继续走跨空间权限判定误导为"无权限"；
+                // version_id 为空（未锁定版本）保持原判定逻辑不变
+                if (StringUtils.isNotBlank(versionId)
+                    && Objects.isNull(releaseVersionMapper.selectByAppIdAndVersionId(workflowId, versionId))) {
+                    throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND, versionId);
+                }
                 if (!Strings.CS.equals(workflowEntity.getWorkspaceId(), workspaceId)) {
                     if (!shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId)
                         && !publishCrossWorkspace) {

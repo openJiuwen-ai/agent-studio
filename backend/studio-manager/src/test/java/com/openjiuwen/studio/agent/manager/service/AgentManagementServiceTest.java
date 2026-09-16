@@ -570,7 +570,8 @@ class AgentManagementServiceTest extends BaseTest {
     }
 
     @Test
-    @Sql(scripts = {"classpath:sql/agent_setup_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    @Sql(scripts = {"classpath:sql/agent_setup_db.sql",
+        "classpath:sql/controller_sub_workflow_setup_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testModifyAgentWithUserProfileMemory() throws IOException {
 
         // set up
