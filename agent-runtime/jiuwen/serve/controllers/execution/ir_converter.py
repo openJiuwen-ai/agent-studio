@@ -3255,6 +3255,11 @@ class IRConverter:
             )
 
         inputs_schema = _convert_schema(node.get("inputs") or {})
+        if node_type == "EI.http":
+            # 与 _add_component 注册路径对齐：单节点调试同样需要 G1/G2/G4 货架重排
+            # （query→query_parameters、userFields 平铺、auth 并入），
+            # 否则调试时 query/用户参数/鉴权都无法按组件预期读取（MR 检视意见 #1）
+            inputs_schema = _remap_http_inputs_schema(inputs_schema, configs)
         return SingleComponentInfo(
             component=component,
             node_id=component_id,

@@ -3,7 +3,9 @@
 """单组件调测包装器，用于在新框架（openjiuwen）下实现旧框架的单组件调试能力。"""
 
 import asyncio
+import json
 import logging
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
@@ -262,6 +264,8 @@ class SingleComponentDebugWrapper:
             return inputs
         elif self._node_type == "jiuwen.intentDetection":
             return inputs
+        elif self._node_type == "EI.http":
+            return self._preprocess_http_inputs(inputs)
         elif self._node_type in ("jiuwen.subWorkflow", "jiuwen.workflowComposite"):
             param_field = _SYSTEM_FIELDS
         else:
@@ -288,6 +292,78 @@ class SingleComponentDebugWrapper:
                 )
 
         return {param_field: processed_inputs}
+
+    # ------------------------------------------------------------------
+    # EI.http 输入组装 — 对齐 HTTPRequestExecutable 的货架契约（MR 检视意见 #1）
+    # ------------------------------------------------------------------
+
+    def _preprocess_http_inputs(self, inputs: dict) -> dict:
+        """组装 EI.http 的单节点调试输入。
+
+        HTTPRequestExecutable.process_inputs 从 invoke inputs 顶层读取
+        query_parameters / headers 两货架与平铺用户字段（{{key}} 占位符替换）。
+        工作流路径中这些内容由 _add_component 注册重排后 inputs_schema、
+        图状态注入；调试路径绕过 Vertex，通用 userFields 分支会把面板输入
+        收缩成 {userFields: {...}}，导致 query/headers/鉴权全部丢失。
+        此处以重排后 inputs_schema（query→query_parameters、auth 并入、
+        userFields 平铺）为底，叠加调试面板 query / headers 两个 JSON 框的
+        覆盖：合并语义，空框 {} 表示完全按节点配置执行，框内同名键优先于节点配置。
+        """
+        base = (
+            deepcopy(self._inputs_schema)
+            if isinstance(self._inputs_schema, dict)
+            else {}
+        )
+        query_override = self._parse_http_debug_box(inputs.get("query"), "query")
+        if query_override:
+            shelf = base.get("query_parameters")
+            base["query_parameters"] = {
+                **(shelf if isinstance(shelf, dict) else {}),
+                **query_override,
+            }
+        headers_override = self._parse_http_debug_box(inputs.get("headers"), "headers")
+        if headers_override:
+            shelf = base.get("headers")
+            base["headers"] = {
+                **(shelf if isinstance(shelf, dict) else {}),
+                **headers_override,
+            }
+        return base
+
+    @staticmethod
+    def _parse_http_debug_box(value: Any, box_name: str) -> dict:
+        """解析 HTTP 调试面板 JSON 框的值。
+
+        前端 Monaco 编辑器传 JSON 字符串（如 '{}'），直接 API 调用可能传 dict，
+        两种形态都接受；非法 JSON 或非对象报 COMPONENT_STEP_DEBUG_ERROR，
+        避免用户输入被静默吞掉。
+        """
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return {}
+            try:
+                parsed = json.loads(text)
+            except ValueError as exc:
+                raise JiuWenBaseException(
+                    error_code=StatusCode.COMPONENT_STEP_DEBUG_ERROR.code,
+                    message=StatusCode.COMPONENT_STEP_DEBUG_ERROR.errmsg.format(
+                        reason=f"HTTP debug input '{box_name}' is not valid JSON: {exc}"
+                    ),
+                ) from exc
+            if not isinstance(parsed, dict):
+                raise JiuWenBaseException(
+                    error_code=StatusCode.COMPONENT_STEP_DEBUG_ERROR.code,
+                    message=StatusCode.COMPONENT_STEP_DEBUG_ERROR.errmsg.format(
+                        reason=f"HTTP debug input '{box_name}' must be a JSON object"
+                    ),
+                )
+            return parsed
+        return {}
 
     # ------------------------------------------------------------------
     # 输入格式适配 — graph_invoker 组件需要 {INPUTS_KEY: ..., CONFIG_KEY: ...}
