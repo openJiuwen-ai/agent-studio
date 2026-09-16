@@ -110,6 +110,13 @@ export class SenderComponent implements OnDestroy {
 
   @Input() placeholder?: string = ''; //根据任务状态对话框展示不同的提示
 
+  /**
+   * 是否为图片附件生成本地预览 blob URL（img 字段）。
+   * blob 需要消费方在聊天历史销毁时调用 URL.revokeObjectURL 闭环生命周期，
+   * 仅在已实现释放逻辑的页面（如单智能体预览调试）开启，避免其他页面泄漏。
+   */
+  @Input() enableImageLocalPreview = false;
+
   @Input() aiDisclaimer?: string = this.i18n.transform('ai_generated_disclaimer_three');
 
   @Input() senderDiabledTip = '';
@@ -420,7 +427,7 @@ export class SenderComponent implements OnDestroy {
           type: isImage ? 'image' : 'file',
           name: file.name,
           url: '',
-          img: isImage ? URL.createObjectURL(file) : undefined,
+          img: isImage && this.enableImageLocalPreview ? URL.createObjectURL(file) : undefined,
           file,
           isImage,
           fileId: uuidV4(),

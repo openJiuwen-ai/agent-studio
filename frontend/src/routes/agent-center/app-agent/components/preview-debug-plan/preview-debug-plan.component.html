@@ -168,6 +168,7 @@
           [showClear]="false"
           [sending]="isShowStopIcon"
           [disabled]="sendDisabled"
+          [enableImageLocalPreview]="true"
           (disabledSender)="getDisableSender($event)"
           [maxlength]="userQueryLimit"
           (clear)="clearChat()"
