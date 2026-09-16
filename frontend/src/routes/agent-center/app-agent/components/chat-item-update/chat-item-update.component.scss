@@ -49,13 +49,16 @@
         align-items: center;
       }
 
+      /* 固定 52×52 方形缩略图：加载失败不产生行框空行，非 1:1 图片按 cover 裁剪，不会撑高气泡 */
       .uploaded-image {
         width: 52px;
+        height: 52px;
 
-        /* block 化：图片加载失败/无尺寸时不产生行框（strut），避免气泡内出现空行；填满 52px 宽，极小尺寸图也可见 */
         img {
           display: block;
           width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
       }
     }
