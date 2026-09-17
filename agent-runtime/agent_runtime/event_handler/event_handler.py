@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType, ConversationEvent
 from openjiuwen.core.common.logging import workflow_logger
 
+from agent_runtime.common.background_task import run_in_background
 from agent_runtime.event_handler.events.base_events import BaseEventsProcessor
 from agent_runtime.event_handler.events.agent_events import AgentEventsProcessor
 from agent_runtime.event_handler.events.workflow_events import WorkflowEventsProcessor
@@ -161,8 +162,19 @@ class EventHandler:
                 async for chunk in self.generate_output_data(output_event):
                     yield chunk
 
-            # Stream ended: persist conversation history
-            await self._persist_conversation()
+            # Stream ended: persist conversation history in background.
+            # 会话历史落库是整段历史的 Redis 读改写（耗时随轮数增长），
+            # 移出终态事件关键路径后台执行，done/end 不再等待它完成；
+            # 协程内部自带 try/except，失败仅记日志不影响响应。
+            # conv_manager 为空（未 init_trace）时与旧行为一致：直接跳过。
+            if self.conv_manager:
+                run_in_background(
+                    self._persist_conversation(),
+                    name=(
+                        f"persist-conversation-"
+                        f"{getattr(self.trace, 'conversation_id', '')}"
+                    ),
+                )
 
             # Agent mode: inject done event
             if handler_type in (PlanModeType.ReAct.value, PlanModeType.PlanExecute.value):
