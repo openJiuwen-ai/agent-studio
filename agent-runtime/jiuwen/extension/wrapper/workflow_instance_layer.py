@@ -103,34 +103,15 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             context_params = {**context_params, "_current_query": current_query}
         context = self._build_context(context_params, args_tuple.context)
         # 当调用方传入预构建 context 时（_build_context 直接返回），
-        # 在 async 上下文中追加当轮 query（带去重），否则提问器读不到当轮回复。
-        # 注意：此处原地修改调用方传入的 context。当前架构下每次工作流执行
-        # 创建独立 context，不存在跨执行共享；若未来引入 context 池化/复用，
-        # 需改为拷贝后追加。
+        # 不原地修改（避免实例复用/并发场景的上下文污染和多会话串扰）。
+        # passthrough 场景极少（主路径 context=None 由 _build_context 构建），
+        # 调用方应自行确保 context 包含当轮 query。
         if args_tuple.context is not None and current_query:
-            try:
-                from openjiuwen.core.foundation.llm import UserMessage
-                # 防御性检查：确认 context 具备预期接口
-                if not hasattr(context, "get_context_window") or not hasattr(context, "add_messages"):
-                    logger.warning(
-                        f"Passthrough context for workflow {self.workflow_id} "
-                        f"lacks get_context_window/add_messages, skipping query append"
-                    )
-                else:
-                    # 去重：检查 context 末条 user 消息是否已等于当轮 query
-                    cw = await context.get_context_window()
-                    msgs = cw.get_messages() if cw and hasattr(cw, "get_messages") else []
-                    last_user = next(
-                        (m for m in reversed(msgs) if getattr(m, "role", None) == "user"),
-                        None,
-                    )
-                    if last_user is None or getattr(last_user, "content", None) != current_query:
-                        await context.add_messages([UserMessage(role="user", content=current_query)])
-            except (AttributeError, TypeError) as e:
-                logger.warning(
-                    f"Failed to append current query to passthrough context "
-                    f"for workflow {self.workflow_id}: {e}"
-                )
+            logger.warning(
+                f"Passthrough context detected for workflow {self.workflow_id}, "
+                f"current query not appended to avoid in-place mutation. "
+                f"Caller should ensure context contains the current turn's query."
+            )
         return super().astream(
             query=args_tuple.query,
             params=args_tuple.params,
@@ -278,6 +259,10 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             if last_user is None or last_user.get("content") != query:
                 histories = list(histories)  # 浅拷贝防改原列表
                 histories.append(dict(role="user", content=query))
+        # 空历史但有当轮 query 时（首轮/无历史场景），仍构建含 query 的 context，
+        # 否则提问器在首轮也读不到当轮输入（缺陷①在空历史场景的盲区）。
+        if not histories and query:
+            histories = [dict(role="user", content=query)]
         if not histories:
             return self._context
 
@@ -300,8 +285,17 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             clean_histories = []
             for msg in histories:
                 if isinstance(msg, dict):
+                    role = msg.get("role")
+                    # 缺失 role 的消息跳过：不默认赋 "user"，避免把 system
+                    # 或其他非用户消息误标为用户消息注入模型上下文。
+                    if not role:
+                        logger.warning(
+                            f"_build_context: skipping history message without role "
+                            f"for workflow {self.workflow_id}"
+                        )
+                        continue
                     clean_msg = {
-                        "role": msg.get("role", "user"),
+                        "role": role,
                         "content": msg.get("content", ""),
                     }
                     # 保留 enable_history 和 name，converter 会读取这两个字段：

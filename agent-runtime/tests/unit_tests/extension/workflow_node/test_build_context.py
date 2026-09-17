@@ -257,3 +257,43 @@ class TestBuildContextPassthrough:
 
         assert result is mock_context
         mock_context.add_messages.assert_not_called()
+
+
+class TestBuildContextEdgeCases:
+    """_build_context 边界场景：空历史 + query、缺失 role 的消息。"""
+
+    @staticmethod
+    def test_empty_history_with_query_builds_context():
+        """无历史但有 _current_query 时，仍构建含 query 的 context（首轮场景）。"""
+        layer = _make_layer()
+        params = {"_current_query": "查询电费账单"}
+
+        result = layer._build_context(params, None)
+
+        # 不应返回 None/self._context，应成功构建 SessionModelContext
+        assert result is not None
+        assert result is not layer._context
+
+    @staticmethod
+    def test_message_without_role_skipped():
+        """缺失 role 的消息应被跳过，不默认赋 'user'。"""
+        layer = _make_layer()
+        params = {
+            "conversation_history": [
+                {"role": "user", "content": "有效消息"},
+                {"content": "无 role 的消息"},  # 缺失 role，应跳过
+                {"role": "assistant", "content": "回复"},
+            ],
+        }
+
+        with patch(
+            "jiuwen.extension.wrapper.workflow_instance_layer.WorkflowMessageConverter"
+        ) as mock_converter:
+            layer._build_context(params, None)
+
+        call_args = mock_converter.conversation_messages_to_model_context.call_args
+        clean_histories = call_args[0][0]
+        # 无 role 的消息被跳过，只剩 2 条
+        assert len(clean_histories) == 2
+        assert clean_histories[0]["role"] == "user"
+        assert clean_histories[1]["role"] == "assistant"
