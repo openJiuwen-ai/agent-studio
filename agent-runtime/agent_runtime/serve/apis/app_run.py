@@ -32,6 +32,7 @@ from agent_runtime.serve.apis.run_check import (
 )
 from agent_runtime.common.env_variables_loader import (
     load_environment_variables,
+    load_default_environment_id,
     _SECRET_ENV_KEYS_KEY,
 )
 from agent_runtime.event_handler.event_handler import EventHandler
@@ -440,6 +441,41 @@ async def _resolve_handler_type(ir_path: str) -> str:
     return mode_to_handler.get(mode, IRType.Workflow.value)
 
 
+async def _resolve_env_scope(
+    project_id: Optional[str],
+    environment_id: Optional[str],
+    workspace_id: Optional[str],
+    ir_path: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """兜底解析环境作用域：直连 runtime 未传 environment_id / workspace_id 时补齐。
+
+    - environment_id 缺省 → 从 Redis 读项目默认环境（manager 环境管理侧维护，
+      key: project:{projectId}:default_environment）
+    - workspace_id 缺省 → 从 IR metadata.workspaceId 取（工作流/智能体归属空间）
+
+    读不到时保持原值（None），由调用方按现状降级（占位符解析失败报错），
+    不借用其它项目/其它空间的变量，也不新增异常路径。
+
+    Returns:
+        (environment_id, workspace_id) 兜底后的二元组。
+    """
+    resolved_env_id = environment_id
+    if not resolved_env_id:
+        resolved_env_id = await load_default_environment_id(project_id)
+
+    resolved_ws_id = workspace_id
+    if not resolved_ws_id:
+        try:
+            ir_json = await async_ir_load(ir_path)
+            ir_ws_id = (ir_json.get("metadata") or {}).get("workspaceId")
+            if ir_ws_id:
+                resolved_ws_id = str(ir_ws_id)
+        except Exception as e:
+            workflow_logger.debug(f"Failed to load workspace id from IR: {ir_path}, error: {e}")
+
+    return resolved_env_id, resolved_ws_id
+
+
 def _extract_instance_id(ir_path: str) -> str:
     """从IR路径提取instance_id (最后一个/到.json之间的部分)."""
     last_slash_index = ir_path.rfind("/")
@@ -501,6 +537,7 @@ async def _execute_workflow_run(
     body: WorkflowAppRunRequest,
     request: Request,
     stream_header: str = "true",
+    resolve_env: bool = True,
 ):
     """工作流试运行核心逻辑."""
     # 中间件在路由匹配前执行、拿不到 path_params，trace_id 会回退成 execution_id；
@@ -539,6 +576,23 @@ async def _execute_workflow_run(
     if err:
         return err
 
+    # environment_id / workspace_id 兜底：仅直连入口启用（resolve_env=True）。
+    # 网页入口（run_web_workflow）传 resolve_env=False，environment_id 是否注入由
+    # manager 决定（无鉴权，请求 workspace 不可信），避免用请求 workspace 拼接默认
+    # 环境加载变量造成跨空间变量外流。
+    if resolve_env:
+        environment_id, workspace_id = await _resolve_env_scope(
+            ctx.project_id, ctx.environment_id, ctx.workspace_id, ir_path,
+        )
+        if environment_id != ctx.environment_id or workspace_id != ctx.workspace_id:
+            workflow_logger.info(
+                "Resolved env scope for workflow run: project=%s, environment=%s->%s, workspace=%s->%s",
+                ctx.project_id, ctx.environment_id, environment_id, ctx.workspace_id, workspace_id,
+            )
+    else:
+        environment_id = ctx.environment_id
+        workspace_id = ctx.workspace_id
+
     instance_id = ctx.workflow_id
     user_id = _request_ctx.get().user_id
     version_id = resolved_version or ""
@@ -571,7 +625,7 @@ async def _execute_workflow_run(
 
     # 根据 environment_id 从 Redis 加载环境变量
     env_vars = await load_environment_variables(
-        ctx.environment_id, ctx.workspace_id,
+        environment_id, workspace_id,
     )
     # 写入请求上下文，供 StudioModelClient 解析 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符
     _request_ctx.get().env_variables = env_vars
@@ -619,6 +673,7 @@ async def _execute_agent_run(
     body: AgentAppRunRequest,
     request: Request,
     stream_header: str = "true",
+    resolve_env: bool = True,
 ):
     """智能体试运行核心逻辑."""
     # 同 _execute_workflow_run：路由匹配后用 path 的 conversation_id 覆盖 trace_id
@@ -662,6 +717,23 @@ async def _execute_agent_run(
     if err:
         return err
 
+    # environment_id / workspace_id 兜底：仅直连入口启用（resolve_env=True）。
+    # 网页入口（run_web_agent）传 resolve_env=False，environment_id 是否注入由
+    # manager 决定（无鉴权，请求 workspace 不可信），避免用请求 workspace 拼接默认
+    # 环境加载变量造成跨空间变量外流。
+    if resolve_env:
+        environment_id, workspace_id = await _resolve_env_scope(
+            ctx.project_id, ctx.environment_id, ctx.workspace_id, ir_path,
+        )
+        if environment_id != ctx.environment_id or workspace_id != ctx.workspace_id:
+            workflow_logger.info(
+                "Resolved env scope for agent run: project=%s, environment=%s->%s, workspace=%s->%s",
+                ctx.project_id, ctx.environment_id, environment_id, ctx.workspace_id, workspace_id,
+            )
+    else:
+        environment_id = ctx.environment_id
+        workspace_id = ctx.workspace_id
+
     instance_id = ctx.agent_id
     user_id = _request_ctx.get().user_id
     version_id = resolved_version or ""
@@ -694,7 +766,7 @@ async def _execute_agent_run(
 
     # 根据 environment_id 从 Redis 加载环境变量
     env_vars = await load_environment_variables(
-        ctx.environment_id, ctx.workspace_id,
+        environment_id, workspace_id,
     )
     # 写入请求上下文，供 StudioModelClient 解析 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符
     _request_ctx.get().env_variables = env_vars

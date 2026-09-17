@@ -10,6 +10,7 @@ import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -1008,6 +1009,100 @@ class AgentServiceProxyServiceTest {
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
         assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-1", urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * runWebWorkflow 流式 — 通道存在（appType=workflow）且有默认环境：转发 URL 追加
+     * environment_id，默认环境按通道所属项目解析、workspace 取发布通道 workspace
+     * （对齐 runWebAgent；网页工作流占位符 URL 依赖该环境变量回填，否则插件/MCP
+     * URL 中的 ${_env.plugin_url_params.VAR} 解析为空导致 gethostbyname(None)）
+     */
+    @Test
+    void testRunWebWorkflow_StreamWithDefaultEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", CommonConstant.WORKFLOW_TYPE));
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-default");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(List.of(env));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", true, new WorkflowRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals(
+            "http://runtime:8080/v1/workflows/chat/code-1/conversations/conv-1?workspace_id=ws-owner&environment_id=env-default",
+            urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue("proj-1");
+    }
+
+    /**
+     * runWebWorkflow 流式（stream 缺省按 true）— 通道存在但项目无默认环境：
+     * 转发 URL 不带 environment_id，行为同现状
+     */
+    @Test
+    void testRunWebWorkflow_StreamNoDefaultEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", CommonConstant.WORKFLOW_TYPE));
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(Collections.emptyList());
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", null, new WorkflowRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/workflows/chat/code-1/conversations/conv-1?workspace_id=ws-1",
+            urlCaptor.getValue());
+    }
+
+    /**
+     * runWebWorkflow 非流式 — 通道存在且有默认环境：Feign 调用携带默认环境 id 与发布通道 workspace
+     */
+    @Test
+    void testRunWebWorkflow_NonStreamWithDefaultEnv() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
+            mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+                eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", CommonConstant.WORKFLOW_TYPE));
+            EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+            env.setId("env-default");
+            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(List.of(env));
+
+            WorkflowRunReq body = new WorkflowRunReq();
+            ResponseEntity<Object> expected = ResponseEntity.ok("ok");
+            when(runtimeClient.runWebWorkflow("token", "code-1", "conv-1", "ws-owner", "env-default", body, false))
+                .thenReturn(expected);
+
+            Object result = proxyService.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", false,
+                body);
+
+            assertEquals("ok", result);
+        }
+    }
+
+    /**
+     * runWebWorkflow — 通道存在但发布应用非工作流/单智能体（appType=controller）：
+     * 不兜底默认环境，转发 URL 不带 environment_id（多智能体发布不走本兜底）
+     */
+    @Test
+    void testRunWebWorkflow_ChannelAppTypeController_NoEnv() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", "controller"));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", true, new WorkflowRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/workflows/chat/code-1/conversations/conv-1?workspace_id=ws-1",
+            urlCaptor.getValue());
         verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
     }
 
