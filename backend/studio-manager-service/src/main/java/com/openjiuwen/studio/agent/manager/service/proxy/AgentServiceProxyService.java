@@ -595,13 +595,25 @@ public class AgentServiceProxyService {
 
     public Object runWebWorkflow(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
         String conversationId, Boolean stream, WorkflowRunReq body) {
+        // 网页短链入口无鉴权：默认环境按 short_code 所属发布通道的 project 解析，
+        // 环境变量按 (environment_id, workspace_id) 维度存储，加载 workspace 同样取
+        // 发布通道 workspace（对齐 runWebAgent，保证占位符 URL 解析到发布方预期的变量值）
+        ReleaseChannel channel = lookupWebReleaseChannel(shortCode);
+        String environmentId = resolveChannelDefaultEnvironment(channel, shortCode);
+        String forwardWorkspaceId = workspaceId;
+        if (StringUtils.hasText(environmentId)) {
+            forwardWorkspaceId = channel.getWorkspaceId();
+        }
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/workflows/chat/" + shortCode + "/conversations/" + conversationId
-                + "?workspace_id=" + workspaceId;
-
+                + "?workspace_id=" + forwardWorkspaceId;
+            if (StringUtils.hasText(environmentId)) {
+                url = url + "&environment_id=" + environmentId;
+            }
             return stream(url, httpHeaders, JsonUtils.encode(body));
         }
-        return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, workspaceId, body, false).getBody();
+        return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId, environmentId,
+            body, false).getBody();
     }
 
     /**
@@ -720,12 +732,12 @@ public class AgentServiceProxyService {
     }
 
     /**
-     * 按网页发布通道解析单智能体默认环境：以通道所属 project 为准（不信任请求路径
-     * project_id）。通道不存在、发布应用非单智能体（appType != agent，多智能体发布
-     * 不走本兜底）、通道 workspace 缺失（无法安全确定环境变量加载维度，宁可不放行
-     * 也不回退到请求 workspace）或项目无默认环境时返回 null，转发不带
-     * environment_id，行为与项目未配置默认环境一致（占位符模型报
-     * MD_ENV_VAR_UNRESOLVED，不会借用其它项目/其它空间的环境变量）。
+     * 按网页发布通道解析默认环境：以通道所属 project 为准（不信任请求路径
+     * project_id）。通道不存在、发布应用非单智能体/工作流（appType 不属于
+     * agent / workflow，如多智能体发布，不走本兜底）、通道 workspace 缺失
+     * （无法安全确定环境变量加载维度，宁可不放行也不回退到请求 workspace）或
+     * 项目无默认环境时返回 null，转发不带 environment_id，行为与项目未配置
+     * 默认环境一致（占位符 URL 报错，不会借用其它项目/其它空间的环境变量）。
      *
      * @param channel 网页发布通道，可为 null
      * @param shortCode 网页短链码（仅用于日志）
@@ -737,8 +749,9 @@ public class AgentServiceProxyService {
                 shortCode);
             return null;
         }
-        if (!CommonConstant.AGENT_TYPE.equals(channel.getAppType())) {
-            log.warn("web release channel app is not single agent, skip default environment, shortCode: {}, "
+        if (!CommonConstant.AGENT_TYPE.equals(channel.getAppType())
+            && !CommonConstant.WORKFLOW_TYPE.equals(channel.getAppType())) {
+            log.warn("web release channel app is not single agent or workflow, skip default environment, shortCode: {}, "
                 + "appType: {}", shortCode, channel.getAppType());
             return null;
         }

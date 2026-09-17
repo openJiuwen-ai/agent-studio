@@ -1,4 +1,4 @@
-﻿# -*- coding: UTF-8 -*-
+# -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Tests for web_run.py — web workflow/agent run endpoints."""
 
@@ -228,6 +228,44 @@ class TestRunWebWorkflow:
             )
 
         mock_service.get_release_info.assert_awaited_once_with("abc123", "en-us")
+
+    @pytest.mark.asyncio
+    async def test_env_workspace_passed_to_context(self):
+        """environment_id/workspace_id 透传到 WorkflowRunContext，供插件/MCP URL 占位符解析."""
+        release_info = _make_release_info()
+        expected_response = JSONResponse(content={})
+        body = WorkflowAppRunRequest()
+        request = _make_request(
+            {"short_code": "abc123", "conversation_id": "conv-1"}
+        )
+
+        with (
+            patch(
+                "agent_runtime.serve.apis.web_run._release_service"
+            ) as mock_service,
+            patch(
+                "agent_runtime.serve.apis.web_run._execute_workflow_run",
+                new_callable=AsyncMock,
+                return_value=expected_response,
+            ) as mock_exec,
+        ):
+            mock_service.get_release_info = AsyncMock(return_value=release_info)
+            await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(
+                    short_code="abc123",
+                    conversation_id="conv-1",
+                    workspace_id="ws-1",
+                    environment_id="env-1",
+                    language="zh-cn",
+                    stream="true",
+                ),
+            )
+
+        ctx = mock_exec.await_args.args[0]
+        assert ctx.environment_id == "env-1"
+        assert ctx.workspace_id == "ws-1"
 
 
 class TestRunWebAgent:

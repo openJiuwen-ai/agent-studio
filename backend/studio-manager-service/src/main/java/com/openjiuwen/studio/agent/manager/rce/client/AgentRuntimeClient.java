@@ -297,6 +297,7 @@ public interface AgentRuntimeClient {
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("short_code") String shortCode,
         @PathVariable("conversation_id") String conversationId, @RequestParam("workspace_id") String workspaceId,
+        @RequestParam(value = "environment_id", required = false) String environmentId,
         @RequestBody WorkflowRunReq body, @RequestHeader("stream") Boolean stream);
 
     @PostMapping("/v1/agents/chat/{short_code}")

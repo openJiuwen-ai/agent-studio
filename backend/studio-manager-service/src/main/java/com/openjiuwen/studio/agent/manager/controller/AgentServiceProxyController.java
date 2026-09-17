@@ -549,6 +549,9 @@ public class AgentServiceProxyController {
         @NotNull @ApiParam(value = "输入参数", required = true) @Valid @RequestBody ServiceWorkflowRunReq body,
         @RequestHeader HttpHeaders httpHeaders) {
         checkWorkflowPermission(projectId, workspaceId, workflowId);
+        // 工作流无环境选择：environment_id 缺省时回填项目默认环境，插件/MCP URL 与
+        // 模型 api_url 中的 ${_env.plugin_url_params.VAR} 占位符按默认环境解析
+        environmentId = agentServiceProxyService.resolveEnvironmentId(projectId, environmentId);
         return runAssets(projectId, workspaceId, environmentId, workflowId, conversationId, version, stream, body,
             httpHeaders);
     }
