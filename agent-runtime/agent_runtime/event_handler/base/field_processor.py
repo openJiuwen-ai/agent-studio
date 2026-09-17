@@ -147,8 +147,12 @@ class FieldDataProcessor:
           才用 trace.instance_id 兜底。这样单层/双层 controller 都能正确按 member
           agent_id 过滤历史——旧 Java 路径靠 processOnEvent 原样存流里的消息
           （带 member agent_id）实现同样的效果。
-        - 本轮 user query 由 trace.query 提供，前置写入（若 conversation_info 已有
-          相同 query 且带 agent_id，则用那条的 agent_id 覆盖前置的，去重）。
+        - 本轮 user query 由 trace.query 提供：conversation_info 中**已存在**相同
+          query 的 user 消息（Controller 场景，engine 全量历史尾部即本轮 query）时
+          保持原序不前置——旧实现"前置+去重"会把 query 从尾部搬到头部，逐轮累积
+          导致持久化历史 user 倒序、意图流 messages 参数乱序；**不存在**（单
+          agent/workflow 场景，conversation_info 只含本轮 assistant 消息）时前置
+          写入，保证历史带上 user 一轮。
         """
         fallback_agent_id = getattr(trace, "instance_id", "") or ""
 
@@ -159,28 +163,34 @@ class FieldDataProcessor:
                 m["agent_id"] = aid
             return m
 
-        messages = []
+        def _norm_content(raw) -> str:
+            if raw is None:
+                return ""
+            if isinstance(raw, str):
+                return raw
+            # 对 dict/list 使用标准 JSON 格式，其他类型用 str()
+            if isinstance(raw, (dict, list)):
+                return json.dumps(raw, ensure_ascii=False)
+            return str(raw)
+
+        raw_messages = trace.conversation_info.get("messages", [])
         query = getattr(trace, "query", "") or ""
-        if query:
+
+        query_in_messages = bool(query) and any(
+            isinstance(msg, dict)
+            and msg.get("role") == "user"
+            and _norm_content(msg.get("content")) == query
+            for msg in raw_messages
+        )
+
+        messages = []
+        if query and not query_in_messages:
             messages.append(_msg("user", query))
 
-        for msg in trace.conversation_info.get("messages", []):
-            role = "user" if msg.get("role", "") == "user" else "assistant"
-            content = msg.get("content", "")
-            if content is None:
-                content = ""
-            elif not isinstance(content, str):
-                # 对 dict/list 使用标准 JSON 格式，其他类型用 str()
-                if isinstance(content, (dict, list)):
-                    content = json.dumps(content, ensure_ascii=False)
-                else:
-                    content = str(content)
-            # 与已前置的 user query 去重：若 conversation_info 里有相同 query 且带 agent_id，
-            # 用其 agent_id 覆盖前置的（保留正确的 member agent_id），跳过重复
-            is_dup_user_query = role == "user" and content == query
-            if is_dup_user_query and messages and messages[0].get("content") == query:
-                if msg.get("agent_id"):
-                    messages[0]["agent_id"] = msg["agent_id"]
+        for msg in raw_messages:
+            if not isinstance(msg, dict):
                 continue
+            role = "user" if msg.get("role", "") == "user" else "assistant"
+            content = _norm_content(msg.get("content"))
             messages.append(_msg(role, content, msg.get("agent_id")))
         return messages

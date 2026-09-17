@@ -223,6 +223,9 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
                 if (CollectionUtils.isEmpty(environmentManagerEntities)) {
                     int result = environmentManagerMapper.updateIsDefaultById(envInfo.getId(),
                         true, null);
+                    if (result > 0) {
+                        environmentCacheUtil.updateDefaultEnvironmentCache(envInfo.getProjectId(), envInfo.getId());
+                    }
                 }
             }
         } catch (Exception exception) {
@@ -325,10 +328,13 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
             List<EnvironmentManagerEntity> isDefaultFase
                 = environmentManagerMapper.findByProjectIdAndIsDefaultFalseAndStatus(projectId, READY.getValue());
             if (CollectionUtils.isEmpty(isDefaultFase)) {
+                // 项目环境全部删除，清除默认环境缓存
+                environmentCacheUtil.deleteDefaultEnvironmentCache(projectId);
                 return true;
             }
             environmentManagerMapper.updateIsDefaultById(isDefaultFase.get(0).getId(),
                 true, CommonUtil.getUserId());
+            environmentCacheUtil.updateDefaultEnvironmentCache(projectId, isDefaultFase.get(0).getId());
             return true;
         } catch (Exception e) {
             throw new AgentStudioException(ENVIRONMENT_DELETE_FAIL);
@@ -365,6 +371,8 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         if (result <= 0) {
             throw new AgentStudioException(ENVIRONMENT_DEFAULT_SET_FAIL);
         }
+        // 同步项目默认环境缓存，runtime 直连时按 project_id 读取
+        environmentCacheUtil.updateDefaultEnvironmentCache(projectId, environmentId);
         return true;
     }
 

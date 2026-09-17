@@ -28,9 +28,50 @@ _logger = logging.getLogger(__name__)
 # Redis key: environment:{envId}:workspaceId:{wsId}
 _ENV_VAR_KEY_TEMPLATE = "environment:%s:workspaceId:%s"
 
+# Redis key: project:{projectId}:default_environment（manager 环境管理写入，runtime 直连时读取）
+_PROJECT_DEFAULT_ENV_KEY_TEMPLATE = "project:%s:default_environment"
+
 # 环境变量解析结果 key
 _PLUGIN_URL_PARAMS_KEY = "plugin_url_params"
 _SECRET_ENV_KEYS_KEY = "_secretEnvKeys"
+
+
+async def load_default_environment_id(project_id: Optional[str]) -> Optional[str]:
+    """从 Redis 读取项目默认环境 id（manager 环境管理侧维护）。
+
+    Args:
+        project_id: 项目 ID，为空时返回 None。
+
+    Returns:
+        默认环境 id；project_id 为空 / Redis 不可达 / key 不存在时返回 None
+        （兼容老数据：历史项目从未写入该 key，返回 None 由调用方降级）。
+    """
+    if not project_id:
+        return None
+
+    redis_key = _PROJECT_DEFAULT_ENV_KEY_TEMPLATE % project_id
+    try:
+        redis_client = get_redis_client()
+        raw = await redis_client.get(redis_key)
+    except Exception as e:
+        _logger.error(
+            "Failed to load default environment id from redis: key=%s, error=%s",
+            redis_key, e,
+        )
+        return None
+
+    if raw is None:
+        return None
+
+    raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    if not raw_str or not raw_str.strip():
+        return None
+    # Java Redisson 默认 codec 对 String 做 JSON 编码（存成 "9abd-..." 带引号），
+    # 用 json.loads 还原；已是纯字符串（手动写入/其他写入方）则原样返回
+    try:
+        return json.loads(raw_str)
+    except (ValueError, TypeError):
+        return raw_str.strip()
 
 
 async def load_environment_variables(
