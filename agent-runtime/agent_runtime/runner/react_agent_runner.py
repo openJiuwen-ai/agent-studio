@@ -21,6 +21,7 @@ from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
+from agent_runtime.common.background_task import run_in_background
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.single_agent.agents.react_agent import ReActAgent, ReActAgentConfig
 from openjiuwen.core.single_agent.schema.agent_card import AgentCard
@@ -893,7 +894,21 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Agent execution failed: {e}")
         finally:
             if session:
-                await session.post_run()
+                if adapter.interaction_pending:
+                    # 中断等待用户输入：InterruptionState 只写入内存 session
+                    # （react_agent._commit_interrupt），落 Redis 的唯一途径是
+                    # post_run；下一轮 pre_agent_execute 会 recover 它来恢复
+                    # 中断现场，且恢复轮不重新播种历史。此处必须同步保存。
+                    # 问题文本已随 message_end 先行到达客户端，同步落库不
+                    # 产生新的用户可感延迟。
+                    await session.post_run()
+                else:
+                    # 正常完成：post_run 全量序列化并保存 agent 会话状态，
+                    # 移出流收尾关键路径后台执行，避免阻塞终态事件。
+                    run_in_background(
+                        session.post_run(),
+                        name=f"react-post-run-{req.conversation_id}",
+                    )
 
     async def run_blocking(self, req: ExecutionRequest) -> str:
         """运行 ReActAgent 并返回完整的 LLM 响应字符串"""
