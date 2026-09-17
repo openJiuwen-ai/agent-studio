@@ -141,7 +141,8 @@ class TestCancelEndpoint200:
     @pytest.mark.asyncio
     async def test_running_execution_marked_and_echoed(self):
         registry = _make_registry(
-            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"}
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1",
+             "user_id": "u-1", "entry_type": "agent"}
         )
 
         with _patch_registry(registry):
@@ -161,11 +162,54 @@ class TestCancelEndpoint200:
         registry.mark_cancelled.assert_awaited_once_with("conv-1")
 
     @pytest.mark.asyncio
+    async def test_running_workflow_echoes_workflow_id_key(self):
+        """在飞工作流（entry_type=workflow）→ workflow_id key 回显，无 agent_id 键（契约 v0.7）。"""
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "wf-97b8",
+             "user_id": "u-1", "entry_type": "workflow"}
+        )
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-1"
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["workflow_id"] == "wf-97b8"  # hash 存储字段名 agent_id=入口ID，展示层换 key
+        assert "agent_id" not in body  # 互斥单 key：不得再出现误导性的 agent_id 字段
+        assert body["cancelled"] is True
+        registry.mark_cancelled.assert_awaited_once_with("conv-1")
+
+    @pytest.mark.asyncio
+    async def test_running_legacy_snapshot_without_type_falls_back_agent_id(self):
+        """旧版快照无 entry_type（升级窗口 ≤1h 残留）→ 退回 v0.6 agent_id 单字段行为。"""
+        registry = _make_registry(
+            {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "wf-97b8",
+             "user_id": "u-1"}
+        )
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-1"
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["agent_id"] == "wf-97b8"
+        assert "workflow_id" not in body
+
+    @pytest.mark.asyncio
     async def test_no_inflight_suspended_marks_and_succeeds(self):
-        """无在飞但有挂起归属快照且 project/入口匹配（挂起态取消）→ 200 且标记置位（US3 依赖）。"""
+        """无在飞但有挂起归属快照且 project/入口匹配（挂起态取消）→ 200 且标记置位（US3 依赖）。
+
+        入口 ID 从 suspend 快照回显（缺陷修复：此前仅读 registration，挂起/已结束
+        场景入口 ID 丢失、agent_id 恒空串）。
+        """
         registry = _make_registry(None)
         registry.get_suspension = AsyncMock(return_value={
-            "instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"
+            "instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1",
+            "user_id": "u-1", "entry_type": "agent",
         })
 
         with _patch_registry(registry):
@@ -177,7 +221,28 @@ class TestCancelEndpoint200:
         body = json.loads(resp.body)
         assert body["cancelled"] is True
         assert body["running"] is False
+        assert body["agent_id"] == "agent-1"  # 回显来源=suspend 快照而非空 registration
         registry.mark_cancelled.assert_awaited_once_with("conv-none")
+
+    @pytest.mark.asyncio
+    async def test_suspended_workflow_echoes_workflow_id_key(self):
+        """挂起/已结束工作流（suspend 快照 entry_type=workflow）→ workflow_id key 回显。"""
+        registry = _make_registry(None)
+        registry.get_suspension = AsyncMock(return_value={
+            "instance_id": "i-1", "project_id": "proj-1", "agent_id": "wf-97b8",
+            "user_id": "u-1", "entry_type": "workflow",
+        })
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-none"
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["cancelled"] is True
+        assert body["workflow_id"] == "wf-97b8"
+        assert "agent_id" not in body
 
     @pytest.mark.asyncio
     async def test_no_inflight_suspended_entry_mismatch_403(self):
@@ -240,6 +305,24 @@ class TestCancelEndpoint200:
         registry.mark_cancelled.assert_not_awaited()  # 关键断言：无意义取消不留痕
 
     @pytest.mark.asyncio
+    async def test_no_inflight_no_suspension_with_workflow_query_echoes_workflow_key(self):
+        """无痕 + 调用方携带 workflow_id → workflow_id key 回显（互斥单 key 同样适用无痕）。"""
+        registry = _make_registry(None)
+        registry.get_suspension = AsyncMock(return_value={})
+
+        with _patch_registry(registry):
+            resp = await cancel_execution(
+                _make_request(), project_id="proj-1", conversation_id="conv-none",
+                workflow_id="wf-97b8",
+            )
+
+        assert resp.status_code == 200
+        body = json.loads(resp.body)
+        assert body["cancelled"] is False
+        assert body["workflow_id"] == "wf-97b8"
+        assert "agent_id" not in body
+
+    @pytest.mark.asyncio
     async def test_project_match_with_entry_match_passes(self):
         registry = _make_registry(
             {"instance_id": "i-1", "project_id": "proj-1", "agent_id": "agent-1", "user_id": "u-1"}
@@ -282,7 +365,7 @@ class TestStreamRegistration:
             frames = await self._collect(
                 stream_response(
                     _req(), "exec-1", self._FakeRunner([_sse("message")]),
-                    entry=StreamEntryContext(entry_id="agent-1"),
+                    entry=StreamEntryContext(entry_id="agent-1", entry_type="agent"),
                 )
             )
 
@@ -293,6 +376,7 @@ class TestStreamRegistration:
         assert exec_id == "exec-1"
         reg_info = kwargs["info"]  # RegistrationInfo（G.FNM.03 参数封装）
         assert reg_info.agent_id == "agent-1"
+        assert reg_info.entry_type == "agent"  # 入口类型随注册落快照（cancel 回显选 key 依据）
         assert reg_info.project_id == ""  # 无 _request_ctx 时防御为空串
         registry.unregister.assert_awaited_once_with("conv-1", task=task)
 

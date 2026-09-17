@@ -57,17 +57,20 @@ class TestRegister:
             await registry.register(
                 "conv-1", task, execution_id="exec-1",
                 info=RegistrationInfo(
-                    project_id="proj-1", agent_id="agent-1", user_id="user-1"
+                    project_id="proj-1", agent_id="agent-1", user_id="user-1",
+                    entry_type="agent",
                 ),
             )
 
         assert registry._records["conv-1"].task is task  # noqa: SLF001 进程内映射写入
-        # exec 注册与 suspend 挂起归属快照同结构写入（instance_id 每进程唯一）
+        # exec 注册与 suspend 挂起归属快照同结构写入（instance_id 每进程唯一；
+        # entry_type 随快照落 Redis，cancel 响应按此选择回显 key）
         expected_mapping = {
             "instance_id": registry.instance_id,
             "project_id": "proj-1",
             "agent_id": "agent-1",
             "user_id": "user-1",
+            "entry_type": "agent",
         }
         assert client.hset.await_count == 2
         client.hset.assert_any_await("exec:conv-1", mapping=expected_mapping)
