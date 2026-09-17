@@ -230,11 +230,12 @@ class TestBuildContextSessionModelContext:
 
 
 class TestBuildContextPassthrough:
-    """_build_context 传入 context 非 None 时仍应追加 _current_query。"""
+    """_build_context 传入 context 非 None 时直接返回，追加逻辑由 astream 完成。"""
 
     @staticmethod
-    def test_existing_context_gets_query_appended():
-        """传入预构建 context 时，_current_query 应追加到 context 历史中。"""
+    def test_existing_context_returned_as_is():
+        """传入预构建 context 时，_build_context 直接返回，不调 add_messages。
+        当轮 query 的追加由 astream() 在 async 上下文中完成（带去重）。"""
         layer = _make_layer()
         mock_context = MagicMock()
         params = {"_current_query": "户号100023"}
@@ -243,15 +244,12 @@ class TestBuildContextPassthrough:
 
         # 应返回传入的 context（不创建新的）
         assert result is mock_context
-        # 应调用 add_messages 追加当轮 query
-        mock_context.add_messages.assert_called_once()
-        added_messages = mock_context.add_messages.call_args[0][0]
-        assert len(added_messages) == 1
-        assert added_messages[0].content == "户号100023"
+        # _build_context 是 sync 方法，不调用 async 的 add_messages
+        mock_context.add_messages.assert_not_called()
 
     @staticmethod
     def test_existing_context_no_query_no_append():
-        """传入预构建 context 但无 _current_query 时，不应调用 add_messages。"""
+        """传入预构建 context 但无 _current_query 时，直接返回。"""
         layer = _make_layer()
         mock_context = MagicMock()
         params = {}

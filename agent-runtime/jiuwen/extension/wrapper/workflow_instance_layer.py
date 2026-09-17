@@ -102,6 +102,25 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         if current_query and context_params is not None:
             context_params = {**context_params, "_current_query": current_query}
         context = self._build_context(context_params, args_tuple.context)
+        # 当调用方传入预构建 context 时（_build_context 直接返回），
+        # 在 async 上下文中追加当轮 query（带去重），否则提问器读不到当轮回复。
+        if args_tuple.context is not None and current_query:
+            try:
+                from openjiuwen.core.foundation.llm import UserMessage
+                # 去重：检查 context 末条 user 消息是否已等于当轮 query
+                cw = await context.get_context_window()
+                msgs = cw.get_messages() if cw else []
+                last_user = next(
+                    (m for m in reversed(msgs) if getattr(m, "role", None) == "user"),
+                    None,
+                )
+                if last_user is None or getattr(last_user, "content", None) != current_query:
+                    await context.add_messages([UserMessage(role="user", content=current_query)])
+            except Exception as e:
+                logger.warning(
+                    f"Failed to append current query to passthrough context "
+                    f"for workflow {self.workflow_id}: {e}"
+                )
         return super().astream(
             query=args_tuple.query,
             params=args_tuple.params,
@@ -220,16 +239,10 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         )
 
     def _build_context(self, params: dict, context=None):
-        # 当调用方传入预构建的 context 时，仍需追加当轮 query 到其历史中，
-        # 否则 Controller 模式走此路径时提问器读不到当轮用户回复（缺陷①旁路）。
+        # 当调用方传入预构建的 context 时直接返回；当轮 query 的追加
+        # 由 astream() 在 async 上下文中完成（add_messages 是 async 方法，
+        # 不能在 sync 的 _build_context 中调用）。
         if context is not None:
-            query = params.get("_current_query", "")
-            if query:
-                try:
-                    from openjiuwen.core.foundation.llm import UserMessage
-                    context.add_messages([UserMessage(role="user", content=query)])
-                except Exception:
-                    pass  # context 追加失败不阻塞主流程
             return context
 
         histories = (

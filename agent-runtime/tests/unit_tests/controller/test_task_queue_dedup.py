@@ -64,24 +64,31 @@ class TestTaskQueueDedupMergeInputData:
         assert queue._status_maps[old_task.id] == TaskStatus.PENDING
 
     @staticmethod
-    def test_failed_task_dedup_merges_query():
-        """FAILED 状态任务去重时，旧任务 query 字段应被新任务覆盖（重试场景）。"""
+    def test_failed_task_dedup_merges_all_fields():
+        """FAILED 状态任务去重时，合并所有字段（重试可能携带更新后的参数）。"""
         queue = TaskQueue()
 
         old_task = _make_task("wf-002", {
             "query": "失败的旧输入",
             "extra_field": "preserved",
+            "workflow_req_params": {"old": "value"},
         })
         queue.add_task(old_task)
         queue.get_next_task()
         queue.mark_task_failed(old_task.id)
         assert queue._status_maps[old_task.id] == TaskStatus.FAILED
 
-        new_task = _make_task("wf-002", {"query": "重试的新输入"})
+        new_task = _make_task("wf-002", {
+            "query": "重试的新输入",
+            "workflow_req_params": {"new": "value"},
+        })
         queue.add_task(new_task)
 
         assert queue.pending_tasks[0].id == old_task.id
+        # query 和 workflow_req_params 被新值覆盖
         assert queue.pending_tasks[0].input_data["query"] == "重试的新输入"
+        assert queue.pending_tasks[0].input_data["workflow_req_params"] == {"new": "value"}
+        # 旧任务中未被新任务覆盖的字段保留
         assert queue.pending_tasks[0].input_data["extra_field"] == "preserved"
 
     @staticmethod
