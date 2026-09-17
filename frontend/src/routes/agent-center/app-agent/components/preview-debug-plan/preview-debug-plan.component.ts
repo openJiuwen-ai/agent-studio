@@ -152,6 +152,9 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
     this.dialogHistory = this.dialogHistory.map((conversation) =>
       conversation.filter((item) => item.role !== "followUpQuestions")
     );
+    // 新一轮开始，作废旧暂存耗时：上一轮 statistic 后异常中断（错误/超时/停止）的
+    // pendingLatency 残留不再有效，防止串到本轮 summary 显示上一轮的耗时
+    this.pendingLatency = undefined;
     this.sensitiveFlag = false;
     this.isRequesting = true;
     this.isLoading = true;
