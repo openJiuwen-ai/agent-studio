@@ -2002,6 +2002,14 @@ class IRConverter:
             if hasattr(end, "set_expect_mix"):
                 end.set_expect_mix(has_batch and has_stream)
 
+            # mix 场景把批源引用（如 End 引用 Start 参数，含 #end_ 输出声明）传给
+            # End 组件：transform（真流式）路径的 inputs 只含流源字段，批源字段
+            # 需由 End 自行从 io_state 解析，否则未赋值字段会从 user_fields 缺失。
+            if has_batch and has_stream and hasattr(end, "set_batch_input_refs"):
+                _batch_user_fields = (batch_schema or {}).get("userFields") or {}
+                if isinstance(_batch_user_fields, dict) and _batch_user_fields:
+                    end.set_batch_input_refs(_batch_user_fields)
+
             set_end_kwargs: dict = {}
             if has_batch and has_stream:
                 # Split schema by source type to avoid duplicate keys
