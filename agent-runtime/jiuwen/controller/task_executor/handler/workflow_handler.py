@@ -1382,11 +1382,11 @@ class WorkflowHandler(BaseHandler):
         properties = workflow_context.workflow_parameters.get("parameters", {}).get(
             "properties", {}
         )
-        # 初始化missing_parameters，排除query参数
+        # 初始化missing_parameters，排除query、sys、conversationHistory参数
         missing_parameters = {
             key: value.get("description", "")
             for key, value in properties.items()
-            if value.get("required", False) and key not in ("query", "sys")
+            if value.get("required", False) and key not in ("query", "sys", "conversationHistory")
         }
         # 获取workflow_req_params
         workflow_req_params = self.context_manager.get_global_variables(
