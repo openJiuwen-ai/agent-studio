@@ -412,10 +412,22 @@ export class DynamicNodeParamsComponent {
         const errors = markers.filter(
           (marker) => marker.severity === monaco.MarkerSeverity.Error,
         );
-        inputItem.isError = errors.length > 0;
-
-        // 判断编辑器内容是否为空
-        const isEmpty = editorInstance.getValue().trim() === '';
+        const rawValue = editorInstance.getValue().trim();
+        const isEmpty = rawValue === '';
+        let hasError = errors.length > 0;
+        // 语法合法且非空时，再校验值是否符合声明的复杂类型（如 array<object> 必须是对象数组）
+        if (!hasError && !isEmpty) {
+          let parsed: any;
+          try {
+            parsed = JSON.parse(rawValue);
+          } catch {
+            parsed = undefined;
+          }
+          if (parsed === undefined || !this.matchType(parsed, inputItem.type, inputItem.children ?? inputItem.schema)) {
+            hasError = true;
+          }
+        }
+        inputItem.isError = hasError;
         inputItem.isEmpty = isEmpty;
         // 复杂类型index递增
         editorIndex += 1;
@@ -590,6 +602,94 @@ export class DynamicNodeParamsComponent {
       return false;
     }
     return type === 'object' || type.startsWith('array');
+  }
+
+  /**
+   * 判断解析后的 JSON 值是否符合声明的复杂类型（object / array / array<T>）。
+   * subFields 为 object / array<object> 元素的子字段声明，存在时递归校验声明字段的类型
+   * （仅校验声明字段，缺失/未知字段不报错）。subFields 兼容两种来源：
+   *   - children：前端配置侧格式（IWFViewWithMultiType[]，type 为 string[]）
+   *   - schema：后端格式（IWorkflowField[]，type 为 string，子字段声明在 .schema）
+   */
+  private matchType(value: any, type: string, subFields?: any): boolean {
+    if (type === 'object') {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return false;
+      }
+      return this.matchObjectFields(value, subFields);
+    }
+    if (type === 'array') {
+      return Array.isArray(value);
+    }
+    if (type.startsWith('array<') && type.endsWith('>')) {
+      const elementType = type.slice(6, -1).trim(); // 'object' | 'string' | 'integer' | 'number' | 'boolean' | 'any'
+      if (!Array.isArray(value)) {
+        return false;
+      }
+      if (elementType === 'any') {
+        return true;
+      }
+      return value.every((el) => this.matchElementType(el, elementType, subFields));
+    }
+    // 基础类型（递归 object 子字段时可能走到这里）
+    return this.matchElementType(value, type);
+  }
+
+  /**
+   * 校验 object 值中已声明字段的类型。仅校验声明且存在值的字段；
+   * 字段缺失或出现未声明字段均不报错（与"仅校验声明字段类型"的严格度一致）。
+   * subFields 兼容 children（type:string[]）与 schema（type:string + .schema）两种来源。
+   */
+  private matchObjectFields(objValue: any, subFields?: any): boolean {
+    const fields = this.asFieldList(subFields);
+    if (!fields || fields.length === 0) {
+      return true; // 无子字段声明，不校验内部
+    }
+    for (const field of fields) {
+      const childValue = objValue?.[field.name];
+      if (childValue === undefined || childValue === null) {
+        continue; // 缺失字段不报
+      }
+      const childType = Array.isArray(field.type) ? field.type.join('/') : String(field.type ?? '');
+      if (!this.matchType(childValue, childType, field.children ?? field.schema)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** 将子字段声明统一规整为数组；非数组（如后端 schema 为单个元素描述）返回 null。 */
+  private asFieldList(subFields: any): any[] | null {
+    if (Array.isArray(subFields)) {
+      return subFields;
+    }
+    return null;
+  }
+
+  /**
+   * 判断数组元素是否符合声明的元素类型，语义与 ArrTypeValidatorDirective 保持一致。
+   * elementType 为 object 时，subFields 为该 object 的子字段声明，递归校验。
+   */
+  private matchElementType(value: any, elementType: string, subFields?: any): boolean {
+    switch (elementType) {
+      case 'string':
+        return typeof value === 'string';
+      case 'integer':
+        return typeof value === 'number';
+      case 'number':
+        return typeof value === 'number';
+      case 'boolean':
+        return typeof value === 'boolean';
+      case 'object':
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          return false;
+        }
+        return this.matchObjectFields(value, subFields);
+      case 'array':
+        return Array.isArray(value);
+      default:
+        return true; // 'any' / 'file' / 未知
+    }
   }
 
   public async onUploadFile(e: Event, inputItem, uploadType = 'multi'): Promise<void> {

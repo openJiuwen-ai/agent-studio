@@ -865,6 +865,10 @@ public class WorkflowValidationService {
                             MessageFormat.format(i18nUtil.getMessage("workflow.validate.output.less"), node.getId())));
                 }
                 validateFieldNames(nodeInfo.getOutputs(), node, errors);
+                // 校验开始节点输出参数默认值的类型是否与声明的参数类型匹配（如 array<object> 默认值必须是对象数组）
+                if (Strings.CS.equals(nodeInfo.getType(), NodeType.START.getType())) {
+                    validateStartNodeDefaultValues(nodeInfo.getOutputs(), node, errors);
+                }
             }
         }
     }
@@ -878,7 +882,279 @@ public class WorkflowValidationService {
                     .setReason(MessageFormat.format(i18nUtil.getMessage("workflow.validate.composed"), node.getId(),
                         field.getName())));
             }
+            // 递归校验 object / array<object> 子字段名（子字段声明在 schema 中）
+            validateNestedFieldNames(field, node, errors);
         }
+    }
+
+    /**
+     * 递归校验 object / array<object> 嵌套子字段名是否合法。
+     * - object：schema 直接为子字段列表
+     * - array<object>：schema 为元素描述，其 schema 为子字段列表
+     * - array<T>（T 非 object）/ 基础类型：无子字段，跳过
+     * schema 解析失败或为空时跳过，不阻断。
+     */
+    private void validateNestedFieldNames(WorkflowFieldVO field, Node node,
+        List<WorkflowValidationVOErrors> errors) {
+        String declaredType = field.getType() == null ? "" : field.getType().toLowerCase(Locale.ROOT);
+        // object：schema 直接是子字段列表
+        if (Strings.CS.equals(declaredType, TypeEnum.OBJECT.toString())) {
+            validateSchemaFieldNames(field.getSchema(), node, errors);
+            return;
+        }
+        // array<object>：schema 是元素描述，子字段在元素描述的 schema 里
+        if (declaredType.startsWith("array<") && declaredType.endsWith(">")) {
+            String elementType = declaredType.substring(6, declaredType.length() - 1).trim();
+            if (Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                validateSchemaFieldNames(schemaFieldSchema(field.getSchema()), node, errors);
+            }
+            return;
+        }
+        // array + schema 形式：schema 为元素描述，元素为 object 时校验其子字段
+        if (Strings.CS.equals(declaredType, TypeEnum.ARRAY.toString())) {
+            String elementType = schemaFieldType(field.getSchema());
+            if (elementType != null && Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                validateSchemaFieldNames(schemaFieldSchema(field.getSchema()), node, errors);
+            }
+        }
+    }
+
+    /**
+     * 校验 schema（子字段列表）中每个子字段的名称，并递归其嵌套子字段。
+     */
+    private void validateSchemaFieldNames(Object schema, Node node,
+        List<WorkflowValidationVOErrors> errors) {
+        if (schema == null) {
+            return;
+        }
+        List<Object> subFields;
+        try {
+            subFields = JsonUtils.objectToClass(schema);
+        } catch (Exception e) {
+            return; // schema 解析失败，不阻断
+        }
+        if (subFields == null) {
+            return;
+        }
+        for (Object sub : subFields) {
+            Map<String, Object> subMap;
+            try {
+                subMap = JsonUtils.objectToClass(sub);
+            } catch (Exception e) {
+                continue;
+            }
+            if (subMap == null) {
+                continue;
+            }
+            Object subName = subMap.get("name");
+            if (subName != null && !isNameValid(String.valueOf(subName))) {
+                errors.add(new WorkflowValidationVOErrors().setId(node.getId())
+                    .setType(node.getType())
+                    .setReason(MessageFormat.format(i18nUtil.getMessage("workflow.validate.composed"), node.getId(),
+                        subName)));
+            }
+            // 递归子字段的嵌套子字段
+            Object subType = subMap.get("type");
+            String subTypeStr = subType == null ? null : String.valueOf(subType).toLowerCase(Locale.ROOT);
+            Object subSchema = subMap.get("schema");
+            if (subTypeStr != null && Strings.CS.equals(subTypeStr, TypeEnum.OBJECT.toString())) {
+                validateSchemaFieldNames(subSchema, node, errors);
+            } else if (subTypeStr != null && Strings.CS.equals(subTypeStr, TypeEnum.ARRAY.toString())) {
+                // array：元素为 object 时，子字段在元素描述的 schema 里
+                String elementType = schemaFieldType(subSchema);
+                if (elementType != null && Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                    validateSchemaFieldNames(schemaFieldSchema(subSchema), node, errors);
+                }
+            }
+        }
+    }
+
+
+    /**
+     * 校验开始节点输出参数默认值的类型是否与声明的参数类型匹配。
+     * 例如 array<object> 的默认值必须是对象数组；object 的默认值必须是对象；基础类型同理。
+     * 默认值为引用类型(ref)时跳过，仅校验字面量默认值。
+     */
+    private void validateStartNodeDefaultValues(List<WorkflowFieldVO> outputs, Node node,
+        List<WorkflowValidationVOErrors> errors) {
+        for (WorkflowFieldVO field : outputs) {
+            if (field.getValue() == null) {
+                continue;
+            }
+            // 仅校验字面量默认值，引用类型(ref/generated)跳过
+            WorkflowFieldVOValue value = field.getValue();
+            if (value.getType() != null && value.getType() != WorkflowFieldVOValue.TypeEnum.LITERAL) {
+                continue;
+            }
+            Object defaultValue = value.getDefault();
+            if (defaultValue == null || (defaultValue instanceof String s && StringUtils.isBlank(s))) {
+                continue;
+            }
+            if (!isDefaultValueTypeValid(field, defaultValue)) {
+                errors.add(new WorkflowValidationVOErrors().setId(node.getId())
+                    .setType(node.getType())
+                    .setReason(MessageFormat.format(i18nUtil.getMessage("workflow.validate.default.type.mismatch"),
+                        node.getId(), field.getName(), field.getType())));
+            }
+        }
+    }
+
+    /**
+     * 判断默认值是否匹配字段声明的类型。兼容 "array<object>" 和 "array" + schema 两种声明形式。
+     * object / array<object> 时，schema 携带子字段声明，递归校验已声明字段的类型
+     * （仅校验声明字段类型，字段缺失或出现未声明字段不报错）。
+     */
+    private boolean isDefaultValueTypeValid(WorkflowFieldVO field, Object defaultValue) {
+        String declaredType = field.getType() == null ? "" : field.getType().toLowerCase(Locale.ROOT);
+
+        // 数组类型：默认值必须是 List
+        if (declaredType.startsWith("array<") || Strings.CS.equals(declaredType, TypeEnum.ARRAY.toString())) {
+            // 解析元素类型与元素 schema（object 时 schema 为子字段声明，用于递归校验）
+            String elementType = null;
+            Object elementSchema = null;
+            if (declaredType.startsWith("array<") && declaredType.endsWith(">")) {
+                elementType = declaredType.substring(6, declaredType.length() - 1).trim();
+                // array<object>: object 子字段 schema 在 field.schema（元素描述）的 schema 字段
+                if (Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                    elementSchema = schemaFieldSchema(field.getSchema());
+                }
+            } else {
+                // array + schema 形式：field.schema 为元素描述（Map 或 WorkflowFieldVO）
+                Object elementDesc = field.getSchema();
+                elementType = schemaFieldType(elementDesc);
+                if (elementType != null && Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                    elementSchema = schemaFieldSchema(elementDesc);
+                }
+            }
+            List<Object> items;
+            try {
+                items = JsonUtils.objectToClass(defaultValue);
+            } catch (Exception e) {
+                return false;
+            }
+            if (!(items instanceof List)) {
+                return false;
+            }
+            if (elementType == null || Strings.CS.equals(elementType, "any")) {
+                return true;
+            }
+            for (Object item : items) {
+                if (!isElementTypeValid(item, elementType, elementSchema)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // 对象类型：默认值必须是 Map，schema 为子字段声明
+        if (Strings.CS.equals(declaredType, TypeEnum.OBJECT.toString())) {
+            return isElementTypeValid(defaultValue, TypeEnum.OBJECT.toString(), field.getSchema());
+        }
+
+        // 基础类型
+        return isElementTypeValid(defaultValue, declaredType, null);
+    }
+
+    /**
+     * 判断单个值是否符合声明的元素/基础类型。type 为 object 时，schema 为子字段声明，
+     * 递归校验已声明字段的类型。
+     */
+    private boolean isElementTypeValid(Object value, String type, Object schema) {
+        if (type == null) {
+            return true;
+        }
+        switch (type) {
+            case "string":
+                return value instanceof String;
+            case "integer":
+            case "number":
+                // 数值类型兼容字符串数字（前端默认值常以字符串形式存储）
+                if (value instanceof Number) {
+                    return true;
+                }
+                if (value instanceof String s) {
+                    try {
+                        Double.parseDouble(s);
+                        return true;
+                    } catch (NumberFormatException e) {
+                        return false;
+                    }
+                }
+                return false;
+            case "boolean":
+                return value instanceof Boolean;
+            case "object":
+                if (!(value instanceof Map)) {
+                    return false;
+                }
+                return matchObjectFields((Map<?, ?>) value, schema);
+            case "array":
+                return value instanceof List;
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * 递归校验 object 值中已声明字段（schema 子字段列表）的类型。
+     * 仅校验 schema 中声明且存在值的字段；字段缺失或出现未声明字段均不报错。
+     */
+    private boolean matchObjectFields(Map<?, ?> objValue, Object schema) {
+        if (schema == null) {
+            return true; // 无子字段声明，不校验内部
+        }
+        List<Object> subFields;
+        try {
+            subFields = JsonUtils.objectToClass(schema);
+        } catch (Exception e) {
+            return true; // schema 解析失败，不阻断（与无声明一致）
+        }
+        if (subFields == null) {
+            return true;
+        }
+        for (Object sub : subFields) {
+            Map<String, Object> subMap;
+            try {
+                subMap = JsonUtils.objectToClass(sub);
+            } catch (Exception e) {
+                continue;
+            }
+            if (subMap == null || subMap.get("name") == null) {
+                continue;
+            }
+            Object subValue = objValue.get(String.valueOf(subMap.get("name")));
+            if (subValue == null) {
+                continue; // 缺失字段不报
+            }
+            String subType = subMap.get("type") == null
+                ? null : String.valueOf(subMap.get("type")).toLowerCase(Locale.ROOT);
+            if (!isElementTypeValid(subValue, subType, subMap.get("schema"))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** 从单个字段描述（元素描述，Map 或 WorkflowFieldVO）取其 type，转小写。 */
+    private String schemaFieldType(Object schema) {
+        if (schema instanceof WorkflowFieldVO vo && vo.getType() != null) {
+            return vo.getType().toLowerCase(Locale.ROOT);
+        }
+        if (schema instanceof Map<?, ?> m && m.get("type") != null) {
+            return String.valueOf(m.get("type")).toLowerCase(Locale.ROOT);
+        }
+        return null;
+    }
+
+    /** 从单个字段描述（元素描述，Map 或 WorkflowFieldVO）取其 schema（子字段声明）。 */
+    private Object schemaFieldSchema(Object schema) {
+        if (schema instanceof WorkflowFieldVO vo) {
+            return vo.getSchema();
+        }
+        if (schema instanceof Map<?, ?> m) {
+            return m.get("schema");
+        }
+        return null;
     }
 
     private void validateInputFields(List<WorkflowFieldVO> fieldList, Node node, Map<String, Node> nodeMap,
