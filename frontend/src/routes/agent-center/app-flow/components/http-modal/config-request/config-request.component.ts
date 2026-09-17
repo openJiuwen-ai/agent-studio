@@ -84,11 +84,20 @@ export class ConfigRequestComponent extends ModalBaseComponent {
 
   onRefUpdate(info: IParamRef[]): void {
     this.nameRefOptions = info;
-    const inputs = this.nodeInfo.inputs ?? [];
-    const querySchema = inputs.find((item) => item.name === 'query')?.schema as IWorkflowField[];
-    this.queryParams = NodeUtils.initInputs(querySchema, this.nameRefOptions);
-    const headerSchema = inputs.find((item) => item.name === 'headers')?.schema as IWorkflowField[];
-    this.headerParams = NodeUtils.initInputs(headerSchema, this.nameRefOptions);
+    if (this.isInit) {
+      const inputs = this.nodeInfo.inputs ?? [];
+      const querySchema = inputs.find((item) => item.name === 'query')?.schema as IWorkflowField[];
+      this.queryParams = NodeUtils.initInputs(querySchema, this.nameRefOptions);
+      const headerSchema = inputs.find((item) => item.name === 'headers')?.schema as IWorkflowField[];
+      this.headerParams = NodeUtils.initInputs(headerSchema, this.nameRefOptions);
+      this.isInit = false;
+    } else {
+      // MR 检视意见 #3：对齐父组件 http-modal.onRefUpdate 的 isInit 守卫——
+      // 后续 ref 事件只刷新既有行（含用户新增行）的引用选项，不从
+      // nodeInfo.inputs 重建行，避免覆盖用户在面板中未保存的修改
+      NodeUtils.reSelectRefsWithNewOps(this.queryParams, this.nameRefOptions);
+      NodeUtils.reSelectRefsWithNewOps(this.headerParams, this.nameRefOptions);
+    }
   }
 
   private createBlankRow(): IWorkflowField {

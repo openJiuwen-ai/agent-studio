@@ -306,8 +306,13 @@ class SingleComponentDebugWrapper:
         图状态注入；调试路径绕过 Vertex，通用 userFields 分支会把面板输入
         收缩成 {userFields: {...}}，导致 query/headers/鉴权全部丢失。
         此处以重排后 inputs_schema（query→query_parameters、auth 并入、
-        userFields 平铺）为底，叠加调试面板 query / headers 两个 JSON 框的
-        覆盖：合并语义，空框 {} 表示完全按节点配置执行，框内同名键优先于节点配置。
+        userFields 平铺）为底，叠加调试面板输入：
+
+        - query / headers 两个 JSON 框并入对应货架（合并语义，空框 {} 表示
+          完全按节点配置执行，框内同名键优先于节点配置）；
+        - 其余用户字段值叠加到顶层同名键（MR 检视意见 #1：不叠加则用户在
+          面板填写的用户字段值被丢弃，调试结果与输入不一致），见
+          _overlay_http_user_fields。
         """
         base = (
             deepcopy(self._inputs_schema)
@@ -328,7 +333,53 @@ class SingleComponentDebugWrapper:
                 **(shelf if isinstance(shelf, dict) else {}),
                 **headers_override,
             }
+        self._overlay_http_user_fields(inputs, base)
         return base
+
+    def _overlay_http_user_fields(self, inputs: dict, base: dict) -> None:
+        """把调试面板的用户字段值叠加到 base 顶层（MR 检视意见 #1）。
+
+        取值口径对齐通用 userFields 分支：仅接受 configs.userFields.inputs
+        声明过的键，或重排后 base 已存在的键；平铺形态（前端节点测试对话框
+        按 inputs 条目逐键发送）与嵌套 userFields 形态（直接 API 调用）都
+        接受，平铺键优先。组件保留键（method/body/authentication 等）一律
+        跳过——重排侧同样避让，调试输入不得改变节点控制配置。
+        """
+        # ir_converter 模块级导入了本模块（SingleComponentInfo），此处必须
+        # 函数级延迟导入避免循环依赖
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            _HTTP_RESERVED_INPUT_KEYS,
+        )
+
+        candidates: dict = {}
+        nested = inputs.get(_USER_FIELDS)
+        if isinstance(nested, dict):
+            candidates.update(nested)
+        for key, value in inputs.items():
+            if key in ("query", "headers", _USER_FIELDS):
+                continue  # query/headers 已由货架合并消费
+            candidates[key] = value
+
+        declared = {
+            item.get("id")
+            for item in (self._configs.get(_USER_FIELDS) or {}).get("inputs", [])
+            if isinstance(item, dict)
+        }
+        declared.discard(None)
+        for key, value in candidates.items():
+            if key in _HTTP_RESERVED_INPUT_KEYS:
+                workflow_logger.warning(
+                    f"EI.http debug input {key!r} collides with component "
+                    "reserved key; skipped in overlay"
+                )
+                continue
+            if key in declared or key in base:
+                base[key] = value
+            else:
+                workflow_logger.warning(
+                    f"EI.http debug input {key!r} is not a declared user "
+                    "field; skipped in overlay"
+                )
 
     @staticmethod
     def _parse_http_debug_box(value: Any, box_name: str) -> dict:

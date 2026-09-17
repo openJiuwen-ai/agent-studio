@@ -6,6 +6,8 @@ userFields 平铺、auth 并入）；本文件验证 SingleComponentDebugWrapper
 对 EI.http 按 HTTPRequestExecutable 的货架契约组装 invoke inputs，并叠加调试面板覆盖：
 - 面板空框（'{}' 字符串）/缺省 → 货架与重排 schema 一致（含 auth 头）；
 - query / headers 框并入对应货架，同名键框优先、节点配置与 auth 保留；
+- 其余用户字段框值叠加到顶层同名键（MR 检视意见 #1 后续轮），组件保留键
+  与未声明键不叠加；嵌套 userFields 形态（API 直调）同样接受；
 - dict 形态输入（直接 API 调用）同样接受；
 - 非法 JSON / 非对象 JSON → COMPONENT_STEP_DEBUG_ERROR，不静默吞输入；
 - 覆盖不写回 inputs_schema（deepcopy 底座，实例可复用）。
@@ -14,6 +16,8 @@ userFields 平铺、auth 并入）；本文件验证 SingleComponentDebugWrapper
     cd agent-runtime
     pytest tests/unit_tests/extension/wrapper/test_single_component_http_debug_inputs.py -v
 """
+
+# pylint: disable=protected-access  # 单测需直接调用内部方法 _preprocess_inputs
 
 import pytest
 
@@ -112,3 +116,64 @@ def test_non_http_node_still_uses_userfields_branch():
     wrapper = SingleComponentDebugWrapper(component_info=info, execution_id="exec_test")
     out = wrapper._preprocess_inputs({})
     assert out == {"userFields": {"x": "1"}}
+
+
+# ─── MR 检视意见 #1（后续轮）：其余用户字段框值必须叠加到 base ──────────
+
+
+def test_user_field_box_overlaid():
+    # 节点测试对话框按 nodeInfo.inputs 条目逐键发送：query/headers 是 JSON 框，
+    # 用户字段（如 uid）是普通输入框，值必须叠加到顶层供 {{uid}} 占位符解析
+    out = _make_wrapper()._preprocess_inputs(
+        {"query": "{}", "headers": "{}", "uid": "99"}
+    )
+    assert out["uid"] == "99"
+    # 货架不受影响
+    assert out["query_parameters"] == {"page": "1"}
+    assert out["headers"]["X-Api-Key"] == "secret123"
+
+
+def test_user_field_declared_without_default_overlaid():
+    # base（重排 schema）里没有该字段默认值，但 configs.userFields.inputs 声明过
+    # → 对齐通用分支的声明口径，同样叠加
+    wrapper = _make_wrapper(
+        inputs_schema={"query_parameters": {}, "headers": {}},
+        configs={"userFields": {"inputs": [{"id": "city", "sourceType": "input"}]}},
+    )
+    out = wrapper._preprocess_inputs({"city": "shanghai"})
+    assert out["city"] == "shanghai"
+
+
+def test_nested_user_fields_dict_overlaid():
+    # API 直调传嵌套 userFields 形态同样接受
+    out = _make_wrapper()._preprocess_inputs({"userFields": {"uid": "7"}})
+    assert out["uid"] == "7"
+
+
+def test_flat_key_wins_over_nested():
+    out = _make_wrapper()._preprocess_inputs(
+        {"userFields": {"uid": "7"}, "uid": "8"}
+    )
+    assert out["uid"] == "8"
+
+
+def test_reserved_and_undeclared_keys_not_overlaid():
+    # 组件保留键与未声明键不得经调试输入改变节点控制配置
+    out = _make_wrapper()._preprocess_inputs(
+        {"method": "DELETE", "body": "evil", "authentication": "x", "unknown": "1"}
+    )
+    assert "method" not in out
+    assert "body" not in out
+    assert "authentication" not in out
+    assert "unknown" not in out
+    assert out["query_parameters"] == {"page": "1"}
+
+
+def test_declared_field_with_reserved_name_blocked():
+    # 用户字段声明成保留键名（重排侧已避让）→ 叠加侧同样拦截
+    wrapper = _make_wrapper(
+        inputs_schema={"query_parameters": {}, "headers": {}},
+        configs={"userFields": {"inputs": [{"id": "body", "sourceType": "input"}]}},
+    )
+    out = wrapper._preprocess_inputs({"body": "evil"})
+    assert "body" not in out

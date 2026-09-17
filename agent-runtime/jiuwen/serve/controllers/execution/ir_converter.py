@@ -4045,9 +4045,18 @@ _HTTP_RESERVED_INPUT_KEYS = frozenset(
     {"query_parameters", "headers", "authentication", "body", "method", "url"}
 )
 
-# 匹配"双引号字符串（含转义）"或"裸 true/false/null 令牌"：字符串整体被第一分支
-# 消费，故串内内容不受替换影响（{"msg": "true story"} 不会被改写）。
-_JSON_LITERAL_TOKEN_RE = re.compile(r'("(?:[^"\\]|\\.)*")|\b(true|false|null)\b')
+# 匹配"引号字符串（双/单引号，含转义）"、"{{占位符}}"或"裸 true/false/null 令牌"：
+# 前三者整体被第一分支消费，内部内容不受替换影响（MR 检视意见 #2）：
+# - {"msg": "true story"} / {'msg': 'true story'} 串内单词不改写（body 允许
+#   Python 字面量形态，组件走 ast.literal_eval，单引号串是合法输入）；
+# - {{true}} / {{null}} 占位符内裸词是变量名，改写成 {{True}} 后无法按原始
+#   key 解析，body 解析失败会被组件静默丢弃。
+_JSON_LITERAL_TOKEN_RE = re.compile(
+    r'("(?:[^"\\]|\\.)*"'  # 双引号字符串（含转义）
+    r"|'(?:[^'\\]|\\.)*'"  # 单引号字符串（含转义）
+    r"|\{\{[^{}]*\}\}"  # {{占位符}}整段保护
+    r")|\b(true|false|null)\b"
+)
 _JSON_LITERAL_TO_PYTHON = {"true": "True", "false": "False", "null": "None"}
 
 
@@ -4078,9 +4087,20 @@ def _remap_http_inputs_schema(inputs_schema: Any, configs: dict | None) -> Any:
     if not isinstance(inputs_schema, dict):
         return inputs_schema
     query = inputs_schema.get("query")
+    existing_query_parameters = inputs_schema.get("query_parameters")
     headers = inputs_schema.get("headers")
     remapped: dict[str, Any] = {
-        "query_parameters": dict(query) if isinstance(query, dict) else {},
+        # MR 检视意见 #4：schema 已含 query_parameters（调用方直接给组件形态，
+        # 或函数被重复调用）时合并而非重置——末尾兜底循环会因该键已在
+        # remapped 中而跳过，重置将丢失已有值。同名键 query（IR 原生货架）优先。
+        "query_parameters": {
+            **(
+                dict(existing_query_parameters)
+                if isinstance(existing_query_parameters, dict)
+                else {}
+            ),
+            **(dict(query) if isinstance(query, dict) else {}),
+        },
         "headers": dict(headers) if isinstance(headers, dict) else {},
     }
     user_fields = inputs_schema.get("userFields")
@@ -4106,9 +4126,15 @@ def _remap_http_inputs_schema(inputs_schema: Any, configs: dict | None) -> Any:
 
 
 def _synthesize_exception_process(node: dict) -> dict | None:
-    """为只写 exceptionEnable/exceptionSuppression 的 IR 节点（HTTP 节点前端）
-    合成等价 exceptionProcess。缺此fallback时 HTTP 节点开启异常处理仍直接中断（G5）。
+    """为只写 exceptionEnable/exceptionSuppression 的 EI.http 节点合成 exceptionProcess。
+
+    HTTP 节点前端不产出 exceptionProcess，缺此 fallback 时开启异常处理仍直接
+    中断（G5）。合成仅限 EI.http（MR 检视意见 #5）：其他节点类型的
+    exceptionProcess 由各自前端产出，缺失时保持既有语义，泛化合成会改变
+    HTTP 以外节点的既有异常行为。
     """
+    if node.get("type") != "EI.http":
+        return None
     configs = node.get("configs") or {}
     if not configs.get("exceptionEnable") or not configs.get("exceptionSuppression"):
         return None
@@ -4121,7 +4147,7 @@ def _synthesize_exception_process(node: dict) -> dict | None:
             "按开启异常处理语义回退空默认输出"
         )
         default_outputs = {}
-    if node.get("type") == "EI.http" and isinstance(default_outputs, dict):
+    if isinstance(default_outputs, dict):
         default_outputs = {
             _HTTP_OUTPUT_KEY_ALIASES.get(key, key): value
             for key, value in default_outputs.items()
