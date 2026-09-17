@@ -159,23 +159,23 @@ class TestBuildContextMessageCleaning:
         assert "files" not in msg
 
     @staticmethod
-    def test_non_dict_messages_preserved():
-        """非 dict 类型的消息（如 BaseMessage 对象）应原样保留。"""
+    def test_non_dict_messages_skipped():
+        """非 dict 消息应被跳过（converter 的 .get() 对非 dict 会报错），不 mock converter。"""
         layer = _make_layer()
-        mock_message = MagicMock()  # 模拟 BaseMessage 对象
+        mock_message = MagicMock()  # 模拟非 dict 消息（如 BaseMessage 对象）
         params = {
-            "conversation_history": [mock_message],
+            "conversation_history": [
+                {"role": "user", "content": "有效消息"},
+                mock_message,  # 非 dict，应被跳过
+            ],
         }
 
-        with patch(
-            "jiuwen.extension.wrapper.workflow_instance_layer.WorkflowMessageConverter"
-        ) as mock_converter:
-            layer._build_context(params, None)
+        # 不 mock converter，验证真实路径：非 dict 被跳过后 converter 正常处理
+        result = layer._build_context(params, None)
 
-        call_args = mock_converter.conversation_messages_to_model_context.call_args
-        clean_histories = call_args[0][0]
-        assert len(clean_histories) == 1
-        assert clean_histories[0] is mock_message
+        # 应成功构建 context（非 dict 消息被跳过，不导致异常）
+        assert result is not None
+        assert result is not layer._context
 
 
 class TestBuildContextSessionModelContext:

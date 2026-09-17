@@ -90,11 +90,18 @@ class TaskQueue:
                         # 合并所有字段（新值覆盖旧值，旧值中未出现的字段保留）。
                         # PENDING 场景保留原始输入，避免同一 workflow 连续入队时
                         # 最新输入静默覆盖最早的待处理输入。
-                        if existing_status == TaskStatus.RUNNING:
-                            if "query" in task.input_data:
-                                existing_task.input_data["query"] = task.input_data["query"]
-                        elif existing_status == TaskStatus.FAILED:
-                            existing_task.input_data.update(task.input_data)
+                        # 类型守卫：input_data 可能为 None 或非 dict，先验证再操作，
+                        # 避免异常后旧任务已从原队列移除但未加入 pending 的不一致状态。
+                        both_are_dict = (
+                            isinstance(existing_task.input_data, dict)
+                            and isinstance(task.input_data, dict)
+                        )
+                        if both_are_dict:
+                            if existing_status == TaskStatus.RUNNING:
+                                if "query" in task.input_data:
+                                    existing_task.input_data["query"] = task.input_data["query"]
+                            elif existing_status == TaskStatus.FAILED:
+                                existing_task.input_data.update(task.input_data)
 
                         # 移到pending队列末尾并更新状态
                         self.pending_tasks.append(existing_task)
