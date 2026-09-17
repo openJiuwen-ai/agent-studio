@@ -467,20 +467,19 @@ class WorkflowManagementServiceTest {
             entity.setId("wf-1");
             entity.setTriggerList(new ArrayList<>());
             when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
-            when(scheduler.getTrigger(any(TriggerKey.class))).thenReturn(null);
-            when(scheduler.isShutdown()).thenReturn(false);
 
             TriggerConfig body = new TriggerConfig();
             body.setType("EVENT");
             body.setName("event-trigger");
             body.setTriggerId("evt-1");
-            body.setCron("0 0 * * * ?");
             body.setPrompt("test prompt");
 
             var result = workflowManagementService.addTrigger("p1", "wf-1", "w1", body);
 
             assertNotNull(result);
             assertEquals("evt-1", result.getTriggerId());
+            assertEquals(List.of(body), entity.getTriggerList());
+            verifyNoInteractions(scheduler);
         }
     }
 

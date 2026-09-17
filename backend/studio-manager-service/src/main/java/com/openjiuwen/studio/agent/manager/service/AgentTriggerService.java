@@ -52,6 +52,15 @@ public class AgentTriggerService extends QuartzJobBean {
         JobDataMap jobDetailMap = context.getJobDetail().getJobDataMap();
         String jobName = context.getJobDetail().getKey().getName();
         log.info("[Task Start] The scheduled task starts to be executed. Task name:{}", jobName);
+        executeTarget(jobDetailMap);
+    }
+
+    /**
+     * Executes the Agent or Workflow described by the supplied trigger data.
+     *
+     * @param jobDetailMap trigger target data
+     */
+    public void executeTarget(JobDataMap jobDetailMap) {
         String authToken = StringUtils.EMPTY;
 
         // 2. 判断任务类型并执行
