@@ -82,6 +82,39 @@ class TestRunBlocking:
         assert "第一" in result and "第二" in result or result == ""
 
 
+class TestRegisterMcpServers:
+    """MCP registration failures must stop ReAct before the LLM is invoked."""
+
+    @pytest.mark.asyncio
+    async def test_registration_error_is_propagated(self):
+        runner = ReActAgentRunner(api_key="test")
+        agent = MagicMock()
+        ir_json = {
+            "configs": {
+                "mcps": [
+                    {
+                        "id": "mcp-id",
+                        "name": "calculate",
+                        "type": "streamable_http",
+                        "url": "http://unreachable.example/mcp",
+                    }
+                ]
+            }
+        }
+
+        with patch(
+            "jiuwen.extension.wrapper.mcp_server_loader.load_mcp_server_from_ir",
+            new=AsyncMock(side_effect=RuntimeError("MCP connection failed")),
+        ):
+            with pytest.raises(
+                RuntimeError,
+                match="Failed to register MCP server calculate: MCP connection failed",
+            ):
+                await runner._register_mcp_servers(ir_json, agent, "agent-id")
+
+        agent.ability_manager.add.assert_not_called()
+
+
 class TestBuildSkillsPrompt:
     """验证 build_skills_prompt 构建的路径不重复拼接 skill_dir，且分隔符统一为 /"""
 

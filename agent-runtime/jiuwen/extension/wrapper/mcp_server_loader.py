@@ -47,12 +47,19 @@ async def load_mcp_server_from_ir(
     config = convert_ir_to_server_config(ir_config)
 
     try:
-        await Runner.resource_mgr.add_mcp_server(config, tag=tag)
+        add_result = await Runner.resource_mgr.add_mcp_server(config, tag=tag)
+        if not add_result.is_ok():
+            raise add_result.error()
+
         server_id = config.server_id
 
         tool_ids = Runner.resource_mgr._resource_registry.tool().get_mcp_tool_id(
             server_id
         )
+        if not tool_ids:
+            raise RuntimeError(
+                f"MCP server '{server_id}' did not expose any available tools"
+            )
 
         logger.info(
             f"MCP Server registered: {server_id}, tools: {tool_ids}, tag: {tag}"

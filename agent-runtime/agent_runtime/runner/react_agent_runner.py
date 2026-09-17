@@ -422,7 +422,11 @@ class ReActAgentRunner:
                 agent.ability_manager.add(mcp_config)
                 tool_ids.extend(mcp_tool_ids)
             except Exception as e:
-                workflow_logger.error(f"Failed to register MCP server {mcp_conf.get('name')}: {e}")
+                message = (
+                    f"Failed to register MCP server {mcp_conf.get('name')}: {e}"
+                )
+                workflow_logger.error(message)
+                raise RuntimeError(message) from e
 
         workflow_logger.info(f"Registered {len(tool_ids)} MCP tools success")
         return tool_ids

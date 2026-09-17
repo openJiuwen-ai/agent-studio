@@ -255,10 +255,12 @@ class SSEClientNew(McpClient):
         except ExceptionGroup as eg:
             eg_str = exception_group_to_str_simple(eg)
             logger.warning(f"get mcp tools list error, {eg_str}")
-            return []
-        except Exception:
-            logger.warning("get mcp tools list error, please check mcp server.")
-            return []
+            raise RuntimeError(f"Failed to list MCP tools: {eg_str}") from eg
+        except Exception as error:
+            logger.warning(
+                f"get mcp tools list error, {type(error).__name__}: {error}"
+            )
+            raise RuntimeError(f"Failed to list MCP tools: {error}") from error
 
     def _process_tools_result(self, result) -> List[McpToolCard]:
         """处理工具列表结果，支持 mcp_choose_tools 过滤"""
