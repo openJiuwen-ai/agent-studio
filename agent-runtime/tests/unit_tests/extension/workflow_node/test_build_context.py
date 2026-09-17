@@ -119,7 +119,7 @@ class TestBuildContextMessageCleaning:
 
     @staticmethod
     def test_strip_extra_fields():
-        """intent/enable_history/agent_id 等多余字段应被去除。"""
+        """intent/agent_id 等多余字段应被去除，但 enable_history 和 name 应保留。"""
         layer = _make_layer()
         params = {
             "conversation_history": [
@@ -127,10 +127,10 @@ class TestBuildContextMessageCleaning:
                     "role": "user",
                     "content": "查询电费账单",
                     "intent": ["dianfeizhangdanchaxungongzuoliu"],
-                    "enable_history": True,
+                    "enable_history": False,
+                    "name": "testUser",
                     "agent_id": "468c8dd2-xxxx",
                     "files": None,
-                    "name": None,
                     "tool_call_id": None,
                     "tool_calls": None,
                     "function_call": None,
@@ -146,11 +146,17 @@ class TestBuildContextMessageCleaning:
         call_args = mock_converter.conversation_messages_to_model_context.call_args
         clean_histories = call_args[0][0]
         assert len(clean_histories) == 1
-        # 只保留 role + content
-        assert clean_histories[0] == {"role": "user", "content": "查询电费账单"}
-        assert "intent" not in clean_histories[0]
-        assert "enable_history" not in clean_histories[0]
-        assert "agent_id" not in clean_histories[0]
+        msg = clean_histories[0]
+        # role + content 保留
+        assert msg["role"] == "user"
+        assert msg["content"] == "查询电费账单"
+        # enable_history 和 name 保留（converter._extract_msg_fields 会读取）
+        assert msg["enable_history"] is False
+        assert msg["name"] == "testUser"
+        # 其余多余字段去除
+        assert "intent" not in msg
+        assert "agent_id" not in msg
+        assert "files" not in msg
 
     @staticmethod
     def test_non_dict_messages_preserved():

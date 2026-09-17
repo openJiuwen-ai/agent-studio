@@ -4,8 +4,8 @@
 """TaskQueue.add_task 去重合并 input_data 的单元测试。
 
 覆盖缺陷②修复：同 workflow_id 的未完成任务去重时，
-新任务的 input_data 必须合并到旧任务，否则恢复轮
-InteractiveInput 拿不到用户当轮回复。
+仅在 RUNNING/FAILED 场景下合并新任务的 input_data 到旧任务，
+PENDING 场景保留原始输入（避免连续入队时覆盖最早的待处理输入）。
 """
 from unittest.mock import MagicMock
 
@@ -36,38 +36,74 @@ def _make_task(workflow_id: str, input_data: dict, task_id: str = None) -> Task:
 
 
 class TestTaskQueueDedupMergeInputData:
-    """去重时应合并新任务的 input_data 到旧任务。"""
+    """去重时 input_data 合并策略：RUNNING/FAILED 合并，PENDING 保留原始。"""
 
     @staticmethod
-    def test_dedup_merges_input_data():
-        """同 workflow_id 的未完成任务去重时，旧任务 input_data 应被新任务覆盖。"""
+    def test_running_task_dedup_merges_input():
+        """RUNNING 状态任务去重时，旧任务 input_data 应被新任务覆盖（中断恢复场景）。"""
         queue = TaskQueue()
 
-        # 第一轮：添加初始任务（query="查询电费账单"）
         old_task = _make_task("wf-001", {"query": "查询电费账单"})
         queue.add_task(old_task)
-        assert len(queue.pending_tasks) == 1
-        assert queue.pending_tasks[0].input_data == {"query": "查询电费账单"}
+        # 模拟任务被取出执行（状态变为 RUNNING）
+        queue.get_next_task()
+        assert queue._status_maps[old_task.id] == TaskStatus.RUNNING
 
-        # 第二轮：用户回复后，controller 创建新任务（query="户号100023"）
+        # 用户回复后，controller 创建新任务
         new_task = _make_task("wf-001", {"query": "户号100023"})
         queue.add_task(new_task)
 
-        # 去重后仍只有 1 个任务，且 input_data 已更新为用户回复
+        # 旧任务被移回 pending，input_data 已更新为用户回复
         assert len(queue.pending_tasks) == 1
-        assert queue.pending_tasks[0].id == old_task.id  # 保留旧任务对象
+        assert queue.pending_tasks[0].id == old_task.id
         assert queue.pending_tasks[0].input_data == {"query": "户号100023"}
+        assert queue._status_maps[old_task.id] == TaskStatus.PENDING
+
+    @staticmethod
+    def test_failed_task_dedup_merges_input():
+        """FAILED 状态任务去重时，旧任务 input_data 应被新任务覆盖（重试场景）。"""
+        queue = TaskQueue()
+
+        old_task = _make_task("wf-002", {"query": "失败的旧输入"})
+        queue.add_task(old_task)
+        queue.get_next_task()
+        queue.mark_task_failed(old_task.id)
+        assert queue._status_maps[old_task.id] == TaskStatus.FAILED
+
+        new_task = _make_task("wf-002", {"query": "重试的新输入"})
+        queue.add_task(new_task)
+
+        assert queue.pending_tasks[0].id == old_task.id
+        assert queue.pending_tasks[0].input_data == {"query": "重试的新输入"}
+
+    @staticmethod
+    def test_pending_task_preserves_original_input():
+        """PENDING 状态任务去重时，应保留原始 input_data（连续入队不覆盖）。"""
+        queue = TaskQueue()
+
+        old_task = _make_task("wf-003", {"query": "最早的待处理输入"})
+        queue.add_task(old_task)
+        assert queue._status_maps[old_task.id] == TaskStatus.PENDING
+
+        new_task = _make_task("wf-003", {"query": "最新输入"})
+        queue.add_task(new_task)
+
+        # PENDING 场景保留原始输入，不覆盖
+        assert len(queue.pending_tasks) == 1
+        assert queue.pending_tasks[0].id == old_task.id
+        assert queue.pending_tasks[0].input_data == {"query": "最早的待处理输入"}
 
     @staticmethod
     def test_dedup_preserves_old_task_object():
         """去重应保留旧任务对象（同一引用），确保 _task_maps 等引用不断裂。"""
         queue = TaskQueue()
 
-        old_task = _make_task("wf-002", {"query": "旧输入"})
+        old_task = _make_task("wf-004", {"query": "旧输入"})
         queue.add_task(old_task)
+        queue.get_next_task()  # 变为 RUNNING
         old_task_id = old_task.id
 
-        new_task = _make_task("wf-002", {"query": "新输入"})
+        new_task = _make_task("wf-004", {"query": "新输入"})
         queue.add_task(new_task)
 
         # _task_maps 中仍是旧任务 ID
@@ -82,13 +118,13 @@ class TestTaskQueueDedupMergeInputData:
         """已完成任务不应触发去重合并，新任务应正常入队。"""
         queue = TaskQueue()
 
-        old_task = _make_task("wf-003", {"query": "已完成的任务"})
+        old_task = _make_task("wf-005", {"query": "已完成的任务"})
         queue.add_task(old_task)
         queue._status_maps[old_task.id] = TaskStatus.COMPLETED
         queue.completed_tasks.append(old_task)
         queue.pending_tasks.remove(old_task)
 
-        new_task = _make_task("wf-003", {"query": "新任务"})
+        new_task = _make_task("wf-005", {"query": "新任务"})
         queue.add_task(new_task)
 
         # 新任务正常入队（不与已完成任务去重）
@@ -122,22 +158,3 @@ class TestTaskQueueDedupMergeInputData:
         assert queue.pending_tasks[0] is task
         assert task.id in queue._task_maps
         assert queue._status_maps[task.id] == TaskStatus.PENDING
-
-    @staticmethod
-    def test_running_task_dedup_merges_input():
-        """运行中的同 workflow_id 任务也应合并 input_data。"""
-        queue = TaskQueue()
-
-        old_task = _make_task("wf-004", {"query": "运行中的旧输入"})
-        queue.add_task(old_task)
-        # 模拟任务被取出执行
-        queue.get_next_task()
-        assert queue._status_maps[old_task.id] == TaskStatus.RUNNING
-
-        new_task = _make_task("wf-004", {"query": "用户回复的新输入"})
-        queue.add_task(new_task)
-
-        # 旧任务被移回 pending，input_data 已更新
-        assert queue._status_maps[old_task.id] == TaskStatus.PENDING
-        assert old_task.input_data == {"query": "用户回复的新输入"}
-        assert old_task in queue.pending_tasks

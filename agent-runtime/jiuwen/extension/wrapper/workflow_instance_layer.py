@@ -84,15 +84,24 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
     ) -> AsyncGenerator[Union[Message, StreamData], None]:
         """Normalize legacy calls and delegate execution to the original WorkflowWrapper."""
         args_tuple = self._normalize_astream_args(args, kwargs)
-        # 提取当轮 query 注入 params，供 _build_context 追加到历史（缺陷①）。
+        # 提取当轮 query，供 _build_context 追加到历史（缺陷①）。
+        # 逻辑与 WorkflowWrapper._extract_resume_query 对齐：raw_inputs 优先，
+        # 为空时回退到 user_inputs 末条值（覆盖 InteractiveInput 仅有 user_inputs 的场景）。
         current_query = ""
         if hasattr(args_tuple.query, "raw_inputs"):
             current_query = str(args_tuple.query.raw_inputs or "")
+            if not current_query and hasattr(args_tuple.query, "user_inputs"):
+                user_inputs = args_tuple.query.user_inputs
+                if user_inputs:
+                    current_query = str(list(user_inputs.values())[-1])
         elif isinstance(args_tuple.query, str):
             current_query = args_tuple.query
-        if current_query and args_tuple.params is not None:
-            args_tuple.params["_current_query"] = current_query
-        context = self._build_context(args_tuple.params, args_tuple.context)
+        # 用 params 副本传递 _current_query，避免污染调用方原始 params
+        # （同一实例复用或并发调用时残留上一次的 _current_query）。
+        context_params = args_tuple.params
+        if current_query and context_params is not None:
+            context_params = {**context_params, "_current_query": current_query}
+        context = self._build_context(context_params, args_tuple.context)
         return super().astream(
             query=args_tuple.query,
             params=args_tuple.params,
@@ -253,16 +262,24 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
                 history_messages=[],  # 必须传空列表，默认 None 会触发 validate_messages 异常
                 processors=[],  # 必须传空列表，默认 None 会在 get_context_window 迭代时报错
             )
-            # 清理历史消息：converter 只接受 role+content 的纯 dict 或 BaseMessage，
-            # get_message_by_intent 返回的 dict 带 intent/enable_history/agent_id 等
-            # 额外字段会导致 "context message is invalid" 异常（一直存在的静默 bug）。
+            # 清理历史消息：去除 intent/agent_id/files/tool_call_id 等多余字段，
+            # 保留 converter._extract_msg_fields 实际读取的 role/content/name/enable_history，
+            # 避免 "context message is invalid" 异常（一直存在的静默 bug）。
             clean_histories = []
             for msg in histories:
                 if isinstance(msg, dict):
-                    clean_histories.append({
+                    clean_msg = {
                         "role": msg.get("role", "user"),
                         "content": msg.get("content", ""),
-                    })
+                    }
+                    # 保留 enable_history 和 name，converter 会读取这两个字段：
+                    # enable_history=False 的消息不应注入模型上下文，
+                    # name 会传入 ConversationUserMessage/ConversationAssistantMessage。
+                    if "enable_history" in msg:
+                        clean_msg["enable_history"] = msg["enable_history"]
+                    if msg.get("name"):
+                        clean_msg["name"] = msg["name"]
+                    clean_histories.append(clean_msg)
                 else:
                     clean_histories.append(msg)
             WorkflowMessageConverter.conversation_messages_to_model_context(
