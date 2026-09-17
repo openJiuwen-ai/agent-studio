@@ -1050,16 +1050,18 @@ async def _process_streaming_output(
     """
     # 每次对话都需要先生成一个start标识
     start_flag = True
+    stream_start_time_ms: Optional[int] = None
 
     async for item in origin_output:
         # 生成开始标识
         if start_flag:
+            stream_start_time_ms = get_current_time_ms()
             start_stream_data = StreamingChatResponse(
                 event=ConversationEvent.START,
                 index=0,
                 executionId=item.execution_id,
                 data={},
-                createdTime=get_current_time_ms(),
+                createdTime=stream_start_time_ms,
                 isStructMessage=item.is_struct_message,
             ).model_dump_json(by_alias=True, exclude_none=True)
             start_flag = False
@@ -1076,6 +1078,13 @@ async def _process_streaming_output(
                     )
                 )
             )
+
+        if (
+            item.code == StreamCode.CONTROLLER_FINISH_MESSAGE.value
+            and isinstance(item.data, dict)
+        ):
+            item.data.setdefault("start_time", stream_start_time_ms)
+            item.data.setdefault("end_time", get_current_time_ms())
 
         # 生成响应数据
         response = await _build_streaming_response(item, collector)

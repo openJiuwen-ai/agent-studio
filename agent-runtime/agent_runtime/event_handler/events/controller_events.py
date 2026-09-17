@@ -129,6 +129,13 @@ class ControllerEventsProcessor(BaseEventsProcessor):
             if not execution_id:
                 execution_id = "executionId"
             data["executionId"] = execution_id
+        # 透传 runner 层（jiwen _process_streaming_output）注入的 start_time/end_time，
+        # 供前端计算多智能体任务的运行时间，与工作流 workflow_finished 事件的表现对齐
+        incoming_data = full_data.get("data")
+        if isinstance(incoming_data, dict):
+            for timing_key in ("start_time", "end_time"):
+                if timing_key in incoming_data:
+                    data[timing_key] = incoming_data[timing_key]
         return EventField(
             event=ConversationEvent.TASK_END.value,
             conversation_id=trace.conversation_id,

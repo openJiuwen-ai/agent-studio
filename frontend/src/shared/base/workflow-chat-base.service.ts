@@ -692,6 +692,12 @@ export abstract class WorkflowChatBaseComponent {
           plan.status = 'finished';
         });
         this.isPlanMode = false;
+        if (data?.start_time && data?.end_time) {
+          this.chatLoop[curIndex].latency = flowCommonLogic.calcElapsedTime(
+            data.start_time,
+            data.end_time,
+          );
+        }
       }
       if (event === 'task_end' && data.executionId) {
         this.chatLoop[curIndex].execution_id = data.executionId;
