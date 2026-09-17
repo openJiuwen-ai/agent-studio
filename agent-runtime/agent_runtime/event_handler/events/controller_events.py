@@ -119,7 +119,15 @@ class ControllerEventsProcessor(BaseEventsProcessor):
     @classmethod
     def process_agent_interrupted_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         trace.block = True
-        return None
+        # 转发中断事件（data 含 runner 层注入的 start_time/end_time），
+        # 供前端在中断轮（如等待用户输入）也能显示本轮运行时间，与 task_end 表现一致
+        incoming_data = full_data.get("data")
+        return EventField(
+            event=ConversationEvent.AGENT_INTERRUPTED.value,
+            conversation_id=trace.conversation_id,
+            data=incoming_data if isinstance(incoming_data, dict) else {},
+            createdTime=full_data.get("createdTime"),
+        )
 
     @classmethod
     def process_task_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:

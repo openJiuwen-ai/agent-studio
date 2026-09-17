@@ -685,6 +685,15 @@ export abstract class WorkflowChatBaseComponent {
     }
 
     if (this.type === 'multi') {
+      // 中断轮（如等待用户输入）：后端在 agent_interrupted 中注入 start_time/end_time，
+      // 同样计算本轮运行时间，保持与正常完成轮（task_end）显示一致
+      if (event === 'agent_interrupted' && data?.start_time && data?.end_time) {
+        this.chatLoop[curIndex].latency = flowCommonLogic.calcElapsedTime(
+          data.start_time,
+          data.end_time,
+        );
+        this.isClearRunStatus = true;
+      }
       if(event === 'task_end') {
         this.chatLoop[curIndex].thinkLoading = false;
         this.chatLoop[curIndex].thinking = false;

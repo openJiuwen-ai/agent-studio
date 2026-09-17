@@ -1080,7 +1080,10 @@ async def _process_streaming_output(
             )
 
         if (
-            item.code == StreamCode.CONTROLLER_FINISH_MESSAGE.value
+            item.code in (
+                StreamCode.CONTROLLER_FINISH_MESSAGE.value,
+                StreamCode.CONTROLLER_AGENT_INTERRUPT_MESSAGE.value,
+            )
             and isinstance(item.data, dict)
         ):
             item.data.setdefault("start_time", stream_start_time_ms)
