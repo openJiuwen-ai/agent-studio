@@ -24,7 +24,6 @@ import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AvailableModelServicesQo;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
-import com.openjiuwen.studio.agent.manager.dto.MaasServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelNameResp;
@@ -396,11 +395,6 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     public ModelNameResp existsModelName(String projectId, String workspaceId, String modelName) {
         return new ModelNameResp().setExistModelName(
             modelServiceMapper.countByModelName(projectId, workspaceId, modelName) > 0);
-    }
-
-    @Override
-    public MaasServiceRsp maasModelServiceList(String projectId) {
-        return new MaasServiceRsp();
     }
 
     private ModelServiceBase queryMSAndPermissionCheck(String projectId, String workspaceId, String id,

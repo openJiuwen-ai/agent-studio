@@ -4,6 +4,7 @@
 
 package com.openjiuwen.studio.agent.manager.controller;
 
+import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.manager.dto.AuthConfigListQo;
 import com.openjiuwen.studio.agent.manager.dto.CreateAuthConfigReq;
 import com.openjiuwen.studio.agent.manager.dto.ProviderAuthCfgList;
@@ -34,10 +35,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * ProviderAuthMgmtApi interface
  */ public interface ProviderAuthMgmtApi {
-    @ApiOperation(value = "", nickname = "authConfigList", notes = "查询供应商认证配置",
+    @ApiOperation(value = "", nickname = "authConfigList", notes = "查询供应商认证配置（provider_id 与 metadata_id 至少传其一）",
         response = ProviderAuthCfgList.class, tags = {"ProviderAuthMgmt"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "成功", response = ProviderAuthCfgList.class)
+        @ApiResponse(code = 200, message = "成功", response = ProviderAuthCfgList.class),
+        @ApiResponse(code = 400, message = "provider_id 和 metadata_id 不能同时为空", response = ErrorRsp.class)
     })
     @RequestMapping(value = "/v1/{project_id}/model-manager/provider/auths", produces = {"application/json"},
         method = RequestMethod.GET)

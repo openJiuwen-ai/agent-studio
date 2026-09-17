@@ -48,7 +48,7 @@ public class WorkflowInfo implements Serializable {
     private String name = null;
 
     @JsonProperty("code")
-    @Schema(description = "工作流编码", example = "workflow-code-01")
+    @Schema(description = "工作流编码；创建时必填", example = "workflow-code-01")
     @Length(min = 2, max = 64)
     private String code = null;
 
@@ -74,7 +74,7 @@ public class WorkflowInfo implements Serializable {
     private List<TriggerConfig> triggerList = null;
 
     @JsonProperty("workflow_details")
-    @Schema(description = "工作流详情", example = "{}")
+    @Schema(description = "工作流详情；缺失时服务端生成默认工作流模板", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> workflowDetails = null;
@@ -138,7 +138,7 @@ public class WorkflowInfo implements Serializable {
     private String creatorId = null;
 
     @JsonProperty("type")
-    @Schema(description = "工作流类型", example = "chat")
+    @Schema(description = "工作流类型，chat：对话型，task：任务型；创建时必填", example = "chat")
     @Length(max = 32)
     private String type = null;
 

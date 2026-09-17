@@ -31,9 +31,7 @@ paths:
         content:
           application/json:
             schema:
-              additionalProperties: true
-              type: object
-              title: Req Json
+              $ref: '#/components/schemas/ExecutionRequest'
         required: true
       responses:
         '200':
@@ -41,6 +39,9 @@ paths:
           content:
             application/json:
               schema: {}
+        '400':
+          description: 请求校验失败或保留请求头冲突：请求体校验失败返回 error_code=02001003 四字段错误体；请求体携带服务器认证/平台协议保留请求头时返回
+            {"error":"reserved_header_in_body"}
         '422':
           description: Validation Error
           content:
@@ -345,7 +346,16 @@ paths:
               $ref: '#/components/schemas/WorkflowAppRunRequest'
       responses:
         '200':
-          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
+          description: '流式响应（Server-Sent Events），stream=false 时返回 JSON。
+
+            SSE 帧事件（event 字段）枚举：
+
+            - agent 链路：start、message、agent_node_message、function_call_end、plugin_start、plugin_end、statistic_data、summary_response、done（终态）
+
+            - workflow 链路：workflow_started、message、error、exception、workflow_finished、end（终态）
+
+            注：agent 链路流式终态为 done，workflow 链路终态为 end；内容审核阻断流仅产生 message（拦截话术）与 done
+            帧，帧字段为 event/data/executionId/index/createdTime 子集。'
           content:
             application/json:
               schema: {}
@@ -439,7 +449,16 @@ paths:
               $ref: '#/components/schemas/AgentAppRunRequest'
       responses:
         '200':
-          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
+          description: '流式响应（Server-Sent Events），stream=false 时返回 JSON。
+
+            SSE 帧事件（event 字段）枚举：
+
+            - agent 链路：start、message、agent_node_message、function_call_end、plugin_start、plugin_end、statistic_data、summary_response、done（终态）
+
+            - workflow 链路：workflow_started、message、error、exception、workflow_finished、end（终态）
+
+            注：agent 链路流式终态为 done，workflow 链路终态为 end；内容审核阻断流仅产生 message（拦截话术）与 done
+            帧，帧字段为 event/data/executionId/index/createdTime 子集。'
           content:
             application/json:
               schema: {}
@@ -565,7 +584,16 @@ paths:
               $ref: '#/components/schemas/WorkflowAppRunRequest'
       responses:
         '200':
-          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
+          description: '流式响应（Server-Sent Events），stream=false 时返回 JSON。
+
+            SSE 帧事件（event 字段）枚举：
+
+            - agent 链路：start、message、agent_node_message、function_call_end、plugin_start、plugin_end、statistic_data、summary_response、done（终态）
+
+            - workflow 链路：workflow_started、message、error、exception、workflow_finished、end（终态）
+
+            注：agent 链路流式终态为 done，workflow 链路终态为 end；内容审核阻断流仅产生 message（拦截话术）与 done
+            帧，帧字段为 event/data/executionId/index/createdTime 子集。'
           content:
             application/json:
               schema: {}
@@ -649,7 +677,16 @@ paths:
               $ref: '#/components/schemas/AgentAppRunRequest'
       responses:
         '200':
-          description: 流式响应（Server-Sent Events），stream=false 时返回 JSON
+          description: '流式响应（Server-Sent Events），stream=false 时返回 JSON。
+
+            SSE 帧事件（event 字段）枚举：
+
+            - agent 链路：start、message、agent_node_message、function_call_end、plugin_start、plugin_end、statistic_data、summary_response、done（终态）
+
+            - workflow 链路：workflow_started、message、error、exception、workflow_finished、end（终态）
+
+            注：agent 链路流式终态为 done，workflow 链路终态为 end；内容审核阻断流仅产生 message（拦截话术）与 done
+            帧，帧字段为 event/data/executionId/index/createdTime 子集。'
           content:
             application/json:
               schema: {}
@@ -1026,6 +1063,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FileResolveResponse'
+        '400':
+          description: SSRF 校验拒绝或下载失败，返回四字段 ErrorRsp（error_code=02001003）
+        '500':
+          description: 文件解析失败，返回四字段 ErrorRsp（error_code=02001002）
         '422':
           description: Validation Error
           content:
@@ -1052,6 +1093,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateDocumentResponse'
+        '500':
+          description: 上传文档或生成下载链接失败，返回四字段 ErrorRsp（error_code=02001002）
         '422':
           description: Validation Error
           content:
@@ -1661,6 +1704,219 @@ components:
       - kb_id
       title: DeleteKBRequest
       description: 删除知识库请求。
+    ExecutionParams:
+      properties:
+        conversationKey:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Conversationkey
+          default: ''
+        conversationHistory:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ConversationHistoryMessage'
+            type: array
+          - type: 'null'
+          title: Conversationhistory
+        pluginConfigs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/PluginConfig'
+            type: array
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Pluginconfigs
+        globalVariables:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Globalvariables
+        toolSwitchDict:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Toolswitchdict
+        workflowSequence:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Workflowsequence
+        activeWorkflows:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Activeworkflows
+        intent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Intent
+          default: ''
+        enableHistory:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enablehistory
+          default: true
+        environmentVariables:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Environmentvariables
+        files:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Files
+        DeepResearchAgentConfig:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Deepresearchagentconfig
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+          default: ''
+        reportTemplate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reporttemplate
+          default: ''
+        interruptFeedback:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Interruptfeedback
+          default: ''
+        fileName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Filename
+          default: ''
+        fileStream:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Filestream
+          default: ''
+        isTemplate:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Istemplate
+          default: false
+        fileUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fileurl
+          default: ''
+        repoId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Repoid
+          default: ''
+        enableMemoryRetrieve:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enablememoryretrieve
+          default: false
+        enableMemoryExtract:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Enablememoryextract
+          default: false
+        sysOperationCard:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Sysoperationcard
+        ir_cache:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Ir Cache
+        isDebug:
+          type: boolean
+          title: Isdebug
+          description: 是否启用调试模式
+          default: false
+      type: object
+      title: ExecutionParams
+      description: Defines the structure of execution params.
+    ExecutionRequest:
+      properties:
+        conversationId:
+          type: string
+          minLength: 1
+          title: Conversationid
+        userId:
+          type: string
+          title: Userid
+          default: anonymous
+        irPath:
+          type: string
+          title: Irpath
+          default: __mvp_mock__
+        params:
+          $ref: '#/components/schemas/ExecutionParams'
+        headers:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Headers
+          default: {}
+        query:
+          type: string
+          title: Query
+          default: ''
+        responseMode:
+          $ref: '#/components/schemas/ResponseMode'
+          default: streaming
+        agentType:
+          type: string
+          title: Agenttype
+          description: 'Agent类型: auto=自动检测, workflow=WorkflowRunner, react=ReActAgent,
+            controller=ControllerRunner'
+          default: auto
+        resumeInput:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resumeinput
+          description: 恢复中断时的用户输入（后端自动检测会话状态决定是否使用）
+        dialogueCount:
+          type: integer
+          title: Dialoguecount
+          description: 对话轮次计数，用于消息历史裁剪与统计
+          default: 1
+      type: object
+      required:
+      - conversationId
+      title: ExecutionRequest
     FileResolveResponse:
       properties:
         content:
@@ -1840,6 +2096,12 @@ components:
       type: object
       title: ReleaseInfo
       description: 应用发布信息
+    ResponseMode:
+      type: string
+      enum:
+      - streaming
+      - blocking
+      title: ResponseMode
     SearchRequest:
       properties:
         kb_id:

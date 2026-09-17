@@ -11,13 +11,12 @@ import json
 from typing import Any, List, Optional
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import BaseModel, Field, ConfigDict
 
 from agent_runtime.common.config import settings
 from agent_runtime.context.request_context import _request_ctx
-from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
+from agent_runtime.serve.error_rsp import build_error_response
 
 
 # Redis key 格式: global.vals.{resourceId}.{conversationId}
@@ -57,22 +56,6 @@ class UpdateVariableReq(BaseModel):
     value: Any = Field(default=None)
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
-
-
-def _build_error_response(
-    status_code: int, code_key: str, language: str = "zh-cn"
-) -> JSONResponse:
-    """构建错误响应."""
-    error_code, error_msg, error_reason, error_suggestion = (
-        ErrorContextBuilder.get_language_context(language, code_key)
-    )
-    content = {
-        "error_code": error_code,
-        "error_msg": error_msg,
-        "error_reason": error_reason,
-        "error_suggestion": error_suggestion,
-    }
-    return JSONResponse(status_code=status_code, content=content)
 
 
 def _build_redis_key(resource_id: str, conversation_id: str) -> str:
@@ -118,7 +101,7 @@ async def get_conversation_variables(
             redis_key,
             e,
         )
-        return _build_error_response(500, _CODE_GET_VARIABLE_FAILED, language)
+        return build_error_response(500, _CODE_GET_VARIABLE_FAILED, language)
 
     if raw is None:
         return ConversationVariableRsp(status="success", data=[])
@@ -133,7 +116,7 @@ async def get_conversation_variables(
             redis_key,
             e,
         )
-        return _build_error_response(400, _CODE_PARSE_VARIABLE_FAILED, language)
+        return build_error_response(400, _CODE_PARSE_VARIABLE_FAILED, language)
 
     return ConversationVariableRsp(status="success", data=variables)
 
@@ -165,25 +148,26 @@ async def update_conversation_variable(
             redis_key,
             e,
         )
-        return _build_error_response(500, _CODE_GET_VARIABLE_FAILED, language)
+        return build_error_response(500, _CODE_GET_VARIABLE_FAILED, language)
 
     if raw is None:
-        return _build_error_response(400, _CODE_GET_VARIABLE_FAILED, language)
+        # upsert：无历史记录时直接创建（"更新即 upsert"产品语义）
+        obj = {var_id: body.value}
+    else:
+        raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
 
-    raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        try:
+            obj = json.loads(raw_str)
+        except ValueError as e:
+            workflow_logger.error(
+                "Failed to parse conversation variables for update: key=%s, error=%s",
+                redis_key,
+                e,
+            )
+            return build_error_response(400, _CODE_PARSE_VARIABLE_FAILED, language)
 
-    try:
-        obj = json.loads(raw_str)
-    except ValueError as e:
-        workflow_logger.error(
-            "Failed to parse conversation variables for update: key=%s, error=%s",
-            redis_key,
-            e,
-        )
-        return _build_error_response(400, _CODE_PARSE_VARIABLE_FAILED, language)
-
-    # 更新顶层 key
-    obj[var_id] = body.value
+        # 更新顶层 key
+        obj[var_id] = body.value
 
     try:
         await redis_client.set(
@@ -196,6 +180,7 @@ async def update_conversation_variable(
             redis_key,
             e,
         )
-        return _build_error_response(500, _CODE_GET_VARIABLE_FAILED, language)
+        return build_error_response(500, _CODE_GET_VARIABLE_FAILED, language)
 
     return VariableInfo(name=var_id, value=body.value)
+

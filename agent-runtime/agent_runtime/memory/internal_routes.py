@@ -8,13 +8,18 @@ import logging
 import re
 import uuid
 
-from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Query, Request
 from openjiuwen.core.memory.manage.mem_model.memory_unit import MemoryType
 
 from agent_runtime.memory.adapter.ltm_manager import get_ltm
+from agent_runtime.serve.error_rsp import build_error_response
 
 logger = logging.getLogger(__name__)
+
+
+def _lang(request: Request) -> str:
+    """从请求头获取语言，用于 i18n 错误文案。"""
+    return request.headers.get("x-language", "zh-cn")
 
 
 def _validate_uuid(value: str, field_name: str = "id") -> str | None:
@@ -47,14 +52,14 @@ memory_internal_router = APIRouter(prefix="/internal/v1/memory-repos", tags=["me
 
 
 @memory_internal_router.delete("/{memory_repo_id}")
-async def delete_memory_repo(memory_repo_id: str):
+async def delete_memory_repo(memory_repo_id: str, request: Request):
     """Delete all memory data for a memory repo.
 
     Called by Java Manager via Runtime RCE when a memory repo is deleted.
     """
     err = _validate_uuid(memory_repo_id, "memory_repo_id")
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
 
     ltm = get_ltm()
     if ltm is None:
@@ -82,11 +87,11 @@ async def delete_memory_repo(memory_repo_id: str):
 
 
 @memory_internal_router.delete("/{memory_repo_id}/users/{user_id}/memories")
-async def clear_user_memories(memory_repo_id: str, user_id: str):
+async def clear_user_memories(memory_repo_id: str, user_id: str, request: Request):
     """Clear all memories for a user within a memory repo scope."""
     err = _validate_uuid(memory_repo_id, "memory_repo_id")
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
 
     ltm = get_ltm()
     if ltm is None:
@@ -105,18 +110,18 @@ async def clear_user_memories(memory_repo_id: str, user_id: str):
             memory_repo_id,
             e,
         )
-        return JSONResponse(status_code=500, content={"status": "error", "reason": str(e)})
+        return build_error_response(500, "02001002", language=_lang(request), reason=str(e))
 
 
 @memory_internal_router.post("/{memory_repo_id}/users/{user_id}/memories/batch-delete")
-async def batch_delete_memories(memory_repo_id: str, user_id: str, body: dict):
+async def batch_delete_memories(memory_repo_id: str, user_id: str, body: dict, request: Request):
     """Batch-delete memories by ID list.
 
     Body: {"memory_ids": ["id1", "id2", ...]}
     """
     err = _validate_uuid(memory_repo_id, "memory_repo_id")
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
 
     ltm = get_ltm()
     if ltm is None:
@@ -127,7 +132,7 @@ async def batch_delete_memories(memory_repo_id: str, user_id: str, body: dict):
 
     memory_ids = body.get("memory_ids", [])
     if not memory_ids:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": "memory_ids is required"})
+        return build_error_response(400, "02001003", language=_lang(request), reason="memory_ids is required")
 
     errors = []
     for mem_id in memory_ids:
@@ -145,6 +150,7 @@ async def batch_delete_memories(memory_repo_id: str, user_id: str, body: dict):
 async def list_user_memories(
     memory_repo_id: str,
     user_id: str,
+    request: Request,
     page_size: int = Query(10, ge=1, le=1000),
     page_num: int = Query(1, ge=1),
     memory_type: str = Query(None),
@@ -152,7 +158,7 @@ async def list_user_memories(
     """Paginated list of memories for a user within a memory repo scope."""
     err = _validate_uuid(memory_repo_id, "memory_repo_id")
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
 
     ltm = get_ltm()
     if ltm is None:
@@ -168,9 +174,8 @@ async def list_user_memories(
         try:
             mem_type_enum = MemoryType(memory_type)
         except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={"status": "error", "reason": f"invalid memory_type: {memory_type}"},
+            return build_error_response(
+                400, "02001003", language=_lang(request), reason=f"invalid memory_type: {memory_type}"
             )
 
     try:
@@ -214,7 +219,7 @@ async def list_user_memories(
             e,
             exc_info=True,
         )
-        return JSONResponse(status_code=500, content={"status": "error", "reason": str(e)})
+        return build_error_response(500, "02001002", language=_lang(request), reason=str(e))
 
 
 # total 统计的扫描参数：每批行数与安全上限（超出上限后 total 按封顶值近似）
@@ -254,6 +259,7 @@ async def search_memories(
     memory_repo_id: str,
     user_id: str,
     body: dict,
+    request: Request,
 ):
     """Semantic search for memories within a memory repo scope.
 
@@ -261,7 +267,7 @@ async def search_memories(
     """
     err = _validate_uuid(memory_repo_id, "memory_repo_id")
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
 
     ltm = get_ltm()
     if ltm is None:
@@ -272,10 +278,17 @@ async def search_memories(
 
     query = body.get("query", "")
     if not query:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": "query is required"})
+        return build_error_response(400, "02001003", language=_lang(request), reason="query is required")
 
     top_k = body.get("top_k", 10)
     threshold = body.get("threshold", 0.3)
+
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
+        return build_error_response(400, "02001003", language=_lang(request),
+            reason="top_k must be a positive integer")
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not (0 <= threshold <= 1):
+        return build_error_response(400, "02001003", language=_lang(request),
+            reason="threshold must be between 0 and 1")
 
     try:
         results = await ltm.search_user_mem(
@@ -318,19 +331,19 @@ async def search_memories(
 
 
 @memory_internal_router.put("/{memory_repo_id}/memories/{memory_id}")
-async def update_memory(memory_repo_id: str, memory_id: str, body: dict):
+async def update_memory(memory_repo_id: str, memory_id: str, body: dict, request: Request):
     """Update a single memory's content.
 
     Body: {"user_id": "...", "content": "new content"}
     """
     err = _validate_uuid(memory_repo_id, "memory_repo_id")
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
     err = _validate_memory_id(memory_id)
     if err:
-        return JSONResponse(status_code=400, content={"status": "error", "reason": err})
+        return build_error_response(400, "02001003", language=_lang(request), reason=err)
     if not memory_id or not memory_id.strip():
-        return JSONResponse(status_code=400, content={"status": "error", "reason": "memory_id is required"})
+        return build_error_response(400, "02001003", language=_lang(request), reason="memory_id is required")
 
     ltm = get_ltm()
     if ltm is None:
@@ -364,4 +377,4 @@ async def update_memory(memory_repo_id: str, memory_id: str, body: dict):
             memory_repo_id,
             e,
         )
-        return JSONResponse(status_code=500, content={"status": "error", "reason": str(e)})
+        return build_error_response(500, "02001002", language=_lang(request), reason=str(e))

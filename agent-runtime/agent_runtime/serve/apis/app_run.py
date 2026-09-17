@@ -21,6 +21,7 @@ from agent_runtime.serve.apis.app_run_request import (
     NodeExecuteRequest,
 )
 from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
+from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
 from agent_runtime.serve.apis.publish_version_cache import (
     LATEST_PUBLISH_VERSION,
     resolve_published_version,
@@ -63,7 +64,13 @@ app_run_app = APIRouter(tags=["app_run"])
 # 对话类接口：默认 SSE 流式，stream=false 时返回非流式 JSON
 _STREAMING_RESPONSES_200 = {
     200: {
-        "description": "流式响应（Server-Sent Events），stream=false 时返回 JSON",
+        "description": "流式响应（Server-Sent Events），stream=false 时返回 JSON。\n"
+        "SSE 帧事件（event 字段）枚举：\n"
+        "- agent 链路：start、message、agent_node_message、function_call_end、plugin_start、plugin_end、"
+        "statistic_data、summary_response、done（终态）\n"
+        "- workflow 链路：workflow_started、message、error、exception、workflow_finished、end（终态）\n"
+        "注：agent 链路流式终态为 done，workflow 链路终态为 end；内容审核阻断流仅产生 message（拦截话术）与 "
+        "done 帧，帧字段为 event/data/executionId/index/createdTime 子集。",
         "content": {
             "text/event-stream": {"schema": {"type": "string"}},
             "application/json": {"schema": {}},
@@ -633,7 +640,7 @@ async def _execute_workflow_run(
     _request_ctx.get().env_variables = env_vars
     req_json = build_req_json_from_workflow(body, exec_ctx, env_vars=env_vars)
 
-    response = await ir_execute(req_json, request)
+    response = await ir_execute(ExecutionRequest.model_validate(req_json), request)
 
     # 工作流固定使用 workflow handler_type
     if stream:
@@ -776,7 +783,7 @@ async def _execute_agent_run(
     _request_ctx.get().env_variables = env_vars
     req_json = build_req_json_from_agent(body, exec_ctx, env_vars=env_vars)
 
-    response = await ir_execute(req_json, request)
+    response = await ir_execute(ExecutionRequest.model_validate(req_json), request)
 
     # 从IR中确定handler_type
     try:

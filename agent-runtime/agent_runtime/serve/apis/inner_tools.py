@@ -58,6 +58,14 @@ async def _download_file(file_url: str) -> bytes:
     "/v1/inner-tools/file/resolve",
     response_model=FileResolveResponse,
     summary="解析文件",
+    responses={
+        400: {
+            "description": "SSRF 校验拒绝或下载失败，返回四字段 ErrorRsp（error_code=02001003）",
+        },
+        500: {
+            "description": "文件解析失败，返回四字段 ErrorRsp（error_code=02001002）",
+        },
+    },
 )
 async def resolve_file(
     file_url: str = Query(..., description="文件访问url"),
@@ -92,6 +100,11 @@ async def resolve_file(
     "/v1/inner-tools/document/create",
     response_model=CreateDocumentResponse,
     summary="文档生成",
+    responses={
+        500: {
+            "description": "上传文档或生成下载链接失败，返回四字段 ErrorRsp（error_code=02001002）",
+        },
+    },
 )
 async def create_document(req: CreateDocumentRequest):
     """根据文本内容生成 docx，上传 OBS 返回临时下载链接"""

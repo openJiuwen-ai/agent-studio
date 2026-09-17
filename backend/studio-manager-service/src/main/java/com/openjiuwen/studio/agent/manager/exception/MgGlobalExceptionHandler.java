@@ -167,9 +167,14 @@ public class MgGlobalExceptionHandler {
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleNoResourceFoundException(Exception exception) {
         log.error("exception: {}", exception.getMessage());
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(String.valueOf(StudioError.STATIC_RESOURCE_NOT_EXIST.getCode()))
-            .setErrorMsg(exception.getMessage());
-        return new ResponseEntity<>(errorRsp, StudioError.STATIC_RESOURCE_NOT_EXIST.getHttpStatus());
+        StudioError errorInfo = StudioError.STATIC_RESOURCE_NOT_EXIST;
+        ErrorInfo i18nInfo = i18nUtil.getMessage(new AgentStudioException(errorInfo));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(i18nInfo.getMessage())
+            .setErrorReason(i18nInfo.getReason())
+            .setErrorSuggestion(i18nInfo.getSuggestion());
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -182,11 +187,14 @@ public class MgGlobalExceptionHandler {
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleException(AsyncRequestTimeoutException exception) {
         log.error("AsyncRequestTimeoutException", exception);
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(
-                String.valueOf(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getCode()))
-            .setErrorMsg(i18nUtil.getMessage(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT));
-        return new ResponseEntity<>(errorRsp,
-            StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getHttpStatus());
+        StudioError errorInfo = StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT;
+        ErrorInfo i18nInfo = i18nUtil.getMessage(new AgentStudioException(errorInfo));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(i18nInfo.getMessage())
+            .setErrorReason(i18nInfo.getReason())
+            .setErrorSuggestion(i18nInfo.getSuggestion());
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -225,9 +233,14 @@ public class MgGlobalExceptionHandler {
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleNotReadableException(Exception exception) {
         log.error("NotReadableException: {}", exception.getMessage());
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(StudioError.METHOD_ARGUMENT_NOT_VALID.getFullCode())
-            .setErrorMsg(i18nUtil.getMessage(StudioError.METHOD_ARGUMENT_NOT_VALID));
-        return new ResponseEntity<>(errorRsp, StudioError.METHOD_ARGUMENT_NOT_VALID.getHttpStatus());
+        StudioError errorInfo = StudioError.METHOD_ARGUMENT_NOT_VALID;
+        ErrorInfo i18nInfo = i18nUtil.getMessage(new AgentStudioException(errorInfo));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(i18nInfo.getMessage())
+            .setErrorReason(i18nInfo.getReason())
+            .setErrorSuggestion(i18nInfo.getSuggestion());
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
