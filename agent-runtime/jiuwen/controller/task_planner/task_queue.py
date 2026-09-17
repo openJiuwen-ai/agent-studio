@@ -75,6 +75,11 @@ class TaskQueue:
 
                     # 只要不是已完成状态，就将任务移到pending队列末尾
                     if existing_status != TaskStatus.COMPLETED:
+                        # 中断恢复场景：用户回复以新任务 input_data 到达，
+                        # 旧任务的 input_data 还是上轮 query；去重保留旧任务
+                        # 对象的同时必须更新输入，否则恢复轮 InteractiveInput
+                        # 永远拿不到当轮回复（缺陷②）
+                        existing_task.input_data = task.input_data
                         # 从当前队列中移除任务
                         if existing_status == TaskStatus.PENDING:
                             self.pending_tasks.remove(existing_task)
