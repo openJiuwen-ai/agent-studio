@@ -41,11 +41,16 @@ class ExecutionRecord:
 
 @dataclass
 class RegistrationInfo:
-    """执行归属三元组（Redis ``exec:{conv}`` hash 的数据源，register 参数封装）。"""
+    """执行归属三元组（Redis ``exec:{conv}`` hash 的数据源，register 参数封装）。
+
+    entry_type：入口类型 "agent"/"workflow"（cancel 响应按此选择回显 key——
+    workflow_id 或 agent_id，消除"workflow_id 填在 agent_id 字段"的误导）。
+    """
 
     project_id: str = ""
-    agent_id: str = ""  # 契约 v0.6：执行智能体时=agent_id、执行工作流时=workflow_id
+    agent_id: str = ""  # 契约 v0.7：执行智能体时=agent_id、执行工作流时=workflow_id
     user_id: str = ""
+    entry_type: str = ""  # ""=未标注（旧快照兼容，cancel 回显退回 agent_id 单字段）
 
 
 class ExecutionRegistry:
@@ -78,7 +83,8 @@ class ExecutionRegistry:
     ) -> None:
         """注册在飞执行：本地 task 映射 + Redis hash 归属四元组 + 初始化取消标记。
 
-        agent_id 语义（契约 v0.6）：执行智能体时=agent_id、执行工作流时=workflow_id。
+        agent_id 语义（契约 v0.7）：执行智能体时=agent_id、执行工作流时=workflow_id；
+        entry_type 标注入口类型，cancel 响应按此选择回显 key（互斥单 key）。
         归属三元组经 RegistrationInfo 封装（G.FNM.03：6 参收敛为具名参数组）。
         """
         if not conversation_id:
@@ -98,6 +104,7 @@ class ExecutionRegistry:
             "project_id": info.project_id or "",
             "agent_id": info.agent_id or "",
             "user_id": info.user_id or "",
+            "entry_type": info.entry_type or "",
         }
         await client.hset(exec_key, mapping=exec_mapping)
         await client.expire(exec_key, EXEC_TTL_SECONDS)

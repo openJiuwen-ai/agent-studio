@@ -239,10 +239,12 @@ async def ir_execute(req_json: dict, request: Request):
 
     if req.response_mode == ResponseMode.STREAMING:
         entry_id = getattr(request.state, "instance_id", "")
-        # entry_id=执行入口，由 app_run 三个执行端点写入 request.state.instance_id
-        # （app_run.py:361-366 workflow 执行=workflow_id / :483-488 agent 执行=agent_id /
-        # :583-593 另一 workflow 端点=workflow_id），作为注册记录 agent_id 供终止接口
-        # 归属校验与回显。绕过 app_run 直调 ir_execute 时为空串：归属校验静默退化，
+        # entry_id=执行入口，由 app_run 两个执行端点写入 request.state.instance_id
+        # （workflow 执行=workflow_id / agent 执行=agent_id），连同 entry_type
+        # （"agent"/"workflow"）经本函数 → stream_response → ExecutionRegistry.register
+        # 落 exec/suspend 快照，供终止接口归属校验与回显。单节点/组件调试走
+        # component_debug_execute → debug_stream_response，不经注册链路（cancel 对
+        # 其无感知）。绕过 app_run 直调 ir_execute 时为空串：归属校验静默退化，
         # 记 warning 保证可观测（检视意见：入口校验依赖 instance_id 注入）。
         if not entry_id:
             workflow_logger.warning(
@@ -258,6 +260,7 @@ async def ir_execute(req_json: dict, request: Request):
                 entry=StreamEntryContext(
                     entry_id=entry_id,
                     project_id=getattr(request.state, "project_id", ""),
+                    entry_type=getattr(request.state, "entry_type", ""),
                 ),
             ),
             media_type="text/event-stream",
@@ -323,11 +326,14 @@ class StreamEntryContext:
     """执行入口上下文（ir_execute 从 request.state 注入，注册归属数据源）。
 
     entry_id：执行智能体时=agent_id、执行工作流时=workflow_id（request.state.instance_id）；
-    project_id：执行端点路径 project（request.state.project_id，与 cancel 校验同口径）。
+    project_id：执行端点路径 project（request.state.project_id，与 cancel 校验同口径）；
+    entry_type：入口类型 "agent"/"workflow"（request.state.entry_type，注册随快照
+    落 Redis，cancel 响应按此选择回显 key）。
     """
 
     entry_id: str = ""
     project_id: str = ""
+    entry_type: str = ""
 
 
 async def stream_response(
@@ -389,6 +395,7 @@ async def stream_response(
                 project_id=register_project_id,
                 agent_id=entry.entry_id,
                 user_id=(_ctx.user_id if _ctx is not None else ""),
+                entry_type=entry.entry_type,
             ),
         )
         pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
@@ -458,6 +465,28 @@ async def _check_before_cancel(
     return None
 
 
+def _entry_echo_field(
+    snapshot: dict, agent_id: str = "", workflow_id: str = ""
+) -> dict:
+    """cancel 响应的入口资源回显字段（契约 v0.7，按类型互斥单 key）。
+
+    有快照（exec 注册或 suspend 快照）时按快照 entry_type 选 key：
+    workflow → {"workflow_id": 入口ID}；agent/无标注（旧快照兼容窗口 ≤1h，
+    退回 v0.6 单字段行为）→ {"agent_id": 入口ID}。无快照（无痕）时按调用方
+    携带的入口参数回显对应 key（带 workflow_id→workflow_id；带 agent_id 或
+    都不带→agent_id）。快照 hash 存储字段名仍为 agent_id（存入口 ID），仅展示
+    层按类型换 key，归属校验逻辑不受影响。
+    """
+    if snapshot:
+        entry_id = snapshot.get("agent_id") or agent_id or workflow_id
+        if snapshot.get("entry_type") == "workflow":
+            return {"workflow_id": entry_id}
+        return {"agent_id": entry_id}
+    if workflow_id and not agent_id:
+        return {"workflow_id": workflow_id}
+    return {"agent_id": agent_id or workflow_id}
+
+
 @execution_app.post("/v1/{project_id}/conversations/{conversation_id}/cancel")
 async def cancel_execution(
     request: Request,
@@ -469,7 +498,9 @@ async def cancel_execution(
     """执行终止端点（工作流/多智能体/单智能体三类合并 1 接口，定位主键 conversation_id）。
 
     归属校验（_check_before_cancel）→ 置协作式取消标记（所有实例可见，幂等 TTL）
-    + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段。
+    + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段
+    （入口字段按执行类型互斥单 key 回显，契约 v0.7：工作流执行→workflow_id、
+    智能体执行→agent_id、无痕时按调用方携带的入口参数回显）。
     cancelled=取消标记真实置位时 true；会话无任何痕迹（从未执行/打错会话 ID/
     快照过期）时 false 且 message 明示，防调用方把"打错 ID"误判为终止成功；
     running=调用时是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，
@@ -491,6 +522,7 @@ async def cancel_execution(
         return forbidden_response
 
     running = bool(registration)  # 是否检测到在飞执行（仅参考信息）
+    suspension = {}
     if not running:
         # 无在飞注册（从未执行/已结束/已挂起注销）：凭挂起归属快照 suspend:{conv}
         # 校验归属后才置位。仅靠"知道 conversation_id"不得跨项目终止他人挂起会话
@@ -510,7 +542,7 @@ async def cancel_execution(
             return JSONResponse(
                 status_code=200,
                 content={
-                    "agent_id": agent_id or workflow_id,
+                    **_entry_echo_field({}, agent_id, workflow_id),
                     "conversation_id": conversation_id,
                     "cancelled": False,
                     "running": False,
@@ -536,10 +568,13 @@ async def cancel_execution(
             )
             return _build_error_response(403, code_key, language)
     await registry.mark_cancelled(conversation_id)
+    # 入口回显源：在飞取 exec 注册；无在飞（挂起/已结束≤1h）取 suspend 快照——
+    # 此前仅读 registration，挂起/已结束场景入口 ID 丢失回显为空串（缺陷修复）
+    echo_snapshot = registration if running else suspension
     return JSONResponse(
         status_code=200,
         content={
-            "agent_id": registration.get("agent_id") or agent_id or workflow_id,
+            **_entry_echo_field(echo_snapshot, agent_id, workflow_id),
             "conversation_id": conversation_id,
             "cancelled": True,
             "running": running,

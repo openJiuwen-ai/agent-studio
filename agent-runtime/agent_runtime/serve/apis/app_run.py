@@ -545,6 +545,8 @@ async def _execute_workflow_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 入口类型标注（cancel 响应按此选择回显 key：workflow_id/agent_id）
+    request.state.entry_type = "workflow"
     # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
     # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
     request.state.project_id = ctx.project_id
@@ -668,6 +670,8 @@ async def _execute_agent_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 入口类型标注（cancel 响应按此选择回显 key：workflow_id/agent_id）
+    request.state.entry_type = "agent"
     # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
     # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
     request.state.project_id = ctx.project_id
@@ -773,6 +777,9 @@ async def _execute_node_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 注：单节点执行走 component_debug_execute → debug_stream_response，不经
+    # stream_response 注册链路（不落 exec/suspend 快照，cancel 对其无感知），
+    # 故此处不标注 entry_type（写入也无消费者）
     # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
     # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
     request.state.project_id = ctx.project_id
