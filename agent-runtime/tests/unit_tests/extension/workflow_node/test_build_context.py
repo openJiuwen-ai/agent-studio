@@ -234,8 +234,7 @@ class TestBuildContextPassthrough:
 
     @staticmethod
     def test_existing_context_returned_as_is():
-        """传入预构建 context 时，_build_context 直接返回，不调 add_messages。
-        当轮 query 的追加由 astream() 在 async 上下文中完成（带去重）。"""
+        """传入预构建 context 时直接返回，追加逻辑由 astream 在 async 上下文完成。"""
         layer = _make_layer()
         mock_context = MagicMock()
         params = {"_current_query": "户号100023"}
