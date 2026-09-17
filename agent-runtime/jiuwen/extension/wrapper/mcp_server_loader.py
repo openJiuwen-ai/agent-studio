@@ -8,6 +8,7 @@ MCP Server 加载器
 from __future__ import annotations
 
 import copy
+import re
 from typing import Dict, Any, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,10 +22,34 @@ from jiuwen.extension.wrapper.restful_api_loader import param_deserialization
 
 HEADERS = "headers"
 AUTH = "auth"
+_ENV_PLACEHOLDER_PATTERN = re.compile(
+    r"\s*\$\{_env\.plugin_url_params\.([^}]+)\}\s*"
+)
+
+
+def _resolve_env_in_url(
+    url: str, environment_variables: Dict[str, Any] | None = None
+) -> str:
+    """Resolve MCP URL placeholders from the selected runtime environment."""
+    if not url or not _ENV_PLACEHOLDER_PATTERN.search(url):
+        return url
+
+    params = (environment_variables or {}).get("plugin_url_params") or {}
+
+    def _replace(match: re.Match) -> str:
+        name = match.group(1)
+        if name not in params:
+            return match.group(0)
+        value = params[name]
+        return str(value).strip() if value is not None else ""
+
+    return _ENV_PLACEHOLDER_PATTERN.sub(_replace, url)
 
 
 async def load_mcp_server_from_ir(
-    ir_config: Dict[str, Any], tag: str | None = None
+    ir_config: Dict[str, Any],
+    tag: str | None = None,
+    environment_variables: Dict[str, Any] | None = None,
 ) -> List[str]:
     """
     从 IR 配置创建并注册 MCP Server
@@ -44,7 +69,9 @@ async def load_mcp_server_from_ir(
     Returns:
         注册后的 tool_id 列表
     """
-    config = convert_ir_to_server_config(ir_config)
+    config = convert_ir_to_server_config(
+        ir_config, environment_variables=environment_variables
+    )
 
     try:
         add_result = await Runner.resource_mgr.add_mcp_server(config, tag=tag)
@@ -137,7 +164,9 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
     config = McpServerConfig(
         server_id=server_id,
         server_name=server_name,
-        server_path=ir_config.get("url", ""),
+        server_path=_resolve_env_in_url(
+            ir_config.get("url", ""), kwargs.get("environment_variables")
+        ),
         client_type=client_type,
         auth_headers=auth_headers,
         params=params,

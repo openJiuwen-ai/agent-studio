@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from jiuwen.extension.wrapper.mcp_server_loader import load_mcp_server_from_ir
+from jiuwen.extension.wrapper.mcp_server_loader import (
+    convert_ir_to_server_config,
+    load_mcp_server_from_ir,
+)
 from jiuwen.extension.wrapper.sse_client_new import SSEClientNew
 from jiuwen.extension.wrapper.streamable_http_client_new import (
     StreamableHttpClientNew,
@@ -59,6 +62,38 @@ def _mcp_ir() -> dict:
         "arguments": [],
         "mcp_choose_tools": ["add"],
     }
+
+
+def test_convert_config_resolves_environment_variables_in_url():
+    """ReAct MCP registration must resolve the environment selected at runtime."""
+
+    ir_config = _mcp_ir()
+    ir_config["url"] = (
+        "http://${_env.plugin_url_params.ip}:"
+        "${_env.plugin_url_params.port}/mcp"
+    )
+
+    config = convert_ir_to_server_config(
+        ir_config,
+        environment_variables={
+            "plugin_url_params": {"ip": "127.0.0.1", "port": "8766"}
+        },
+    )
+
+    assert config.server_path == "http://127.0.0.1:8766/mcp"
+
+
+def test_convert_config_keeps_fixed_url_unchanged():
+    """Existing MCP configurations without placeholders remain compatible."""
+
+    config = convert_ir_to_server_config(
+        _mcp_ir(),
+        environment_variables={
+            "plugin_url_params": {"ip": "127.0.0.1", "port": "8766"}
+        },
+    )
+
+    assert config.server_path == "http://unreachable.example/mcp"
 
 
 @pytest.mark.asyncio
