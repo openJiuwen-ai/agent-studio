@@ -1,6 +1,6 @@
 // [BUILD-VERSION] 每次改代码后递增此数字，用于判断是否加载了新 bundle
 // eslint-disable-next-line no-console
-console.warn('[BUILD-VERSION] v7');
+console.warn('[BUILD-VERSION] v8');
 import 'reflect-metadata';
 import {
   provideHttpClient,

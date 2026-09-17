@@ -619,7 +619,17 @@ export class DynamicNodeParamsComponent {
       return this.matchObjectFields(value, subFields);
     }
     if (type === 'array') {
-      return Array.isArray(value);
+      if (!Array.isArray(value)) {
+        return false;
+      }
+      // subFields 可能为元素描述（{type:元素类型, schema:子字段声明}），解析元素类型并递归校验每个元素
+      // 兼容后端 schema 格式：array + schema={type:'object',schema:[...]}
+      const elementType = this.schemaFieldType(subFields);
+      if (elementType == null || elementType === 'any') {
+        return true; // 无元素类型声明，仅校验是数组
+      }
+      const elementSchema = this.schemaFieldSchema(subFields);
+      return value.every((el) => this.matchElementType(el, elementType, elementSchema));
     }
     if (type.startsWith('array<') && type.endsWith('>')) {
       const elementType = type.slice(6, -1).trim(); // 'object' | 'string' | 'integer' | 'number' | 'boolean' | 'any'
@@ -662,6 +672,22 @@ export class DynamicNodeParamsComponent {
   private asFieldList(subFields: any): any[] | null {
     if (Array.isArray(subFields)) {
       return subFields;
+    }
+    return null;
+  }
+
+  /** 从元素描述（Map/对象，{type, schema}）取其 type，转小写；非对象返回 null。 */
+  private schemaFieldType(schema: any): string | null {
+    if (schema && typeof schema === 'object' && !Array.isArray(schema) && schema.type != null) {
+      return String(schema.type).toLowerCase();
+    }
+    return null;
+  }
+
+  /** 从元素描述（{type, schema}）取其 schema（子字段声明）。 */
+  private schemaFieldSchema(schema: any): any {
+    if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
+      return schema.schema;
     }
     return null;
   }

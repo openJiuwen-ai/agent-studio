@@ -1096,7 +1096,21 @@ public class WorkflowValidationService {
             case "array":
                 // 字符串形式的 JSON 数组先解析
                 Object arrValue = parseJsonValue(value);
-                return arrValue instanceof List;
+                if (!(arrValue instanceof List)) {
+                    return false;
+                }
+                // schema 为元素描述（{type:元素类型, schema:子字段声明}），解析元素类型并递归校验每个元素
+                String arrElementType = schemaFieldType(schema);
+                if (arrElementType == null || Strings.CS.equals(arrElementType, "any")) {
+                    return true; // 无元素类型声明，仅校验是数组
+                }
+                Object arrElementSchema = schemaFieldSchema(schema);
+                for (Object item : (List<?>) arrValue) {
+                    if (!isElementTypeValid(item, arrElementType, arrElementSchema)) {
+                        return false;
+                    }
+                }
+                return true;
             default:
                 return true;
         }
