@@ -239,11 +239,13 @@ async def ir_execute(req_json: dict, request: Request):
 
     if req.response_mode == ResponseMode.STREAMING:
         entry_id = getattr(request.state, "instance_id", "")
-        # entry_id=执行入口，由 app_run 三个执行端点写入 request.state.instance_id
-        # （app_run.py workflow 执行=workflow_id / agent 执行=agent_id / 组件调试
-        # =workflow_id），连同 entry_type（"agent"/"workflow"）作为注册记录供终止
-        # 接口归属校验与回显。绕过 app_run 直调 ir_execute 时为空串：归属校验
-        # 静默退化，记 warning 保证可观测（检视意见：入口校验依赖 instance_id 注入）。
+        # entry_id=执行入口，由 app_run 两个执行端点写入 request.state.instance_id
+        # （workflow 执行=workflow_id / agent 执行=agent_id），连同 entry_type
+        # （"agent"/"workflow"）经本函数 → stream_response → ExecutionRegistry.register
+        # 落 exec/suspend 快照，供终止接口归属校验与回显。单节点/组件调试走
+        # component_debug_execute → debug_stream_response，不经注册链路（cancel 对
+        # 其无感知）。绕过 app_run 直调 ir_execute 时为空串：归属校验静默退化，
+        # 记 warning 保证可观测（检视意见：入口校验依赖 instance_id 注入）。
         if not entry_id:
             workflow_logger.warning(
                 "ir_execute without entry_id: request.state.instance_id not set "
