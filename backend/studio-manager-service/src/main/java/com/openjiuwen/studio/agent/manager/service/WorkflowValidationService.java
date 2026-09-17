@@ -1026,9 +1026,11 @@ public class WorkflowValidationService {
                     elementSchema = schemaFieldSchema(elementDesc);
                 }
             }
+            // 前端复杂类型默认值常以 JSON 字符串写入 value.default，先解析成对象再判类型
+            Object parsed = parseJsonValue(defaultValue);
             List<Object> items;
             try {
-                items = JsonUtils.objectToClass(defaultValue);
+                items = JsonUtils.objectToClass(parsed);
             } catch (Exception e) {
                 return false;
             }
@@ -1057,7 +1059,8 @@ public class WorkflowValidationService {
 
     /**
      * 判断单个值是否符合声明的元素/基础类型。type 为 object 时，schema 为子字段声明，
-     * 递归校验已声明字段的类型。
+     * 递归校验已声明字段的类型。value 若为 JSON 字符串，先解析成对象再判类型
+     * （前端复杂类型默认值常以 JSON 字符串形式存储）。
      */
     private boolean isElementTypeValid(Object value, String type, Object schema) {
         if (type == null) {
@@ -1084,14 +1087,39 @@ public class WorkflowValidationService {
             case "boolean":
                 return value instanceof Boolean;
             case "object":
-                if (!(value instanceof Map)) {
+                // 字符串形式的 JSON 对象先解析
+                Object objValue = parseJsonValue(value);
+                if (!(objValue instanceof Map)) {
                     return false;
                 }
-                return matchObjectFields((Map<?, ?>) value, schema);
+                return matchObjectFields((Map<?, ?>) objValue, schema);
             case "array":
-                return value instanceof List;
+                // 字符串形式的 JSON 数组先解析
+                Object arrValue = parseJsonValue(value);
+                return arrValue instanceof List;
             default:
                 return true;
+        }
+    }
+
+    /**
+     * 若 value 是 JSON 字符串，解析成对象（Map/List/标量）；非字符串或解析失败则原样返回。
+     * 用于兼容前端把复杂类型默认值以 JSON 字符串写入 value.default 的场景。
+     * 必须用 readValue（而非 convertValue），后者对 String 输入原样返回 String，不会解析 JSON。
+     * 空白字符串原样返回（上层已对空值做跳过）。
+     */
+    private Object parseJsonValue(Object value) {
+        if (!(value instanceof String s)) {
+            return value;
+        }
+        String trimmed = s.trim();
+        if (trimmed.isEmpty()) {
+            return value;
+        }
+        try {
+            return JsonUtils.json2Obj(trimmed, new TypeReference<Object>() {});
+        } catch (Exception e) {
+            return value; // 非 JSON 字符串，原样返回，交给后续 instanceof 判定
         }
     }
 
