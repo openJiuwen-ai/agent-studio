@@ -1070,6 +1070,20 @@ public class WorkflowValidationService {
             case "string":
                 return value instanceof String;
             case "integer":
+                // integer 需为整数（与 isTypeValid 中 element instanceof Integer 语义一致），
+                // 兼容字符串数字（前端默认值常以字符串形式存储）与浮点 Number（需无小数部分）
+                if (value instanceof Number n) {
+                    return n.doubleValue() == Math.floor(n.doubleValue()) && !Double.isInfinite(n.doubleValue());
+                }
+                if (value instanceof String s) {
+                    try {
+                        double d = Double.parseDouble(s);
+                        return d == Math.floor(d) && !Double.isInfinite(d) && !Double.isNaN(d);
+                    } catch (NumberFormatException e) {
+                        return false;
+                    }
+                }
+                return false;
             case "number":
                 // 数值类型兼容字符串数字（前端默认值常以字符串形式存储）
                 if (value instanceof Number) {
