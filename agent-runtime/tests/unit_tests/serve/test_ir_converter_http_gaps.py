@@ -8,6 +8,8 @@
 3. _parse_exception_config：exceptionEnable/exceptionSuppression 合成 fallback（G5）、
    handleType 大小写归一（历史 .lower() 死路径修复）、HTTP outputs_schema 置空、
    默认输出 snake→camel 别名、非法 JSON 回退、未开启异常 → None
+4. MR 检视意见轮（2026-09-17）：单引号串/{{占位符}}内裸词保护（#2）、
+   query_parameters 合并不重置与幂等（#4）、异常合成仅限 EI.http（#5）
 
 运行方式：
     cd agent-runtime
@@ -198,9 +200,12 @@ def test_non_http_outputs_schema_still_converted():
 
 @pytest.mark.asyncio
 async def test_create_single_component_http_inputs_remapped(monkeypatch):
-    """create_single_component（单节点调试路径）返回的 inputs_schema 必须与
-    _add_component 注册路径一样经过 _remap_http_inputs_schema（G1/G2/G4），
-    否则单节点调试时 query/用户参数/鉴权全部无法按组件预期读取。"""
+    """单节点调试路径返回的 inputs_schema 必须与注册路径一样重排。
+
+    create_single_component 需要与 _add_component 注册路径一样经过
+    _remap_http_inputs_schema（G1/G2/G4），否则单节点调试时 query/用户参数/
+    鉴权全部无法按组件预期读取。
+    """
     from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 
     node = {
@@ -243,3 +248,61 @@ async def test_create_single_component_http_inputs_remapped(monkeypatch):
     assert "userFields" not in schema
     # G4：auth 并入 headers 货架
     assert schema["headers"]["X-Api-Key"] == "secret123"
+
+
+# ─── MR 检视意见 #2/#4/#5（2026-09-17 轮）─────────────────────────────
+
+
+def test_pythonize_protects_single_quoted_content():
+    # #2：body 允许 Python 字面量形态（组件走 ast.literal_eval），单引号串内不得改写
+    out = _pythonize_json_literals("{'msg': 'true story', 'ok': true}")
+    assert out == "{'msg': 'true story', 'ok': True}"
+    assert ast.literal_eval(out) == {"msg": "true story", "ok": True}
+
+
+def test_pythonize_protects_placeholder_bare_words():
+    # #2：{{true}}/{{null}} 内裸词是变量名，改写成 {{True}} 后无法按原始 key
+    # 解析 → body 解析失败被组件静默丢弃
+    tmpl = '{"a": {{true}}, "b": {{null}}, "c": "x{{false}}y"}'
+    assert _pythonize_json_literals(tmpl) == tmpl
+
+
+def test_remap_merges_existing_query_parameters():
+    # #4：schema 已含 query_parameters 时合并而非重置；同名键 query（IR 原生）优先
+    schema = {
+        "query": {"page": "1", "k": "new"},
+        "query_parameters": {"legacy": "v", "k": "old"},
+        "headers": {},
+        "userFields": {},
+    }
+    out = _remap_http_inputs_schema(schema, {})
+    assert out["query_parameters"] == {"legacy": "v", "page": "1", "k": "new"}
+
+
+def test_remap_idempotent():
+    # #4：函数被重复调用不得丢货架值
+    schema = {"query": {"page": "1"}, "headers": {"X-A": "1"}, "userFields": {"uid": "42"}}
+    configs = {
+        "auth": {
+            "scope": "SERVICE",
+            "headers": {"X-Api-Key": "s"},
+            "query": {"api_key": "k"},
+        }
+    }
+    once = _remap_http_inputs_schema(schema, configs)
+    twice = _remap_http_inputs_schema(once, configs)
+    assert twice == once
+
+
+def test_synthesize_skipped_for_non_http_node():
+    # #5：非 HTTP 节点缺 exceptionProcess 时保持既有语义（不合成默认输出），
+    # 迁移不改变 HTTP 以外节点的异常行为
+    node = {
+        "type": "jiuwen.code",
+        "id": "n2",
+        "configs": {
+            "exceptionEnable": True,
+            "exceptionSuppression": '{"result": "x"}',
+        },
+    }
+    assert _parse_exception_config(node) is None
