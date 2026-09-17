@@ -39,11 +39,15 @@ class TestTaskQueueDedupMergeInputData:
     """去重时 input_data 合并策略：RUNNING/FAILED 合并，PENDING 保留原始。"""
 
     @staticmethod
-    def test_running_task_dedup_merges_input():
-        """RUNNING 状态任务去重时，旧任务 input_data 应被新任务覆盖（中断恢复场景）。"""
+    def test_running_task_dedup_merges_query():
+        """RUNNING 状态任务去重时，旧任务 query 字段应被新任务覆盖（中断恢复场景），
+        其他 input_data 字段（如 workflow_req_params）保留不丢失。"""
         queue = TaskQueue()
 
-        old_task = _make_task("wf-001", {"query": "查询电费账单"})
+        old_task = _make_task("wf-001", {
+            "query": "查询电费账单",
+            "workflow_req_params": {"key": "value"},
+        })
         queue.add_task(old_task)
         # 模拟任务被取出执行（状态变为 RUNNING）
         queue.get_next_task()
@@ -53,18 +57,22 @@ class TestTaskQueueDedupMergeInputData:
         new_task = _make_task("wf-001", {"query": "户号100023"})
         queue.add_task(new_task)
 
-        # 旧任务被移回 pending，input_data 已更新为用户回复
+        # 旧任务被移回 pending，query 已更新，其他字段保留
         assert len(queue.pending_tasks) == 1
         assert queue.pending_tasks[0].id == old_task.id
-        assert queue.pending_tasks[0].input_data == {"query": "户号100023"}
+        assert queue.pending_tasks[0].input_data["query"] == "户号100023"
+        assert queue.pending_tasks[0].input_data["workflow_req_params"] == {"key": "value"}
         assert queue._status_maps[old_task.id] == TaskStatus.PENDING
 
     @staticmethod
-    def test_failed_task_dedup_merges_input():
-        """FAILED 状态任务去重时，旧任务 input_data 应被新任务覆盖（重试场景）。"""
+    def test_failed_task_dedup_merges_query():
+        """FAILED 状态任务去重时，旧任务 query 字段应被新任务覆盖（重试场景）。"""
         queue = TaskQueue()
 
-        old_task = _make_task("wf-002", {"query": "失败的旧输入"})
+        old_task = _make_task("wf-002", {
+            "query": "失败的旧输入",
+            "extra_field": "preserved",
+        })
         queue.add_task(old_task)
         queue.get_next_task()
         queue.mark_task_failed(old_task.id)
@@ -74,7 +82,8 @@ class TestTaskQueueDedupMergeInputData:
         queue.add_task(new_task)
 
         assert queue.pending_tasks[0].id == old_task.id
-        assert queue.pending_tasks[0].input_data == {"query": "重试的新输入"}
+        assert queue.pending_tasks[0].input_data["query"] == "重试的新输入"
+        assert queue.pending_tasks[0].input_data["extra_field"] == "preserved"
 
     @staticmethod
     def test_pending_task_preserves_original_input():

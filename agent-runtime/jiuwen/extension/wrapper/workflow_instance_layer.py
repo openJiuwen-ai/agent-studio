@@ -220,7 +220,16 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         )
 
     def _build_context(self, params: dict, context=None):
+        # 当调用方传入预构建的 context 时，仍需追加当轮 query 到其历史中，
+        # 否则 Controller 模式走此路径时提问器读不到当轮用户回复（缺陷①旁路）。
         if context is not None:
+            query = params.get("_current_query", "")
+            if query:
+                try:
+                    from openjiuwen.core.foundation.llm import UserMessage
+                    context.add_messages([UserMessage(role="user", content=query)])
+                except Exception:
+                    pass  # context 追加失败不阻塞主流程
             return context
 
         histories = (
@@ -286,5 +295,9 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
                 clean_histories, model_context
             )
             return model_context
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                f"_build_context failed for workflow {self.workflow_id}, "
+                f"falling back to self._context: {e}"
+            )
             return self._context

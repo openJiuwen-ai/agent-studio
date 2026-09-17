@@ -84,12 +84,14 @@ class TaskQueue:
                             self.failed_tasks.remove(existing_task)
 
                         # 中断恢复/重试场景（RUNNING/FAILED）：用户回复以新任务
-                        # input_data 到达，旧任务的 input_data 还是上轮 query，
-                        # 必须更新输入，否则恢复轮 InteractiveInput 永远拿不到
-                        # 当轮回复（缺陷②）。PENDING 场景保留原始输入，避免
+                        # input_data["query"] 到达，旧任务的 query 还是上轮值，
+                        # 必须更新，否则恢复轮 InteractiveInput 永远拿不到当轮
+                        # 回复（缺陷②）。仅更新 query 字段，保留 workflow_req_params
+                        # 等其他字段不丢失。PENDING 场景保留原始输入，避免
                         # 同一 workflow 连续入队时最新输入静默覆盖最早的待处理输入。
                         if existing_status in (TaskStatus.RUNNING, TaskStatus.FAILED):
-                            existing_task.input_data = task.input_data
+                            if "query" in task.input_data:
+                                existing_task.input_data["query"] = task.input_data["query"]
 
                         # 移到pending队列末尾并更新状态
                         self.pending_tasks.append(existing_task)

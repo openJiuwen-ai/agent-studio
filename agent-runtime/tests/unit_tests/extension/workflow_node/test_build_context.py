@@ -227,3 +227,36 @@ class TestBuildContextSessionModelContext:
 
         # 原始列表不应被修改（仍是 2 条）
         assert len(original_histories) == 2
+
+
+class TestBuildContextPassthrough:
+    """_build_context 传入 context 非 None 时仍应追加 _current_query。"""
+
+    @staticmethod
+    def test_existing_context_gets_query_appended():
+        """传入预构建 context 时，_current_query 应追加到 context 历史中。"""
+        layer = _make_layer()
+        mock_context = MagicMock()
+        params = {"_current_query": "户号100023"}
+
+        result = layer._build_context(params, mock_context)
+
+        # 应返回传入的 context（不创建新的）
+        assert result is mock_context
+        # 应调用 add_messages 追加当轮 query
+        mock_context.add_messages.assert_called_once()
+        added_messages = mock_context.add_messages.call_args[0][0]
+        assert len(added_messages) == 1
+        assert added_messages[0].content == "户号100023"
+
+    @staticmethod
+    def test_existing_context_no_query_no_append():
+        """传入预构建 context 但无 _current_query 时，不应调用 add_messages。"""
+        layer = _make_layer()
+        mock_context = MagicMock()
+        params = {}
+
+        result = layer._build_context(params, mock_context)
+
+        assert result is mock_context
+        mock_context.add_messages.assert_not_called()
