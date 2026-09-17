@@ -40,8 +40,7 @@ class TestTaskQueueDedupMergeInputData:
 
     @staticmethod
     def test_running_task_dedup_merges_query():
-        """RUNNING 状态任务去重时，旧任务 query 字段应被新任务覆盖（中断恢复场景），
-        其他 input_data 字段（如 workflow_req_params）保留不丢失。"""
+        """RUNNING 状态去重时仅更新 query 字段，保留 workflow_req_params 等其他字段。"""
         queue = TaskQueue()
 
         old_task = _make_task("wf-001", {
