@@ -450,6 +450,12 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
     MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
+  /** 是否存在可展示的输出：任一 answer 块有内容即显示结果区。
+   *  task 型按 node_id 分块，首块可能为空（如首个输出节点无文本），不能只看第一块 */
+  public hasAnswerText(item: any): boolean {
+    return !!item?.showAnswer?.some((sub: any) => !!sub?.text?.trim());
+  }
+
   public changePluginFormCollapse(pluginForm: any) {
     const collapsed = pluginForm.collapsed;
     pluginForm.collapsed = !collapsed;

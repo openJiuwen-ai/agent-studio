@@ -434,14 +434,6 @@ export class ScenarioExamplePageComponent
     );
   }
 
-  /** 全部 answer 块拼接后的字符数（与 copyAnswer 复制内容同口径） */
-  public getAnswerCharCount() {
-    return (this.chatLoop[0]?.showAnswer || [])
-      .map((sub: any) => sub.text || '')
-      .join('\n\n')
-      .trim().length;
-  }
-
   /** 开始节点的输入参数列表通过校验后，点击【开始运行】，获取表单key-value，作为run接口的入参 */
   private getRunWorkflowParams() {
     return this.dynamicNodeParams?.getDynamicParams();
