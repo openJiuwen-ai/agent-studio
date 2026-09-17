@@ -7,8 +7,9 @@ operate directly on the LTM (LongTermMemory) singleton.
 import logging
 import re
 import uuid
+from dataclasses import dataclass
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from openjiuwen.core.memory.manage.mem_model.memory_unit import MemoryType
 
 from agent_runtime.memory.adapter.ltm_manager import get_ltm
@@ -37,6 +38,40 @@ _MEMORY_ID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{24}$"
     r"|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
+
+
+@dataclass
+class MemoryListPathParams:
+    """记忆列表接口 path 参数封装."""
+
+    memory_repo_id: str
+    user_id: str
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        memory_repo_id: str = Path(..., description="记忆仓库ID"),
+        user_id: str = Path(..., description="用户ID"),
+    ) -> "MemoryListPathParams":
+        return cls(memory_repo_id=memory_repo_id, user_id=user_id)
+
+
+@dataclass
+class MemoryListQueryParams:
+    """记忆列表接口 query 参数封装."""
+
+    page_size: int = Query(10, ge=1, le=1000)
+    page_num: int = Query(1, ge=1)
+    memory_type: str = Query(None)
+
+    @classmethod
+    async def as_dependency(
+        cls,
+        page_size: int = Query(10, ge=1, le=1000),
+        page_num: int = Query(1, ge=1),
+        memory_type: str = Query(None),
+    ) -> "MemoryListQueryParams":
+        return cls(page_size=page_size, page_num=page_num, memory_type=memory_type)
 
 
 def _validate_memory_id(value: str) -> str | None:
@@ -148,15 +183,12 @@ async def batch_delete_memories(memory_repo_id: str, user_id: str, body: dict, r
 
 @memory_internal_router.get("/{memory_repo_id}/users/{user_id}/memories")
 async def list_user_memories(
-    memory_repo_id: str,
-    user_id: str,
     request: Request,
-    page_size: int = Query(10, ge=1, le=1000),
-    page_num: int = Query(1, ge=1),
-    memory_type: str = Query(None),
+    path: MemoryListPathParams = Depends(MemoryListPathParams.as_dependency),
+    query: MemoryListQueryParams = Depends(MemoryListQueryParams.as_dependency),
 ):
     """Paginated list of memories for a user within a memory repo scope."""
-    err = _validate_uuid(memory_repo_id, "memory_repo_id")
+    err = _validate_uuid(path.memory_repo_id, "memory_repo_id")
     if err:
         return build_error_response(400, "02001003", language=_lang(request), reason=err)
 
@@ -165,25 +197,25 @@ async def list_user_memories(
         return {"total": 0, "memories": []}
 
     # LTM stores user_id in lowercase (OpenSearch index names must be lowercase)
-    user_id = user_id.lower()
+    user_id = path.user_id.lower()
 
     # 类型过滤：字符串 → MemoryType 枚举，直传 LTM（服务端过滤 + 过滤后分页）。
     # LTM 只认枚举（UNKNOWN 表示不过滤），透传字符串会被当成无效类型。
     mem_type_enum = MemoryType.UNKNOWN
-    if memory_type:
+    if query.memory_type:
         try:
-            mem_type_enum = MemoryType(memory_type)
+            mem_type_enum = MemoryType(query.memory_type)
         except ValueError:
             return build_error_response(
-                400, "02001003", language=_lang(request), reason=f"invalid memory_type: {memory_type}"
+                400, "02001003", language=_lang(request), reason=f"invalid memory_type: {query.memory_type}"
             )
 
     try:
         results = await ltm.get_user_mem_by_page(
             user_id=user_id,
-            scope_id=memory_repo_id,
-            page_size=page_size,
-            page_idx=page_num,
+            scope_id=path.memory_repo_id,
+            page_size=query.page_size,
+            page_idx=query.page_num,
             memory_type=mem_type_enum,
         )
 
@@ -205,17 +237,17 @@ async def list_user_memories(
             })
 
         # 非满页即最后一页，total 可直接算出；满页才需要有界扫描（cap 内精确）
-        if len(memories) < page_size:
-            total = (page_num - 1) * page_size + len(memories)
+        if len(memories) < query.page_size:
+            total = (query.page_num - 1) * query.page_size + len(memories)
         else:
-            total = await _count_user_memories(ltm, user_id, memory_repo_id, mem_type_enum)
+            total = await _count_user_memories(ltm, user_id, path.memory_repo_id, mem_type_enum)
 
         return {"total": total, "memories": memories}
     except Exception as e:
         logger.error(
             "Failed to list memories for user %s in repo %s: %s",
             user_id,
-            memory_repo_id,
+            path.memory_repo_id,
             e,
             exc_info=True,
         )
