@@ -658,6 +658,7 @@
                             style="width: 100%"
                             [name]="'responseFormEnvRef' + origin.keyindex"
                             [(ngModel)]="origin.env_var_ref"
+                            [ngModelOptions]="{standalone: true}"
                             nzAllowClear
                             [title]="''"
                             [nzPlaceHolder]="'select_env_var' | i18nextEager"
