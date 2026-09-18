@@ -349,6 +349,8 @@ async def _execute_workflow_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 请求级 enable_history 透传给 EventHandler，落库补写本轮 query 时保持标志位
+    request.state.enable_history = body.enable_history
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
@@ -467,6 +469,8 @@ async def _execute_agent_run(
     request.state.user_id = user_id
     request.state.version_id = version_id
     request.state.instance_id = instance_id
+    # 请求级 enable_history 透传给 EventHandler，落库补写本轮 query 时保持标志位
+    request.state.enable_history = body.enable_history
 
     # body已携带会话历史时跳过Redis加载
     if body.histories:

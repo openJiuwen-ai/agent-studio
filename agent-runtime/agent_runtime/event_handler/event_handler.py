@@ -95,6 +95,8 @@ class EventHandler:
             is_debug=is_debug,
             language=language,
             query=query,
+            # 请求级 enable_history（app_run 写入 request.state），落库补 query 时使用
+            enable_history=getattr(request.state, "enable_history", None),
         )
         self.conv_manager = ConversationManager()
 
