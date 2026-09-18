@@ -23,6 +23,7 @@ from agent_runtime.serve.apis.app_run_request import (
 from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
 from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
 from agent_runtime.serve.error_rsp import build_error_response
+from pydantic import ValidationError
 from agent_runtime.serve.apis.publish_version_cache import (
     LATEST_PUBLISH_VERSION,
     resolve_published_version,
