@@ -4897,6 +4897,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (opKey && ['z', 'y'].includes(event.key)) {
+      // Skip canvas undo/redo when focus is in an editable control, let the browser handle it natively
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
       // undo
       if (opKey && event.key === 'z') {
         this.undo();
