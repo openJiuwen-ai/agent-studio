@@ -92,9 +92,9 @@ export class ConfigRequestComponent extends ModalBaseComponent {
       this.headerParams = NodeUtils.initInputs(headerSchema, this.nameRefOptions);
       this.isInit = false;
     } else {
-      // MR 检视意见 #3：对齐父组件 http-modal.onRefUpdate 的 isInit 守卫——
-      // 后续 ref 事件只刷新既有行（含用户新增行）的引用选项，不从
-      // nodeInfo.inputs 重建行，避免覆盖用户在面板中未保存的修改
+      // 对齐父组件 http-modal.onRefUpdate 的 isInit 守卫：后续 ref 事件
+      // 只刷新既有行（含用户新增行）的引用选项，不从 nodeInfo.inputs
+      // 重建行，避免覆盖用户在面板中未保存的修改
       NodeUtils.reSelectRefsWithNewOps(this.queryParams, this.nameRefOptions);
       NodeUtils.reSelectRefsWithNewOps(this.headerParams, this.nameRefOptions);
     }
@@ -136,22 +136,10 @@ export class ConfigRequestComponent extends ModalBaseComponent {
     this.onSaveChange();
   }
 
-  getQueryNames(index: number): { existingValues: string[]; isHttp: boolean } {
-    const names = this.queryParams.map((p) => p.name);
-    names.splice(index, 1);
-    return { existingValues: names, isHttp: true };
-  }
-
   getQueryExistingNames(index: number): string[] {
     const names = this.queryParams.map((p) => p.name);
     names.splice(index, 1);
     return names;
-  }
-
-  getHeaderNames(index: number): { existingValues: string[]; isHttp: boolean } {
-    const names = this.headerParams.map((p) => p.name);
-    names.splice(index, 1);
-    return { existingValues: names, isHttp: true };
   }
 
   getHeaderExistingNames(index: number): string[] {

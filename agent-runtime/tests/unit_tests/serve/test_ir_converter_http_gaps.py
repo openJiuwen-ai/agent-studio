@@ -154,6 +154,15 @@ def test_synthesize_missing_suppression_returns_none():
     assert _parse_exception_config(_http_node(suppression=None)) is None
 
 
+def test_synthesize_empty_suppression_string_still_synthesizes():
+    # 默认输出编辑器直绑 exceptionSuppression：用户清空内容存 ''，语义是
+    # "开启异常处理 + 空默认输出"，不得按未配置回退 interrupt
+    cfg = _parse_exception_config(_http_node(suppression=""))
+    assert cfg is not None
+    assert cfg.handle_type == "defaultOutputs"
+    assert cfg.default_outputs == {}
+
+
 def test_synthesize_bad_json_falls_back_empty():
     cfg = _parse_exception_config(_http_node(suppression="{not json"))
     assert cfg is not None

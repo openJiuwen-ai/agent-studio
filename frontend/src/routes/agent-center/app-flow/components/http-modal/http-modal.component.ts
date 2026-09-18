@@ -12,6 +12,7 @@ import { MODULES } from '@shared/modules';
 import { CommonValidation } from '@shared/validation/commonValidation';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe, I18NextModule } from 'angular-i18next';
 import { cloneDeep } from 'lodash';
+import { takeUntil } from 'rxjs';
 import { AppFlowService } from '../../app-flow.service';
 import { NodeService } from '../../node.service';
 import {
@@ -116,12 +117,15 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
     );
 
     const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
+    // refs 订阅随弹窗销毁终止，避免组件销毁后仍回调 onRefUpdate
     if (parentNode) {
-      this.getLoopInnerNodeRefs(parentNode, { strOnly: true }).subscribe(
-        (info) => this.onRefUpdate(info),
-      );
+      this.getLoopInnerNodeRefs(parentNode, { strOnly: true })
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((info) => this.onRefUpdate(info));
     } else {
-      this.getSelfRefs().subscribe((info) => this.onRefUpdate(info));
+      this.getSelfRefs()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((info) => this.onRefUpdate(info));
     }
   }
 
@@ -271,6 +275,11 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   override ngOnDestroy(): void {
+    // 清理未决的 200ms 更新定时器，避免组件销毁后触发 updateChangeAndInitTime
+    if (this.updateTimeout) {
+      clearTimeout(this.updateTimeout);
+      this.updateTimeout = null;
+    }
     super.ngOnDestroy();
     this.modelCloseSave();
   }
