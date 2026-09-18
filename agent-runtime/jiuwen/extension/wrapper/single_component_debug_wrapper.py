@@ -386,8 +386,8 @@ class SingleComponentDebugWrapper:
         """解析 HTTP 调试面板 JSON 框的值。
 
         前端 Monaco 编辑器传 JSON 字符串（如 '{}'），直接 API 调用可能传 dict，
-        两种形态都接受；非法 JSON 或非对象报 COMPONENT_STEP_DEBUG_ERROR，
-        避免用户输入被静默吞掉。
+        两种形态都接受；非法 JSON、非对象及其他非 str/dict 形态报
+        COMPONENT_STEP_DEBUG_ERROR，避免用户输入被静默吞掉。
         """
         if value is None:
             return {}
@@ -414,7 +414,17 @@ class SingleComponentDebugWrapper:
                     ),
                 )
             return parsed
-        return {}
+        # list/number/bool 等非 str/dict 形态（仅 API 直调会传入）：按约定报错，
+        # 不得静默忽略调试覆盖
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_STEP_DEBUG_ERROR.code,
+            message=StatusCode.COMPONENT_STEP_DEBUG_ERROR.errmsg.format(
+                reason=(
+                    f"HTTP debug input '{box_name}' must be a JSON object "
+                    f"or a JSON object string, got {type(value).__name__}"
+                )
+            ),
+        )
 
     # ------------------------------------------------------------------
     # 输入格式适配 — graph_invoker 组件需要 {INPUTS_KEY: ..., CONFIG_KEY: ...}
