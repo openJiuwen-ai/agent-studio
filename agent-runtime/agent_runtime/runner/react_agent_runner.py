@@ -408,7 +408,13 @@ class ReActAgentRunner:
         workflow_logger.info(f"Registered {len(tool_ids)} plugins success")
         return tool_ids
 
-    async def _register_mcp_servers(self, ir_json: dict, agent: ReActAgent, agent_id: str) -> list[str]:
+    async def _register_mcp_servers(
+        self,
+        ir_json: dict,
+        agent: ReActAgent,
+        agent_id: str,
+        environment_variables: dict | None = None,
+    ) -> list[str]:
         """注册 MCP Server"""
         from jiuwen.extension.wrapper.mcp_server_loader import convert_ir_to_server_config, load_mcp_server_from_ir
 
@@ -417,8 +423,14 @@ class ReActAgentRunner:
 
         for mcp_conf in mcps:
             try:
-                mcp_tool_ids = await load_mcp_server_from_ir(mcp_conf, tag=agent_id)
-                mcp_config = convert_ir_to_server_config(mcp_conf)
+                mcp_tool_ids = await load_mcp_server_from_ir(
+                    mcp_conf,
+                    tag=agent_id,
+                    environment_variables=environment_variables,
+                )
+                mcp_config = convert_ir_to_server_config(
+                    mcp_conf, environment_variables=environment_variables
+                )
                 agent.ability_manager.add(mcp_config)
                 tool_ids.extend(mcp_tool_ids)
             except Exception as e:
@@ -757,7 +769,12 @@ class ReActAgentRunner:
         # 4. 注册工具
         try:
             await self._register_plugins(ir_json, agent, agent_id)
-            await self._register_mcp_servers(ir_json, agent, agent_id)
+            await self._register_mcp_servers(
+                ir_json,
+                agent,
+                agent_id,
+                req.params.environment_variables,
+            )
             await self._register_workflows(ir_json, agent, agent_id)
             await self._register_skills(ir_json, agent, agent_id, skill_work_dir)
             # 有 skill 配置时注册 read_file 工具（基于 SysOperation local 模式）
