@@ -1485,7 +1485,11 @@ class PlanExecuteMode(BaseMode):
             f"task_id: {self.task_id}| Intermediate message count: {len(msgs)}",
             simple_log=f"task_id: {self.task_id}| Intermediate message count: {len(msgs)}",
         )
-        formatted_msgs = ConversationHistory.convert_messages_to_chat_history_dict(msgs)
+        # filter_history=False：持久化序列化需保留enable_history=False的消息并输出
+        # 标志位，否则本轮query落库后下一轮被默认补True，"本轮不入历史"语义失效
+        formatted_msgs = ConversationHistory.convert_messages_to_chat_history_dict(
+            msgs, filter_history=False
+        )
         return StreamData(
             code=StreamCode.CONTROLLER_INTERMEDIATE_MESSAGE.value,
             msg="intermediate message",
