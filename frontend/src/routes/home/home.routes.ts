@@ -34,6 +34,19 @@ export const HOME_ROUTES: Routes = [
     },
   },
   {
+    path: 'scheduler',
+    loadChildren: () =>
+      import('@routes/scheduler').then(
+        (module) => module.SchedulerRoutingModule,
+      ),
+    data: {
+      i18nextNamespaces: [I18nNamespace.AGENT_CENTER],
+    },
+    resolve: {
+      i18next: I18NEXT_NAMESPACE_RESOLVER,
+    },
+  },
+  {
     path: '',
     pathMatch: 'full',
     redirectTo: 'overview',
@@ -263,6 +276,13 @@ export const HOME_ROUTES: Routes = [
     resolve: {
       i18next: I18NEXT_NAMESPACE_RESOLVER,
     },
+  },
+  {
+    path: 'conversation',
+    loadChildren: () =>
+      import('@routes/conversation-workspace/conversation-workspace-routing.module').then(
+        (module) => module.ConversationWorkspaceRoutingModule,
+      ),
   },
   {
     path: '**',

@@ -1,0 +1,118 @@
+{
+  "agentId": "child-agent-转账汇款",
+  "agentName": "child-agent-转账汇款",
+  "agentVersion": "0.6.0",
+  "configs": {
+    "chatHistoryMaxTurn": 10,
+    "global_intents": [],
+    "global_variables": [
+      {
+        "default": "阿发",
+        "description": "name",
+        "name": "name",
+        "type": "string"
+      }
+    ],
+    "maxIteration": 9,
+    "mode": "Controller",
+    "modelConfig": {
+      "modelName": "Qwen/Qwen2.5-72B-Instruct",
+      "modelType": "qwen",
+      "hyperParameters": {
+        "temperature": 0.1,
+        "top_p": 0.2
+      },
+      "extension": {}
+    },
+    "plugins": [],
+    "specify_workflow_order": false,
+    "sysPromptTemplate": "你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"",
+    "workflows": [
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "名字",
+            "method": "Body",
+            "name": "name",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "开始工作流_转账汇款",
+        "id": "start_04558450-6d42-4b4b-9601-199be7504f9f",
+        "ir_path": "开始工作流_转账汇款.json",
+        "name": "开始工作流_转账汇款",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          },
+          {
+            "description": "",
+            "name": "action_after_completion",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "Start"
+      },
+      {
+        "description": "转账汇款",
+        "name": "转账汇款",
+        "ir_path": "转账汇款.json",
+        "id": "aeea775b-307e-4e46-867b-0c62bf6b6ed7",
+        "workflow_type": "Normal",
+        "action_after_completion": "WaitUserInput"
+      },
+      {
+        "name": "结束工作流_转账汇款",
+        "id": "结束工作流_转账汇款-18537cd66f19c4bf3f3db81860f2c1591802f6f42e0a524a",
+        "ir_path": "结束工作流_转账汇款.json",
+        "workflow_type": "End",
+        "action_after_completion": "Terminal"
+      },
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "默认工作流：\n当满足以下条件时进入该工作流：\n1、用户回复中的意图无法匹配业务工作流描述及功能时\n2、用户查询“什么是…”、“…的方法”、”…的介绍”等知识\n时\n如果不符合上述条件，不要选取该工作流。",
+        "id": "default_ebc41e93-894b-4adb-8009-e517d50a73a5",
+        "ir_path": "默认工作流_child_agent_ir_转账汇款.json",
+        "name": "默认客服FAQ",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "Default"
+      }
+    ]
+  },
+  "description": "转账汇款Agent",
+  "metadata": {
+    "projectId": "project_mock",
+    "updatedAt": "1755082262535"
+  },
+  "schemaVersion": "0.6.0"
+}

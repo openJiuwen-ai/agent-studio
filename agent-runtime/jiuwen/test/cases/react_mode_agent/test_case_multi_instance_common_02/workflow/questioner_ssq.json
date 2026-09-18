@@ -1,0 +1,274 @@
+{
+  "workflowId": "117c6695dcd9139726dce28c83abe0e671ea76b4be270599",
+  "workflowName": "提问器-ssq",
+  "workflowVersion": "0.6.0",
+  "configs": {},
+  "components": [
+    {
+      "id": "node_start",
+      "name": "输入",
+      "type": "jiuwen.start",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {}
+      },
+      "outputs": {
+        "systemFields": {
+          "query": ""
+        },
+        "userFields": {}
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "query",
+              "type": "string",
+              "description": "用户输入"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "name": "输出",
+      "type": "jiuwen.end",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "tel": "${node_5d8bd3c331a04.userFields.tel}",
+          "time": "${node_5d8bd3c331a04.userFields.time}",
+          "switch": "${node_5d8bd3c331a04.userFields.switch}",
+          "signals": "${node_5d8bd3c331a04.userFields.signals}",
+          "flow_rate": "${node_5d8bd3c331a04.userFields.flow_rate}"
+        }
+      },
+      "outputs": {
+        "responseContent": ""
+      },
+      "configs": {
+        "responseTemplate": "电话号码：{{tel}}，故障发生时间：{{time}}，移动开关开启状态：{{switch}}，车机端信号状态：{{signals}}，车机端剩余流量：{{flow_rate}}",
+        "responseMode": "directResponse",
+        "isStreamOut": true,
+        "userFields": {
+          "inputs": [
+            {
+              "id": "tel",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "time",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "switch",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "signals",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            },
+            {
+              "id": "flow_rate",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "id": "node_5d8bd3c331a04",
+      "name": "Questioner",
+      "type": "jiuwen.questioner",
+      "typeVersion": "1.0.1",
+      "inputs": {
+        "userFields": {
+          "input": "${node_start.systemFields.query}"
+        }
+      },
+      "outputs": {
+        "userFields": {
+          "USER_RESPONSE": {
+            "name": "USER_RESPONSE",
+            "type": "string",
+            "description": "用户最近一轮对话"
+          },
+          "tel": {
+            "name": "tel",
+            "type": "string",
+            "description": "电话号码"
+          },
+          "time": {
+            "name": "time",
+            "type": "string",
+            "description": "故障发生时间"
+          },
+          "switch": {
+            "name": "switch",
+            "type": "string",
+            "description": "移动开关"
+          },
+          "signals": {
+            "name": "signals",
+            "type": "string",
+            "description": "车机端显示信号"
+          },
+          "flow_rate": {
+            "name": "flow_rate",
+            "type": "string",
+            "description": "剩余流量"
+          }
+        },
+        "user_response": ""
+      },
+      "configs": {
+        "model": {
+          "modelName": "mock_model_name",
+          "modelType": "customer_chat_llm"
+        },
+        "hyperParameters": {
+          "temperature": 0,
+          "top_p": 0.9
+        },
+        "extra_prompt_for_fields_extraction": null,
+        "prompt_template": [],
+        "rails_config": "",
+        "question_content": "",
+        "input_complement": false,
+        "with_chat_history": true,
+        "extract_fields_from_response": true,
+        "max_response": 3,
+        "type_complement": "",
+        "field_names": [
+          {
+            "field_name": "tel",
+            "description": "电话号码",
+            "cn_field_name": "电话号码",
+            "required": true
+          },
+          {
+            "field_name": "time",
+            "description": "故障发生时间",
+            "cn_field_name": "故障发生时间",
+            "required": true
+          },
+          {
+            "field_name": "switch",
+            "description": "移动开关",
+            "cn_field_name": "移动开关",
+            "required": true
+          },
+          {
+            "field_name": "signals",
+            "description": "车机端显示信号",
+            "cn_field_name": "车机端显示信号",
+            "required": true
+          },
+          {
+            "field_name": "flow_rate",
+            "description": "剩余流量",
+            "cn_field_name": "剩余流量",
+            "required": true
+          }
+        ],
+        "userFields": {
+          "inputs": [
+            {
+              "id": "input",
+              "type": "string",
+              "required": true,
+              "sourceType": "ref"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "USER_RESPONSE",
+              "type": "string",
+              "description": "用户最近一轮对话"
+            },
+            {
+              "id": "tel",
+              "type": "string",
+              "description": "电话号码"
+            },
+            {
+              "id": "time",
+              "type": "string",
+              "description": "故障发生时间"
+            },
+            {
+              "id": "switch",
+              "type": "string",
+              "description": "移动开关"
+            },
+            {
+              "id": "signals",
+              "type": "string",
+              "description": "车机端显示信号"
+            },
+            {
+              "id": "flow_rate",
+              "type": "string",
+              "description": "剩余流量"
+            }
+          ]
+        },
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_5d8bd3c331a04"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_5d8bd3c331a04"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ],
+  "schemaVersion": "0.6",
+  "description": "自动化用例_ssq\n2024-09-24_14:44:41\n提问器，questioner，common_1727160281.871243\n\n车机故障\n电话号码是10000，故障发生在十点，移动开关开启，车机端有显示信号，车机端有剩余流量"
+}

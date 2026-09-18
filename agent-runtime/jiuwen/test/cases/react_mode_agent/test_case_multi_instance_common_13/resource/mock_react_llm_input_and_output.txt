@@ -1,0 +1,24 @@
+
+mock 大模型输入
+{'messages': [SystemMessage(type='system', content='## 人设\n我将扮演一个知识问答助手的角色。\n\n## 输出格式\n输出答案时，应遵循以下格式要求：\n- 使用“您好您好”开头\n 今天日期：2026-04-11 14:43:07，星期六。\n', name=None, id=None), HumanMessage(type='user', content='调用2_questioners_zcm输入你好', name=None, id=None)], 'tools': [{'name': 'mock_header_through', 'description': 'mock插件', 'parameters': {'type': 'object', 'properties': {'input': {'description': '输入query', 'type': 'string'}, 'Cookie': {'description': '请求头参数', 'type': 'string'}}, 'required': ['input', 'Cookie']}}, {'name': '2_questioners_zcm', 'description': '111无需提供properties以外的参数信息', 'parameters': {'type': 'object', 'properties': {'query': {'description': '', 'type': 'string'}}, 'required': ['query']}}]}
+
+mock 大模型输出
+type='assistant' content='2_questioners_zcm|{"query": "\\u4f60\\u597d"}' name=None id=None tool_calls=ToolCall(name='2_questioners_zcm', args={'query': '你好'}, id='') usage_metadata=UsageMetadata(code=0, errmsg='成功', prompt='', task_id='', model_name='', finish_reason='function_call', total_latency=0.0, model_stats={}, first_token_time='', requests_start_time='', type='', input_tokens=0, output_tokens=0, total_tokens=0) raw_content=None reasoning_content=None
+
+mock 大模型输入
+{'messages': [SystemMessage(type='system', content='## 人设\n我将扮演一个知识问答助手的角色。\n\n## 输出格式\n输出答案时，应遵循以下格式要求：\n- 使用“您好您好”开头\n 今天日期：2026-04-11 14:43:07，星期六。\n', name=None, id=None), HumanMessage(type='user', content='调用2_questioners_zcm输入华晨宇', name=None, id=None)], 'tools': [{'name': 'mock_header_through', 'description': 'mock插件', 'parameters': {'type': 'object', 'properties': {'input': {'description': '输入query', 'type': 'string'}, 'Cookie': {'description': '请求头参数', 'type': 'string'}}, 'required': ['input', 'Cookie']}}, {'name': '2_questioners_zcm', 'description': '111无需提供properties以外的参数信息', 'parameters': {'type': 'object', 'properties': {'query': {'description': '', 'type': 'string'}}, 'required': ['query']}}]}
+
+mock 大模型输出
+type='assistant' content='2_questioners_zcm|{"query": "\\u534e\\u6668\\u5b87"}' name=None id=None tool_calls=ToolCall(name='2_questioners_zcm', args={'query': '华晨宇'}, id='') usage_metadata=UsageMetadata(code=0, errmsg='成功', prompt='', task_id='', model_name='', finish_reason='function_call', total_latency=0.0, model_stats={}, first_token_time='', requests_start_time='', type='', input_tokens=0, output_tokens=0, total_tokens=0) raw_content=None reasoning_content=None
+
+mock 大模型输入
+{'messages': [SystemMessage(type='system', content='## 人设\n我将扮演一个知识问答助手的角色。\n\n## 输出格式\n输出答案时，应遵循以下格式要求：\n- 使用“您好您好”开头\n 今天日期：2026-04-11 14:43:08，星期六。\n', name=None, id=None), HumanMessage(type='user', content='调用2_questioners_zcm输入星期六', name=None, id=None)], 'tools': [{'name': 'mock_header_through', 'description': 'mock插件', 'parameters': {'type': 'object', 'properties': {'input': {'description': '输入query', 'type': 'string'}, 'Cookie': {'description': '请求头参数', 'type': 'string'}}, 'required': ['input', 'Cookie']}}, {'name': '2_questioners_zcm', 'description': '111无需提供properties以外的参数信息', 'parameters': {'type': 'object', 'properties': {'query': {'description': '', 'type': 'string'}}, 'required': ['query']}}]}
+
+mock 大模型输出
+type='assistant' content='2_questioners_zcm|{"query": "\\u661f\\u671f\\u516d"}' name=None id=None tool_calls=ToolCall(name='2_questioners_zcm', args={'query': '星期六'}, id='') usage_metadata=UsageMetadata(code=0, errmsg='成功', prompt='', task_id='', model_name='', finish_reason='function_call', total_latency=0.0, model_stats={}, first_token_time='', requests_start_time='', type='', input_tokens=0, output_tokens=0, total_tokens=0) raw_content=None reasoning_content=None
+
+mock 大模型输入
+{'messages': [SystemMessage(type='system', content='## 人设\n我将扮演一个知识问答助手的角色。\n\n## 输出格式\n输出答案时，应遵循以下格式要求：\n- 使用“您好您好”开头\n 今天日期：2026-04-11 14:43:08，星期六。\n', name=None, id=None), HumanMessage(type='user', content='调用2_questioners_zcm输入西瓜', name=None, id=None)], 'tools': [{'name': 'mock_header_through', 'description': 'mock插件', 'parameters': {'type': 'object', 'properties': {'input': {'description': '输入query', 'type': 'string'}, 'Cookie': {'description': '请求头参数', 'type': 'string'}}, 'required': ['input', 'Cookie']}}, {'name': '2_questioners_zcm', 'description': '111无需提供properties以外的参数信息', 'parameters': {'type': 'object', 'properties': {'query': {'description': '', 'type': 'string'}}, 'required': ['query']}}]}
+
+mock 大模型输出
+type='assistant' content='2_questioners_zcm|{"query": "\\u897f\\u74dc"}' name=None id=None tool_calls=ToolCall(name='2_questioners_zcm', args={'query': '西瓜'}, id='') usage_metadata=UsageMetadata(code=0, errmsg='成功', prompt='', task_id='', model_name='', finish_reason='function_call', total_latency=0.0, model_stats={}, first_token_time='', requests_start_time='', type='', input_tokens=0, output_tokens=0, total_tokens=0) raw_content=None reasoning_content=None
