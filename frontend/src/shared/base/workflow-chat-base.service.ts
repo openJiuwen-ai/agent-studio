@@ -135,6 +135,10 @@ export abstract class WorkflowChatBaseComponent {
   // 是否重新点击【试运行】按钮
   protected isRetryRunning = false;
 
+  // 本轮（段）SSE 发起时刻。用于 onDone 兜底结算 latency：
+  // 多智能体(task_end)与含 Input 节点的交互式分段流均无 workflow_finished 事件
+  protected roundStartTime: number | null = null;
+
   // 工作流是否运行失败（3种标识：event:error/onError/onTimeout）
   // 遇到event:error的流式块，之后再遇到workflow_finished，不会刷新工作流运行状态
   protected isStreamFail = false;
@@ -219,6 +223,9 @@ export abstract class WorkflowChatBaseComponent {
   }
 
   protected handleSSEEvents(curIndex: number, callbackFn?) {
+    // 记录本轮（段）SSE 发起时刻：多智能体(task_end)与含 Input 节点的交互式分段流
+    // 均不触发 workflow_finished，onDone 兜底结算 latency 依赖此时刻
+    this.roundStartTime = Date.now();
     this.testStatusObj.show = true;
     this.testStatusObj.status = 'run';
     this.testStatusObj.text = this.i18n.transform('workflow_chat_run', {time: ''});
@@ -779,7 +786,17 @@ export abstract class WorkflowChatBaseComponent {
       curQA.plans?.forEach(plan => {
         plan.status = 'finished';
       });
+      // 兜底结算运行时长：多智能体(task_end)、含 Input 节点的交互式分段流
+      // 均不触发 workflow_finished（latency 唯一常规写入点），流关闭时用
+      // 本段发起时刻补算，保证"运行时间"在各工作流形态下都能显示
+      if (!curQA.latency && this.roundStartTime) {
+        curQA.latency = flowCommonLogic.calcElapsedTime(
+          this.roundStartTime,
+          Date.now(),
+        );
+      }
     }
+    this.roundStartTime = null;
     this.isRequesting = false;
     this.cdr.markForCheck();
   }

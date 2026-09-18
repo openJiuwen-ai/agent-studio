@@ -241,10 +241,6 @@
                           "
                         >
                           <div class="left-area">
-                            <ng-container *ngIf="item.latency">
-                              {{ 'run_time' | i18nextEager }}
-                              <span style="color: #191919">{{ item.latency }}</span>
-                            </ng-container>
                             <span *ngIf="item.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                             <div
                               *ngIf="(item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && !answer.isShowInputParams && answer.text?.trim()"

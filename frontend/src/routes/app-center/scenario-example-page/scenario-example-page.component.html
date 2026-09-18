@@ -90,9 +90,6 @@
           <div class="top-area">
             <div class="sub-title">{{ 'result_generation' | i18nextEager }}</div>
             <div class="right-opr-btns">
-              <span *ngIf="canCopyAnswer()" style="color: #808080;">
-                {{ getAnswerCharCount() }}{{ 'character' | i18nextEager }}
-              </span>
               <div
                 *ngIf="canCopyAnswer()"
                 class="chat-header-icon"

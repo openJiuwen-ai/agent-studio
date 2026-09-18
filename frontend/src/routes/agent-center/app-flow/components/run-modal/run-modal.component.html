@@ -207,9 +207,7 @@
                 </div>
               </div>
               <div
-                *ngIf="
-                  item.showAnswer?.length && item.showAnswer[0]?.text?.trim()
-                "
+                *ngIf="hasAnswerText(item)"
                 class="has-answer"
               >
                 <div class="text-chunk-title flex items-center justify-between">
