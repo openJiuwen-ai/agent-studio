@@ -13,5 +13,6 @@
   - [Troubleshooting](how-to/troubleshooting.md)
 - [Reference](reference/)
   - [REST API Reference](reference/rest-api.md)
+  - [Skill Error Codes](reference/skill-error-codes.md)
 - [Explanation](explanation/)
   - [Architecture Overview](explanation/architecture-overview.md)
