@@ -84,7 +84,34 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
     ) -> AsyncGenerator[Union[Message, StreamData], None]:
         """Normalize legacy calls and delegate execution to the original WorkflowWrapper."""
         args_tuple = self._normalize_astream_args(args, kwargs)
-        context = self._build_context(args_tuple.params, args_tuple.context)
+        # 提取当轮 query，供 _build_context 追加到历史（缺陷①）。
+        # 逻辑与 WorkflowWrapper._extract_resume_query 对齐：raw_inputs 优先，
+        # 为空时回退到 user_inputs 末条值（覆盖 InteractiveInput 仅有 user_inputs 的场景）。
+        current_query = ""
+        if hasattr(args_tuple.query, "raw_inputs"):
+            current_query = str(args_tuple.query.raw_inputs or "")
+            if not current_query and hasattr(args_tuple.query, "user_inputs"):
+                user_inputs = args_tuple.query.user_inputs
+                if user_inputs:
+                    current_query = str(list(user_inputs.values())[-1])
+        elif isinstance(args_tuple.query, str):
+            current_query = args_tuple.query
+        # 用 params 副本传递 _current_query，避免污染调用方原始 params
+        # （同一实例复用或并发调用时残留上一次的 _current_query）。
+        context_params = args_tuple.params
+        if current_query and context_params is not None:
+            context_params = {**context_params, "_current_query": current_query}
+        context = self._build_context(context_params, args_tuple.context)
+        # 当调用方传入预构建 context 时（_build_context 直接返回），
+        # 不原地修改（避免实例复用/并发场景的上下文污染和多会话串扰）。
+        # passthrough 场景极少（主路径 context=None 由 _build_context 构建），
+        # 调用方应自行确保 context 包含当轮 query。
+        if args_tuple.context is not None and current_query:
+            logger.warning(
+                f"Passthrough context detected for workflow {self.workflow_id}, "
+                f"current query not appended to avoid in-place mutation. "
+                f"Caller should ensure context contains the current turn's query."
+            )
         return super().astream(
             query=args_tuple.query,
             params=args_tuple.params,
@@ -203,6 +230,9 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         )
 
     def _build_context(self, params: dict, context=None):
+        # 当调用方传入预构建的 context 时直接返回；当轮 query 的追加
+        # 由 astream() 在 async 上下文中完成（add_messages 是 async 方法，
+        # 不能在 sync 的 _build_context 中调用）。
         if context is not None:
             return context
 
@@ -216,6 +246,23 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             sys_vars = global_vars.get("sys", {})
             if isinstance(sys_vars, dict):
                 histories = sys_vars.get("conversationHistory")
+
+        # 确保当轮输入在历史末尾（带去重），提问器从 context 读历史，
+        # 不追加则 context 不含当轮输入，提问器提取必然失败（缺陷①）。
+        query = params.get("_current_query", "")
+        if query and isinstance(histories, list):
+            last_user = next(
+                (m for m in reversed(histories)
+                 if isinstance(m, dict) and m.get("role") == "user"),
+                None,
+            )
+            if last_user is None or last_user.get("content") != query:
+                histories = list(histories)  # 浅拷贝防改原列表
+                histories.append(dict(role="user", content=query))
+        # 空历史但有当轮 query 时（首轮/无历史场景），仍构建含 query 的 context，
+        # 否则提问器在首轮也读不到当轮输入（缺陷①在空历史场景的盲区）。
+        if not histories and query:
+            histories = [dict(role="user", content=query)]
         if not histories:
             return self._context
 
@@ -229,10 +276,52 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
                 context_id=f"{self.workflow_id or 'workflow'}_context",
                 session_id=self.session_id or "",
                 config=ContextEngineConfig(),
+                history_messages=[],  # 必须传空列表，默认 None 会触发 validate_messages 异常
+                processors=[],  # 必须传空列表，默认 None 会在 get_context_window 迭代时报错
             )
+            # 清理历史消息：去除 intent/agent_id/files/tool_call_id 等多余字段，
+            # 保留 converter._extract_msg_fields 实际读取的 role/content/name/enable_history，
+            # 避免 "context message is invalid" 异常（一直存在的静默 bug）。
+            clean_histories = []
+            for msg in histories:
+                if isinstance(msg, dict):
+                    role = msg.get("role")
+                    # 缺失 role 的消息跳过：不默认赋 "user"，避免把 system
+                    # 或其他非用户消息误标为用户消息注入模型上下文。
+                    if not role:
+                        logger.warning(
+                            f"_build_context: skipping history message without role "
+                            f"for workflow {self.workflow_id}"
+                        )
+                        continue
+                    clean_msg = {
+                        "role": role,
+                        "content": msg.get("content", ""),
+                    }
+                    # 保留 enable_history 和 name，converter 会读取这两个字段：
+                    # enable_history=False 的消息不应注入模型上下文，
+                    # name 会传入 ConversationUserMessage/ConversationAssistantMessage。
+                    if "enable_history" in msg:
+                        clean_msg["enable_history"] = msg["enable_history"]
+                    if msg.get("name"):
+                        clean_msg["name"] = msg["name"]
+                    clean_histories.append(clean_msg)
+                else:
+                    # 非 dict 消息（如 BaseMessage 对象）跳过：converter 的
+                    # _extract_msg_fields 调用 .get() 方法，非 dict 类型会报
+                    # AttributeError。实际运行中 get_message_by_intent 返回的
+                    # 均为 dict，此处为防御性处理。
+                    logger.warning(
+                        f"_build_context: skipping non-dict history message "
+                        f"(type={type(msg).__name__}) for workflow {self.workflow_id}"
+                    )
             WorkflowMessageConverter.conversation_messages_to_model_context(
-                histories, model_context
+                clean_histories, model_context
             )
             return model_context
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                f"_build_context failed for workflow {self.workflow_id}, "
+                f"falling back to self._context: {e}"
+            )
             return self._context
