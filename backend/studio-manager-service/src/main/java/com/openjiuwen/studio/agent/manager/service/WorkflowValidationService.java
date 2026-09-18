@@ -1095,14 +1095,14 @@ public class WorkflowValidationService {
                 }
                 return false;
             case "number":
-                // 数值类型兼容字符串数字（前端默认值常以字符串形式存储）
-                if (value instanceof Number) {
-                    return true;
+                // 数值类型兼容字符串数字（前端默认值常以字符串形式存储）；
+                // 与前端 Number.isFinite 一致，拒绝 NaN/Infinity（Double.parseDouble 对 "NaN"/"Infinity" 不抛异常）
+                if (value instanceof Number n) {
+                    return Double.isFinite(n.doubleValue());
                 }
                 if (value instanceof String s) {
                     try {
-                        Double.parseDouble(s);
-                        return true;
+                        return Double.isFinite(Double.parseDouble(s));
                     } catch (NumberFormatException e) {
                         return false;
                     }

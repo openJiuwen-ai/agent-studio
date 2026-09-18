@@ -38,9 +38,12 @@ class WorkflowValidationServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 注入 i18nUtil mock，避免 validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时 NPE
+        // 注入 i18nUtil mock，避免 validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时 NPE。
+        // 被测代码调 getMessage(key) 单参数(varargs 空)与 getMessage(key, args) 两参数两种形式，
+        // any(Object[].class) 匹配 varargs 数组(含空数组)，两个 stub 覆盖两种调用形式。
         I18nUtil i18nUtil = mock(I18nUtil.class);
-        when(i18nUtil.getMessage(anyString(), any())).thenReturn("mocked message");
+        when(i18nUtil.getMessage(anyString())).thenReturn("mocked message");
+        when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message");
         ReflectionTestUtils.setField(service, "i18nUtil", i18nUtil);
     }
 
@@ -127,6 +130,24 @@ class WorkflowValidationServiceTest {
         assertTrue(invokeIsElementTypeValid(1.5, "number", null), "number 应接受浮点");
         assertTrue(invokeIsElementTypeValid("1.5", "number", null), "number 应接受字符串浮点");
         assertTrue(invokeIsElementTypeValid(1, "number", null), "number 应接受整数");
+    }
+
+    @Test
+    void isElementTypeValid_number_shouldRejectNaNAndInfinity() {
+        // 与前端 Number.isFinite 一致，拒绝 NaN/Infinity
+        // Double.parseDouble 对 "NaN"/"Infinity" 不抛异常，需显式 finite 校验
+        assertFalse(invokeIsElementTypeValid("NaN", "number", null), "number 不应接受字符串 NaN");
+        assertFalse(invokeIsElementTypeValid("Infinity", "number", null), "number 不应接受字符串 Infinity");
+        assertFalse(invokeIsElementTypeValid("-Infinity", "number", null), "number 不应接受字符串 -Infinity");
+        assertFalse(invokeIsElementTypeValid(Double.NaN, "number", null), "number 不应接受 Double.NaN");
+        assertFalse(invokeIsElementTypeValid(Double.POSITIVE_INFINITY, "number", null), "number 不应接受 Infinity");
+    }
+
+    @Test
+    void isElementTypeValid_integer_shouldRejectNaNAndInfinity() {
+        assertFalse(invokeIsElementTypeValid("NaN", "integer", null), "integer 不应接受 NaN");
+        assertFalse(invokeIsElementTypeValid("Infinity", "integer", null), "integer 不应接受 Infinity");
+        assertFalse(invokeIsElementTypeValid(Double.NaN, "integer", null), "integer 不应接受 Double.NaN");
     }
 
     @Test
