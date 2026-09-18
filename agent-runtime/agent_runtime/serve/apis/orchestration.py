@@ -154,8 +154,7 @@ async def health():
     summary="IR 执行（流式/非流式）",
     responses={
         400: {
-            "description": "请求校验失败或保留请求头冲突：请求体校验失败返回 error_code=02001003 四字段错误体；"
-            "请求体携带服务器认证/平台协议保留请求头时返回 {\"error\":\"reserved_header_in_body\"}",
+            "description": "请求体校验失败返回 error_code=02001003 四字段错误体",
         }
     },
 )
@@ -180,19 +179,13 @@ async def ir_execute(req: ExecutionRequest, request: Request):
         json.dumps(req.model_dump(mode="json", by_alias=True), ensure_ascii=False),
     )
 
-    #  全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header
-    # 保留/客户 header 出现在 body → 400
+    # 全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header——
+    # 以中间件捕获的服务器 headers（platform + customer）整体覆盖 req.headers，body 携带的 headers 不参与合并
     request_ctx = _request_ctx.get()
-    try:
-        req.headers = _build_runtime_execution_headers(
-            platform_headers=request_ctx.platform_headers,
-            customer_headers=request_ctx.customer_headers,
-        )
-    except ValueError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "reserved_header_in_body", "details": str(e)},
-        )
+    req.headers = _build_runtime_execution_headers(
+        platform_headers=request_ctx.platform_headers,
+        customer_headers=request_ctx.customer_headers,
+    )
     # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
     cfg = get_config()
     if cfg.enabled:
@@ -591,18 +584,12 @@ async def component_debug_execute(component_id: str, req_json: dict, request: Re
     """单组件调试端点（：与普通执行一致 — body 安全 + effective userId 服务器覆盖）"""
     try:
         req = ComponentDebugRequest.model_validate(req_json)
-        # 禁止 body 覆盖服务器认证/平台协议 Header（与 ir_execute 同规则）
+        # 禁止 body 覆盖服务器认证/平台协议 Header（与 ir_execute 同规则：服务器 headers 整体覆盖）
         request_ctx = _request_ctx.get()
-        try:
-            req.headers = _build_runtime_execution_headers(
-                platform_headers=request_ctx.platform_headers,
-                customer_headers=request_ctx.customer_headers,
-            )
-        except ValueError as e:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "reserved_header_in_body", "details": str(e)},
-            )
+        req.headers = _build_runtime_execution_headers(
+            platform_headers=request_ctx.platform_headers,
+            customer_headers=request_ctx.customer_headers,
+        )
         # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
         cfg = get_config()
         if cfg.enabled:
