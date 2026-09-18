@@ -1064,6 +1064,12 @@ class IntentionDetectModule:
         workflow_req_params = workflow_handler.prepare_workflow_params(
             context_workflow_req_params, intent_workflow_context
         )
+        # 注入意图识别工作流 Start 节点用户字段默认值：未赋值的请求变量引用
+        # （如 End 节点的 ${_request.xxx}）解析为 None 后会被 End 输出过滤丢弃，
+        # 与普通工作流路径（workflow_handler.py stream_handle_workflow_start）保持一致
+        workflow_handler._inject_start_field_defaults(
+            workflow_req_params, intent_workflow_context
+        )
         workflow_req_params.setdefault("global_variables", {}).update(
             {"intents": intents, "messages": messages}
         )
