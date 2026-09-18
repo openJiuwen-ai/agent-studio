@@ -125,4 +125,43 @@ describe('DynamicNodeParamsComponent - matchType', () => {
     expect(callMatchType(123, 'object', null)).toBe(false);
     expect(callMatchType([1], 'object', null)).toBe(false);
   });
+
+  // ===== integer 整数约束（中风险2：与后端一致）=====
+
+  it('integer 1 → true（整数）', () => {
+    expect(callMatchType(1, 'integer')).toBe(true);
+  });
+
+  it('integer 1.5 → false（浮点应拒绝）', () => {
+    expect(callMatchType(1.5, 'integer')).toBe(false);
+  });
+
+  it('integer "1" → true（字符串整数）', () => {
+    expect(callMatchType('1', 'integer')).toBe(true);
+  });
+
+  it('integer "1.5" → false（字符串浮点应拒绝）', () => {
+    expect(callMatchType('1.5', 'integer')).toBe(false);
+  });
+
+  it('number 1.5 → true（number 接受浮点）', () => {
+    expect(callMatchType(1.5, 'number')).toBe(true);
+  });
+
+  it('number "1.5" → true（number 接受字符串浮点）', () => {
+    expect(callMatchType('1.5', 'number')).toBe(true);
+  });
+
+  // ===== array<object> + 后端 schema 元素描述（中风险1：schemaFieldSchema 提取）=====
+
+  it('array<object> + 后端 schema 元素描述：[{name:123}] → false（子字段类型递归校验）', () => {
+    // 后端 schema 格式：array<object>, subFields = {type:object, schema:[{name:name,type:string}]}
+    const elementDesc = { type: 'object', schema: [{ name: 'name', type: 'string' }] };
+    expect(callMatchType([{ name: 123 }], 'array<object>', elementDesc)).toBe(false);
+  });
+
+  it('array<object> + 后端 schema 元素描述：[{name:"ppp"}] → true', () => {
+    const elementDesc = { type: 'object', schema: [{ name: 'name', type: 'string' }] };
+    expect(callMatchType([{ name: 'ppp' }], 'array<object>', elementDesc)).toBe(true);
+  });
 });

@@ -15,6 +15,11 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 /**
  * WorkflowValidationService 默认值类型校验相关纯函数单元测试。
  * 覆盖 bug001 高/中/低风险修复：parseJsonValue / isElementTypeValid / isDefaultValueTypeValid / isNameValid。
@@ -116,9 +121,14 @@ class WorkflowValidationServiceTest {
     }
 
     @Test
-    void isElementTypeValid_boolean_shouldRejectString() {
-        assertFalse(invokeIsElementTypeValid("true", "boolean", null), "boolean 不应接受字符串");
-        assertTrue(invokeIsElementTypeValid(true, "boolean", null), "boolean 应接受布尔");
+    void isElementTypeValid_boolean_shouldAcceptBooleanAndStringBoolean() {
+        // 高风险修复：兼容前端 START 节点布尔默认值以字符串 "true"/"false" 写入 value.default
+        assertTrue(invokeIsElementTypeValid(true, "boolean", null), "boolean 应接受 Boolean 实例");
+        assertTrue(invokeIsElementTypeValid(false, "boolean", null), "boolean 应接受 Boolean 实例");
+        assertTrue(invokeIsElementTypeValid("true", "boolean", null), "boolean 应接受字符串 \"true\"");
+        assertTrue(invokeIsElementTypeValid("false", "boolean", null), "boolean 应接受字符串 \"false\"");
+        assertFalse(invokeIsElementTypeValid("yes", "boolean", null), "boolean 不应接受非布尔字符串");
+        assertFalse(invokeIsElementTypeValid(1, "boolean", null), "boolean 不应接受数字");
     }
 
     @Test
@@ -194,6 +204,66 @@ class WorkflowValidationServiceTest {
         WorkflowFieldVO field = buildField("integer", null);
         assertFalse(invokeIsDefaultValueTypeValid(field, "1.5"), "integer 默认值 1.5 应拒绝");
         assertTrue(invokeIsDefaultValueTypeValid(field, "1"), "integer 默认值 1 应通过");
+    }
+
+    // ===== validateSchemaFieldNames：array<object> 递归（低风险4）=====
+
+    @Test
+    void validateSchemaFieldNames_arrayObjectNested_shouldRecurse() {
+        // 子字段类型为 array<object>，其元素 object 的子字段名违规应被递归发现
+        // schema = [{name:addr, type:array<object>, schema:{type:object, schema:[{name:123, type:string}]}}]
+        Map<String, Object> grandChild = buildSubField("123", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(grandChild));
+        Map<String, Object> subField = buildSubField("addr", "array<object>");
+        subField.put("schema", elementDesc);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
+
+        assertFalse(errors.isEmpty(), "array<object> 嵌套子字段名 123 违规应被发现");
+        assertTrue(errors.stream().anyMatch(e -> e.getReason().contains("123")), "错误原因应含字段名 123");
+    }
+
+    @Test
+    void validateSchemaFieldNames_arrayNested_shouldRecurse() {
+        // 子字段类型为 array（无尖括号）+ schema 元素为 object，子字段名违规应被发现
+        Map<String, Object> grandChild = buildSubField("456", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(grandChild));
+        Map<String, Object> subField = buildSubField("addr", "array");
+        subField.put("schema", elementDesc);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
+
+        assertFalse(errors.isEmpty(), "array 嵌套子字段名 456 违规应被发现");
+    }
+
+    @Test
+    void validateSchemaFieldNames_allValid_shouldNotReport() {
+        Map<String, Object> grandChild = buildSubField("city", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(grandChild));
+        Map<String, Object> subField = buildSubField("addr", "array<object>");
+        subField.put("schema", elementDesc);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
+
+        assertTrue(errors.isEmpty(), "全合法应不报错");
     }
 
     // ===== 辅助方法 =====
