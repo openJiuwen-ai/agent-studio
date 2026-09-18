@@ -229,8 +229,8 @@ export class AppMarkdownAnswerComponent
         const mouseEvent = e as MouseEvent;
         const tooltipElement = this.tooltip!;
         const tooltipRect = tooltipElement.getBoundingClientRect();
-        const mouseX = mouseEvent.pageX;
-        const mouseY = mouseEvent.pageY;
+        const mouseX = mouseEvent.clientX;
+        const mouseY = mouseEvent.clientY;
 
         // 左侧 + 下方定位
         tooltipElement.style.left = `${mouseX - tooltipRect.width - 10}px`;
