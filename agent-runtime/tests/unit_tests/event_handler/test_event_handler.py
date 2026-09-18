@@ -2,6 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Tests for event_handler.py — EventHandler main entry."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -379,3 +380,118 @@ class TestEncapsulateNonStreamResponse:
             mock_response, "workflow", request, "wf/ir/wf-1/wf-1.json"
         )
         assert isinstance(result, JSONResponse)
+
+
+class TestPersistConversationInBackground:
+    """终态事件不再被会话历史落库阻塞（fire-and-forget 后台执行）。"""
+
+    @staticmethod
+    def _make_react_handler() -> EventHandler:
+        handler = EventHandler()
+        request = MagicMock(spec=Request)
+        request.path_params = {"conversation_id": "conv-1", "agent_id": "agent-1"}
+        request.state = MagicMock(user_id="user-1", version_id="")
+        request.headers = {}
+        handler.init_trace("ReAct", request, "agent/ir/agent-1/agent-1.json")
+        return handler
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_done_emitted_before_persist_completes():
+        """persist 被阻塞时 done 事件仍立即发出，且后台任务最终完成。"""
+        handler = TestPersistConversationInBackground._make_react_handler()
+        persist_started = asyncio.Event()
+        persist_release = asyncio.Event()
+        persist_finished = asyncio.Event()
+
+        async def slow_persist():
+            persist_started.set()
+            await persist_release.wait()
+            persist_finished.set()
+
+        async def body():
+            summary = json.dumps({
+                "event": "summary_response",
+                "createdTime": 1784279772000,
+                "data": {"answer": {"role": "assistant", "content": "ok"}},
+            })
+            yield f"data: {summary}\n\n".encode()
+
+        with patch.object(handler, "_persist_conversation", side_effect=slow_persist):
+            events = []
+            async for chunk in handler.get_handler_body_iterator("ReAct", body()):
+                payload = chunk.decode("utf-8")
+                assert payload.startswith("data: ")
+                events.append(json.loads(payload[6:]))
+
+        # done 已在 persist 明确未完成（release 未触发）时送达
+        assert not persist_finished.is_set()
+        assert events, "stream should yield events"
+        assert events[-1].get("event") == "done"
+
+        # 后台任务随后执行并完成
+        for _ in range(200):
+            if persist_started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert persist_started.is_set()
+        persist_release.set()
+        for _ in range(200):
+            if persist_finished.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert persist_finished.is_set()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_controller_end_event_not_blocked_by_persist():
+        """Controller 模式：终态 end 事件同样不等待 persist。"""
+        handler = TestPersistConversationInBackground._make_react_handler()
+        handler.trace.handler_type = "Controller"
+        persist_release = asyncio.Event()
+
+        async def slow_persist():
+            await persist_release.wait()
+
+        async def body():
+            task_end = json.dumps({
+                "event": "task_end",
+                "createdTime": 1784279773000,
+                "data": {},
+            })
+            yield f"data: {task_end}\n\n".encode()
+
+        with patch.object(handler, "_persist_conversation", side_effect=slow_persist):
+            events = []
+            async for chunk in handler.get_handler_body_iterator(
+                "Controller", body()
+            ):
+                payload = chunk.decode("utf-8")
+                events.append(json.loads(payload[6:]))
+
+        assert events, "stream should yield events"
+        assert events[-1].get("event") == "end"
+        persist_release.set()
+        # 给后台任务让出控制权完成，避免悬挂任务告警
+        for _ in range(100):
+            await asyncio.sleep(0)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_without_init_trace_workflow_mode_matches_old_behavior():
+        """未 init_trace（conv_manager 为空）时跳过后台落库、无终态注入、不报错。"""
+        handler = EventHandler()
+
+        async def body():
+            yield (
+                b'data: {"event":"message","data":{"answer":"hi"},'
+                b'"createdTime":1}\n\n'
+            )
+
+        events = []
+        async for chunk in handler.get_handler_body_iterator("workflow", body()):
+            payload = chunk.decode("utf-8")
+            events.append(json.loads(payload[6:]))
+
+        assert len(events) == 1
+        assert events[0].get("event") == "message"
