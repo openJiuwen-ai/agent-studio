@@ -79,8 +79,14 @@ _MOD = "jiuwen.serve.controllers.execution.ir_converter"
 
 
 def _patches(shared_ir):
-    """返回 mock 上下文管理器元组:async_ir_load 返回 shared_ir;校验/下游构建器旁路。"""
+    """返回 mock 上下文管理器元组:子 IR 预取(批量接口)返回同一 shared dict;校验/下游构建器旁路。"""
+    # 兼容仍直接调用 async_ir_load 的路径
     async_ir_load = patch(f"{_MOD}.async_ir_load", new=AsyncMock(return_value=shared_ir))
+    # _recursive_create 的子 IR 预取已并发化:单子场景批量返回 [shared_ir]
+    async_ir_load_batch = patch(
+        f"{_MOD}.async_ir_load_batch",
+        new=AsyncMock(return_value=[shared_ir]),
+    )
     agent_ir_validator = patch(f"{_MOD}.AgentIrValidator", new=MagicMock())
     # get_task_model 同步返回 (task_model_stub, None) → model_configs 为 None → llm 跳过
     agent_ir_utils_mock = MagicMock()
@@ -91,14 +97,20 @@ def _patches(shared_ir):
         # side_effect 每次返回新实例,避免子/根 config 共用同一对象导致 metadata 互相覆盖
         new=AsyncMock(side_effect=lambda *a, **kw: AgentConfig()),
     )
-    return async_ir_load, agent_ir_validator, agent_ir_utils, create_agent_config
+    return (
+        async_ir_load,
+        async_ir_load_batch,
+        agent_ir_validator,
+        agent_ir_utils,
+        create_agent_config,
+    )
 
 
 async def _build(parent_id: str, child_intent, shared_ir):
     """跑 create_all_agents_config_list,mock 下游;返回 (all_configs, shared_ir)。"""
     root = _root_ir(parent_id, child_intent)
-    p1, p2, p3, p4 = _patches(shared_ir)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patches(shared_ir)
+    with p1, p2, p3, p4, p5:
         configs, _info = await IRConverter.create_all_agents_config_list(root, "conv-test")
     return configs, shared_ir
 
