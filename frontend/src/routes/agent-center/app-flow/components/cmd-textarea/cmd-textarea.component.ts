@@ -282,9 +282,15 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       return;
     }
 
-    // 超过最大长度截断
+    // 超过最大长度截断（粘贴会替换选区内容，需补回选区长度）
     if (this.maxLength) {
-      const leaveLength = this.maxLength - this.getLength();
+      const selectedLength = this.range
+        .toString()
+        .replaceAll('\u200B', '').length;
+      const leaveLength = Math.max(
+        this.maxLength - this.getLength() + selectedLength,
+        0,
+      );
       if (clipboardContent.length > leaveLength) {
         clipboardContent = clipboardContent.slice(0, leaveLength);
       }
@@ -293,10 +299,13 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     // 创建文本节点
     const textNode = document.createTextNode(clipboardContent);
 
+    // 先删除选区内容再插入（光标处粘贴时选区为空，删除无影响）
+    this.range.deleteContents();
     // 插入文本到光标位置
     this.range.insertNode(textNode);
     // 移动光标到插入内容之后
     this.range.setStartAfter(textNode);
+    this.range.collapse(true);
 
     // 触发内容更新
     this.emit();
