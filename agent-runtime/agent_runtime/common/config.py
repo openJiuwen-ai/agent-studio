@@ -398,6 +398,11 @@ class ConversationVariableSettings(BaseSettings):
         default=259200, validation_alias="CONVERSATION_VARIABLE_STORE_TIME"
     )
 
+    # 对话历史 Redis key 的过期时间（压测等场景可调短以控制内存）
+    conversation_ttl_seconds: int = Field(
+        default=86400, validation_alias="CONVERSATION_TTL_SECONDS"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
