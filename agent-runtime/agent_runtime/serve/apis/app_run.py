@@ -22,6 +22,7 @@ from agent_runtime.serve.apis.app_run_request import (
 )
 from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
 from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
+from agent_runtime.serve.error_rsp import build_error_response
 from agent_runtime.serve.apis.publish_version_cache import (
     LATEST_PUBLISH_VERSION,
     resolve_published_version,
@@ -640,7 +641,13 @@ async def _execute_workflow_run(
     _request_ctx.get().env_variables = env_vars
     req_json = build_req_json_from_workflow(body, exec_ctx, env_vars=env_vars)
 
-    response = await ir_execute(ExecutionRequest.model_validate(req_json), request)
+    try:
+        request_model = ExecutionRequest.model_validate(req_json)
+    except ValidationError as e:
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        return build_error_response(400, "02001003", language=language, reason=str(e))
+
+    response = await ir_execute(request_model, request)
 
     # 工作流固定使用 workflow handler_type
     if stream:
@@ -783,7 +790,13 @@ async def _execute_agent_run(
     _request_ctx.get().env_variables = env_vars
     req_json = build_req_json_from_agent(body, exec_ctx, env_vars=env_vars)
 
-    response = await ir_execute(ExecutionRequest.model_validate(req_json), request)
+    try:
+        request_model = ExecutionRequest.model_validate(req_json)
+    except ValidationError as e:
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        return build_error_response(400, "02001003", language=language, reason=str(e))
+
+    response = await ir_execute(request_model, request)
 
     # 从IR中确定handler_type
     try:

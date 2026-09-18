@@ -113,6 +113,8 @@ class MgGlobalExceptionHandlerTest {
     @Test
     void testHandleNoResourceFoundException() {
         NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/missing");
+        ErrorInfo errorInfo = new ErrorInfo("not found", "reason", "suggestion");
+        when(i18nUtil.getMessage(any(AgentStudioException.class))).thenReturn(errorInfo);
 
         ResponseEntity<ErrorRsp> response = handler.handleNoResourceFoundException(ex);
 
