@@ -40,8 +40,7 @@ paths:
             application/json:
               schema: {}
         '400':
-          description: 请求校验失败或保留请求头冲突：请求体校验失败返回 error_code=02001003 四字段错误体；请求体携带服务器认证/平台协议保留请求头时返回
-            {"error":"reserved_header_in_body"}
+          description: 请求体校验失败返回 error_code=02001003 四字段错误体
         '422':
           description: Validation Error
           content:
