@@ -9,7 +9,8 @@ userFields 平铺、auth 并入）；本文件验证 SingleComponentDebugWrapper
 - 其余用户字段框值叠加到顶层同名键（MR 检视意见 #1 后续轮），组件保留键
   与未声明键不叠加；嵌套 userFields 形态（API 直调）同样接受；
 - dict 形态输入（直接 API 调用）同样接受；
-- 非法 JSON / 非对象 JSON → COMPONENT_STEP_DEBUG_ERROR，不静默吞输入；
+- 非法 JSON / 非对象 JSON / 其余非 str/dict 形态（list/number/bool，API 直调）
+  → COMPONENT_STEP_DEBUG_ERROR，不静默吞输入；
 - 覆盖不写回 inputs_schema（deepcopy 底座，实例可复用）。
 
 运行方式：
@@ -94,6 +95,14 @@ def test_invalid_json_box_raises_debug_error():
 def test_non_object_json_box_raises_debug_error():
     with pytest.raises(JiuWenBaseException):
         _make_wrapper()._preprocess_inputs({"headers": "[1, 2]"})
+
+
+@pytest.mark.parametrize("bad", [[1, 2], 5, True])
+def test_non_str_non_dict_box_raises_debug_error(bad):
+    # API 直调传 list/number/bool 形态按约定报错，不得静默忽略调试覆盖
+    # （dict 是合法形态，见 test_dict_inputs_accepted）
+    with pytest.raises(JiuWenBaseException):
+        _make_wrapper()._preprocess_inputs({"query": bad})
 
 
 def test_override_does_not_pollute_schema():

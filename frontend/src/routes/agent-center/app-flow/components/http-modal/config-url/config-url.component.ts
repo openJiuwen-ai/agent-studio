@@ -38,10 +38,13 @@ export class ConfigUrlComponent implements OnInit {
   path = '';
 
   ngOnInit(): void {
-    // 仅当前导 '/' 存在时才裁掉：历史数据/API 直写的 path 可能不带前导 '/'，
-    // 无条件 slice(1) 会丢首字符并被 onPathChange 回写固化
-    const raw = this.configs.path || '';
-    this.path = raw.startsWith('/') ? raw.slice(1) : raw;
+    // 加载即归一为与 onPathChange 一致的规范形态（单个前导 '/' 或空串）：
+    // 历史数据/API 直写的 path 可能不带前导 '/'（UI 写入必经 onPathChange 归一），
+    // 只展示不回写会让 IR 构建层的 endpoint+path 纯拼接产出 endpointabc；
+    // 无条件 slice(1) 又会丢首字符。归一化幂等，对已规范值无副作用
+    const p = (this.configs.path || '').replace(/^\/+/, '');
+    this.configs.path = p ? `/${p}` : '';
+    this.path = p;
   }
 
   onPathChange(): void {
