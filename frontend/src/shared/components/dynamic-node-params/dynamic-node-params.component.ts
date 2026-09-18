@@ -711,6 +711,9 @@ export class DynamicNodeParamsComponent {
           return Number.isFinite(value) && value === Math.floor(value);
         }
         if (typeof value === 'string') {
+          if (value.trim() === '') {
+            return false; // 空串拒绝（与后端 Double.parseDouble 一致，Number("")===0 会误判）
+          }
           const n = Number(value);
           return Number.isFinite(n) && n === Math.floor(n);
         }
@@ -720,6 +723,9 @@ export class DynamicNodeParamsComponent {
           return true;
         }
         if (typeof value === 'string') {
+          if (value.trim() === '') {
+            return false; // 空串拒绝（与后端 Double.parseDouble 一致）
+          }
           const n = Number(value);
           return !Number.isNaN(n) && Number.isFinite(n);
         }

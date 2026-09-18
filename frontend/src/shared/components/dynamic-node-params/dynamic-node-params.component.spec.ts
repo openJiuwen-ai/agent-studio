@@ -7,6 +7,7 @@ import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.servi
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { agentCommonLogic } from '@routes/agent-center/app-agent/common-logic-agent';
 import { I18NextEagerPipe } from 'angular-i18next';
+import { of } from 'rxjs';
 
 /**
  * DynamicNodeParamsComponent - matchType 递归校验单元测试。
@@ -26,7 +27,7 @@ describe('DynamicNodeParamsComponent - matchType', () => {
         { provide: agentCommonLogic, useValue: {} as any },
         { provide: AppAgentRepoService, useValue: {} as any },
         { provide: I18NextEagerPipe, useValue: { transform: (k: string) => k } as any },
-        { provide: AppFlowService, useValue: {} as any },
+        { provide: AppFlowService, useValue: { fileListUpdate$: () => of([]) } as any },
         { provide: AgentConfigService, useValue: {} as any },
       ],
     }).compileComponents();
@@ -46,8 +47,8 @@ describe('DynamicNodeParamsComponent - matchType', () => {
     expect(callMatchType([{ a: 1 }], 'array<object>')).toBe(true);
   });
 
-  it('array<object> + [1,2](元素非对象,无 schema) → true(无元素声明只校验数组)', () => {
-    expect(callMatchType([1, 2], 'array<object>')).toBe(true);
+  it('array<object> + [1,2](元素非 object,无 schema) → false(元素类型为 object,数字非 object)', () => {
+    expect(callMatchType([1, 2], 'array<object>')).toBe(false);
   });
 
   // ===== runtime 递归：children 格式（配置侧，type:string[]）=====
@@ -150,6 +151,18 @@ describe('DynamicNodeParamsComponent - matchType', () => {
 
   it('number "1.5" → true（number 接受字符串浮点）', () => {
     expect(callMatchType('1.5', 'number')).toBe(true);
+  });
+
+  it('integer "" → false（空串拒绝，与后端 Double.parseDouble 一致）', () => {
+    expect(callMatchType('', 'integer')).toBe(false);
+  });
+
+  it('integer "  " → false（纯空白拒绝）', () => {
+    expect(callMatchType('  ', 'integer')).toBe(false);
+  });
+
+  it('number "" → false（空串拒绝）', () => {
+    expect(callMatchType('', 'number')).toBe(false);
   });
 
   // ===== array<object> + 后端 schema 元素描述（中风险1：schemaFieldSchema 提取）=====

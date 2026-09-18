@@ -8,6 +8,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.constant.Constants;
@@ -1150,6 +1151,8 @@ public class WorkflowValidationService {
      * 若 value 是 JSON 字符串，解析成对象（Map/List/标量）；非字符串或解析失败则原样返回。
      * 用于兼容前端把复杂类型默认值以 JSON 字符串写入 value.default 的场景。
      * 必须用 readValue（而非 convertValue），后者对 String 输入原样返回 String，不会解析 JSON。
+     * 注意：JsonUtils.json2Obj 内部 catch JsonProcessingException 返回 null（不抛），无法据其区分
+     * "非 JSON" 与 "解析为 null"；故直接用 JSON_MAPPER.readValue，非 JSON 抛异常 → 原样返回。
      * 空白字符串原样返回（上层已对空值做跳过）。
      */
     private Object parseJsonValue(Object value) {
@@ -1161,8 +1164,8 @@ public class WorkflowValidationService {
             return value;
         }
         try {
-            return JsonUtils.json2Obj(trimmed, new TypeReference<Object>() {});
-        } catch (Exception e) {
+            return JsonUtils.JSON_MAPPER.readValue(trimmed, Object.class);
+        } catch (JsonProcessingException e) {
             return value; // 非 JSON 字符串，原样返回，交给后续 instanceof 判定
         }
     }

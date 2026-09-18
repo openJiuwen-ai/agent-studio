@@ -70,4 +70,15 @@ describe('OutputParamsComponent - hasInvalidDescendant', () => {
     const field = { name: 'ppp', type: 'string' };
     expect(component.hasInvalidDescendant(field as any)).toBe(false);
   });
+
+  it('子字段名含连字符（合法，与后端 isNameValid 一致）→ 应返回 false', () => {
+    // 后端 isNameValid 允许连字符 [a-zA-Z0-9_-]*，前端 isNameValid 需一致
+    const field = buildArrayObjectField([{ name: 'my-field', type: 'string' }]);
+    expect(component.hasInvalidDescendant(field as any)).toBe(false);
+  });
+
+  it('子字段名含点号（非法）→ 应返回 true', () => {
+    const field = buildArrayObjectField([{ name: 'my.field', type: 'string' }]);
+    expect(component.hasInvalidDescendant(field as any)).toBe(true);
+  });
 });

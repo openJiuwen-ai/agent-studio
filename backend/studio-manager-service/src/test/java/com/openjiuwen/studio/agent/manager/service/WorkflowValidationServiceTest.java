@@ -12,24 +12,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 
 /**
  * WorkflowValidationService 默认值类型校验相关纯函数单元测试。
  * 覆盖 bug001 高/中/低风险修复：parseJsonValue / isElementTypeValid / isDefaultValueTypeValid / isNameValid。
- * 被测方法为 private 纯函数，不依赖任何 @Autowired 字段，直接 new 实例 + 反射调用。
+ * 被测方法为 private 纯函数。service 用 new 实例，i18nUtil 等字段通过反射注入 mock
+ * （validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时调 i18nUtil.getMessage）。
  */
 class WorkflowValidationServiceTest {
 
     private final WorkflowValidationService service = new WorkflowValidationService();
+
+    @BeforeEach
+    void setUp() {
+        // 注入 i18nUtil mock，避免 validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时 NPE
+        I18nUtil i18nUtil = mock(I18nUtil.class);
+        when(i18nUtil.getMessage(anyString(), any())).thenReturn("mocked message");
+        ReflectionTestUtils.setField(service, "i18nUtil", i18nUtil);
+    }
 
     // ===== parseJsonValue（高风险：默认值 JSON 字符串解析）=====
 

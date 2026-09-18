@@ -55,9 +55,9 @@ export class OutputParamsComponent {
     return param.description || this.i18n.transform('not_configured');
   }
 
-  /** 字段名合规规则，与 ValueWarnDirective 保持一致 */
+  /** 字段名合规规则，与后端 WorkflowValidationService.isNameValid 保持一致（允许连字符） */
   private isNameValid(name?: string): boolean {
-    return !!name && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
+    return !!name && /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(name);
   }
 
   /**
