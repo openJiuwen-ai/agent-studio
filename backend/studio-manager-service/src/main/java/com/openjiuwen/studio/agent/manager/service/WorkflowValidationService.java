@@ -1076,6 +1076,11 @@ public class WorkflowValidationService {
         if (type == null) {
             return true;
         }
+        // array<object> 等带尖括号形式归一为 array 处理（元素类型从 schema 元素描述取，与 array 分支一致），
+        // 避免 switch 无 array<...> 分支走 default 返回 true 跳过元素递归校验
+        if (type.startsWith("array<")) {
+            type = TypeEnum.ARRAY.toString();
+        }
         switch (type) {
             case "string":
                 return value instanceof String;

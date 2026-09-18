@@ -227,6 +227,27 @@ class WorkflowValidationServiceTest {
     }
 
     @Test
+    void isDefaultValueTypeValid_objectWithArrayObjectSubField_shouldRecurse() {
+        // reviewer 风险:object 默认值的子字段类型为 array<object>（带尖括号），
+        // isElementTypeValid 原 switch 无 array<...> 分支走 default 返回 true 跳过元素递归。
+        // 子字段 arr 类型 array<object>，schema 为元素描述 {type:object, schema:[{name:name,type:string}]}
+        Map<String, Object> nameField = buildSubField("name", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(nameField));
+        Map<String, Object> arrSubField = buildSubField("arr", "array<object>");
+        arrSubField.put("schema", elementDesc);
+
+        WorkflowFieldVO field = buildField("object", List.of(arrSubField));
+        // 合法：arr 元素子字段类型正确
+        assertTrue(invokeIsDefaultValueTypeValid(field, "{\"arr\":[{\"name\":\"x\"}]}"),
+            "object 子字段 array<object> 合法默认值应通过");
+        // 非法：arr 元素子字段 name 应 string 实 number
+        assertFalse(invokeIsDefaultValueTypeValid(field, "{\"arr\":[{\"name\":123}]}"),
+            "object 子字段 array<object> 元素子字段类型不匹配应拒绝（递归校验）");
+    }
+
+    @Test
     void isDefaultValueTypeValid_arrayObject_mismatchedElementField_shouldReject() {
         // 中风险：array<object> 元素子字段类型不匹配应拒绝
         WorkflowFieldVO field = buildField("array<object>",
