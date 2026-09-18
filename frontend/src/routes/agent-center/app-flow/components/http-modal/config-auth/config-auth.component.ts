@@ -95,7 +95,7 @@ export class ConfigAuthComponent {
     this.configs.auth_info = {
       scope: 'SERVICE',
       // 保留当前已选鉴权域：此处整对象重建，若硬编码 HEADERS 会在用户
-      // 编辑 Key/Value 时把 Query 域选择静默重置（MR 检视意见 #2）
+      // 编辑 Key/Value 时把 Query 域选择静默重置
       domain: this.configs.auth_info?.domain || 'HEADERS',
       auth_keys: this.apiKeyAuthArgs,
     };

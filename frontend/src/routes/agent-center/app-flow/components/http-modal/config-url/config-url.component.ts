@@ -38,11 +38,17 @@ export class ConfigUrlComponent implements OnInit {
   path = '';
 
   ngOnInit(): void {
-    this.path = this.configs.path ? this.configs.path.slice(1) : '';
+    // 仅当前导 '/' 存在时才裁掉：历史数据/API 直写的 path 可能不带前导 '/'，
+    // 无条件 slice(1) 会丢首字符并被 onPathChange 回写固化
+    const raw = this.configs.path || '';
+    this.path = raw.startsWith('/') ? raw.slice(1) : raw;
   }
 
   onPathChange(): void {
-    this.configs.path = `/${this.path}`;
+    // 归一化用户输入：剥掉前导斜杠再拼接，避免 '//x' 双斜杠进入最终 URL
+    // （IR 构建层 endpoint+path 直接字符串拼接）；空输入存 '' 而非 '/'
+    const p = (this.path ?? '').replace(/^\/+/, '');
+    this.configs.path = p ? `/${p}` : '';
     this.onSaveChange();
   }
 

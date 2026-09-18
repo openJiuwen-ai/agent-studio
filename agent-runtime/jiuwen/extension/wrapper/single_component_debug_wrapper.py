@@ -294,7 +294,7 @@ class SingleComponentDebugWrapper:
         return {param_field: processed_inputs}
 
     # ------------------------------------------------------------------
-    # EI.http 输入组装 — 对齐 HTTPRequestExecutable 的货架契约（MR 检视意见 #1）
+    # EI.http 输入组装 — 对齐 HTTPRequestExecutable 的货架契约
     # ------------------------------------------------------------------
 
     def _preprocess_http_inputs(self, inputs: dict) -> dict:
@@ -310,8 +310,8 @@ class SingleComponentDebugWrapper:
 
         - query / headers 两个 JSON 框并入对应货架（合并语义，空框 {} 表示
           完全按节点配置执行，框内同名键优先于节点配置）；
-        - 其余用户字段值叠加到顶层同名键（MR 检视意见 #1：不叠加则用户在
-          面板填写的用户字段值被丢弃，调试结果与输入不一致），见
+        - 其余用户字段值叠加到顶层同名键（不叠加则用户在面板填写的
+          用户字段值被丢弃，调试结果与输入不一致），见
           _overlay_http_user_fields。
         """
         base = (
@@ -337,7 +337,7 @@ class SingleComponentDebugWrapper:
         return base
 
     def _overlay_http_user_fields(self, inputs: dict, base: dict) -> None:
-        """把调试面板的用户字段值叠加到 base 顶层（MR 检视意见 #1）。
+        """把调试面板的用户字段值叠加到 base 顶层。
 
         取值口径对齐通用 userFields 分支：仅接受 configs.userFields.inputs
         声明过的键，或重排后 base 已存在的键；平铺形态（前端节点测试对话框
