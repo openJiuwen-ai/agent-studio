@@ -332,9 +332,13 @@ def instance_app(config: dict | None = None):
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
         status_code_map = {404: "02001004", 405: "02001005"}
         code_key = status_code_map.get(exc.status_code, "02001003" if exc.status_code < 500 else "02001002")
-        return build_error_response(
+        response = build_error_response(
             exc.status_code, code_key, language=language, reason=str(exc.detail)
         )
+        # 透传 HTTPException 携带的协议头（如 405 的 Allow），与 FastAPI 默认 handler 行为一致
+        if exc.headers:
+            response.headers.update(exc.headers)
+        return response
 
     @_app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
