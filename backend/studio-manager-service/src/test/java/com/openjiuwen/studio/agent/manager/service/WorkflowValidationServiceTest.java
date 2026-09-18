@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -264,6 +266,64 @@ class WorkflowValidationServiceTest {
         ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
 
         assertTrue(errors.isEmpty(), "全合法应不报错");
+    }
+
+    // ===== validateStartNodeDefaultValues：generated 默认值不再跳过（高风险）=====
+
+    @Test
+    void validateStartNodeDefaultValues_generatedWithInvalidDefault_shouldReport() {
+        // 高风险：前端 getInitOutputParamConfig 创建开始节点输出 value.type 默认 generated，
+        // set-default 写默认值只改 value.default 不改 type，故 generated + 非法默认值应被校验而非跳过。
+        WorkflowFieldVO field = buildField("array<object>",
+            buildObjectElementSchema(List.of(buildSubField("name", "string"))));
+        WorkflowFieldVOValue value = new WorkflowFieldVOValue();
+        value.setType(WorkflowFieldVOValue.TypeEnum.GENERATED);
+        value.setDefault("[{\"name\":123}]"); // name 应 string 实 number
+        field.setValue(value);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateStartNodeDefaultValues", List.of(field), node, errors);
+
+        assertFalse(errors.isEmpty(), "generated 类型 + 非法默认值应报错（不应跳过）");
+    }
+
+    @Test
+    void validateStartNodeDefaultValues_generatedWithValidDefault_shouldNotReport() {
+        WorkflowFieldVO field = buildField("array<object>",
+            buildObjectElementSchema(List.of(buildSubField("name", "string"))));
+        WorkflowFieldVOValue value = new WorkflowFieldVOValue();
+        value.setType(WorkflowFieldVOValue.TypeEnum.GENERATED);
+        value.setDefault("[{\"name\":\"x\"}]"); // 合法
+        field.setValue(value);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateStartNodeDefaultValues", List.of(field), node, errors);
+
+        assertTrue(errors.isEmpty(), "generated 类型 + 合法默认值应不报错");
+    }
+
+    @Test
+    void validateStartNodeDefaultValues_ref_shouldSkip() {
+        // ref 引用别的节点，无字面量默认值，应跳过
+        WorkflowFieldVO field = buildField("array<object>", null);
+        WorkflowFieldVOValue value = new WorkflowFieldVOValue();
+        value.setType(WorkflowFieldVOValue.TypeEnum.REF);
+        value.setDefault("invalid_not_checked");
+        field.setValue(value);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateStartNodeDefaultValues", List.of(field), node, errors);
+
+        assertTrue(errors.isEmpty(), "ref 类型应跳过校验");
     }
 
     // ===== 辅助方法 =====

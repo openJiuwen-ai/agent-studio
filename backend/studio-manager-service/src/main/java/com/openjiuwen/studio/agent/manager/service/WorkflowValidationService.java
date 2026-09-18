@@ -987,9 +987,12 @@ public class WorkflowValidationService {
             if (field.getValue() == null) {
                 continue;
             }
-            // 仅校验字面量默认值，引用类型(ref/generated)跳过
+            // 仅跳过引用类型（ref：引用别的节点输出，无字面量默认值）；
+            // generated/literal 的 default 非空时为用户设置的字面量默认值，需校验类型。
+            // 注：前端 getInitOutputParamConfig 创建开始节点输出时 value.type 默认为 generated，
+            // set-default 组件写默认值只改 value.default 不改 type，故 generated 默认值仍需校验。
             WorkflowFieldVOValue value = field.getValue();
-            if (value.getType() != null && value.getType() != WorkflowFieldVOValue.TypeEnum.LITERAL) {
+            if (value.getType() == WorkflowFieldVOValue.TypeEnum.REF) {
                 continue;
             }
             Object defaultValue = value.getDefault();
