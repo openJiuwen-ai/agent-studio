@@ -13,6 +13,7 @@ import time
 import traceback
 
 from openjiuwen.core.common.logging import workflow_logger
+from agent_runtime.common.config import settings
 from agent_runtime.event_handler.base.trace import Trace
 
 # 会话历史最大消息数
@@ -21,8 +22,8 @@ MAX_MESSAGE_NUM = int(os.getenv("MAX_MESSAGE_NUM", "100"))
 MAX_MESSAGE_SIZE = int(os.getenv("MAX_MESSAGE_SIZE", "5000000"))
 # Redis key 前缀
 KEY_PREFIX = "agentBuilder:conversation"
-# 默认 TTL 24小时
-DEFAULT_TTL = 86400
+# 默认 TTL 24小时（可用 CONVERSATION_TTL_SECONDS 覆盖，压测场景调短以控制内存）
+DEFAULT_TTL = settings.conversation_variable.conversation_ttl_seconds
 
 
 def _get_redis_client():
