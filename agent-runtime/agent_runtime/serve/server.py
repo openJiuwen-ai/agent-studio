@@ -73,6 +73,9 @@ from agent_runtime.serve.apis.openjiuwen_kb_api import openjiuwen_kb_router
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from agent_runtime.serve.error_rsp import build_error_response
 
 # 初始化 prompt 模板
 from jiuwen.common.init import init_prompt
@@ -322,6 +325,20 @@ def instance_app(config: dict | None = None):
 
     for i in apps_map:
         _app.include_router(i)
+
+    @_app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        """HTTPException 统一为四字段 ErrorRsp，避免落入 FastAPI 默认 {"detail": ...} 形态."""
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        status_code_map = {404: "02001004", 405: "02001005"}
+        code_key = status_code_map.get(exc.status_code, "02001003" if exc.status_code < 500 else "02001002")
+        response = build_error_response(
+            exc.status_code, code_key, language=language, reason=str(exc.detail)
+        )
+        # 透传 HTTPException 携带的协议头（如 405 的 Allow），与 FastAPI 默认 handler 行为一致
+        if exc.headers:
+            response.headers.update(exc.headers)
+        return response
 
     @_app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):

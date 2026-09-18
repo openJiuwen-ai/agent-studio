@@ -1629,7 +1629,7 @@ public class WorkflowValidationService {
      */
     public void validateCode(String code) {
         if (StringUtils.isEmpty(code)) {
-            throw new AgentStudioException(StudioError.WORKFLOW_EN_NAME_REPEATED);
+            throw new AgentStudioException(StudioError.WORKFLOW_CODE_REQUIRED);
         }
         if (code.length() > MAX_NAME_SIZE) {
             throw new AgentStudioException(StudioError.WORKFLOW_NAME_EXCEEDS_LIMIT);
@@ -1666,8 +1666,9 @@ public class WorkflowValidationService {
      * @param workflowType 工作流类型
      */
     public void validateWorkflowType(String workflowType) {
-        if (!Strings.CS.equals(workflowType, "chat") && !Strings.CS.equals(workflowType, "task")) {
-            throw new AgentStudioException(StudioError.CHECK_WORKFLOW_INFO_FAILED);
+        if (StringUtils.isEmpty(workflowType)
+            || (!Strings.CS.equals(workflowType, "chat") && !Strings.CS.equals(workflowType, "task"))) {
+            throw new AgentStudioException(StudioError.UNSUPPORTED_WORKFLOW_TYPE);
         }
     }
 

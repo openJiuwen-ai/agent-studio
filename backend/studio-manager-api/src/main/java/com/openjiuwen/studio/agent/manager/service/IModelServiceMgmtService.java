@@ -5,7 +5,6 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.manager.dto.AvailableModelServicesQo;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
-import com.openjiuwen.studio.agent.manager.dto.MaasServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelNameResp;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceListQo;
@@ -55,13 +54,6 @@ public interface IModelServiceMgmtService {
      * @param modelName modelName
      */
     ModelNameResp existsModelName(String projectId, String workspaceId, String modelName);
-
-    /**
-     * maasModelServiceList
-     *
-     * @param projectId projectId
-     */
-    MaasServiceRsp maasModelServiceList(String projectId);
 
     /**
      * modelServiceDetail

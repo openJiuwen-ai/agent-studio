@@ -1430,6 +1430,11 @@ public enum StudioError {
      */
     WORKFLOW_TEMPLATE_INVALID_JSON(BAD_REQUEST, WORKFLOW, "1098"),
 
+    /**
+     * 缺少工作流编码
+     */
+    WORKFLOW_CODE_REQUIRED(BAD_REQUEST, WORKFLOW, "1101"),
+
     /*
      * ============================== 多智能体相关错误码 ==============================
      */

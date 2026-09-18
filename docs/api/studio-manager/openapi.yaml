@@ -1,7 +1,19 @@
 openapi: 3.1.0
 info:
   title: Agent Studio Manager API
-  description: 智能体管理平台 API 文档 — 涵盖智能体创建、配置、发布、知识库管理、提示词工程等管理面接口
+  description: |-
+    智能体管理平台 API 文档 — 涵盖智能体创建、配置、发布、知识库管理、提示词工程等管理面接口。
+
+    ## 认证说明
+    本版本默认启用 Simple 认证（POC/演示模式），请求头 X-Auth-Token 为选填：
+    - 不传 X-Auth-Token：自动使用内置默认用户 testUser|0 兜底，适用于本地开发与功能演示；
+    - 传入 X-Auth-Token：格式为 userId|projectId（例如 testUser|0），以该用户身份访问。
+    Simple 认证不提供真实访问控制，生产环境请通过企业 SSO 鉴权保障安全（需二次开发对接）。
+
+    ## 响应格式
+    接口响应分为两种形态：
+    - 直接返回业务对象（各接口响应 schema 即业务数据结构）；
+    - 返回统一包装体 {code, message, data}（响应 schema 为 BaseResp / PromptBaseResp 等包装类型），其中 code 为 0 表示业务成功，非 0 表示业务失败，data 为业务数据。
   contact:
     name: OpenJiuWen Team
   license:
@@ -735,7 +747,8 @@ paths:
       tags:
       - knowledge-base-connection-config-management-api-controller
       summary: 查询默认知识库连接详情
-      description: 查询默认知识库连接详情
+      description: 查询当前环境配置的默认知识库连接：kb_connection_id 为固定占位值（default_lakesearch_inside_connection_id），返回环境支持（按连接器类型配置）的第一个已配置默认连接；未配置时
+        knowledge_base_connection_detail 为 null，表示默认连接未配置
       operationId: showDefaultKnowledgeBaseConnection
       parameters:
       - name: project_id
@@ -749,7 +762,7 @@ paths:
           pattern: "^[a-zA-Z0-9_-]+$"
       - name: kb_connection_id
         in: path
-        description: 知识库连接id
+        description: 知识库连接id（固定占位值：default_lakesearch_inside_connection_id）
         required: true
         schema:
           type: string
@@ -2009,7 +2022,9 @@ paths:
                 $ref: "#/components/schemas/ModifyToolRsp"
     post:
       tags:
-      - agent-service-proxy-controller
+      - ToolRuntime
+      summary: 工具执行
+      description: 执行一个工具
       operationId: runTool
       parameters:
       - name: workspace_id
@@ -5319,7 +5334,9 @@ paths:
   /v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables/reset:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentMemoryManagement
+      summary: 重置用户的变量记忆
+      description: 重置用户的变量记忆（用于Agent运行时用户手动重置自己的变量记忆），重置后，用户的所有变量值将重置为默认值
       operationId: resetUserVariableMemory
       parameters:
       - name: project_id
@@ -5355,7 +5372,9 @@ paths:
   /v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables/batch-delete:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentMemoryManagement
+      summary: 批量删除用户的变量记忆
+      description: 批量删除用户的变量记忆（用于Agent运行时用户手动删除自己的变量记忆）
       operationId: batchDeleteUserVariableMemory
       parameters:
       - name: project_id
@@ -5803,7 +5822,7 @@ paths:
       tags:
       - provider-auth-mgmt-api-controller
       summary: ""
-      description: 查询供应商认证配置
+      description: 查询供应商认证配置（provider_id 与 metadata_id 至少传其一）
       operationId: authConfigList
       parameters:
       - name: project_id
@@ -5825,21 +5844,21 @@ paths:
         example: example-id-123
       - name: provider_id
         in: query
-        description: 提供者ID
+        description: 提供者ID；provider_id 与 metadata_id 至少传其一
         required: false
         schema:
           type: string
-          description: 提供者ID
+          description: 提供者ID；provider_id 与 metadata_id 至少传其一
           example: example-id-123
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: example-id-123
       - name: metadata_id
         in: query
-        description: 元数据
+        description: 元数据；provider_id 与 metadata_id 至少传其一
         required: false
         schema:
           type: string
-          description: 元数据
+          description: 元数据；provider_id 与 metadata_id 至少传其一
           example: example-id-123
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         example: example-id-123
@@ -7739,7 +7758,10 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations/{conversation_id}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: run workflow applications
+      description: "运行场景化应用接口（代理 Runtime 接口 POST /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}，\
+        SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）"
       operationId: runWorkflowWithConversation
       parameters:
       - name: project_id
@@ -7813,7 +7835,9 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations/{conversation_id}/node_execute/{node_id}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: run workflow node execution
+      description: 运行工作流单节点执行
       operationId: runWorkflowNodeExecute
       parameters:
       - name: project_id
@@ -7886,7 +7910,9 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions:
     post:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: 工作流自动生成追问
+      description: 自动生成追问
       operationId: additionalQuestionsWorkflow
       parameters:
       - name: project_id
@@ -7925,7 +7951,8 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations/{conversation_id}/abort:
     post:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: 停止对话生成并清空会话
       operationId: abortConversation
       parameters:
       - name: project_id
@@ -8225,7 +8252,10 @@ paths:
   /v1/{project_id}/agent-manager/workflows/chat/{short_code}/conversations/{conversation_id}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: run web Workflow
+      description: "运行网页Workflow（代理 Runtime 接口 POST /v1/workflows/chat/{short_code}/conversations/{conversation_id}，\
+        SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）"
       operationId: runWebWorkflow
       parameters:
       - name: short_code
@@ -8282,7 +8312,10 @@ paths:
   /v1/{project_id}/agent-manager/workflows-assets/{workflow_id}/conversations/{conversation_id}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: run workflow applications
+      description: "百宝箱运行（代理 Runtime 接口 POST /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}，\
+        SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）"
       operationId: runAssetsWorkflow
       parameters:
       - name: project_id
@@ -10034,7 +10067,9 @@ paths:
   /v1/{project_id}/agent-manager/mcp-servers/test:
     post:
       tags:
-      - agent-service-proxy-controller
+      - McpServerRuntime
+      summary: 测试 mcp 服务
+      description: 测试 mcp 服务
       operationId: testServer
       parameters:
       - name: project_id
@@ -12249,7 +12284,9 @@ paths:
   /v1/{project_id}/agent-manager/asr/short-audio:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentRuntime
+      summary: 一句话语音识别
+      description: 一句话语音识别
       operationId: voiceRecognition
       parameters:
       - name: project_id
@@ -12330,7 +12367,9 @@ paths:
   /v1/{project_id}/agent-manager/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback:
     post:
       tags:
-      - agent-service-proxy-controller
+      - ConversationManagement
+      summary: 指定message创建用户反馈
+      description: 指定message创建用户反馈
       operationId: createUserFeedback
       parameters:
       - name: project_id
@@ -12395,7 +12434,9 @@ paths:
                 type: string
     delete:
       tags:
-      - agent-service-proxy-controller
+      - ConversationManagement
+      summary: 删除指定message用户反馈
+      description: 删除指定message用户反馈
       operationId: deleteFeedback
       parameters:
       - name: project_id
@@ -13117,148 +13158,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentInfo"
-  /v1/{project_id}/agent-manager/agents/{agent_id}/conversations:
-    get:
-      tags:
-      - agent-service-proxy-controller
-      operationId: listAgentConversations
-      parameters:
-      - name: project_id
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: agent_id
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int32
-          maximum: 9223372036854775807
-          minimum: 0
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int32
-          maximum: 9223372036854775807
-          minimum: 0
-      - name: start_time
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int64
-      - name: end_time
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int64
-      - name: type
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 32
-      - name: workspace_id
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConversionQueries"
-    post:
-      tags:
-      - agent-service-proxy-controller
-      operationId: runAgent
-      parameters:
-      - name: project_id
-        in: path
-        description: 项目id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: workspace_id
-        in: query
-        description: 空间id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_()-]+$"
-      - name: agent_type
-        in: query
-        description: Agent类型
-        required: false
-        schema:
-          type: string
-      - name: agent_id
-        in: path
-        description: agent id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: version
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: stream
-        in: header
-        required: false
-        schema:
-          type: boolean
-      - name: environment_id
-        in: query
-        description: 环境id
-        required: false
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_()-]+$"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ServiceRunAgentReq"
-        required: true
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
   /v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentRuntime
+      summary: run agent
+      description: "运行知识型Agent（代理 Runtime 接口 POST /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}，\
+        SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）"
       operationId: runAgentWithConversation
       parameters:
       - name: project_id
@@ -13343,7 +13249,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/memory-variables/reset:
     post:
       tags:
-      - agent-service-proxy-controller
+      - ConversationManagement
+      summary: 根据conversation_id重置会话记忆
+      description: 根据conversation_id重置会话记忆
       operationId: resetConversationMemory
       parameters:
       - name: workspace_id
@@ -13397,7 +13305,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/additional-questions:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentRuntime
+      summary: 自动生成追问
+      description: 自动生成追问
       operationId: additionalQuestions
       parameters:
       - name: project_id
@@ -13550,7 +13460,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/{agent_id}/analytics/event:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AnalyticsEvent
+      summary: 增加分析事件
+      description: 提供分析事件记录接口，实现（类似点赞，点踩）功能
       operationId: analyticsEvent
       parameters:
       - name: project_id
@@ -13591,7 +13503,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/upload-file:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentRuntime
+      summary: Agent对话上传文件
+      description: Agent对话上传文件
       operationId: agentUploadFile
       parameters:
       - name: workspace_id
@@ -13841,7 +13755,10 @@ paths:
   /v1/{project_id}/agent-manager/agents/chat/{short_code}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentRuntime
+      summary: run web agent
+      description: "运行网页Agent（代理 Runtime 接口 POST /v1/agents/chat/{short_code}，SSE\
+        \ 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）"
       operationId: runWebAgent
       parameters:
       - name: short_code
@@ -13889,7 +13806,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/audio/tts:
     post:
       tags:
-      - agent-service-proxy-controller
+      - TextToSpeech
+      summary: text To Speech
+      description: 文本转语音
       operationId: textToSpeech
       parameters:
       - name: project_id
@@ -13926,7 +13845,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/audio/transcriptions:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AudioTranscription
+      summary: audio transcription
+      description: 语音转写
       operationId: audioTranscriptions
       parameters:
       - name: project_id
@@ -13963,7 +13884,10 @@ paths:
   /v1/{project_id}/agent-manager/agents-assets/{agent_id}/conversations/{conversation_id}:
     post:
       tags:
-      - agent-service-proxy-controller
+      - AgentRuntime
+      summary: run agent asset
+      description: "运行百宝箱Agent（代理 Runtime 接口 POST /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}，\
+        SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）"
       operationId: runAssetsAgentWithConversation
       parameters:
       - name: project_id
@@ -14048,7 +13972,9 @@ paths:
   /v1/{project_id}/agent-manager/agent-builder/rerank:
     post:
       tags:
-      - agent-service-proxy-controller
+      - RuntimeModelServiceController
+      summary: 重排序接口
+      description: rerank
       operationId: rerank
       parameters:
       - name: workspace_id
@@ -14090,7 +14016,9 @@ paths:
   /v1/{project_id}/agent-manager/agent-builder/embeddings:
     post:
       tags:
-      - agent-service-proxy-controller
+      - RuntimeModelServiceController
+      summary: 文本向量化
+      description: textEmbeddings
       operationId: textEmbeddings
       parameters:
       - name: workspace_id
@@ -14132,7 +14060,9 @@ paths:
   /v1/{project_id}/agent-manager/agent-builder/chat/completions:
     post:
       tags:
-      - agent-service-proxy-controller
+      - RuntimeModelServiceController
+      summary: 模型调测
+      description: chatCompletions
       operationId: chatCompletions
       parameters:
       - name: workspace_id
@@ -15209,7 +15139,9 @@ paths:
   /v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables:
     get:
       tags:
-      - agent-service-proxy-controller
+      - AgentMemoryManagement
+      summary: 查询应用中的用户的变量记忆列表
+      description: 查询应用中的用户的变量记忆列表（用于Agent运行时查询变量列表）
       operationId: listUserVariableMemory
       parameters:
       - name: project_id
@@ -15807,27 +15739,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModelNameResp"
-  /v1/{project_id}/model-manager/maas-model-services:
-    get:
-      tags:
-      - model-service-mgmt-api-controller
-      summary: ""
-      description: 查询模型服务
-      operationId: maasModelServiceList
-      parameters:
-      - name: project_id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: "^[a-zA-Z0-9_-]{1,40}$"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MaasServiceRsp"
   /v1/{project_id}/model-manager/interface-protocol:
     get:
       tags:
@@ -16998,7 +16909,9 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/executions/{execution_id}:
     get:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: 查询工作流执行洞察
+      description: 查询工作流执行洞察信息
       operationId: getExecutionInsight_1
       parameters:
       - name: project_id
@@ -17122,7 +17035,8 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations:
     get:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: 查询当前对话中用户输入内容的列表
       operationId: listConversationQueries_1
       parameters:
       - name: project_id
@@ -17192,7 +17106,8 @@ paths:
   /v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations/{conversation_id}/executions:
     get:
       tags:
-      - agent-service-proxy-controller
+      - WorkflowRuntime
+      summary: 查询当前对话中用户输入内容的列表
       operationId: listExecutionQueries_1
       parameters:
       - name: project_id
@@ -19358,6 +19273,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VersionReferenceListRsp"
+  /v1/{project_id}/agent-manager/agents/{agent_id}/validate:
+    get:
+      tags:
+      - agent-management-api-controller
+      summary: 校验智能体
+      description: 智能体试运行前预校验。多智能体校验下挂子工作流引用的版本是否存在。
+      operationId: validateAgent
+      parameters:
+      - name: project_id
+        in: path
+        description: 项目ID。
+        required: true
+        schema:
+          type: string
+      - name: agent_id
+        in: path
+        description: 资源ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowValidationVO"
   /v1/{project_id}/agent-manager/agents/{agent_id}/recommended-questions:
     get:
       tags:
@@ -19481,7 +19435,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/{agent_id}/executions/{execution_id}:
     get:
       tags:
-      - agent-service-proxy-controller
+      - ConversationManagement
+      summary: 查询Agent会话信息
+      description: 查询 agent 会话信息
       operationId: getAgentExecutionInfo
       parameters:
       - name: project_id
@@ -19575,10 +19531,81 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AutoAddResultJsonObject"
+  /v1/{project_id}/agent-manager/agents/{agent_id}/conversations:
+    get:
+      tags:
+      - ConversationManagement
+      summary: 查询当前Agent应用的会话列表
+      operationId: listAgentConversations
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          maximum: 9223372036854775807
+          minimum: 0
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          maximum: 9223372036854775807
+          minimum: 0
+      - name: start_time
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: end_time
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 32
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversionQueries"
   /v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/memory-variables:
     get:
       tags:
-      - agent-service-proxy-controller
+      - ConversationManagement
+      summary: 根据conversation_id查询会话记忆
+      description: 根据conversation_id查询会话记忆
       operationId: retrieveConversationMemory
       parameters:
       - name: project_id
@@ -19748,7 +19775,9 @@ paths:
   /v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/execution-queries:
     get:
       tags:
-      - agent-service-proxy-controller
+      - ConversationManagement
+      summary: 查询Agent对话输入内容列表
+      description: 查询用户的Agent对话输入内容的列表
       operationId: listAgentExecutionQueries
       parameters:
       - name: project_id
@@ -20851,14 +20880,17 @@ components:
         code:
           type: integer
           format: int32
-          description: 编码
-          example: 1
+          description: 状态码：200 表示业务成功，非 200 表示业务失败
+          example: 200
         message:
           type: string
-          description: 消息
-          example: 示例文本
+          description: "消息内容依接口而定：prompt/tasks 列表接口为任务统计 JSON 字符串（如 {\"TOTAL\":0,\"\
+            TEXT\":0,\"MULTI\":0}），其余接口为操作提示消息"
+          example: success
         data:
-          description: 数据列表
+          description: 业务数据，结构依接口而定；prompt/tasks 列表接口为分页对象（含列表数据与 total/pageNum/pageSize/pages
+            分页元数据）
+          example: {}
     PromptEvalDataItem:
       type: object
       properties:
@@ -21120,14 +21152,14 @@ components:
         code:
           type: integer
           format: int32
-          description: 状态码
-          example: 200
+          description: 状态码：0 表示业务成功，非 0 表示业务失败
+          example: 0
         message:
           type: string
           description: 消息
           example: 操作成功
         data:
-          description: 数据
+          description: 业务数据，结构依接口而定
           example: {}
     ConnectionParamInfo:
       type: object
@@ -22140,7 +22172,7 @@ components:
           minLength: 2
         code:
           type: string
-          description: 工作流编码
+          description: 工作流编码；创建时必填
           example: workflow-code-01
           maxLength: 64
           minLength: 2
@@ -22171,7 +22203,7 @@ components:
         workflow_details:
           type: object
           additionalProperties: {}
-          description: 工作流详情
+          description: 工作流详情；缺失时服务端生成默认工作流模板
           example: {}
         create_time:
           type: integer
@@ -22233,7 +22265,7 @@ components:
           pattern: "^[a-zA-Z0-9_-]+$"
         type:
           type: string
-          description: 工作流类型
+          description: 工作流类型，chat：对话型，task：任务型；创建时必填
           example: chat
           maxLength: 32
         ref_workflows:
@@ -30200,7 +30232,7 @@ components:
       properties:
         knowledge_base_connection_detail:
           $ref: "#/components/schemas/DefaultKnowledgeBaseConnectionDetail"
-          description: 知识库
+          description: 知识库；默认连接未配置时该字段为 null
           example: {}
     KnowledgeBaseConfig:
       type: object
@@ -30761,28 +30793,6 @@ components:
           type: boolean
           description: 模型
           example: true
-    MaasService:
-      type: object
-      properties:
-        served_model_name:
-          type: string
-          description: 模型
-          example: 示例名称
-        is_subscribed:
-          type: boolean
-          description: issubscribed
-          example: true
-    MaasServiceRsp:
-      type: object
-      properties:
-        data:
-          type: array
-          description: 数据
-          example: []
-          items:
-            $ref: "#/components/schemas/MaasService"
-          maxItems: 2147483647
-          minItems: 0
     ModelInterfaceProtocolListRsp:
       type: object
       properties:
@@ -34432,9 +34442,3 @@ components:
       properties:
         id:
           type: string
-  securitySchemes:
-    AccessToken:
-      type: apiKey
-      description: SSO 访问令牌，通过请求头 Access-Token 传递；Simple 模式使用 X-Auth-Token
-      name: Access-Token
-      in: header

@@ -26,7 +26,6 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -43,7 +42,7 @@ import java.util.regex.Pattern;
 public class WorkspaceInterceptor implements HandlerInterceptor {
 
     // 定义正则表达式模式，仅允许字母、数字、下划线和连字符
-    private static final Pattern ID_PATTERN = Pattern.compile("^[a-zA-Z0-9_()-]+$");
+    private static final Pattern ID_PATTERN = Pattern.compile("^[a-zA-Z0-9_()-]{1,64}$");
 
     private static final String REGISTERED_URIS = "REGISTERED_URIS";
 
@@ -60,7 +59,7 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
             "/v2/*/agent-manager/knowledge-bases/images/*",
             "/v1/open/developer/agent-manager/agents/exist/published", "/v1/agent-manager/health",
             "/v1/agent-manager/*/cleannotify", "/v1/model-manager/model-services/subscribe","/v1/*/mcp/server/list",
-            "/v1/*/agent-builder/prompt/industry/list", "/v1/*/model-manager/maas-model-services", "/v1/studio/datasources/*/execute"));
+            "/v1/*/agent-builder/prompt/industry/list", "/v1/studio/datasources/*/execute"));
 
     @Autowired
     private WorkspaceMapper workspaceMapper;
@@ -96,12 +95,10 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
         }
 
         // 验证ID格式是否合法
-        // 验证workspace_id是否为空（project_id为空时路由匹配不到，不会走到这里）
-        if (isEmptyId(workspaceId)) {
-            sendErrorResponse(response, HttpServletResponse.SC_BAD_REQUEST,
-                "openjiuwen.02001009", "Workspace ID cannot be empty",
-                "Please provide a valid Workspace ID in the request parameters.");
-            return false;
+        // 验证workspace_id格式与长度（空/空白/格式非法/超长统一由正则校验）
+        if (!isValidId(workspaceId)) {
+            log.error("invalid workspaceId: {}", workspaceId);
+            throw new AgentStudioException(StudioError.WORKSPACE_FORMAT_INVALID);
         }
         if (!isValidId(projectId)) {
             log.error("invalid format, projectId: {}", projectId);
@@ -110,22 +107,6 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
         if (!isValidId(workspaceId)) {
             log.error("invalid format, workspaceId: {}", workspaceId);
             throw new AgentStudioException(StudioError.WORKSPACE_FORMAT_INVALID);
-        }
-
-        // 验证ID长度是否合法
-        if (projectId.length() > 64) {
-            log.error("projectId length exceeded: {}", projectId.length());
-            sendErrorResponse(response, HttpServletResponse.SC_BAD_REQUEST,
-                "openjiuwen.02001010", "Project ID length must be between 1 and 64",
-                "Please ensure the Project ID does not exceed 64 characters.");
-            return false;
-        }
-        if (workspaceId.length() > 64) {
-            log.error("workspaceId length exceeded: {}", workspaceId.length());
-            sendErrorResponse(response, HttpServletResponse.SC_BAD_REQUEST,
-                "openjiuwen.02001009", "Workspace ID length must be between 1 and 64",
-                "Please ensure the Workspace ID does not exceed 64 characters.");
-            return false;
         }
 
         ThreadLocalUtils.setWorkspaceId(workspaceId);
@@ -177,14 +158,6 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
             String uri = parts[1];
             return checkUriPermission(requestUri, uri) && requestMethod.equals(method);
         });
-    }
-
-    private boolean isEmptyId(String id) {
-        // 检查ID是否为空或者仅包含空白字符
-        if (id == null || id.trim().isEmpty()) {
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -267,21 +240,8 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
      * @return 如果ID为空或者不符合格式，则返回false；否则返回true
      */
     private boolean isValidId(String id) {
-        // 检查ID是否为空或者仅包含空白字符
-        if (id == null || id.trim().isEmpty()) {
-            return false;
-        }
-        // 否则校验是否符合正则表达式
-        return ID_PATTERN.matcher(id).matches();
-    }
-
-    /**
-     * 发送错误响应
-     */
-    private void sendErrorResponse(HttpServletResponse response, int status, String errorCode, String message, String suggestion) throws IOException {
-        response.setStatus(status);
-        response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write("{\"error_code\": \"" + errorCode + "\", \"error_msg\": \"" + message + "\", \"error_suggestion\": \"" + suggestion + "\"}");
+        // 正则已涵盖空串/空白/格式/长度（1-64），先排除空白与 null
+        return !StringUtils.isBlank(id) && ID_PATTERN.matcher(id).matches();
     }
 
     @Override

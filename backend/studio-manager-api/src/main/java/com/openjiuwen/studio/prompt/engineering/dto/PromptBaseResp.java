@@ -24,15 +24,15 @@ public class PromptBaseResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
-    @Schema(description = "编码", example = "1")
+    @Schema(description = "状态码：200 表示业务成功，非 200 表示业务失败", example = "200")
     private Integer code = null;
 
     @JsonProperty("message")
-    @Schema(description = "消息", example = "示例文本")
+    @Schema(description = "消息内容依接口而定：prompt/tasks 列表接口为任务统计 JSON 字符串（如 {\"TOTAL\":0,\"TEXT\":0,\"MULTI\":0}），其余接口为操作提示消息", example = "success")
     private String message = null;
 
     @JsonProperty("data")
-    @Schema(description = "数据列表", example = "")
+    @Schema(description = "业务数据，结构依接口而定；prompt/tasks 列表接口为分页对象（含列表数据与 total/pageNum/pageSize/pages 分页元数据）", example = "{}")
     @Valid
     private Object data = null;
 

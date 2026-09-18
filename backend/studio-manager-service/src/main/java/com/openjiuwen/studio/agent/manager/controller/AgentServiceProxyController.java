@@ -84,10 +84,10 @@ import com.openjiuwen.studio.agent.manager.service.WorkflowRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
 import com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService;
 
-import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -259,8 +259,8 @@ public class AgentServiceProxyController {
     /**
      * 执行Agent，带会话id
      */
-    @ApiOperation(value = "run agent asset", nickname = "runAgentAsset", notes = "运行百宝箱Agent",
-        response = Object.class, tags = {"AgentRuntime"})
+    @Operation(summary = "run agent asset", description = "运行百宝箱Agent（代理 Runtime 接口 POST /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}，SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）",
+        tags = {"AgentRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = Object.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
@@ -308,8 +308,8 @@ public class AgentServiceProxyController {
     /**
      * 执行Agent，带会话id
      */
-    @ApiOperation(value = "run agent", nickname = "runAgentWithConversation", notes = "运行知识型Agent",
-        response = Object.class, tags = {"AgentRuntime"})
+    @Operation(summary = "run agent", description = "运行知识型Agent（代理 Runtime 接口 POST /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}，SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）",
+        tags = {"AgentRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = Object.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
@@ -342,86 +342,6 @@ public class AgentServiceProxyController {
         environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
         return runningAgent(projectId, workspaceId, agentType, agentId, conversationId, version, type, stream, body,
             httpHeaders, environmentId);
-    }
-
-    /**
-     * 执行Agent，不带会话id
-     */
-    @ApiOperation(value = "run agent", nickname = "runAgent", notes = "运行知识型Agent", response = Object.class,
-        tags = {"AgentRuntime"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "OK", response = Object.class),
-        @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/conversations",
-        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
-    public Object runAgent(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_()-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.QUERY, description = "空间id", schema = @Schema())
-        @RequestParam(value = "workspace_id", required = true) String workspaceId,
-        @Parameter(in = ParameterIn.QUERY, description = "Agent类型", schema = @Schema())
-        @RequestParam(value = "agent_type", required = false) String agentType,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "agent id", required = true, schema = @Schema())
-        @PathVariable("agent_id") String agentId, @RequestParam(value = "version", required = false) String version,
-        @RequestHeader(value = "stream", required = false) Boolean stream,
-        @NotNull @ApiParam(value = "输入参数", required = true) @Valid @RequestBody ServiceRunAgentReq body,
-        @RequestHeader HttpHeaders httpHeaders,
-        @Pattern(regexp = "^[a-zA-Z0-9_()-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.QUERY, description = "环境id", schema = @Schema())
-        @RequestParam(value = "environment_id", required = false) String environmentId) {
-        checkAgentPermission(projectId, workspaceId, agentId, version);
-
-        // 单智能体无环境选择：environment_id 缺省时回填项目默认环境，模型 api_url
-        // 占位符按默认环境解析（仅单智能体；多智能体保持既有不带参行为）
-        environmentId = agentServiceProxyService.resolveEnvironmentIdForSingleAgent(projectId, agentId, environmentId);
-        if (stream == null || stream) {
-            String url = "%s/v1/%s/agents/%s/conversations?workspace_id=%s";
-            url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, agentId, workspaceId);
-            if (agentType != null) {
-                url += "&agent_type=" + agentType;
-            }
-            if (version != null) {
-                url += "&version=" + version;
-            }
-            if (StringUtils.isNotBlank(environmentId)) {
-                url += "&environment_id=" + environmentId;
-            }
-            if (CommonConstant.DEEPRESEARCH_TYPE.equals(agentType)) {
-                return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body), 7200000L);
-            }
-
-            // 判断是否为debug模式
-            List<String> invokeModeList = httpHeaders.get(Constant.Agent.INVOKE_HEADER_KEY);
-            String invokeMode = invokeModeList != null && !invokeModeList.isEmpty() ? invokeModeList.get(0) : "";
-            boolean isDebug = Constant.Common.INVOKE_MOD_DEBUG.equalsIgnoreCase(invokeMode);
-
-            if (isDebug) {
-                String executeType = agentType != null ? agentType : Constant.AppType.AGENT;
-                AgentExecuteParams executeParams = AgentExecuteParams.builder()
-                    .projectId(projectId)
-                    .agentId(agentId)
-                    .workspaceId(workspaceId)
-                    .query(extractQuery(body))
-                    .inputs(body.getInputs())
-                    .debug(true)
-                    .executeType(executeType)
-                    .userId(RequestContextUtils.getRequestUserId())
-                    .versionId(version)
-                    .modelDeploymentId(body.getModelDeploymentId())
-                    .toolSwitchDict(body.getToolSwitchDict())
-                    .environmentId(environmentId)
-                    .token(RequestContextUtils.getRequestAuthToken())
-                    .build();
-                return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
-            }
-
-            return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
-        } else {
-            return runtimeClient.runAgent(RequestContextUtils.getRequestAuthToken(), projectId, agentId,
-                workspaceId, agentType, version, environmentId, body).getBody();
-        }
     }
 
     private Object runAssets(String projectId, String workspaceId, String environmentId, String workflowId,
@@ -478,8 +398,8 @@ public class AgentServiceProxyController {
         }
     }
 
-    @ApiOperation(value = "run workflow applications", nickname = "runWorkflowAsset", notes = "百宝箱运行",
-        response = Object.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "run workflow applications", description = "百宝箱运行（代理 Runtime 接口 POST /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}，SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）",
+        tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = Object.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
@@ -523,8 +443,8 @@ public class AgentServiceProxyController {
     /**
      * 执行 workflow
      */
-    @ApiOperation(value = "run workflow applications", nickname = "runWorkflowWithConversation",
-        notes = "运行场景化应用接口", response = Object.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "run workflow applications",
+        description = "运行场景化应用接口（代理 Runtime 接口 POST /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}，SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = Object.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
@@ -559,8 +479,7 @@ public class AgentServiceProxyController {
     /**
      * agent 上传文件
      */
-    @ApiOperation(value = "Agent对话上传文件", nickname = "agentUploadFile", notes = "Agent对话上传文件",
-        response = FileUploadRsp.class, tags = {"AgentRuntime"})
+    @Operation(summary = "Agent对话上传文件", description = "Agent对话上传文件", tags = {"AgentRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "agent文件上传响应体", response = FileUploadRsp.class),
         @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
@@ -587,9 +506,7 @@ public class AgentServiceProxyController {
 
     }
 
-    @ApiOperation(value = "根据conversation_id重置会话记忆", nickname = "resetConversationMemory",
-        notes = "根据conversation_id重置会话记忆", response = MemoryVariable.class, responseContainer = "List",
-        tags = {"ConversationManagement"})
+    @Operation(summary = "根据conversation_id重置会话记忆", description = "根据conversation_id重置会话记忆", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "conversation记忆列表", response = MemoryVariable.class,
             responseContainer = "List"),
@@ -616,9 +533,7 @@ public class AgentServiceProxyController {
             versionId).getBody();
     }
 
-    @ApiOperation(value = "根据conversation_id查询会话记忆", nickname = "retrieveConversationMemory",
-        notes = "根据conversation_id查询会话记忆", response = MemoryVariable.class, responseContainer = "List",
-        tags = {"ConversationManagement"})
+    @Operation(summary = "根据conversation_id查询会话记忆", description = "根据conversation_id查询会话记忆", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "conversation记忆列表", response = MemoryVariable.class,
             responseContainer = "List"),
@@ -645,8 +560,7 @@ public class AgentServiceProxyController {
             retrieveConversationMemoryQo).getBody();
     }
 
-    @ApiOperation(value = "run workflow node execution", nickname = "runWorkflowNodeExecute",
-        notes = "运行工作流单节点执行", response = WorkflowRunRsp.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "run workflow node execution", description = "运行工作流单节点执行", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = WorkflowRunRsp.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
@@ -676,8 +590,7 @@ public class AgentServiceProxyController {
             conversationId, nodeId, body, httpHeaders);
     }
 
-    @ApiOperation(value = "指定message创建用户反馈", nickname = "createUserFeedback", notes = "指定message创建用户反馈",
-        response = String.class, tags = {"ConversationManagement"})
+    @Operation(summary = "指定message创建用户反馈", description = "指定message创建用户反馈", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = String.class)
     })
@@ -702,8 +615,7 @@ public class AgentServiceProxyController {
             versionId, body).getBody();
     }
 
-    @ApiOperation(value = "删除指定message用户反馈", nickname = "deleteFeedback", notes = "删除指定message用户反馈",
-        response = ConversationDeleteResp.class, tags = {"ConversationManagement"})
+    @Operation(summary = "删除指定message用户反馈", description = "删除指定message用户反馈", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = ConversationDeleteResp.class)
     })
@@ -726,9 +638,7 @@ public class AgentServiceProxyController {
             .getBody();
     }
 
-    @ApiOperation(value = "批量删除用户的变量记忆", nickname = "batchDeleteUserVariableMemory",
-        notes = "批量删除用户的变量记忆（用于Agent运行时用户手动删除自己的变量记忆）",
-        response = BatchDeleteUserVariableMemoryResponseBody.class, tags = {"AgentMemoryManagement"})
+    @Operation(summary = "批量删除用户的变量记忆", description = "批量删除用户的变量记忆（用于Agent运行时用户手动删除自己的变量记忆）", tags = {"AgentMemoryManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "批量删除变量记忆的响应体",
             response = BatchDeleteUserVariableMemoryResponseBody.class),
@@ -752,9 +662,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.batchDeleteUserVariableMemory(projectId, agentId, workspaceId, body).getBody();
     }
 
-    @ApiOperation(value = "查询应用中的用户的变量记忆列表", nickname = "listUserVariableMemory",
-        notes = "查询应用中的用户的变量记忆列表（用于Agent运行时查询变量列表）",
-        response = ListUserVariableMemoryResponseBody.class, tags = {"AgentMemoryManagement"})
+    @Operation(summary = "查询应用中的用户的变量记忆列表", description = "查询应用中的用户的变量记忆列表（用于Agent运行时查询变量列表）", tags = {"AgentMemoryManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "变量记忆列表", response = ListUserVariableMemoryResponseBody.class),
         @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
@@ -776,9 +684,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.listUserVariableMemory(projectId, agentId, workspaceId).getBody();
     }
 
-    @ApiOperation(value = "重置用户的变量记忆", nickname = "resetUserVariableMemory",
-        notes = "重置用户的变量记忆（用于Agent运行时用户手动重置自己的变量记忆），重置后，用户的所有变量值将重置为默认值",
-        response = ResetUserVariableMemoryResponseBody.class, tags = {"AgentMemoryManagement"})
+    @Operation(summary = "重置用户的变量记忆", description = "重置用户的变量记忆（用于Agent运行时用户手动重置自己的变量记忆），重置后，用户的所有变量值将重置为默认值", tags = {"AgentMemoryManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "批量删除变量记忆的响应体",
             response = ResetUserVariableMemoryResponseBody.class),
@@ -801,8 +707,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.resetUserVariableMemory(projectId, agentId, workspaceId).getBody();
     }
 
-    @ApiOperation(value = "查询当前对话中用户输入内容的列表", nickname = "listConversationQueries", notes = "",
-        response = ConversionQueries.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "查询当前对话中用户输入内容的列表", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = ConversionQueries.class),
         @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
@@ -821,8 +726,7 @@ public class AgentServiceProxyController {
         return workflowRuntimeService.listConversationQueries(projectId, workflowId, listConversationQueriesQo);
     }
 
-    @ApiOperation(value = "查询当前对话中用户输入内容的列表", nickname = "listExecutionQueries", notes = "",
-        response = ExecutionQueries.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "查询当前对话中用户输入内容的列表", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = ExecutionQueries.class),
         @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
@@ -844,8 +748,7 @@ public class AgentServiceProxyController {
             listExecutionQueriesQo);
     }
 
-    @ApiOperation(value = "", nickname = "getExecutionInsight", notes = "", response = ExecutionInfo.class,
-        tags = {"WorkflowRuntime"})
+    @Operation(summary = "查询工作流执行洞察", description = "查询工作流执行洞察信息", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = ExecutionInfo.class),
         @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
@@ -873,8 +776,7 @@ public class AgentServiceProxyController {
 
 
     // 此接口已弃用
-    @ApiOperation(value = "测试 mcp 服务", nickname = "testServer", notes = "测试 mcp 服务",
-        response = McpValidationResp.class, tags = {"McpServerRuntime"})
+    @Operation(summary = "测试 mcp 服务", description = "测试 mcp 服务", tags = {"McpServerRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "mcp 服务测试结果", response = McpValidationResp.class),
         @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
@@ -894,8 +796,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.testServer(projectId, body, workspaceId).getBody();
     }
 
-    @ApiOperation(value = "重排序接口", nickname = "rerank", notes = "rerank", response = Object.class,
-        tags = {"RuntimeModelServiceController"})
+    @Operation(summary = "重排序接口", description = "rerank", tags = {"RuntimeModelServiceController"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "rerank", response = Object.class)
     })
@@ -910,8 +811,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.rerank(headers, workspaceId, request, refresh, projectId, apiUrlEnvVars);
     }
 
-    @ApiOperation(value = "文本向量化", nickname = "textEmbeddings", notes = "textEmbeddings", response = Object.class,
-        tags = {"RuntimeModelServiceController"})
+    @Operation(summary = "文本向量化", description = "textEmbeddings", tags = {"RuntimeModelServiceController"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "textEmbeddings", response = Object.class)
     })
@@ -927,8 +827,7 @@ public class AgentServiceProxyController {
             apiUrlEnvVars);
     }
 
-    @ApiOperation(value = "模型调测", nickname = "chatCompletions", notes = "chatCompletions", response = Object.class,
-        tags = {"RuntimeModelServiceController"})
+    @Operation(summary = "模型调测", description = "chatCompletions", tags = {"RuntimeModelServiceController"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "chatCompletions", response = Object.class)
     })
@@ -944,8 +843,7 @@ public class AgentServiceProxyController {
             apiUrlEnvVars);
     }
 
-    @ApiOperation(value = "自动生成追问", nickname = "additionalQuestions", notes = "自动生成追问",
-        response = AutoAddResultJsonObject.class, tags = {"AgentRuntime"})
+    @Operation(summary = "自动生成追问", description = "自动生成追问", tags = {"AgentRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "追问列表", response = AutoAddResultJsonObject.class),
         @ApiResponse(code = 400, message = "Bad Request", response = ErrorRsp.class)
@@ -967,8 +865,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.additionalQuestions(projectId, agentId, conversationId, workspaceId, body)
             .getBody();
     }
-    @ApiOperation(value = "工作流自动生成追问", nickname = "additionalQuestionsWorkflow", notes = "自动生成追问",
-        response = AutoAddResultJsonObject.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "工作流自动生成追问", description = "自动生成追问", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "追问列表", response = AutoAddResultJsonObject.class),
         @ApiResponse(code = 400, message = "Bad Request", response = ErrorRsp.class)
@@ -991,8 +888,7 @@ public class AgentServiceProxyController {
             .getBody();
     }
 
-    @ApiOperation(value = "工具执行", nickname = "runTool", notes = "执行一个工具",
-        response = RunToolResponseBody.class, tags = {"ToolRuntime"})
+    @Operation(summary = "工具执行", description = "执行一个工具", tags = {"ToolRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "工具运行结果", response = RunToolResponseBody.class),
         @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
@@ -1012,8 +908,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.runTool(workspaceId, projectId, body, toolId).getBody();
     }
 
-    @ApiOperation(value = "text To Speech", nickname = "textToSpeech", notes = "文本转语音", response = Object.class,
-        tags = {"TextToSpeech"})
+    @Operation(summary = "text To Speech", description = "文本转语音", tags = {"TextToSpeech"})
     @ApiResponses(value = {@ApiResponse(code = 200, message = "OK", response = Object.class)})
     @PostMapping(value = "/v1/{project_id}/agent-manager/agents/audio/tts", consumes = {"application/json"})
     JSONObject textToSpeech(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
@@ -1025,8 +920,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.textToSpeech(projectId, workspaceId, request);
     }
 
-    @ApiOperation(value = "audio transcription", nickname = "audioTranscription", notes = "语音转写",
-        response = Object.class, tags = {"AudioTranscription"})
+    @Operation(summary = "audio transcription", description = "语音转写", tags = {"AudioTranscription"})
     @ApiResponses(value = {@ApiResponse(code = 200, message = "OK", response = Object.class)})
     @PostMapping(value = "/v1/{project_id}/agent-manager/agents/audio/transcriptions", consumes = {"application/json"})
     public StsTextResp audioTranscriptions(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
@@ -1039,9 +933,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.audioTranscriptions(projectId, workspaceId,request).getBody();
     }
 
-    @ApiOperation(value = "增加分析事件", nickname = "analyticsEvent",
-        notes = "提供分析事件记录接口，实现（类似点赞，点踩）功能", response = AnalyticsEventResp.class,
-        tags = {"AnalyticsEvent"})
+    @Operation(summary = "增加分析事件", description = "提供分析事件记录接口，实现（类似点赞，点踩）功能", tags = {"AnalyticsEvent"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "事件", response = AnalyticsEventResp.class),
         @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
@@ -1062,8 +954,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.analyticsEvent(projectId, agentId, body, workspaceId).getBody();
     }
 
-    @ApiOperation(value = "", nickname = "listAgentExecutionQueries", notes = "查询用户的Agent对话输入内容的列表",
-        response = AgentExecutionQueries.class, tags = {"ConversationManagement"})
+    @Operation(summary = "查询Agent对话输入内容列表", description = "查询用户的Agent对话输入内容的列表", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "agent对话query列表", response = AgentExecutionQueries.class),
         @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
@@ -1084,8 +975,7 @@ public class AgentServiceProxyController {
             listAgentExecutionQueriesQo);
     }
 
-    @ApiOperation(value = "", nickname = "getAgentExecutionInfo", notes = "查询 agent 会话信息",
-        response = AgentExecutionInfo.class, tags = {"ConversationManagement"})
+    @Operation(summary = "查询Agent会话信息", description = "查询 agent 会话信息", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Agent对话信息列表", response = AgentExecutionInfo.class)
     })
@@ -1105,8 +995,7 @@ public class AgentServiceProxyController {
         return agentRuntimeService.getAgentExecutionInfo(projectId, executionId, agentId, getAgentExecutionInfoQo);
     }
 
-    @ApiOperation(value = "", nickname = "voiceRecognition", notes = "一句话语音识别", response = AsrRsp.class,
-        tags = {"AgentRuntime"})
+    @Operation(summary = "一句话语音识别", description = "一句话语音识别", tags = {"AgentRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "语音识别返回数据", response = AsrRsp.class),
         @ApiResponse(code = 400, message = "Bad Request", response = ErrorRsp.class)
@@ -1120,8 +1009,7 @@ public class AgentServiceProxyController {
         return agentServiceProxyService.voiceRecognition(projectId, body, workspaceId).getBody();
     }
 
-    @ApiOperation(value = "查询当前Agent应用的会话列表", nickname = "listAgentConversations", notes = "",
-        response = ConversionQueries.class, tags = {"ConversationManagement"})
+    @Operation(summary = "查询当前Agent应用的会话列表", tags = {"ConversationManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = ConversionQueries.class),
         @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
@@ -1140,8 +1028,7 @@ public class AgentServiceProxyController {
         return agentRuntimeService.listAgentConversations(projectId, agentId, listAgentConversationsQo);
     }
 
-    @ApiOperation(value = "停止对话生成并清空会话", nickname = "abortConversation", notes = "", response = Status.class,
-        tags = {"WorkflowRuntime"})
+    @Operation(summary = "停止对话生成并清空会话", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "", response = Status.class),
         @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
@@ -1165,8 +1052,8 @@ public class AgentServiceProxyController {
 
     ;
 
-    @ApiOperation(value = "run web Workflow", nickname = "runWebAgent", notes = "运行网页Workflow",
-        response = WorkflowRunReq.class, tags = {"WorkflowRuntime"})
+    @Operation(summary = "run web Workflow", description = "运行网页Workflow（代理 Runtime 接口 POST /v1/workflows/chat/{short_code}/conversations/{conversation_id}，SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）",
+        tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = WorkflowRunReq.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
@@ -1193,8 +1080,8 @@ public class AgentServiceProxyController {
             stream, body);
     }
 
-    @ApiOperation(value = "run web agent", nickname = "runWebAgent", notes = "运行网页Agent",
-        response = AgentRunRsp.class, tags = {"AgentRuntime"})
+    @Operation(summary = "run web agent", description = "运行网页Agent（代理 Runtime 接口 POST /v1/agents/chat/{short_code}，SSE 流事件枚举以 Runtime 接口定义为准；请求参数及权限/业务校验见本接口定义）",
+        tags = {"AgentRuntime"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = AgentRunRsp.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)

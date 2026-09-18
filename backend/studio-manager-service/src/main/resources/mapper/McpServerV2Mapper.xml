@@ -96,11 +96,13 @@
     <insert id="insert">
         INSERT INTO ws_mcp_server_def (id, server_code, icon, name, name_en, description,
         description_en, readme, url, server_config, tools,
-        type, org_type, view_times, install_times)
+        type, org_type, view_times, install_times, tenant_id, dept_code, deleted,
+        created_by_user_id, last_updated_by_user_id)
         VALUES (#{id}, #{serverCode}, #{icon}, #{name}, #{nameEn},
         #{description}, #{descriptionEn}, #{readme},
         #{url}, #{serverConfig}, #{tools}, #{type},
-        #{orgType}, #{viewTimes}, #{installTimes})
+        #{orgType}, #{viewTimes}, #{installTimes}, #{tenantId}, #{deptCode}, #{deleted},
+        #{createdByUserId}, #{lastUpdatedByUserId})
     </insert>
 
     <update id="updateViewTimes">

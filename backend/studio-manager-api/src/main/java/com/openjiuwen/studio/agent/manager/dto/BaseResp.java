@@ -25,7 +25,7 @@ public class BaseResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
-    @Schema(description = "状态码", example = "200")
+    @Schema(description = "状态码：0 表示业务成功，非 0 表示业务失败", example = "0")
     private Integer code = null;
 
     @JsonProperty("message")
@@ -33,7 +33,7 @@ public class BaseResp implements Serializable {
     private String message = null;
 
     @JsonProperty("data")
-    @Schema(description = "数据", example = "{}")
+    @Schema(description = "业务数据，结构依接口而定", example = "{}")
     @Valid
     private Object data = null;
 

@@ -95,33 +95,6 @@ public interface AgentRuntimeClient {
         @RequestBody Object request);
 
     /**
-     * 运行 agent
-     */
-    @SuppressWarnings("checkstyle: all")
-    @PostMapping("/v1/{project_id}/agents/{agent_id}/conversations")
-    ResponseEntity<Object> runAgent(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @PathVariable(value = "agent_id") String agentId,
-        @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
-        @RequestParam(value = "version") String version,
-        @RequestParam(value = "environment_id", required = false) String environmentId,
-        @RequestBody Object request);
-
-    /**
-     * 运行 agent，流式
-     */
-    @SuppressWarnings("checkstyle: all")
-    @PostMapping("/v1/{project_id}/agents/{agent_id}/conversations")
-    Flux<Object> runAgentStream(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @RequestHeader(value = CommonConstant.AUTHORIZATION, required = false) String authorization,
-        @PathVariable(value = "project_id") String projectId, @PathVariable(value = "agent_id") String agentId,
-        @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
-        @RequestParam(value = "version") String version,
-        @RequestParam(value = "environment_id", required = false) String environmentId,
-        @RequestBody Object request);
-
-    /**
      * 运行工作流
      */
     @SuppressWarnings("checkstyle: all")

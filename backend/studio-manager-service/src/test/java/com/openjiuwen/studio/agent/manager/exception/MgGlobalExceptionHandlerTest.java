@@ -113,6 +113,8 @@ class MgGlobalExceptionHandlerTest {
     @Test
     void testHandleNoResourceFoundException() {
         NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/missing");
+        ErrorInfo errorInfo = new ErrorInfo("not found", "reason", "suggestion");
+        when(i18nUtil.getMessage(any(AgentStudioException.class))).thenReturn(errorInfo);
 
         ResponseEntity<ErrorRsp> response = handler.handleNoResourceFoundException(ex);
 
@@ -123,13 +125,14 @@ class MgGlobalExceptionHandlerTest {
     @Test
     void testHandleAsyncRequestTimeoutException() {
         AsyncRequestTimeoutException ex = new AsyncRequestTimeoutException();
-        when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("timeout error");
+        ErrorInfo errorInfo = new ErrorInfo("timeout error", "timeout reason", "timeout suggestion");
+        when(i18nUtil.getMessage(any(AgentStudioException.class))).thenReturn(errorInfo);
 
         ResponseEntity<ErrorRsp> response = handler.handleException(ex);
 
         assertNotNull(response);
         assertNotNull(response.getBody());
-        assertEquals(String.valueOf(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getCode()),
+        assertEquals(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getFullCode(),
             response.getBody().getErrorCode());
     }
 
@@ -160,7 +163,8 @@ class MgGlobalExceptionHandlerTest {
     @Test
     void testHandleNotReadableException() {
         HttpMessageNotReadableException ex = mock(HttpMessageNotReadableException.class);
-        when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("not readable");
+        ErrorInfo errorInfo = new ErrorInfo("not readable", "reason", "suggestion");
+        when(i18nUtil.getMessage(any(AgentStudioException.class))).thenReturn(errorInfo);
 
         ResponseEntity<ErrorRsp> response = handler.handleNotReadableException(ex);
 
