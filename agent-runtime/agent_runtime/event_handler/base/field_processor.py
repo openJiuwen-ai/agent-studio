@@ -156,11 +156,15 @@ class FieldDataProcessor:
         """
         fallback_agent_id = getattr(trace, "instance_id", "") or ""
 
-        def _msg(role: str, content: str, existing_agent_id=None) -> dict:
+        def _msg(role: str, content: str, existing_agent_id=None, enable_history=None) -> dict:
             m = {"role": role, "content": content}
             aid = existing_agent_id if existing_agent_id else fallback_agent_id
             if aid:
                 m["agent_id"] = aid
+            # enable_history=False必须随消息落库，否则下一轮加载时
+            # 被ConversationHistoryMessage默认补True，"本轮不入历史"语义失效
+            if enable_history is False:
+                m["enable_history"] = False
             return m
 
         def _norm_content(raw) -> str:
@@ -185,12 +189,15 @@ class FieldDataProcessor:
 
         messages = []
         if query and not query_in_messages:
-            messages.append(_msg("user", query))
+            # 补写本轮query时带上请求级enable_history（trace透传），保持标志位
+            messages.append(
+                _msg("user", query, None, getattr(trace, "enable_history", None))
+            )
 
         for msg in raw_messages:
             if not isinstance(msg, dict):
                 continue
             role = "user" if msg.get("role", "") == "user" else "assistant"
             content = _norm_content(msg.get("content"))
-            messages.append(_msg(role, content, msg.get("agent_id")))
+            messages.append(_msg(role, content, msg.get("agent_id"), msg.get("enable_history")))
         return messages
