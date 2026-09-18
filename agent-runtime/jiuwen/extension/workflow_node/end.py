@@ -695,7 +695,9 @@ class End(BaseEnd):
         query = session.get_global_state("query") or ""
         # outputs 来自 IR 中 outputs.userFields（#end_ 前缀映射），代表 End 节点最终输出，
         # 优先级高于 inputs（IR 的 inputs.userFields，仅作为兜底/原始引用）。
-        user_fields = {**inputs, **outputs, **{"query": query}}
+        # query 仅兜底：End 未配置 query 输出时才补用户输入，避免覆盖 End 固定值。
+        user_fields = {**inputs, **outputs}
+        user_fields.setdefault("query", query)
 
         # 构建带有 think 的 result（用于 message_end）
         result_with_think = get_output_data_with_metadata(
@@ -799,7 +801,8 @@ class End(BaseEnd):
             getattr(inner_session.state(), "_node_id", None) if inner_session else None
         )
         query = session.get_global_state("query") or ""
-        user_fields = {**inputs, **outputs, **{"query": query}}
+        user_fields = {**inputs, **outputs}
+        user_fields.setdefault("query", query)
         last_end_node_stream = None
         first_end_node_stream = True
         async for output in super().stream(inputs, session, context):
@@ -909,7 +912,8 @@ class End(BaseEnd):
             getattr(inner_session.state(), "_node_id", None) if inner_session else None
         )
         query = session.get_global_state("query") or ""
-        user_fields = {**inputs, **outputs, **{"query": query}}
+        user_fields = {**inputs, **outputs}
+        user_fields.setdefault("query", query)
 
         # 构建带有 think 的 result（用于 message_end）
         result_with_think = get_output_data_with_metadata(
@@ -1046,7 +1050,8 @@ class End(BaseEnd):
         inner_session = getattr(session, "_inner", None)
         node_id = getattr(inner_session.state(), "_node_id", None)
         query = session.get_global_state("query") or ""
-        user_fields = {**final_inputs, **outputs, **{"query": query}}
+        user_fields = {**final_inputs, **outputs}
+        user_fields.setdefault("query", query)
 
         # 构建带有 think 的 result（用于 message_end）
         result_with_think = get_output_data_with_metadata(
@@ -1299,7 +1304,8 @@ class End(BaseEnd):
             getattr(inner_session.state(), "_node_id", None) if inner_session else None
         )
         query = session.get_global_state("query") or ""
-        user_fields = {**clean_input_values, **outputs, **{"query": query}}
+        user_fields = {**clean_input_values, **outputs}
+        user_fields.setdefault("query", query)
 
         first_end_node_stream = True
         last_output_index = 0
@@ -1499,7 +1505,8 @@ class End(BaseEnd):
             getattr(inner_session.state(), "_node_id", None) if inner_session else None
         )
         query = session.get_global_state("query") or ""
-        user_fields = {**clean_input_values, **outputs, **{"query": query}}
+        user_fields = {**clean_input_values, **outputs}
+        user_fields.setdefault("query", query)
 
         # 构建带有 think 的 result（用于 message_end）
         result_with_think = get_output_data_with_metadata(
