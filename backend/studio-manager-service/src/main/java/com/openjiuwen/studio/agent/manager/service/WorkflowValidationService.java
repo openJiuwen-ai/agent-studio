@@ -965,6 +965,12 @@ public class WorkflowValidationService {
                 if (elementType != null && Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
                     validateSchemaFieldNames(schemaFieldSchema(subSchema), node, errors);
                 }
+            } else if (subTypeStr != null && subTypeStr.startsWith("array<") && subTypeStr.endsWith(">")) {
+                // array<object> 形式（带尖括号）：元素为 object 时，子字段在 schema（元素描述）的 schema 里
+                String elementType = subTypeStr.substring(6, subTypeStr.length() - 1).trim();
+                if (Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                    validateSchemaFieldNames(schemaFieldSchema(subSchema), node, errors);
+                }
             }
         }
     }
@@ -1099,7 +1105,14 @@ public class WorkflowValidationService {
                 }
                 return false;
             case "boolean":
-                return value instanceof Boolean;
+                // 兼容字符串布尔值（前端 START 节点布尔默认值通过 set-default 以 "true"/"false" 写入）
+                if (value instanceof Boolean) {
+                    return true;
+                }
+                if (value instanceof String s) {
+                    return "true".equalsIgnoreCase(s) || "false".equalsIgnoreCase(s);
+                }
+                return false;
             case "object":
                 // 字符串形式的 JSON 对象先解析
                 Object objValue = parseJsonValue(value);

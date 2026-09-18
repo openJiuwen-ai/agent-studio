@@ -639,7 +639,12 @@ export class DynamicNodeParamsComponent {
       if (elementType === 'any') {
         return true;
       }
-      return value.every((el) => this.matchElementType(el, elementType, subFields));
+      return value.every((el) => {
+        // array<object> 时，subFields 可能为元素描述（后端 schema 格式 {type:object,schema:[...]}），
+        // 需先 schemaFieldSchema 提取子字段列表，否则 asFieldList 返回 null 跳过嵌套校验
+        const elementSubFields = Array.isArray(subFields) ? subFields : this.schemaFieldSchema(subFields);
+        return this.matchElementType(el, elementType, elementSubFields);
+      });
     }
     // 基础类型（递归 object 子字段时可能走到这里）
     return this.matchElementType(value, type);
@@ -701,9 +706,24 @@ export class DynamicNodeParamsComponent {
       case 'string':
         return typeof value === 'string';
       case 'integer':
-        return typeof value === 'number';
+        // integer 需为整数（与后端 isElementTypeValid 整数约束一致），兼容字符串数字
+        if (typeof value === 'number') {
+          return Number.isFinite(value) && value === Math.floor(value);
+        }
+        if (typeof value === 'string') {
+          const n = Number(value);
+          return Number.isFinite(n) && n === Math.floor(n);
+        }
+        return false;
       case 'number':
-        return typeof value === 'number';
+        if (typeof value === 'number') {
+          return true;
+        }
+        if (typeof value === 'string') {
+          const n = Number(value);
+          return !Number.isNaN(n) && Number.isFinite(n);
+        }
+        return false;
       case 'boolean':
         return typeof value === 'boolean';
       case 'object':
