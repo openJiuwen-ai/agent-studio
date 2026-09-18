@@ -83,11 +83,19 @@ paths:
 
         归属校验（_check_before_cancel）→ 置协作式取消标记（所有实例可见，幂等 TTL）
 
-        + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段。
+        + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段
 
-        cancelled=取消信号已受理（除 4xx/5xx 外恒 true，不代表终止完成）；running=调用时
+        （入口字段按执行类型互斥单 key 回显，契约 v0.7：工作流执行→workflow_id、
 
-        是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，不视为失败）。
+        智能体执行→agent_id、无痕时按调用方携带的入口参数回显）。
+
+        cancelled=取消标记真实置位时 true；会话无任何痕迹（从未执行/打错会话 ID/
+
+        快照过期）时 false 且 message 明示，防调用方把"打错 ID"误判为终止成功；
+
+        running=调用时是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，
+
+        不视为失败）。
 
         运行中被终止的原 SSE 流末尾无 done（无 done 即中止，零改动约定）。'
       operationId: cancel_execution_v1__project_id__conversations__conversation_id__cancel_post
@@ -558,6 +566,25 @@ paths:
           description: 会话ID
           title: Conversation Id
         description: 会话ID
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          type: string
+          description: 工作空间ID
+          default: ''
+          title: Workspace Id
+        description: 工作空间ID
+      - name: environment_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 环境ID（manager 回填）
+          title: Environment Id
+        description: 环境ID（manager 回填）
       - name: x-language
         in: header
         required: false
@@ -869,13 +896,17 @@ paths:
         required: true
         schema:
           type: string
+          description: 记忆仓库ID
           title: Memory Repo Id
+        description: 记忆仓库ID
       - name: user_id
         in: path
         required: true
         schema:
           type: string
+          description: 用户ID
           title: User Id
+        description: 用户ID
       - name: page_size
         in: query
         required: false
