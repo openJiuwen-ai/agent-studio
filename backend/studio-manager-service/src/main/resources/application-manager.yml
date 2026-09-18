@@ -871,7 +871,7 @@ auth:
     validate-url: ${auth_sso_validate_url:}
     # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
     header: ${auth_sso_header:Access-Token}
-  # SSO 响应字段与用户属性映射
+  # SSO 响应字段与用户属性映射（支持点号分隔的多层嵌套路径，如 result.user_id）
   user-info:
     claims:
       user-id: ${user_info_claims_user_id:user_id}

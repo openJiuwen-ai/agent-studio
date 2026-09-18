@@ -194,13 +194,22 @@ public class SsoAuthenticationService {
     }
 
     /**
-     * 从 SSO 响应中按 Claim 名称提取字段值
+     * 从 SSO 响应中按 Claim 路径提取字段值
+     *
+     * <p>claimPath 支持点号分隔的多层嵌套路径，例如 "result.user_id" 表示取
+     * 根节点下 result 对象的 user_id 字段；单层字段名（如 "user_id"）保持原有行为。</p>
      */
-    private String extractClaim(Map<String, Object> ssoUserInfo, String claimName) {
-        if (claimName == null || claimName.isBlank()) {
+    private String extractClaim(Map<String, Object> ssoUserInfo, String claimPath) {
+        if (claimPath == null || claimPath.isBlank()) {
             return "";
         }
-        Object value = ssoUserInfo.get(claimName);
+        Object value = ssoUserInfo;
+        for (String key : claimPath.split("\\.")) {
+            if (!(value instanceof Map)) {
+                return "";
+            }
+            value = ((Map<?, ?>) value).get(key);
+        }
         return value != null ? value.toString() : "";
     }
 

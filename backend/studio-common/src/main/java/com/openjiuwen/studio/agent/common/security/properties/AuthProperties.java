@@ -84,26 +84,30 @@ public class AuthProperties {
         @Data
         public static class ClaimsConfig {
             /**
-             * 用户 ID Claim
+             * 用户 ID Claim 路径
              * 配置项: auth.user-info.claims.user-id
+             * 支持点号分隔的多层嵌套路径，例如 result.user_id
              */
             private String userId;
 
             /**
-             * 用户名 Claim
+             * 用户名 Claim 路径
              * 配置项: auth.user-info.claims.user-name
+             * 支持点号分隔的多层嵌套路径，例如 result.user_name
              */
             private String userName;
 
             /**
-             * 域 ID Claim
+             * 域 ID Claim 路径
              * 配置项: auth.user-info.claims.domain-id
+             * 支持点号分隔的多层嵌套路径
              */
             private String domainId;
 
             /**
-             * 项目 ID Claim
+             * 项目 ID Claim 路径
              * 配置项: auth.user-info.claims.project-id
+             * 支持点号分隔的多层嵌套路径
              */
             private String projectId;
         }
