@@ -4027,8 +4027,10 @@ def _resolve_branch_condition(
         branch_config = _find_branch_config(source_node, branch_id)
         if branch_config is None:
             return "True"
-        return _normalize_branch_expression(
-            branch_config.get("boolExpression") or "True"
+        return _apply_none_short_circuit(
+            _normalize_branch_expression(
+                branch_config.get("boolExpression") or "True"
+            )
         )
     if source_type == "jiuwen.intentDetection":
         branch_config = _find_branch_config(source_node, branch_id)
@@ -4243,6 +4245,31 @@ def _normalize_branch_expression(expression: str) -> str:
     converted = converted.replace("&&", " and ").replace("||", " or ")
     converted = _NEGATION_PATTERN.sub(" not ", converted)
     return " ".join(converted.split())
+
+
+_LENGTH_COMPARE_PATTERN = re.compile(
+    r"length\((\$\{[^{}]+\})\)\s*(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)"
+)
+
+
+def _apply_none_short_circuit(expression: str) -> str:
+    """对 length(${ref}) 大小比较加 None 短路，对齐商用版 None 走 default 的语义。
+
+    openjiuwen core 的 _safe_len(None) 返回 0，导致 `length(None) <= 0`
+    求值为 True 而误走 if 分支；商用版 jiuwen 层对 None 参与比较
+    （除 ==/!=）直接判定失败。此处改写为
+    `(not (${ref} is None) and length(${ref}) <= 0)`，None 时条件为
+    False 走 default，非 None 值行为不变。core 的 _safe_len 对 None
+    返回 0 不抛错，因此 and 组合即使非短路求值也不会报错。
+    """
+    if not expression:
+        return expression
+
+    def _repl(match: re.Match) -> str:
+        ref = match.group(1)
+        return "(not ({} is None) and {})".format(ref, match.group(0))
+
+    return _LENGTH_COMPARE_PATTERN.sub(_repl, expression)
 
 
 def _compact_named_input_items(items: list[Any]) -> dict[str, Any] | None:
