@@ -74,6 +74,7 @@ from jiuwen.orchestration.flow.stream.base import StreamCode, StreamData
 from jiuwen.serve.controllers.execution.open_utils import (
     cache_workflow_queue,
     async_ir_load,
+    drain_background_ttl_tasks,
 )
 
 # 多次使用的变量名以常量定义
@@ -1177,7 +1178,9 @@ class LazyWorkflow:
         """instantiate"""
         try:
             # 优先从缓存中读取 WorkflowSpec 重建
-            sub_wf_spec = await cache_workflow_queue.aget(self.ir_path)
+            sub_wf_spec = await cache_workflow_queue.aget(
+                self.ir_path, should_refresh_ttl=True
+            )
             if "is_sub_workflow" not in self._params:
                 self._params["is_sub_workflow"] = self.parent_workflow_id is not None
             if sub_wf_spec is not None:
@@ -1277,7 +1280,9 @@ async def build_workflow(
         )
         return await lwf.instantiate()
     if isinstance(data, dict):
-        cache_workflow_spec = await cache_workflow_queue.aget(data.get("ir_path", ""))
+        cache_workflow_spec = await cache_workflow_queue.aget(
+            data.get("ir_path", ""), should_refresh_ttl=True
+        )
         if cache_workflow_spec:
             data = cache_workflow_spec
     wf = Workflow(**kwargs)
@@ -1289,4 +1294,15 @@ def sync_build_workflow(
     data: Union[dict, WorkflowState, WorkflowSpec], **kwargs
 ) -> Workflow:
     """sync build workflow"""
-    return asyncio.new_event_loop().run_until_complete(build_workflow(data, **kwargs))
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(build_workflow(data, **kwargs))
+    finally:
+        # 运行本临时循环上挂起的后台续期任务（含构建异常路径），避免其随循环
+        # 悬挂（悬挂任务会持引用阻止循环对象及其 fd 被 GC，长期累积导致泄漏）；
+        # drain 自身失败不得掩盖构建结果或异常
+        try:
+            drain_background_ttl_tasks(loop)
+        except Exception:
+            pass
+        loop.close()

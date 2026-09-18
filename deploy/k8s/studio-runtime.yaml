@@ -78,6 +78,16 @@ spec:
               value: '60'
             - name: MODEL_CACHE_REDIS_TTL
               value: '300'
+            # 定义缓存（IR/工作流spec/智能体实例）Redis TTL（秒），默认 24h；
+            # 业务调用（Redis 命中）滑动续期；MEM_CACHE_TTL_SECONDS 为 L1 内存滑动窗口（秒）
+            - name: IR_CACHE_TTL_SECONDS
+              value: '86400'
+            - name: WORKFLOW_CACHE_TTL_SECONDS
+              value: '86400'
+            - name: AGENT_CACHE_TTL_SECONDS
+              value: '86400'
+            - name: MEM_CACHE_TTL_SECONDS
+              value: '3600'
             # ======== [选填] HTTPS证书 ========
             # 启用时设HTTPS=true，并填写证书Base64编码
             - name: HTTPS
