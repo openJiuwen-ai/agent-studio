@@ -330,7 +330,8 @@ def instance_app(config: dict | None = None):
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         """HTTPException 统一为四字段 ErrorRsp，避免落入 FastAPI 默认 {"detail": ...} 形态."""
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        code_key = "02001003" if exc.status_code < 500 else "02001002"
+        status_code_map = {404: "02001004", 405: "02001005"}
+        code_key = status_code_map.get(exc.status_code, "02001003" if exc.status_code < 500 else "02001002")
         return build_error_response(
             exc.status_code, code_key, language=language, reason=str(exc.detail)
         )
