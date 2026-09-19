@@ -1345,6 +1345,87 @@ export const FlowUtils = {
   ) {
     const oldMemory = cloneDeep(oldConfigs?.memory);
     const newMemory = cloneDeep(configs?.memory);
+
+    // Detect renamed memory variables by pairing old and new items by index.
+    // When a variable is renamed, the old filter (oldItem.name === newItem.name)
+    // excludes it from updateMemory, leaving stale ref_var_name in all referencing nodes.
+    const renameMap: Map<string, string> = new Map();
+    if (oldMemory && newMemory && oldMemory.length === newMemory.length) {
+      for (let i = 0; i < oldMemory.length; i++) {
+        const oldName = oldMemory[i]?.name;
+        const newName = newMemory[i]?.name;
+        if (oldName && newName && oldName !== newName) {
+          renameMap.set(`memory.${oldName}`, `memory.${newName}`);
+        }
+      }
+    }
+
+    // If there are renames, rewrite ref_var_name across all graph nodes.
+    // A recursive walker replaces the need to manually traverse each node
+    // type's specific structure (inputs, branches, settings, outputs, etc.).
+    if (renameMap.size > 0) {
+      // Recursively walk an object tree and rewrite any ref_var_name property
+      // that matches a renamed memory variable. Handles exact match
+      // (memory.oldName) and nested access (memory.oldName.field).
+      // WeakSet guards against circular references.
+      const rewrite = (
+        obj: any,
+        visited: WeakSet<any> = new WeakSet(),
+      ): boolean => {
+        if (!obj || typeof obj !== 'object') {
+          return false;
+        }
+        if (visited.has(obj)) {
+          return false;
+        }
+        visited.add(obj);
+
+        let changed = false;
+        if (Array.isArray(obj)) {
+          for (const item of obj) {
+            if (rewrite(item, visited)) {
+              changed = true;
+            }
+          }
+          return changed;
+        }
+
+        for (const key of Object.keys(obj)) {
+          const val = obj[key];
+          if (key === 'ref_var_name' && typeof val === 'string') {
+            for (const [oldRef, newRef] of renameMap) {
+              if (val === oldRef || val.startsWith(oldRef + '.')) {
+                obj[key] = newRef + val.substring(oldRef.length);
+                changed = true;
+              }
+            }
+          } else if (val && typeof val === 'object') {
+            if (rewrite(val, visited)) {
+              changed = true;
+            }
+          }
+        }
+        return changed;
+      };
+
+      graph.getNodes().forEach((node) => {
+        const nodeInfo = node.getData()?.ngArguments?.nodeInfo;
+        if (!nodeInfo) {
+          return;
+        }
+        const updated = cloneDeep(nodeInfo);
+        if (rewrite(updated)) {
+          node.setData({ ngArguments: { nodeInfo: updated } });
+          node.setData(null, { ignoreHistory: true });
+          node.setData(
+            { ngArguments: { nodeInfo: updated } },
+            { ignoreHistory: true },
+          );
+        }
+      });
+    }
+
+    // Existing logic: update type/schema for items that still match by name.
     const updateMemory = newMemory?.filter((newItem) =>
       oldMemory?.some((oldItem) => oldItem.name === newItem.name),
     );
