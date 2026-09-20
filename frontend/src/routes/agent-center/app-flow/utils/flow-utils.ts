@@ -1352,8 +1352,14 @@ export const FlowUtils = {
     // A recursive walker replaces the need to manually traverse each node
     // type's specific structure (inputs, branches, settings, outputs, etc.).
     if (renameList.length > 0) {
+      // Sort by oldRef length descending so the most specific (longest) rule
+      // matches first. Combined with the break in the inner loop, a parent
+      // prefix rule can never overwrite a child path rule when both the
+      // parent variable and a child field are renamed in the same save.
       const renameMap: Map<string, string> = new Map(
-        renameList.map((r) => [r.oldRef, r.newRef]),
+        [...renameList]
+          .sort((a, b) => b.oldRef.length - a.oldRef.length)
+          .map((r) => [r.oldRef, r.newRef]),
       );
 
       // Recursively walk an object tree and rewrite any ref_var_name property
@@ -1390,6 +1396,9 @@ export const FlowUtils = {
               if (val === oldRef || val.startsWith(oldRef + '.') || val.startsWith(oldRef + '[')) {
                 obj[key] = newRef + val.substring(oldRef.length);
                 changed = true;
+                // renameMap is sorted longest-oldRef-first, so the first
+                // match is the most specific rule; stop here.
+                break;
               }
             }
           } else if (val && typeof val === 'object') {
@@ -2076,9 +2085,11 @@ export const FlowUtils = {
       return false;
     }
 
-    // Referencing the item itself (no further path) is always valid
+    // Referencing the item itself (no further path) is valid. A segment
+    // carrying an array index (e.g. "foo[0]") additionally requires the
+    // item to actually be an array type.
     if (path.length === 1) {
-      return true;
+      return arr.length === 1 || currentItem.type === 'array';
     }
 
     let nextData: any;
