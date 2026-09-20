@@ -211,42 +211,26 @@ class QuestionerTraceStore:
             if tracer is None:
                 return True
 
-            from openjiuwen.core.session.tracer.handler import TracerHandlerName
-
             invoke_id = session._inner.executable_id()
             parent_id = session._inner.parent_id()
-            handler_class_name = (
-                TracerHandlerName.TRACER_WORKFLOW.value + "." + parent_id
-                if parent_id != ""
-                else TracerHandlerName.TRACER_WORKFLOW.value
-            )
-            # 适配 Tracer 嵌套结构：内置 TraceWorkflowHandler 存于
-            # _workflow_handlers[TRACER_WORKFLOW.value] 嵌套 dict（tracer.py:137-139），
-            # 与 trigger()(:172-176) 范式一致。trace writer 关时该 dict 不存在 → no-op
-            # （与原 AttributeError no-op 等价，不引入新行为）。
-            wf_handlers = tracer._workflow_handlers.get(TracerHandlerName.TRACER_WORKFLOW.value)
-            handler = None
-            if wf_handlers:
-                handler = wf_handlers.get(handler_class_name) or wf_handlers.get(
-                    TracerHandlerName.TRACER_WORKFLOW.value
-                )
-
-            if handler:
-                span = handler._span_manager.get_span(invoke_id)
-                if span:
-                    if not isinstance(span.on_invoke_data, list):
-                        span.on_invoke_data = []
-                    # 仅在 span 的 on_invoke_data 为空时 extend 历史数据。
-                    # 提问器跨轮持久（USER_INTERACT 未 node_finished，pop_workflow_span 不触发），
-                    # on_invoke_data 已累积前序轮 trace + 当轮 _session.trace 写入；
-                    # 若每轮 resume 都 extend 全量 Redis trace，会重复 → 末轮 user 被早轮内容覆盖
-                    # （如"查询电费账单"被重复到末尾，把"确认"挤掉）。
-                    if not span.on_invoke_data:
-                        span.on_invoke_data.extend(trace_list)
-                    # 只发送一次事件
-                    import asyncio
-
-                    asyncio.create_task(handler._send_data(span))
+            # 用 Tracer 公开 API get_workflow_span 取 span（避免访问 protected
+            # _workflow_handlers / handler._span_manager，G.CLS.11）。该 span 与
+            # TraceWorkflowHandler._span_manager.get_span 是同一对象（register_workflow_span_manager
+            # 把同一 SpanManager 同时挂到 tracer_workflow_span_manager_dict 和 handler）。
+            span = tracer.get_workflow_span(invoke_id, parent_id)
+            if span:
+                if not isinstance(span.on_invoke_data, list):
+                    span.on_invoke_data = []
+                # 仅在 span 的 on_invoke_data 为空时 extend 历史数据。
+                # 提问器跨轮持久（USER_INTERACT 未 node_finished，pop_workflow_span 不触发），
+                # on_invoke_data 已累积前序轮 trace + 当轮 _session.trace 写入；
+                # 若每轮 resume 都 extend 全量 Redis trace，会重复 → 末轮 user 被早轮内容覆盖
+                # （如"查询电费账单"被重复到末尾，把"确认"挤掉）。
+                if not span.on_invoke_data:
+                    span.on_invoke_data.extend(trace_list)
+                # 不在此 _send_data：下一条 _session.trace → Tracer.trigger →
+                # TraceWorkflowHandler.on_invoke 会 append 当轮数据并 _send_data 全量 span
+                # （含此处恢复的历史）自动发出；在此再发会重复。
             return True
         except Exception as e:
             workflow_logger.warning("Failed to recover trace data to session: {}", e)
