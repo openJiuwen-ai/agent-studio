@@ -79,10 +79,11 @@ def test_remap_reserved_key_skipped():
     schema = {
         "query": {},
         "headers": {},
-        "userFields": {"query_parameters": "evil", "uid": "1"},
+        "userFields": {"query_parameters": "evil", "query": "evil2", "uid": "1"},
     }
     out = _remap_http_inputs_schema(schema, {})
     assert out["query_parameters"] == {}  # 用户字段不得覆盖组件读取通道
+    assert "query" not in out  # 检视意见 #4：query 同属保留键，告警跳过而非平铺
     assert out["uid"] == "1"
 
 

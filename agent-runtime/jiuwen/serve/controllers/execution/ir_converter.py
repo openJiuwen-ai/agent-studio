@@ -4048,9 +4048,10 @@ _HTTP_OUTPUT_KEY_ALIASES = {
 }
 
 # 组件 process_inputs 保留键：用户字段平铺到顶层时避让，防覆盖组件读取通道。
-# （query/headers 已由前端 H7 校验拦截，此处防御 query_parameters 等同名极端配置）
+# query 与前端禁名清单同口径：用户行叫 query 时平铺出的顶层 query 键组件
+# 并不读取（只读 query_parameters），静默忽略不如告警跳过；headers 等同理
 _HTTP_RESERVED_INPUT_KEYS = frozenset(
-    {"query_parameters", "headers", "authentication", "body", "method", "url"}
+    {"query", "query_parameters", "headers", "authentication", "body", "method", "url"}
 )
 
 # 匹配"引号字符串（双/单引号，含转义）"、"{{占位符}}"或"裸 true/false/null 令牌"：

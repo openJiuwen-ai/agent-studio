@@ -118,9 +118,10 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
     data["think"] = safe_think if isinstance(think_raw, str) else think_raw
     data["answer"] = safe_answer if isinstance(answer_raw, str) else answer_raw
 
-    # message_end 的 origin_answer 也需审核（含 REPLY 阻断检查）
+    # message_end 的 origin_answer 也需审核（含 REPLY 阻断检查）；
+    # 与 answer 同口径：非字符串（如 End 直出 int）不参与审核、原样透传
     origin_answer = data.get("origin_answer")
-    if origin_answer:
+    if isinstance(origin_answer, str) and origin_answer:
         safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx, chunk)
         if safe_origin is None:
             return None
@@ -142,7 +143,9 @@ def _handle_workflow_end(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _M
         return None
     data["answer"] = safe_answer if isinstance(answer_raw, str) else answer_raw
 
-    if origin_answer:
+    # origin_answer 同样只对字符串审核：真值非字符串（int/dict，HTTP 状态码
+    # 等直出形态）进审核会按字符串处理报错，非字符串分段保护须覆盖两个字段
+    if isinstance(origin_answer, str) and origin_answer:
         safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx, chunk)
         if safe_origin is None:
             return None
