@@ -89,9 +89,8 @@ class HierarchicalControlAgent(BaseControlAgent):
                     )
                     logger.debug(
                         "load conv_history related to agent_id %s: %s",
-                        agent_id,
-                        self._get_history(current_inputs),
-                        simple_log=f"load conv_history related to agent_id {agent_id}",
+                        agent_id, self._get_history(current_inputs),
+                        simple_log="load conv_history related to agent_id %s" % (agent_id),
                     )
                     send_task = asyncio.create_task(
                         self.runner.send_message(
@@ -179,7 +178,10 @@ class HierarchicalControlAgent(BaseControlAgent):
                     logger.debug("Handoff from %s to %s", agent_id, target_agent)
                 target_agent_info["agent_id"] = target_agent
                 return ExecutionAction.HANDOFF, False
-            logger.warning(f"Invalid handoff target: {target_agent}")
+            logger.warning(
+                "Invalid handoff target: %s",
+                target_agent,
+            )
             return ExecutionAction.ERROR, True
 
         if message.type == MemberMessageType.INTERRUPT:
@@ -193,7 +195,8 @@ class HierarchicalControlAgent(BaseControlAgent):
             _inner = getattr(message.data, "data", None)
             _err_msg = _inner.get("message") if isinstance(_inner, dict) else None
             logger.error(
-                f"Agent {agent_id} returned error: message={_err_msg}, raw={message.data}"
+                "Agent %s returned error: message=%s, raw=%s",
+                agent_id, _err_msg, message.data,
             )
             return ExecutionAction.ERROR, True
 
@@ -292,8 +295,8 @@ class HierarchicalControlAgent(BaseControlAgent):
         )
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"Loaded state: calls={self.current_agent_calls_count}, "
-                f"interrupted_agents={len(self.interrupted_agents)}"
+                "Loaded state: calls=%s, interrupted_agents=%s",
+                self.current_agent_calls_count, len(self.interrupted_agents),
             )
 
     def reset_execution_state(self) -> None:
@@ -307,8 +310,9 @@ class HierarchicalControlAgent(BaseControlAgent):
     ) -> Message:
         """记录日志并生成错误消息"""
         logger.error(
-            f"Error in agent {agent_id}: {error_msg}",
-            simple_log=f"Error in agent {agent_id}",
+            "Error in agent %s: %s",
+            agent_id, error_msg,
+            simple_log="Error in agent %s" % (agent_id),
         )
         return self._create_error_message(error_msg, agent_id, execution_id)
 
@@ -379,9 +383,8 @@ class HierarchicalControlAgent(BaseControlAgent):
         ]
         logger.debug(
             "get chat_history for agent: %s chat_history: %s",
-            agent_id,
-            selected_chat_history,
-            simple_log=f"get chat_history for agent: {agent_id}",
+            agent_id, selected_chat_history,
+            simple_log="get chat_history for agent: %s" % (agent_id),
         )
         context = current_inputs["runtime_context"].agent_workflow_context
         context["workflow_chat_history"] = ConversationHistory(selected_chat_history)
@@ -410,8 +413,9 @@ class HierarchicalControlAgent(BaseControlAgent):
         if self.current_agent_calls_count >= self.config.max_agent_calls:
             if self._detect_cycle():
                 logger.warning(
-                    f"Cyclic repeated calls, call chain: {self.call_agent_history}",
-                    simple_log="Cyclic repeated calls.",
+                    "Cyclic repeated calls, call chain: %s",
+                    self.call_agent_history,
+                    simple_log='Cyclic repeated calls.',
                 )
                 return self.config.main_agent.metadata.id, True
             return None, False

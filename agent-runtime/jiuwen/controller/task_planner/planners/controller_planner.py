@@ -84,7 +84,8 @@ class ControllerPlanner(TaskPlanner):
         """
         controller_state = self.context_manager.get_controller_state(self.task_id)
         logger.debug(
-            f"get controller state for {self.task_id}, create at {controller_state.created_at}"
+            "get controller state for %s, create at %s",
+            self.task_id, controller_state.created_at,
         )
         return controller_state
 
@@ -154,12 +155,9 @@ class ControllerPlanner(TaskPlanner):
         if rule_result:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"task_id: {self.task_id} | Rule applied in stream, result_type={type(rule_result).__name__}, "
-                    f"result={rule_result}",
-                    simple_log=(
-                        f"task_id: {self.task_id} | Rule applied in stream, "
-                        f"result_type={type(rule_result).__name__}"
-                    ),
+                    "task_id: %s | Rule applied in stream, result_type=%s, result=%s",
+                    self.task_id, type(rule_result).__name__, rule_result,
+                    simple_log="task_id: %s | Rule applied in stream, result_type=%s" % (self.task_id, type(rule_result).__name__),
                 )
             yield rule_result
             return
@@ -172,7 +170,8 @@ class ControllerPlanner(TaskPlanner):
         ):
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"task_id: {self.task_id}| Waiting for start workflow to complete or user input"
+                    "task_id: %s| Waiting for start workflow to complete or user input",
+                    self.task_id,
                 )
             if message.message_type == MessageType.USER_INPUT:
                 intent_workflow_task = await self._get_intent_based_workflow(
@@ -222,7 +221,11 @@ class ControllerPlanner(TaskPlanner):
         )
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Saved intent param: {intent}", simple_log="Saved intent param")
+            logger.debug(
+                "Saved intent param: %s",
+                intent,
+                simple_log='Saved intent param',
+            )
         self.context_manager.set_global_variables(WorkflowConstants.INTENT, intent)
         self.context_manager.set_global_variables(
             WorkflowConstants.CONVERSATION_ID, conversation_id
@@ -232,8 +235,9 @@ class ControllerPlanner(TaskPlanner):
         workflow_req_params["global_intents"] = self.plan_config.global_intents
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"task_id: {self.task_id}| global_intents: {self.plan_config.global_intents}",
-                simple_log="task_id: {self.task_id}| global_intents",
+                "task_id: %s| global_intents: %s",
+                self.task_id, self.plan_config.global_intents,
+                simple_log='task_id: {self.task_id}| global_intents',
             )
         self.context_manager.set_global_variables(
             WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY, workflow_req_params
@@ -259,7 +263,8 @@ class ControllerPlanner(TaskPlanner):
                     valid_sequence.append(workflow_id)
                 else:
                     logger.warning(
-                        f"task_id: {self.task_id}| Workflow ID {workflow_id} not found in context"
+                        "task_id: %s| Workflow ID %s not found in context",
+                        self.task_id, workflow_id,
                     )
 
             if valid_sequence:
@@ -269,7 +274,8 @@ class ControllerPlanner(TaskPlanner):
                 )
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
-                        f"task_id: {self.task_id}| Saved valid workflow sequence: {valid_sequence}"
+                        "task_id: %s| Saved valid workflow sequence: %s",
+                        self.task_id, valid_sequence,
                     )
                 # 当有valid_sequence时，确保active_workflows不生效
                 self.context_manager.set_global_variables(
@@ -277,7 +283,8 @@ class ControllerPlanner(TaskPlanner):
                 )
             else:
                 logger.warning(
-                    f"task_id: {self.task_id}| No valid workflows found in the provided sequence"
+                    "task_id: %s| No valid workflows found in the provided sequence",
+                    self.task_id,
                 )
 
         # 仅当workflow_sequence为空或无效时，才处理active_workflows
@@ -292,7 +299,8 @@ class ControllerPlanner(TaskPlanner):
                     valid_active_workflows.append(workflow_id)
                 else:
                     logger.warning(
-                        f"task_id: {self.task_id}| Active workflow ID {workflow_id} not found in context"
+                        "task_id: %s| Active workflow ID %s not found in context",
+                        self.task_id, workflow_id,
                     )
 
             if valid_active_workflows:
@@ -301,7 +309,10 @@ class ControllerPlanner(TaskPlanner):
                     WorkflowConstants.ACTIVE_WORKFLOWS_KEY, valid_active_workflows
                 )
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"Saved active workflows: {valid_active_workflows}")
+                    logger.debug(
+                        "Saved active workflows: %s",
+                        valid_active_workflows,
+                    )
             else:
                 logger.warning("No valid workflows found in the active workflows list")
 
@@ -390,12 +401,16 @@ class ControllerPlanner(TaskPlanner):
         if default_workflow_task:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"task_id: {self.task_id}| Default workflow selected: {default_workflow_task.workflow_id}"
+                    "task_id: %s| Default workflow selected: %s",
+                    self.task_id, default_workflow_task.workflow_id,
                 )
             return default_workflow_task
 
         if self.plan_config.parent_agent_metadata:
-            logger.warning(f"task_id: {self.task_id}| Handoff to father agent")
+            logger.warning(
+                "task_id: %s| Handoff to father agent",
+                self.task_id,
+            )
             return self.rule_module.create_handoff_father_agent_task(self.task_id)
 
         return None
@@ -415,8 +430,9 @@ class ControllerPlanner(TaskPlanner):
             return None
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"task_id: {self.task_id}| Routing to PE Agent due to complex task",
-                simple_log=f"task_id: {self.task_id}| Routing to PE Agent",
+                "task_id: %s| Routing to PE Agent due to complex task",
+                self.task_id,
+                simple_log="task_id: %s| Routing to PE Agent" % (self.task_id),
             )
         return self.rule_module.create_handoff_child_agent_task(pe_agent, self.task_id)
 
@@ -429,7 +445,8 @@ class ControllerPlanner(TaskPlanner):
             return None
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"task_id: {self.task_id}| Default workflow selected: {default_workflow_task.workflow_id}"
+                "task_id: %s| Default workflow selected: %s",
+                self.task_id, default_workflow_task.workflow_id,
             )
         return default_workflow_task
 
@@ -505,7 +522,10 @@ class ControllerPlanner(TaskPlanner):
 
         # 创建并返回第一个工作流的开始任务
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Executing first workflow in sequence: {first_workflow_id}")
+            logger.debug(
+                "Executing first workflow in sequence: %s",
+                first_workflow_id,
+            )
         return self.rule_module.create_workflow_start_task(
             message, first_workflow_id, WorkflowType.GENERAL
         )
@@ -519,7 +539,8 @@ class ControllerPlanner(TaskPlanner):
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"current_workflow_index：{controller_context.current_workflow_index}"
+                "current_workflow_index：%s",
+                controller_context.current_workflow_index,
             )
         # 检查是否已经完成所有工作流
         if controller_context.current_workflow_index >= len(valid_sequence):
@@ -538,8 +559,8 @@ class ControllerPlanner(TaskPlanner):
             ):
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
-                        f"Waiting for previous workflow {previous_workflow_id} to complete "
-                        f"before executing {current_workflow_id}"
+                        "Waiting for previous workflow %s to complete before executing %s",
+                        previous_workflow_id, current_workflow_id,
                     )
                 return None
 
@@ -550,7 +571,8 @@ class ControllerPlanner(TaskPlanner):
                 # 当前工作流已完成，增加索引准备执行下一个
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
-                        f"Workflow {current_workflow_id} completed, advancing to next workflow"
+                        "Workflow %s completed, advancing to next workflow",
+                        current_workflow_id,
                     )
                 controller_context.current_workflow_index += 1
 
@@ -562,16 +584,16 @@ class ControllerPlanner(TaskPlanner):
             # 当前工作流正在执行但未完成，等待
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"Workflow {current_workflow_id} is still executing, waiting for completion"
+                    "Workflow %s is still executing, waiting for completion",
+                    current_workflow_id,
                 )
             return None
 
         # 当前工作流未开始执行或不在运行状态，创建工作流开始任务
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"Sequence mode - "
-                f"Executing "
-                f"workflow {controller_context.current_workflow_index}/{len(valid_sequence) - 1}: {current_workflow_id}"
+                "Sequence mode - Executing workflow %s/%s: %s",
+                controller_context.current_workflow_index, len(valid_sequence) - 1, current_workflow_id,
             )
 
         return self.rule_module.create_workflow_start_task(
@@ -587,7 +609,8 @@ class ControllerPlanner(TaskPlanner):
             if detected_workflow_id:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
-                        f"Intent-based mode - Using Default workflow ID: {detected_workflow_id}"
+                        "Intent-based mode - Using Default workflow ID: %s",
+                        detected_workflow_id,
                     )
                 return self.rule_module.create_workflow_start_task(
                     message, detected_workflow_id, WorkflowType.DEFAULT
@@ -614,7 +637,10 @@ class ControllerPlanner(TaskPlanner):
             # Get detection result
             detected_intent_name = self.context_manager.get_latest_intent()
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Intent detection result: {detected_intent_name}")
+                logger.debug(
+                    "Intent detection result: %s",
+                    detected_intent_name,
+                )
 
             # 首先检查是否为全局意图
             if (
@@ -622,7 +648,10 @@ class ControllerPlanner(TaskPlanner):
                 in self.intention_detect_module.global_intent_2_category_map
             ):
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"Detected global intent: {detected_intent_name}")
+                    logger.debug(
+                        "Detected global intent: %s",
+                        detected_intent_name,
+                    )
                 # 处理全局意图逻辑
                 return self._get_handle_global_intent_workflow(
                     detected_intent_name, message
@@ -633,7 +662,10 @@ class ControllerPlanner(TaskPlanner):
                 in self.intention_detect_module.category_2_child_id_map
             ):
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"Detected agent handoff: {detected_intent_name}")
+                    logger.debug(
+                        "Detected agent handoff: %s",
+                        detected_intent_name,
+                    )
                 return self._get_handle_handoff_agent_intent(
                     detected_intent_name, message
                 )
@@ -649,19 +681,24 @@ class ControllerPlanner(TaskPlanner):
                 if detected_workflow_id:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            f"Intent-based mode - Selected workflow ID: {detected_workflow_id}"
+                            "Intent-based mode - Selected workflow ID: %s",
+                            detected_workflow_id,
                         )
                     return self.rule_module.create_workflow_start_task(
                         message, detected_workflow_id, WorkflowType.GENERAL
                     )
             else:
-                logger.warning(f"No workflow found for intent {detected_intent_name}")
+                logger.warning(
+                    "No workflow found for intent %s",
+                    detected_intent_name,
+                )
         except Exception as e:
             import traceback
 
             logger.error(
-                f"Error during intent detection: {str(traceback.format_exc())}",
-                simple_log="Error during intent detection",
+                "Error during intent detection: %s",
+                str(traceback.format_exc()),
+                simple_log='Error during intent detection',
             )
             raise JiuWenBaseException(
                 error_code=StatusCode.CONTROLLER_INTENT_DETECTION_ERROR.code,
@@ -680,7 +717,10 @@ class ControllerPlanner(TaskPlanner):
             处理结果，可能是任务或None
         """
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Processing global intent: {global_intent_name}")
+            logger.debug(
+                "Processing global intent: %s",
+                global_intent_name,
+            )
 
         # 从配置中找到对应的全局意图配置
         if self.plan_config.global_intents:
@@ -688,8 +728,9 @@ class ControllerPlanner(TaskPlanner):
                 if global_intent.name == global_intent_name:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            f"Found global intent config: {global_intent}",
-                            simple_log="Found global intent config",
+                            "Found global intent config: %s",
+                            global_intent,
+                            simple_log='Found global intent config',
                         )
 
                     # 根据handler_type处理不同类型的全局意图
@@ -700,7 +741,10 @@ class ControllerPlanner(TaskPlanner):
                         )
                     break
 
-        logger.warning(f"Global intent {global_intent_name} not found in configuration")
+        logger.warning(
+            "Global intent %s not found in configuration",
+            global_intent_name,
+        )
         return None
 
     def _get_end_workflow(
@@ -753,7 +797,8 @@ class ControllerPlanner(TaskPlanner):
                 if not self.context_manager.is_general_workflow_completed(workflow_id):
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            f"Waiting for workflow {workflow_id} to complete before executing end workflow"
+                            "Waiting for workflow %s to complete before executing end workflow",
+                            workflow_id,
                         )
                     return False
 
@@ -787,7 +832,10 @@ class ControllerPlanner(TaskPlanner):
             处理结果，可能是任务或None
         """
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Processing agent handoff intent: {detected_intent_class}")
+            logger.debug(
+                "Processing agent handoff intent: %s",
+                detected_intent_class,
+            )
 
         # A.1(C-09): category → child.id(唯一),按 id 定位 child,允许同名子成员
         child_id = self.intention_detect_module.category_2_child_id_map.get(
@@ -797,7 +845,10 @@ class ControllerPlanner(TaskPlanner):
             for child_agent in self.plan_config.child_agents_metadata:
                 if child_agent.id == child_id:
                     if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(f"Found child agent config: {child_agent}")
+                        logger.debug(
+                            "Found child agent config: %s",
+                            child_agent,
+                        )
 
                     # 创建agent handoff任务
                     task_id = getattr(message, "task_id", "task")
@@ -806,7 +857,8 @@ class ControllerPlanner(TaskPlanner):
                     )
 
         logger.warning(
-            f"Child agent for intent class {detected_intent_class} not found in configuration"
+            "Child agent for intent class %s not found in configuration",
+            detected_intent_class,
         )
         return None
 
