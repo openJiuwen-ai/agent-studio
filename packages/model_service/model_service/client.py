@@ -351,8 +351,8 @@ class StudioModelClient(OpenAIModelClient):
                     _extra["X-Request-Id"] = _ctx.request_id
                 if _ctx.execution_id:
                     _extra["X-Execution-Id"] = _ctx.execution_id
-        except Exception:
-            pass
+        except ImportError:
+            workflow_logger.debug("X-Request-Id propagation skipped: agent_runtime not available")
         _req_headers = _request_headers()
         if _req_headers:
             _tp = _req_headers.get("traceparent")
@@ -370,7 +370,7 @@ class StudioModelClient(OpenAIModelClient):
             from jiuwen.common.log.base import logger as _jw_logger
             _jw_logger.debug(f"LLM extra_headers injected: {_extra}")
         except ImportError:
-            pass
+            workflow_logger.debug("LLM extra_headers debug log skipped: jiuwen logger not available")
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
             extra_body = dict(params.get("extra_body") or {})
