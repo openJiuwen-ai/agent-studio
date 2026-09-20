@@ -471,3 +471,50 @@ def test_synthesize_skipped_for_non_http_node():
         },
     }
     assert _parse_exception_config(node) is None
+
+
+# ─── MR 检视意见（2026-09-20 第七轮）：auth 子字段形态甄别 / dict suppression 保留 ───
+
+
+def test_remap_auth_non_dict_subfields_skipped():
+    """auth.headers/auth.query 真值非 dict 不得 AttributeError 打断 IR 转换。
+
+    API 直写/导入 DSL 可能带入字符串、列表等畸形形态：`or {}` 只挡 falsy，
+    真值非 dict 直接 .items() 抛 AttributeError 使注册与单节点调试整体崩溃。
+    修复后仅跳过畸形子字段合并并告警。
+    """
+    schema = {"query": {"page": "1"}, "headers": {"X-A": "1"}, "userFields": {}}
+    configs = {
+        "auth": {"scope": "SERVICE", "headers": "X-Api-Key: secret", "query": ["k=v"]}
+    }
+    out = _remap_http_inputs_schema(schema, configs)
+    # 畸形子字段被跳过，用户货架原样保留
+    assert out["headers"] == {"X-A": "1"}
+    assert out["query_parameters"] == {"page": "1"}
+
+    # 混合形态：headers 畸形不影响 query 正常合并
+    configs_mixed = {"auth": {"headers": "broken", "query": {"api_key": "k"}}}
+    out = _remap_http_inputs_schema(schema, configs_mixed)
+    assert out["query_parameters"] == {"page": "1", "api_key": "k"}
+    assert out["headers"] == {"X-A": "1"}
+
+
+def test_synthesize_dict_suppression_preserved():
+    """API 直写形态：exceptionSuppression 已是 dict 时不得清空。
+
+    json.loads(dict) 抛 TypeError 被历史 except 捕获后回退空默认输出，
+    用户已配置的兜底值被静默丢弃且告警文案误报"非合法 JSON"。
+    """
+    node = {
+        "type": "EI.http",
+        "id": "n1",
+        "configs": {
+            "exceptionEnable": True,
+            "exceptionSuppression": {"body": "fallback", "status_code": 0},
+        },
+    }
+    cfg = _parse_exception_config(node)
+    assert cfg is not None
+    assert cfg.handle_type == "defaultOutputs"
+    # snake→camel 别名归一对 dict 形态同样生效
+    assert cfg.default_outputs == {"body": "fallback", "statusCode": 0}

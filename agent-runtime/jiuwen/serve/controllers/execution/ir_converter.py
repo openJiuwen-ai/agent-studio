@@ -4123,9 +4123,27 @@ def _remap_http_inputs_schema(inputs_schema: Any, configs: dict | None) -> Any:
             remapped[key] = value
     auth = (configs or {}).get("auth")
     if isinstance(auth, dict):
-        for key, value in (auth.get("headers") or {}).items():
+        # auth.headers/auth.query 为真值非 dict 形态（字符串/列表，API 直写或
+        # 导入 DSL 畸形数据）时直接 .items() 会 AttributeError 打断整段 IR
+        # 转换——按形态甄别：畸形子字段仅跳过合并并告警，用户货架与另一
+        # 鉴权域不受影响
+        auth_headers = auth.get("headers") or {}
+        if not isinstance(auth_headers, dict):
+            logger.warning(
+                f"EI.http configs.auth.headers 非对象"
+                f"（{type(auth_headers).__name__}），跳过合并"
+            )
+            auth_headers = {}
+        for key, value in auth_headers.items():
             remapped["headers"].setdefault(key, value)
-        for key, value in (auth.get("query") or {}).items():
+        auth_query = auth.get("query") or {}
+        if not isinstance(auth_query, dict):
+            logger.warning(
+                f"EI.http configs.auth.query 非对象"
+                f"（{type(auth_query).__name__}），跳过合并"
+            )
+            auth_query = {}
+        for key, value in auth_query.items():
             remapped["query_parameters"].setdefault(key, value)
     for key, value in inputs_schema.items():
         if key not in ("query", "headers", "userFields") and key not in remapped:
@@ -4149,14 +4167,19 @@ def _synthesize_exception_process(node: dict) -> dict | None:
     suppression = configs.get("exceptionSuppression")
     if not configs.get("exceptionEnable") or suppression is None:
         return None
-    try:
-        default_outputs = json.loads(suppression) if suppression else {}
-    except (TypeError, ValueError):
-        logger.warning(
-            f"node {node.get('id')} exceptionSuppression 非合法 JSON，"
-            "按开启异常处理语义回退空默认输出"
-        )
-        default_outputs = {}
+    if isinstance(suppression, dict):
+        # API 直写形态已是对象：不得再过 json.loads（抛 TypeError 被捕获后
+        # 回退空默认输出，用户已配置的兜底值被静默丢弃），直接进别名归一
+        default_outputs = suppression
+    else:
+        try:
+            default_outputs = json.loads(suppression) if suppression else {}
+        except (TypeError, ValueError):
+            logger.warning(
+                f"node {node.get('id')} exceptionSuppression 非合法 JSON，"
+                "按开启异常处理语义回退空默认输出"
+            )
+            default_outputs = {}
     if isinstance(default_outputs, dict):
         default_outputs = {
             _HTTP_OUTPUT_KEY_ALIASES.get(key, key): value
