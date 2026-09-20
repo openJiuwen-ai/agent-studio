@@ -104,10 +104,16 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   override ngOnInit(): void {
-    this.ensureHttpInputContainers();
+    const purgedShadowRows = this.ensureHttpInputContainers();
     this.setNodeBase(this.nodeInfo);
     this.configs = cloneDeep(this.nodeInfo.configs);
     super.ngOnInit();
+    // FB-7：影子行清理必须标记为变更——super.ngOnInit 里 updateChangeAndInitTime
+    // 会把 initTime/changeTime 拉平，不补 changeUpdateTime 则关闭面板时
+    // tagCompareNoChange 提前返回，清理结果不会随 handelSave 落盘
+    if (purgedShadowRows) {
+      this.changeUpdateTime();
+    }
     this.validationRules.push(
       CommonValidation.nameUniquenessVerify(
         this.names,
@@ -180,11 +186,29 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
    * 已存 DSL 中丢失；此后 handelSave 用 find('query'/'headers') 找不到容器便
    * 静默跳过写回，导致请求头/请求参数再也存不上（节点进入终态损坏）。
    * 打开面板时按工厂默认补回缺失容器，坏节点即可恢复可保存。
+   *
+   * 背景（FB-7 影子行）：用户曾建过名为 query/headers 的输入参数时，该行被
+   * 展示过滤挡在面板外（看不见、删不掉），却被 handelSave 的容器过滤原样保留
+   * 并随 DSL 落库；试运行触发后端参数重名校验（参数名称query重复）后节点即
+   * 死锁——UI 无任何入口能移除它。这里按形态区分容器行与用户行（容器：
+   * source 'pre_defined' + schema 数组；用户行：source 'user'、无 schema），
+   * 打开面板即清理影子行。
+   *
+   * @returns 是否清理了影子行（调用方据此标记变更，保证关闭面板时落盘）
    */
-  ensureHttpInputContainers(): void {
+  ensureHttpInputContainers(): boolean {
     if (!Array.isArray(this.nodeInfo.inputs)) {
       this.nodeInfo.inputs = [];
     }
+    const isShadowRow = (item) =>
+      (item.name === 'query' || item.name === 'headers') &&
+      item.source !== 'pre_defined' &&
+      !Array.isArray(item.schema);
+    const before = this.nodeInfo.inputs.length;
+    this.nodeInfo.inputs = this.nodeInfo.inputs.filter(
+      (item) => !isShadowRow(item),
+    );
+    const purged = this.nodeInfo.inputs.length !== before;
     const defaults = this.appFlowServ.getInitHttpContainerInputs();
     defaults.forEach((container) => {
       const exist = this.nodeInfo.inputs.find(
@@ -196,6 +220,7 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
         exist.schema = [];
       }
     });
+    return purged;
   }
 
   handelSave(): void {

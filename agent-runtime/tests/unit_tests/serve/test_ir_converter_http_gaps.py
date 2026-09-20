@@ -170,6 +170,16 @@ def test_synthesize_bad_json_falls_back_empty():
     assert cfg.default_outputs == {}
 
 
+@pytest.mark.parametrize("suppression", ['[1, 2]', '"text"', "123", "null"])
+def test_synthesize_non_object_json_falls_back_empty(suppression):
+    # 合法 JSON 但非对象：异常恢复按 dict 消费（_merge_dicts .items()），
+    # 透传会 AttributeError 导致恢复失败，须回退空默认输出
+    cfg = _parse_exception_config(_http_node(suppression=suppression))
+    assert cfg is not None
+    assert cfg.handle_type == "defaultOutputs"
+    assert cfg.default_outputs == {}
+
+
 def test_handletype_case_normalization():
     def _ep_node(handle_type):
         return {

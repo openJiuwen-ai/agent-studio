@@ -4154,6 +4154,15 @@ def _synthesize_exception_process(node: dict) -> dict | None:
             _HTTP_OUTPUT_KEY_ALIASES.get(key, key): value
             for key, value in default_outputs.items()
         }
+    else:
+        # 合法 JSON 但非对象（数组/字符串/数字）：异常恢复按 dict 消费
+        # （_merge_dicts 对其 .items() 合并），原样透传会 AttributeError
+        # 导致恢复失败，按开启异常处理语义回退空默认输出
+        logger.warning(
+            f"node {node.get('id')} exceptionSuppression 为合法 JSON 但非对象"
+            f"（{type(default_outputs).__name__}），回退空默认输出"
+        )
+        default_outputs = {}
     return {"handleType": "defaultOutputs", "defaultOutputs": default_outputs}
 
 

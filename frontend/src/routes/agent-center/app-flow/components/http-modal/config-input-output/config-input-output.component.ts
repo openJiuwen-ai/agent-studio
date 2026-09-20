@@ -87,6 +87,12 @@ export class ConfigInputOutputComponent extends ModalBaseComponent {
   getInputNames(index: number): { existingValues: string[]; forbiddenValues: string[] } {
     const names = this.inputParams.map((p) => p.name);
     names.splice(index, 1);
-    return { existingValues: names, forbiddenValues: ['query', 'headers'] };
+    // 与后端 _HTTP_RESERVED_INPUT_KEYS（ir_converter.py）保持同步：这些名字是
+    // 组件货架/控制保留键，_remap_http_inputs_schema 会跳过且仅告警运行时日志，
+    // 用户建了会静默不生效；query/headers 是前端货架旧名，一并禁止
+    return {
+      existingValues: names,
+      forbiddenValues: ['query', 'headers', 'query_parameters', 'authentication', 'body', 'method', 'url'],
+    };
   }
 }
