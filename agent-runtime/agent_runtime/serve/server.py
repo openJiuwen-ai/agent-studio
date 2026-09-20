@@ -159,7 +159,7 @@ async def lifespan(_app: FastAPI):
                 "workflow": {"level": workflow_log_level},
                 "graph": {"level": graph_log_level},
                 "llm": {"level": llm_log_level},
-                "performance": {"level": "INFO"},
+                "performance": {"level": "WARNING"},
                 "sys_operation": {
                     "level": "WARNING"
                 },  # 关闭 sys_operation 的 INFO 日志

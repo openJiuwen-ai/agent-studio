@@ -341,11 +341,34 @@ class StudioModelClient(OpenAIModelClient):
                     extra.update(to_rename)
             if extra:
                 params["extra_headers"] = extra
+        # X-Request-Id / traceparent: propagate from request context to model API call
+        _extra = dict(params.get("extra_headers") or {})
+        _lower_keys = {k.lower() for k in _extra}
+        try:
+            from agent_runtime.context.request_context import _request_ctx
+            _ctx = _request_ctx.get()
+            if _ctx:
+                if _ctx.request_id and "x-request-id" not in _lower_keys:
+                    _extra["X-Request-Id"] = _ctx.request_id
+                if _ctx.execution_id and "x-execution-id" not in _lower_keys:
+                    _extra["X-Execution-Id"] = _ctx.execution_id
+        except ImportError:
+            workflow_logger.debug("X-Request-Id propagation skipped: agent_runtime not available")
+        _req_headers = _request_headers()
+        if _req_headers:
+            _tp = _req_headers.get("traceparent")
+            if _tp and "traceparent" not in _lower_keys:
+                _extra["traceparent"] = _tp
+        if _extra:
+            params["extra_headers"] = _extra
+
         workflow_logger.info(
             f"[customer-header] LLM customer header rename: target=RUNTIME_LLM_CHAT, "
             f"captured_keys={list(captured.keys()) if captured else []}, "
             f"projected_keys={list((params.get('extra_headers') or {}).keys())}"
         )
+        _trace_headers = {k: v for k, v in _extra.items() if k in ("X-Request-Id", "X-Execution-Id", "traceparent")}
+        workflow_logger.debug(f"LLM extra_headers injected: {_trace_headers}")
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
             extra_body = dict(params.get("extra_body") or {})

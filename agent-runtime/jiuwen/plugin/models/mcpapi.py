@@ -15,6 +15,7 @@ from jiuwen.common.configs.env_constants import (
 )
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger, get_x_request_id, get_x_execution_id
+from openjiuwen.core.common.logging import workflow_logger
 from jiuwen.controller.common.constants import WorkflowConstants
 from jiuwen.insight.manager import TraceManager
 from jiuwen.insight.utils import get_instance_info
@@ -124,7 +125,7 @@ class McpAPI(Invokable, ABC):
             request_params.headers[X_REQUEST_ID] = get_x_request_id()
             request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
             inject_traceparent(request_params.headers)
-            logger.debug(f"MCP API request headers: {request_params.headers}")
+            workflow_logger.debug(f"MCP API request headers: {request_params.headers}")
 
             # 处理自定义鉴权的请求头
             self.replace_mcp_headers_extra(request_params, **kwargs)
@@ -338,7 +339,7 @@ class McpServer(McpAPI, ABC):
             request_params.headers[X_REQUEST_ID] = get_x_request_id()
             request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
             inject_traceparent(request_params.headers)
-            logger.debug(f"MCP API request headers: {request_params.headers}")
+            workflow_logger.debug(f"MCP API request headers: {request_params.headers}")
 
             # 处理自定义鉴权的请求头
             self.replace_mcp_headers_extra(request_params, **kwargs)
