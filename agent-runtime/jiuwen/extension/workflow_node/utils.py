@@ -33,6 +33,29 @@ _TEMPLATE_VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 _TEMPLATE_MISSING = object()
 
 
+def _extract_placeholders(template: Any) -> List[str]:
+    """Extract all ``{{var}}`` placeholder names from a JSON template (recursive)."""
+    names: List[str] = []
+    seen: set = set()
+
+    def _walk(t: Any) -> None:
+        if isinstance(t, dict):
+            for v in t.values():
+                _walk(v)
+        elif isinstance(t, list):
+            for v in t:
+                _walk(v)
+        elif isinstance(t, str):
+            for m in _TEMPLATE_VAR_RE.finditer(t):
+                name = m.group(1)
+                if name not in seen:
+                    seen.add(name)
+                    names.append(name)
+
+    _walk(template)
+    return names
+
+
 def _parse_path(path: str) -> List[PathToken]:
     """
     Parse a dot/bracket path like: ``a.b[0].c`` -> ``["a","b",0,"c"]``.
@@ -275,6 +298,14 @@ class AsyncDictStreamTransformConfig:
             raise ValueError("AsyncDictStreamTransformConfig.variables must be a list")
         variables = [VariableDef.from_dict(x) for x in variables_raw]
 
+        # Auto-generate variables from frame_template placeholders when the
+        # frontend only saved frame_template (no explicit variables).
+        if not variables:
+            ft = data.get("frame_template")
+            if ft is not None:
+                placeholders = _extract_placeholders(ft)
+                variables = [VariableDef(name=p, src_path=p) for p in placeholders]
+
         frame_template = data.get("frame_template")
         if frame_template is None:
             raise ValueError(
@@ -384,6 +415,21 @@ class AsyncDictStreamTransformer:
         base: Any = frame
         if self._cfg.input_root_path:
             base = get_by_path(frame, self._cfg.input_root_path, default={})
+        if not src_path:
+            # When src_path is empty (e.g. {{raw_output}} referencing the whole
+            # input), extract the source field value from userFields instead of
+            # returning the entire frame dict (which includes __stream_metadata__).
+            if isinstance(base, dict) and "userFields" in base:
+                uf = base["userFields"]
+                if isinstance(uf, str):
+                    # userFields is a plain string (plugin streaming output)
+                    return uf
+                if isinstance(uf, dict):
+                    # userFields is a dict - find the matching variable
+                    for vdef in self._cfg.variables:
+                        if vdef.name in uf:
+                            return uf[vdef.name]
+            return base
         return get_by_path(base, src_path, default=default)
 
     def _accumulate_concat(

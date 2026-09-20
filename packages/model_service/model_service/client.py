@@ -341,11 +341,36 @@ class StudioModelClient(OpenAIModelClient):
                     extra.update(to_rename)
             if extra:
                 params["extra_headers"] = extra
+        # X-Request-Id / traceparent: propagate from request context to model API call
+        _extra = dict(params.get("extra_headers") or {})
+        try:
+            from agent_runtime.context.request_context import _request_ctx
+            _ctx = _request_ctx.get()
+            if _ctx:
+                if _ctx.request_id:
+                    _extra["X-Request-Id"] = _ctx.request_id
+                if _ctx.execution_id:
+                    _extra["X-Execution-Id"] = _ctx.execution_id
+        except (ImportError, Exception):
+            pass
+        _req_headers = _request_headers()
+        if _req_headers:
+            _tp = _req_headers.get("traceparent")
+            if _tp:
+                _extra["traceparent"] = _tp
+        if _extra:
+            params["extra_headers"] = _extra
+
         workflow_logger.info(
             f"[customer-header] LLM customer header rename: target=RUNTIME_LLM_CHAT, "
             f"captured_keys={list(captured.keys()) if captured else []}, "
             f"projected_keys={list((params.get('extra_headers') or {}).keys())}"
         )
+        try:
+            from jiuwen.common.log.base import logger as _jw_logger
+            _jw_logger.debug(f"LLM extra_headers injected: {_extra}")
+        except Exception:
+            pass
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
             extra_body = dict(params.get("extra_body") or {})
