@@ -9,9 +9,10 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 
+import org.redisson.client.codec.StringCodec;
+
 import lombok.extern.slf4j.Slf4j;
 
-import org.redisson.client.codec.StringCodec;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -46,7 +47,7 @@ public class RedisHistoryEvictionService {
      * 根据 key 类型选择对应的清理策略，清理后重试读取
      *
      * <p>注：为保持既有 API 兼容（调用方契约已固化，同参不同返回类型在 Java 中无法重载共存），
-     * 本方法保留 String 返回、失败返回 null 的既有语义；内部清理链已 Optional 化（见各 evict* 方法）。
+     * 本方法保留 String 返回、失败返回 null 的语义；内部清理链见各 evict* 方法。
      *
      * @param key Redis key
      * @return 清理后的数据 JSON 字符串，如果仍然失败则返回 null
@@ -58,13 +59,13 @@ public class RedisHistoryEvictionService {
                 return null;
             }
             if (key.contains("trace_root_span_")) {
-                return evictTraceInfo(key).orElse(null);
+                return evictTraceInfo(key);
             } else if (key.contains("_conv_")) {
-                return evictListData(key, "insight_conv").orElse(null);
+                return evictListData(key, "insight_conv");
             } else if (key.contains("_exec_rel_") || key.contains("_rel_")) {
-                return evictListData(key, "exec_rel").orElse(null);
+                return evictListData(key, "exec_rel");
             } else {
-                return evictWorkflowInstance(key).orElse(null);
+                return evictWorkflowInstance(key);
             }
         } catch (Exception e) {
             log.error("Failed to evict history for key: {}", key, e);
@@ -73,17 +74,17 @@ public class RedisHistoryEvictionService {
     }
 
     /**
-     * 使用 StringCodec 读取 Redis 中的原始 JSON 字符串（绕过 Jackson 反序列化限制）
+     * 读取 Redis 中的原始 JSON 字符串（显式 StringCodec 绕过解码，供溢出清理读取超长数据；双编码数据还原为 JSON 原文）
+     *
+     * @param key Redis key
+     * @return 原始 JSON 字符串，key 不存在或读失败时为 null
      */
-    private Optional<String> readRawJson(String key) {
+    private String readRawJson(String key) {
         String rawValue = redisClient.get(key, StringCodec.INSTANCE);
-        if (rawValue == null) {
-            return Optional.empty();
+        if (rawValue != null && rawValue.startsWith("\"")) {
+            return JSON.parseObject(rawValue, String.class);
         }
-        if (rawValue.startsWith("\"")) {
-            return Optional.ofNullable(JSON.parseObject(rawValue, String.class));
-        }
-        return Optional.of(rawValue);
+        return rawValue;
     }
 
     /**
@@ -92,10 +93,10 @@ public class RedisHistoryEvictionService {
      * 当 JSON 包含 invoke_list 时按 start_time 排序保留最近的调用记录；
      * 同时截断顶层 inputs/outputs 等大字符串字段
      */
-    private Optional<String> evictWorkflowInstance(String key) {
-        String jsonStr = readRawJson(key).orElse(null);
+    private String evictWorkflowInstance(String key) {
+        String jsonStr = readRawJson(key);
         if (jsonStr == null) {
-            return Optional.empty();
+            return null;
         }
 
         JSONObject entity = JSON.parseObject(jsonStr);
@@ -151,28 +152,28 @@ public class RedisHistoryEvictionService {
         modified = true;
 
         if (!modified) {
-            return Optional.of(jsonStr);
+            return jsonStr;
         }
 
         String updatedJson = entity.toJSONString();
         redisClient.setAndKeepTtl(key, updatedJson, Duration.ofDays(7));
 
-        return Optional.of(updatedJson);
+        return updatedJson;
     }
 
     /**
      * 清理 TraceInfo 中的历史事件
      */
-    private Optional<String> evictTraceInfo(String key) {
-        String jsonStr = readRawJson(key).orElse(null);
+    private String evictTraceInfo(String key) {
+        String jsonStr = readRawJson(key);
         if (jsonStr == null) {
-            return Optional.empty();
+            return null;
         }
 
         JSONObject traceInfo = JSON.parseObject(jsonStr);
         JSONArray eventList = traceInfo.getJSONArray("jiuwenEventList");
         if (eventList == null || eventList.isEmpty()) {
-            return Optional.of(jsonStr);
+            return jsonStr;
         }
 
         int originalSize = eventList.size();
@@ -196,21 +197,21 @@ public class RedisHistoryEvictionService {
         log.info("Evicted trace info events: key={}, original={}, remaining={}",
             key, originalSize, eventList.size());
 
-        return Optional.of(updatedJson);
+        return updatedJson;
     }
 
     /**
      * 清理列表类型数据（ExecutionInfoList / ConversationInfoList）
      */
-    private Optional<String> evictListData(String key, String type) {
-        String jsonStr = readRawJson(key).orElse(null);
+    private String evictListData(String key, String type) {
+        String jsonStr = readRawJson(key);
         if (jsonStr == null) {
-            return Optional.empty();
+            return null;
         }
 
         JSONArray list = JSON.parseArray(jsonStr);
         if (list == null || list.isEmpty()) {
-            return Optional.of(jsonStr);
+            return jsonStr;
         }
 
         int originalSize = list.size();
@@ -234,7 +235,7 @@ public class RedisHistoryEvictionService {
         log.info("Evicted list data: key={}, type={}, original={}, remaining={}",
             key, type, originalSize, list.size());
 
-        return Optional.of(updatedJson);
+        return updatedJson;
     }
 
     private Optional<String> extractStartTime(JSONObject event) {

@@ -4,12 +4,9 @@
 
 package com.openjiuwen.studio.agent.manager.rce.client;
 
-import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
-import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
-import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
 import com.openjiuwen.studio.agent.common.dto.run.*;
@@ -163,44 +160,10 @@ public interface AgentRuntimeClient {
         @PathVariable(value = "conversation_id") String conversationId, @PathVariable(value = "node_id") String nodeId,
         @RequestBody WorkflowRunReq body);
 
-    @PostMapping("/v1/{project_id}/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback")
-    ResponseEntity<String> createUserFeedback(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId,
-        @PathVariable("app_id") String appId, @PathVariable("conversation_id") String conversationId,
-        @PathVariable("message_id") String messageId, @RequestParam("app_type") String appType,
-        @RequestParam("version_id") String versionId, @RequestBody @Valid Feedback body);
-
-    @DeleteMapping("/v1/{project_id}/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback")
-    ResponseEntity<ConversationDeleteResp> deleteFeedback(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("app_id") String appId,
-        @PathVariable("conversation_id") String conversationId, @PathVariable("message_id") String messageId,
-        @RequestParam("version_id") String version_id);
-
     @GetMapping("/v1/{project_id}/agent-builder/prompt/industry/list")
     ResponseEntity<List<IndustryVo>> listIndustry(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("project_id") String projectId, @RequestParam("workspace_id") String workspaceId);
-
-    @PostMapping(value = "/v2/{project_id}/agent-runtime/agents/{agent_id}/memories/variables/batch-delete")
-    ResponseEntity<BatchDeleteUserVariableMemoryResponseBody> batchDeleteUserVariableMemory(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @RequestParam("workspace_id") String workspaceId,
-        @RequestBody @NotNull @Valid BatchDeleteUserVariableMemoryRequestBody body);
-
-    @GetMapping(value = "/v2/{project_id}/agent-runtime/agents/{agent_id}/memories/variables")
-    ResponseEntity<ListUserVariableMemoryResponseBody> listUserVariableMemory(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @RequestParam("workspace_id") String workspaceId);
-
-    @PostMapping(value = "/v2/{project_id}/agent-runtime/agents/{agent_id}/memories/variables/reset")
-    ResponseEntity<ResetUserVariableMemoryResponseBody> resetUserVariableMemory(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @RequestParam("workspace_id") String workspaceId);
 
     @PostMapping(value = "/v1/{project_id}/workflows/{workflow_id}/tasks")
     ResponseEntity<TaskRsp> createTask(
