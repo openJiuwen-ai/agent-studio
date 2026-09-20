@@ -101,6 +101,8 @@ export class GlobalConfigComponent
 
   @Output() configsChange = new EventEmitter<IFlowConfigs>();
 
+  @Output() memoryRenamed = new EventEmitter<{ oldRef: string; newRef: string }[]>();
+
   @Output() close = new EventEmitter<void>();
 
   @ViewChild('genPrologueTip') genPrologueTip: any;
@@ -215,6 +217,8 @@ export class GlobalConfigComponent
   };
   public treeNodes: NzTreeNodeOptions[] = [];
 
+  private originNames = new WeakMap<object, string>();
+
   protected isHCS = false;
   public showSettingContentReview = false;
   public followupPlaceholder = `- ${this.i18n.transform(
@@ -309,6 +313,8 @@ export class GlobalConfigComponent
       )
     );
     this.treeNodes = this.convertToTreeNodes(this.assignmentMemos);
+
+    this.stampOriginNames();
 
     this.showSafetyBarrier =
       !!this.configServ.getConfigs()?.safety_barrier_display;
@@ -830,6 +836,39 @@ export class GlobalConfigComponent
   onNameChange() {
   }
 
+  private stampOriginNames() {
+    this.autoMemos.forEach((m) => this.originNames.set(m, m.name));
+    this.treeNodes.forEach((t) => this.originNames.set(t, t.name));
+  }
+
+  private restampOriginNames() {
+    this.originNames = new WeakMap<object, string>();
+    this.stampOriginNames();
+  }
+
+  private detectRenames(): { oldRef: string; newRef: string }[] {
+    const renames: { oldRef: string; newRef: string }[] = [];
+    this.autoMemos.forEach((m) => {
+      const originName = this.originNames.get(m);
+      if (originName && m.name && originName !== m.name) {
+        renames.push({
+          oldRef: `memory.${originName}`,
+          newRef: `memory.${m.name}`,
+        });
+      }
+    });
+    this.treeNodes.forEach((t) => {
+      const originName = this.originNames.get(t);
+      if (originName && t.name && originName !== t.name) {
+        renames.push({
+          oldRef: `memory.${originName}`,
+          newRef: `memory.${t.name}`,
+        });
+      }
+    });
+    return renames;
+  }
+
   onConfirm(): void {
     this.assignmentMemos = this.convertToAssignMemos(this.treeNodes);
     const newConf: IFlowConfigs = cloneDeep(this.configs);
@@ -873,7 +912,9 @@ export class GlobalConfigComponent
       enable: this.probeConfig.enabled,
       prompt: this.probeConfig.enabled || this.probeConfig.probeInputed !== this.followupPlaceholder ? this.probeConfig.probeInputed : ""
     };
+    this.memoryRenamed.emit(this.detectRenames());
     this.configsChange.emit(newConf);
+    this.restampOriginNames();
   }
 
   updateModel(e) {
@@ -912,6 +953,7 @@ export class GlobalConfigComponent
       const req = startSchemaStrField(JSON.stringify(data));
       this.assignmentMemos = this.fields2Views(req);
       this.treeNodes=this.convertToTreeNodes(this.assignmentMemos);
+      this.restampOriginNames();
       this.cdr.detectChanges();
       modalRef.close();
     })
@@ -929,6 +971,7 @@ export class GlobalConfigComponent
         templatesSelected: (data) => {
           this.assignmentMemos = [...this.assignmentMemos, ...this.fields2Views(data)];
           this.treeNodes = this.convertToTreeNodes(this.assignmentMemos);
+          this.restampOriginNames();
           this.cdr.detectChanges();
           modalRef.close();
         },

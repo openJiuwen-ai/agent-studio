@@ -1342,28 +1342,20 @@ export const FlowUtils = {
     graph,
     updateRefType,
     self,
+    renameList: { oldRef: string; newRef: string }[] = [],
   ) {
     const oldMemory = cloneDeep(oldConfigs?.memory);
     const newMemory = cloneDeep(configs?.memory);
 
-    // Detect renamed memory variables by pairing old and new items by index.
-    // When a variable is renamed, the old filter (oldItem.name === newItem.name)
-    // excludes it from updateMemory, leaving stale ref_var_name in all referencing nodes.
-    const renameMap: Map<string, string> = new Map();
-    if (oldMemory && newMemory && oldMemory.length === newMemory.length) {
-      for (let i = 0; i < oldMemory.length; i++) {
-        const oldName = oldMemory[i]?.name;
-        const newName = newMemory[i]?.name;
-        if (oldName && newName && oldName !== newName) {
-          renameMap.set(`memory.${oldName}`, `memory.${newName}`);
-        }
-      }
-    }
-
-    // If there are renames, rewrite ref_var_name across all graph nodes.
+    // Rewrite ref_var_name across all graph nodes using the precise rename
+    // list captured by global-config (WeakMap-based, no index inference).
     // A recursive walker replaces the need to manually traverse each node
     // type's specific structure (inputs, branches, settings, outputs, etc.).
-    if (renameMap.size > 0) {
+    if (renameList.length > 0) {
+      const renameMap: Map<string, string> = new Map(
+        renameList.map((r) => [r.oldRef, r.newRef]),
+      );
+
       // Recursively walk an object tree and rewrite any ref_var_name property
       // that matches a renamed memory variable. Handles exact match
       // (memory.oldName) and nested access (memory.oldName.field).
@@ -1415,8 +1407,6 @@ export const FlowUtils = {
         }
         const updated = cloneDeep(nodeInfo);
         if (rewrite(updated)) {
-          node.setData({ ngArguments: { nodeInfo: updated } });
-          node.setData(null, { ignoreHistory: true });
           node.setData(
             { ngArguments: { nodeInfo: updated } },
             { ignoreHistory: true },
@@ -1425,9 +1415,11 @@ export const FlowUtils = {
       });
     }
 
-    // Existing logic: update type/schema for items that still match by name.
+    // Existing logic: update type/schema for items that still match by name
+    // or were renamed (included via renameList).
     const updateMemory = newMemory?.filter((newItem) =>
-      oldMemory?.some((oldItem) => oldItem.name === newItem.name),
+      oldMemory?.some((oldItem) => oldItem.name === newItem.name) ||
+      renameList.some((r) => r.newRef === `memory.${newItem.name}`),
     );
     const initialNodeIds = [];
     const nodes = graph.getNodes();
