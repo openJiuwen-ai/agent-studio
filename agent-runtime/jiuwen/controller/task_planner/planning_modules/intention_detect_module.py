@@ -4,6 +4,7 @@
 import ast
 import asyncio
 import copy
+import logging
 import os
 import re
 import time
@@ -153,8 +154,9 @@ class IntentionDetectModule:
         Returns:
             str or None: 上一次的意图/工作流名称，如果无法确定或无效则返回None
         """
-        logger.info(
-            f"task_id: {task_id}| handle LATEST intent, use interrupted task if there is any"
+        logger.debug(
+            "task_id: %s| handle LATEST intent, use interrupted task if there is any",
+            task_id,
         )
 
         # 返回会话历史中上一条 user 消息的意图
@@ -164,15 +166,17 @@ class IntentionDetectModule:
             "分类0",
             "意图不明",
         ):
-            logger.info(
-                f"task_id: {task_id}| LATEST resolved from history: {history_intent}",
-                simple_log=f"task_id: {task_id}| LATEST from history",
+            logger.debug(
+                "task_id: %s| LATEST resolved from history: %s",
+                task_id, history_intent,
+                simple_log="task_id: %s| LATEST from history" % task_id,
             )
             return history_intent
 
-        logger.info(
-            f"task_id: {task_id}| LATEST has no valid prior intent, will fall back to detection",
-            simple_log=f"task_id: {task_id}| LATEST no valid prior intent",
+        logger.debug(
+            "task_id: %s| LATEST has no valid prior intent, will fall back to detection",
+            task_id,
+            simple_log="task_id: %s| LATEST no valid prior intent" % task_id,
         )
         return None
 
@@ -366,11 +370,12 @@ class IntentionDetectModule:
             # 处理LATEST逻辑
             intent_function = self._handle_latest_intent(task_id)
             if latest_intent:
-                logger.info(
-                    f"latest_intent is {latest_intent}, "
-                    f"message list is {self.context_manager.engine.get_messages()}",
-                    simple_log="get latest_intent",
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "latest_intent is %s, message list is %s",
+                        latest_intent, self.context_manager.engine.get_messages(),
+                        simple_log="get latest_intent",
+                    )
                 intent_function = latest_intent
         elif specified_intent:
             # 有值但不是LATEST，执行指定意图匹配逻辑
@@ -645,8 +650,9 @@ class IntentionDetectModule:
         intent_config = self.plan_config.intent_identification
         query = self.context_manager.get_latest_user_content()
 
-        logger.info(
-            f"task_id {task_id}| Using coarse-grained intent identification method: {intent_config.method}"
+        logger.debug(
+            "task_id %s| Using coarse-grained intent identification method: %s",
+            task_id, intent_config.method,
         )
         intent_function = None
         candidate_intents = None
@@ -856,7 +862,7 @@ class IntentionDetectModule:
         **kwargs,
     ):
         """使用工作流方式进行意图识别"""
-        logger.info(f"task_id {task_id}| Using workflow-based intent detection")
+        logger.debug("task_id %s| Using workflow-based intent detection", task_id)
         runtime_data = kwargs.get("runtime_data", {})
 
         try:
@@ -874,10 +880,12 @@ class IntentionDetectModule:
                 intent_config,
                 **kwargs,
             )
-            logger.info(
-                f"task_id {task_id}| Workflow input: {workflow_input}",
-                simple_log=f"task_id {task_id}| get Workflow input",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "task_id %s| Workflow input: %s",
+                    task_id, workflow_input,
+                    simple_log="task_id %s| get Workflow input" % task_id,
+                )
 
             # 执行意图识别工作流
             workflow_output = await self._execute_intent_workflow(
@@ -887,10 +895,12 @@ class IntentionDetectModule:
                 task_id,
                 runtime_data=runtime_data,
             )
-            logger.info(
-                f"task_id {task_id}| Workflow output: {workflow_output}",
-                simple_log=f"task_id {task_id}| get Workflow output",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "task_id %s| Workflow output: %s",
+                    task_id, workflow_output,
+                    simple_log="task_id %s| get Workflow output" % task_id,
+                )
 
             # 解析工作流输出结果
             return self._parse_workflow_output(workflow_output, task_id)
@@ -1095,8 +1105,9 @@ class IntentionDetectModule:
         conversation_id = self.context_manager.get_global_variables(
             WorkflowConstants.CONVERSATION_ID
         )
-        logger.info(
-            f"task_id: {task_id} | Starting intent identification workflow execution, config_id: {intent_config.id}"
+        logger.debug(
+            "task_id: %s | Starting intent identification workflow execution, config_id: %s",
+            task_id, intent_config.id,
         )
 
         # 获取 insight_queue 用于发送调试信息
@@ -1110,8 +1121,9 @@ class IntentionDetectModule:
             # 收集流式执行的结果
             result = {"intent_id": None, "intent_name": None, "candidate_intents": None}
 
-            logger.info(
-                f"task_id: {task_id} | Starting streaming execution of intent identification workflow"
+            logger.debug(
+                "task_id: %s | Starting streaming execution of intent identification workflow",
+                task_id,
             )
 
             async for (
@@ -1379,7 +1391,7 @@ class IntentionDetectModule:
                     workflows_to_process.append(workflow_context)
         else:
             # 不传入使用全部的业务工作流进行跳转
-            logger.warning("No active workflows found, use all general workflows.")
+            logger.debug("No active workflows found, use all general workflows.")
             workflows_to_process = self.context_manager.get_normal_workflow_contexts()
 
         # 处理工作流

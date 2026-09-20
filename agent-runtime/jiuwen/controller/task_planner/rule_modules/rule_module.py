@@ -181,7 +181,7 @@ class RuleModule:
             task_id = getattr(msg, "task_id", "task")
 
             # 获取工作流信息
-            logger.info(f"Creating workflow task for: {workflow_id}")
+            logger.debug("Creating workflow task for: %s", workflow_id)
 
             # 创建唯一任务ID
             task_unique_id = f"{task_id}_workflow_{workflow_id}_{secrets.token_hex(4)}"
