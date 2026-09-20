@@ -1390,7 +1390,6 @@ export const FlowUtils = {
               if (val === oldRef || val.startsWith(oldRef + '.') || val.startsWith(oldRef + '[')) {
                 obj[key] = newRef + val.substring(oldRef.length);
                 changed = true;
-                break;
               }
             }
           } else if (val && typeof val === 'object') {

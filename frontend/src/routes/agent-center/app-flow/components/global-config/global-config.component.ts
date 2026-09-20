@@ -840,7 +840,20 @@ export class GlobalConfigComponent
 
   private stampOriginNames() {
     this.autoMemos.forEach((m) => { if (!this.originNames.has(m)) this.originNames.set(m, m.name); });
-    this.treeNodes.forEach((t) => { if (!this.originNames.has(t)) this.originNames.set(t, t.name); });
+    const stampTree = (nodes: any[], parentPath: string) => {
+      nodes.forEach((t) => {
+        const fullPath = this.buildChildPath(parentPath, t);
+        if (!this.originNames.has(t)) this.originNames.set(t, fullPath);
+        if (t.children) stampTree(t.children, fullPath);
+      });
+    };
+    stampTree(this.treeNodes, '');
+  }
+
+  private buildChildPath(parentPath: string, child: any): string {
+    if (!parentPath) return child.name;
+    if (child.parentType === 'array') return `${parentPath}[0].${child.name}`;
+    return `${parentPath}.${child.name}`;
   }
 
   private restampOriginNames() {
@@ -860,16 +873,20 @@ export class GlobalConfigComponent
         newRef: `memory.${m.name}`,
       });
     });
-    this.treeNodes.forEach((t) => {
-      const originName = this.originNames.get(t);
-      if (!originName || !t.name || originName === t.name) {
-        return;
-      }
-      renames.push({
-        oldRef: `memory.${originName}`,
-        newRef: `memory.${t.name}`,
+    const detectTree = (nodes: any[], parentPath: string) => {
+      nodes.forEach((t) => {
+        const originFullPath = this.originNames.get(t);
+        const currentFullPath = this.buildChildPath(parentPath, t);
+        if (originFullPath && currentFullPath && originFullPath !== currentFullPath) {
+          renames.push({
+            oldRef: `memory.${originFullPath}`,
+            newRef: `memory.${currentFullPath}`,
+          });
+        }
+        if (t.children) detectTree(t.children, currentFullPath);
       });
-    });
+    };
+    detectTree(this.treeNodes, '');
     return renames;
   }
 
