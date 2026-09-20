@@ -359,15 +359,14 @@ class WorkflowRunner:
         # 3. 创建对话上下文
         t_context = time.perf_counter()
         # 追加当轮 query 到历史末尾：试运行 resume 时 conversation_history(body.messages)
-        # 末条是上轮 assistant 问话，当轮用户输入在 req.query 而非 history → 提问器
-        # _get_latest_chat_history 读 context 末条是 assistant，回退 self._query（首轮输入）
+        # 末条是上轮 assistant 问话，当轮用户输入在 req.resume_input/req.query 而非 history →
+        # 提问器 _get_latest_chat_history 读 context 末条是 assistant，回退 self._query（首轮输入）
         # → trace 三轮都写首轮内容、字段提取取错轮。与 workflow_instance_layer.astream
         # 的 _current_query 追加对齐（controller 路径），此处覆盖试运行(workflow-self)路径。
+        # 用 req.resume_input or req.query，与 app_run.py 构建 resume 输入一致
+        # （resume 请求可能把当轮输入放 resumeInput 而 query 为空/旧值）。
         _history = list(req.params.conversation_history or [])
-        _cur_query = req.query if isinstance(req.query, str) else (
-            getattr(req.query, "raw_inputs", None)
-            or (list((getattr(req.query, "user_inputs", None) or {}).values()) or [""])[-1]
-        )
+        _cur_query = req.resume_input or req.query or ""
         if _cur_query:
             _last = _history[-1] if _history else None
             _last_role = getattr(_last, "role", None)

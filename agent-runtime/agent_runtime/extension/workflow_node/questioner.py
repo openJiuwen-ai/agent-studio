@@ -1797,7 +1797,17 @@ class QuestionerDirectReplyHandler:
 
         if not content:
             return
-
+        # 去重：若 context 末条已是相同 user content，不再写入
+        # （workflow_runner 已把当轮 query 追加到 history 末尾，此处再写会重复，
+        # 污染 dialogue_history，可能影响 LLM 字段提取）
+        try:
+            context_window = await context.get_context_window()
+            _msgs = context_window.get_messages() if context_window else []
+            if _msgs and getattr(_msgs[-1], "role", None) == "user" \
+                    and getattr(_msgs[-1], "content", None) == content:
+                return
+        except Exception:
+            pass
         user_message = UserMessage(role="user", content=content)
         await context.add_messages([user_message])
 
