@@ -843,7 +843,10 @@ export class GlobalConfigComponent
     const stampTree = (nodes: any[], parentPath: string) => {
       nodes.forEach((t) => {
         const fullPath = this.buildChildPath(parentPath, t);
-        if (!this.originNames.has(t)) this.originNames.set(t, fullPath);
+        // Skip empty names: a child created by addChild/addAssignmentMemos has
+        // name '' until the user types one; its baseline is stamped on the
+        // next restampOriginNames after save.
+        if (t.name && !this.originNames.has(t)) this.originNames.set(t, fullPath);
         if (t.children) stampTree(t.children, fullPath);
       });
     };
@@ -877,7 +880,7 @@ export class GlobalConfigComponent
       nodes.forEach((t) => {
         const originFullPath = this.originNames.get(t);
         const currentFullPath = this.buildChildPath(parentPath, t);
-        if (originFullPath && currentFullPath && originFullPath !== currentFullPath) {
+        if (originFullPath && t.name && originFullPath !== currentFullPath) {
           renames.push({
             oldRef: `memory.${originFullPath}`,
             newRef: `memory.${currentFullPath}`,
