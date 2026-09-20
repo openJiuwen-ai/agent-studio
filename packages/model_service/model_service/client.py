@@ -369,7 +369,8 @@ class StudioModelClient(OpenAIModelClient):
         )
         try:
             from jiuwen.common.log.base import logger as _jw_logger
-            _jw_logger.debug(f"LLM extra_headers injected keys: {list(_extra.keys())}")
+            _trace_headers = {k: v for k, v in _extra.items() if k in ("X-Request-Id", "X-Execution-Id", "traceparent")}
+            _jw_logger.debug(f"LLM extra_headers injected: {_trace_headers}")
         except ImportError:
             workflow_logger.debug("LLM extra_headers debug log skipped: jiuwen logger not available")
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
