@@ -2079,26 +2079,45 @@ export const FlowUtils = {
     const currentPath = path[0];
     const arr = currentPath.split('[');
     const currentName = arr[0];
+    const hasIndex = arr.length > 1;
 
     const currentItem = data.find(item => item.name === currentName);
     if (!currentItem) {
       return false;
     }
 
-    // Referencing the item itself (no further path) is valid. A segment
-    // carrying an array index (e.g. "foo[0]") additionally requires the
-    // item to actually be an array type.
+    // Callers pass either raw DSL fields (type 'array') or view tree nodes
+    // (type 'array<object>' / 'array<string>' from fields2RefParams);
+    // accept both shapes.
+    const itemType = currentItem.type;
+    const isArrayType =
+      itemType === 'array' ||
+      (typeof itemType === 'string' && itemType.startsWith('array<'));
+
+    // A segment carrying an array index (e.g. "foo[0]") requires the item
+    // to actually be an array; conversely an array item descended into
+    // without an index segment (e.g. "foo.bar" on array foo) is a stale
+    // reference left over from a type change and is invalid.
+    if (hasIndex && !isArrayType) {
+      return false;
+    }
+
+    // Referencing the item itself (or one of its elements) is valid
     if (path.length === 1) {
-      return arr.length === 1 || currentItem.type === 'array';
+      return true;
     }
 
     let nextData: any;
-    if (currentItem.type === 'object') {
+    if (itemType === 'object') {
       nextData = currentItem.schema;
-    } else if (currentItem.type === 'array') {
-      nextData = currentItem.schema.schema;
+    } else if (isArrayType) {
+      if (!hasIndex) {
+        return false;
+      }
+      nextData = currentItem.schema?.schema;
     } else {
-      return path.length === 1 && currentItem.name === currentName;
+      // Simple types cannot have nested paths
+      return false;
     }
 
     if (Array.isArray(nextData)) {
