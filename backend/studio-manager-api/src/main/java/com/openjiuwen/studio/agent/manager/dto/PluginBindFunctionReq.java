@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,20 +28,24 @@ public class PluginBindFunctionReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("function_id")
+    @Schema(description = "函数ID", example = "func_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String functionId = null;
 
     @JsonProperty("tool_id")
+    @Schema(description = "工具ID", example = "tool_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String toolId = null;
 
     @JsonProperty("function_input")
+    @Schema(description = "函数输入", example = "{\"key\":\"value\"}")
     @Valid
     private Object functionInput = null;
 
     @JsonProperty("function_output")
+    @Schema(description = "函数输出", example = "{\"result\":\"success\"}")
     @Valid
     private Object functionOutput = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,15 +27,18 @@ public class AgentVariable implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("variable_key")
+    @Schema(description = "变量键名", example = "user_name")
     @Pattern(regexp = "^[^\\^]*$")
     @Length(max = 100)
     private String variableKey = null;
 
     @JsonProperty("description")
+    @Schema(description = "变量描述", example = "用户名称")
     @Length(max = 200)
     private String description = null;
 
     @JsonProperty("default_value")
+    @Schema(description = "变量默认值", example = "张三")
     @Length(max = 100)
     private String defaultValue = null;
 

@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 # 导入 model_service 即触发 StudioModelClient 注册（client_provider="studio"），
 # 并复用 resolver / policy / dispatch 机制层。
 import model_service  # noqa: F401
-from model_service import dispatch, policy, resolver
+from model_service import dispatch, env_resolver, policy, resolver
 from model_service.ports import get_request_customer_headers
 from common_utils.customer_header import resolve, get_capture_keys, get_config
 from agent_builder.common.exception.model_codes import (
@@ -387,7 +387,9 @@ async def chat_completions(
                     if resp.status_code >= 300:
                         raise resolver.ModelServiceError(
                             INVOKE_MODEL_SERVICE_FAIL,
-                            f"upstream {url} returned {resp.status_code}: {resp.text}",
+                            f"upstream {url} returned {resp.status_code}: {resp.text}"
+                            + env_resolver.env_url_error_hint(
+                                detail.model.api_url_env_placeholders),
                             upstream_status=resp.status_code,
                             upstream_body=resp.text,
                         )
@@ -414,7 +416,9 @@ async def chat_completions(
                 await client.aclose()
                 raise resolver.ModelServiceError(
                     INVOKE_MODEL_SERVICE_FAIL,
-                    f"upstream {url} returned {resp.status_code}: {text}",
+                    f"upstream {url} returned {resp.status_code}: {text}"
+                    + env_resolver.env_url_error_hint(
+                        detail.model.api_url_env_placeholders),
                     upstream_status=resp.status_code,
                     upstream_body=text,
                 )

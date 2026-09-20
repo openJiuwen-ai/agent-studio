@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,23 +27,28 @@ public class KnowledgeRepoSearchCriteria implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "知识库ID", example = "kr001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "知识库名称", example = "产品知识库")
     @Length(min = 1, max = 50)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "vector")
     @Length(min = 1, max = 16)
     private String type = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "internal")
     @Length(min = 1, max = 16)
     private String source = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     @Length(min = 1, max = 16)
     private String status = null;
 

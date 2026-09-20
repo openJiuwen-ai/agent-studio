@@ -16,6 +16,7 @@ import {
 } from '@routes/agent-center/app-agent/components/add-mcp-servers/add-mcp-servers.component';
 import { AgentDataService } from '@services/agent-center/agent-data.service';
 import { MasOperatorService } from '@services/mas-operator.service';
+import { CommonUtils } from 'src/utils/common.util';
 
 @Component({
   selector: 'meta-add-mcp-service-modal',
@@ -88,6 +89,7 @@ export class AddMCPServiceModalComponent implements OnInit {
   public mcpLimit = 0;
   public emptyPlaceholder = this.i18n.transform('search_placeholder');
   public searchMarketVal: any[] = [];
+  public lang: string = CommonUtils.getLanguage();
 
   constructor(
     private readonly fb: FormBuilder,
@@ -105,6 +107,10 @@ export class AddMCPServiceModalComponent implements OnInit {
 
   get searchNameIsEmpty(): boolean {
     return this.searchedItem.length === 0;
+  }
+
+  isZH(): boolean {
+    return this.lang === 'zh-cn';
   }
 
   ngOnInit() {
@@ -128,7 +134,7 @@ export class AddMCPServiceModalComponent implements OnInit {
       this.currentPage = 1;
     }
     const query:any = {
-      language: 'ZH',
+      language: this.isZH() ? 'ZH' : 'EN',
       name: this.searchedItem.find((item) => item.field === 'name')?.value,
     };
     if (externalMapFlag) {

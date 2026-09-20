@@ -70,15 +70,19 @@ Copy-Item "$Workspace\packages\storage\storage"             "$Staging\app\storag
 Copy-Item "$Workspace\packages\common_utils\common_utils"   "$Staging\app\common_utils"       -Recurse -Force
 
 # 合并 runtime + builder 依赖为单一 requirements.txt（同一 venv 供 EIStart 与 EIBuilder 两服务，
-# 按包名去重、runtime 优先；psycopg2 与 psycopg2-binary 是不同包均保留）。
+# 按包名去重、runtime 优先）。psycopg2（源码包，PyPI 只发 win wheel + sdist，无 manylinux wheel）
+# 剔除：目标 Linux 裸机无 gcc+pg_config，pip 解析/构建 sdist 失败会中止整个安装（连 wheel 下载
+# 也全军覆没）；psycopg2 模块由 psycopg2-binary 提供（manylinux2014，glibc 2.17+，与 docker-builder 同源）。
 # 无 BOM 写（PS5.1 Set-Content -Encoding UTF8 加 BOM 会破坏 pip 解析首个包名）。
 A-Log "  合并 requirements.txt (agent-runtime + agent_builder)"
 $mergedReqs = New-Object System.Collections.Generic.List[string]
 $seenPkg = New-Object 'System.Collections.Generic.HashSet[string]'
+$skipPkgs = @('psycopg2')
 foreach ($l in @((Get-Content "$Workspace\agent-runtime\requirements.txt") + (Get-Content "$Workspace\agent_builder\requirements.txt"))) {
   $t = $l.Trim()
   if (-not $t) { continue }
   $pkg = (($t -split '[<>=!~]', 2)[0]).Trim()
+  if ($skipPkgs -contains $pkg) { continue }
   if ($seenPkg.Add($pkg)) { $mergedReqs.Add($t) }
 }
 [System.IO.File]::WriteAllLines("$Staging\app\requirements.txt", $mergedReqs, (New-Object System.Text.UTF8Encoding $false))
@@ -87,7 +91,11 @@ foreach ($l in @((Get-Content "$Workspace\agent-runtime\requirements.txt") + (Ge
 A-Log "[4/4] 生成 nginx.conf.tmpl + 复制 init.sql"
 $srcNginx = "$Workspace\deploy\config\nginx.conf"
 if (-not (Test-Path $srcNginx)) { A-Die "未找到 $srcNginx" }
-$t = Get-Content $srcNginx -Raw
+# -Encoding UTF8 必须显式指定：PS5.1 的 Get-Content 对无 BOM 文件默认按 ANSI(GBK) 解码，
+# 源文件里以中文标点（如"。"E3 80 82）结尾的行，其尾字节会与 LF 组成非法 GBK 对被整对吞掉，
+# 导致换行丢失、后续指令被上一行注释吞掉（实测：log_format 被两行中文注释并入一行而失效，
+# nginx 报 unknown log format "access"）。
+$t = Get-Content $srcNginx -Raw -Encoding UTF8
 $t = $t -replace 'server studio-manager:31111','server 127.0.0.1:31111'
 $t = $t -replace 'server studio-builder:31015','server 127.0.0.1:31015'
 $t = $t -replace '/opt/cloud/wiseagent-nginx/nginx/dist/hws','@@BUNDLE_ROOT@@/app/frontend/dist/hws'

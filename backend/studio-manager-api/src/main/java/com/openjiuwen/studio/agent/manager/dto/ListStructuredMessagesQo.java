@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,45 +29,55 @@ public class ListStructuredMessagesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 100000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "1000")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 1000;
 
     @JsonProperty("sort")
+    @Schema(description = "排序方式", example = "desc")
     @Length(max = 5)
     private String sort = "desc";
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "测试消息")
     @Pattern(regexp = "^.{0,64}$")
     @Length(max = 192)
     private String name = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "general")
     @Length(max = 16)
     private String category = null;
 
     @JsonProperty("import_method")
+    @Schema(description = "导入方式", example = "manual")
     @Length(max = 16)
     private String importMethod = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     @Length(max = 32)
     private String status = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user001")
     @Length(max = 32)
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "user002")
     @Length(max = 32)
     private String updater = null;
 

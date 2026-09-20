@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,37 +28,47 @@ public class ListStudioSkillsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "100")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 100;
 
     @JsonProperty("offset")
+    @Schema(description = "查询偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("status")
+    @Schema(description = "技能状态", example = "PUBLISHED")
     private String status = null;
 
     @JsonProperty("name")
+    @Schema(description = "技能名称", example = "我的技能")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "技能描述", example = "这是一个示例技能")
     private String description = null;
 
     @JsonProperty("source")
+    @Schema(description = "技能来源", example = "STUDIO")
     private String source = null;
 
     @JsonProperty("priority_status")
+    @Schema(description = "优先级状态", example = "HIGH")
     private String priorityStatus = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("tag_id")
+    @Schema(description = "标签ID", example = "tag_001")
     private String tagId = null;
 
     @JsonProperty("published_asset")
+    @Schema(description = "已发布资产数量", example = "1")
     private Integer publishedAsset = null;
 
     public Integer getLimit() {

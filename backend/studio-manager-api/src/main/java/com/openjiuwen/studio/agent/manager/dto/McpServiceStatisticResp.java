@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -22,19 +23,24 @@ public class McpServiceStatisticResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("serviceId")
+    @Schema(description = "服务ID", example = "service-001")
     @Length(max = 64)
     private String serviceId = null;
 
     @JsonProperty("totalInvokingTimes")
+    @Schema(description = "总调用次数", example = "100.0")
     private Double totalInvokingTimes = null;
 
     @JsonProperty("totalInvokingTimesPerMonth")
+    @Schema(description = "月调用次数", example = "50.0")
     private Double totalInvokingTimesPerMonth = null;
 
     @JsonProperty("totalInvokingTimesCurrentDay")
+    @Schema(description = "当日调用次数", example = "10.0")
     private Double totalInvokingTimesCurrentDay = null;
 
     @JsonProperty("totalInvokingTimesCurrentWeek")
+    @Schema(description = "当周调用次数", example = "30.0")
     private Double totalInvokingTimesCurrentWeek = null;
 
     public String getServiceId() {

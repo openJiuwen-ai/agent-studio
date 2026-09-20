@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,27 +25,35 @@ public class McpFailReasonDetailDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "错误码", example = "DEPLOY_FAILED")
     private String code = null;
 
     @JsonProperty("message_cn")
+    @Schema(description = "中文错误信息", example = "部署失败")
     private String messageCn = null;
 
     @JsonProperty("message_en")
+    @Schema(description = "英文错误信息", example = "Deploy failed")
     private String messageEn = null;
 
     @JsonProperty("reason_cn")
+    @Schema(description = "中文失败原因", example = "配置错误")
     private String reasonCn = null;
 
     @JsonProperty("reason_en")
+    @Schema(description = "英文失败原因", example = "Configuration error")
     private String reasonEn = null;
 
     @JsonProperty("suggestion_cn")
+    @Schema(description = "中文修复建议", example = "请检查配置")
     private String suggestionCn = null;
 
     @JsonProperty("suggestion_en")
+    @Schema(description = "英文修复建议", example = "Please check configuration")
     private String suggestionEn = null;
 
     @JsonProperty("debug_info")
+    @Schema(description = "调试信息", example = "Connection timeout")
     private String debugInfo = null;
 
     public String getCode() {

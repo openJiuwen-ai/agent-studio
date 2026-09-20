@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,57 +28,70 @@ public class WorkspaceMemberInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "成员记录ID", example = "member-record-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("workspaceId")
+    @Schema(description = "工作空间ID", example = "workspace-123")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("memberName")
+    @Schema(description = "成员名称", example = "张三")
     @Pattern(regexp = "^[a-zA-Z0-9\\u4e00-\\u9fa5._-][a-zA-Z0-9\\u4e00-\\u9fa5._\\- ]{0,63}$")
     @Length(min = 1, max = 64)
     private String memberName = null;
 
     @JsonProperty("memberId")
+    @Schema(description = "成员ID", example = "user-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String memberId = null;
 
     @JsonProperty("memberSource")
+    @Schema(description = "成员来源", example = "iam")
     @Length(min = 1, max = 128)
     private String memberSource = null;
 
     @JsonProperty("domainId")
+    @Schema(description = "域ID", example = "domain-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String domainId = null;
 
     @JsonProperty("role")
+    @Schema(description = "成员角色", example = "admin")
     @Length(min = 1, max = 64)
     private String role = null;
 
     @JsonProperty("createdOn")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00Z")
     private Date createdOn = null;
 
     @JsonProperty("updatedOn")
+    @Schema(description = "更新时间", example = "2026-01-02T00:00:00Z")
     private Date updatedOn = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者名称", example = "管理员")
     @Length(min = 1, max = 128)
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者名称", example = "管理员")
     @Length(min = 1, max = 128)
     private String updater = null;
 
     @JsonProperty("creatorId")
+    @Schema(description = "创建者ID", example = "user-456")
     @Length(min = 1, max = 128)
     private String creatorId = null;
 
     @JsonProperty("updaterId")
+    @Schema(description = "更新者ID", example = "user-456")
     @Length(min = 1, max = 128)
     private String updaterId = null;
 

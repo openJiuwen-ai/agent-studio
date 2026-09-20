@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -27,17 +28,21 @@ public class DatasetResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("datasets")
+    @Schema(description = "datasets", example = "")
     @Valid
     private List<DatasetVo> datasets = null;
 
     @JsonProperty("dataset_id")
+    @Schema(description = "数据集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String datasetId = null;
 
     @JsonProperty("dataset_values")
+    @Schema(description = "数据集Values", example = "")
     @Valid
     private List<Map<String, String>> datasetValues = null;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10")
     private Integer count = null;
 
     public List<DatasetVo> getDatasets() {

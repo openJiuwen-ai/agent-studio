@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -27,23 +28,29 @@ public class WorkflowFieldVOValue implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "取值类型", example = "literal")
     private TypeEnum type = null;
 
     @JsonProperty("content")
+    @Schema(description = "取值内容", example = "hello world")
     @Valid
     private Object content = null;
 
     @JsonProperty("operator")
+    @Schema(description = "运算符", example = "increment")
     private OperatorEnum operator = null;
 
     @JsonProperty("hint")
+    @Schema(description = "提示信息", example = "请输入内容")
     private String hint = null;
 
     @JsonProperty("default")
+    @Schema(description = "默认值", example = "null")
     @Valid
     private Object _default = null;
 
     @JsonProperty("display")
+    @Schema(description = "显示内容", example = "Hello")
     @Valid
     private Object display = null;
 

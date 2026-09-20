@@ -66,6 +66,7 @@ import org.springframework.web.multipart.MultipartFile;
     @PathVariable("knowledge_repo_id") String knowledgeRepoId, @Size(min = 1, max = 64)
     @Parameter(in = ParameterIn.PATH, description = "文件id", required = true, schema = @Schema())
     @PathVariable("file_id") String fileId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
     @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId, @NotNull @ApiParam(value = "创建知识库FAQ切片请求体", required = true) @Valid @RequestBody
     FaqFileChunkReq body);
@@ -89,6 +90,7 @@ import org.springframework.web.multipart.MultipartFile;
     @PathVariable("knowledge_repo_id") String knowledgeRepoId, @Size(min = 1, max = 64)
     @Parameter(in = ParameterIn.PATH, description = "文件id", required = true, schema = @Schema())
     @PathVariable("file_id") String fileId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
     @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
@@ -115,6 +117,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "切片id", required = true, schema = @Schema())
         @PathVariable("chunk_id") String chunkId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
@@ -227,6 +230,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "切片id", required = true, schema = @Schema())
         @PathVariable("chunk_id") String chunkId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "修改知识库切片请求体", required = true) @Valid @RequestBody FaqFileChunkReq body);
@@ -245,6 +249,7 @@ import org.springframework.web.multipart.MultipartFile;
         produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<UploadFaqFileRsp> uploadFaqFile(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())

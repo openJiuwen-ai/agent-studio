@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -29,14 +31,17 @@ public class ModifyChannelReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "example-id-123", required = true)
     @NotBlank
     @Length(max = 128)
     private String versionId = null;
 
     @JsonProperty("visibility_scope")
+    @Schema(description = "visibilityscope", example = "STRING")
     private VisibilityScopeEnum visibilityScope = VisibilityScopeEnum.TENANT;
 
     @JsonProperty("call_count")
+    @Schema(description = "数量", example = "10")
     @Range(min = -1L, max = 10000L)
     private Integer callCount = null;
 

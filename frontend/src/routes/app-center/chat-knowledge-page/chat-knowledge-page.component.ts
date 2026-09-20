@@ -652,11 +652,10 @@ export class ChatKnowledgePageComponent implements OnInit {
     return question.trim();
   }
 
-  /** 复制、点赞和点踩按钮是否可见。大模型的回答可能是空字符串，不能调用反馈接口 */
+  /** 复制按钮是否可见：有已生成内容即可复制。失败/停止/超时轮不隐藏（与试运行窗口口径一致）；空回答不显示 */
   public isVisibleOfLastBtns(item: any): boolean {
     return (
       item.showBottomBtns &&
-      !item.isTimeoutOrError &&
       item.showAnswer?.trim() !== ''
     );
   }
@@ -664,12 +663,9 @@ export class ChatKnowledgePageComponent implements OnInit {
 
   /** 复制整体答案 */
   copyAllAnswer(messages: any, currentIndex: number) {
-    this.clipboard.copy(messages?.showAnswer.replace('\n\n', ''));
-    this.chatLoop[currentIndex].showCopiedTip = true;
-    setTimeout(() => {
-      this.chatLoop[currentIndex].showCopiedTip = false;
-      this.cdr.markForCheck();
-    }, 600);
+    // 直接复制原始 markdown，保留段落分隔与结构（原 replace 会吞掉第一个段落分隔）
+    this.clipboard.copy(messages?.showAnswer ?? '');
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   /** 点击底部的清空对话，开启新聊天 */
@@ -733,7 +729,7 @@ export class ChatKnowledgePageComponent implements OnInit {
       }
       this.chatLoop[this.activeCurrentIdx].isShowRed = false;
       this.chatLoop[this.activeCurrentIdx].showBottomBtns = true;
-      // 停止生成的这一轮没有复制、点赞和点踩按钮。只有重新生成按钮
+      // 停止/超时/报错轮的复制按钮不再被 isTimeoutOrError 连带隐藏，已生成内容可复制
       this.chatLoop[this.activeCurrentIdx].isTimeoutOrError = true;
       this.chatLoop[this.activeCurrentIdx].chunkIds = [];
       this.isShowStopIcon = false;

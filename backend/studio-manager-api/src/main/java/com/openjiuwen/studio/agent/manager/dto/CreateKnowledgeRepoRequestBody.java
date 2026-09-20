@@ -10,6 +10,7 @@ import com.openjiuwen.studio.agent.common.dto.knowledge.ParseConf;
 import com.openjiuwen.studio.agent.common.dto.knowledge.SplitConf;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -30,37 +31,45 @@ public class CreateKnowledgeRepoRequestBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("display_name")
+    @Schema(description = "知识库名称", example = "我的知识库", required = true)
     @ValidKnowledgeBaseName
     @NotBlank
     @Length(min = 1, max = 50)
     private String displayName = null;
 
     @JsonProperty("description")
+    @Schema(description = "知识库描述", example = "用于存储技术文档", required = true)
     @NotBlank
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("embedding_model")
+    @Schema(description = "向量化模型配置", example = "{}")
     @Valid
     private ModelConf embeddingModel = null;
 
     @JsonProperty("rerank_model")
+    @Schema(description = "重排序模型配置", example = "{}")
     @Valid
     private ModelConf rerankModel = null;
 
     @JsonProperty("parse_conf")
+    @Schema(description = "解析配置", example = "{}")
     @Valid
     private ParseConf parseConf = null;
 
     @JsonProperty("split_conf")
+    @Schema(description = "分割配置", example = "{}")
     @Valid
     private SplitConf splitConf = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "base64_icon")
     @Length(max = 1024000)
     private String icon = null;
 
     @JsonProperty("rag_chunk_parser_conf")
+    @Schema(description = "RAG分块解析配置", example = "{}")
     @Valid
     private RagChunkParserConf ragChunkParserConf = null;
 

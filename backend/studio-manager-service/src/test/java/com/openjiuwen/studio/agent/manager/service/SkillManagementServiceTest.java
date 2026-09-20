@@ -204,6 +204,7 @@ public class SkillManagementServiceTest {
     @Test
     void testImportStudioSkill_Success() throws Exception {
         MultipartFile mockMultipartFile = mock(MultipartFile.class);
+        when(mockMultipartFile.getOriginalFilename()).thenReturn("test-skill.zip");
 
         File tempZipFile = File.createTempFile("agentBuilder-import-test-", ".zip");
         java.nio.file.Files.write(tempZipFile.toPath(), "mock-zip-content".getBytes(StandardCharsets.UTF_8));

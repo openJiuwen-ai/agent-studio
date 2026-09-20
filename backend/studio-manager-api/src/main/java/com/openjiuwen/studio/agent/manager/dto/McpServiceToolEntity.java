@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class McpServiceToolEntity implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "工具名称", example = "search-tool")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工具描述", example = "搜索工具")
     private String description = null;
 
     @JsonProperty("input")
+    @Schema(description = "输入参数", example = "{}")
     private String input = null;
 
     @JsonProperty("output")
+    @Schema(description = "输出参数", example = "{}")
     private String output = null;
 
     @JsonProperty("config")
+    @Schema(description = "配置信息", example = "{}")
     private String config = null;
 
     public String getName() {

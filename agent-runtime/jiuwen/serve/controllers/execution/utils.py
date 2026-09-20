@@ -1050,16 +1050,18 @@ async def _process_streaming_output(
     """
     # 每次对话都需要先生成一个start标识
     start_flag = True
+    stream_start_time_ms: Optional[int] = None
 
     async for item in origin_output:
         # 生成开始标识
         if start_flag:
+            stream_start_time_ms = get_current_time_ms()
             start_stream_data = StreamingChatResponse(
                 event=ConversationEvent.START,
                 index=0,
                 executionId=item.execution_id,
                 data={},
-                createdTime=get_current_time_ms(),
+                createdTime=stream_start_time_ms,
                 isStructMessage=item.is_struct_message,
             ).model_dump_json(by_alias=True, exclude_none=True)
             start_flag = False
@@ -1076,6 +1078,16 @@ async def _process_streaming_output(
                     )
                 )
             )
+
+        if (
+            item.code in (
+                StreamCode.CONTROLLER_FINISH_MESSAGE.value,
+                StreamCode.CONTROLLER_AGENT_INTERRUPT_MESSAGE.value,
+            )
+            and isinstance(item.data, dict)
+        ):
+            item.data.setdefault("start_time", stream_start_time_ms)
+            item.data.setdefault("end_time", get_current_time_ms())
 
         # 生成响应数据
         response = await _build_streaming_response(item, collector)
@@ -1138,12 +1150,31 @@ async def post_process_agent_group_streaming_output(
         await AsyncStateManager().delete_state(conversation_id)
     # 更新或者删除存储介质中的workflow state
     try:
-        if execution_data.instance.get_task_end():
+        task_end = execution_data.instance.get_task_end()
+        # 任务结束时若组内仍有待恢复的中断工作流（如：工作流A中断后，用户
+        # 穿插执行了新工作流C），不能删除 AgentGroupState——其中保存着各成员
+        # agent 的中断工作流上下文，删掉后下一轮将无法回到中断入口。
+        has_pending_interrupts = False
+        check_pending_interrupts = getattr(
+            execution_data.instance, "has_pending_interrupted_workflows", None
+        )
+        if check_pending_interrupts is not None:
+            has_pending_interrupts = await check_pending_interrupts()
+        if task_end and not has_pending_interrupts:
             await AsyncStateManager().delete_state(conversation_id)
             logger.info(
                 f"conversation {conversation_id} has deleted execution state for agent group"
             )
         else:
+            # 任务结束但组内仍有待恢复的中断工作流：保留 AgentGroupState 供下一轮
+            # 回到中断入口。注：无需重置 control_agent.current_agent_calls_count——
+            # save_agent_group_state 本就不会持久化该计数（每轮恢复为 0），
+            # 不存在跨轮累积触发 max_agent_calls 的问题。
+            if task_end and has_pending_interrupts:
+                logger.info(
+                    f"conversation {conversation_id} keeps agent group state "
+                    f"for pending interrupted workflows"
+                )
             agent_group_state = await execution_data.instance.get_state()
             serialized_agent_state = serialize_object(agent_group_state)
             await AsyncStateManager().save_state(

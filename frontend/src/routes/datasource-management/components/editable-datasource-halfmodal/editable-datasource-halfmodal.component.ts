@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, Optional } from '@angular/core';
+import { ChangeDetectorRef, Component, Input, OnInit, Optional } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
@@ -40,12 +40,14 @@ export class EditableDatasourceHalfmodalComponent implements OnInit {
 
   public btnLoading = false;
   public status = '';
+  public lastErrorMessage = '';
 
   constructor(
     private i18n: I18NextEagerPipe,
     private fb: FormBuilder,
     private dataSourceRepoServe: DataSourceManagementRepoService,
     private nzMessage: NzMessageService,
+    private cdr: ChangeDetectorRef,
     @Optional() private drawerRef: NzDrawerRef
   ) {
     this.form = this.fb.group({
@@ -76,7 +78,7 @@ export class EditableDatasourceHalfmodalComponent implements OnInit {
     this.drawerRef?.close();
   }
 
-  public createDatasource() {
+  public async createDatasource() {
     if (this.form.invalid) {
       Object.values(this.form.controls).forEach(control => {
         if (control.invalid) {
@@ -93,40 +95,33 @@ export class EditableDatasourceHalfmodalComponent implements OnInit {
       name: raw.name,
       desc: raw.desc,
       type: raw.type.value,
-      internet_access: raw.internet_access,
-      connection_info: {
+      connectionInfo: {
         host: raw.host,
         port: raw.port,
-        ssl_enabled: raw.ssl_enabled,
-        database_name: raw.database_name,
+        sslEnabled: raw.ssl_enabled,
+        databaseName: raw.database_name,
         user: raw.user,
         password: raw.password,
       },
     };
-    if (this.id) {
-      this.dataSourceRepoServe
-        .modifyDatasource(this.id, params)
-        .then(() => {
-          this.nzMessage.success(
-            this.i18n.transform('successfully_modify_datasource'),
-          );
-          this.close();
-        })
-        .finally(() => {
-          this.btnLoading = false;
-        });
-    } else {
-      this.dataSourceRepoServe
-        .createDatasource(params)
-        .then(() => {
-          this.nzMessage.success(
-            this.i18n.transform('successfully_create_datasource'),
-          );
-          this.close();
-        })
-        .finally(() => {
-          this.btnLoading = false;
-        });
+    try {
+      if (this.id) {
+        await this.dataSourceRepoServe.modifyDatasource(this.id, params);
+        this.nzMessage.success(
+          this.i18n.transform('successfully_modify_datasource'),
+        );
+      } else {
+        await this.dataSourceRepoServe.createDatasource(params);
+        this.nzMessage.success(
+          this.i18n.transform('successfully_create_datasource'),
+        );
+      }
+      this.close();
+    } catch {
+      // 错误已由 HTTP 全局错误处理器展示
+    } finally {
+      this.btnLoading = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -142,17 +137,17 @@ export class EditableDatasourceHalfmodalComponent implements OnInit {
     const selectedType = this.typeOptions.find((i) => i.value === res.type);
 
     this.form.controls.name.setValue(res.name);
-    this.form.controls.desc.setValue(res.description);
+    this.form.controls.desc.setValue(res.desc);
     this.form.controls.type.setValue(selectedType);
-    this.form.controls.internet_access.setValue(res.internet_access);
-    this.form.controls.host.setValue(res.connection_info?.host);
-    this.form.controls.port.setValue(res.connection_info?.port);
+    this.form.controls.host.setValue(res.connectionInfo?.host);
+    this.form.controls.port.setValue(res.connectionInfo?.port);
     this.form.controls.database_name.setValue(
-      res.connection_info?.database_name,
+      res.connectionInfo?.databaseName,
     );
-    this.form.controls.ssl_enabled.setValue(res.connection_info?.ssl_enabled);
-    this.form.controls.user.setValue(res.connection_info?.user);
-    this.form.controls.password.setValue(res.connection_info?.password);
+    this.form.controls.ssl_enabled.setValue(res.connectionInfo?.sslEnabled);
+    this.form.controls.user.setValue(res.connectionInfo?.user);
+    this.form.controls.password.setValue(res.connectionInfo?.password);
     this.status = res.status;
+    this.lastErrorMessage = res.lastErrorMessage || '';
   }
 }

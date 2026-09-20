@@ -64,8 +64,8 @@ import org.springframework.web.bind.annotation.RequestParam;
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "插件id", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
-        String workspaceId, @ApiParam(value = "是否需要校验鉴权") @RequestParam(value = "need_validate", required = false)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId, @Parameter(in = ParameterIn.QUERY, description = "是否需要校验鉴权", required = false, schema = @Schema()) @ApiParam(value = "是否需要校验鉴权") @RequestParam(value = "need_validate", required = false)
         Boolean needValidate,
         @NotNull @ApiParam(value = "创建插件鉴权凭证请求体", required = true) @Valid @RequestBody ToolCredential body);
 
@@ -87,7 +87,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "创建一个工具OpenAPI定义", nickname = "createToolOpenAPI", notes = "创建一个工具OpenAPI定义",
@@ -107,7 +107,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建工具请求体", required = true) @Valid @RequestBody CreateToolReq body);
 
@@ -131,7 +131,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "插件ID。", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id。", required = true, schema = @Schema()) @ApiParam(value = "项目空间id。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "创建一个工具", nickname = "createToolV1", notes = "创建一个工具",
@@ -150,7 +150,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建工具请求体", required = true) @Valid @RequestBody CreateToolReq body);
 
@@ -172,7 +172,7 @@ import org.springframework.web.bind.annotation.RequestParam;
     @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
     @PathVariable("tool_id") String toolId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "删除一个工具", nickname = "deleteToolV1",
@@ -193,7 +193,7 @@ import org.springframework.web.bind.annotation.RequestParam;
     @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
     @PathVariable("tool_id") String toolId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "删除一个工具版本定义", nickname = "deleteToolVersion", notes = "删除一个工具版本定义",
@@ -216,7 +216,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取一个工具版本定义", nickname = "getToolVersion", notes = "获取一个工具版本定义",
@@ -259,7 +259,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取工具列表", nickname = "listToolsV1", notes = "获取工具列表",
@@ -295,7 +295,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
@@ -315,7 +315,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("tool_id") String toolId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "版本创建信息") @Valid @RequestBody(required = false) CreateVersionReq body);
 
@@ -336,7 +336,7 @@ import org.springframework.web.bind.annotation.RequestParam;
     @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "工具id", required = true, schema = @Schema())
     @PathVariable("tool_id") String toolId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
 }

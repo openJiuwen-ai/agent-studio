@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,18 +26,22 @@ public class ModelInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "text", required = true)
     @NotBlank
     private String type = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("url")
+    @Schema(description = "接口地址", example = "https://example.com", required = true)
     @NotBlank
     private String url = null;
 
     @JsonProperty("token")
+    @Schema(description = "Token数量", example = "1024")
     private String token = null;
 
     public String getType() {

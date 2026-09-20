@@ -91,7 +91,7 @@ public class ManagerResourceCleanTask {
 
         // 查询所有两年前软删除的AGENT ID
         List<HistoryAgentEntity> agentEntities = historyAgentMapper.findByUpdatedOnLessThan(targetDate);
-        List<String> workflowIds = historyWorkflowMapper.findByUpdatedOnLessThan(targetDate);
+        List<String> workflowIds = historyWorkflowMapper.findByUpdatedOnLessThan(targetDate.getTime());
 
         TransactionStatus status = transactionManager.getTransaction(new DefaultTransactionDefinition());
         try {

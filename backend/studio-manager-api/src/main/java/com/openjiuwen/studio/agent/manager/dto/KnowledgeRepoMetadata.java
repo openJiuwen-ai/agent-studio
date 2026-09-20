@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class KnowledgeRepoMetadata implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("endpoint")
+    @Schema(description = "端点", example = "示例字符串")
     private String endpoint = null;
 
     @JsonProperty("authorization")
+    @Schema(description = "authorization", example = "示例字符串")
     private String authorization = null;
 
     public String getEndpoint() {

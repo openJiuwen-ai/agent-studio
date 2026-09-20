@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -30,42 +31,51 @@ public class FileChunkInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "分片ID", example = "chunk_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @NotBlank
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("content")
+    @Schema(description = "分片内容", example = "这是分片文本内容", required = true)
     @NotBlank
     @Length(min = 1, max = 65535)
     private String content = null;
 
     @JsonProperty("title")
+    @Schema(description = "分片标题", example = "第一章 概述", required = true)
     @NotBlank
     @Length(max = 65535)
     private String title = null;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "1")
     private Long pageNum = null;
 
     @JsonProperty("component_num")
+    @Schema(description = "组件编号", example = "1")
     private Long componentNum = null;
 
     @JsonProperty("timestamp")
+    @Schema(description = "时间戳", example = "1717200000000")
     @Length(max = 13)
     private String timestamp = null;
 
     @JsonProperty("knowledge_repo_id")
+    @Schema(description = "知识库ID", example = "repo_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String knowledgeRepoId = null;
 
     @JsonProperty("image_ids")
+    @Schema(description = "图片ID列表", example = "[\"img_001\"]")
     @Valid
     @Size(max = 100)
     private List<@Length(min = 1, max = 100) String> imageIds = null;
 
     @JsonProperty("image_paths")
+    @Schema(description = "图片路径列表", example = "[\"/images/img_001.png\"]")
     @Valid
     @Size(max = 100)
     private List<@Length(min = 1, max = 2000) String> imagePaths = null;

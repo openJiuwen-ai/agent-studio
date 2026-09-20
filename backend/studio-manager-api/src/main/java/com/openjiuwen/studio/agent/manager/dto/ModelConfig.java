@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,24 +25,31 @@ public class ModelConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("top_p")
+    @Schema(description = "Top-P 采样参数，控制生成多样性，取值范围 0~1", example = "1.0")
     private Double topP = 1.0d;
 
     @JsonProperty("temperature")
+    @Schema(description = "Temperature 采样参数，控制生成随机性，取值范围 0~2", example = "0.0")
     private Double temperature = 0.0d;
 
     @JsonProperty("history_size")
+    @Schema(description = "对话历史轮次数量", example = "20")
     private Integer historySize = 20;
 
     @JsonProperty("output_format")
+    @Schema(description = "输出格式，可选值：text、json", example = "text")
     private String outputFormat = "text";
 
     @JsonProperty("max_tokens")
+    @Schema(description = "生成最大 token 数量", example = "4096")
     private Integer maxTokens = 4096;
 
     @JsonProperty("frequency_penalty")
+    @Schema(description = "频率惩罚参数，降低已出现 token 的重复率，取值范围 -2~2", example = "0.0")
     private Double frequencyPenalty = 0.0d;
 
     @JsonProperty("enable_thinking")
+    @Schema(description = "是否启用思考链（Chain-of-Thought）", example = "true")
     private Boolean enableThinking = true;
 
     public Double getTopP() {

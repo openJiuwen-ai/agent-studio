@@ -19,8 +19,26 @@ from agent_runtime.serve.apis.app_release import ReleaseInfo, _RELEASE_WEB_REL_K
 
 release_api_router = APIRouter(tags=["release"])
 
+_OPERATION_RESPONSE_200 = {
+    200: {
+        "description": "操作成功",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": {"type": "string", "description": "操作结果消息"},
+                    },
+                    "required": ["message"],
+                },
+            }
+        },
+    },
+}
 
-@release_api_router.post("/v1/{project_id}/releases")
+
+@release_api_router.post("/v1/{project_id}/releases", summary="创建应用发布信息",
+    responses=_OPERATION_RESPONSE_200)
 async def create_release_info(
     project_id: str,
     body: ReleaseInfo,
@@ -77,7 +95,8 @@ async def create_release_info(
     return JSONResponse(status_code=200, content={"message": "Release info created successfully"})
 
 
-@release_api_router.delete("/v1/{project_id}/releases/{release_id}")
+@release_api_router.delete("/v1/{project_id}/releases/{release_id}", summary="删除应用发布信息",
+    responses=_OPERATION_RESPONSE_200)
 async def delete_release_info(
     project_id: str,
     release_id: str,

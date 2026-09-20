@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import com.openjiuwen.studio.agent.common.dto.TriggerConfig;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -34,225 +35,280 @@ public class ModifyAgentReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "智能体名称，2~64个字符", example = "智能助手")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!](?:[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！! ]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!])?$")
     @Length(min = 2, max = 64)
     private String name = null;
 
     @JsonProperty("type")
+    @Schema(description = "智能体类型：agent-单智能体，controller-多智能体", example = "agent")
     private TypeEnum type = null;
 
     @JsonProperty("description")
+    @Schema(description = "智能体描述，1~256个字符", example = "这是一个智能助手")
     @Length(min = 1, max = 256)
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "智能体图标，支持base64或URL", example = "data:image/png;base64,iVBOR...")
     private String icon = null;
 
     @JsonProperty("details")
+    @Schema(description = "多智能体控制器配置（仅type=controller时使用）", example = "")
     @Valid
     private ControllerVO details = null;
 
     @JsonProperty("instructions")
+    @Schema(description = "提示词指令内容，最大10000字符", example = "你是一个专业的智能助手")
     @Length(max = 10000)
     private String instructions = null;
 
     @JsonProperty("model_deployment_id")
+    @Schema(description = "模型部署ID", example = "dep-1234567890")
     @Length(max = 128)
     private String modelDeploymentId = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Length(max = 256)
     private String modelName = null;
 
     @JsonProperty("model_endpoint")
+    @Schema(description = "模型推理端点URL", example = "https://api.example.com/v1/chat/completions")
     private String modelEndpoint = null;
 
     @JsonProperty("model_version")
+    @Schema(description = "模型版本号", example = "v1.0.0")
     private String modelVersion = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型参数配置（temperature、top_p等）", example = "")
     @Valid
     private ModelConfig modelConfig = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型标识", example = "openai")
     @Length(max = 32)
     private String modelType = null;
 
     @JsonProperty("strategy_flag")
+    @Schema(description = "是否启用策略模式", example = "false")
     private Boolean strategyFlag = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型标识符", example = "gpt-4-turbo")
     @Length(max = 64)
     private String model = null;
 
     @JsonProperty("plan_qa_independent")
+    @Schema(description = "计划QA是否独立执行", example = "false")
     private Boolean planQaIndependent = null;
 
     @JsonProperty("plan_model")
+    @Schema(description = "规划模型标识符", example = "gpt-4")
     @Length(max = 64)
     private String planModel = null;
 
     @JsonProperty("plan_model_deployment_id")
+    @Schema(description = "规划模型部署ID", example = "dep-plan-1234567890")
     @Length(max = 128)
     private String planModelDeploymentId = null;
 
     @JsonProperty("plan_model_name")
+    @Schema(description = "规划模型名称", example = "gpt-4")
     @Length(max = 256)
     private String planModelName = null;
 
     @JsonProperty("plan_model_config")
+    @Schema(description = "规划模型参数配置", example = "")
     @Valid
     private ModelConfig planModelConfig = null;
 
     @JsonProperty("plan_model_type")
+    @Schema(description = "规划模型类型标识", example = "openai")
     @Length(max = 32)
     private String planModelType = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具ID列表", example = "[\"tool-1\",\"tool-2\"]")
     @Valid
     @Size()
     private List<@Length() String> tools = null;
 
     @JsonProperty("tool_details")
+    @Schema(description = "工具详情列表", example = "")
     @Valid
     @Size()
     private List<AgentToolDetail> toolDetails = null;
 
     @JsonProperty("workflows")
+    @Schema(description = "工作流ID列表", example = "[\"wf-1\",\"wf-2\"]")
     @Valid
     @Size()
     private List<@Length() String> workflows = null;
 
     @JsonProperty("workflow_details")
+    @Schema(description = "工作流详情列表", example = "")
     @Valid
     @Size()
     private List<AgentWorkflowDetail> workflowDetails = null;
 
     @JsonProperty("mcp_servers")
+    @Schema(description = "MCP服务器名称列表", example = "[\"mcp-server-1\"]")
     @Valid
     @Size()
     private List<@Length() String> mcpServers = null;
 
     @JsonProperty("mcp_choose_tools")
+    @Schema(description = "MCP服务器与所选工具的映射", example = "")
     @Valid
     @Size()
     private Map<String, List<String>> mcpChooseTools = null;
 
     @JsonProperty("mcp_details")
+    @Schema(description = "MCP服务器详情列表", example = "")
     @Valid
     @Size()
     private List<AgentMcpDetail> mcpDetails = null;
 
     @JsonProperty("knowledge_repos")
+    @Schema(description = "知识库ID列表", example = "[\"repo-1\",\"repo-2\"]")
     @Valid
     @Size()
     private List<@Length() String> knowledgeRepos = null;
 
     @JsonProperty("trigger_list")
+    @Schema(description = "触发器配置列表", example = "")
     @Valid
     @Size()
     private List<TriggerConfig> triggerList = null;
 
     @JsonProperty("memory_variables")
+    @Schema(description = "记忆变量列表", example = "")
     @Valid
     @Size()
     private List<MemoryVariable> memoryVariables = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白，最大512字符", example = "你好，我是智能助手，有什么可以帮助你的吗？")
     @Length(max = 512)
     private String prologue = null;
 
     @JsonProperty("is_template")
+    @Schema(description = "是否为模板", example = "false")
     private Boolean isTemplate = null;
 
     @JsonProperty("search_engine")
+    @Schema(description = "搜索引擎配置", example = "")
     @Valid
     private SearchEngine searchEngine = null;
 
     @JsonProperty("suggest_queries")
+    @Schema(description = "推荐问题列表", example = "[\"如何使用智能助手？\"]")
     @Valid
     @Size()
     private List<@Length(max = 512) String> suggestQueries = null;
 
     @JsonProperty("additional_questions_config")
+    @Schema(description = "追加问题配置", example = "")
     @Valid
     private AdditionalQuestionsConfig additionalQuestionsConfig = null;
 
     @JsonProperty("voice_interaction")
+    @Schema(description = "语音交互配置", example = "")
     @Valid
     private VoiceInteraction voiceInteraction = null;
 
     @JsonProperty("knowledge_retrieve_policy")
+    @Schema(description = "知识检索策略", example = "")
     @Valid
     private KnowledgeRetrievePolicy knowledgeRetrievePolicy = null;
 
     @JsonProperty("agent_variables")
+    @Schema(description = "智能体变量列表，最多30个", example = "")
     @Valid
     @Size(max = 30)
     private List<AgentVariable> agentVariables = null;
 
     @JsonProperty("input_variables")
+    @Schema(description = "输入变量列表，最多30个", example = "")
     @Valid
     @Size(max = 30)
     private List<InputVariable> inputVariables = null;
 
     @JsonProperty("memory_config")
+    @Schema(description = "记忆配置", example = "")
     @Valid
     private AgentMemoryConfig memoryConfig = null;
 
     @JsonProperty("content_review")
+    @Schema(description = "内容审核配置", example = "")
     @Valid
     @Size()
     private Map<String, Object> contentReview = null;
 
     @JsonProperty("safety_barrier")
+    @Schema(description = "是否启用安全护栏", example = "true")
     private Boolean safetyBarrier = null;
 
     @JsonProperty("status")
+    @Schema(description = "智能体状态：0-草稿，1-已发布", example = "0")
     private Integer status = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者标识", example = "user-123")
     private String creator = null;
 
     @JsonProperty("scheduling_mode")
+    @Schema(description = "调度模式", example = "ReAct")
     private SchedulingModeEnum schedulingMode = null;
 
     @JsonProperty("workflow_switch_enabled")
+    @Schema(description = "是否启用工作流开关", example = "false")
     private Boolean workflowSwitchEnabled = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2026-01-01T10:00:00Z")
     private Date createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2026-01-01T12:00:00Z")
     private Date updateTime = null;
 
     @JsonProperty("publish_time")
+    @Schema(description = "发布时间", example = "2026-01-01T14:00:00Z")
     private Date publishTime = null;
 
     @JsonProperty("reference")
+    @Schema(description = "引用配置", example = "")
     @Valid
     private Reference reference = null;
 
     @JsonProperty("scenes")
+    @Schema(description = "场景列表", example = "")
     @Valid
     @Size()
     private List<Scene> scenes = null;
 
     @JsonProperty("sub_type")
+    @Schema(description = "智能体子类型", example = "chat")
     private String subType = null;
 
     @JsonProperty("skills")
+    @Schema(description = "技能引用列表", example = "")
     @Valid
     @Size()
     private List<SkillReference> skills = null;
 
     @JsonProperty("skill_details")
+    @Schema(description = "技能详情列表", example = "")
     @Valid
     @Size()
     private List<AgentSkillDetail> skillDetails = null;
 
     @JsonProperty("writing_template")
+    @Schema(description = "写作模板", example = "请根据以下要求撰写文章：")
     private String writingTemplate = null;
 
     public String getName() {

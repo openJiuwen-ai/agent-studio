@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,30 +33,36 @@ public class PeEvaluationTaskDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,30}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     @NotBlank
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String taskId = null;
 
     @JsonProperty("method")
+    @Schema(description = "评估方法", example = "similarity", required = true)
     @Pattern(regexp = "similarity|matching")
     @NotBlank
     private String method = null;
 
     @JsonProperty("test_set_id")
+    @Schema(description = "测试集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String testSetId = null;
 
     @JsonProperty("prompt_ids")
+    @Schema(description = "提示词ID列表", example = "", required = true)
     @Valid
     @NotNull
     @Size(max = 9)
@@ -64,10 +71,12 @@ public class PeEvaluationTaskDto implements Serializable {
         = new ArrayList<String>();
 
     @JsonProperty("regular_expression")
+    @Schema(description = "正则表达式", example = "^[0-9]+$")
     @Length(max = 64)
     private String regularExpression = null;
 
     @JsonProperty("eval_model_config")
+    @Schema(description = "评估模型配置", example = "")
     @Valid
     private ModelConfig evalModelConfig = null;
 

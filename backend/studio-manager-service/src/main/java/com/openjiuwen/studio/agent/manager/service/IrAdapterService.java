@@ -95,6 +95,7 @@ import com.openjiuwen.studio.agent.manager.entity.KnowledgeRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
+import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationInputVariable;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationVariable;
@@ -1369,7 +1370,7 @@ public class IrAdapterService {
             // 其他的包括走FG的，都是SSE
             result.put(TYPE, CommonConstant.MCP_SERVER_TYPE.SSE);
         }
-        McpServerManagerService.recoveryAuthInfo(serviceEntity);
+        mcpServiceManager.recoveryAuthInfo(serviceEntity);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(serviceEntity.getOrgType(),
             encryptionAdapter.decrypt(serviceEntity.getServerConfig()), serviceEntity.getAuthInfo()));
         result.put(HEADERS, WorkflowUtils.parseHeadersOfServerConfig(serviceEntity.getOrgType(),
@@ -1599,7 +1600,25 @@ public class IrAdapterService {
                 && CommonConstant.Plugin.INTF_TYPE_STREAMING.equalsIgnoreCase(toolEntity.getIntfType());
             result.put(STREAMING, isStream);
         }
-        result.put(NAME, toolEntity.getToolDisplayName());
+        // 确保 name 包含 operation 后缀，实现操作级工具隔离
+        // OBS DSL JSON 可能只存了插件拼音名，需通过 transferPlugin2Tool 拼接 operation 名
+        String displayName = toolEntity.getToolDisplayName();
+        if (ids.length > 1 && !"0".equals(ids[1])) {
+            try {
+                List<PluginEntity> pluginEntities = pluginService.getPlugin(
+                    projectId, null, Collections.singletonList(pluginId));
+                if (!pluginEntities.isEmpty()) {
+                    ToolEntity correctTool = pluginBaseImpl.transferPlugin2Tool(
+                        pluginEntities.get(0), ids[1]);
+                    displayName = correctTool.getToolDisplayName();
+                }
+            } catch (Exception e) {
+                // 查询失败时使用原始名称
+                log.warn("Failed to resolve operation display name for plugin {}: {}",
+                    pluginId, e.getMessage());
+            }
+        }
+        result.put(NAME, displayName);
         result.put(DESCRIPTION, toolEntity.getToolDesc());
         result.put(URL, toolEntity.getRequestInfo().getUrl());
         result.put(METHOD, toolEntity.getRequestInfo().getMethod());
@@ -1668,6 +1687,13 @@ public class IrAdapterService {
 
         result.put(ARGUMENTS,
             isAgentPlugin ? parseAgentPluginParams(inputSchema, true) : parseWorkflowPluginParams(inputSchema, true));
+        // 扫描 inputSchema properties 中的 env_var_ref，生成 inputParameters 引用关系
+        if (isAgentPlugin) {
+            Map<String, String> envRefMap = extractEnvVarReferences(inputSchema);
+            if (!envRefMap.isEmpty()) {
+                result.put(INPUT_PARAMETERS, envRefMap);
+            }
+        }
         SchemaConfig outputSchema = JSON.parseObject(toolEntity.getOutputSchema(), SchemaConfig.class);
         result.put(RESPONSE, isAgentPlugin ? parseAgentPluginParams(outputSchema, false)
             : parseWorkflowPluginParams(outputSchema, false));
@@ -1684,6 +1710,31 @@ public class IrAdapterService {
         }
 
         return result;
+    }
+
+    /**
+     * 扫描 inputSchema 的 properties，提取其中的 env_var_ref 环境变量引用，
+     * 生成 inputParameters 引用映射（如 {"host": "{{_env.plugin_url_params.host}}"}）。
+     *
+     * @param inputSchema 插件输入Schema
+     * @return 环境变量引用映射，空Map表示无环境变量引用
+     */
+    private Map<String, String> extractEnvVarReferences(SchemaConfig inputSchema) {
+        Map<String, String> envRefMap = new HashMap<>();
+        if (inputSchema == null || inputSchema.getProperties() == null) {
+            return envRefMap;
+        }
+        for (Map.Entry<String, SchemaConfig> entry : inputSchema.getProperties().entrySet()) {
+            SchemaConfig prop = entry.getValue();
+            if (prop == null) {
+                continue;
+            }
+            String envVarRef = prop.getEnvVarRef();
+            if (StringUtils.isNotBlank(envVarRef)) {
+                envRefMap.put(entry.getKey(), "{{_env.plugin_url_params." + envVarRef + "}}");
+            }
+        }
+        return envRefMap;
     }
 
     private String getPluginFreeTrialUsageQuotaKey(String domainId, String pluginId) {
@@ -1789,7 +1840,7 @@ public class IrAdapterService {
             result.put(URL, CommonUtil.parseUrlFromMcpConfig(jsonObject, 0));
         }
 
-        McpServerManagerService.recoveryAuthInfo(mcpServerInfo);
+        mcpServiceManager.recoveryAuthInfo(mcpServerInfo);
         String serverConfig = getServiceConfig(mcpServerInfo);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(mcpServerInfo.getOrgType(), serverConfig, mcpServerInfo.getAuthInfo()));
         result.put(HEADERS, WorkflowUtils.parseHeadersOfServerConfig(mcpServerInfo.getOrgType(),
@@ -2637,8 +2688,16 @@ public class IrAdapterService {
                 objectMapper.convertValue(resourceConfig.get(ARGUMENTS), new TypeReference<>() {});
             // 用户所配置的信息
             List<Map<String, Object>> argumentSettings = parseExtendInfo(extendInfo);
-            // 记录引用关系
+            // 记录引用关系，保留已有的环境变量引用（来自 parsePluginConfig 提取的 defaultValue 占位符）
             Map<String, String> refMap = new HashMap<>();
+            Object existingInputParams = resourceConfig.get(INPUT_PARAMETERS);
+            if (existingInputParams instanceof Map<?, ?> existingMap) {
+                for (Map.Entry<?, ?> entry : existingMap.entrySet()) {
+                    if (entry.getKey() instanceof String k && entry.getValue() instanceof String v) {
+                        refMap.put(k, v);
+                    }
+                }
+            }
             // 更新参数
             setArguments(argumentSettings, argumentsList, true, resourceType, refMap, null);
 

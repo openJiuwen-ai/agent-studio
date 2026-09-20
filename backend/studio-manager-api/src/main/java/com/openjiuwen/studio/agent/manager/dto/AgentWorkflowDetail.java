@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,12 +25,15 @@ public class AgentWorkflowDetail implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String workflowId = null;
 
     @JsonProperty("workflow_version")
+    @Schema(description = "工作流版本", example = "v1.0.0")
     private String workflowVersion = null;
 
     @JsonProperty("workflow_param")
+    @Schema(description = "工作流参数", example = "{\"key\":\"value\"}")
     private String workflowParam = null;
 
     public String getWorkflowId() {

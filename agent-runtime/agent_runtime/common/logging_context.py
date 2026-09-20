@@ -2,6 +2,7 @@ import copy
 import logging
 import re
 
+from agent_runtime.common.config import settings
 from agent_runtime.common.session_state_access import get_state_info
 from agent_runtime.context.request_context import _request_ctx
 from openjiuwen.core.common.logging import get_session_id
@@ -201,6 +202,9 @@ def install_log_formatter_patch() -> None:
     DefaultLogger._get_formatter = get_formatter
     _FORMATTER_PATCH_INSTALLED = True
     _OPENJIUWEN_LOGGING_MANAGED = True
+
+    if not settings.server.performance_log_enabled:
+        logging.getLogger("performance").disabled = True
 
 
 def install_request_id_log_record_factory() -> None:

@@ -63,5 +63,5 @@ export interface IMemoryItem {
   memory_id: string;
   content: string;
   type?: string;
-  last_update_time?: number;
+  last_update_time?: string;
 }

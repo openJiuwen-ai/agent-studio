@@ -2,6 +2,12 @@
   width: 100%;
 }
 
+/* 附件上传图标满 20 个后的禁用态 */
+.disabled-upload-icon {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .sender-main {
   width: 100%;
   display: flex;
@@ -111,6 +117,20 @@
   width: calc(50% - 4.5px);
   max-width: 250px;
   border-radius: 16px;
+
+  /* 删除按钮 hover 显示，与表单系文件条一致 */
+  .delete-file-icon {
+    visibility: hidden;
+    cursor: pointer;
+
+    &:hover {
+      color: #f23030;
+    }
+  }
+
+  &:hover .delete-file-icon {
+    visibility: visible;
+  }
 }
 
 .container {
@@ -221,7 +241,8 @@
     }
   }
   .sender-main {
-    .ant-input:focus {
+    /* 仅单行输入框 focus 不显示边框；textarea（textarea-content）保留 ant-input 默认 focus 蓝框 */
+    .focus-input.ant-input:focus {
       border: none !important;
       box-shadow: none !important;
       &:focus{

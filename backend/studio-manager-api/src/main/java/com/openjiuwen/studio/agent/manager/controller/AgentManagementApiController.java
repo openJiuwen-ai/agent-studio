@@ -13,6 +13,8 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -26,6 +28,7 @@ import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -34,6 +37,8 @@ import com.openjiuwen.studio.agent.manager.dto.ModifyChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 import com.openjiuwen.studio.agent.manager.service.IAgentManagementService;
 
 import org.slf4j.Logger;
@@ -68,6 +73,13 @@ public class AgentManagementApiController implements AgentManagementApi {
         String agentId, AutoAddStudioResourceRequestBody body) {
         return ResponseModel.success(
             agentManagementService.autoAddStudioResource(projectId, workspaceId, agentId, body));
+    }
+
+    @Override
+    public ResponseEntity<BatchDeleteVersionsResponseBody> batchDeleteAgentVersions(String projectId, String agentId,
+        String workspaceId, BatchDeleteVersionsRequestBody body) {
+        return ResponseModel.success(
+            agentManagementService.batchDeleteAgentVersions(projectId, agentId, workspaceId, body));
     }
 
     @Override
@@ -221,6 +233,13 @@ public class AgentManagementApiController implements AgentManagementApi {
     }
 
     @Override
+    public ResponseEntity<VersionReferenceListRsp> listAgentVersionReferences(String projectId, String agentId,
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo) {
+        return ResponseModel.success(
+            agentManagementService.listAgentVersionReferences(projectId, agentId, listAgentVersionReferencesQo));
+    }
+
+    @Override
     public ResponseEntity<VersionListRsp> listAgentVersions(String projectId, String agentId,
         ListAgentVersionsQo listAgentVersionsQo) {
         return ResponseModel.success(agentManagementService.listAgentVersions(projectId, agentId, listAgentVersionsQo));
@@ -267,6 +286,11 @@ public class AgentManagementApiController implements AgentManagementApi {
     @Override
     public ResponseEntity<AgentInfo> retrieveAgent(String projectId, String agentId, String workspaceId) {
         return ResponseModel.success(agentManagementService.retrieveAgent(projectId, agentId, workspaceId));
+    }
+
+    @Override
+    public ResponseEntity<WorkflowValidationVO> validateAgent(String projectId, String agentId, String workspaceId) {
+        return ResponseModel.success(agentManagementService.validateAgent(projectId, agentId, workspaceId));
     }
 
     @Override

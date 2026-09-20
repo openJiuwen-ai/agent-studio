@@ -12,6 +12,8 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -25,6 +27,7 @@ import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -33,6 +36,8 @@ import com.openjiuwen.studio.agent.manager.dto.ModifyChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
@@ -66,6 +71,17 @@ public interface IAgentManagementService {
      */
     AutoAddResultJsonObject autoAddStudioResource(String projectId, String workspaceId, String agentId,
         AutoAddStudioResourceRequestBody body);
+
+    /**
+     * batchDeleteAgentVersions
+     *
+     * @param projectId projectId
+     * @param agentId agentId
+     * @param workspaceId workspaceId
+     * @param body body
+     */
+    BatchDeleteVersionsResponseBody batchDeleteAgentVersions(String projectId, String agentId, String workspaceId,
+        BatchDeleteVersionsRequestBody body);
 
     /**
      * copyAgent
@@ -305,6 +321,16 @@ public interface IAgentManagementService {
     AgentVersionListRsp listAgentLastVersions(String projectId, ListAgentLastVersionsQo listAgentLastVersionsQo);
 
     /**
+     * listAgentVersionReferences
+     *
+     * @param projectId projectId
+     * @param agentId agentId
+     * @param listAgentVersionReferencesQo listAgentVersionReferencesQo
+     */
+    VersionReferenceListRsp listAgentVersionReferences(String projectId, String agentId,
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo);
+
+    /**
      * listAgentVersions
      *
      * @param projectId projectId
@@ -381,6 +407,17 @@ public interface IAgentManagementService {
      * @param workspaceId workspaceId
      */
     AgentInfo retrieveAgent(String projectId, String agentId, String workspaceId);
+
+    /**
+     * 智能体试运行前预校验。多智能体校验下挂业务子工作流引用的版本是否存在，
+     * 与工作流 /workflows/{id}/validate 的机制保持一致
+     *
+     * @param projectId projectId
+     * @param agentId agentId
+     * @param workspaceId workspaceId
+     * @return 校验结果，success=false 时 errors 为出错节点列表
+     */
+    WorkflowValidationVO validateAgent(String projectId, String agentId, String workspaceId);
 
     /**
      * retrieveAgentApp

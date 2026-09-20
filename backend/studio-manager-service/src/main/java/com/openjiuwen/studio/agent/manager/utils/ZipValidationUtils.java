@@ -273,6 +273,7 @@ public class ZipValidationUtils {
      */
     private static void validateExtractedContent(File zipFile) {
         Path tempDir = null;
+        Path tempDirForValidation = null;
         String zipFileName;
         try {
             zipFileName = zipFile.getName().substring(0, zipFile.getName().lastIndexOf('.'));
@@ -280,7 +281,7 @@ public class ZipValidationUtils {
             // 创建临时目录
             tempDir = Files.createTempDirectory(zipFileName);
 
-            Path tempDirForValidation = tempDir.resolveSibling(zipFileName);
+            tempDirForValidation = tempDir.resolve(zipFileName);
 
             // 解压ZIP文件
             unzip(zipFile, tempDirForValidation);
@@ -295,7 +296,6 @@ public class ZipValidationUtils {
             log.error("Failed to verify the decompressed content: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.RESOURCE_READER_ERROR);
         } finally {
-            // 清理临时文件
             if (tempDir != null) {
                 deleteDirectoryQuietly(tempDir);
             }

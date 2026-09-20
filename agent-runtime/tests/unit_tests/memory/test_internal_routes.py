@@ -80,8 +80,8 @@ class TestDeleteMemoryRepo:
                 resp = await client.delete(f"/internal/v1/memory-repos/{INVALID_ID}")
         assert resp.status_code == 400
         data = resp.json()
-        assert data["status"] == "error"
-        assert "not a valid UUID" in data["reason"]
+        assert data["error_code"] == "openjiuwen.02001003"
+        assert "not a valid UUID" in data["error_reason"]
 
 
 class TestBatchDeleteMemories:
@@ -99,7 +99,7 @@ class TestBatchDeleteMemories:
                 )
         assert resp.status_code == 400
         data = resp.json()
-        assert data["status"] == "error"
+        assert data["error_code"] == "openjiuwen.02001003"
 
     @pytest.mark.asyncio
     async def test_missing_memory_ids_key_returns_400(self):
@@ -190,7 +190,7 @@ class TestBatchDeleteMemories:
                 )
         assert resp.status_code == 400
         data = resp.json()
-        assert "not a valid UUID" in data["reason"]
+        assert "not a valid UUID" in data["error_reason"]
 
 
 class TestListUserMemories:
@@ -255,7 +255,7 @@ class TestListUserMemories:
                 )
         assert resp.status_code == 400
         data = resp.json()
-        assert "not a valid UUID" in data["reason"]
+        assert "not a valid UUID" in data["error_reason"]
 
 
 class TestUpdateMemory:
@@ -272,7 +272,8 @@ class TestUpdateMemory:
                     json={"user_id": "u", "content": "c"},
                 )
         assert resp.status_code == 400
-        assert "memory_repo_id" in resp.json()["reason"]
+        data = resp.json()
+        assert "memory_repo_id" in data["error_reason"]
 
     @pytest.mark.asyncio
     async def test_update_invalid_memory_uuid_returns_400(self):
@@ -285,7 +286,8 @@ class TestUpdateMemory:
                     json={"user_id": "u", "content": "c"},
                 )
         assert resp.status_code == 400
-        assert "memory_id" in resp.json()["reason"]
+        data = resp.json()
+        assert "memory_id" in data["error_reason"]
 
 
 class TestClearUserMemories:
@@ -301,7 +303,8 @@ class TestClearUserMemories:
                     f"/internal/v1/memory-repos/{INVALID_ID}/users/testuser/memories",
                 )
         assert resp.status_code == 400
-        assert "not a valid UUID" in resp.json()["reason"]
+        data = resp.json()
+        assert "not a valid UUID" in data["error_reason"]
 
 
 class TestSearchMemories:
@@ -388,7 +391,7 @@ class TestSearchMemories:
                 )
         assert resp.status_code == 400
         data = resp.json()
-        assert "query is required" in data["reason"]
+        assert "query is required" in data["error_reason"]
 
     @pytest.mark.asyncio
     async def test_search_missing_query_returns_400(self):
@@ -401,6 +404,8 @@ class TestSearchMemories:
                     json={},
                 )
         assert resp.status_code == 400
+        data = resp.json()
+        assert data["error_code"] == "openjiuwen.02001003"
 
     @pytest.mark.asyncio
     async def test_search_invalid_repo_uuid_returns_400(self):
@@ -414,7 +419,7 @@ class TestSearchMemories:
                 )
         assert resp.status_code == 400
         data = resp.json()
-        assert "not a valid UUID" in data["reason"]
+        assert "not a valid UUID" in data["error_reason"]
 
     @pytest.mark.asyncio
     async def test_search_default_parameters(self):

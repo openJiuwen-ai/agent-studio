@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,74 +32,92 @@ public class ListPluginsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws-001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "分页偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量限制", example = "1000")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 1000;
 
     @JsonProperty("id")
+    @Schema(description = "插件ID", example = "plugin-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("ids")
+    @Schema(description = "插件ID列表", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> ids = null;
 
     @JsonProperty("en_name")
+    @Schema(description = "英文名称", example = "my-plugin")
     @Length(max = 64)
     private String enName = null;
 
     @JsonProperty("cn_name")
+    @Schema(description = "中文名称", example = "我的插件")
     @Length(max = 64)
     private String cnName = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "插件描述信息")
     @Length(max = 256)
     private String desc = null;
 
     @JsonProperty("type")
+    @Schema(description = "插件类型", example = "tool")
     @Length(max = 32)
     private String type = null;
 
     @JsonProperty("intf_type")
+    @Schema(description = "接口类型", example = "rest")
     @Length(max = 32)
     private String intfType = null;
 
     @JsonProperty("call_mode")
+    @Schema(description = "调用方式", example = "sync")
     @Length(max = 32)
     private String callMode = null;
 
     @JsonProperty("published")
+    @Schema(description = "是否已发布", example = "true")
     private Boolean published = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否为自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "admin")
     @Length(max = 64)
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user-001")
     @Length(max = 64)
     private String creatorId = null;
 
     @JsonProperty("entry_point")
+    @Schema(description = "入口点", example = "/api/plugin")
     private String entryPoint = null;
 
     @JsonProperty("label")
+    @Schema(description = "标签", example = "utility")
     @Length(max = 32)
     private String label = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "general")
     private String category = null;
 
     public String getWorkspaceId() {

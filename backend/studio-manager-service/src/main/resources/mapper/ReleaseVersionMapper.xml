@@ -165,6 +165,7 @@
                 app_sub_type
             from t_release_version
             where
+                deleted = false and
                 app_id in
                 <foreach collection="appIds" item="id" index="index" open="(" close=")" separator=",">
                     #{id}
@@ -174,6 +175,7 @@
               app_id, max(version_id) as max_version_id
             from t_release_version
             where
+                deleted = false and
                 app_id in
                 <foreach collection="appIds" item="id" index="index" open="(" close=")" separator=",">
                     #{id}

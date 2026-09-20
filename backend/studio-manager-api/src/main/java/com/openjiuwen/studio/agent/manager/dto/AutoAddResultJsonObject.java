@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,34 +29,42 @@ public class AutoAddResultJsonObject implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "my_agent")
     private String name = null;
 
     @JsonProperty("prologue")
+    @Schema(description = "开场白", example = "你好，我是智能助手")
     private String prologue = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "这是一个智能助手")
     private String description = null;
 
     @JsonProperty("questions")
+    @Schema(description = "问题列表", example = "[\"如何使用？\"]")
     @Valid
     @Size()
     private List<@Length() String> questions = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具列表", example = "[]")
     @Valid
     @Size()
     private List<ToolReference> tools = null;
 
     @JsonProperty("workflows")
+    @Schema(description = "工作流列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowReference> workflows = null;
 
     @JsonProperty("icons")
+    @Schema(description = "图标", example = "{}")
     @Valid
     private Icon icons = null;
 
     @JsonProperty("skills")
+    @Schema(description = "技能列表", example = "[]")
     @Valid
     @Size()
     private List<SkillReference> skills = null;

@@ -490,7 +490,6 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             response.setKnowledgeBaseConnectionDetail(defaultKnowledgeBaseConnectionDetail);
             return response;
         }
-        response.setKnowledgeBaseConnectionDetail(null);
         return response;
     }
 

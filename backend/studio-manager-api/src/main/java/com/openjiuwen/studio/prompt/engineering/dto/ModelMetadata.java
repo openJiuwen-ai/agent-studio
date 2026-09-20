@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,6 +25,7 @@ public class ModelMetadata implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("max_tokens")
+    @Schema(description = "最大Token数", example = "1024")
     private Integer maxTokens = null;
 
     public Integer getMaxTokens() {

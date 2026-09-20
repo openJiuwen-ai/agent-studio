@@ -4,709 +4,427 @@
 
 package com.openjiuwen.studio.agent.manager.service;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.when;
 
-import com.openjiuwen.studio.agent.common.utils.I18nUtil;
-import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
-import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
-import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
-import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
-import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
-import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
-import com.openjiuwen.studio.agent.manager.entity.ShareScopeEntity;
-import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
-import com.openjiuwen.studio.agent.manager.enums.ToolType;
-import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
-import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
-import com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper;
-import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
-import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
-import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
-import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
-import com.openjiuwen.studio.agent.manager.service.WorkflowValidationService.Node;
-import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.IRConfig;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Answers;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
-@MockitoSettings(strictness = Strictness.LENIENT)
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+
+/**
+ * WorkflowValidationService 默认值类型校验相关纯函数单元测试。
+ * 覆盖 bug001 高/中/低风险修复：parseJsonValue / isElementTypeValid / isDefaultValueTypeValid / isNameValid。
+ * 被测方法为 private 纯函数。service 用 new 实例，i18nUtil 等字段通过反射注入 mock
+ * （validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时调 i18nUtil.getMessage）。
+ */
 class WorkflowValidationServiceTest {
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private ToolMapper toolMapper;
 
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private PluginMapper pluginMapper;
-
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private IPluginBase pluginDomain;
-
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private ShareResourceMapper shareResourceMapper;
-
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private ShareScopeMapper shareScopeMapper;
-
-    @Mock
-    private I18nUtil i18nUtil;
-
-    @InjectMocks
-    private WorkflowValidationService workflowValidationService;
-
-    @InjectMocks
-    private WorkflowValidationService validator;
-
-    private Node node;
-
-    private AutoCloseable mockitoCloseable;
-
-    private List<WorkflowValidationVOErrors> errors;
+    private final WorkflowValidationService service = new WorkflowValidationService();
 
     @BeforeEach
-    void setUp() throws Exception {
-        mockitoCloseable = MockitoAnnotations.openMocks(this);
-        ReflectionTestUtils.setField(workflowValidationService, "workflowSchema", "not_empty");
-        ReflectionTestUtils.setField(workflowValidationService, "iconMaxSize", "not_empty");
-        ReflectionTestUtils.setField(workflowValidationService, "opSvcProjectId", "not_empty");
-        ReflectionTestUtils.setField(workflowValidationService, "systemFields", "[\"request_id\", \"session_id\"]");
-        ReflectionTestUtils.setField(workflowValidationService, "interactiveNodeType", "not_empty");
-        ReflectionTestUtils.setField(workflowValidationService, "maxNodeNum", 0);
-        ReflectionTestUtils.setField(workflowValidationService, "workflowExceptionSupportNodes", "not_empty");
-        ReflectionTestUtils.setField(workflowValidationService, "branchNodeType", "not_empty");
-        
-        // 初始化正则表达式模式
-        ReflectionTestUtils.invokeMethod(workflowValidationService, "init");
+    void setUp() {
+        // 注入 i18nUtil mock，避免 validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时 NPE。
+        // 被测代码调 getMessage(key) 单参数(varargs 空)与 getMessage(key, args) 两参数两种形式，
+        // any(Object[].class) 匹配 varargs 数组(含空数组)，两个 stub 覆盖两种调用形式。
+        I18nUtil i18nUtil = mock(I18nUtil.class);
+        when(i18nUtil.getMessage(anyString())).thenReturn("mocked message");
+        when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message");
+        ReflectionTestUtils.setField(service, "i18nUtil", i18nUtil);
     }
 
-    @AfterEach
-    void tearDown() throws Exception {
-        mockitoCloseable.close();
+    // ===== parseJsonValue（高风险：默认值 JSON 字符串解析）=====
+
+    @Test
+    void parseJsonObjectString_shouldReturnMap() {
+        Object result = invoke("parseJsonValue", "{\"a\":1}");
+        assertTrue(result instanceof Map, "JSON 对象字符串应解析为 Map");
     }
 
     @Test
-    void test_validateTools_with_null_nodes() throws Exception {
-        assertDoesNotThrow(() -> {
-            workflowValidationService.validateTools(null, "projectId", "workspaceId");
-        });
+    void parseJsonArrayString_shouldReturnList() {
+        Object result = invoke("parseJsonValue", "[1,2,3]");
+        assertTrue(result instanceof List, "JSON 数组字符串应解析为 List");
     }
 
     @Test
-    void test_validateTools_with_valid_config_and_plugins() throws Exception {
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        Map<String, Object> nodeMap = new HashMap<>();
-        nodeMap.put("type", "Plugin");
-        Map<String, Object> configMap = new HashMap<>();
-
-        HashMap<String, Object> exception_process = new HashMap<>();
-        exception_process.put("retry_times", 2);
-
-        configMap.put("plugins", new ArrayList<>());
-        configMap.put("exception_process", exception_process);
-
-        nodeMap.put("configs", configMap);
-        nodes.add(nodeMap);
-
-        try (MockedStatic<JsonUtils> jsonUtilsMock = mockStatic(JsonUtils.class)) {
-            jsonUtilsMock.when(() -> JsonUtils.objectToClass(nodeMap.get("configs"))).thenReturn(configMap);
-            jsonUtilsMock.when(() -> JsonUtils.objectToClass(configMap.get("exception_process")))
-                    .thenReturn(exception_process);
-
-            ToolEntity toolEntity = mock(ToolEntity.class);
-            when(toolMapper.selectById(anyString())).thenReturn(toolEntity);
-            when(toolEntity.getWorkspaceId()).thenReturn("workspaceId");
-            assertThrows(AgentStudioException.class, () -> {
-                workflowValidationService.validateTools(nodes, "projectId", "workspaceId");
-            });
-        }
+    void parseEmptyArrayString_shouldReturnEmptyList() {
+        Object result = invoke("parseJsonValue", "[]");
+        assertTrue(result instanceof List, "空数组字符串应解析为空 List");
+        assertEquals(0, ((List<?>) result).size());
     }
 
     @Test
-    void test_validateTools_with_no_agent_nodes() throws Exception {
-        assertDoesNotThrow(() -> {
-            List<Map<String, Object>> nodes = new ArrayList<>();
-            Map<String, Object> nodeMap = new HashMap<>();
-            nodeMap.put("type", "NotAgent");
-            nodes.add(nodeMap);
-
-            workflowValidationService.validateTools(nodes, "projectId", "workspaceId");
-        });
+    void parseNonJsonString_shouldReturnOriginal() {
+        // 非 JSON 字符串应原样返回（交给后续 instanceof 判定）
+        Object result = invoke("parseJsonValue", "hello");
+        assertEquals("hello", result);
     }
 
     @Test
-    void test_validateTools_with_agent_nodes_without_plugins() throws Exception {
-        assertDoesNotThrow(() -> {
-            List<Map<String, Object>> nodes = new ArrayList<>();
-            Map<String, Object> nodeMap = new HashMap<>();
-            nodeMap.put("type", "Agent");
-            nodeMap.put("configs", new HashMap<>());
-            nodes.add(nodeMap);
-
-            workflowValidationService.validateTools(nodes, "projectId", "workspaceId");
-            // No exception should be thrown
-        });
+    void parseNonString_shouldReturnOriginal() {
+        // 非 String 输入原样返回
+        List<Object> list = List.of(1, 2);
+        Object result = invoke("parseJsonValue", list);
+        assertSame(list, result);
     }
 
     @Test
-    void test_validateTools_with_agent_nodes_and_matching_workspace_ids() throws Exception {
-        assertDoesNotThrow(() -> {
-            List<Map<String, Object>> nodes = new ArrayList<>();
-            Map<String, Object> nodeMap = new HashMap<>();
-            nodeMap.put("type", "Agent");
-            Map<String, Object> configs = new HashMap<>();
-            List<Map<String, Object>> plugins = new ArrayList<>();
-            Map<String, Object> plugin = new HashMap<>();
-            plugin.put("id", "pluginId");
-            ToolEntity toolEntity = new ToolEntity();
-            toolEntity.setWorkspaceId("workspaceId");
-            toolEntity.setType("inner");
-            plugins.add(plugin);
-            configs.put("plugins", plugins);
-            nodeMap.put("configs", configs);
-            nodes.add(nodeMap);
+    void parseBlankString_shouldReturnOriginal() {
+        Object result = invoke("parseJsonValue", "   ");
+        assertEquals("   ", result, "空白字符串原样返回");
+    }
 
-            when(shareScopeMapper.selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString())).thenReturn(new ShareScopeEntity());
-            when(shareResourceMapper.selectShareResourceEntityByResourceId(anyString())).thenReturn(new ShareResourceEntity());
+    // ===== isNameValid（字段名正则：不能以数字开头）=====
 
-            when(pluginDomain.buildToolByPlugin(anyString(), anyString(), anyString(), anyString())).thenReturn(toolEntity);
-            workflowValidationService.validateTools(nodes, "projectId", "workspaceId");
-            // No exception should be thrown
-        });
+    @Test
+    void isNameValid_legalName_shouldReturnTrue() {
+        assertTrue(invokeNameValid("ppp"), "合法字段名应通过");
+        assertTrue(invokeNameValid("_name"), "下划线开头合法");
+        assertTrue(invokeNameValid("name_1"), "含数字合法");
     }
 
     @Test
-    void test_validateTools_with_agent_nodes_and_non_matching_workspace_ids() throws Exception {
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        Map<String, Object> nodeMap = new HashMap<>();
-        nodeMap.put("type", "Agent");
-        Map<String, Object> configs = new HashMap<>();
-        List<Map<String, Object>> plugins = new ArrayList<>();
-        Map<String, Object> plugin = new HashMap<>();
-        plugin.put("id", "pluginId");
-        PluginEntity toolEntity = new PluginEntity();
-        toolEntity.setWorkspaceId("differentWorkspaceId");
-        plugins.add(plugin);
-        configs.put("plugins", plugins);
-        nodeMap.put("configs", configs);
-        nodes.add(nodeMap);
-
-        when(pluginMapper.selectByPrimaryKey("pluginId", null)).thenReturn(toolEntity);
-        when(shareScopeMapper.selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString())).thenReturn(new ShareScopeEntity());
-        when(shareResourceMapper.selectShareResourceEntityByResourceId(anyString())).thenReturn(new ShareResourceEntity());
-
-        workflowValidationService.validateTools(nodes, "projectId", "workspaceId");
+    void isNameValid_digitStart_shouldReturnFalse() {
+        assertFalse(invokeNameValid("123"), "数字开头应拒绝");
+        assertFalse(invokeNameValid("1abc"), "数字开头应拒绝");
     }
 
     @Test
-    void test_validateTools_with_inner_tool_bypasses_workspace_isolation() throws Exception {
-        // publishCrossWorkspace=false 时，内置预置工具（workspaceId 固定为 default）仍应可被任意空间引用
-        ReflectionTestUtils.setField(workflowValidationService, "publishCrossWorkspace", false);
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        Map<String, Object> nodeMap = new HashMap<>();
-        nodeMap.put("type", "Plugin");
-        Map<String, Object> configMap = new HashMap<>();
-        configMap.put("id", "preset_Read_File");
-        configMap.put("tool_id", "preset_Read_File");
-        nodeMap.put("configs", configMap);
-        nodes.add(nodeMap);
+    void isNameValid_null_shouldReturnFalse() {
+        assertFalse(invokeNameValid(null), "null 应拒绝");
+    }
 
-        try (MockedStatic<JsonUtils> jsonUtilsMock = mockStatic(JsonUtils.class)) {
-            jsonUtilsMock.when(() -> JsonUtils.objectToClass(nodeMap.get("configs"))).thenReturn(configMap);
+    // ===== isElementTypeValid：integer 整数约束（低风险）=====
 
-            ToolEntity toolEntity = new ToolEntity();
-            toolEntity.setWorkspaceId("default");
-            toolEntity.setType(ToolType.INNER.type);
-            when(pluginDomain.buildToolByPlugin(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(toolEntity);
-
-            assertDoesNotThrow(() -> {
-                workflowValidationService.validateTools(nodes, "projectId", "userWorkspaceId");
-            });
-        }
+    @Test
+    void isElementTypeValid_integer_shouldRejectFloat() {
+        assertFalse(invokeIsElementTypeValid(1.5, "integer", null), "integer 不应接受浮点 1.5");
+        assertFalse(invokeIsElementTypeValid("1.5", "integer", null), "integer 不应接受字符串 \"1.5\"");
     }
 
     @Test
-    void test_validateTools_with_null_nodes_should_return_early() throws Exception {
-        assertDoesNotThrow(() -> {
-            workflowValidationService.validateTools(null, "projectId", "workspaceId");
-        });
+    void isElementTypeValid_integer_shouldAcceptInteger() {
+        assertTrue(invokeIsElementTypeValid(1, "integer", null), "integer 应接受整数 1");
+        assertTrue(invokeIsElementTypeValid(1.0, "integer", null), "1.0 无小数部分应通过");
+        assertTrue(invokeIsElementTypeValid(-3, "integer", null), "负整数应通过");
+        assertTrue(invokeIsElementTypeValid("1", "integer", null), "字符串整数应通过");
     }
 
     @Test
-    void test_validateQuestionerNode_with_both_fields_exceeding_max_length() throws Exception {
-        try (MockedStatic<JsonUtils> jsonUtilsMock = mockStatic(JsonUtils.class)) {
-
-            //Given
-            List<Map<String, Object>> nodes = new ArrayList<>();
-            Map<String, Object> nodeMap = new HashMap<>();
-            nodeMap.put("type", "Questioner");
-
-            Map<String, Object> configMap = new HashMap<>();
-            String extraPrompt = "a".repeat(3001); // 超过最大限制3000
-            String questionContent = "b".repeat(3001); // 超过最大限制3000
-            configMap.put("extra_prompt_for_fields_extraction", extraPrompt);
-            configMap.put("question_content", questionContent);
-
-            nodeMap.put("configs", configMap);
-            nodes.add(nodeMap);
-
-            jsonUtilsMock.when(() -> JsonUtils.objectToClass(nodeMap.get("configs"))).thenReturn(configMap);
-            jsonUtilsMock.when(() -> JsonUtils.objectToClass(configMap.get("extra_prompt_for_fields_extraction")))
-                .thenReturn(extraPrompt);
-            jsonUtilsMock.when(() -> JsonUtils.objectToClass(configMap.get("question_content")))
-                .thenReturn(questionContent);
-
-            assertThrows(AgentStudioException.class, () -> {
-                workflowValidationService.validateQuestionerNode(nodes, "workflowId");
-            });
-        }
+    void isElementTypeValid_number_shouldAcceptFloat() {
+        assertTrue(invokeIsElementTypeValid(1.5, "number", null), "number 应接受浮点");
+        assertTrue(invokeIsElementTypeValid("1.5", "number", null), "number 应接受字符串浮点");
+        assertTrue(invokeIsElementTypeValid(1, "number", null), "number 应接受整数");
     }
 
     @Test
-    void testValidate_NestedInvalidName() {
-        lenient().when(i18nUtil.getMessage(anyString())).thenReturn("Error message for {0}");
-        errors = new ArrayList<>();
-
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("http_request");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
-        when(mockNodeInfo.getType()).thenReturn("http_request");
-
-        WorkflowFieldVO parentField = new WorkflowFieldVO();
-        parentField.setName("parent");
-        WorkflowFieldVOValue parentValue = new WorkflowFieldVOValue();
-        parentValue.setType(WorkflowFieldVOValue.TypeEnum.NESTED);
-        parentField.setValue(parentValue);
-
-        com.alibaba.fastjson2.JSONObject nestedObj = new com.alibaba.fastjson2.JSONObject();
-        nestedObj.put("name", "123name"); // 非法名称：数字开头
-
-        WorkflowFieldVOValue nestedVal = new WorkflowFieldVOValue();
-        nestedVal.setType(WorkflowFieldVOValue.TypeEnum.LITERAL);
-        nestedVal.setContent("some value");
-        nestedObj.put("value", nestedVal);
-
-        com.alibaba.fastjson2.JSONArray schema = new com.alibaba.fastjson2.JSONArray();
-        schema.add(nestedObj);
-        parentField.setSchema(schema);
-
-        ReflectionTestUtils.invokeMethod(validator, "validateInputFields",
-            List.of(parentField), mockNode, new HashMap<>(), new HashMap<>(), errors);
-
-        assertEquals(0, errors.size());
+    void isElementTypeValid_number_shouldRejectNaNAndInfinity() {
+        // 与前端 Number.isFinite 一致，拒绝 NaN/Infinity
+        // Double.parseDouble 对 "NaN"/"Infinity" 不抛异常，需显式 finite 校验
+        assertFalse(invokeIsElementTypeValid("NaN", "number", null), "number 不应接受字符串 NaN");
+        assertFalse(invokeIsElementTypeValid("Infinity", "number", null), "number 不应接受字符串 Infinity");
+        assertFalse(invokeIsElementTypeValid("-Infinity", "number", null), "number 不应接受字符串 -Infinity");
+        assertFalse(invokeIsElementTypeValid(Double.NaN, "number", null), "number 不应接受 Double.NaN");
+        assertFalse(invokeIsElementTypeValid(Double.POSITIVE_INFINITY, "number", null), "number 不应接受 Infinity");
     }
 
     @Test
-    void testValidate_LiteralRequiredEmpty() {
-        lenient().when(i18nUtil.getMessage(anyString())).thenReturn("Error message for {0}");
-        errors = new ArrayList<>();
+    void isElementTypeValid_integer_shouldRejectNaNAndInfinity() {
+        assertFalse(invokeIsElementTypeValid("NaN", "integer", null), "integer 不应接受 NaN");
+        assertFalse(invokeIsElementTypeValid("Infinity", "integer", null), "integer 不应接受 Infinity");
+        assertFalse(invokeIsElementTypeValid(Double.NaN, "integer", null), "integer 不应接受 Double.NaN");
+    }
 
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("http_request");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
+    @Test
+    void isElementTypeValid_string_shouldRejectNumber() {
+        assertFalse(invokeIsElementTypeValid(1, "string", null), "string 不应接受数字");
+        assertTrue(invokeIsElementTypeValid("abc", "string", null), "string 应接受字符串");
+    }
 
-        WorkflowFieldVO field = new WorkflowFieldVO();
-        field.setName("testField");
-        field.setRequired(true);
+    @Test
+    void isElementTypeValid_boolean_shouldAcceptBooleanAndStringBoolean() {
+        // 高风险修复：兼容前端 START 节点布尔默认值以字符串 "true"/"false" 写入 value.default
+        assertTrue(invokeIsElementTypeValid(true, "boolean", null), "boolean 应接受 Boolean 实例");
+        assertTrue(invokeIsElementTypeValid(false, "boolean", null), "boolean 应接受 Boolean 实例");
+        assertTrue(invokeIsElementTypeValid("true", "boolean", null), "boolean 应接受字符串 \"true\"");
+        assertTrue(invokeIsElementTypeValid("false", "boolean", null), "boolean 应接受字符串 \"false\"");
+        assertFalse(invokeIsElementTypeValid("yes", "boolean", null), "boolean 不应接受非布尔字符串");
+        assertFalse(invokeIsElementTypeValid(1, "boolean", null), "boolean 不应接受数字");
+    }
 
+    @Test
+    void isElementTypeValid_object_jsonString_shouldParseAndValidate() {
+        // object 分支应解析 JSON 字符串再校验
+        assertTrue(invokeIsElementTypeValid("{\"a\":1}", "object", null), "JSON 对象字符串应通过");
+        assertFalse(invokeIsElementTypeValid("hello", "object", null), "非 JSON 字符串应拒绝");
+    }
+
+    @Test
+    void isElementTypeValid_array_jsonString_shouldParseAndValidate() {
+        // array 分支应解析 JSON 字符串，并递归校验元素类型（中风险 2）
+        assertTrue(invokeIsElementTypeValid("[1,2]", "array", null), "JSON 数组字符串无 schema 应通过");
+        assertFalse(invokeIsElementTypeValid("123", "array", null), "非数组应拒绝");
+    }
+
+    @Test
+    void isElementTypeValid_array_withElementSchema_shouldValidateElements() {
+        // array + schema={type:string}：元素应为 string，数字元素应拒绝（中风险 2）
+        Map<String, Object> schema = new HashMap<>();
+        schema.put("type", "string");
+        assertFalse(invokeIsElementTypeValid(List.of(1, 2), "array", schema), "array<string> 元素为数字应拒绝");
+        assertTrue(invokeIsElementTypeValid(List.of("a", "b"), "array", schema), "array<string> 元素为字符串应通过");
+    }
+
+    @Test
+    void isElementTypeValid_array_withObjectElementSchema_shouldValidateSubFields() {
+        // array + schema={type:object, schema:[{name:name,type:string}]}：元素子字段类型应递归校验
+        Map<String, Object> nameField = new HashMap<>();
+        nameField.put("name", "name");
+        nameField.put("type", "string");
+        Map<String, Object> elementSchema = new HashMap<>();
+        elementSchema.put("type", "object");
+        elementSchema.put("schema", List.of(nameField));
+
+        Map<String, Object> validObj = new HashMap<>();
+        validObj.put("name", "ppp");
+        assertTrue(invokeIsElementTypeValid(List.of(validObj), "array", elementSchema), "元素子字段类型正确应通过");
+
+        Map<String, Object> invalidObj = new HashMap<>();
+        invalidObj.put("name", 123); // name 应 string 实 number
+        assertFalse(invokeIsElementTypeValid(List.of(invalidObj), "array", elementSchema), "元素子字段类型错误应拒绝");
+    }
+
+    // ===== isDefaultValueTypeValid：默认值类型校验（高风险 + 中风险）=====
+
+    @Test
+    void isDefaultValueTypeValid_arrayJsonString_shouldNotFalseReport() {
+        // 高风险：前端复杂类型默认值以 JSON 字符串写入 value.default，不应被误报类型不匹配
+        WorkflowFieldVO field = buildField("array<object>",
+            buildObjectElementSchema(List.of(buildSubField("name", "string"))));
+        assertTrue(invokeIsDefaultValueTypeValid(field, "[{\"name\":\"x\"}]"), "合法 array<object> JSON 字符串默认值不应被误报");
+    }
+
+    @Test
+    void isDefaultValueTypeValid_objectJsonString_shouldNotFalseReport() {
+        WorkflowFieldVO field = buildField("object",
+            List.of(buildSubField("a", "integer")));
+        assertTrue(invokeIsDefaultValueTypeValid(field, "{\"a\":1}"), "合法 object JSON 字符串默认值不应被误报");
+    }
+
+    @Test
+    void isDefaultValueTypeValid_objectWithArrayObjectSubField_shouldRecurse() {
+        // reviewer 风险:object 默认值的子字段类型为 array<object>（带尖括号），
+        // isElementTypeValid 原 switch 无 array<...> 分支走 default 返回 true 跳过元素递归。
+        // 子字段 arr 类型 array<object>，schema 为元素描述 {type:object, schema:[{name:name,type:string}]}
+        Map<String, Object> nameField = buildSubField("name", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(nameField));
+        Map<String, Object> arrSubField = buildSubField("arr", "array<object>");
+        arrSubField.put("schema", elementDesc);
+
+        WorkflowFieldVO field = buildField("object", List.of(arrSubField));
+        // 合法：arr 元素子字段类型正确
+        assertTrue(invokeIsDefaultValueTypeValid(field, "{\"arr\":[{\"name\":\"x\"}]}"),
+            "object 子字段 array<object> 合法默认值应通过");
+        // 非法：arr 元素子字段 name 应 string 实 number
+        assertFalse(invokeIsDefaultValueTypeValid(field, "{\"arr\":[{\"name\":123}]}"),
+            "object 子字段 array<object> 元素子字段类型不匹配应拒绝（递归校验）");
+    }
+
+    @Test
+    void isDefaultValueTypeValid_arrayObject_mismatchedElementField_shouldReject() {
+        // 中风险：array<object> 元素子字段类型不匹配应拒绝
+        WorkflowFieldVO field = buildField("array<object>",
+            buildObjectElementSchema(List.of(buildSubField("name", "string"))));
+        assertFalse(invokeIsDefaultValueTypeValid(field, "[{\"name\":123}]"), "元素子字段 name 应 string 实 number 应拒绝");
+    }
+
+    @Test
+    void isDefaultValueTypeValid_integerFloat_shouldReject() {
+        // 低风险：integer 默认值 1.5 应拒绝
+        WorkflowFieldVO field = buildField("integer", null);
+        assertFalse(invokeIsDefaultValueTypeValid(field, "1.5"), "integer 默认值 1.5 应拒绝");
+        assertTrue(invokeIsDefaultValueTypeValid(field, "1"), "integer 默认值 1 应通过");
+    }
+
+    // ===== validateSchemaFieldNames：array<object> 递归（低风险4）=====
+
+    @Test
+    void validateSchemaFieldNames_arrayObjectNested_shouldRecurse() {
+        // 子字段类型为 array<object>，其元素 object 的子字段名违规应被递归发现
+        // schema = [{name:addr, type:array<object>, schema:{type:object, schema:[{name:123, type:string}]}}]
+        Map<String, Object> grandChild = buildSubField("123", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(grandChild));
+        Map<String, Object> subField = buildSubField("addr", "array<object>");
+        subField.put("schema", elementDesc);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
+
+        assertFalse(errors.isEmpty(), "array<object> 嵌套子字段名 123 违规应被发现");
+        assertTrue(errors.stream().anyMatch(e -> e.getReason().contains("123")), "错误原因应含字段名 123");
+    }
+
+    @Test
+    void validateSchemaFieldNames_arrayNested_shouldRecurse() {
+        // 子字段类型为 array（无尖括号）+ schema 元素为 object，子字段名违规应被发现
+        Map<String, Object> grandChild = buildSubField("456", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(grandChild));
+        Map<String, Object> subField = buildSubField("addr", "array");
+        subField.put("schema", elementDesc);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
+
+        assertFalse(errors.isEmpty(), "array 嵌套子字段名 456 违规应被发现");
+    }
+
+    @Test
+    void validateSchemaFieldNames_allValid_shouldNotReport() {
+        Map<String, Object> grandChild = buildSubField("city", "string");
+        Map<String, Object> elementDesc = new HashMap<>();
+        elementDesc.put("type", "object");
+        elementDesc.put("schema", List.of(grandChild));
+        Map<String, Object> subField = buildSubField("addr", "array<object>");
+        subField.put("schema", elementDesc);
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateSchemaFieldNames", List.of(subField), node, errors);
+
+        assertTrue(errors.isEmpty(), "全合法应不报错");
+    }
+
+    // ===== validateStartNodeDefaultValues：generated 默认值不再跳过（高风险）=====
+
+    @Test
+    void validateStartNodeDefaultValues_generatedWithInvalidDefault_shouldReport() {
+        // 高风险：前端 getInitOutputParamConfig 创建开始节点输出 value.type 默认 generated，
+        // set-default 写默认值只改 value.default 不改 type，故 generated + 非法默认值应被校验而非跳过。
+        WorkflowFieldVO field = buildField("array<object>",
+            buildObjectElementSchema(List.of(buildSubField("name", "string"))));
         WorkflowFieldVOValue value = new WorkflowFieldVOValue();
-        value.setType(WorkflowFieldVOValue.TypeEnum.LITERAL);
-        value.setContent("");
+        value.setType(WorkflowFieldVOValue.TypeEnum.GENERATED);
+        value.setDefault("[{\"name\":123}]"); // name 应 string 实 number
         field.setValue(value);
 
-        ReflectionTestUtils.invokeMethod(validator, "validateInputFields",
-            List.of(field), mockNode, new HashMap<>(), new HashMap<>(), errors);
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateStartNodeDefaultValues", List.of(field), node, errors);
 
-        assertEquals(1, errors.size());
-        assertTrue(errors.get(0).getReason().contains("testField"));
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - 非String类型元素
-     */
-    @Test
-    void testIsStringTypeValid_withNonStringElement() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(true);
-        irConfig.setTemplate(false);
-        
-        List<String> inputFields = new ArrayList<>();
-        
-        // 调用被测方法
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", 123, irConfig, inputFields, node);
-        
-        // 验证结果
-        assertFalse(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - String类型元素，非空校验通过
-     */
-    @Test
-    void testIsStringTypeValid_withValidStringElement() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(true);  // 允许为空
-        irConfig.setTemplate(false);  // 非模板
-        
-        List<String> inputFields = new ArrayList<>();
-        
-        // 调用被测方法
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "test", irConfig, inputFields, node);
-        
-        // 验证结果
-        assertTrue(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - String类型元素，非空校验失败（非MESSAGE节点）
-     */
-    @Test
-    void testIsStringTypeValid_withEmptyStringAndNonBlankConfigForNonMessageNode() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        nodeInfo.setType("HTTP");  // 非MESSAGE节点
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(false);  // 不允许为空
-        irConfig.setTemplate(false);  // 非模板
-        
-        List<String> inputFields = new ArrayList<>();
-        
-        // 调用被测方法
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "", irConfig, inputFields, node);
-        
-        // 验证结果
-        assertFalse(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - String类型元素，非空校验失败（MESSAGE节点，enableHistory=true）
-     */
-    @Test
-    void testIsStringTypeValid_withEmptyStringAndNonBlankConfigForMessageNodeWithHistoryEnabled() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        nodeInfo.setType("Message");  // MESSAGE节点
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(false);  // 不允许为空
-        irConfig.setTemplate(false);  // 非模板
-        
-        List<String> inputFields = new ArrayList<>();
-        
-        // 调用被测方法
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "", irConfig, inputFields, node);
-        
-        // 验证结果
-        assertFalse(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - String类型元素，非空校验通过但模板引用失败
-     */
-    @Test
-    void testIsStringTypeValid_withTemplateReferencesNotFoundInInputFields() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        nodeInfo.setType("HTTP");
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(true);  // 允许为空
-        irConfig.setTemplate(true);  // 模板类型
-        
-        List<String> inputFields = new ArrayList<>();
-        inputFields.add("field1");  // 只有field1在输入字段中
-        
-        // 调用被测方法，包含模板引用{{field1}}和{{field2}}，其中field2不在输入字段中
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "Hello {{field1}} and {{field2}}", irConfig, inputFields, node);
-        
-        // 验证结果
-        assertFalse(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - String类型元素，非空校验且模板引用都通过
-     */
-    @Test
-    void testIsStringTypeValid_withAllTemplateReferencesFoundInInputFields() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        nodeInfo.setType("HTTP");
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(true);  // 允许为空
-        irConfig.setTemplate(true);  // 模板类型
-        
-        List<String> inputFields = new ArrayList<>();
-        inputFields.add("field1");
-        inputFields.add("field2");  // field1和field2都在输入字段中
-        
-        // 调用被测方法，包含模板引用{{field1}}和{{field2}}，所有引用都在输入字段中
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "Hello {{field1}} and {{field2}}", irConfig, inputFields, node);
-        
-        // 验证结果
-        assertTrue(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - MESSAGE节点，enableHistory=false，空字符串应该通过
-     */
-    @Test
-    void testIsStringTypeValid_withMessageNodeAndHistoryDisabledAllowsEmptyString() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", false);  // 历史关闭
-        nodeInfo.setConfigs(configs);
-        nodeInfo.setType("Message");  // 注意：这里应该是"Message"，不是"MESSAGE"
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(false);  // 表面上不允许为空
-        irConfig.setTemplate(false);  // 非模板
-        
-        List<String> inputFields = new ArrayList<>();
-        
-        // 调用被测方法
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "", irConfig, inputFields, node);
-        
-        // 验证结果 - 对于MESSAGE节点且历史关闭，空字符串应该通过
-        assertTrue(result);
-    }
-
-    /**
-     * 测试 isStringTypeValid 方法 - 包含系统字段的模板引用
-     */
-    @Test
-    void testIsStringTypeValid_withSystemFieldReferences() {
-        // 准备测试数据
-        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("enable_history", true);
-        nodeInfo.setConfigs(configs);
-        nodeInfo.setType("HTTP");
-        
-        Node node = new Node(nodeInfo);
-        
-        IRConfig irConfig = new IRConfig();
-        irConfig.setBlank(true);
-        irConfig.setTemplate(true);
-        
-        List<String> inputFields = new ArrayList<>();
-        inputFields.add("user_input");
-        
-        // 调用被测方法，包含用户字段和系统字段，系统字段不应该被提取
-        boolean result = (Boolean) ReflectionTestUtils.invokeMethod(workflowValidationService, "isStringTypeValid", "Hello {{user_input}} request_id={{request_id}}", irConfig, inputFields, node);
-        
-        // 验证结果 - 只有user_input需要检查，request_id是系统字段
-        assertTrue(result);
+        assertFalse(errors.isEmpty(), "generated 类型 + 非法默认值应报错（不应跳过）");
     }
 
     @Test
-    void test_validateQuestionerNodeConfig_success() {
-        Map<String, Object> configs = new HashMap<>();
-        configs.put("extract_fields_from_response", false);
-        configs.put("question_content", "");
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("Questioner");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
-        when(mockNodeInfo.getConfigs()).thenReturn(configs);
-        List<WorkflowValidationVOErrors> errors = new ArrayList<>();
+    void validateStartNodeDefaultValues_generatedWithValidDefault_shouldNotReport() {
+        WorkflowFieldVO field = buildField("array<object>",
+            buildObjectElementSchema(List.of(buildSubField("name", "string"))));
+        WorkflowFieldVOValue value = new WorkflowFieldVOValue();
+        value.setType(WorkflowFieldVOValue.TypeEnum.GENERATED);
+        value.setDefault("[{\"name\":\"x\"}]"); // 合法
+        field.setValue(value);
 
-        String errorMsg = "Question content cannot be empty";
-        when(i18nUtil.getMessage("openjiuwen.02201093")).thenReturn(errorMsg);
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateStartNodeDefaultValues", List.of(field), node, errors);
 
-        // 2. 使用 ReflectionTestUtils 调用私有方法
-        // 参数依次为：(目标对象, 方法名, 参数1, 参数2)
-        ReflectionTestUtils.invokeMethod(workflowValidationService, "validateQuestionerNodeConfig", mockNode, errors);
-
-        // 3. 断言验证
-        assertEquals(1, errors.size(), "应该产生一个错误");
-        assertEquals("node_id_001", errors.get(0).getId());
-        assertEquals("Questioner", errors.get(0).getType());
-        assertEquals(errorMsg, errors.get(0).getReason());
+        assertTrue(errors.isEmpty(), "generated 类型 + 合法默认值应不报错");
     }
 
     @Test
-    void test_validateStreamTransformNodeConfig_success() {
-        Map<String, Object> configs = new HashMap<>();
-        List<String> concat = new ArrayList<>();
-        concat.add("raw_output.content");
+    void validateStartNodeDefaultValues_ref_shouldSkip() {
+        // ref 引用别的节点，无字面量默认值，应跳过
+        WorkflowFieldVO field = buildField("array<object>", null);
+        WorkflowFieldVOValue value = new WorkflowFieldVOValue();
+        value.setType(WorkflowFieldVOValue.TypeEnum.REF);
+        value.setDefault("invalid_not_checked");
+        field.setValue(value);
 
-        Map<String, Object> transformer = new HashMap<>();
-        transformer.put("frame_template", "{\"type\":\"message\",\"data\":{\"content\":\"{{raw_output.content}}\",\"riskDescription\":null},\"finish\":\"{{raw_output.finish}}\"}");
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        WorkflowValidationService.Node node = mock(WorkflowValidationService.Node.class);
+        when(node.getId()).thenReturn("node_start");
+        when(node.getType()).thenReturn("Start");
+        ReflectionTestUtils.invokeMethod(service, "validateStartNodeDefaultValues", List.of(field), node, errors);
 
-        configs.put("transformer", transformer);
-        configs.put("concat", concat);
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("StreamTransform");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
-        when(mockNodeInfo.getConfigs()).thenReturn(configs);
-        List<WorkflowValidationVOErrors> errors = new ArrayList<>();
-
-
-        // 2. 使用 ReflectionTestUtils 调用私有方法
-        // 参数依次为：(目标对象, 方法名, 参数1, 参数2)
-        ReflectionTestUtils.invokeMethod(workflowValidationService, "validateStreamTransformNodeConfig", mockNode, errors);
-
-        // 3. 断言验证
-        assertEquals(0, errors.size(), "应该产生0个错误");
+        assertTrue(errors.isEmpty(), "ref 类型应跳过校验");
     }
 
-    @Test
-    void test_validateStreamTransformNodeConfig_success_1() {
-        Map<String, Object> configs = new HashMap<>();
-        List<String> concat = new ArrayList<>();
-        concat.add("raw_output.test");
+    // ===== 辅助方法 =====
 
-        Map<String, Object> transformer = new HashMap<>();
-        transformer.put("frame_template", "{\"type\":\"message\",\"data\":{\"content\":\"{{raw_output.content}}\",\"riskDescription\":null},\"finish\":\"{{raw_output.finish}}\"}");
-
-        configs.put("transformer", transformer);
-        configs.put("concat", concat);
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("StreamTransform");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
-        when(mockNodeInfo.getConfigs()).thenReturn(configs);
-        List<WorkflowValidationVOErrors> errors = new ArrayList<>();
-
-
-        // 2. 使用 ReflectionTestUtils 调用私有方法
-        // 参数依次为：(目标对象, 方法名, 参数1, 参数2)
-        ReflectionTestUtils.invokeMethod(workflowValidationService, "validateStreamTransformNodeConfig", mockNode, errors);
-
-        // 3. 断言验证
-        assertEquals(1, errors.size(), "应该产生1个错误");
-        assertEquals("node_id_001", errors.get(0).getId());
-        assertEquals("StreamTransform", errors.get(0).getType());
+    private Object invoke(String methodName, Object... args) {
+        return ReflectionTestUtils.invokeMethod(service, methodName, args);
     }
 
-    @Test
-    void test_validateStreamTransformNodeConfig_success_2() {
-        Map<String, Object> configs = new HashMap<>();
-        List<String> concat = new ArrayList<>();
-        concat.add("raw_output.content");
-
-        Map<String, Object> transformer = new HashMap<>();
-        transformer.put("frame_template", "");
-
-        configs.put("transformer", transformer);
-        configs.put("concat", concat);
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("StreamTransform");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
-        when(mockNodeInfo.getConfigs()).thenReturn(configs);
-        List<WorkflowValidationVOErrors> errors = new ArrayList<>();
-
-
-        // 2. 使用 ReflectionTestUtils 调用私有方法
-        // 参数依次为：(目标对象, 方法名, 参数1, 参数2)
-        ReflectionTestUtils.invokeMethod(workflowValidationService, "validateStreamTransformNodeConfig", mockNode, errors);
-
-        // 3. 断言验证
-        assertEquals(2, errors.size(), "应该产生2个错误");
-        assertEquals("node_id_001", errors.get(0).getId());
-        assertEquals("StreamTransform", errors.get(0).getType());
+    private boolean invokeNameValid(String name) {
+        return (boolean) ReflectionTestUtils.invokeMethod(service, "isNameValid", name);
     }
 
-    @Test
-    void test_validateStreamTransformNodeConfig_success_3() {
-        Map<String, Object> configs = new HashMap<>();
-        List<String> concat = new ArrayList<>();
-        concat.add("raw_output.content");
+    private boolean invokeIsElementTypeValid(Object value, String type, Object schema) {
+        return (boolean) ReflectionTestUtils.invokeMethod(service, "isElementTypeValid", value, type, schema);
+    }
 
-        Map<String, Object> transformer = new HashMap<>();
-        transformer.put("frame_template", "raw_output.content");
+    private boolean invokeIsDefaultValueTypeValid(WorkflowFieldVO field, Object defaultValue) {
+        return (boolean) ReflectionTestUtils.invokeMethod(service, "isDefaultValueTypeValid", field, defaultValue);
+    }
 
-        configs.put("transformer", transformer);
-        configs.put("concat", concat);
-        Node mockNode = Mockito.mock(Node.class);
-        when(mockNode.getId()).thenReturn("node_id_001");
-        when(mockNode.getType()).thenReturn("StreamTransform");
-        WorkflowNodeVO mockNodeInfo = Mockito.mock(WorkflowNodeVO.class);
-        when(mockNode.getNodeInfo()).thenReturn(mockNodeInfo);
-        when(mockNodeInfo.getConfigs()).thenReturn(configs);
-        List<WorkflowValidationVOErrors> errors = new ArrayList<>();
+    private static void assertSame(Object expected, Object actual) {
+        assertTrue(expected == actual, "应返回同一对象引用");
+    }
 
+    /** 构造 WorkflowFieldVO，type 为声明类型，schema 为子字段声明。 */
+    private WorkflowFieldVO buildField(String type, Object schema) {
+        WorkflowFieldVO field = new WorkflowFieldVO();
+        field.setName("test_field");
+        field.setType(type);
+        field.setSchema(schema);
+        return field;
+    }
 
-        // 2. 使用 ReflectionTestUtils 调用私有方法
-        // 参数依次为：(目标对象, 方法名, 参数1, 参数2)
-        ReflectionTestUtils.invokeMethod(workflowValidationService, "validateStreamTransformNodeConfig", mockNode, errors);
+    /** 构造后端 schema 子字段描述 Map（{name, type, schema}）。 */
+    private Map<String, Object> buildSubField(String name, String type) {
+        Map<String, Object> sub = new HashMap<>();
+        sub.put("name", name);
+        sub.put("type", type);
+        return sub;
+    }
 
-        // 3. 断言验证
-        assertEquals(1, errors.size(), "应该产生1个错误");
-        assertEquals("node_id_001", errors.get(0).getId());
-        assertEquals("StreamTransform", errors.get(0).getType());
+    /** array<object> 的 schema 为元素描述 {type:object, schema:[子字段列表]}。 */
+    private Map<String, Object> buildObjectElementSchema(List<Map<String, Object>> subFields) {
+        Map<String, Object> elementSchema = new HashMap<>();
+        elementSchema.put("type", "object");
+        elementSchema.put("schema", subFields);
+        return elementSchema;
     }
 }

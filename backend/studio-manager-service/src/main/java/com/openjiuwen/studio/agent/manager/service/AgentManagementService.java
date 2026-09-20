@@ -52,10 +52,14 @@ import com.openjiuwen.studio.agent.manager.dto.AgentToolDetail;
 import com.openjiuwen.studio.agent.manager.dto.AgentVariable;
 import com.openjiuwen.studio.agent.manager.dto.AgentVersionListItem;
 import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowReference;
 import com.openjiuwen.studio.agent.manager.dto.AgentWorkflowDetail;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionFailedInfo;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
@@ -77,6 +81,7 @@ import com.openjiuwen.studio.agent.manager.dto.KnowledgeRetrievePolicy;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -93,7 +98,9 @@ import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkspaceMemberInfo;
 import com.openjiuwen.studio.agent.manager.dto.maas.ImageGenerationRequest;
 import com.openjiuwen.studio.agent.manager.dto.maas.ImageGenerationResponse;
@@ -171,6 +178,7 @@ import org.quartz.TriggerKey;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -180,6 +188,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -338,6 +347,13 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Autowired
     private ShareResourceMapper shareResourceMapper;
+
+    /**
+     * 自身代理，用于批量删除时逐版本调用事务方法，避免同类自调用导致事务失效
+     */
+    @Autowired
+    @Lazy
+    private AgentManagementService self;
 
     @Autowired
     private AgentImportService agentImportService;
@@ -1136,6 +1152,127 @@ public class AgentManagementService implements IAgentManagementService {
             agentInfo.setFromShare(true);
         }
         return agentInfo;
+    }
+
+    /**
+     * 智能体试运行前预校验。多智能体校验下挂业务子工作流引用的版本是否存在，
+     * 机制与工作流 /workflows/{id}/validate 一致：不抛异常，返回节点级错误列表由前端标红并阻止运行。
+     * 其他类型智能体没有对应的预校验项，直接返回成功。
+     *
+     * @param projectId 项目ID
+     * @param agentId agentId
+     * @param workspaceId 空间ID
+     * @return 校验结果，success=false 时 errors 为出错节点列表
+     */
+    @Override
+    public WorkflowValidationVO validateAgent(String projectId, String agentId, String workspaceId) {
+        Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId);
+        if (agent == null) {
+            log.error("agent does not exist, projectId = {}, workspaceId = {}, agentId = {}", projectId, workspaceId,
+                agentId);
+            throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
+        }
+        if (AgentType.naValueOf(agent.getType()) != AgentType.CONTROLLER) {
+            return new WorkflowValidationVO().setSuccess(true);
+        }
+        return controllerManagementService.validateSubWorkflowVersions(agent);
+    }
+
+    /**
+     * 发布前校验单智能体的子工作流引用（两个维度，不可用即拦截发布）：
+     * 1) t_mapping（草稿态）中已绑定的引用：resource_version 指向的版本必须存在；
+     *    共享类映射（reference_type=SHARE）还要求该版本仍共享授权给本空间
+     *    （共享是二维授权：scope 授权 + versionList 含该版本），防止"保存后共享被收回"仍放行。
+     *    版本号为空表示跟随最新，不视为悬空。
+     * 2) DSL（AgentInfo.workflows）中存在、但 mapping 缺失的引用：跨空间导入时可见性判定
+     *    （本空间存在 or 共享授权）会正确跳过建 mapping，若只校验 mapping 则这类悬空引用
+     *    零校验、发布直接放行（对应缺陷：导入引用他空间工作流的智能体后发布仍成功）。
+     *    不可见 → 拦截；可见但快照版本已被删除/未共享 → 拦截。
+     *
+     * @param projectId 项目 id（本空间判定为 project_id + workspace_id 双维度，同保存链路）
+     * @param agentId agent id
+     * @param workspaceId 当前空间
+     * @param agentInfo 发布链路上游已解析的智能体 DSL 信息
+     */
+    private void validateAgentWorkflowVersionMappings(String projectId, String agentId, String workspaceId,
+        AgentInfo agentInfo) {
+        // 维度1：mapping 中已绑定引用的版本存在性（含共享二维判定）
+        List<MappingEntity> boundWorkflowMappings = mappingMapper.selectByAppIdAndResourceType(agentId,
+            CommonConstant.WORKFLOW_TYPE);
+        Set<String> mappedResourceIds = new HashSet<>();
+        if (CollectionUtils.isNotEmpty(boundWorkflowMappings)) {
+            for (MappingEntity mapping : boundWorkflowMappings) {
+                mappedResourceIds.add(mapping.getResourceId());
+                String resourceVersion = mapping.getResourceVersion();
+                if (StringUtils.isEmpty(resourceVersion)) {
+                    continue;
+                }
+                boolean versionUsable;
+                if (ReferenceTypeEnum.SHARE.getValue().equals(mapping.getReferenceType())) {
+                    // 共享引用：版本存在且仍共享授权给本空间（scope + versionList）。
+                    // 以 reference_type 判定而非 resource_workspace_id：保存链路建的
+                    // SHARE 映射不回填 resource_workspace_id，按字段路由会漏判
+                    versionUsable = shareResourceManagerService
+                        .queryShareResourceEntityByResourceIdAndVersionId(mapping.getResourceId(), workspaceId,
+                            resourceVersion) != null;
+                } else {
+                    // 本空间引用：版本全局存在即可
+                    versionUsable =
+                        releaseVersionMapper.selectByAppIdAndVersionId(mapping.getResourceId(), resourceVersion)
+                            != null;
+                }
+                if (!versionUsable) {
+                    log.error("agent {} bound workflow {} version {} not found or not shared, publish blocked",
+                        agentId, mapping.getResourceId(), resourceVersion);
+                    throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND,
+                        resourceVersion);
+                }
+            }
+        }
+
+        // 维度2：DSL 中存在但 mapping 缺失的引用（导入兜底正确跳过建 mapping 的悬空引用）
+        if (agentInfo == null || CollectionUtils.isEmpty(agentInfo.getWorkflows())) {
+            return;
+        }
+        for (WorkflowReference workflowRef : agentInfo.getWorkflows()) {
+            String subWorkflowId = workflowRef.getWorkflowId();
+            // 已有 mapping 的引用由维度1校验；workflowId 为空的残留跳过
+            if (StringUtils.isEmpty(subWorkflowId) || mappedResourceIds.contains(subWorkflowId)) {
+                continue;
+            }
+            WorkflowEntity workflowEntity = workflowMapper.getWorkflowById(subWorkflowId);
+            boolean workflowExists = workflowEntity != null && !Boolean.TRUE.equals(workflowEntity.getDeleted());
+            // 本空间判定与保存链路 selectByWorkflowSearchCriteria 一致：project_id + workspace_id 双维度
+            boolean localWorkflow = workflowExists
+                && Strings.CS.equals(workflowEntity.getProjectId(), projectId)
+                && Strings.CS.equals(workflowEntity.getWorkspaceId(), workspaceId);
+            // 可见性：本空间存在且未删除，或已共享授权给本空间。getWorkflowById 按 id 全库查询、
+            // 无 project/workspace 过滤，跨空间残留的引用同样能查到，须叠加空间判定
+            if (!localWorkflow && !(workflowExists
+                && shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, subWorkflowId))) {
+                log.error("agent {} references workflow {} which is not visible in workspace {}, publish blocked",
+                    agentId, subWorkflowId, workspaceId);
+                throw new AgentStudioException(StudioError.SUB_WORKFLOW_CANNOT_USE, subWorkflowId);
+            }
+            // 可见但引用版本不可用：发布拦截（共享引用为二维判定，与维度1口径一致）
+            String refVersion = workflowRef.getLastVersionId();
+            if (StringUtils.isEmpty(refVersion)) {
+                continue;
+            }
+            boolean versionUsable;
+            if (localWorkflow) {
+                versionUsable = releaseVersionMapper.selectByAppIdAndVersionId(subWorkflowId, refVersion) != null;
+            } else {
+                versionUsable = shareResourceManagerService
+                    .queryShareResourceEntityByResourceIdAndVersionId(subWorkflowId, workspaceId, refVersion) != null;
+            }
+            if (!versionUsable) {
+                log.error("agent {} references workflow {} version {} not found or not shared, publish blocked",
+                    agentId, subWorkflowId, refVersion);
+                throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND,
+                    refVersion);
+            }
+        }
     }
 
     /**
@@ -2303,6 +2440,22 @@ public class AgentManagementService implements IAgentManagementService {
 
         AgentType agentType = AgentType.naValueOf(agent.getType());
 
+        // 发布前校验：多智能体下挂子工作流引用的版本必须存在（与编辑保存链路的校验一致，
+        // 前端 publishAgent 已有预校验弹错误列表，此处为后端兜底，防止绕过前端直接调接口）
+        if (Objects.requireNonNull(agentType) == AgentType.CONTROLLER) {
+            WorkflowValidationVO validationVo = controllerManagementService.validateSubWorkflowVersions(agent);
+            if (!Boolean.TRUE.equals(validationVo.isSuccess())) {
+                log.error("agent {} publish blocked, sub workflow version not found: {}", agentId,
+                    validationVo.getErrors());
+                throw new AgentStudioException(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND);
+            }
+        } else {
+            // 发布前校验：单智能体的子工作流引用必须可用。
+            // 既有链路发布时只做 JSON 快照、不校验引用，可发布出引用悬空版本/跨空间不可见
+            // 工作流的坏版本，运行时才报错（mapping 校验 + DSL 兜底双维度）
+            validateAgentWorkflowVersionMappings(projectId, agentId, workspaceId, agentInfo);
+        }
+
         // 创建DSL文件的版本快照
         if (Objects.requireNonNull(agentType) == AgentType.CONTROLLER) {
             String dslVersionPath = String.format(AGENT_OBS_PATH_TEMPLATE, CommonConstant.AGENT,
@@ -2586,21 +2739,27 @@ public class AgentManagementService implements IAgentManagementService {
     public CommonDeleteRsp deleteAgentVersion(String projectId, String agentId, String versionId, String workspaceId) {
         Agent agent = getAgent(projectId, workspaceId, agentId);
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(agent.getAgentId(), versionId);
+        if (releaseVersion == null) {
+            log.error("agent version is not found, agentId = {}, versionId = {}", agentId, versionId);
+            throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+        }
         ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
-        if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
-            && shareResource.getVersionList().contains(versionId)) {
+        if (ObjectUtils.isNotEmpty(shareResource) && shareResource.containsVersion(versionId)) {
             log.error("the resource version has been shared,you can't delete it");
             throw new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY);
         }
         if (isSoftDelete) {
             mgObsService.softDeleteObsFile(releaseVersion.getDslPath());
             mgObsService.softDeleteObsFile(releaseVersion.getIrPath());
+            // 多智能体版本发布时会生成环境变量文件，删除版本时同步清理（与deleteWorkflowVersion对齐）
+            mgObsService.softDeleteObsFile(getEnvironmentVariableFilePath(releaseVersion.getIrPath()));
 
             // 处理Agent版本表，迁移到新的表，旧数据删除
             agentCommonService.softDeleteReleaseVersionById(releaseVersion);
         } else {
             mgObsService.deleteObsFile(releaseVersion.getDslPath());
             mgObsService.deleteObsFile(releaseVersion.getIrPath());
+            mgObsService.deleteObsFile(getEnvironmentVariableFilePath(releaseVersion.getIrPath()));
             releaseVersionMapper.deleteByPrimaryKey(releaseVersion.getId());
         }
         // 删除最新发布版本
@@ -2649,6 +2808,109 @@ public class AgentManagementService implements IAgentManagementService {
         }
 
         return new CommonDeleteRsp().setId(versionId);
+    }
+
+    @Override
+    public VersionReferenceListRsp listAgentVersionReferences(String projectId, String agentId,
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo) {
+        // 资源归属校验，防止横向越权（与listAgentVersions对齐）
+        getAgent(projectId, listAgentVersionReferencesQo.getWorkspaceId(), agentId);
+        return relationManagementService.listVersionReferences(projectId, agentId,
+            listAgentVersionReferencesQo.getWorkspaceId(), listAgentVersionReferencesQo.getVersionId());
+    }
+
+    /**
+     * 批量删除智能体版本，部分成功模式：
+     * 已共享版本与删除失败的版本记入failed列表，不影响其他版本的删除
+     */
+    @Override
+    @OperationLog(
+        operationType = OperationType.DELETE,
+        resourceType = "Agent",
+        description = "批量删除智能体版本",
+        resourceId = "agentId",
+        resourceName = ""
+    )
+    public BatchDeleteVersionsResponseBody batchDeleteAgentVersions(String projectId, String agentId,
+        String workspaceId, BatchDeleteVersionsRequestBody body) {
+        // 资源归属校验，防止横向越权（与deleteAgentVersion对齐）
+        getAgent(projectId, workspaceId, agentId);
+
+        // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
+        ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
+
+        List<String> versionIds = body.getVersionIds();
+        List<String> success = new ArrayList<>();
+        List<BatchDeleteVersionFailedInfo> failed = new ArrayList<>();
+        for (String versionId : versionIds) {
+            if (ObjectUtils.isNotEmpty(shareResource) && shareResource.containsVersion(versionId)) {
+                log.error("batch delete agent version, the resource version {} has been shared, you can't delete it",
+                    versionId);
+                failed.add(buildVersionDeleteFailedInfo(versionId,
+                    new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY)));
+                continue;
+            }
+            try {
+                // 通过自身代理调用，保证每版本独立事务，单版本失败不影响其他版本
+                self.deleteAgentVersion(projectId, agentId, versionId, workspaceId);
+                success.add(versionId);
+            } catch (Exception e) {
+                log.error("batch delete agent version failed, agentId={}, versionId={}", agentId, versionId, e);
+                failed.add(buildVersionDeleteFailedInfo(versionId, e));
+            }
+        }
+        return new BatchDeleteVersionsResponseBody()
+            .setTotalCount(versionIds.size())
+            .setDeletedCount(success.size())
+            .setSuccess(success)
+            .setFailed(failed);
+    }
+
+    /**
+     * 构建批量删除版本的失败详情
+     *
+     * @param versionId 版本ID
+     * @param e 删除时抛出的异常
+     * @return 失败详情
+     */
+    private BatchDeleteVersionFailedInfo buildVersionDeleteFailedInfo(String versionId, Exception e) {
+        String errorCode = StudioError.UNEXPECTED_ERROR.name();
+        if (e instanceof AgentStudioException agentStudioException
+            && ObjectUtils.isNotEmpty(agentStudioException.getErrorCode())) {
+            errorCode = agentStudioException.getErrorCode().name();
+        }
+        // 仅AgentStudioException的消息是可控的业务文案，可直接返回；
+        // 其他异常（如NPE）的message可能包含内部类名/方法名，不可暴露给调用方
+        String errorMsg = (e instanceof AgentStudioException && StringUtils.isNotEmpty(e.getMessage()))
+            ? e.getMessage() : errorCode;
+        return new BatchDeleteVersionFailedInfo()
+            .setVersionId(versionId)
+            .setErrorCode(errorCode)
+            .setErrorMsg(errorMsg);
+    }
+
+    /**
+     * 获取版本环境变量文件路径（多智能体发布时生成，与deleteWorkflowVersion对齐）
+     *
+     * @param originalPath 版本IR文件路径
+     * @return 环境变量文件路径
+     */
+    private String getEnvironmentVariableFilePath(String originalPath) {
+        if (StringUtils.isEmpty(originalPath)) {
+            return "";
+        }
+        File originalFile = new File(originalPath);
+        String parentDir = originalFile.getParent();
+        String originalName = originalFile.getName();
+        int lastDotIndex = originalName.lastIndexOf('.');
+        if (lastDotIndex < 0) {
+            return "";
+        }
+        String fileName = originalName.substring(0, lastDotIndex);
+        String suffix = originalName.substring(lastDotIndex);
+        String newFileName = fileName + "_env" + suffix;
+        File newFile = new File(parentDir, newFileName);
+        return newFile.getPath();
     }
 
     /**

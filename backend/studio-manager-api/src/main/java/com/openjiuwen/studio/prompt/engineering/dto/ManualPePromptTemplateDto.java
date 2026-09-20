@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,37 +33,45 @@ public class ManualPePromptTemplateDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,18}[\\u4e00-\\u9fa5a-zA-Z0-9]$")
     @NotBlank
     private String name = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     @Length(max = 10000)
     private String content = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "PLAYGROUND")
     @Pattern(regexp = "PLAYGROUND|EXPERIMENT|CANDIDATE|HORIZONTAL|NO_SOURCE|PRESET")
     private String source = null;
 
     @JsonProperty("variables")
+    @Schema(description = "变量", example = "[{\"name\":\"var1\",\"type\":\"string\",\"value\":\"val1\"}]")
     @Length(max = 255)
     private String variables = null;
 
     @JsonProperty("tag_list")
+    @Schema(description = "标签列表", example = "", required = true)
     @Valid
     @NotNull
     @Size(max = 500)
     private List<@Length() String> tagList = new ArrayList<String>();
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("industry_id")
+    @Schema(description = "行业ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     @NotBlank
     private String industryId = null;

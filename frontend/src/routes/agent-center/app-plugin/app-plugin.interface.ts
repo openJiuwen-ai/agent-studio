@@ -38,6 +38,9 @@ export interface IRequestArgsBase {
 
   oneOf?: IRequestArgsOF[];
   anyOf?: IRequestArgsOF[];
+
+  /** 引用的环境变量名，设置后该参数在工作流中自动绑定到同名环境变量 */
+  env_var_ref?: string;
 }
 
 export interface IRequestArgsOF {

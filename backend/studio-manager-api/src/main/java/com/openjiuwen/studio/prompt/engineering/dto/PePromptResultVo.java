@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -25,56 +26,73 @@ public class PePromptResultVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     private String content = null;
 
     @JsonProperty("model")
+    @Schema(description = "模型名称", example = "gpt-4")
     private String model = null;
 
     @JsonProperty("manual_score")
+    @Schema(description = "人工评分", example = "4")
     private Integer manualScore = null;
 
     @JsonProperty("model_config")
+    @Schema(description = "模型配置", example = "")
     @Valid
     private ModelConfig modelConfig = null;
 
     @JsonProperty("variable_vo")
+    @Schema(description = "变量列表", example = "")
     @Valid
     private List<VariableVo> variableVo = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "2024-01-01T00:00:00.000Z")
     private String updater = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private Date createdOn = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private Date updatedOn = null;
 
     @JsonProperty("score")
+    @Schema(description = "评分", example = "85")
     private Integer score = null;
 
     @JsonProperty("token")
+    @Schema(description = "Token数量", example = "1024")
     private Integer token = null;
 
     @JsonProperty("correct_num")
+    @Schema(description = "正确数量", example = "80")
     private Integer correctNum = null;
 
     @JsonProperty("error_num")
+    @Schema(description = "错误数量", example = "20")
     private Integer errorNum = null;
 
     @JsonProperty("time")
+    @Schema(description = "时间", example = "1.5")
     private Double time = null;
 
     @JsonProperty("file_info")
+    @Schema(description = "文件信息", example = "")
     @Valid
     private FileInfoVo fileInfo = null;
 

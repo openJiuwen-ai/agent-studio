@@ -73,7 +73,7 @@ export class ModelSenderComponent
     if (this.disabled) {
       return;
     }
-    if (this.uploadData.length >= 10) {
+    if (this.uploadData.length >= 20) {
       return;
     }
     this.fileInput.nativeElement.click();
@@ -86,9 +86,9 @@ export class ModelSenderComponent
     if (len <= 0) {
       return;
     }
-    if (len + this.uploadData.length > 10) {
+    if (len + this.uploadData.length > 20) {
       this.message.warning(
-        this.i18n.transform('upload_max_ten_files_tip'),
+        this.i18n.transform('upload_max_files_tip'),
       );
       return;
     }

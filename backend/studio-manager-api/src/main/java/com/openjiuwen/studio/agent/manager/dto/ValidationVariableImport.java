@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class ValidationVariableImport implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("variableName")
+    @Schema(description = "变量名称", example = "api_key")
     private String variableName = null;
 
     @JsonProperty("validateResult")
+    @Schema(description = "校验结果", example = "success")
     private String validateResult = null;
 
     @JsonProperty("variableValue")
+    @Schema(description = "变量值", example = "sk-123456")
     private String variableValue = null;
 
     @JsonProperty("variableType")
+    @Schema(description = "变量类型", example = "string")
     private String variableType = null;
 
     @JsonProperty("isSecret")
+    @Schema(description = "是否为密钥", example = "false")
     private Boolean isSecret = null;
 
     public String getVariableName() {

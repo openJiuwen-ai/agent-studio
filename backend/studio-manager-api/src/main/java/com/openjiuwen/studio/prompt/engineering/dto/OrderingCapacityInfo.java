@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,9 +28,11 @@ public class OrderingCapacityInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_spec_code")
+    @Schema(description = "resourceSpec编码", example = "示例文本")
     private String resourceSpecCode = null;
 
     @JsonProperty("capacities")
+    @Schema(description = "capacities", example = "")
     @Valid
     private List<@Length() String> capacities = null;
 

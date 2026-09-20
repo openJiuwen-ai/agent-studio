@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,6 +27,7 @@ public class WorkFlowNodeMemoryIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("userProfile")
+    @Schema(description = "用户profile", example = "{}")
     @Valid
     private WorkFlowNodeUserProfileIR userProfile = null;
 

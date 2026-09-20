@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -26,52 +27,68 @@ public class McpServerBaseInfoDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "mcp-server-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-server")
     private String icon = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "天气服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "Weather Service")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供天气查询功能")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "Provide weather query functionality")
     private String descriptionEn = null;
 
     @JsonProperty("type")
+    @Schema(description = "服务类型", example = "local")
     private String type = null;
 
     @JsonProperty("deploy_type")
+    @Schema(description = "部署类型", example = "cloud")
     private String deployType = null;
 
     @JsonProperty("org_type")
+    @Schema(description = "组织类型", example = "personal")
     private String orgType = null;
 
     @JsonProperty("view_times")
+    @Schema(description = "浏览次数", example = "1024")
     private Long viewTimes = null;
 
     @JsonProperty("install_times")
+    @Schema(description = "安装次数", example = "256")
     private Long installTimes = null;
 
     @JsonProperty("score")
+    @Schema(description = "评分", example = "4.5")
     private Double score = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "weather")
     private String category = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务配置", example = "服务配置JSON")
     private String serverConfig = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date lastUpdatedDate = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date createdDate = null;
 
     public String getId() {

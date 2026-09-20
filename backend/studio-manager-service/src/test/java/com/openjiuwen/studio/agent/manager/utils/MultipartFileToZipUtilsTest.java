@@ -56,8 +56,8 @@ class MultipartFileToZipUtilsTest {
         File resultFile = MultipartFileToZipUtils.convertToZipFile(multipartFile, targetDir.toString());
         assertNotNull(resultFile, "Converted file should not be null");
         assertTrue(resultFile.exists(), "Converted file should exist");
-        assertEquals(originalFilename, resultFile.getName(),
-                "Converted filename should be same as original filename");
+        assertTrue(resultFile.getName().endsWith(originalFilename),
+                "Converted filename should end with original filename");
         String actualContent = new String(Files.readAllBytes(resultFile.toPath()));
         assertEquals(expectedContent, actualContent, "File content should be correct");
         assertTrue(resultFile.getParentFile().getAbsolutePath().contains(targetDir.toString()),
@@ -75,8 +75,8 @@ class MultipartFileToZipUtilsTest {
         File resultFile = MultipartFileToZipUtils.convertToZipFile(multipartFile);
         assertNotNull(resultFile, "Converted file should not be null");
         assertTrue(resultFile.exists(), "Converted file should exist");
-        assertEquals(originalFilename, resultFile.getName(),
-                "Converted filename should be same as original filename");
+        assertTrue(resultFile.getName().endsWith(originalFilename),
+                "Converted filename should end with original filename");
     }
 
     @Test
@@ -91,8 +91,8 @@ class MultipartFileToZipUtilsTest {
 
         assertNotNull(resultFile, "Converted file should not be null");
         assertTrue(resultFile.exists(), "Converted file should exist");
-        assertEquals(originalFilename, resultFile.getName(),
-                "Converted filename should correctly handle no extension case");
+        assertTrue(resultFile.getName().endsWith(originalFilename),
+                "Converted filename should end with original filename");
         String actualContent = new String(Files.readAllBytes(resultFile.toPath()));
         assertEquals(new String(content, StandardCharsets.UTF_8), actualContent, "File content should be correct");
     }
@@ -110,7 +110,8 @@ class MultipartFileToZipUtilsTest {
         File resultFile = MultipartFileToZipUtils.convertToZipFile(multipartFile, targetDir.toString());
         assertNotNull(resultFile, "Converted file should not be null");
         assertTrue(resultFile.exists(), "Converted file should exist");
-        assertEquals(originalFilename, resultFile.getName(), "Converted filename should be correct");
+        assertTrue(resultFile.getName().endsWith(originalFilename),
+                "Converted filename should end with original filename");
         assertEquals(0, resultFile.length(), "Empty file should be created successfully");
     }
 

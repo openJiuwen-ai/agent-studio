@@ -121,6 +121,13 @@ class HierarchicalControlAgent(BaseControlAgent):
                             agent_id,
                         )
 
+                except asyncio.CancelledError:
+                    # 上游终止（运行中取消）传播到本层：连带取消在飞的成员执行
+                    # （级联终止，避免 finally 里 await send_task 拖到自然结束），
+                    # 然后继续向上传播，保证 HTTP 流即时掐断且无终态 done
+                    if send_task and not send_task.done():
+                        send_task.cancel()
+                    raise
                 except Exception as e:
                     error_msg = f"Agent execution failed: {str(e)}"
                     yield self._log_and_yield_error(error_msg, agent_id)
@@ -134,7 +141,7 @@ class HierarchicalControlAgent(BaseControlAgent):
 
             # 如果达到最大调用次数，返回Error消息
             if (
-                self.current_agent_calls_count > self.config.max_agent_calls
+                self.current_agent_calls_count >= self.config.max_agent_calls
                 and not force_default_workflow
             ):
                 error_msg = (
@@ -404,6 +411,7 @@ class HierarchicalControlAgent(BaseControlAgent):
         """检测调用历史中是否存在死循环"""
         history = self.call_agent_history
         history_len = len(history)
+
         if history_len < 2:
             return False
 

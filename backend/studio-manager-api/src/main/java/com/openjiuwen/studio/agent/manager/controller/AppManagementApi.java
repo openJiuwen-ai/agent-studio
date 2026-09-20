@@ -51,8 +51,10 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("app_id") String appId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
         @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "目标项目空间ID。", required = true, schema = @Schema())
         @ApiParam(value = "目标项目空间ID。", required = true)
         @RequestParam(value = "target_workspace_id", required = true) String targetWorkspaceId,
         @ApiParam(value = "搜索条件。") @Valid @RequestBody(required = false) SearchCriteria body);

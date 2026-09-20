@@ -337,10 +337,9 @@ class LongTermMemoryDefaultIndex(BaseMemoryIndex):
         filters = _build_filter(user_id, scope_id)
         # 处理多类型：用 terms 查询
         if mem_types:
-            # list_docs_by_filter 的 filters 是 dict term；多类型需单独处理
-            docs: list[MemoryDoc] = []
-            for mt in mem_types:
-                f = {**filters, FIELD_MEMORY_TYPE: mt}
+            # 单类型：过滤后直接分页，offset 只应用一次
+            if len(mem_types) == 1:
+                f = {**filters, FIELD_MEMORY_TYPE: mem_types[0]}
                 hits = await self._vector_store.list_docs_by_filter(
                     self._index_name,
                     f,
@@ -348,17 +347,33 @@ class LongTermMemoryDefaultIndex(BaseMemoryIndex):
                     limit=limit,
                     sort=(FIELD_LAST_UPDATED, "desc"),
                 )
+                return [
+                    _store_doc_to_memory_doc(h.fields, h.fields.get("id", ""))
+                    for h in hits
+                ]
+            # 多类型：每类取回覆盖请求窗口的原始行（offset=0），合并排序后
+            # 统一切片——若 per-type 查询各自带 offset，offset 会被应用两次，
+            # page>=2 恒返回空
+            docs: list[MemoryDoc] = []
+            for mt in mem_types:
+                f = {**filters, FIELD_MEMORY_TYPE: mt}
+                hits = await self._vector_store.list_docs_by_filter(
+                    self._index_name,
+                    f,
+                    offset=0,
+                    limit=offset + limit,
+                    sort=(FIELD_LAST_UPDATED, "desc"),
+                )
                 for h in hits:
                     docs.append(_store_doc_to_memory_doc(h.fields, h.fields.get("id", "")))
             # 多类型时按 type 顺序、时间倒序
-            if mem_types:
-                type_order = {mt: i for i, mt in enumerate(mem_types)}
-                docs.sort(
-                    key=lambda d: (
-                        type_order.get(d.type, len(type_order)),
-                        -(d.timestamp.timestamp() if d.timestamp else 0),
-                    )
+            type_order = {mt: i for i, mt in enumerate(mem_types)}
+            docs.sort(
+                key=lambda d: (
+                    type_order.get(d.type, len(type_order)),
+                    -(d.timestamp.timestamp() if d.timestamp else 0),
                 )
+            )
             return docs[offset:offset + limit]
 
         hits = await self._vector_store.list_docs_by_filter(

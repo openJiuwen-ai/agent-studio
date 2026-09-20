@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -27,9 +29,11 @@ public class ControllerConfigIRIntentIdentification implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "STRING")
     private TypeEnum type = null;
 
     @JsonProperty("id")
+    @Schema(description = "ID", example = "example-id-123")
     @Length(max = 128)
     private String id = null;
 

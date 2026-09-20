@@ -245,17 +245,31 @@ class PlanExecutePlanner(TaskPlanner):
             )
             return filtered
 
-        # 获取场景中的工具名称集合
-        scene_tool_names = set(matched_scene.tools)
+        # 获取场景中的工具名称集合（场景级 + 指南级聚合）
+        scene_tool_names = set(matched_scene.tools) if matched_scene.tools else set()
+        # 如果场景级工具为空，从指南中聚合所有工具名
+        if not scene_tool_names and matched_scene.guidelines:
+            for guideline in matched_scene.guidelines:
+                if guideline.tools:
+                    scene_tool_names.update(guideline.tools)
+            logger.info(
+                f"task_id: {self.task_id}| Aggregated tools from guidelines: {scene_tool_names}"
+            )
 
-        # 过滤插件
+        # 过滤插件 — plugin.name 格式为 "{plugin_pinyin}{operation_name}"（如 zhinenghuiyizhushoucreate_meeting）
+        # scene_tool_names 中存完整 operation 名（前端保存 plugin_display_name + tool_display_name）
+        # Java IR parsePluginConfig 确保 plugin.name 包含 operation 后缀，实现精确匹配
         filtered_tools = []
         for plugin in plugins:
-            if getattr(plugin, "name", "") in scene_tool_names:
+            pname = getattr(plugin, "name", "")
+            if pname in scene_tool_names:
                 filtered_tools.append(plugin)
 
         scene_name = matched_scene.name if matched_scene else "None"
-        logger.info(f"Filtered {len(filtered_tools)} tools from scene: {scene_name}")
+        logger.info(
+            f"task_id: {self.task_id}| Filtered {len(filtered_tools)} tools from scene: {scene_name}, "
+            f"scene_tool_names={scene_tool_names}"
+        )
         return filtered_tools
 
     def _filter_workflows_by_scene(self, matched_scene) -> dict:
@@ -275,11 +289,15 @@ class PlanExecutePlanner(TaskPlanner):
             return all_workflows
 
         scene_tool_names = set(matched_scene.tools) if matched_scene.tools else set()
-        filtered = {
-            k: ctx
-            for k, ctx in all_workflows.items()
-            if ctx.workflow_name in scene_tool_names
-        }
+        # 如果场景级工具为空，从指南中聚合所有工具名
+        if not scene_tool_names and matched_scene.guidelines:
+            for guideline in matched_scene.guidelines:
+                if guideline.tools:
+                    scene_tool_names.update(guideline.tools)
+        filtered = {}
+        for k, ctx in all_workflows.items():
+            if ctx.workflow_name in scene_tool_names:
+                filtered[k] = ctx
         logger.info(
             f"task_id: {self.task_id}| Filtered {len(filtered)} workflow(s) by scene for task planning"
         )

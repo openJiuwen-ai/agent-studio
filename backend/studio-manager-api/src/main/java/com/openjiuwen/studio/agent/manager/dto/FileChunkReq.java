@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,19 +28,23 @@ public class FileChunkReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("title")
+    @Schema(description = "标题", example = "文档标题")
     @Length(max = 10000)
     private String title = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "文档内容", required = true)
     @NotBlank
     @Length(min = 1, max = 10000)
     private String content = null;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "1")
     @Range(min = 1L, max = 65535L)
     private Long pageNum = null;
 
     @JsonProperty("component_num")
+    @Schema(description = "组件编号", example = "1")
     @Range(min = 1L, max = 65535L)
     private Long componentNum = null;
 

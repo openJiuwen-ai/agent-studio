@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
@@ -156,12 +157,15 @@ public class MessageManagementService implements IMessageManagementService {
 
     @Override
     public Resource exportStructuredMessages(String projectId, String workspaceId, ExportMessagesParams body) {
-        List<StructuredMessageEntity> structuredMessageEntities =
-            this.structuredMessageMapper.getByIds(body.getMessagesIds(), RequestContextUtils.getRequestWorkspaceId(),
-                RequestContextUtils.getRequestUserDomainId(), RequestContextUtils.getRequestUserId());
         List<StructMessage> infos = new ArrayList<>();
-        structuredMessageEntities
-            .forEach(structuredMessageEntity -> infos.add(convertStructMessage(structuredMessageEntity)));
+        // 空 messages_ids 直接返回空导出文件，不查库（与 batchDelete 空 items 短路一致）
+        if (!CollectionUtils.isEmpty(body.getMessagesIds())) {
+            List<StructuredMessageEntity> structuredMessageEntities =
+                this.structuredMessageMapper.getByIds(body.getMessagesIds(), RequestContextUtils.getRequestWorkspaceId(),
+                    RequestContextUtils.getRequestUserDomainId(), RequestContextUtils.getRequestUserId());
+            structuredMessageEntities
+                .forEach(structuredMessageEntity -> infos.add(convertStructMessage(structuredMessageEntity)));
+        }
         Resource resource;
         try {
             resource = ExcelToJsonConverterUtil.exportMessagesToExcel(infos);

@@ -126,16 +126,17 @@
       </nz-form-control>
     </nz-form-item>
 
-    <nz-form-item *ngIf="this.status === 'success' || this.status === 'failed'">
+    <nz-form-item *ngIf="this.status === 'AVAILABLE' || this.status === 'UNAVAILABLE'">
       <nz-form-label [nzNoColon]="true">
         <span>{{ 'connection_status'|i18nextEager }}</span>
       </nz-form-label>
       <nz-form-control>
-        <div *ngIf="this.status === 'success'">
+        <div *ngIf="this.status === 'AVAILABLE'">
           <nz-badge nzStatus="success" [nzText]="'success_modified_saved_recheck_status'|i18nextEager"></nz-badge>
         </div>
-        <div *ngIf="this.status === 'failed'">
+        <div *ngIf="this.status === 'UNAVAILABLE'">
           <nz-badge nzStatus="error" [nzText]="'failure_modified_saved_recheck_status'|i18nextEager"></nz-badge>
+          <div *ngIf="this.lastErrorMessage" class="text-sm text-red-500 mt-1">{{ this.lastErrorMessage }}</div>
         </div>
       </nz-form-control>
     </nz-form-item>

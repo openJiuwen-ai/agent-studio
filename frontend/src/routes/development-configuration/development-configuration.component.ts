@@ -18,6 +18,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { IntentPackageComponent } from '@routes/intent-package/intent-package/intent-package.component';
 import { ObjectManageComponent } from '@routes/object-manage/object-manage.component';
+import { DatasourceManagementComponent } from '@routes/datasource-management/datasource-management.component';
 @Component({
   selector: 'development-configuration',
   templateUrl: './development-configuration.component.html',
@@ -34,6 +35,7 @@ import { ObjectManageComponent } from '@routes/object-manage/object-manage.compo
     NzTabsModule,
     IntentPackageComponent,
     ObjectManageComponent,
+    DatasourceManagementComponent,
   ],
   providers: [
     {
@@ -55,6 +57,7 @@ export class DevelopmentConfigurationComponent implements OnInit, OnDestroy {
     { id: 'intent-manage', i18nKey: 'intent_management', active: false, show: true },
     { id: 'message-template', i18nKey: 'message_template', active: false, show: true },
     { id: 'object-manage', i18nKey: 'object_manage', active: false, show: true },
+    { id: 'datasource', i18nKey: 'data_source_management', active: false, show: true },
   ];
 
   activeId = 'custom-model';

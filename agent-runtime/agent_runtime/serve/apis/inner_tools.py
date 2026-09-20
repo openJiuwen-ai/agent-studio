@@ -10,11 +10,12 @@ from typing import Optional
 import aiohttp
 from docx import Document
 from docx.oxml.ns import qn
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query, Request
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import BaseModel, Field
 
 from agent_runtime.common.config import settings
+from agent_runtime.serve.error_rsp import build_error_response
 from agent_runtime.utils.file_parser import FileParser
 from storage import S3StorageProvider
 from jiuwen.common.utils.utils import illegal_url
@@ -58,22 +59,32 @@ async def _download_file(file_url: str) -> bytes:
     "/v1/inner-tools/file/resolve",
     response_model=FileResolveResponse,
     summary="解析文件",
+    responses={
+        400: {
+            "description": "SSRF 校验拒绝或下载失败，返回四字段 ErrorRsp（error_code=02001003）",
+        },
+        500: {
+            "description": "文件解析失败，返回四字段 ErrorRsp（error_code=02001002）",
+        },
+    },
 )
 async def resolve_file(
+    request: Request,
     file_url: str = Query(..., description="文件访问url"),
 ):
     """根据 file_url 下载并解析文件内容，支持 txt/csv/xlsx/docx"""
+    language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
     # SSRF 防护
     if illegal_url(file_url):
         workflow_logger.warning("Resolve file rejected by SSRF check: {}", file_url)
-        raise HTTPException(status_code=400, detail="非法文件URL")
+        return build_error_response(400, "02001003", language=language, reason="非法文件URL")
 
     # 下载文件
     try:
         data = await _download_file(file_url)
     except Exception as e:
         workflow_logger.error("Download file failed: url={}, error:{}", file_url, e, exc_info=True)
-        raise HTTPException(status_code=400, detail=f"下载文件失败: {e}") from e
+        return build_error_response(400, "02001003", language=language, reason=f"下载文件失败: {e}")
 
     # 按扩展名分发解析
     suffix = FileParser.get_suffix(file_url)
@@ -81,7 +92,7 @@ async def resolve_file(
         content = FileParser.parse(data, suffix)
     except Exception as e:
         workflow_logger.error("Parse file failed: suffix={}, error:{}", suffix, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"解析文件失败: {e}") from e
+        return build_error_response(500, "02001002", language=language, reason=f"解析文件失败: {e}")
 
     # 截断
     content = FileParser.truncate(content, settings.object_storage.max_resolve_size)
@@ -92,9 +103,15 @@ async def resolve_file(
     "/v1/inner-tools/document/create",
     response_model=CreateDocumentResponse,
     summary="文档生成",
+    responses={
+        500: {
+            "description": "上传文档或生成下载链接失败，返回四字段 ErrorRsp（error_code=02001002）",
+        },
+    },
 )
-async def create_document(req: CreateDocumentRequest):
+async def create_document(request: Request, req: CreateDocumentRequest):
     """根据文本内容生成 docx，上传 OBS 返回临时下载链接"""
+    language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
     # 文件名校验
     name = FileParser.build_legal_name(req.document_name)
 
@@ -124,7 +141,7 @@ async def create_document(req: CreateDocumentRequest):
         workflow_logger.error(
             "Upload document failed: {}, {}", object_key, e, exc_info=True
         )
-        raise HTTPException(status_code=500, detail=f"上传文档失败: {e}") from e
+        return build_error_response(500, "02001002", language=language, reason=f"上传文档失败: {e}")
 
     # 生成签名下载 URL
     expires_days = (
@@ -141,6 +158,6 @@ async def create_document(req: CreateDocumentRequest):
         workflow_logger.error(
             "Generate presigned url failed: {}, {}", object_key, e, exc_info=True
         )
-        raise HTTPException(status_code=500, detail=f"生成下载链接失败: {e}") from e
+        return build_error_response(500, "02001002", language=language, reason=f"生成下载链接失败: {e}")
 
     return CreateDocumentResponse(url=url)

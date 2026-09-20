@@ -45,7 +45,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         consumes = {"application/json"}, method = RequestMethod.POST)
     ResponseEntity<RouterStrategyBaseInfo> createRouterStrategy(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody RouterStrategyRequest body);
 
@@ -57,7 +59,9 @@ import org.springframework.web.bind.annotation.RequestParam;
     @RequestMapping(value = "/v1/{project_id}/model-router-strategies/{strategy_id}", method = RequestMethod.DELETE)
     ResponseEntity<Void> deleteRouterStrategy(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
@@ -84,7 +88,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.GET)
     ResponseEntity<RouterStrategyBaseInfo> strategyDetail(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
@@ -99,7 +105,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         method = RequestMethod.PUT)
     ResponseEntity<Void> updateRouterStrategy(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())

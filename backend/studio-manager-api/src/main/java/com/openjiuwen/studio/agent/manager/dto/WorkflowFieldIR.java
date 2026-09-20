@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,29 +26,37 @@ public class WorkflowFieldIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "字段名称", example = "input_text")
     private String name = null;
 
     @JsonProperty("required")
+    @Schema(description = "是否必填", example = "true")
     private Boolean required = null;
 
     @JsonProperty("type")
+    @Schema(description = "字段类型", example = "string")
     private String type = null;
 
     @JsonProperty("description")
+    @Schema(description = "字段描述", example = "输入文本")
     private String description = null;
 
     @JsonProperty("schema")
+    @Schema(description = "字段Schema定义", example = "{}")
     @Valid
     private Object schema = null;
 
     @JsonProperty("default_value")
+    @Schema(description = "默认值", example = "default")
     @Valid
     private Object defaultValue = null;
 
     @JsonProperty("method")
+    @Schema(description = "方法", example = "GET")
     private String method = null;
 
     @JsonProperty("visible")
+    @Schema(description = "是否可见", example = "true")
     private Boolean visible = null;
 
     public String getName() {

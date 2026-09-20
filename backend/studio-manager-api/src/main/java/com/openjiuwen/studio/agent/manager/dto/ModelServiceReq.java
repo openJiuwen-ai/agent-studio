@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,67 +29,85 @@ public class ModelServiceReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("provider_id")
+    @Schema(description = "供应商ID", example = "provider_001")
     @Length(max = 40)
     private String providerId = null;
 
     @JsonProperty("service_name")
+    @Schema(description = "服务名称", example = "my-service")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\\\\\/:| -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String serviceName = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\\\\\/:| -@]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String modelName = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "LLM")
     @Pattern(regexp = "(LLM|Text-Embedding|RERANK|IMAGE-TO-TEXT)")
     private String modelType = null;
 
     @JsonProperty("model_tags")
+    @Schema(description = "模型标签", example = "tag1,tag2")
     @Length(max = 1024)
     private String modelTags = null;
 
     @JsonProperty("model_description")
+    @Schema(description = "模型描述", example = "这是一个大语言模型")
     @Length(max = 1024)
     private String modelDescription = null;
 
     @JsonProperty("api_url")
+    @Schema(description = "API地址", example = "https://api.example.com/v1")
     @Length(max = 255)
     private String apiUrl = null;
 
     @JsonProperty("is_support_function")
+    @Schema(description = "是否支持函数调用", example = "true")
     private Boolean isSupportFunction = null;
 
     @JsonProperty("logo")
+    @Schema(description = "图标", example = "logo.png")
     private String logo = null;
 
     @JsonProperty("is_public")
+    @Schema(description = "是否公开", example = "false")
     private Boolean isPublic = null;
 
     @JsonProperty("is_network")
+    @Schema(description = "是否联网", example = "true")
     private Boolean isNetwork = null;
 
     @JsonProperty("is_reasoning")
+    @Schema(description = "是否支持推理", example = "true")
     private Boolean isReasoning = null;
 
     @JsonProperty("is_support_close_reasoning")
+    @Schema(description = "是否支持关闭推理", example = "false")
     private Boolean isSupportCloseReasoning = null;
 
     @JsonProperty("interface_protocol")
+    @Schema(description = "接口协议", example = "OpenAI")
     private String interfaceProtocol = null;
 
     @JsonProperty("is_support_stream")
+    @Schema(description = "是否支持流式输出", example = "true")
     private Boolean isSupportStream = null;
 
     @JsonProperty("model_size")
+    @Schema(description = "模型大小", example = "7.0")
     @Range(min = 0L)
     private Float modelSize = null;
 
     @JsonProperty("context_length")
+    @Schema(description = "上下文长度", example = "4096")
     private Integer contextLength = null;
 
     @JsonProperty("throttling_policy")
+    @Schema(description = "限流策略", example = "10")
     private ThrottlingPolicyEnum throttlingPolicy = null;
 
     public String getProviderId() {

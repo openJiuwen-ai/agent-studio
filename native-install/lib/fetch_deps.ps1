@@ -33,8 +33,25 @@ function Download($url, $sha, $out){
   if ($env:GITHUB_MIRROR -and $url -like 'https://github.com/*') { $url = "$env:GITHUB_MIRROR$url" }
   # 须用嵌套 if 而非 -and：PowerShell 的 -and 不保证短路右侧 cmdlet 调用，
   # Get-Item 在文件不存在时仍会执行，抛 ItemNotFound 叠加 Stop 偏好即致命退出。
+  # 缓存指纹（$out.src）：缓存文件名不含版本号（如 redis-linux.rpm），依赖改版本时
+  # （如 redis 7.4.2→7.0.14）防止旧文件被同名误命中——指纹不匹配即重新下载。
   $cached = $false
-  if (Test-Path $out -PathType Leaf) { if ((Get-Item $out).Length -gt 0) { $cached = $true } }
+  $srcMark = "$out.src"
+  if (Test-Path $out -PathType Leaf) {
+    if ((Get-Item $out).Length -gt 0) {
+      $cached = $true
+      if (Test-Path $srcMark -PathType Leaf) {
+        if ((Get-Content $srcMark -Raw).Trim() -ne $url) {
+          $cached = $false
+          D-Log "  缓存指纹不匹配（依赖版本变更），重新下载: $(Split-Path $out -Leaf)"
+        }
+      } else {
+        # 历史缓存无指纹：补写当前指纹并沿用（避免存量缓存全量重下；沿用即认定其版本
+        # 与当前 versions.env 一致，此后任何版本变更都受指纹保护）
+        [System.IO.File]::WriteAllText($srcMark, $url)
+      }
+    }
+  }
   if ($cached) { D-Log "  缓存命中: $(Split-Path $out -Leaf)" }
   else {
     D-Log "  下载: $url"
@@ -49,6 +66,7 @@ function Download($url, $sha, $out){
     } else {
       try { Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing } catch { D-Die "下载失败: $url" }
     }
+    [System.IO.File]::WriteAllText($srcMark, $url)
   }
   if ($sha) {
     $got = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()

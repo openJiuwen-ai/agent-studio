@@ -5,6 +5,8 @@
 package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CopyWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -17,6 +19,7 @@ import com.openjiuwen.studio.agent.manager.dto.GetWorkflowVersionQo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsV1Qo;
 import com.openjiuwen.studio.agent.common.dto.agent.ListWorkflowsQo;
@@ -26,6 +29,7 @@ import com.openjiuwen.studio.agent.manager.dto.ValidateWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkFlowEnvs;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFrontParamInfo;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowInfo;
@@ -79,9 +83,33 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "配置触发器。", required = true) @Valid @RequestBody TriggerConfig body);
+
+    @ApiOperation(value = "批量删除工作流版本", nickname = "batchDeleteWorkflowVersions", notes = "批量删除工作流版本。",
+        response = BatchDeleteVersionsResponseBody.class, tags = {"WorkflowManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "批量删除工作流版本响应。", response = BatchDeleteVersionsResponseBody.class),
+        @ApiResponse(code = 400, message = "请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "鉴权失败。", response = String.class),
+        @ApiResponse(code = 403, message = "没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<BatchDeleteVersionsResponseBody> batchDeleteWorkflowVersions(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
+        @PathVariable("workflow_id") String workflowId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "批量删除工作流版本请求。", required = true) @Valid @RequestBody
+        BatchDeleteVersionsRequestBody body);
 
     @ApiOperation(value = "复制工作流", nickname = "copyWorkflow", notes = "复制工作流。", response = WorkflowInfo.class,
         tags = {"WorkflowManagement"})
@@ -114,7 +142,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "工作流请求信息。", required = true) @Valid @RequestBody WorkflowInfo body);
 
@@ -132,7 +160,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @NotNull @ApiParam(value = "创建workflow版本通道请求。", required = true) @Valid @RequestBody
         CreateChannelReq body);
 
@@ -151,7 +179,7 @@ import org.springframework.web.multipart.MultipartFile;
     @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("trigger_id")
     String triggerId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "刪除工作流", nickname = "deleteWorkflow", notes = "刪除工作流。",
@@ -172,7 +200,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除一个workflow版本通道", nickname = "deleteWorkflowChannel",
@@ -191,7 +219,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("channel_id") String channelId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除一个workflow版本快照", nickname = "deleteWorkflowVersion",
@@ -214,7 +242,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("version_id") String versionId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "工作流编辑触发器", nickname = "editTrigger", notes = "工作流编辑触发器。",
@@ -231,7 +259,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "配置触发器。", required = true) @Valid @RequestBody TriggerConfig body);
 
@@ -251,7 +279,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "导出参数设置。", required = true) @Valid @RequestBody ExportParams body);
 
@@ -269,7 +297,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取工作流详情", nickname = "getWorkflow", notes = "获取工作流详情。",
@@ -286,7 +314,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取一个workflow中的渠道变量", nickname = "getWorkflowEnvs",
@@ -339,7 +367,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "workflow ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取一个workflow版本定义", nickname = "getWorkflowVersion",
@@ -379,7 +407,7 @@ import org.springframework.web.multipart.MultipartFile;
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ImportRsp> importWorkflows(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
@@ -425,6 +453,28 @@ import org.springframework.web.multipart.MultipartFile;
         @PathVariable("project_id") String projectId,
         @ApiParam(value = "ListWorkflowLastVersionsQo: converted from multi query params") @Valid
         ListWorkflowLastVersionsQo listWorkflowLastVersionsQo);
+
+    @ApiOperation(value = "查询工作流各版本引用数量", nickname = "listWorkflowVersionReferences",
+        notes = "查询工作流各版本引用数量。", response = VersionReferenceListRsp.class, tags = {"WorkflowManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "版本引用数量列表。", response = VersionReferenceListRsp.class),
+        @ApiResponse(code = 400, message = "请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "鉴权失败。", response = String.class),
+        @ApiResponse(code = 403, message = "没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<VersionReferenceListRsp> listWorkflowVersionReferences(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
+        @PathVariable("workflow_id") String workflowId,
+        @ApiParam(value = "ListWorkflowVersionReferencesQo: converted from multi query params") @Valid
+        ListWorkflowVersionReferencesQo listWorkflowVersionReferencesQo);
 
     @ApiOperation(value = "查询工作流版本列表", nickname = "listWorkflowVersions", notes = "查询工作流版本列表。",
         response = VersionListRsp.class, tags = {"WorkflowManagement"})
@@ -495,7 +545,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Size(max = 128) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("channel_id") String channelId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "修改版本通道请求体。") @Valid @RequestBody(required = false) ModifyChannelReq body);
 
@@ -510,10 +560,10 @@ import org.springframework.web.multipart.MultipartFile;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/import/parse", produces = {"application/json"},
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<WorkflowInfo> parseThirdpartyWorkflowFile(@NotNull @Size(min = 1, max = 64)
-        @ApiParam(value = "第三方工作流类型", required = true, allowableValues = "Dify")
+        @Parameter(in = ParameterIn.QUERY, description = "第三方工作流类型", required = true, schema = @Schema()) @ApiParam(value = "第三方工作流类型", required = true, allowableValues = "Dify")
         @RequestParam(value = "type", required = true) String type,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
@@ -534,7 +584,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "发布工作流版本", nickname = "releaseWorkflowVersion", notes = "发布工作流版本。",
@@ -555,7 +605,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @ApiParam(value = "") @Valid @RequestBody(required = false) CreateVersionReq body);
 
     @ApiOperation(value = "发布工作流版本V1", nickname = "releaseWorkflowVersionV1", notes = "发布工作流版本。",
@@ -576,7 +626,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @ApiParam(value = "") @Valid @RequestBody(required = false) CreateVersionReq body);
 
     @ApiOperation(value = "设置工作流试运行状态", nickname = "setWorkflowTestStatus", notes = "设置工作流试运行状态。",
@@ -593,9 +643,9 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
-        @NotNull @ApiParam(value = "是否试运行成功。", required = true) @RequestParam(value = "success", required = true)
+        @NotNull @Parameter(in = ParameterIn.QUERY, description = "是否试运行成功。", required = true, schema = @Schema()) @ApiParam(value = "是否试运行成功。", required = true) @RequestParam(value = "success", required = true)
         Boolean success);
 
     @ApiOperation(value = "修改工作流", nickname = "updateWorkflow", notes = "修改工作流。",
@@ -616,7 +666,7 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "工作流请求信息。", required = true) @Valid @RequestBody WorkflowInfo body);
 

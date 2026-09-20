@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.NotBlank;
 
@@ -24,6 +25,7 @@ public class DataImportBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file")
+    @Schema(description = "文件", example = "", required = true)
     @NotBlank
     private Resource file = null;
 

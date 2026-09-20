@@ -1,6 +1,6 @@
 /* eslint-disable eslint-comments/disable-enable-pair */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Output, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
 import { I18nNamespace } from '@i18n';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
@@ -25,8 +25,6 @@ import { AccBlockComponent } from '../acc-block/acc-block.component';
 import { ModalBaseComponent } from '../base/modal-base.component';
 import { SetDefaultComponent } from '../set-default/set-default.component';
 import { NodeUtils } from '../utils';
-import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
-import { EnvVariableComponent } from "@routes/platform-management/environment-management/env-variable/env-variable.component";
 
 @Component({
   selector: 'multi-agent-config-modal',
@@ -42,7 +40,6 @@ import { EnvVariableComponent } from "@routes/platform-management/environment-ma
     SetDefaultComponent,
     MemoryLibSelector,
     LengthValidatorDirective,
-    EnvVariableComponent,
   ],
   providers: [
     {
@@ -58,15 +55,12 @@ export class MultiAgentConfigComponent extends ModalBaseComponent implements OnI
 
   @Input() memoryConfig: any;
 
-  @Input() environment = '';
-
   @Input() flowId: string;
 
   @Output() configsChange = new EventEmitter<{
     inputs: IWorkflowField[];
     global_variables: IWorkflowField[];
     memory_config: IMemoryLibBaseInfo | null;
-    environment: string;
   }>();
 
   @ViewChild('inputsForm') inputsForm: NgForm;
@@ -82,12 +76,6 @@ export class MultiAgentConfigComponent extends ModalBaseComponent implements OnI
   public inputParams: IWorkflowField[] = [];
 
   public variables: IWorkflowField[] = [];
-
-  public envCfgOptions: any = [];
-
-  public selectEnv = '';
-
-  public showCard = false;
 
   public memoryLibData: {
     enable: boolean;
@@ -109,8 +97,6 @@ export class MultiAgentConfigComponent extends ModalBaseComponent implements OnI
     protected override appFlowServ: AppFlowService,
     protected override nodeServ: NodeService,
     public configServ: AgentConfigService,
-    private environmentManagementService: EnvManagementService,
-    private el: ElementRef
   ) {
     super(nodeServ, appFlowServ);
   }
@@ -121,28 +107,6 @@ export class MultiAgentConfigComponent extends ModalBaseComponent implements OnI
     this.inputParams = cloneDeep(this.inputs ?? []);
     this.variables = cloneDeep(this.globalVariables ?? []);
     this.memoryLibData.data = this.memoryConfig?.memory_repo_id ? [this.memoryConfig] : [];
-    this.selectEnv = this.environment || '';
-    this.getInitEnvOptions();
-  }
-
-  getInitEnvOptions() {
-    this.envCfgOptions = [];
-
-    this.environmentManagementService
-      .getEnvironmentList({
-        offset: 0,
-        limit: 99
-      })
-      .then((res) => {
-        const selectEnv = res.env_info?.find((item) => item.id === this.selectEnv);
-        if (!selectEnv && this.selectEnv) {
-          this.selectEnv = '';
-        }
-        this.envCfgOptions = res?.env_info?.map((item) => {
-          item.disabled = item.status !== 'READY';
-          return item;
-        });
-      });
   }
 
   get removeSysFromInputs() {
@@ -176,7 +140,6 @@ export class MultiAgentConfigComponent extends ModalBaseComponent implements OnI
       inputs: this.inputParams,
       global_variables: this.variables,
       memory_config: this.memoryLibData.data[0],
-      environment: this.selectEnv || '',
     });
   }
 
@@ -263,27 +226,6 @@ export class MultiAgentConfigComponent extends ModalBaseComponent implements OnI
       this.memoryLibData.data = [updatedData];
     }
     halfModalRef?.destroy?.(reason);
-  }
-
-  envSelect($event) {
-    this.showCard = false;
-  }
-
-  ngModelChange($event) {
-    this.showCard = false;
-  }
-
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: Event) {
-    if (!this.showCard) return;
-
-    const target = event.target as HTMLElement;
-    const button = this.el.nativeElement.querySelector('button[nz-button]');
-    const card = this.el.nativeElement.querySelector('.card');
-
-    if (!(button?.contains(target) || card?.contains(target))) {
-      this.showCard = false;
-    }
   }
 
   protected readonly memoryLibSelectorTipType = MemoryLibSelectorTipType;

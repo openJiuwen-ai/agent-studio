@@ -55,7 +55,8 @@ node_type_mapping = {
     CustomNode.PARAM_OUTPUT.value: "ParamOutput",
     CustomNode.HTTP.value: "Http",
     CustomNode.LTM.value: "LTM",
-    CustomNode.SQL.value: "DataQuery",
+    CustomNode.SQL.value: "Sql",
+    "jiuwen.sql": "Sql",
     # Component class names (from workflow_stream_data_wrapper)
     "LLMChain": "LLM",
     "FlowQA": "QA",

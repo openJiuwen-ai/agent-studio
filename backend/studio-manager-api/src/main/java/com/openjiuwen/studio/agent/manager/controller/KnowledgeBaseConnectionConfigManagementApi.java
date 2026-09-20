@@ -81,13 +81,18 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Min(0) @Max(10000)
+        @Parameter(in = ParameterIn.QUERY, description = "分页记录的起始位置偏移量,默认值0", required = false, schema = @Schema())
         @ApiParam(value = "分页记录的起始位置偏移量,默认值0", allowableValues = "0, 10000", defaultValue = "0")
         @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset,
-        @Min(1) @Max(1000) @ApiParam(value = "每一页的数量,默认10", allowableValues = "1, 1000", defaultValue = "10")
+        @Min(1) @Max(1000)
+        @Parameter(in = ParameterIn.QUERY, description = "每一页的数量,默认10", required = false, schema = @Schema())
+        @ApiParam(value = "每一页的数量,默认10", allowableValues = "1, 1000", defaultValue = "10")
         @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit);
 
     @ApiOperation(value = "查询默认知识库连接详情", nickname = "showDefaultKnowledgeBaseConnection",
-        notes = "查询默认知识库连接详情", response = ShowDefaultKnowledgeBaseConnectionDetailResponseBody.class,
+        notes = "查询当前环境配置的默认知识库连接：kb_connection_id 为固定占位值（default_lakesearch_inside_connection_id），"
+            + "返回环境支持（按连接器类型配置）的第一个已配置默认连接；未配置时 knowledge_base_connection_detail 为 null，表示默认连接未配置",
+        response = ShowDefaultKnowledgeBaseConnectionDetailResponseBody.class,
         tags = {"KnowledgeBaseConnectionConfigManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "知识库",
@@ -104,8 +109,8 @@ import org.springframework.web.bind.annotation.RequestParam;
     ResponseEntity<ShowDefaultKnowledgeBaseConnectionDetailResponseBody> showDefaultKnowledgeBaseConnection(
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "知识库连接id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,         @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "知识库连接id（固定占位值：default_lakesearch_inside_connection_id）", required = true, schema = @Schema())
         @PathVariable("kb_connection_id") String kbConnectionId);
 
     @ApiOperation(value = "用于测试默认知识库连接是否正常", nickname = "testDefaultKnowledgeBaseConnection",

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,58 +32,72 @@ public class ListToolsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 10000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "限制数量", example = "20")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 1000;
 
     @JsonProperty("id")
+    @Schema(description = "ID", example = "tool_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("ids")
+    @Schema(description = "ID列表", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> ids = null;
 
     @JsonProperty("en_name")
+    @Schema(description = "英文名称", example = "my_tool")
     @Length(max = 64)
     private String enName = null;
 
     @JsonProperty("cn_name")
+    @Schema(description = "中文名称", example = "我的工具")
     @Length(max = 64)
     private String cnName = null;
 
     @JsonProperty("desc")
+    @Schema(description = "描述", example = "工具描述")
     @Length(max = 256)
     private String desc = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "plugin")
     @Length(max = 32)
     private String type = null;
 
     @JsonProperty("intf_type")
+    @Schema(description = "接口类型", example = "rest")
     private String intfType = null;
 
     @JsonProperty("published")
+    @Schema(description = "是否已发布", example = "true")
     private Boolean published = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user_001")
     @Length(max = 64)
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     @Length(max = 64)
     private String creatorId = null;
 

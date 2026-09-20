@@ -222,12 +222,16 @@ class FastRedisCheckpointer(Checkpointer):
     # ── Internal helpers ────────────────────────────────────────
 
     async def _clear_checkpoint_and_sentinel(
-        self, session_id: str, workflow_id: str, session
+        self, session_id: str, workflow_id: str, session=None
     ):
         """Clear GraphStore keys, remove workflow_id from sentinel SET, and workflow storage.
 
         Used for both normal completion and WorkflowAbortException (异常结束节点),
         which should both result in a clean slate for the next run.
+
+        session is optional — release_workflow() calls this without a session
+        object; in that case delegate fallback paths are skipped (precise
+        deletion failure is logged instead).
 
         Only removes the given workflow_id from the sentinel SET — other workflows
         in the same session (e.g., the main workflow when a sub-workflow completes)
@@ -286,10 +290,14 @@ class FastRedisCheckpointer(Checkpointer):
                     try:
                         await graph_state.delete(session_id, workflow_id)
                     except Exception:
-                        await self._delegate.post_workflow_execute(session, {}, None)
+                        await self._delegate_fallback_clear(
+                            session_id, workflow_id, session
+                        )
                         return
                 else:
-                    await self._delegate.post_workflow_execute(session, {}, None)
+                    await self._delegate_fallback_clear(
+                        session_id, workflow_id, session
+                    )
                     return
         else:
             probe_key = build_key_with_namespace(
@@ -317,16 +325,25 @@ class FastRedisCheckpointer(Checkpointer):
         # QA 的 _load_state_from_session 从 comp_state 读到旧的 USER_INTERACT，
         # 走恢复路径而非新开始路径，不生成问题文本。
         # conversationHistory 不受影响——下一轮 Start 节点从 inputs（请求传入）重建。
-        try:
-            await self._redis.delete(session_id)
+        # 注意：bare key 是 session 级共享的。若 session 内还有其他工作流持有
+        # 中断 checkpoint（哨兵 SET 存在别的成员），不能删——否则其他中断工作流
+        # 恢复时会丢失组件状态（如嵌套子工作流的中断上下文）。
+        if await self._session_has_other_checkpoints(session_id, workflow_id):
             workflow_logger.info(
-                f"FastRedisCheckpointer: deleted bare session key for "
-                f"session {session_id}"
+                f"FastRedisCheckpointer: skip bare session key delete for "
+                f"session {session_id}, other workflows still hold checkpoints"
             )
-        except Exception as e:
-            workflow_logger.warning(
-                f"FastRedisCheckpointer: bare session key delete failed: {e}"
-            )
+        else:
+            try:
+                await self._redis.delete(session_id)
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: deleted bare session key for "
+                    f"session {session_id}"
+                )
+            except Exception as e:
+                workflow_logger.warning(
+                    f"FastRedisCheckpointer: bare session key delete failed: {e}"
+                )
 
         # Remove this workflow_id from the sentinel SET (not the whole SET)
         # Redis auto-deletes the key when the last member is removed, so no
@@ -355,14 +372,68 @@ class FastRedisCheckpointer(Checkpointer):
                     f"falling back to full delegate post_workflow_execute for session "
                     f"{session_id}, workflow {workflow_id}: {e}"
                 )
-                await self._delegate.post_workflow_execute(session, {}, None)
+                await self._delegate_fallback_clear(session_id, workflow_id, session)
         else:
             workflow_logger.warning(
                 f"FastRedisCheckpointer: workflow_storage not accessible on delegate, "
                 f"falling back to full delegate post_workflow_execute for session "
                 f"{session_id}, workflow {workflow_id}"
             )
-            await self._delegate.post_workflow_execute(session, {}, None)
+            await self._delegate_fallback_clear(session_id, workflow_id, session)
+
+    async def _delegate_fallback_clear(self, session_id, workflow_id, session) -> None:
+        """Fallback to the delegate's full clear path when precise deletion fails.
+
+        Skipped when session is None (release_workflow path) — precise deletion
+        failure is already logged by the caller.
+        """
+        if session is None:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: delegate fallback unavailable "
+                f"(no session object) for session {session_id}, "
+                f"workflow {workflow_id}"
+            )
+            return
+        await self._delegate.post_workflow_execute(session, {}, None)
+
+    async def _session_has_other_checkpoints(
+        self, session_id: str, workflow_id: str
+    ) -> bool:
+        """Check whether other workflows in this session still hold checkpoints.
+
+        Used to guard session-wide shared resources (e.g., the bare session
+        key) from being deleted while another workflow's interrupt checkpoint
+        is still alive.
+        """
+        try:
+            members = await self._redis.smembers(_sentinel_key(session_id))
+        except Exception as e:
+            # 查询失败时保守视为存在其他 checkpoint，跳过 bare key 删除：
+            # 误保留会在其他工作流的 checkpoint 清理时自愈（届时守卫正常执行），
+            # 而误删除会丢掉同会话其他中断工作流的会话级 comp_state 上下文
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: sentinel SMEMBERS failed for "
+                f"session {session_id}, skipping bare session key delete: {e}"
+            )
+            return True
+        for member in members:
+            if isinstance(member, bytes):
+                member = member.decode("utf-8")
+            if member and member != workflow_id:
+                return True
+        return False
+
+    async def release_workflow(self, session_id: str, workflow_id: str) -> None:
+        """Release checkpoint state for a single workflow within a session.
+
+        Unlike release(session_id) — which deletes ALL checkpoint keys of the
+        session — this only clears the graph state (NS filtered by workflow_id,
+        including sub-workflow scoped NS like {main}|{node}|{sub}), workflow
+        state and sentinel membership belonging to workflow_id. Interrupt
+        checkpoints of OTHER workflows in the same session are preserved so
+        they can still be resumed.
+        """
+        await self._clear_checkpoint_and_sentinel(session_id, workflow_id, None)
 
     # ── Delegate pass-through methods ───────────────────────────
 

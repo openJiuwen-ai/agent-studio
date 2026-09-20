@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,33 +26,42 @@ public class ReleaseInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("app_id")
+    @Schema(description = "应用ID", example = "app_001", required = true)
     @NotBlank
     private String appId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     private String workspaceId = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "chat", required = true)
     @NotBlank
     private String appType = null;
 
     @JsonProperty("version_id")
+    @Schema(description = "版本ID", example = "v1.0.0", required = true)
     @NotBlank
     private String versionId = null;
 
     @JsonProperty("channel_type")
+    @Schema(description = "渠道类型", example = "web")
     private String channelType = null;
 
     @JsonProperty("short_code")
+    @Schema(description = "短码", example = "abc123")
     private String shortCode = null;
 
     @JsonProperty("visibility_scope")
+    @Schema(description = "可见范围", example = "public")
     private String visibilityScope = null;
 
     @JsonProperty("call_count")
+    @Schema(description = "调用次数", example = "100")
     private Integer callCount = null;
 
     public String getAppId() {

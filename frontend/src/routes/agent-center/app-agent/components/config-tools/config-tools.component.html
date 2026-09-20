@@ -17,7 +17,7 @@
                     style="width: 100%;"
                     [selectedModel]="modelConfig.model_deployment_id"
                     [clearable]="false"
-                    [disableEnvPlaceholderModels]="true"
+                    [disableEnvPlaceholderModels]="!hasDefaultEnv"
                     (update)="changeModelSelected($event)"
                   ></llm-select>
                 </div>
@@ -118,6 +118,7 @@
                         pluginItem.app_last_version_obj &&
                         pluginItem.resource_version &&
                         pluginItem.app_last_version_obj.valid &&
+                        pluginItem.app_last_version_obj.resource_latest_version &&
                         pluginItem.app_last_version_obj.resource_latest_version !==
                         pluginItem.resource_version
                       "

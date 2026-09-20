@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.mapper;
 
 import com.openjiuwen.studio.agent.manager.dto.ResourceMapping;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceCount;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -140,6 +141,20 @@ public interface MappingMapper {
         @Param("appType") String appType, @Param("referenceType") String referenceType);
 
     /**
+     * 按资源版本分组统计有效引用数量
+     * 引用方可能是智能体（含多智能体）或工作流，需JOIN两张表过滤引用方workspace；
+     * 共享引用按资源原空间（resource_workspace_id）过滤；
+     * resource_version为NULL的latest引用不统计
+     *
+     * @param resourceId 资源ID
+     * @param workspaceId 工作空间ID
+     * @param resourceVersion 资源版本，传null统计所有版本
+     * @return 版本引用数量列表
+     */
+    List<VersionReferenceCount> countReferenceByResourceId(@Param("resourceId") String resourceId,
+        @Param("workspaceId") String workspaceId, @Param("resourceVersion") String resourceVersion);
+
+    /**
      * 更新指定资源的valid为false
      *
      * @param resourceId 资源ID
@@ -148,6 +163,22 @@ public interface MappingMapper {
      */
     int updateValidByResourceIdAndVersionId(@Param("resourceId") String resourceId,
         @Param("resourceVersion") String resourceVersion);
+
+    /**
+     * 删除资源版本后回退引用方的版本号：仅当引用记录的resource_version仍等于被删版本号时，
+     * 才将其更新为newResourceVersion（剩余最新版本号，或版本全部删除时为null，null表示跟随最新版本）。
+     * 采用条件更新（CAS）语义，仅更新仍指向被删版本的引用，不影响并发产生的新版本引用；
+     * 仅处理草稿引用（app_version为null），已发布版本快照是不可变历史记录不做改动
+     * （与deleteAgentVersion只删自身快照行的语义一致），避免运行时下载已删版本的DSL。
+     *
+     * @param resourceId 资源ID
+     * @param expectedResourceVersion 被删除的版本号
+     * @param newResourceVersion 回退到的版本号（版本全部删除时为null）
+     * @return 更新数量
+     */
+    int updateResourceVersionIfMatch(@Param("resourceId") String resourceId,
+        @Param("expectedResourceVersion") String expectedResourceVersion,
+        @Param("newResourceVersion") String newResourceVersion);
 
     int updateByPrimaryKeySelective(MappingEntity mappingEntity);
 

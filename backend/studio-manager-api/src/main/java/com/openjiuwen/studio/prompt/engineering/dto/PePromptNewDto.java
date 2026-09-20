@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,20 +27,25 @@ public class PePromptNewDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-()（）]{0,32}[\\u4e00-\\u9fa5a-zA-Z0-9()（）]$")
     @Length(max = 256)
     private String name = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     private String content = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "2024-01-01T00:00:00.000Z")
     private String updater = null;
 
     public String getName() {

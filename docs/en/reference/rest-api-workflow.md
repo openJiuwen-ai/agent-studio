@@ -14,6 +14,8 @@
 8. [Import Workflow](#8-import-workflow)
 9. [Export Workflow](#9-export-workflow)
 10. [Parse Import File](#10-parse-import-file)
+11. [Batch Query Workflow Version References](#11-batch-query-workflow-version-references)
+12. [Batch Delete Workflow Versions](#12-batch-delete-workflow-versions)
 
 ---
 
@@ -873,6 +875,183 @@ file=@dify_workflow.yml
     "nodes": [],
     "edges": []
   }
+}
+```
+
+---
+
+## 11. Batch Query Workflow Version References
+
+**Description**
+
+This API is used to query the reference count of each version of a specified workflow application, with optional filtering by version ID. The reference count includes workflows in the current workspace that directly reference the version, as well as usages of the version through sharing. Versions shared to the asset plaza are marked with `is_shared` as `true`, and the latest version is marked with `is_latest` as `true`.
+
+**URI**
+
+```
+GET /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references?workspace_id={workspace_id}
+```
+
+**Path Parameters**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| project_id | Yes | String | Tenant project ID |
+| workflow_id | Yes | String | Workflow ID |
+
+**Query Parameters**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| workspace_id | Yes | String | Workspace ID |
+| version_id | No | String | Version ID. If not specified, reference counts of all versions are returned |
+
+**Request Headers**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| X-Auth-Token | Yes | String | User token |
+
+**Response Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| version_references | Array of VersionReference | List of version reference counts |
+
+**VersionReference**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| version_id | String | Version ID |
+| version_name | String | Version name |
+| reference_count | Long | Reference count |
+| is_shared | Boolean | Whether shared to the asset plaza |
+| is_latest | Boolean | Whether it is the latest version |
+
+**Request Example**
+
+```
+GET /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references?workspace_id={workspace_id} HTTP/1.1
+Host: api.example.com
+X-Auth-Token: {token}
+```
+
+**Response Example**
+
+```json
+{
+  "version_references": [
+    {
+      "version_id": "1787901244768",
+      "version_name": "v1.0.0",
+      "reference_count": 1,
+      "is_shared": false,
+      "is_latest": true
+    },
+    {
+      "version_id": "1787800848138",
+      "version_name": "v0.9.0",
+      "reference_count": 0,
+      "is_shared": true,
+      "is_latest": false
+    }
+  ]
+}
+```
+
+---
+
+## 12. Batch Delete Workflow Versions
+
+**Description**
+
+This API is used to batch delete versions of a specified workflow application, using a partial-success mode: when a single version fails to be deleted (e.g., the version is shared or does not exist), only that version is added to the failed list and its own changes are rolled back, without affecting the deletion of other versions. Versions shared to the asset plaza cannot be deleted directly and must be unshared first.
+
+**URI**
+
+```
+POST /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete?workspace_id={workspace_id}
+```
+
+**Path Parameters**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| project_id | Yes | String | Tenant project ID |
+| workflow_id | Yes | String | Workflow ID |
+
+**Query Parameters**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| workspace_id | Yes | String | Workspace ID |
+
+**Request Headers**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| X-Auth-Token | Yes | String | User token |
+
+**Request Parameters**
+
+| Parameter | Required | Type | Description |
+|-----------|----------|------|-------------|
+| version_ids | Yes | Array of String | List of version IDs to delete, 1 to 20 items, each item a numeric string |
+
+**Response Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| total_count | Integer | Total number of versions submitted for deletion |
+| deleted_count | Integer | Number of versions successfully deleted |
+| success | Array of String | List of successfully deleted version IDs |
+| failed | Array of FailedInfo | List of failed version details |
+
+**FailedInfo**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| version_id | String | Version ID |
+| error_code | String | Error code, e.g., `SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY` (shared version cannot be deleted directly), `WORKFLOW_VERSION_NOT_FOUND` (version does not exist) |
+| error_msg | String | Error message |
+
+**Status Codes**
+
+| Status Code | Description |
+|--------|------|
+| 200 | Request accepted. Per-version deletion results are returned in `success` and `failed` |
+| 400 | Invalid request, e.g., `version_ids` is empty, exceeds 20 items, or has an invalid format |
+| 403 | No operation permission |
+| 404 | Workflow does not exist |
+| 500 | Internal service error |
+
+**Request Example**
+
+```
+POST /v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete?workspace_id={workspace_id} HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+X-Auth-Token: {token}
+
+{
+  "version_ids": ["1787800848138", "1787901244768"]
+}
+```
+
+**Response Example**
+
+```json
+{
+  "total_count": 2,
+  "deleted_count": 1,
+  "success": ["1787901244768"],
+  "failed": [
+    {
+      "version_id": "1787800848138",
+      "error_code": "SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY",
+      "error_msg": "Shared resources cannot be deleted directly"
+    }
+  ]
 }
 ```
 

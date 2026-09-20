@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,30 +29,38 @@ public class ControllerIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("schemaVersion")
+    @Schema(description = "Schema版本", example = "1.0")
     private String schemaVersion = null;
 
     @JsonProperty("agentId")
+    @Schema(description = "Agent ID", example = "agent_001")
     private String agentId = null;
 
     @JsonProperty("agentVersion")
+    @Schema(description = "Agent版本", example = "1.0.0")
     private String agentVersion = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "这是一个Agent")
     private String description = null;
 
     @JsonProperty("agentName")
+    @Schema(description = "Agent名称", example = "my_agent")
     private String agentName = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入参数列表", example = "[]")
     @Valid
     @Size()
     private List<ControllerParamIR> inputs = null;
 
     @JsonProperty("configs")
+    @Schema(description = "配置", example = "{}")
     @Valid
     private ControllerConfigIR configs = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> metadata = null;

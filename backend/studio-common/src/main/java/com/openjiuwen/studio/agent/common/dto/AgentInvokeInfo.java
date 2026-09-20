@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -24,42 +26,53 @@ public class AgentInvokeInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node-001")
     @Length(max = 128)
     private String nodeId = null;
 
     @JsonProperty("node_name")
+    @Schema(description = "节点名称", example = "LLM调用节点")
     @Length(max = 128)
     private String nodeName = null;
 
     @JsonProperty("node_type")
+    @Schema(description = "节点类型", example = "llm")
     @Length(max = 32)
     private String nodeType = null;
 
     @JsonProperty("node_status")
+    @Schema(description = "节点状态", example = "success")
     private String nodeStatus = null;
 
     @JsonProperty("model_deployment_id")
+    @Schema(description = "模型部署ID", example = "deploy-001")
     private String modelDeploymentId = null;
 
     @JsonProperty("error_message")
+    @Schema(description = "错误信息", example = "null")
     @Length(max = 4096)
     private String errorMessage = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "输入信息", example = "{}")
     @Valid
     private Object inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出信息", example = "{}")
     @Valid
     private Object outputs = null;
 
     @JsonProperty("start_time")
+    @Schema(description = "开始时间（时间戳，毫秒）", example = "1710000000000")
     private Long startTime = null;
 
     @JsonProperty("end_time")
+    @Schema(description = "结束时间（时间戳，毫秒）", example = "1710000005000")
     private Long endTime = null;
 
     @JsonProperty("meta_data")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     private Object metaData = null;
 

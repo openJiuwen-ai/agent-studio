@@ -223,6 +223,9 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
                 if (CollectionUtils.isEmpty(environmentManagerEntities)) {
                     int result = environmentManagerMapper.updateIsDefaultById(envInfo.getId(),
                         true, null);
+                    if (result > 0) {
+                        environmentCacheUtil.updateDefaultEnvironmentCache(envInfo.getProjectId(), envInfo.getId());
+                    }
                 }
             }
         } catch (Exception exception) {
@@ -325,10 +328,13 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
             List<EnvironmentManagerEntity> isDefaultFase
                 = environmentManagerMapper.findByProjectIdAndIsDefaultFalseAndStatus(projectId, READY.getValue());
             if (CollectionUtils.isEmpty(isDefaultFase)) {
+                // 项目环境全部删除，清除默认环境缓存
+                environmentCacheUtil.deleteDefaultEnvironmentCache(projectId);
                 return true;
             }
             environmentManagerMapper.updateIsDefaultById(isDefaultFase.get(0).getId(),
                 true, CommonUtil.getUserId());
+            environmentCacheUtil.updateDefaultEnvironmentCache(projectId, isDefaultFase.get(0).getId());
             return true;
         } catch (Exception e) {
             throw new AgentStudioException(ENVIRONMENT_DELETE_FAIL);
@@ -365,6 +371,8 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         if (result <= 0) {
             throw new AgentStudioException(ENVIRONMENT_DEFAULT_SET_FAIL);
         }
+        // 同步项目默认环境缓存，runtime 直连时按 project_id 读取
+        environmentCacheUtil.updateDefaultEnvironmentCache(projectId, environmentId);
         return true;
     }
 
@@ -483,7 +491,17 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         if (offset < 0) {
             offset = 0;
         }
-        List<EnvironmentManagerEntity> environmentManagerEntities = environmentManagerMapper.selectAll(projectId, offset, limit);
+        String name = queryEnvironmentsListQo.getName();
+        List<EnvironmentManagerEntity> environmentManagerEntities;
+        if (Boolean.TRUE.equals(queryEnvironmentsListQo.getIsDefault())) {
+            // 按默认环境过滤：与运行时默认环境兜底解析（AgentServiceProxyService.resolveEnvironmentId
+            // 走的 findByProjectIdAndIsDefaultTrue）同源，前端据此判断"是否存在默认环境"时
+            // 不受分页截断影响（列表按 created_on 倒序分页，默认环境可能不在第一页）；
+            // 默认环境项目内唯一，忽略 offset/limit
+            environmentManagerEntities = environmentManagerMapper.findByProjectIdAndIsDefaultTrue(projectId);
+        } else {
+            environmentManagerEntities = environmentManagerMapper.selectByConditionWithPage(name, projectId, offset, limit);
+        }
         List<Environment> envInfoList = null;
         if (!environmentManagerEntities.isEmpty()) {
             envInfoList = environmentManagerEntities.stream().map(entity -> {
@@ -519,7 +537,12 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
             }).toList();
         }
         Environments environments = new Environments();
-        environments.setTotal(environmentManagerEntities.size());
+        if (Boolean.TRUE.equals(queryEnvironmentsListQo.getIsDefault())) {
+            // 默认环境单条返回，total 即 0/1
+            environments.setTotal(environmentManagerEntities.size());
+        } else {
+            environments.setTotal(environmentManagerMapper.countByCondition(name, projectId));
+        }
         environments.setEnvInfo(envInfoList);
         return environments;
     }

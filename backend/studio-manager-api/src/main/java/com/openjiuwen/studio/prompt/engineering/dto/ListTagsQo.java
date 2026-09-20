@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -27,16 +28,19 @@ public class ListTagsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "50", required = true)
     @NotNull
     @Range(min = 1L, max = 1000L)
     private Integer limit = 50;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0", required = true)
     @NotNull
     @Range(min = 0L, max = 100000L)
     private Integer offset = 0;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @NotBlank
     private String workspaceId = null;
 

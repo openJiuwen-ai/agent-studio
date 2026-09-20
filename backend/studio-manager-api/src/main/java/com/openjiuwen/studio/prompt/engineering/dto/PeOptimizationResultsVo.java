@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -27,43 +28,56 @@ public class PeOptimizationResultsVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("total")
+    @Schema(description = "总数", example = "100")
     private Integer total = null;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10")
     private Integer count = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("dataset_name")
+    @Schema(description = "数据集名称", example = "示例名称")
     private String datasetName = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "running")
     private String status = null;
 
     @JsonProperty("best_prompt")
+    @Schema(description = "最佳提示词", example = "优化后的提示词内容")
     private String bestPrompt = null;
 
     @JsonProperty("error_msg")
+    @Schema(description = "错误信息", example = "")
     private String errorMsg = null;
 
     @JsonProperty("progress_rate")
+    @Schema(description = "进度百分比", example = "50.0")
     private Double progressRate = null;
 
     @JsonProperty("num_iter")
+    @Schema(description = "迭代次数", example = "3")
     private String numIter = null;
 
     @JsonProperty("prompts")
+    @Schema(description = "提示词列表", example = "")
     @Valid
     private List<PeOptimizationResultVo> prompts = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private Date createdOn = null;
 
     public Integer getTotal() {

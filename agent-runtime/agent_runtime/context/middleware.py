@@ -120,6 +120,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             customer_headers=customer_headers,
             platform_headers=platform_headers,
+            ir_load_cache={},
         )
 
         # 从 X-Auth-Token 或 AGENT_SID cookie 解析 user_id（格式: userId|projectId）

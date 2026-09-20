@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 
 import jakarta.validation.Valid;
@@ -26,38 +27,47 @@ public class WorkflowRunInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("parent_workflow_id")
+    @Schema(description = "父工作流ID", example = "wf_001")
     @Length(max = 32)
     private String parentWorkflowId = null;
 
     @JsonProperty("status")
+    @Schema(description = "运行状态", example = "running")
     @Valid
     private Status status = null;
 
     @JsonProperty("error_code")
+    @Schema(description = "错误码", example = "WF.0001")
     @Length(max = 256)
     private String errorCode = null;
 
     @JsonProperty("error_message")
+    @Schema(description = "错误信息", example = "工作流执行失败")
     @Length(max = 4096)
     private String errorMessage = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "输出结果", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> outputs = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     @Size()
     private Map<String, Object> metadata = null;
 
     @JsonProperty("start_time")
+    @Schema(description = "开始时间", example = "1717200000000")
     private Long startTime = null;
 
     @JsonProperty("end_time")
+    @Schema(description = "结束时间", example = "1717203600000")
     private Long endTime = null;
 
     @JsonProperty("execution_id")
+    @Schema(description = "执行ID", example = "exec_001")
     @Length(max = 256)
     private String executionId = null;
 

@@ -108,6 +108,7 @@ services:
     image: ${STUDIO_CONSOLE_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
+    user: "1001:1000"
     cpus: 0.5
     mem_limit: 512m
     environment:
@@ -121,10 +122,11 @@ services:
       # - ./config/cert.pem:/home/secret/cert.pem
       # - ./config/pri_key.pem:/home/secret/pri_key.pem
     ports:
-      # HTTPS启动：改为 443:443
-      - '${CONSOLE_PORT:-80}:80'
+      # HTTPS启动：改为 ${CONSOLE_PORT:-443}:8443
+      - '${CONSOLE_PORT:-80}:8080'
     healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/80'"]
+      # HTTPS启动：将8080改为8443
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -144,7 +146,7 @@ services:
     image: ${STUDIO_MANAGER_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
-    privileged: true
+    user: "1001:1001"
     cpus: 2
     mem_limit: 4g
     ports:
@@ -187,7 +189,7 @@ services:
       agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-runtime:31014}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
-      front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery,Agent}
+      front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}
       # 知识库模式（可选，默认 LakeSearch 行为不变）：LakeSearch/CUSTOM
@@ -239,7 +241,7 @@ services:
     image: ${STUDIO_RUNTIME_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
-    privileged: true
+    user: "1000:1000"
     cpus: 2
     mem_limit: 4g
     ports:
@@ -325,6 +327,8 @@ services:
       LOG_MASKED_ENABLED: ${LOG_MASKED_ENABLED:-false}
       LOG_MASKED_PATTERNS: ${LOG_MASKED_PATTERNS:-}
       MODEL_CALL_LOGGING_ENABLED: ${MODEL_CALL_LOGGING_ENABLED:-false}
+      # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
+      PERFORMANCE_LOG_ENABLED: ${PERFORMANCE_LOG_ENABLED:-true}
       ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
       EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
       INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}
@@ -351,7 +355,7 @@ services:
     image: ${STUDIO_BUILDER_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
-    privileged: true
+    user: "1000:1000"
     cpus: 2
     mem_limit: 4g
     ports:

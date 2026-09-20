@@ -42,6 +42,7 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "ComplexIntentDetection": "EI.ComplexIntentDetection",
     "FlowStreamTransform": "jiuwen.paramExtraction",
     "FlowMcp": "jiuwen.mcp",
+    "FlowSql": "jiuwen.sql",
 }
 
 _SKIP_COMPONENT_KEY: list[str] = [

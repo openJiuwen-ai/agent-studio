@@ -148,6 +148,14 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
         },
       ],
     },
+    {
+      name: this.i18n.transform('node_g_database'),
+      nodes: [
+        {
+          data: this.appFlowServ.getInitSqlNodeData(),
+        },
+      ],
+    },
   ];
 
   public customNodeGroups: NodeGroup[] = [

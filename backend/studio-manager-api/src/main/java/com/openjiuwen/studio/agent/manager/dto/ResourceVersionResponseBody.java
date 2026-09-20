@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -26,6 +28,7 @@ public class ResourceVersionResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("versions")
+    @Schema(description = "versions", example = "[]")
     private List<VersionInfo> versions = new ArrayList<VersionInfo>();
 
     public List<VersionInfo> getVersions() {

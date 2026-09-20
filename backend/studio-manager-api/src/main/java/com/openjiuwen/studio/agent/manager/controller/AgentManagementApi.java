@@ -14,6 +14,8 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -28,6 +30,7 @@ import com.openjiuwen.studio.agent.manager.dto.InlineResponse404;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -36,6 +39,8 @@ import com.openjiuwen.studio.agent.manager.dto.ModifyChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -86,7 +91,7 @@ import java.util.Map;
         String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
         String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "配置触发器。", required = true) @Valid @RequestBody TriggerConfig body);
 
@@ -102,12 +107,35 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @ApiParam(value = "智能添加资源请求体。", required = true) @Valid @RequestBody
         AutoAddStudioResourceRequestBody body);
+
+    @ApiOperation(value = "批量删除智能体版本", nickname = "batchDeleteAgentVersions", notes = "批量删除智能体版本。",
+        response = BatchDeleteVersionsResponseBody.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "批量删除智能体版本响应。", response = BatchDeleteVersionsResponseBody.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/versions/batch-delete",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<BatchDeleteVersionsResponseBody> batchDeleteAgentVersions(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
+        @PathVariable("agent_id") String agentId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "批量删除智能体版本请求。", required = true) @Valid @RequestBody
+        BatchDeleteVersionsRequestBody body);
 
     @ApiOperation(value = "复制一个智能体", nickname = "copyAgent", notes = "复制一个智能体。",
         response = AgentInfo.class, tags = {"AgentManagement"})
@@ -122,9 +150,9 @@ import java.util.Map;
     String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
     String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "目标项目空间ID。", required = true) @RequestParam(value = "target_workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "目标项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "目标项目空间ID。", required = true) @RequestParam(value = "target_workspace_id", required = true)
     String targetWorkspaceId);
 
     @ApiOperation(value = "创建智能体", nickname = "createAgent", notes = "创建智能体。", response = AgentInfo.class,
@@ -142,7 +170,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "待创建的智能体信息。") @Valid @RequestBody(required = false) CreateAgentReq body);
 
@@ -159,7 +187,7 @@ import java.util.Map;
     @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
     String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId, @NotNull @ApiParam(value = "创建智能体版本通道请求。", required = true) @Valid @RequestBody
     CreateChannelReq body);
 
@@ -180,7 +208,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建智能体版本请求。", required = true) @Valid @RequestBody CreateVersionReq body);
 
@@ -201,7 +229,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建智能体版本请求。", required = true) @Valid @RequestBody CreateVersionReq body);
 
@@ -222,7 +250,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除一个智能体版本通道", nickname = "deleteAgentChannel", notes = "删除一个智能体版本通道。",
@@ -241,7 +269,7 @@ import java.util.Map;
         @Size(max = 128) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("channel_id") String channelId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除指定智能体版本", nickname = "deleteAgentVersion", notes = "删除指定智能体版本。",
@@ -263,7 +291,7 @@ import java.util.Map;
         @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "版本ID。", required = true, schema = @Schema())
         @PathVariable("version_id") String versionId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "删除触发器", nickname = "deleteTrigger", notes = "删除触发器。", tags = {"AgentManagement"})
@@ -280,7 +308,7 @@ import java.util.Map;
     String agentId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("trigger_id")
     String triggerId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "编辑触发器", nickname = "editTrigger", notes = "编辑触发器。", response = TriggerConfig.class,
@@ -296,7 +324,7 @@ import java.util.Map;
         String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
         String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "配置触发器。", required = true) @Valid @RequestBody TriggerConfig body);
 
@@ -316,7 +344,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "导出参数设置。", required = true) @Valid @RequestBody ExportParams body);
 
@@ -336,7 +364,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "application/json 为非流式，text/event-stream 为流式")
         @RequestHeader(value = "Accept", required = false) String accept,
@@ -357,7 +385,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "导出参数设置。", required = true) @Valid @RequestBody ExportParams body);
 
@@ -376,7 +404,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "生成智能体图标", nickname = "generateAgentIcons", notes = "生成智能体图标。",
@@ -390,7 +418,7 @@ import java.util.Map;
     ResponseEntity<AutoAddResultJsonObject> generateAgentIcons(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
         String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "智能体名称和描述。") @Valid @RequestBody(required = false) CreateAgentReq body);
 
@@ -407,7 +435,7 @@ import java.util.Map;
     String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
     String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "生成开场白", nickname = "generateAgentPrologue", notes = "生成开场白。",
@@ -423,7 +451,7 @@ import java.util.Map;
     String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
     String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "查询租户下已发布的智能体列表，支持id列表查询", nickname = "getAgentApplications",
@@ -475,7 +503,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "导入智能体", nickname = "importAgents", notes = "导入智能体。", response = ImportRsp.class,
@@ -490,7 +518,7 @@ import java.util.Map;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/import", produces = {"application/json"},
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ImportRsp> importAgents(@NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
@@ -516,7 +544,7 @@ import java.util.Map;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/tools/import", produces = {"application/json"},
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ImportRsp> importTools(@NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
@@ -565,6 +593,26 @@ import java.util.Map;
         @PathVariable("project_id") String projectId,
         @ApiParam(value = "ListAgentLastVersionsQo: converted from multi query params") @Valid
         ListAgentLastVersionsQo listAgentLastVersionsQo);
+
+    @ApiOperation(value = "查询智能体各版本引用数量", nickname = "listAgentVersionReferences",
+        notes = "查询智能体各版本引用数量。", response = VersionReferenceListRsp.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "版本引用数量列表。", response = VersionReferenceListRsp.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/versions/references",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<VersionReferenceListRsp> listAgentVersionReferences(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
+        @PathVariable("agent_id") String agentId,
+        @ApiParam(value = "ListAgentVersionReferencesQo: converted from multi query params") @Valid
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo);
 
     @ApiOperation(value = "查询智能体版本列表", nickname = "listAgentVersions", notes = "查询智能体版本列表。",
         response = VersionListRsp.class, tags = {"AgentManagement"})
@@ -634,15 +682,15 @@ import java.util.Map;
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<List<ImportListInfo>> listImportFile(
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @Parameter(description = "file detail") @Valid @RequestPart(value = "file", required = true) MultipartFile file,
         @Min(0) @Max(10000)
-        @ApiParam(value = "分页记录的起始位置偏移量，默认值0。", allowableValues = "10000, 0", defaultValue = "0")
+        @Parameter(in = ParameterIn.QUERY, description = "分页记录的起始位置偏移量，默认值0。", required = false, schema = @Schema()) @ApiParam(value = "分页记录的起始位置偏移量，默认值0。", allowableValues = "10000, 0", defaultValue = "0")
         @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset,
-        @Min(1) @Max(1000) @ApiParam(value = "每一页的数量，默认值10。", allowableValues = "1000, 1", defaultValue = "10")
+        @Min(1) @Max(1000) @Parameter(in = ParameterIn.QUERY, description = "每一页的数量，默认值10。", required = false, schema = @Schema()) @ApiParam(value = "每一页的数量，默认值10。", allowableValues = "1000, 1", defaultValue = "10")
         @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit);
 
     @ApiOperation(value = "修改智能体", nickname = "modifyAgent", notes = "修改智能体。", response = AgentInfo.class,
@@ -662,7 +710,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "待修改的智能体应用。") @Valid @RequestBody(required = false) ModifyAgentReq body);
 
@@ -682,7 +730,7 @@ import java.util.Map;
         @Size(max = 128) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("channel_id") String channelId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @ApiParam(value = "修改版本通道请求体。") @Valid @RequestBody(required = false) ModifyChannelReq body);
 
@@ -701,7 +749,7 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取智能体详情", nickname = "retrieveAgent", notes = "获取智能体详情。",
@@ -721,7 +769,28 @@ import java.util.Map;
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId);
+
+    @ApiOperation(value = "校验智能体", nickname = "validateAgent",
+        notes = "智能体试运行前预校验。多智能体校验下挂子工作流引用的版本是否存在。",
+        response = WorkflowValidationVO.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "校验结果。", response = WorkflowValidationVO.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/validate",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<WorkflowValidationVO> validateAgent(
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
+        @PathVariable("agent_id") String agentId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "获取一个百宝箱的智能体应用", nickname = "retrieveAgentApp",
@@ -737,7 +806,7 @@ import java.util.Map;
     String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
     @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
     String agentId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-    @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+    @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
     String workspaceId);
 
     @ApiOperation(value = "上传一个写作模版", nickname = "uploadDeepResearchTemplate", notes = "上传一个写作模版。", response = FileUploadRsp.class, tags={ "AgentManagement" })
@@ -748,5 +817,5 @@ import java.util.Map;
         produces = { "application/json" },
         consumes = { "multipart/form-data" },
         method = RequestMethod.POST)
-    ResponseEntity<FileUploadRsp> uploadDeepResearchTemplate(@NotNull @Pattern(regexp="^[a-zA-Z0-9_()\\-]+$") @Size(min=1,max=64) @ApiParam(value = "项目空间ID。", required = true)  @RequestParam(value = "workspace_id", required = true) String workspaceId,@Pattern(regexp="^[a-zA-Z0-9_-]+$") @Size(max=64) @Parameter(in = ParameterIn.PATH, description = "", required=true, schema=@Schema()) @PathVariable("project_id") String projectId,@Pattern(regexp="^[a-zA-Z0-9_-]+$") @Size(max=64) @Parameter(in = ParameterIn.PATH, description = "", required=true, schema=@Schema()) @PathVariable("agent_id") String agentId,@Parameter(description = "file detail") @Valid @RequestPart(value = "file" , required = true) MultipartFile file) ;
+    ResponseEntity<FileUploadRsp> uploadDeepResearchTemplate(@NotNull @Pattern(regexp="^[a-zA-Z0-9_()\\-]+$") @Size(min=1,max=64) @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true)  @RequestParam(value = "workspace_id", required = true) String workspaceId,@Pattern(regexp="^[a-zA-Z0-9_-]+$") @Size(max=64) @Parameter(in = ParameterIn.PATH, description = "", required=true, schema=@Schema()) @PathVariable("project_id") String projectId,@Pattern(regexp="^[a-zA-Z0-9_-]+$") @Size(max=64) @Parameter(in = ParameterIn.PATH, description = "", required=true, schema=@Schema()) @PathVariable("agent_id") String agentId,@Parameter(description = "file detail") @Valid @RequestPart(value = "file" , required = true) MultipartFile file) ;
 }

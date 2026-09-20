@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -28,12 +30,14 @@ public class ListStudioSkillsResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("items")
+    @Schema(description = "items", example = "[]", required = true)
     @Valid
     @NotNull
     @Size(max = 50)
     private List<StudioSkillInfo> items = new ArrayList<StudioSkillInfo>();
 
     @JsonProperty("total")
+    @Schema(description = "总数", example = "100", required = true)
     @NotNull
     @Range(min = 0L, max = 1000000L)
     private Integer total = null;

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,22 +27,27 @@ public class VariableDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String id = null;
 
     @JsonProperty("key")
+    @Schema(description = "键", example = "示例文本")
     @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9_]{0,9}$")
     private String key = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     @Pattern(regexp = "^[A-Za-z\\u4E00-\\u9FA5](?:[\\w\\u4E00-\\u9FA5-]{0,8}[\\dA-Za-z\\u4E00-\\u9FA5])?$")
     private String name = null;
 
     @JsonProperty("value")
+    @Schema(description = "值", example = "示例文本")
     @Length(max = 1000)
     private String value = null;
 
     @JsonProperty("pe_task_id")
+    @Schema(description = "PE任务标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String peTaskId = null;
 

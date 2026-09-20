@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,44 +30,57 @@ public class AppInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("app_id")
+    @Schema(description = "应用ID", example = "app-123456")
     private String appId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-123")
     private String projectId = null;
 
     @JsonProperty("name")
+    @Schema(description = "应用名称", example = "智能助手")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "应用描述", example = "这是一个智能助手应用")
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "应用图标URL", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("tags")
+    @Schema(description = "应用标签列表", example = "[\"AI\",\"助手\"]")
     @Valid
     @Size()
     private List<@Length() String> tags = null;
 
     @JsonProperty("app_type")
+    @Schema(description = "应用类型", example = "agent")
     private String appType = null;
 
     @JsonProperty("resource_id")
+    @Schema(description = "资源ID", example = "resource-123")
     private String resourceId = null;
 
     @JsonProperty("workflow_type")
+    @Schema(description = "工作流类型", example = "standard")
     private String workflowType = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "app")
     private String resourceType = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("publish_time")
+    @Schema(description = "发布时间", example = "2026-01-01T00:00:00Z")
     private Date publishTime = null;
 
     @JsonProperty("free_trial_quota")
+    @Schema(description = "免费试用配额", example = "{}")
     @Valid
     private FreeTrialQuota freeTrialQuota = null;
 

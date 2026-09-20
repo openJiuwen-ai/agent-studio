@@ -83,6 +83,10 @@ class WorkflowNodeMessageDataField(BaseModel):
     execution_id: Optional[str] = Field(default=None)
     messages: Optional[list] = Field(default=None)
     metadata: Optional[dict] = Field(default=None)
+    # 循环节点体内事件标识（循环体直接子节点带 loop_node_id/loop_index；
+    # 子工作流内部节点二者为空，用于前端区分过滤）
+    loop_node_id: Optional[str] = Field(default=None)
+    loop_index: Optional[int] = Field(default=None)
 
 
 class PluginEventField(BaseModel):

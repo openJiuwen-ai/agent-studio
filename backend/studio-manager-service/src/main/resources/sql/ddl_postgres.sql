@@ -1409,21 +1409,6 @@ CREATE TABLE IF NOT EXISTS t_router_strategy_backup (
     PRIMARY KEY (ID) 
 );
 
-CREATE TABLE IF NOT EXISTS t_api_keys (
-    API_KEY_ID VARCHAR(80) NOT NULL,
-    API_KEY_NAME VARCHAR(64) NOT NULL,
-    API_KEY_VALUE VARCHAR(256) NOT NULL,
-    DOMAIN_ID varchar(64)  NOT NULL,
-    PROJECT_ID varchar(64)  NOT NULL,
-    WORKSPACE_ID varchar(64)  NOT NULL,
-    CREATED_BY_USER_NAME varchar(64)  NULL DEFAULT 'SYSTEM',
-    LAST_UPDATED_BY_USER_NAME varchar(64)  NULL DEFAULT NULL,
-    CREATED_DATE BIGINT NULL DEFAULT NULL,
-    DESCRIPTION VARCHAR(1024) NOT NULL,
-    USER_ID VARCHAR(64) NOT NULL,
-    PRIMARY KEY (API_KEY_ID) 
-);
-
 CREATE TABLE IF NOT EXISTS t_provider_auth_bound_records(
     ID varchar(64) NOT NULL,
     PROVIDER_AUTH_ID varchar(64) NOT NULL,
@@ -1774,38 +1759,6 @@ CREATE TABLE IF NOT EXISTS t_history_op_task (
 );
 
 -- tool tables
-CREATE TABLE IF NOT EXISTS t_mcp (
-    server_id     VARCHAR(64) NOT NULL,
-    project_id    VARCHAR(64) NOT NULL,
-    server_name   VARCHAR(64) NOT NULL,
-    server_name_en VARCHAR(64) NULL,
-    server_desc   VARCHAR(1000) NOT NULL,
-    icon          TEXT NULL,
-    icon_name     VARCHAR(64)   NULL,
-    tools         TEXT NOT NULL,
-    visibility    VARCHAR(32) NOT NULL DEFAULT 'project',
-    url           VARCHAR(256) NOT NULL,
-    auth          VARCHAR(4096) NULL,
-    type          VARCHAR(32) NOT NULL,
-    category      VARCHAR(32) NULL,
-    creator       VARCHAR(64) NOT NULL,
-    creator_id    VARCHAR(64) NOT NULL,
-    created_on    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_on    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (server_id)
-);
-
-CREATE TABLE IF NOT EXISTS t_mcp_config(
-    id          VARCHAR(64) NOT NULL,
-    server_id   VARCHAR(64) NOT NULL,
-    project_id  VARCHAR(64) NOT NULL,
-    auth_keys   VARCHAR(4096) NOT NULL,
-    creator_id  VARCHAR(64) NOT NULL,
-    created_on  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_on  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY(id)
-);
-
 CREATE TABLE ws_mcp_server_def
 (
     id                      varchar(64)       not null primary key,
@@ -2107,7 +2060,6 @@ CREATE INDEX IF NOT EXISTS MSB_SERVICE_NAME_IDX ON t_model_service_backup (PROJE
 CREATE INDEX IF NOT EXISTS MSB_PROVIDER_ID_INDEX ON t_model_service_backup (PROVIDER_ID);
 CREATE INDEX IF NOT EXISTS PW_ID_INDEX ON t_router_strategy (PROJECT_ID, WORKSPACE_ID);
 CREATE INDEX IF NOT EXISTS SB_PW_ID_INDEX ON t_router_strategy_backup (PROJECT_ID, WORKSPACE_ID);
-CREATE INDEX IF NOT EXISTS AK_PW_ID_INDEX ON t_api_keys (PROJECT_ID, WORKSPACE_ID);
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_t_pe_task_name ON t_pe_task (name, project_id);
 CREATE INDEX IF NOT EXISTS idx_creator ON t_pe_task (creator);
 CREATE INDEX IF NOT EXISTS idx_updater ON t_pe_task (updater);
@@ -2129,10 +2081,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_task_id_name ON t_pe_optimization_task (t
 CREATE INDEX IF NOT EXISTS ix_task_id ON t_pe_optimization_task (task_id);
 CREATE INDEX IF NOT EXISTS ix_creator_status ON t_pe_optimization_task (creator,status);
 CREATE INDEX IF NOT EXISTS idx_t_pe_op_task_domain_id ON t_pe_op_task (domain_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_t_mcp_project_id_mcp_server_name_en ON t_mcp (project_id, server_name_en);
-CREATE INDEX IF NOT EXISTS idx_t_mcp_server_updated_on ON t_mcp (updated_on);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_t_mcp_config_creator_id_project_id_server_id ON t_mcp_config (server_id, creator_id, project_id);
-CREATE INDEX IF NOT EXISTS idx_t_mcp_config_updated_on ON t_mcp_config (updated_on);
 CREATE INDEX IF NOT EXISTS idx_t_tool_updated_on ON t_tool (updated_on);
 CREATE INDEX IF NOT EXISTS idx_t_mapping_agent_tool_assistant_id ON t_mapping_agent_tool (agent_id);
 CREATE INDEX IF NOT EXISTS idx_t_mapping_agent_tool_project_id ON t_mapping_agent_tool (project_id);

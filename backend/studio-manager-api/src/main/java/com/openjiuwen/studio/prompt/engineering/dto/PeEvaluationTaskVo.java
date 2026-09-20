@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,56 +28,73 @@ public class PeEvaluationTaskVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("method")
+    @Schema(description = "评估方法", example = "similarity")
     private String method = null;
 
     @JsonProperty("regular_expression")
+    @Schema(description = "正则表达式", example = "^[0-9]+$")
     private String regularExpression = null;
 
     @JsonProperty("task_id")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String taskId = null;
 
     @JsonProperty("test_set_id")
+    @Schema(description = "测试集ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String testSetId = null;
 
     @JsonProperty("test_set_name")
+    @Schema(description = "测试集名称", example = "示例名称")
     private String testSetName = null;
 
     @JsonProperty("case_num")
+    @Schema(description = "用例数量", example = "1")
     private Integer caseNum = null;
 
     @JsonProperty("created_on")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private String createdOn = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private String updatedOn = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "running")
     private String status = null;
 
     @JsonProperty("prompt_list")
+    @Schema(description = "提示词列表", example = "")
     @Valid
     @Size(max = 500)
     private List<PePromptVo> promptList = null;
 
     @JsonProperty("prompt_best_name")
+    @Schema(description = "最佳提示词名称", example = "示例名称")
     private String promptBestName = null;
 
     @JsonProperty("prompt_num")
+    @Schema(description = "提示词数量", example = "1")
     private Integer promptNum = null;
 
     @JsonProperty("best_score")
+    @Schema(description = "最佳评分", example = "1")
     private Integer bestScore = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     public String getId() {

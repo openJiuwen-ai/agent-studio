@@ -606,12 +606,36 @@ class TestAdditionalQuestionsAPIRoutes:
 
     @staticmethod
     def _get_client():
-        """Create a TestClient with just the execution_app router."""
+        """Create a TestClient with just the execution_app router.
+
+        与生产（server.py）一致注册 RequestValidationError handler：
+        FastAPI 入口校验失败（422）被统一转为 400 + 标准错误码格式。
+        """
         from fastapi import FastAPI
+        from fastapi.exceptions import RequestValidationError
+        from fastapi.responses import JSONResponse
         from agent_runtime.serve.apis.orchestration import execution_app
 
         app = FastAPI()
         app.include_router(execution_app)
+
+        @app.exception_handler(RequestValidationError)
+        async def validation_error_handler(request, exc):
+            errors = exc.errors()
+            detail_parts = [
+                f"{'.'.join(str(p) for p in e.get('loc', []))}: {e.get('msg', '')}"
+                for e in errors
+            ]
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error_code": "openjiuwen.02001003",
+                    "error_msg": "接口参数校验异常",
+                    "error_reason": "; ".join(detail_parts),
+                    "error_suggestion": "请重新校验接口参数是否正确。",
+                },
+            )
+
         return TestClient(app)
 
     def test_agent_route_returns_400_on_invalid_body(self):
@@ -632,13 +656,13 @@ class TestAdditionalQuestionsAPIRoutes:
         )
         assert response.status_code == 400
 
-    def test_agent_route_returns_422_when_workspace_id_missing(self):
+    def test_agent_route_returns_400_when_workspace_id_missing(self):
         client = self._get_client()
         response = client.post(
             "/v1/proj-1/agents/agent-1/conversations/conv-1/additional-questions",
             json={"name": "test", "enable": True},
         )
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     def test_agent_route_accepts_valid_body(self):
         """Valid body should reach the service layer (mocked)."""

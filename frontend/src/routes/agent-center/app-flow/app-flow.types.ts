@@ -120,7 +120,7 @@ export interface IFlowConfigs {
     model_type: string;
     model?: string;
   };
-  environment: string;
+  environment?: string;
   default_model_switch: boolean;
   prologue: string;
   suggest_queries: string[];

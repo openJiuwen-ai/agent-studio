@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.common.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,9 +29,11 @@ public class WorkflowEnvironment implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "环境名称", example = "production")
     private String name = null;
 
     @JsonProperty("variables")
+    @Schema(description = "环境变量", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<@Length() String, @Length() String> variables = null;

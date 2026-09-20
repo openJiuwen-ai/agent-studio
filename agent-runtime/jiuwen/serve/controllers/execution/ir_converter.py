@@ -60,6 +60,7 @@ from jiuwen.extension.workflow_node.flow_input import FlowInput
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 from jiuwen.extension.workflow_node.flow_message import Message
 from jiuwen.extension.workflow_node.flow_qa import FlowQA, build_struct_input_schemas
+from jiuwen.extension.workflow_node.flow_sql import FlowSql
 from jiuwen.extension.workflow_node.flow_stream_transform import FlowStreamTransform
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
@@ -119,6 +120,21 @@ from agent_runtime.common.ir_exceptions import IRBuildException
 _AGENT_VERSION = "agentVersion"
 _WORKFLOW_VERSION = "workflowVersion"
 _USE_AGENT_CORE_MODEL_ENV = "USE_AGENT_CORE_MODEL"
+
+
+def _supports_workflow_comp_name(workflow_type: type) -> bool:
+    """Check whether a workflow implementation supports the optional name argument."""
+    try:
+        return "name" in inspect.signature(
+            workflow_type.add_workflow_comp
+        ).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+# Detect API compatibility once at module import instead of reflecting per node.
+_WORKFLOW_ADD_COMP_SUPPORTS_NAME = _supports_workflow_comp_name(Workflow)
+_LOOP_GROUP_ADD_COMP_SUPPORTS_NAME = _supports_workflow_comp_name(LoopGroup)
 
 
 class _LLMModelIdentifiers(NamedTuple):
@@ -1141,8 +1157,8 @@ class IRConverter:
         agent_id_in_config = f"{agent_id}_{agent_version}"
         plugin_irs = ir_data.get("configs", {}).get("plugins")
         plugins = None
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
                 f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
                 f"agent_id={agent_id}, "
                 f"configs keys="
@@ -1154,8 +1170,8 @@ class IRConverter:
                 try:
                     plugin = PluginIRConverter.ir_to_plugin(plugin_ir, agent_id, conversation_id)
                     plugins.append(plugin)
-                    if logger.isEnabledFor(logging.INFO):
-                        logger.info(
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
                             f"[PluginLoad] create_agent_config: "
                             f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
                         )
@@ -1270,10 +1286,11 @@ class IRConverter:
                     child_metadata_list.append(child_config.metadata)
 
             task_id = str(secrets.token_hex(24))
-            logger.info(
-                f"conversation_id: {conversation_id} generate task_id: {task_id} for this request",
-                simple_log="conversation generate task",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"conversation_id: {conversation_id} generate task_id: {task_id} for this request",
+                    simple_log="conversation generate task",
+                )
             task_model, model_configs = AgentIrUtils().get_task_model(
                 current_ir_data, task_id
             )
@@ -1291,17 +1308,19 @@ class IRConverter:
                 )
             else:
                 llm = None
-            logger.info(
-                f"processing agent config of {current_metadata.id}",
-                simple_log="processing agent config",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"processing agent config of {current_metadata.id}",
+                    simple_log="processing agent config",
+                )
             current_config = await IRConverter.create_agent_config(
                 current_ir_data, llm, task_model, task_id
             )
-            logger.info(
-                f"get agent config of {current_metadata.id} success",
-                simple_log="get agent config",
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"get agent config of {current_metadata.id} success",
+                    simple_log="get agent config",
+                )
             current_config.metadata = current_metadata
             current_config.parent_agent_metadata = parent_metadata
             current_config.child_agents_metadata = child_metadata_list
@@ -1699,6 +1718,18 @@ class IRConverter:
                 # come from stream sources; otherwise use regular INVOKE path.
                 if target_type in IRConverter._AGGREGATE_TYPES:
                     continue
+                # A message that references only batch values (start userFields /
+                # memory defaults) must stay on the regular INVOKE path even when
+                # a stream-capable LLM sits upstream. Otherwise its batch $refs
+                # get wrapped as stream generators that starve (empty render,
+                # default values disappear).
+                if (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                ):
+                    continue
                 stream_input_target_ids.add(target)
 
         parallel_stream_done_inputs: dict[str, dict] = {}
@@ -1716,6 +1747,18 @@ class IRConverter:
                 source in ir_stream_source_ids
                 and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
                 and target_type not in IRConverter._AGGREGATE_TYPES
+                # Keep in sync with the message guard in stream_input_target_ids
+                # collection and _is_stream_connection: a message that references
+                # only batch values (start userFields / memory defaults) must not
+                # be treated as a streaming join terminal, otherwise its lane-done
+                # is wired as TRANSFORM while phase-2 connects a regular edge ->
+                # GRAPH_VERTEX_STREAM_CALL_ERROR at runtime.
+                and not (
+                    target_type == "jiuwen.message"
+                    and not IRConverter._message_schema_has_stream_ref(
+                        node_by_id.get(target, {}), ir_stream_source_ids
+                    )
+                )
             )
             if is_stream_join_edge:
                 parallel_stream_done_inputs[done_node] = {
@@ -1958,6 +2001,14 @@ class IRConverter:
 
             if hasattr(end, "set_expect_mix"):
                 end.set_expect_mix(has_batch and has_stream)
+
+            # mix 场景把批源引用（如 End 引用 Start 参数，含 #end_ 输出声明）传给
+            # End 组件：transform（真流式）路径的 inputs 只含流源字段，批源字段
+            # 需由 End 自行从 io_state 解析，否则未赋值字段会从 user_fields 缺失。
+            if has_batch and has_stream and hasattr(end, "set_batch_input_refs"):
+                _batch_user_fields = (batch_schema or {}).get("userFields") or {}
+                if isinstance(_batch_user_fields, dict) and _batch_user_fields:
+                    end.set_batch_input_refs(_batch_user_fields)
 
             set_end_kwargs: dict = {}
             if has_batch and has_stream:
@@ -2450,6 +2501,9 @@ class IRConverter:
                 node_name=configs.get("name") or node_id,
             )
             return FlowStreamTransform(configs, metadata), node_type, configs
+
+        if node_type == "jiuwen.sql":
+            return FlowSql(configs), node_type, configs
 
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
@@ -3012,8 +3066,37 @@ class IRConverter:
             source_id in stream_source_ids
             and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
         ):
+            # A message referencing only batch values (start userFields / memory
+            # defaults) stays on the regular edge + INVOKE path. A stream edge
+            # would wrap its batch $refs as stream generators that starve
+            # (empty render, default values disappear).
+            if (
+                target_type == "jiuwen.message"
+                and not IRConverter._message_schema_has_stream_ref(
+                    target_node, stream_source_ids
+                )
+            ):
+                return False
             return True
         return False
+
+    @staticmethod
+    def _message_schema_has_stream_ref(
+        target_node: dict, stream_source_ids: set[str]
+    ) -> bool:
+        """True when a ``jiuwen.message`` node references at least one stream source.
+
+        A message only needs the stream-input path (COLLECT) when it actually
+        consumes streamed output from an upstream LLM. When it references only
+        batch values (start userFields / memory defaults), keep it on the
+        regular INVOKE path even if a stream-capable LLM sits upstream —
+        otherwise its batch ``$ref``s get wrapped as stream generators that
+        starve (empty render, default values disappear).
+        """
+        _, stream_schema = _split_inputs_schema_by_source(
+            _convert_schema(target_node.get("inputs") or {}), stream_source_ids
+        )
+        return stream_schema is not None
 
     @staticmethod
     def _add_normal_edge_spec_only(
@@ -3869,9 +3952,12 @@ def _add_workflow_comp_with_exception(
         kwargs["wait_for_all"] = True
     if node_name is not None:
         # Only pass name if the underlying Workflow supports it (openjiuwen >= 0.1.18)
-        import inspect as _inspect
-        _sig = _inspect.signature(workflow.add_workflow_comp)
-        if "name" in _sig.parameters:
+        supports_name = (
+            _LOOP_GROUP_ADD_COMP_SUPPORTS_NAME
+            if isinstance(workflow, LoopGroup)
+            else _WORKFLOW_ADD_COMP_SUPPORTS_NAME
+        )
+        if supports_name:
             kwargs["name"] = node_name
     if isinstance(workflow, LoopGroup):
         workflow.add_workflow_comp(comp_id, component, **kwargs)

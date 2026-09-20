@@ -111,8 +111,10 @@ REDIS_PID="$RUN/redis.pid"
 if [ -f "$REDIS_PID" ] && kill -0 "$(cat "$REDIS_PID")" 2>/dev/null; then
   log "  Redis 已在运行"
 else
+  # ignore-warnings ARM64-COW-BUG：Redis 7 在 aarch64 且内核 <5.19（未修 copy-on-write 缺陷）时
+  # 会拒绝启动；本包 Redis 为缓存用途（数据可再生），按官方建议忽略该告警。x86 内核不受影响。
   "$REDIS_SRV" --port "$REDIS_EXTERNAL_PORT" --daemonize yes --dir "$DATA/redis" \
-    --pidfile "$REDIS_PID" --logfile "$LOG/redis.log" >/dev/null 2>&1 || die "Redis 启动失败"
+    --pidfile "$REDIS_PID" --logfile "$LOG/redis.log" --ignore-warnings ARM64-COW-BUG >/dev/null 2>&1 || die "Redis 启动失败"
 fi
 wait_port "$REDIS_EXTERNAL_PORT" "Redis" 30 || die "Redis 启动失败"
 

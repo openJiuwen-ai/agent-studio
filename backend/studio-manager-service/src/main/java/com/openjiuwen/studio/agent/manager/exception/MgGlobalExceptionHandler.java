@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.BadSqlGrammarException;
@@ -27,6 +28,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -40,6 +42,8 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -103,20 +107,24 @@ public class MgGlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
-        String errMessage = null;
-
-        // 获取校验异常参数
         BindingResult bindingResult = exception.getBindingResult();
-        for (FieldError fieldError : bindingResult.getFieldErrors()) {
-            errMessage = fieldError.getField() + fieldError.getDefaultMessage();
-        }
-        log.error("throw MethodArgumentNotValidException", exception);
+
+        String errMessage = bindingResult.getFieldErrors().stream()
+            .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+            .collect(Collectors.joining("; "));
+
+        List<ErrorDetail> details = bindingResult.getFieldErrors().stream()
+            .map(fe -> new ErrorDetail().setErrorMsg(fe.getField() + ": " + fe.getDefaultMessage()))
+            .collect(Collectors.toList());
+
+        log.error("throw MethodArgumentNotValidException: {}", errMessage);
         StudioError errorInfo = StudioError.METHOD_ARGUMENT_NOT_VALID;
-        String code = "openjiuwen." + errorInfo.getModule().getSubCode() + errorInfo.getCode();
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(code)
-            .setErrorMsg(errMessage).setErrorReason(i18nUtil.getMessage(errorInfo)).setErrorSuggestion(i18nUtil.getSuggestion(errorInfo));
-        return new ResponseEntity<>(errorRsp,
-            ResponseModel.num2HttpStatus(Integer.toString(exception.getStatusCode().value())));
+        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(errMessage)
+            .setErrorReason(i18nUtil.getMessage(errorInfo))
+            .setErrorSuggestion(i18nUtil.getSuggestion(errorInfo))
+            .setDetails(details);
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -125,21 +133,27 @@ public class MgGlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleConstraintViolationException(ConstraintViolationException exception) {
-        StringBuilder errMsg = new StringBuilder();
-        for (ConstraintViolation<?> violation : exception.getConstraintViolations()) {
-            String paramName = violation.getPropertyPath().toString();
-            if (paramName.contains(".")) {
-                paramName = paramName.substring(paramName.lastIndexOf('.') + 1);
-            }
-            errMsg.append(paramName).append(violation.getMessage()).append("; ");
-        }
+        List<ErrorDetail> details = exception.getConstraintViolations().stream()
+            .map(violation -> {
+                String paramName = violation.getPropertyPath().toString();
+                if (paramName.contains(".")) {
+                    paramName = paramName.substring(paramName.lastIndexOf('.') + 1);
+                }
+                return new ErrorDetail().setErrorMsg(paramName + ": " + violation.getMessage());
+            })
+            .collect(Collectors.toList());
+
+        String errMsg = details.stream()
+            .map(ErrorDetail::getErrorMsg)
+            .collect(Collectors.joining("; "));
+
         log.error("throw ConstraintViolationException: {}", errMsg);
         StudioError errorInfo = StudioError.METHOD_ARGUMENT_NOT_VALID;
-        String code = "openjiuwen." + errorInfo.getModule().getSubCode() + errorInfo.getCode();
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(code)
-            .setErrorMsg(errMsg.toString())
+        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(errMsg)
             .setErrorReason(i18nUtil.getMessage(errorInfo))
-            .setErrorSuggestion(i18nUtil.getSuggestion(errorInfo));
+            .setErrorSuggestion(i18nUtil.getSuggestion(errorInfo))
+            .setDetails(details);
         return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
@@ -153,9 +167,14 @@ public class MgGlobalExceptionHandler {
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleNoResourceFoundException(Exception exception) {
         log.error("exception: {}", exception.getMessage());
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(String.valueOf(StudioError.STATIC_RESOURCE_NOT_EXIST.getCode()))
-            .setErrorMsg(exception.getMessage());
-        return new ResponseEntity<>(errorRsp, StudioError.STATIC_RESOURCE_NOT_EXIST.getHttpStatus());
+        StudioError errorInfo = StudioError.STATIC_RESOURCE_NOT_EXIST;
+        ErrorInfo i18nInfo = i18nUtil.getMessage(new AgentStudioException(errorInfo));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(i18nInfo.getMessage())
+            .setErrorReason(i18nInfo.getReason())
+            .setErrorSuggestion(i18nInfo.getSuggestion());
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -168,11 +187,14 @@ public class MgGlobalExceptionHandler {
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleException(AsyncRequestTimeoutException exception) {
         log.error("AsyncRequestTimeoutException", exception);
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(
-                String.valueOf(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getCode()))
-            .setErrorMsg(i18nUtil.getMessage(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT));
-        return new ResponseEntity<>(errorRsp,
-            StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getHttpStatus());
+        StudioError errorInfo = StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT;
+        ErrorInfo i18nInfo = i18nUtil.getMessage(new AgentStudioException(errorInfo));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(i18nInfo.getMessage())
+            .setErrorReason(i18nInfo.getReason())
+            .setErrorSuggestion(i18nInfo.getSuggestion());
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -211,9 +233,14 @@ public class MgGlobalExceptionHandler {
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleNotReadableException(Exception exception) {
         log.error("NotReadableException: {}", exception.getMessage());
-        ErrorRsp errorRsp = new ErrorRsp().setErrorCode(StudioError.METHOD_ARGUMENT_NOT_VALID.getFullCode())
-            .setErrorMsg(i18nUtil.getMessage(StudioError.METHOD_ARGUMENT_NOT_VALID));
-        return new ResponseEntity<>(errorRsp, StudioError.METHOD_ARGUMENT_NOT_VALID.getHttpStatus());
+        StudioError errorInfo = StudioError.METHOD_ARGUMENT_NOT_VALID;
+        ErrorInfo i18nInfo = i18nUtil.getMessage(new AgentStudioException(errorInfo));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(errorInfo.getFullCode())
+            .setErrorMsg(i18nInfo.getMessage())
+            .setErrorReason(i18nInfo.getReason())
+            .setErrorSuggestion(i18nInfo.getSuggestion());
+        return new ResponseEntity<>(errorRsp, errorInfo.getHttpStatus());
     }
 
     /**
@@ -280,15 +307,47 @@ public class MgGlobalExceptionHandler {
     }
 
     /**
-     * Content-Type 不匹配（例如直接 POST 未设置 multipart/form-data）。
+     * Content-Type 不匹配。按接口声明的consumes动态提示期望类型：
+     * 大多数接口期望application/json，仅文件上传类接口期望multipart/form-data，
+     * 硬编码multipart提示会对JSON接口调用方产生误导。
      */
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleHttpMediaTypeNotSupportedException(
         HttpMediaTypeNotSupportedException exception) {
-        String reason = "请求格式错误，需要 multipart/form-data 上传文件";
+        String supported = CollectionUtils.isEmpty(exception.getSupportedMediaTypes()) ? "application/json"
+            : exception.getSupportedMediaTypes().stream().map(Object::toString).distinct()
+                .collect(Collectors.joining("、"));
+        String reason = "请求格式错误，Content-Type 不被该接口支持，期望：" + supported;
         log.error("HttpMediaTypeNotSupportedException: {}", exception.getMessage());
         return badRequest(reason);
+    }
+
+    /**
+     * HTTP 方法不支持（如对仅支持 GET 的接口使用 POST 调用），返回 405 而非兜底的 500。
+     * 错误信息统一走 i18n，不向响应体拼接 Spring 解析出的方法列表：
+     * 路径变量映射会匹配出与业务无关的方法（如 /versions/{version_id} 可匹配 "references"），
+     * 拼出来容易误导调用方，仅记录到日志供运维排查。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleHttpRequestMethodNotSupportedException(
+        HttpRequestMethodNotSupportedException exception) {
+        Set<HttpMethod> supportedMethods = exception.getSupportedHttpMethods();
+        String supported = CollectionUtils.isEmpty(supportedMethods) ? "未知"
+            : supportedMethods.stream().map(HttpMethod::name).collect(Collectors.joining("/"));
+        log.error("HttpRequestMethodNotSupportedException: {}, resolved supported methods: {}",
+            exception.getMessage(), supported);
+        ErrorInfo errorInfo = i18nUtil.getMessage(
+            new AgentStudioException(StudioError.METHOD_NOT_SUPPORTED));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(StudioError.METHOD_NOT_SUPPORTED.getFullCode())
+            .setErrorMsg(errorInfo.getMessage())
+            .setErrorReason(errorInfo.getReason())
+            .setErrorSuggestion(errorInfo.getSuggestion());
+        // 透传 Spring 生成的 Allow 响应头（RFC 9110 要求 405 响应携带）
+        return new ResponseEntity<>(errorRsp, exception.getHeaders(),
+            StudioError.METHOD_NOT_SUPPORTED.getHttpStatus());
     }
 
     /** 构造 400 错误响应，error_reason 使用入参 reason（直接中文字面量），绕过 i18n 模板。 */

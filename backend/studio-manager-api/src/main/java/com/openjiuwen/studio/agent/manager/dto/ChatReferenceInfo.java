@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -30,61 +31,75 @@ public class ChatReferenceInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "file_001")
     @Length(min = 1, max = 64)
     private String fileId = null;
 
     @JsonProperty("chunk_id")
+    @Schema(description = "分块ID", example = "chunk_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String chunkId = null;
 
     @JsonProperty("title")
+    @Schema(description = "标题", example = "用户手册")
     @Length(min = 1, max = 65535)
     private String title = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "这是一个文档内容")
     @Length(min = 1, max = 65535)
     private String content = null;
 
     @JsonProperty("update_date_time")
+    @Schema(description = "更新日期时间", example = "2026-01-01T00:00:00Z")
     @Length(min = 1, max = 64)
     private String updateDateTime = null;
 
     @JsonProperty("doc_type")
+    @Schema(description = "文档类型", example = "pdf")
     @Length(min = 1, max = 64)
     private String docType = null;
 
     @JsonProperty("file_path")
+    @Schema(description = "文件路径", example = "/docs/manual.pdf")
     @Length(min = 1, max = 64)
     private String filePath = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "技术文档")
     @Length(min = 4, max = 255)
     private String category = null;
 
     @JsonProperty("tags")
+    @Schema(description = "标签列表", example = "[]")
     @Valid
     @Size(max = 250)
     private List<@Length(min = 4, max = 255) String> tags = null;
 
     @JsonProperty("score")
+    @Schema(description = "评分", example = "95.5")
     @Range(min = 0L, max = 10000L)
     private Float score = null;
 
     @JsonProperty("subtitle")
+    @Schema(description = "副标题", example = "第一章")
     @Length(min = 1, max = 65535)
     private String subtitle = null;
 
     @JsonProperty("repo_id")
+    @Schema(description = "仓库ID", example = "repo_001")
     @Length(min = 1, max = 64)
     private String repoId = null;
 
     @JsonProperty("image_ids")
+    @Schema(description = "图片ID列表", example = "[]")
     @Valid
     @Size(max = 100)
     private List<@Length(min = 1, max = 100) String> imageIds = null;
 
     @JsonProperty("image_paths")
+    @Schema(description = "图片路径列表", example = "[]")
     @Valid
     @Size(max = 100)
     private List<@Length(min = 1, max = 2000) String> imagePaths = null;

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,50 +32,61 @@ public class FileInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "file_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @NotBlank
     @Length(max = 64)
     private String fileId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("file_name")
+    @Schema(description = "文件名称", example = "document.pdf")
     @Length(min = 1, max = 64)
     private String fileName = null;
 
     @JsonProperty("file_type")
+    @Schema(description = "文件类型", example = "pdf")
     @Length(min = 1, max = 16)
     private String fileType = null;
 
     @JsonProperty("file_size")
+    @Schema(description = "文件大小（字节）", example = "1024")
     @Range(min = 1L, max = 99999999L)
     private Long fileSize = null;
 
     @JsonProperty("file_status")
+    @Schema(description = "文件状态", example = "READY")
     @Length(max = 64)
     private String fileStatus = null;
 
     @JsonProperty("failure_reason")
+    @Schema(description = "失败原因", example = "解析失败")
     @Length(max = 65535)
     private String failureReason = null;
 
     @JsonProperty("file_tags")
+    @Schema(description = "文件标签列表", example = "[\"tag1\"]")
     @Valid
     @Size(max = 20)
     private List<@Length(max = 100) String> fileTags = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Length(max = 4096)
     private String metadata = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1700000000000")
     @Range(min = 0L, max = 253402214400000L)
     private Long createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "1700000000000")
     @Range(min = 0L, max = 253402214400000L)
     private Long updateTime = null;
 

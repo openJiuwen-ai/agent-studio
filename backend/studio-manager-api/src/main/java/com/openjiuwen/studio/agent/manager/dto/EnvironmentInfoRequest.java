@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,28 +27,34 @@ public class EnvironmentInfoRequest implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "安全组名称", example = "my-security-group")
     @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9-]{3,47}$")
     private String name = null;
 
     @JsonProperty("id")
+    @Schema(description = "安全组ID", example = "sg-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("description")
+    @Schema(description = "安全组描述", example = "用于Agent运行的安全组")
     @Pattern(regexp = "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$")
     @Length(max = 128)
     private String description = null;
 
     @JsonProperty("vpcId")
+    @Schema(description = "VPC ID", example = "vpc-001")
     @Length(min = 1, max = 64)
     private String vpcId = null;
 
     @JsonProperty("subnetId")
+    @Schema(description = "子网ID", example = "subnet-001")
     @Length(min = 1, max = 64)
     private String subnetId = null;
 
     @JsonProperty("isDefault")
+    @Schema(description = "是否为默认安全组", example = "false")
     private Boolean isDefault = false;
 
     public String getName() {

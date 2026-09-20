@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,23 +28,29 @@ public class IntentWorkflowVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作流ID", example = "workflow-001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "意图识别工作流")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "用于识别用户意图并路由到对应处理逻辑")
     private String description = null;
 
     @JsonProperty("version")
+    @Schema(description = "工作流版本", example = "1.0.0")
     private String version = null;
 
     @JsonProperty("inputs")
+    @Schema(description = "工作流输入字段列表", example = "[{\"name\":\"userInput\"}]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> inputs = null;
 
     @JsonProperty("outputs")
+    @Schema(description = "工作流输出字段列表", example = "[{\"name\":\"intent\"}]")
     @Valid
     @Size()
     private List<WorkflowFieldVO> outputs = null;

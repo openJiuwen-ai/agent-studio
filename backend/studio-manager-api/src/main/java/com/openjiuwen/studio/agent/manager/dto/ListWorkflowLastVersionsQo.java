@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -31,38 +32,46 @@ public class ListWorkflowLastVersionsQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @NotBlank
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 65535L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "返回数量限制", example = "5")
     @Range(min = 1L, max = 10000L)
     private Integer limit = 5;
 
     @JsonProperty("id")
+    @Schema(description = "工作流ID列表", example = "[\"wf_001\"]")
     @Valid
     @Size(max = 1000)
     private List<@Length(max = 128) String> id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "my_workflow")
     @Pattern(regexp = "^.{0,64}$")
     @Length(max = 192)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "天气查询流程")
     @Length(max = 512)
     private String description = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user_001")
     @Length(max = 128)
     private String creator = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "workflow")
     @Length(max = 128)
     private String type = null;
 

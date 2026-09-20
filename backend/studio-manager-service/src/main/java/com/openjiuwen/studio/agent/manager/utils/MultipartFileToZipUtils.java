@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.UUID;
 
 /**
  * MultipartFile 转 ZIP 文件工具类
@@ -61,8 +62,9 @@ public class MultipartFileToZipUtils {
             throw new AgentStudioException(StudioError.ILLEGAL_FILE_NAME);
         }
 
-        // 构建目标 ZIP 文件路径
-        File zipFile = new File(dir, originalFilename);
+        // 构建目标 ZIP 文件路径（使用唯一文件名避免并发冲突）
+        String uniqueFileName = UUID.randomUUID() + "_" + originalFilename;
+        File zipFile = new File(dir, uniqueFileName);
 
         try {
             // 将 MultipartFile 写入目标 ZIP 文件

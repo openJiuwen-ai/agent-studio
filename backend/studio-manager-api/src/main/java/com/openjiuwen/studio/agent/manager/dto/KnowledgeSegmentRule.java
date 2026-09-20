@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -29,31 +30,38 @@ public class KnowledgeSegmentRule implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "rule_001")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("rule_regexs")
+    @Schema(description = "规则正则表达式列表", example = "[\".*\\\\.pdf\",\".*\\\\.docx\"]")
     @Valid
     @Size(max = 65535)
     private List<@Length(max = 1024) String> ruleRegexs = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project_001")
     @Length(min = 1, max = 64)
     private String projectId = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者名称", example = "张三")
     @Length(max = 64)
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     @Length(max = 64)
     private String creatorId = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1714521600000")
     @Range(min = 0L, max = 253402214400000L)
     private Long createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "1714608000000")
     @Range(min = 0L, max = 253402214400000L)
     private Long updateTime = null;
 

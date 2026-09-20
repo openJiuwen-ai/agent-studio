@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -30,17 +32,20 @@ public class SearchKnowledgeRepoRequestBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("knowledge_repo_id")
+    @Schema(description = "知识仓ID", example = "example-id-123", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @NotBlank
     @Length(max = 64)
     private String knowledgeRepoId = null;
 
     @JsonProperty("query")
+    @Schema(description = "查询内容", example = "查询内容示例", required = true)
     @NotBlank
     @Length(min = 1, max = 4096)
     private String query = null;
 
     @JsonProperty("search_mode")
+    @Schema(description = "搜索", example = "STRING", required = true)
     @NotNull
     private SearchModeEnum searchMode = SearchModeEnum.DOC;
 

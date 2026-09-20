@@ -39,6 +39,7 @@ _COMPONENT_TYPE_DISPLAY: dict[str, str] = {
     "jiuwen.infoExtraction": "Extractor",
     "jiuwen.mcp": "MCP",
     "jiuwen.flowMcp": "MCP",
+    "jiuwen.sql": "Sql",
 }
 
 

@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,9 +23,11 @@ public class ModelStatusReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model_id")
+    @Schema(description = "模型ID", example = "example-id-123")
     private String modelId = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     private String status = null;
 
     public String getModelId() {

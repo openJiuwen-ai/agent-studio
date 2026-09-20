@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -18,28 +19,36 @@ public class JiuwenEvent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("event")
+    @Schema(description = "事件名称", example = "node.status")
     private String event = null;
 
     @JsonProperty("executionId")
+    @Schema(description = "执行ID", example = "execution-001")
     private String executionId = null;
 
     @JsonProperty("conversationId")
+    @Schema(description = "会话ID", example = "conversation-001")
     private String conversationId = null;
 
     @JsonProperty("createdTime")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdTime = null;
 
     @JsonProperty("index")
+    @Schema(description = "索引", example = "0")
     private Integer index = null;
 
     @JsonProperty("isStructMessage")
+    @Schema(description = "是否为结构化消息", example = "false")
     private Boolean isStructMessage = false;
 
     @JsonProperty("data")
+    @Schema(description = "事件数据", example = "{}")
     @Valid
     private JiuwenEventData data = null;
 
     @JsonProperty("dataException")
+    @Schema(description = "数据异常信息", example = "数据解析异常")
     private String dataException = null;
 
     public String getEvent() {

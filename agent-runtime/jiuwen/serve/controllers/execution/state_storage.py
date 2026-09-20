@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
 
+import os
 import threading
 from abc import ABC, abstractmethod
 
 from common_utils.redis_manager import get_redis_client
+from jiuwen.common.configs.env_constants import EXECUTION_STATE_TTL_SECONDS_KEY
 from jiuwen.common.store.redis import get_redis_instance
+
+# Agent 状态 Redis key 默认过期时间（秒），默认 24h。
+# 正常结束会 delete_state 删除；此处 TTL 兜底异常/中断残留的 key，
+# 压测等场景可调短（EXECUTION_STATE_TTL_SECONDS）以控制 Redis 内存。
+_STATE_TTL_SECONDS = int(os.getenv(EXECUTION_STATE_TTL_SECONDS_KEY, 86400))
 
 
 class StateStorage(ABC):
@@ -86,7 +93,7 @@ class RedisStateStorage(StateStorage):
 
     def set_state(self, k, v):
         """往Redis中设置状态"""
-        self.redis_client.set(key=k, value=v)
+        self.redis_client.set(key=k, value=v, ex=_STATE_TTL_SECONDS)
 
 
 class AsyncMemoryStateStorage(AsyncStateStorage):
@@ -133,4 +140,4 @@ class AsyncRedisStateStorage(AsyncStateStorage):
 
     async def set_state(self, k, v):
         """往Redis中设置状态"""
-        await self.redis_client.set(k, v)
+        await self.redis_client.set(k, v, ex=_STATE_TTL_SECONDS)

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,12 +25,15 @@ public class PromptErrorInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "编码", example = "1")
     private Integer code = null;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "示例文本")
     private String message = null;
 
     @JsonProperty("details")
+    @Schema(description = "详情", example = "示例文本")
     private String details = null;
 
     public Integer getCode() {

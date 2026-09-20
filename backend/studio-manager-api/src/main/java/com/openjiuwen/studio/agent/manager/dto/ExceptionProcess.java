@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -30,16 +31,20 @@ public class ExceptionProcess implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("timeout")
+    @Schema(description = "超时时间（秒）", example = "30")
     private Double timeout = null;
 
     @JsonProperty("retry_times")
+    @Schema(description = "重试次数", example = "1")
     @Range(min = 0L, max = 3L)
     private Integer retryTimes = null;
 
     @JsonProperty("handle_type")
+    @Schema(description = "异常处理类型", example = "interrupt")
     private HandleTypeEnum handleType = null;
 
     @JsonProperty("default_outputs")
+    @Schema(description = "默认输出参数", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> defaultOutputs = null;

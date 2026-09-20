@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,12 +25,15 @@ public class PeEvalResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("score")
+    @Schema(description = "评分", example = "85")
     private Integer score = null;
 
     @JsonProperty("time")
+    @Schema(description = "时间", example = "1.5")
     private Double time = null;
 
     @JsonProperty("token")
+    @Schema(description = "Token数量", example = "1024")
     private Integer token = null;
 
     public Integer getScore() {
