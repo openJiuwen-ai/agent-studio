@@ -189,7 +189,7 @@ class FlowStreamTransform(WorkflowComponent):
             # to support whole-frame reference like {{{{raw_output}}}}.
             # If user explicitly configures src_path to a different value,
             # respect their configuration.
-            _dc_replace(v, src_path="") if (v.name == self._source_field and v.src_path == v.name) else v
+            _dc_replace(v, src_path="") if (self._direct_assign_output and v.name == self._source_field and v.src_path == v.name) else v
             for v in cfg.variables
         ]
         return _dc_replace(cfg, variables=new_vars)
@@ -323,6 +323,8 @@ class FlowStreamTransform(WorkflowComponent):
                         pos = end_pos
                         if isinstance(obj, dict):
                             yield obj
+                        elif obj is not None:
+                            yield {"answer": obj}
                 except Exception:
                     remainder = s[pos:]
                     try:
@@ -421,9 +423,7 @@ class FlowStreamTransform(WorkflowComponent):
         if not isinstance(inputs, dict):
             # Non-dict inputs (e.g. bare AsyncGenerator): delegate to invoke path
             resolved = await self._resolve_stream_inputs(inputs)
-            result = await self.invoke(resolved, session, context)
-            if result is not None:
-                yield result
+            await self.invoke(resolved, session, context)
             return
         user_fields = (inputs or {}).get(USER_FIELDS, {}) or {}
         origin_stream = user_fields.get(self._source_field)
