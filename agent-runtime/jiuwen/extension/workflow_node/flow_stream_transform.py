@@ -189,7 +189,13 @@ class FlowStreamTransform(WorkflowComponent):
             # to support whole-frame reference like {{{{raw_output}}}}.
             # If user explicitly configures src_path to a different value,
             # respect their configuration.
-            _dc_replace(v, src_path="") if (self._direct_assign_output and v.name == self._source_field and v.src_path == v.name) else v
+            _dc_replace(v, src_path="")
+            if (
+                self._direct_assign_output
+                and v.name == self._source_field
+                and v.src_path == v.name
+            )
+            else v
             for v in cfg.variables
         ]
         return _dc_replace(cfg, variables=new_vars)
