@@ -5,6 +5,7 @@
 """AgentRunSpace运行空间管理器"""
 
 import asyncio
+import logging
 from typing import Callable
 
 from jiuwen.common.exception.base import JiuWenBaseException
@@ -12,7 +13,6 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.common.utils.utils import format_exception_reason
 from jiuwen.multi_agent.core.enums import ProcessStatus
-import logging
 
 
 class AgentRunSpace:
@@ -100,7 +100,7 @@ class AgentRunSpace:
                     # 通过接受关闭信号回到while循环判断stopped标志退出循环
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            f"received shutdown sentinel from receive_que. runner is stopped: {self._stopped.is_set()}"
+                            "received shutdown sentinel from receive_que. runner is stopped: %s", self._stopped.is_set()
                         )
                 elif result.status == ProcessStatus.ERROR:
                     logger.error(

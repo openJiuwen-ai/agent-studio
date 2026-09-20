@@ -5,6 +5,7 @@
 
 import asyncio
 import time
+import logging
 from typing import Union, Any, AsyncGenerator, List, Optional, Set, Tuple
 
 from jiuwen.common.exception.status_code import StatusCode
@@ -18,7 +19,6 @@ from jiuwen.multi_agent.core.member import MemberMessageType, Message
 from jiuwen.multi_agent.core.stream.stream_handler import StreamHandler
 from jiuwen.orchestration.flow.enum import StreamDataMsg
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
-import logging
 
 
 class HierarchicalControlAgent(BaseControlAgent):
@@ -72,7 +72,7 @@ class HierarchicalControlAgent(BaseControlAgent):
                 self.current_agent_calls_count += 1
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
-                        f"Agent call count: {self.current_agent_calls_count}/{self.config.max_agent_calls}"
+                        "Agent call count: %s/%s", self.current_agent_calls_count, self.config.max_agent_calls
                     )
 
                 if not agent_id:
@@ -176,7 +176,7 @@ class HierarchicalControlAgent(BaseControlAgent):
             target_agent = self._extract_handoff_target(message)
             if target_agent and target_agent in self.agents:
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"Handoff from {agent_id} to {target_agent}")
+                    logger.debug("Handoff from %s to %s", agent_id, target_agent)
                 target_agent_info["agent_id"] = target_agent
                 return ExecutionAction.HANDOFF, False
             logger.warning(f"Invalid handoff target: {target_agent}")
@@ -184,7 +184,7 @@ class HierarchicalControlAgent(BaseControlAgent):
 
         if message.type == MemberMessageType.INTERRUPT:
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Agent {agent_id} requested interrupt")
+                logger.debug("Agent %s requested interrupt", agent_id)
             # 直接处理中断逻辑
             self._handle_agent_interrupt(agent_id)
             return ExecutionAction.INTERRUPT, True
@@ -202,7 +202,7 @@ class HierarchicalControlAgent(BaseControlAgent):
             and message.data.code == StreamCode.CONTROLLER_FINISH_MESSAGE.value
         ):
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Agent {agent_id} finished control")
+                logger.debug("Agent %s finished control", agent_id)
             self.task_end = True
             return ExecutionAction.FINISH, True
 
@@ -249,7 +249,7 @@ class HierarchicalControlAgent(BaseControlAgent):
             target_agent = inputs["handoff_context"].get("to_agent")
             if target_agent and target_agent in self.agents:
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"Selected agent from handoff context: {target_agent}")
+                    logger.debug("Selected agent from handoff context: %s", target_agent)
                 # 清除handoff上下文，避免重复使用
                 del inputs["handoff_context"]
                 return target_agent
@@ -260,14 +260,14 @@ class HierarchicalControlAgent(BaseControlAgent):
 
             if recent_interrupted_agent in self.agents:
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"Resuming interrupted agent: {recent_interrupted_agent}")
+                    logger.debug("Resuming interrupted agent: %s", recent_interrupted_agent)
                 return recent_interrupted_agent
 
         # 3. 默认选择main_agent
         main_agent_id = self.config.main_agent.metadata.id
         if main_agent_id in self.agents:
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Selected main agent: {main_agent_id}")
+                logger.debug("Selected main agent: %s", main_agent_id)
             return main_agent_id
 
         logger.warning("No available agents found")
@@ -324,7 +324,7 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.current_agent_calls_count -= 1
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"Agent {agent_id} interrupted. Total interrupted: {len(self.interrupted_agents)}"
+                "Agent %s interrupted. Total interrupted: %s", agent_id, len(self.interrupted_agents)
             )
 
     def _extract_handoff_target(self, message: Message) -> Optional[str]:

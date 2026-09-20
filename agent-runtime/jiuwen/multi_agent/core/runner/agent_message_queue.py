@@ -5,6 +5,7 @@
 """消息队列核心类"""
 
 import asyncio
+import logging
 from asyncio import Event
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -13,7 +14,6 @@ from typing import Dict, Optional, Any, List
 from jiuwen.common.log.base import logger
 from jiuwen.multi_agent.core.common.message_type import MessageEnvelope
 from jiuwen.multi_agent.core.enums import MessageState
-import logging
 
 
 class QueueStoppedError(RuntimeError):
@@ -104,7 +104,7 @@ class AgentMessageQueue:
             return None
         message_id = envelope.message_id
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"processing message id: {message_id}")
+            logger.debug("processing message id: %s", message_id)
         return envelope
 
     async def mark_message_completed(self, message_id: str) -> None:

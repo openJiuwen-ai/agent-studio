@@ -4,6 +4,7 @@
 
 """层次化智能体组"""
 
+import logging
 from typing import Union, AsyncGenerator, Optional, Dict, Any
 
 from jiuwen.common.exception.base import JiuWenBaseException
@@ -22,7 +23,6 @@ from jiuwen.multi_agent.core.runner.standalone_runner import StandaloneRunner
 from jiuwen.orchestration.flow.enum import StreamDataMsg
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 from jiuwen.serve.controllers.execution.utils import AgentIrUtils
-import logging
 
 
 class HierarchicalAgentGroup(BaseAgentGroup):
@@ -47,7 +47,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
                 self._group_state = AgentGroupState()
 
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Starting AgentGroup {self.config.group_id}")
+                logger.debug("Starting AgentGroup %s", self.config.group_id)
 
             if self.runner is None:
                 self.runner = StandaloneRunner()
@@ -65,7 +65,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
                 await self.runner.start()
 
             self._running = True
-            logger.debug(f"AgentGroup {self.config.group_id} started successfully")
+            logger.debug("AgentGroup %s started successfully", self.config.group_id)
 
         except Exception as e:
             logger.error(
@@ -81,11 +81,11 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             return
 
         try:
-            logger.debug(f"Stopping AgentGroup {self.config.group_id}")
+            logger.debug("Stopping AgentGroup %s", self.config.group_id)
             self._running = False
             await self.runner.stop()
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"AgentGroup {self.config.group_id} stopped successfully")
+                logger.debug("AgentGroup %s stopped successfully", self.config.group_id)
         except Exception as e:
             logger.error(
                 f"Failed to stop AgentGroup: {e}",
@@ -241,7 +241,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
                 self.agents.add(cfg.metadata.id)
                 self.runner.register_member(cfg.metadata.id, Agent, cfg)
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Registered {len(self.agents)} agents")
+                logger.debug("Registered %s agents", len(self.agents))
         except Exception as e:
             logger.error("Failed to initialize agents")
             raise JiuWenBaseException(

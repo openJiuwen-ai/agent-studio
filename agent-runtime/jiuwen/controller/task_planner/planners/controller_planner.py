@@ -140,11 +140,11 @@ class ControllerPlanner(TaskPlanner):
         """
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"task_id: {self.task_id}| Task Planner received message type: {message.message_type} "
-                f"content: {message.content}",
-                simple_log=f"task_id: {self.task_id}| Task Planner received message type: {message.message_type}",
+                "task_id: %s| Task Planner received message type: %s "
+                "content: %s",
+                self.task_id, message.message_type, message.content,
+                simple_log="task_id: %s| Task Planner received message type: %s" % (self.task_id, message.message_type),
             )
-        self.last_message = message
         # 处理用户输入，获取工作流序列
         self._process_user_input(message)
 
