@@ -16,6 +16,8 @@
     pytest tests/unit_tests/serve/test_ir_converter_http_gaps.py -v
 """
 
+# pylint: disable=protected-access  # 单测需直接访问 wrapper 内部成员 _exception_config/_recover_or_raise
+
 import ast
 
 import pytest
