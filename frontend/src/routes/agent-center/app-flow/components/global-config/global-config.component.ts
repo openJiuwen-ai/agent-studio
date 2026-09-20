@@ -734,7 +734,8 @@ export class GlobalConfigComponent
       desc: ""
     };
     this.treeNodes = [...this.treeNodes, child];
-    this.originNames.set(child, child.name);
+    // New node has empty name from getInitOutputParamConfig; a valid
+    // snapshot is established on the first onConfirm → restampOriginNames.
     this.cdr.detectChanges();
   }
 
@@ -838,8 +839,8 @@ export class GlobalConfigComponent
   }
 
   private stampOriginNames() {
-    this.autoMemos.forEach((m) => this.originNames.set(m, m.name));
-    this.treeNodes.forEach((t) => this.originNames.set(t, t.name));
+    this.autoMemos.forEach((m) => { if (!this.originNames.has(m)) this.originNames.set(m, m.name); });
+    this.treeNodes.forEach((t) => { if (!this.originNames.has(t)) this.originNames.set(t, t.name); });
   }
 
   private restampOriginNames() {
@@ -956,7 +957,7 @@ export class GlobalConfigComponent
       const req = startSchemaStrField(JSON.stringify(data));
       this.assignmentMemos = this.fields2Views(req);
       this.treeNodes=this.convertToTreeNodes(this.assignmentMemos);
-      this.restampOriginNames();
+      this.stampOriginNames();
       this.cdr.detectChanges();
       modalRef.close();
     })
@@ -974,7 +975,7 @@ export class GlobalConfigComponent
         templatesSelected: (data) => {
           this.assignmentMemos = [...this.assignmentMemos, ...this.fields2Views(data)];
           this.treeNodes = this.convertToTreeNodes(this.assignmentMemos);
-          this.restampOriginNames();
+          this.stampOriginNames();
           this.cdr.detectChanges();
           modalRef.close();
         },
