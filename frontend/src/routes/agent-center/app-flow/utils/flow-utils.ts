@@ -2110,7 +2110,9 @@ export const FlowUtils = {
               let memosNames = memos.map(m => {
                 return `memory.${m.name}`;
               });
-              v.refWithout = !memosNames.includes(ref_var_name);
+              v.refWithout = !memosNames.some(
+                name => ref_var_name === name || ref_var_name.startsWith(name + '.')
+              );
             } else {
               v.refWithout = true;
             }
