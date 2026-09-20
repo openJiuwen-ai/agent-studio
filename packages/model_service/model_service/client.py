@@ -351,7 +351,7 @@ class StudioModelClient(OpenAIModelClient):
                     _extra["X-Request-Id"] = _ctx.request_id
                 if _ctx.execution_id:
                     _extra["X-Execution-Id"] = _ctx.execution_id
-        except (ImportError, Exception):
+        except Exception:
             pass
         _req_headers = _request_headers()
         if _req_headers:
@@ -369,7 +369,7 @@ class StudioModelClient(OpenAIModelClient):
         try:
             from jiuwen.common.log.base import logger as _jw_logger
             _jw_logger.debug(f"LLM extra_headers injected: {_extra}")
-        except Exception:
+        except ImportError:
             pass
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
