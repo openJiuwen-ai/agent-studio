@@ -417,8 +417,10 @@ class AsyncDictStreamTransformer:
             base = get_by_path(frame, self._cfg.input_root_path, default={})
         if not src_path:
             # When src_path is empty (e.g. {{raw_output}} referencing the whole
-            # input), extract the source field value from userFields instead of
-            # returning the entire frame dict (which includes __stream_metadata__).
+            # input), extract the named variable from userFields. If var_name matches
+            # a userFields key, return that value; otherwise fall back to default.
+            # This avoids returning the raw frame dict (which includes internal
+            # fields like __stream_metadata__).
             if isinstance(base, dict) and "userFields" in base:
                 uf = base["userFields"]
                 if isinstance(uf, str):

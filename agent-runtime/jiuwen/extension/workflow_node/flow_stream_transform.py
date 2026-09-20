@@ -251,12 +251,6 @@ class FlowStreamTransform(WorkflowComponent):
                 ].format(error_msg=str(e)),
             ) from e
 
-        # Handle plain string or non-async-iterable input (same as invoke)
-        if isinstance(origin_stream, str):
-            async def _string_to_async_gen(s):
-                yield s
-            origin_stream = _string_to_async_gen(origin_stream)
-
         transformer = AsyncDictStreamTransformer(cfg)
         out_stream = transformer.transform(self._iter_dict_frames(origin_stream))
 
@@ -325,18 +319,19 @@ class FlowStreamTransform(WorkflowComponent):
                         pos = end_pos
                         if isinstance(obj, dict):
                             yield obj
-                except Exception as e:
+                except Exception:
+                    remainder = s[pos:]
                     try:
                         import ast
-                        obj = ast.literal_eval(s)
+                        obj = ast.literal_eval(remainder)
                         if isinstance(obj, dict):
                             yield obj
                         elif isinstance(obj, str):
                             yield {"answer": obj}
                     except (ValueError, SyntaxError):
-                        yield {"answer": s}
-                    workflow_logger.debug("JSON parse failed, used ast fallback: %s", s[:100])
-                    continue
+                        if remainder:
+                            yield {"answer": remainder}
+                    workflow_logger.debug("JSON parse failed, used ast fallback: %s", remainder[:100])
 
     def _build_result(self, value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """构建返回结果
@@ -369,7 +364,6 @@ class FlowStreamTransform(WorkflowComponent):
         prev: Optional[Dict[str, Any]] = None
 
         async for frame in out_stream:
-            import sys
             if prev is not None:
                 await session.write_stream(
                     OutputSchema(
@@ -423,14 +417,28 @@ class FlowStreamTransform(WorkflowComponent):
         if not isinstance(inputs, dict):
             # Non-dict inputs (e.g. bare AsyncGenerator): delegate to invoke path
             resolved = await self._resolve_stream_inputs(inputs)
-            async for output in self.invoke(resolved, session, context):
-                yield output
+            result = await self.invoke(resolved, session, context)
+            if result is not None:
+                yield result
             return
         user_fields = (inputs or {}).get(USER_FIELDS, {}) or {}
         origin_stream = user_fields.get(self._source_field)
 
         if origin_stream is None:
             return
+
+        if not hasattr(origin_stream, "__aiter__"):
+            if isinstance(origin_stream, str):
+                async def _str_to_gen(s):
+                    yield s
+                origin_stream = _str_to_gen(origin_stream)
+            else:
+                raise build_flow_stream_transform_error(
+                    error_code=FlowStreamTransformStatusCode.INPUT_INVALID[0],
+                    message=FlowStreamTransformStatusCode.INPUT_INVALID[1].format(
+                        error_msg=f"'{self._source_field}' must be an async iterable or string"
+                    ),
+                )
 
         try:
             cfg = self._build_transformer_config()
@@ -448,26 +456,23 @@ class FlowStreamTransform(WorkflowComponent):
         idx = 0
         prev = None
         async for frame in out_stream:
-            import sys
             if prev is not None:
-                answer_data = prev
                 yield OutputSchema(
                     type=STREAM_TYPE_PARTIAL_CONTENT,
                     index=idx,
                     payload=get_data_of_streaming_with_metadata(
-                        answer=answer_data, metadata=self.metadata
+                        answer=prev, metadata=self.metadata
                     ),
                 )
                 idx += 1
             prev = frame
 
         if prev is not None:
-            answer_data = prev
             yield OutputSchema(
                 type=STREAM_TYPE_MESSAGE_END,
                 index=idx,
                 payload=get_data_of_streaming_with_metadata(
-                    answer=answer_data, metadata=self.metadata
+                    answer=prev, metadata=self.metadata
                 ),
             )
 
