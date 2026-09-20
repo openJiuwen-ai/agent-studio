@@ -9,12 +9,17 @@ import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { NzTagModule } from 'ng-zorro-antd/tag';
+import { NzDropDownModule } from 'ng-zorro-antd/dropdown';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzTypographyModule } from 'ng-zorro-antd/typography';
 
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { I18nNamespace } from '@i18n';
 import { MEMORY_STRATEGY_MAP } from '@routes/memory-lib/memory-lib-constants';
 import { IMemoryLibItem, IMemoryStrategy } from '@routes/memory-lib/memory-lib-interfaces';
 import { MemoryLibService } from '@routes/memory-lib/memory-lib.service';
+import { PipesModule } from '../../../../pipes/pipes.module';
 
 @Component({
   selector: 'memory-lib-list',
@@ -23,10 +28,15 @@ import { MemoryLibService } from '@routes/memory-lib/memory-lib.service';
     CommonModule,
     RouterModule,
     I18NextModule,
+    PipesModule,
     NzTableModule,
     NzEmptyModule,
     NzButtonModule,
     NzToolTipModule,
+    NzTagModule,
+    NzDropDownModule,
+    NzIconModule,
+    NzTypographyModule,
   ],
   providers: [
     {
@@ -46,8 +56,7 @@ export class MemoryLibListComponent {
 
   libs = input<IMemoryLibItem[]>();
   dataChange = output<void>();
-
-  constructor() {}
+  editMemoryLib = output<IMemoryLibItem>();
 
   /**
    * 获取策略类型的多语言拼接文本
@@ -60,7 +69,18 @@ export class MemoryLibListComponent {
       .join(' | ') || '';
   }
 
+  editMemory(memoryLib: IMemoryLibItem) {
+    this.editMemoryLib.emit(memoryLib);
+  }
+
+  showReference(memoryLib: IMemoryLibItem) {
+    this.memoryLibService.showReference(memoryLib.memory_repo_id);
+  }
+
   deleteMemory(memoryLib: IMemoryLibItem) {
+    if (this.memoryLibService.subscribeBtnDisabled()) {
+      return;
+    }
     this.memoryLibService.safeDeleteMemoryLib(memoryLib).then(isDeleted => {
       if (isDeleted) {
         this.dataChange.emit();

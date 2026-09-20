@@ -30,6 +30,7 @@ import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.IMemoryRepoManagementService;
+import com.openjiuwen.studio.agent.manager.service.IMemoryServiceInstanceService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
@@ -67,6 +68,9 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
     @Autowired
     private MgObsService mgObsService;
 
+    @Autowired
+    private IMemoryServiceInstanceService memoryServiceInstanceService;
+
     @Value("${memory.default-icon}")
     private String memoryDefaultIcon;
 
@@ -87,6 +91,9 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
         }
         // 校验长期策略是否合法，类型唯一/至少一个策略
         checkLongMemoryStrategies(entity.getLongTermMemoryStrategies());
+
+        // EXTERNAL 后端校验：验证实例存在且可达
+        validateExternalBackend(entity);
 
         // 插入数据库
         memoryRepoMapper.insert(entity);
@@ -129,7 +136,31 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
             .longTermMemoryStrategies(body.getLongTermMemoryStrategies())
             .conversationRound(body.getConversationRound())
             .timeSpan(body.getTimeSpan())
+            .memoryBackendType(StringUtils.isNotEmpty(body.getMemoryBackendType())
+                ? body.getMemoryBackendType() : "BUILTIN")
+            .memoryServiceInstanceId(body.getMemoryServiceInstanceId())
+            .scopeModelConfig(body.getScopeModelConfig())
             .build();
+    }
+
+    /**
+     * EXTERNAL 后端校验：验证实例ID非空且实例存在
+     */
+    private void validateExternalBackend(MemoryRepoEntity entity) {
+        if (!"EXTERNAL".equalsIgnoreCase(entity.getMemoryBackendType())) {
+            return;
+        }
+        if (StringUtils.isEmpty(entity.getMemoryServiceInstanceId())) {
+            throw new InvalidParameterException("EXTERNAL 后端必须指定 memory_service_instance_id");
+        }
+        try {
+            memoryServiceInstanceService.healthCheck(
+                entity.getProjectId(), entity.getMemoryServiceInstanceId(), entity.getWorkspaceId());
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(MemoryRepoManagementService.class)
+                .warn("External instance {} health check failed during repo creation: {}",
+                    entity.getMemoryServiceInstanceId(), e.getMessage());
+        }
     }
 
     @Override
@@ -195,18 +226,43 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
                 .warn("Failed to scan workflows for memory repo cleanup {}: {}", memoryRepoId, e.getMessage());
         }
 
+        // 先查询记忆库以获取后端类型（删除后无法再查）
+        MemoryRepoEntity repoEntityBeforeDelete = null;
+        try {
+            repoEntityBeforeDelete = memoryRepoMapper.selectById(memoryRepoId);
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(MemoryRepoManagementService.class)
+                .warn("Failed to query memory repo {} before delete: {}", memoryRepoId, e.getMessage());
+        }
+
         // 删除记录
         int result = memoryRepoMapper.deleteById(memoryRepoId);
         if (result == 1) {
-            // Delete actual memory data in agent-runtime via LTM (OpenSearch/Redis)
-            try {
-                agentRuntimeClient.deleteMemoryRepoData(memoryRepoId);
-            } catch (Exception e) {
-                // Non-critical: orphaned data doesn't cause errors, just occupies storage.
-                // Structured log for ops monitoring — grep "ORPHAN_MEMORY_DATA" to find failures.
-                org.slf4j.LoggerFactory.getLogger(MemoryRepoManagementService.class)
-                    .error("[ORPHAN_MEMORY_DATA] Failed to delete runtime data for memory repo {}: type={}, msg={}",
-                        memoryRepoId, e.getClass().getSimpleName(), e.getMessage(), e);
+            // 按后端类型分支清理数据
+            String backendType = (repoEntityBeforeDelete != null
+                && StringUtils.isNotEmpty(repoEntityBeforeDelete.getMemoryBackendType()))
+                ? repoEntityBeforeDelete.getMemoryBackendType() : "BUILTIN";
+
+            if ("EXTERNAL".equalsIgnoreCase(backendType) && repoEntityBeforeDelete != null
+                && StringUtils.isNotEmpty(repoEntityBeforeDelete.getMemoryServiceInstanceId())) {
+                // EXTERNAL: 调 agent-memory delete API
+                try {
+                    memoryServiceInstanceService.deleteMemByScope(
+                        repoEntityBeforeDelete.getMemoryServiceInstanceId(), memoryRepoId);
+                } catch (Exception e) {
+                    org.slf4j.LoggerFactory.getLogger(MemoryRepoManagementService.class)
+                        .error("[ORPHAN_MEMORY_DATA] Failed to delete external memory data for repo {}: {}",
+                            memoryRepoId, e.getMessage(), e);
+                }
+            } else {
+                // BUILTIN: Delete actual memory data in agent-runtime via LTM (OpenSearch/Redis)
+                try {
+                    agentRuntimeClient.deleteMemoryRepoData(memoryRepoId);
+                } catch (Exception e) {
+                    org.slf4j.LoggerFactory.getLogger(MemoryRepoManagementService.class)
+                        .error("[ORPHAN_MEMORY_DATA] Failed to delete runtime data for memory repo {}: type={}, msg={}",
+                            memoryRepoId, e.getClass().getSimpleName(), e.getMessage(), e);
+                }
             }
         }
         DeleteMemoryRepoResponseBody res = new DeleteMemoryRepoResponseBody();
@@ -247,6 +303,9 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
                 memoryRepoListItem.setUpdateTime(entity.getUpdateTime());
                 memoryRepoListItem.setLongTermMemoryStrategies(entity.getLongTermMemoryStrategies());
                 memoryRepoListItem.setIcon(StringUtils.isEmpty(entity.getIcon()) ? memoryDefaultIcon : entity.getIcon());
+                memoryRepoListItem.setMemoryBackendType(StringUtils.isNotEmpty(entity.getMemoryBackendType())
+                    ? entity.getMemoryBackendType() : "BUILTIN");
+                memoryRepoListItem.setMemoryServiceInstanceId(entity.getMemoryServiceInstanceId());
                 return memoryRepoListItem;
             })
             .collect(Collectors.toList());
@@ -277,6 +336,9 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
             entity.setIcon(body.getIcon());
         }
 
+        // EXTERNAL 后端校验
+        validateExternalBackend(entity);
+
         // 更新数据库
         memoryRepoMapper.updateById(entity);
 
@@ -297,6 +359,9 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
             .longTermMemoryStrategies(body.getLongTermMemoryStrategies())
             .conversationRound(body.getConversationRound())
             .timeSpan(body.getTimeSpan())
+            .memoryBackendType(body.getMemoryBackendType())
+            .memoryServiceInstanceId(body.getMemoryServiceInstanceId())
+            .scopeModelConfig(body.getScopeModelConfig())
             .lastUpdateUserId(RequestContextUtils.getRequestUserId())
             .lastUpdateUserName(RequestContextUtils.getRequestUserName())
             .build();
@@ -331,6 +396,10 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
         response.setConversationRound(entity.getConversationRound());
         response.setTimeSpan(entity.getTimeSpan());
         response.setIcon(StringUtils.isEmpty(entity.getIcon()) ? memoryDefaultIcon : entity.getIcon());
+        response.setMemoryBackendType(StringUtils.isNotEmpty(entity.getMemoryBackendType())
+            ? entity.getMemoryBackendType() : "BUILTIN");
+        response.setMemoryServiceInstanceId(entity.getMemoryServiceInstanceId());
+        response.setScopeModelConfig(entity.getScopeModelConfig());
         return response;
     }
 }

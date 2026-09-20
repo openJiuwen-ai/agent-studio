@@ -3,78 +3,63 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 24px;
 
-  .memory-management-title-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    .title-container {
-      font-size: 20px;
-      font-weight: bold;
-      line-height: 30px;
-    }
-
-    .memory-operation-container {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-  }
-
-  .guide-container {
-    flex-shrink: 0;
-    overflow: hidden;
-    transition: height 0.3s;
-  }
-
-  .memory-management-list-operation {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-
-    .create-search {
-      flex: 1;
-    }
-  }
-
-  .memory-display-wrapper {
-    position: relative;
-    flex: 1;
+  .memory-repo-list {
+    height: 100%;
     display: flex;
     flex-direction: column;
-    /* 修正点：align-items 必须为 stretch，否则表格会被压缩 */
-    align-items: stretch;
-    justify-content: flex-start;
+    overflow: hidden;
 
-    // nz-spin 容器在 nz-spin 组件内部的类名，确保撑满
-    :any-link { width: 100%; }
-
-    .memory-display-container {
-      width: 100%;
-      flex: 1;
+    .memory-top-operate {
       display: flex;
-      gap: 24px;
-      flex-direction: column;
+      margin-bottom: 24px;
 
-      .memory-display-content {
+      .memory-search {
         flex: 1;
-        width: 100%;
-      }
-
-      .pagination-container {
-        display: flex;
-        justify-content: flex-end;
-        padding-top: 16px;
+        margin-right: 8px;
       }
     }
 
-    .no-data-container {
+    .memory-display-wrapper {
       flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      overflow: auto;
+
+      ::ng-deep .ant-spin-container {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .memory-display-container {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+
+        .memory-display-content {
+          flex: 1;
+          overflow: auto;
+        }
+      }
+
+      .no-data-container {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+    }
+  }
+
+  .flex-right {
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .page-area {
+    bottom: 0;
+
+    &.card-page {
+      margin-top: 16px;
     }
   }
 }
