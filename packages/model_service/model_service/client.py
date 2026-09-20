@@ -367,12 +367,8 @@ class StudioModelClient(OpenAIModelClient):
             f"captured_keys={list(captured.keys()) if captured else []}, "
             f"projected_keys={list((params.get('extra_headers') or {}).keys())}"
         )
-        try:
-            from jiuwen.common.log.base import logger as _jw_logger
-            _trace_headers = {k: v for k, v in _extra.items() if k in ("X-Request-Id", "X-Execution-Id", "traceparent")}
-            _jw_logger.debug(f"LLM extra_headers injected: {_trace_headers}")
-        except ImportError:
-            workflow_logger.debug("LLM extra_headers debug log skipped: jiuwen logger not available")
+        _trace_headers = {k: v for k, v in _extra.items() if k in ("X-Request-Id", "X-Execution-Id", "traceparent")}
+        workflow_logger.debug(f"LLM extra_headers injected: {_trace_headers}")
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
             extra_body = dict(params.get("extra_body") or {})
