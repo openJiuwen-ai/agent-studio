@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import logging
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Union, Any, AsyncGenerator
@@ -22,7 +24,6 @@ from jiuwen.controller.task_planner.planning_modules.task_understanding_module i
 from jiuwen.controller.task_planner.rule_modules.rule_module import RuleModule
 from jiuwen.controller.task_planner.task_planner import TaskPlanner
 from jiuwen.controller.task_planner.task_queue import TaskQueue
-import logging
 
 
 @dataclass
@@ -157,7 +158,10 @@ class ControllerPlanner(TaskPlanner):
                 logger.debug(
                     "task_id: %s | Rule applied in stream, result_type=%s, result=%s",
                     self.task_id, type(rule_result).__name__, rule_result,
-                    simple_log="task_id: %s | Rule applied in stream, result_type=%s" % (self.task_id, type(rule_result).__name__),
+                    simple_log=(
+                        "task_id: %s | Rule applied in stream, "
+                        "result_type=%s"
+                    ) % (self.task_id, type(rule_result).__name__),
                 )
             yield rule_result
             return
