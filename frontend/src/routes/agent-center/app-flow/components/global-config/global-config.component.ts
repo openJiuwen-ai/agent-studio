@@ -734,7 +734,7 @@ export class GlobalConfigComponent
       desc: ""
     };
     this.treeNodes = [...this.treeNodes, child];
-    if (child.name) this.originNames.set(child, child.name);
+    this.originNames.set(child, child.name);
     this.cdr.detectChanges();
   }
 
@@ -838,8 +838,8 @@ export class GlobalConfigComponent
   }
 
   private stampOriginNames() {
-    this.autoMemos.forEach((m) => { if (m.name) this.originNames.set(m, m.name); });
-    this.treeNodes.forEach((t) => { if (t.name) this.originNames.set(t, t.name); });
+    this.autoMemos.forEach((m) => this.originNames.set(m, m.name));
+    this.treeNodes.forEach((t) => this.originNames.set(t, t.name));
   }
 
   private restampOriginNames() {
@@ -851,21 +851,23 @@ export class GlobalConfigComponent
     const renames: { oldRef: string; newRef: string }[] = [];
     this.autoMemos.forEach((m) => {
       const originName = this.originNames.get(m);
-      if (originName && m.name && originName !== m.name) {
-        renames.push({
-          oldRef: `memory.${originName}`,
-          newRef: `memory.${m.name}`,
-        });
+      if (!originName || !m.name || originName === m.name) {
+        return;
       }
+      renames.push({
+        oldRef: `memory.${originName}`,
+        newRef: `memory.${m.name}`,
+      });
     });
     this.treeNodes.forEach((t) => {
       const originName = this.originNames.get(t);
-      if (originName && t.name && originName !== t.name) {
-        renames.push({
-          oldRef: `memory.${originName}`,
-          newRef: `memory.${t.name}`,
-        });
+      if (!originName || !t.name || originName === t.name) {
+        return;
       }
+      renames.push({
+        oldRef: `memory.${originName}`,
+        newRef: `memory.${t.name}`,
+      });
     });
     return renames;
   }
