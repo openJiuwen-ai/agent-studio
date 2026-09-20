@@ -77,7 +77,7 @@ _extract_defaults = _bind_method(
 )
 _inject_defaults = _bind_method(
     _HANDLER_PATH,
-    "_inject_start_field_defaults",
+    "inject_start_field_defaults",
     {"Start": Start},
 )
 
@@ -167,7 +167,7 @@ class TestExtractStartUserFieldDefaults:
 
 
 class TestInjectStartFieldDefaults:
-    """_inject_start_field_defaults — 全部类型默认注入 global_variables。"""
+    """inject_start_field_defaults — 全部类型默认注入 global_variables。"""
 
     @staticmethod
     def _make_context(ir):
