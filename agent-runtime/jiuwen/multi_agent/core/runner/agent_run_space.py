@@ -12,6 +12,7 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.common.utils.utils import format_exception_reason
 from jiuwen.multi_agent.core.enums import ProcessStatus
+import logging
 
 
 class AgentRunSpace:
@@ -25,10 +26,10 @@ class AgentRunSpace:
     async def stop(self) -> None:
         """Stop the run space"""
         self._stopped.set()
-        logger.info("AgentRunSpace set stop")
+        logger.debug("AgentRunSpace set stop")
         try:
             await self._runner.message_queue.shutdown()
-            logger.info("Stop runner message_queue success")
+            logger.debug("Stop runner message_queue success")
         except Exception as e:
             raise JiuWenBaseException(
                 error_code=StatusCode.MULTI_AGENT_RUN_SPACE_SHUTDOWN_QUEUE_ERROR.code,
@@ -37,9 +38,9 @@ class AgentRunSpace:
 
         if not self._run_task.done():
             try:
-                logger.info("Start to stop run_task")
+                logger.debug("Start to stop run_task")
                 await self._run_task
-                logger.info("Stop run_task success")
+                logger.debug("Stop run_task success")
             except Exception as e:
                 raise JiuWenBaseException(
                     error_code=StatusCode.MULTI_AGENT_RUN_SPACE_STOP_TASK_ERROR.code,
@@ -97,9 +98,10 @@ class AgentRunSpace:
                 result = await self._runner.process_next()
                 if result.status == ProcessStatus.NO_MESSAGES:
                     # 通过接受关闭信号回到while循环判断stopped标志退出循环
-                    logger.info(
-                        f"received shutdown sentinel from receive_que. runner is stopped: {self._stopped.is_set()}"
-                    )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"received shutdown sentinel from receive_que. runner is stopped: {self._stopped.is_set()}"
+                        )
                 elif result.status == ProcessStatus.ERROR:
                     logger.error(
                         f"Error processing message: {result.error_message}",

@@ -22,6 +22,7 @@ from jiuwen.multi_agent.core.runner.standalone_runner import StandaloneRunner
 from jiuwen.orchestration.flow.enum import StreamDataMsg
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 from jiuwen.serve.controllers.execution.utils import AgentIrUtils
+import logging
 
 
 class HierarchicalAgentGroup(BaseAgentGroup):
@@ -45,7 +46,8 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             if state is None:
                 self._group_state = AgentGroupState()
 
-            logger.info(f"Starting AgentGroup {self.config.group_id}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Starting AgentGroup {self.config.group_id}")
 
             if self.runner is None:
                 self.runner = StandaloneRunner()
@@ -82,7 +84,8 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             logger.debug(f"Stopping AgentGroup {self.config.group_id}")
             self._running = False
             await self.runner.stop()
-            logger.info(f"AgentGroup {self.config.group_id} stopped successfully")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"AgentGroup {self.config.group_id} stopped successfully")
         except Exception as e:
             logger.error(
                 f"Failed to stop AgentGroup: {e}",
@@ -110,7 +113,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
                 if result.type == MemberMessageType.STREAM:
                     yield result.data
                 elif result.type == MemberMessageType.INTERRUPT:
-                    logger.info(
+                    logger.debug(
                         "Received INTERRUPT message, saving state and stopping stream"
                     )
                     await self._group_state.save_agent_group_state(
@@ -174,7 +177,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             config=self.config,
             runner=self.runner,
         )
-        logger.info("Hierarchical control agent created successfully")
+        logger.debug("Hierarchical control agent created successfully")
 
     def update_group_prompt(self, agent_info_map: Dict[str, Dict[str, Any]]):
         """注册prompt"""
@@ -237,7 +240,8 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             for cfg in self.config.agents:
                 self.agents.add(cfg.metadata.id)
                 self.runner.register_member(cfg.metadata.id, Agent, cfg)
-            logger.info(f"Registered {len(self.agents)} agents")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Registered {len(self.agents)} agents")
         except Exception as e:
             logger.error("Failed to initialize agents")
             raise JiuWenBaseException(

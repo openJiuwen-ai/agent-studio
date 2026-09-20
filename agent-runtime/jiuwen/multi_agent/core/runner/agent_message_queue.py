@@ -13,6 +13,7 @@ from typing import Dict, Optional, Any, List
 from jiuwen.common.log.base import logger
 from jiuwen.multi_agent.core.common.message_type import MessageEnvelope
 from jiuwen.multi_agent.core.enums import MessageState
+import logging
 
 
 class QueueStoppedError(RuntimeError):
@@ -102,7 +103,8 @@ class AgentMessageQueue:
             self._receive_queue.task_done()
             return None
         message_id = envelope.message_id
-        logger.info(f"processing message id: {message_id}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"processing message id: {message_id}")
         return envelope
 
     async def mark_message_completed(self, message_id: str) -> None:
@@ -145,11 +147,11 @@ class AgentMessageQueue:
 
     async def join(self) -> None:
         """等待队列处理完成"""
-        logger.info("Waiting for receive queue to join...")
+        logger.debug("Waiting for receive queue to join...")
         await self._receive_queue.join()
-        logger.info("Waiting for processing queue to join...")
+        logger.debug("Waiting for processing queue to join...")
         await self._processing_queue.join()
-        logger.info("Message queues joined successfully.")
+        logger.debug("Message queues joined successfully.")
 
     async def clear(self) -> None:
         """清理队列"""
@@ -176,7 +178,7 @@ class AgentMessageQueue:
         # 设置为已停止，禁止put
         self._stopped.set()
         await self._receive_queue.put(self.shutdown_sentinel)
-        logger.info("send shutdown sentinel to _receive_queue success")
+        logger.debug("send shutdown sentinel to _receive_queue success")
 
     async def get_state(self) -> MessageQueueState:
         """
