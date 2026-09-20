@@ -149,7 +149,13 @@ class SingleComponentDebugWrapper:
             handle_type = EXCEPTION_HANDLE_INTERRUPT
 
         default_outputs = exception_process.get(EXCEPTION_DEFAULT_OUTPUTS, {}) or {}
-        outputs_schema = self._inputs_schema if isinstance(self._inputs_schema, dict) else {}
+        # HTTP 输出扁平、与 inputs 货架无关：对齐 ir_converter._parse_exception_config
+        # 的 EI.http 规则置空 outputs_schema，让兜底键原样通过；否则恢复输出会混入
+        # 重排后的 inputs 货架键（query_parameters/headers 等）
+        if self._node_type == "EI.http":
+            outputs_schema = {}
+        else:
+            outputs_schema = self._inputs_schema if isinstance(self._inputs_schema, dict) else {}
 
         config = ExceptionConfig(
             handle_type=handle_type,
@@ -604,7 +610,12 @@ class SingleComponentDebugWrapper:
                 ),
             )
 
-        handle_type = (config.handle_type or "").lower()
+        # handle_type 不做大小写变换：_parse_exception_config 的枚举校验已保证
+        # 此处必为三个常量的精确值（非法值早被归为 interrupt）。历史 .lower()
+        # 会把驼峰常量 "defaultOutputs" 变成 "defaultoutputs" 永不命中，
+        # 默认输出恢复静默退化为 interrupt 抛错（errorbranch/interrupt 全小写
+        # 不受影响，唯独 defaultOutputs 被杀）
+        handle_type = config.handle_type or EXCEPTION_HANDLE_INTERRUPT
         if handle_type == EXCEPTION_HANDLE_ERROR_BRANCH:
             if self._node_type in _NO_ERROR_BRANCH_TYPES:
                 raise error

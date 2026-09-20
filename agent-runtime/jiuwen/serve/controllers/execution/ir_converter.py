@@ -3260,6 +3260,14 @@ class IRConverter:
             # （query→query_parameters、userFields 平铺、auth 并入），
             # 否则调试时 query/用户参数/鉴权都无法按组件预期读取
             inputs_schema = _remap_http_inputs_schema(inputs_schema, configs)
+            # 异常处理同样对齐注册路径：HTTP 前端只写 exceptionEnable/
+            # exceptionSuppression，注册路径经 _parse_exception_config 合成
+            # exceptionProcess，而调试 wrapper 只消费 configs.exceptionProcess
+            # ——缺合成则单节点调试开启异常处理不恢复，与试运行行为不一致
+            if not (configs or {}).get("exceptionProcess"):
+                synthesized = _synthesize_exception_process(node)
+                if synthesized:
+                    configs = {**(configs or {}), "exceptionProcess": synthesized}
         return SingleComponentInfo(
             component=component,
             node_id=component_id,

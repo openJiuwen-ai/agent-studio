@@ -269,6 +269,150 @@ async def test_create_single_component_http_inputs_remapped(monkeypatch):
     assert schema["headers"]["X-Api-Key"] == "secret123"
 
 
+# ─── MR 检视意见（2026-09-20 轮）#3：单节点调试路径的异常处理合成 ────────
+
+
+@pytest.mark.asyncio
+async def test_create_single_component_http_exception_process_synthesized(monkeypatch):
+    """单节点调试返回的 configs 必须含合成的 exceptionProcess。
+
+    调试 wrapper 只消费 configs.exceptionProcess（空则 _recover_or_raise 直接
+    抛错），注册路径经 _parse_exception_config 从 exceptionEnable/
+    exceptionSuppression 合成；不对齐则 HTTP 单节点调试开启异常处理不走
+    defaultOutputs 恢复，与试运行行为不一致。
+    """
+    from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+    def _ir(configs):
+        node = {
+            "id": "node_http_1",
+            "type": "EI.http",
+            "name": "HTTP请求_1",
+            "inputs": {},
+            "configs": configs,
+        }
+        return {
+            "workflowId": "wf_test",
+            "workflowVersion": "0.6.0",
+            "components": [node],
+            "connections": [],
+        }
+
+    async def fake_create_component(n, global_model, **kwargs):
+        return object(), "EI.http", n.get("configs") or {}
+
+    monkeypatch.setattr(
+        IRConverter, "_create_component", staticmethod(fake_create_component)
+    )
+
+    # 开启异常处理 → 合成 defaultOutputs（默认输出键走 snake→camel 别名）
+    info = await IRConverter.create_single_component(
+        _ir(
+            {
+                "exceptionEnable": True,
+                "exceptionSuppression": '{"body":"fallback","status_code":0}',
+            }
+        ),
+        "node_http_1",
+    )
+    ep = info.configs["exceptionProcess"]
+    assert ep["handleType"] == "defaultOutputs"
+    assert ep["defaultOutputs"] == {"body": "fallback", "statusCode": 0}
+
+    # 未开启 → 不合成（wrapper 得 None，保持抛错语义）
+    info = await IRConverter.create_single_component(
+        _ir({"exceptionEnable": False}), "node_http_1"
+    )
+    assert "exceptionProcess" not in info.configs
+
+    # configs 已有 exceptionProcess（API 直写形态）→ 不覆盖
+    info = await IRConverter.create_single_component(
+        _ir({"exceptionProcess": {"handleType": "errorbranch"}}), "node_http_1"
+    )
+    assert info.configs["exceptionProcess"] == {"handleType": "errorbranch"}
+
+
+def test_wrapper_http_exception_config_outputs_schema_empty():
+    """wrapper 异常配置对 EI.http 置空 outputs_schema，对齐注册路径。
+
+    HTTP 输出扁平、与 inputs 货架无关；若拿重排后的 inputs_schema 当合并
+    base，恢复输出会混入 query_parameters/headers 等货架键。
+    """
+    from jiuwen.extension.wrapper.single_component_debug_wrapper import (
+        SingleComponentDebugWrapper,
+    )
+    from jiuwen.serve.controllers.execution.ir_converter import SingleComponentInfo
+
+    def _wrapper(node_type, configs, inputs_schema):
+        return SingleComponentDebugWrapper(
+            SingleComponentInfo(
+                component=object(),
+                node_id="n1",
+                node_type=node_type,
+                configs=configs,
+                inputs_schema=inputs_schema,
+                node_name="测试",
+            ),
+            execution_id="exec_test",
+        )
+
+    configs = {
+        "exceptionProcess": {
+            "handleType": "defaultOutputs",
+            "defaultOutputs": {"body": "fallback"},
+        }
+    }
+    shelf = {"query_parameters": {"page": "1"}, "headers": {}}
+    cfg = _wrapper("EI.http", configs, shelf)._exception_config
+    assert cfg is not None
+    assert cfg.outputs_schema == {}
+
+    # 非 HTTP 节点保持既有行为（inputs_schema 作合并 base）
+    cfg = _wrapper("jiuwen.code", configs, shelf)._exception_config
+    assert cfg.outputs_schema == shelf
+
+
+@pytest.mark.asyncio
+async def test_wrapper_recover_dispatches_default_outputs():
+    """_recover_or_raise 必须命中驼峰常量 "defaultOutputs"。
+
+    历史 .lower() 把它变成 "defaultoutputs" 后与常量永不相等，默认输出恢复
+    静默退化为 interrupt 抛错（errorbranch/interrupt 全小写不受影响，唯独
+    defaultOutputs 被杀）——既有平台缺陷，HTTP 单节点调试接入异常合成后暴露。
+    """
+    from jiuwen.extension.wrapper.single_component_debug_wrapper import (
+        SingleComponentDebugWrapper,
+    )
+    from jiuwen.serve.controllers.execution.ir_converter import SingleComponentInfo
+
+    wrapper = SingleComponentDebugWrapper(
+        SingleComponentInfo(
+            component=object(),
+            node_id="n1",
+            node_type="EI.http",
+            configs={
+                "exceptionProcess": {
+                    "handleType": "defaultOutputs",
+                    "defaultOutputs": {"body": "fallback"},
+                }
+            },
+            inputs_schema={"query_parameters": {}},
+            node_name="测试",
+        ),
+        execution_id="exec_test",
+    )
+    events = [
+        sd
+        async for sd in wrapper._recover_or_raise(RuntimeError("boom"), "exec_test")
+    ]
+    assert len(events) == 1
+    outputs = events[0].data["outputs"]
+    assert outputs["isSuccess"] is False
+    assert outputs["body"] == "fallback"
+    # HTTP 恢复输出不得混入 inputs 货架键
+    assert "query_parameters" not in outputs
+
+
 # ─── MR 检视意见 #2/#4/#5（2026-09-17 轮）─────────────────────────────
 
 

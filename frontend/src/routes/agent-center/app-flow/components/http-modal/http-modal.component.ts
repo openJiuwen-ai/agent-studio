@@ -104,14 +104,15 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   override ngOnInit(): void {
-    const purgedShadowRows = this.ensureHttpInputContainers();
+    const inputsHealed = this.ensureHttpInputContainers();
     this.setNodeBase(this.nodeInfo);
     this.configs = cloneDeep(this.nodeInfo.configs);
     super.ngOnInit();
-    // FB-7：影子行清理必须标记为变更——super.ngOnInit 里 updateChangeAndInitTime
-    // 会把 initTime/changeTime 拉平，不补 changeUpdateTime 则关闭面板时
-    // tagCompareNoChange 提前返回，清理结果不会随 handelSave 落盘
-    if (purgedShadowRows) {
+    // FB-1/FB-7：inputs 自愈（清影子行/补容器/修 schema）必须标记为变更——
+    // super.ngOnInit 里 updateChangeAndInitTime 会把 initTime/changeTime 拉平，
+    // 不补 changeUpdateTime 则关闭面板时 tagCompareNoChange 提前返回，
+    // 自愈结果不会随 handelSave 落盘
+    if (inputsHealed) {
       this.changeUpdateTime();
     }
     this.validationRules.push(
@@ -194,7 +195,9 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
    * source 'pre_defined' + schema 数组；用户行：source 'user'、无 schema），
    * 打开面板即清理影子行。
    *
-   * @returns 是否清理了影子行（调用方据此标记变更，保证关闭面板时落盘）
+   * @returns 是否做了自愈修改（清理影子行 / 补回缺失容器 / 修复损坏 schema），
+   * 调用方据此标记变更——否则"开面板未编辑即关闭"时 tagCompareNoChange 提前
+   * 返回，自愈结果不会随 handelSave 落盘
    */
   ensureHttpInputContainers(): boolean {
     if (!Array.isArray(this.nodeInfo.inputs)) {
@@ -208,7 +211,7 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
     this.nodeInfo.inputs = this.nodeInfo.inputs.filter(
       (item) => !isShadowRow(item),
     );
-    const purged = this.nodeInfo.inputs.length !== before;
+    let healed = this.nodeInfo.inputs.length !== before;
     const defaults = this.appFlowServ.getInitHttpContainerInputs();
     defaults.forEach((container) => {
       const exist = this.nodeInfo.inputs.find(
@@ -216,11 +219,13 @@ export class HttpModalComponent extends ModalBaseComponent implements OnInit {
       );
       if (!exist) {
         this.nodeInfo.inputs.push(cloneDeep(container));
+        healed = true;
       } else if (!Array.isArray(exist.schema)) {
         exist.schema = [];
+        healed = true;
       }
     });
-    return purged;
+    return healed;
   }
 
   handelSave(): void {

@@ -43,9 +43,18 @@ export class ConfigUrlComponent implements OnInit {
     // 只展示不回写会让 IR 构建层的 endpoint+path 纯拼接产出 endpointabc；
     // 无条件 slice(1) 又会丢首字符。归一化幂等，对已规范值无副作用。
     // 形态示例：'get'→'/get'、'//get'→'/get'、'/get'→'/get'（不变）、'/'→''、''→''
-    const p = (this.configs.path || '').replace(/^\/+/, '');
-    this.configs.path = p ? `/${p}` : '';
+    const raw = this.configs.path || '';
+    const p = raw.replace(/^\/+/, '');
+    const normalized = p ? `/${p}` : '';
+    this.configs.path = normalized;
     this.path = p;
+    // 归一化改动了值才标记变更：configs 是父组件 cloneDeep 的副本，handelSave
+    // 落盘用的正是这份副本，但父组件 tagCompareNoChange 会让"开面板未编辑即
+    // 关闭"提前返回——不补标记则归一化结果不随关闭落盘，历史非法 path 仍会
+    // 进入 IR 拼接。已规范值不标记，健康节点开→关保持零副作用
+    if (normalized !== raw) {
+      this.changeUpdateTime();
+    }
   }
 
   onPathChange(): void {
