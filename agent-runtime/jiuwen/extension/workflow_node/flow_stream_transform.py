@@ -285,7 +285,8 @@ class FlowStreamTransform(WorkflowComponent):
         async for item in origin_stream:
             # Handle OutputSchema objects from plugin streaming
             if hasattr(item, "payload") and isinstance(getattr(item, "payload", None), dict):
-                item = item.payload.get("answer", item.payload)
+                _ans = item.payload.get("answer")
+                item = _ans if _ans is not None else item.payload
             if isinstance(item, dict):
                 yield item
                 continue
@@ -325,7 +326,16 @@ class FlowStreamTransform(WorkflowComponent):
                         if isinstance(obj, dict):
                             yield obj
                 except Exception as e:
-                    workflow_logger.warning("Failed to parse JSON string: %s", e)
+                    try:
+                        import ast
+                        obj = ast.literal_eval(s)
+                        if isinstance(obj, dict):
+                            yield obj
+                        elif isinstance(obj, str):
+                            yield {"answer": obj}
+                    except (ValueError, SyntaxError):
+                        yield {"answer": s}
+                    workflow_logger.debug("JSON parse failed, used ast fallback: %s", s[:100])
                     continue
 
     def _build_result(self, value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -410,6 +420,12 @@ class FlowStreamTransform(WorkflowComponent):
         此方法聚合流式输入，逐帧转换后 yield OutputSchema 给下游。
         """
         # Do NOT consume AsyncGenerator - keep it alive for per-frame processing
+        if not isinstance(inputs, dict):
+            # Non-dict inputs (e.g. bare AsyncGenerator): delegate to invoke path
+            resolved = await self._resolve_stream_inputs(inputs)
+            async for output in self.invoke(resolved, session, context):
+                yield output
+            return
         user_fields = (inputs or {}).get(USER_FIELDS, {}) or {}
         origin_stream = user_fields.get(self._source_field)
 

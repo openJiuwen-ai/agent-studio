@@ -423,8 +423,10 @@ class AsyncDictStreamTransformer:
                 uf = base["userFields"]
                 if isinstance(uf, str):
                     return uf
-                if isinstance(uf, dict) and var_name and var_name in uf:
-                    return uf[var_name]
+                if isinstance(uf, dict):
+                    if var_name and var_name in uf:
+                        return uf[var_name]
+                    return default
             return base
         return get_by_path(base, src_path, default=default)
 

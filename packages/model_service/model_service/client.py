@@ -343,20 +343,21 @@ class StudioModelClient(OpenAIModelClient):
                 params["extra_headers"] = extra
         # X-Request-Id / traceparent: propagate from request context to model API call
         _extra = dict(params.get("extra_headers") or {})
+        _lower_keys = {k.lower() for k in _extra}
         try:
             from agent_runtime.context.request_context import _request_ctx
             _ctx = _request_ctx.get()
             if _ctx:
-                if _ctx.request_id and "X-Request-Id" not in _extra:
+                if _ctx.request_id and "x-request-id" not in _lower_keys:
                     _extra["X-Request-Id"] = _ctx.request_id
-                if _ctx.execution_id and "X-Execution-Id" not in _extra:
+                if _ctx.execution_id and "x-execution-id" not in _lower_keys:
                     _extra["X-Execution-Id"] = _ctx.execution_id
         except ImportError:
             workflow_logger.debug("X-Request-Id propagation skipped: agent_runtime not available")
         _req_headers = _request_headers()
         if _req_headers:
             _tp = _req_headers.get("traceparent")
-            if _tp and "traceparent" not in _extra:
+            if _tp and "traceparent" not in _lower_keys:
                 _extra["traceparent"] = _tp
         if _extra:
             params["extra_headers"] = _extra
@@ -368,7 +369,7 @@ class StudioModelClient(OpenAIModelClient):
         )
         try:
             from jiuwen.common.log.base import logger as _jw_logger
-            _jw_logger.debug(f"LLM extra_headers injected: {_extra}")
+            _jw_logger.debug(f"LLM extra_headers injected keys: {list(_extra.keys())}")
         except ImportError:
             workflow_logger.debug("LLM extra_headers debug log skipped: jiuwen logger not available")
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
