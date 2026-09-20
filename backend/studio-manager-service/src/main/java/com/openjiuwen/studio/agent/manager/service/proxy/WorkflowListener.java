@@ -128,6 +128,30 @@ public class WorkflowListener extends BaseEventListener {
             // node_wait 事件不在 JiuwenEventType 枚举中，但需要保存 taskId 以支持中断恢复
             if ("node_wait".equalsIgnoreCase(event)) {
                 saveTaskIdOnInterrupt();
+                // Bug1①: resume 轮首个事件通常是 node_wait，走此 early-return 跳过了 processStart
+                //（processStart 只在 eventNum==1 且非 early-return 时触发 getCache+copy 归并）。
+                // 不归并的话，每轮 saveInsightMessage 用各自的空 instance 覆写共享 execution_id
+                // 的 Redis 记录 → 只剩末轮事件 → "只显示最后一轮"。
+                // 在此补一次归并：仅 eventNum==1（每流一次），getCache 命中（resume 有旧 instance）才 copy。
+                // 新会话 getCache 返回 null → 不做，行为完全不变。
+                if (eventNum == 1) {
+                    WorkflowInstanceEntity cached = instanceService.getCache(
+                        executeParams.getExecutionId(), executeParams.getReleasedVersion(), executeParams.getUserId());
+                    if (cached != null) {
+                        instanceService.copy(cached, instance);
+                        // 对齐 processStart：cached 若为终态（SUCCEEDED/FAILED/ABORTED）清 eventList
+                        // + 重置 startTime，否则 resume 会继续累积在陈旧的已完成事件上、显示错乱；
+                        // 最后打回 RUNNING（resume 在跑）。
+                        String cachedStatus = cached.getStatus();
+                        if (WorkflowRunStatus.SUCCEEDED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                            || WorkflowRunStatus.FAILED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                            || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
+                            instance.setEventList(new ArrayList<>());
+                            instance.setStartTime(System.currentTimeMillis());
+                        }
+                        instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
+                    }
+                }
             }
             log.warn("not support event:{}, passThrough anyway.", event);
             passThrough(eventStr);

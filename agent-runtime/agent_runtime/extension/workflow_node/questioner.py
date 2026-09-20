@@ -220,17 +220,29 @@ class QuestionerTraceStore:
                 if parent_id != ""
                 else TracerHandlerName.TRACER_WORKFLOW.value
             )
-            handler = tracer._handlers.get(handler_class_name)
-            if handler is None:
-                handler = tracer._handlers.get(TracerHandlerName.TRACER_WORKFLOW.value)
+            # 适配 Tracer 嵌套结构：内置 TraceWorkflowHandler 存于
+            # _workflow_handlers[TRACER_WORKFLOW.value] 嵌套 dict（tracer.py:137-139），
+            # 与 trigger()(:172-176) 范式一致。trace writer 关时该 dict 不存在 → no-op
+            # （与原 AttributeError no-op 等价，不引入新行为）。
+            wf_handlers = tracer._workflow_handlers.get(TracerHandlerName.TRACER_WORKFLOW.value)
+            handler = None
+            if wf_handlers:
+                handler = wf_handlers.get(handler_class_name) or wf_handlers.get(
+                    TracerHandlerName.TRACER_WORKFLOW.value
+                )
 
             if handler:
                 span = handler._span_manager.get_span(invoke_id)
                 if span:
                     if not isinstance(span.on_invoke_data, list):
                         span.on_invoke_data = []
-                    # 批量 extend 所有历史数据
-                    span.on_invoke_data.extend(trace_list)
+                    # 仅在 span 的 on_invoke_data 为空时 extend 历史数据。
+                    # 提问器跨轮持久（USER_INTERACT 未 node_finished，pop_workflow_span 不触发），
+                    # on_invoke_data 已累积前序轮 trace + 当轮 _session.trace 写入；
+                    # 若每轮 resume 都 extend 全量 Redis trace，会重复 → 末轮 user 被早轮内容覆盖
+                    # （如"查询电费账单"被重复到末尾，把"确认"挤掉）。
+                    if not span.on_invoke_data:
+                        span.on_invoke_data.extend(trace_list)
                     # 只发送一次事件
                     import asyncio
 
@@ -829,6 +841,7 @@ class QuestionerDirectReplyHandler:
         trace_data = {"user": user_content}
         await self._session.trace(data=trace_data)
         await self._write_trace_to_redis(trace_data)
+
 
         # 根据当前状态处理逻辑
         if self._state.status == ExecutionStatus.START:
