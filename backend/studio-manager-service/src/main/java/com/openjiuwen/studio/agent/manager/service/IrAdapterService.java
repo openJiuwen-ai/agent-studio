@@ -1432,10 +1432,22 @@ public class IrAdapterService {
      */
     public List<KnowledgeRepoEntity> getReposFromWorkflowNode(Map<String, Object> nodeConfigs, String projectId) {
         try {
-            String jsonStr = JSON.toJSONString(nodeConfigs.get(REPOS));
+            if (nodeConfigs == null) {
+                return new ArrayList<>();
+            }
+            Object reposObj = nodeConfigs.get(REPOS);
+            // Return empty list when repos is missing/null/empty to avoid iterating over a null JSONArray.
+            if (ObjectUtils.isEmpty(reposObj) || "null".equalsIgnoreCase(String.valueOf(reposObj))) {
+                return new ArrayList<>();
+            }
+            String jsonStr = JSON.toJSONString(reposObj);
+            JSONArray reposArray = JSON.parseArray(jsonStr);
+            if (reposArray == null) {
+                return new ArrayList<>();
+            }
             Map<String, Object> repoIdsMap = new HashMap<>();
             List<String> repoIds = new ArrayList<>();
-            for (Object object : JSON.parseArray(jsonStr)) {
+            for (Object object : reposArray) {
                 JSONObject jsonObject = (JSONObject) object;
                 repoIdsMap.put(jsonObject.getString(ID), object);
                 repoIds.add(jsonObject.getString(ID));
