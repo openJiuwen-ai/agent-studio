@@ -27,7 +27,7 @@ from jiuwen.plugin.models.api_utils import ApiUtils
 from jiuwen.plugin.models.request_params import RequestParamsCreator, RequestParams
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-from openjiuwen.core.common.logging import workflow_logger
+from openjiuwen.core.common.logging import workflow_logger, logger
 from openjiuwen.core.foundation.tool.mcp.base import (
     McpServerConfig,
     NO_TIMEOUT,

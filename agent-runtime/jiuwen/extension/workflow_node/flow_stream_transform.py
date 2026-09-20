@@ -185,6 +185,10 @@ class FlowStreamTransform(WorkflowComponent):
         if not self._source_field:
             return cfg
         new_vars = [
+            # Only clear src_path when it is the default value (src_path == name),
+            # to support whole-frame reference like {{{{raw_output}}}}.
+            # If user explicitly configures src_path to a different value,
+            # respect their configuration.
             _dc_replace(v, src_path="") if (v.name == self._source_field and v.src_path == v.name) else v
             for v in cfg.variables
         ]
