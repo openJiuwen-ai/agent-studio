@@ -3469,8 +3469,9 @@ class IRConverter:
         if not model_id:
             return
         if model_id in _AGENT_CORE_REGISTERED_MODEL_IDS:
-            logger.info(
-                f"Agent-core model resource already registered: model_id={model_id}",
+            logger.debug(
+                "Agent-core model resource already registered: model_id=%s",
+                model_id,
                 simple_log="agent-core model resource already registered",
             )
             return

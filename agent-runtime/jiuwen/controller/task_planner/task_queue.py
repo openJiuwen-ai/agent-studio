@@ -106,8 +106,9 @@ class TaskQueue:
                         # 移到pending队列末尾并更新状态
                         self.pending_tasks.append(existing_task)
                         self._status_maps[existing_task.id] = TaskStatus.PENDING
-                        logger.info(
-                            f"Moved existing task with workflow_id {workflow_id} to end of pending queue"
+                        logger.debug(
+                            "Moved existing task with workflow_id %s to end of pending queue",
+                            workflow_id,
                         )
                         return
         self.pending_tasks.append(task)

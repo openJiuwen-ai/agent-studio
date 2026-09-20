@@ -100,7 +100,9 @@ class StandaloneRunner:
         # 终止队列和事件循环
         await self._agent_run_space.stop()
 
-        logger.info(f"Start to cancel running tasks. len:{len(self._running_tasks)}")
+        logger.debug(
+            "Start to cancel running tasks. len:%s", len(self._running_tasks)
+        )
         # Cancel all running tasks
         for task in list(self._running_tasks):
             if not task.done():
@@ -143,8 +145,9 @@ class StandaloneRunner:
             message_id=message_id,
         )
         # Add message to queue
-        logger.info(
-            f"Send message from [{sender}] to [{recipient}], message_id: {message_id}",
+        logger.debug(
+            "Send message from [%s] to [%s], message_id: %s",
+            sender, recipient, message_id,
             simple_log="Send message",
         )
         await self._message_queue.put(envelope)
@@ -201,19 +204,17 @@ class StandaloneRunner:
 
             # Create processing task based on message type (following Autogen pattern)
             if isinstance(envelope, SendMessageEnvelope):
-                logger.info(
-                    "process send message from [{}] to [{}]".format(
-                        envelope.sender, envelope.recipient
-                    )
+                logger.debug(
+                    "process send message from [%s] to [%s]",
+                    envelope.sender, envelope.recipient,
                 )
                 task = asyncio.create_task(self._process_send_message(envelope))
                 self._running_tasks.add(task)
                 task.add_done_callback(self._envelope_asynctask_callback(envelope))
             elif isinstance(envelope, ResponseMessageEnvelope):
-                logger.info(
-                    "process response message from [{}] to [{}]".format(
-                        envelope.sender, envelope.recipient
-                    )
+                logger.debug(
+                    "process response message from [%s] to [%s]",
+                    envelope.sender, envelope.recipient,
                 )
                 task = asyncio.create_task(self._process_response_message(envelope))
                 self._running_tasks.add(task)
@@ -298,7 +299,9 @@ class StandaloneRunner:
             )
 
             # 标记发送消息处理完成
-            logger.info(f"Send response message from [{recipient}] to [{sender}]")
+            logger.debug(
+                "Send response message from [%s] to [%s]", recipient, sender
+            )
             await self._message_queue.mark_message_completed(message_id)
             return results
         except QueueStoppedError as e:
@@ -337,10 +340,9 @@ class StandaloneRunner:
             for msg in envelope.message:
                 if msg.type == MemberMessageType.INTERRUPT:
                     has_interrupt = True
-                    logger.info(
-                        "Interrupt message found in response: {}".format(
-                            msg.data.data["reason"]
-                        ),
+                    logger.debug(
+                        "Interrupt message found in response: %s",
+                        msg.data.data["reason"],
                         simple_log="Interrupt message found in response",
                     )
 
@@ -356,7 +358,7 @@ class StandaloneRunner:
             if has_interrupt:
                 # 可以在这里触发状态保存、清理资源等
                 # 但不需要挂起消息，因为处理已经完成
-                logger.info("Processing completed with interrupt signal")
+                logger.debug("Processing completed with interrupt signal")
 
             return envelope.message
 

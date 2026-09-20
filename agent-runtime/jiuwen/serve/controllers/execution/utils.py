@@ -1180,8 +1180,9 @@ async def post_process_agent_group_streaming_output(
             await AsyncStateManager().save_state(
                 conversation_id, serialized_agent_state
             )
-            logger.info(
-                f"conversation {conversation_id} has saved execution state for agent group"
+            logger.debug(
+                "conversation %s has saved execution state for agent group",
+                conversation_id,
             )
         execution_data.instance.clear_state()
         # 根据task_id删除template
