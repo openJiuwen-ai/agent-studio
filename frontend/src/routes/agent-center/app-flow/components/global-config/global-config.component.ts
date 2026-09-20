@@ -852,7 +852,7 @@ export class GlobalConfigComponent
 
   private buildChildPath(parentPath: string, child: any): string {
     if (!parentPath) return child.name;
-    if (child.parentType === 'array') return `${parentPath}[0].${child.name}`;
+    if (child.parentType?.startsWith('array')) return `${parentPath}[0].${child.name}`;
     return `${parentPath}.${child.name}`;
   }
 

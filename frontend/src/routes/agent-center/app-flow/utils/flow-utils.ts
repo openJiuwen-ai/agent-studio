@@ -2076,6 +2076,11 @@ export const FlowUtils = {
       return false;
     }
 
+    // Referencing the item itself (no further path) is always valid
+    if (path.length === 1) {
+      return true;
+    }
+
     let nextData: any;
     if (currentItem.type === 'object') {
       nextData = currentItem.schema;
