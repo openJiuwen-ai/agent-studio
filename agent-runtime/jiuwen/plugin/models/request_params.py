@@ -8,6 +8,7 @@ from typing import List
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger, get_x_request_id, get_x_execution_id
+from openjiuwen.core.common.logging import workflow_logger
 from jiuwen.common.types import ValueTypeEnum
 from jiuwen.orchestration.flow.constant import X_REQUEST_ID, X_EXECUTION_ID
 from agent_runtime.context.request_context import inject_traceparent
@@ -142,7 +143,7 @@ class RequestParamsCreator:
         request_params.headers[X_REQUEST_ID] = get_x_request_id()
         request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
         inject_traceparent(request_params.headers)
-        logger.debug(f"Plugin request headers: {request_params.headers}")
+        workflow_logger.debug(f"Plugin request headers: {request_params.headers}")
 
         return request_params
 
