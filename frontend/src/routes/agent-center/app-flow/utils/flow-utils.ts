@@ -2082,7 +2082,7 @@ export const FlowUtils = {
     } else if (currentItem.type === 'array') {
       nextData = currentItem.schema.schema;
     } else {
-      return currentItem.name === currentName;
+      return path.length === 1 && currentItem.name === currentName;
     }
 
     if (Array.isArray(nextData)) {
@@ -2105,15 +2105,11 @@ export const FlowUtils = {
           const ref_source = v.value?.content?.source || '';
           const refNode = cloneDeep(outputsMap[v.value?.content?.ref_node_id]);
           if (ref_var_name.includes('memory.')) {
-            // 对比记忆变量
+            // Validate memory variable ref against schema using checkPath
             if (memory.length) {
               let memos = cloneDeep(memory);
-              let memosNames = memos.map(m => {
-                return `memory.${m.name}`;
-              });
-              v.refWithout = !memosNames.some(
-                name => ref_var_name === name || ref_var_name.startsWith(name + '.') || ref_var_name.startsWith(name + '[')
-              );
+              const subPath = ref_var_name.substring('memory.'.length);
+              v.refWithout = !this.checkPath(memos, subPath.split('.'));
             } else {
               v.refWithout = true;
             }
