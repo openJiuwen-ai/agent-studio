@@ -145,6 +145,7 @@ class ControllerPlanner(TaskPlanner):
                 self.task_id, message.message_type, message.content,
                 simple_log="task_id: %s| Task Planner received message type: %s" % (self.task_id, message.message_type),
             )
+        self.last_message = message
         # 处理用户输入，获取工作流序列
         self._process_user_input(message)
 
