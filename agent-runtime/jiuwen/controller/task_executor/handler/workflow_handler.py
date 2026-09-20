@@ -1232,7 +1232,8 @@ class WorkflowHandler(BaseHandler):
                 # 拦截workflow流出的INTERMEDIATE_MESSAGE
                 if output.code == StreamCode.CONTROLLER_INTERMEDIATE_MESSAGE.value:
                     logger.debug(
-                        f"drop workflow intermediate_message data: {output}",
+                        "drop workflow intermediate_message data: %s",
+                        output,
                         simple_log="drop workflow intermediate_message data",
                     )
                     continue

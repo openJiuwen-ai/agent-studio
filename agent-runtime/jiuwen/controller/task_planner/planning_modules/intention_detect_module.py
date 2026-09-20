@@ -925,7 +925,7 @@ class IntentionDetectModule:
             list: 过滤后的有效候选意图列表
         """
         if not candidate_intents:
-            logger.debug(f"task_id {task_id}| No candidate intents to filter")
+            logger.debug("task_id %s| No candidate intents to filter", task_id)
             return []
 
         filtered_intents = []
@@ -1029,7 +1029,8 @@ class IntentionDetectModule:
 
                 active_workflows.append(workflow_id)
                 logger.debug(
-                    f"task_id {task_id}| Added workflow_id {workflow_id} for workflow_name: {workflow_name}"
+                    "task_id %s| Added workflow_id %s for workflow_name: %s",
+                    task_id, workflow_id, workflow_name,
                 )
 
             except Exception as e:
@@ -1132,8 +1133,8 @@ class IntentionDetectModule:
                 workflow_input, intent_workflow_context, conversation_id
             ):
                 logger.debug(
-                    f"task_id: {task_id} | Received output {output}, node_type: "
-                    f"{output.data.get('node_type')}, code: {output.code}"
+                    "task_id: %s | Received output %s, node_type: %s, code: %s",
+                    task_id, output, output.data.get('node_type'), output.code,
                 )
 
                 # 处理 workflow_node_message 事件，发送到 insight_queue
@@ -1158,8 +1159,9 @@ class IntentionDetectModule:
                         f"task_id: {task_id} | Workflow execution completed, detected intent_id: {result['intent_id']}"
                     )
                     logger.debug(
-                        f"task_id: {task_id} | Number of candidate intents: "
-                        f"{len(result['candidate_intents']) if result['candidate_intents'] else 0}"
+                        "task_id: %s | Number of candidate intents: %s",
+                        task_id,
+                        len(result['candidate_intents']) if result['candidate_intents'] else 0,
                     )
                     break
 
@@ -1220,7 +1222,7 @@ class IntentionDetectModule:
                 - intent_function: 识别到的意图函数名称（字符串）
                 - candidate_intents: 候选意图列表
         """
-        logger.debug(f"task_id: {task_id} | Parsing workflow output")
+        logger.debug("task_id: %s | Parsing workflow output", task_id)
 
         if not workflow_output:
             logger.warning(f"task_id: {task_id} | Workflow output is empty")
@@ -1232,8 +1234,10 @@ class IntentionDetectModule:
             candidate_intents = workflow_output.get("candidate_intents")
 
             logger.debug(
-                f"task_id: {task_id} | Extracted raw intent_id: {intent_id}, "
-                f"candidate_intents count: {len(candidate_intents) if candidate_intents else 0}"
+                "task_id: %s | Extracted raw intent_id: %s, "
+                "candidate_intents count: %s",
+                task_id, intent_id,
+                len(candidate_intents) if candidate_intents else 0,
             )
 
             # 将 intent_id 转换为 intent_function
