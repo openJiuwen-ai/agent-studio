@@ -1806,8 +1806,9 @@ class QuestionerDirectReplyHandler:
             if _msgs and getattr(_msgs[-1], "role", None) == "user" \
                     and getattr(_msgs[-1], "content", None) == content:
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            # 去重检查失败不阻断写入（去重是优化项，add_messages 仍执行）
+            workflow_logger.warning(f"_write_user_message_to_context dedup check failed: {e}")
         user_message = UserMessage(role="user", content=content)
         await context.add_messages([user_message])
 
