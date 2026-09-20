@@ -1358,7 +1358,8 @@ export const FlowUtils = {
 
       // Recursively walk an object tree and rewrite any ref_var_name property
       // that matches a renamed memory variable. Handles exact match
-      // (memory.oldName) and nested access (memory.oldName.field).
+      // (memory.oldName), object nesting (memory.oldName.field), and
+      // array element access (memory.oldName[0].field).
       // WeakSet guards against circular references.
       const rewrite = (
         obj: any,
@@ -1386,7 +1387,7 @@ export const FlowUtils = {
           const val = obj[key];
           if (key === 'ref_var_name' && typeof val === 'string') {
             for (const [oldRef, newRef] of renameMap) {
-              if (val === oldRef || val.startsWith(oldRef + '.')) {
+              if (val === oldRef || val.startsWith(oldRef + '.') || val.startsWith(oldRef + '[')) {
                 obj[key] = newRef + val.substring(oldRef.length);
                 changed = true;
               }
@@ -2111,7 +2112,7 @@ export const FlowUtils = {
                 return `memory.${m.name}`;
               });
               v.refWithout = !memosNames.some(
-                name => ref_var_name === name || ref_var_name.startsWith(name + '.')
+                name => ref_var_name === name || ref_var_name.startsWith(name + '.') || ref_var_name.startsWith(name + '[')
               );
             } else {
               v.refWithout = true;

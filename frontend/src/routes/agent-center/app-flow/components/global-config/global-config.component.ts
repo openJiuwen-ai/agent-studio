@@ -734,6 +734,7 @@ export class GlobalConfigComponent
       desc: ""
     };
     this.treeNodes = [...this.treeNodes, child];
+    if (child.name) this.originNames.set(child, child.name);
     this.cdr.detectChanges();
   }
 
@@ -837,8 +838,8 @@ export class GlobalConfigComponent
   }
 
   private stampOriginNames() {
-    this.autoMemos.forEach((m) => this.originNames.set(m, m.name));
-    this.treeNodes.forEach((t) => this.originNames.set(t, t.name));
+    this.autoMemos.forEach((m) => { if (m.name) this.originNames.set(m, m.name); });
+    this.treeNodes.forEach((t) => { if (t.name) this.originNames.set(t, t.name); });
   }
 
   private restampOriginNames() {
