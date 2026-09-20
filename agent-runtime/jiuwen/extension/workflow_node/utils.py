@@ -411,7 +411,7 @@ class AsyncDictStreamTransformer:
             prev_out[self._cfg.is_last_field] = True
         yield prev_out
 
-    def _read_src(self, frame: Dict[str, Any], src_path: str, default: Any) -> Any:
+    def _read_src(self, frame: Dict[str, Any], src_path: str, default: Any, var_name: str = "") -> Any:
         base: Any = frame
         if self._cfg.input_root_path:
             base = get_by_path(frame, self._cfg.input_root_path, default={})
@@ -422,13 +422,9 @@ class AsyncDictStreamTransformer:
             if isinstance(base, dict) and "userFields" in base:
                 uf = base["userFields"]
                 if isinstance(uf, str):
-                    # userFields is a plain string (plugin streaming output)
                     return uf
-                if isinstance(uf, dict):
-                    # userFields is a dict - find the matching variable
-                    for vdef in self._cfg.variables:
-                        if vdef.name in uf:
-                            return uf[vdef.name]
+                if isinstance(uf, dict) and var_name and var_name in uf:
+                    return uf[var_name]
             return base
         return get_by_path(base, src_path, default=default)
 
@@ -446,7 +442,7 @@ class AsyncDictStreamTransformer:
     def _build_frame_from_template(self, in_frame: Dict[str, Any]) -> Dict[str, Any]:
         values: Dict[str, Any] = {}
         for vdef in self._cfg.variables:
-            v = self._read_src(in_frame, vdef.src_path, default=vdef.default)
+            v = self._read_src(in_frame, vdef.src_path, default=vdef.default, var_name=vdef.name)
             values[vdef.name] = v
             if v is not None:
                 self._last_var_values[vdef.name] = v

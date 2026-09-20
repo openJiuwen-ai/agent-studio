@@ -185,7 +185,7 @@ class FlowStreamTransform(WorkflowComponent):
         if not self._source_field:
             return cfg
         new_vars = [
-            _dc_replace(v, src_path="") if v.name == self._source_field else v
+            _dc_replace(v, src_path="") if (v.name == self._source_field and v.src_path == v.name) else v
             for v in cfg.variables
         ]
         return _dc_replace(cfg, variables=new_vars)
@@ -250,6 +250,12 @@ class FlowStreamTransform(WorkflowComponent):
                     1
                 ].format(error_msg=str(e)),
             ) from e
+
+        # Handle plain string or non-async-iterable input (same as invoke)
+        if isinstance(origin_stream, str):
+            async def _string_to_async_gen(s):
+                yield s
+            origin_stream = _string_to_async_gen(origin_stream)
 
         transformer = AsyncDictStreamTransformer(cfg)
         out_stream = transformer.transform(self._iter_dict_frames(origin_stream))
@@ -355,13 +361,12 @@ class FlowStreamTransform(WorkflowComponent):
         async for frame in out_stream:
             import sys
             if prev is not None:
-                answer_data = prev if not isinstance(prev, dict) else json.dumps(prev, ensure_ascii=False)
                 await session.write_stream(
                     OutputSchema(
                         type=STREAM_TYPE_PARTIAL_CONTENT,
                         index=idx,
                         payload=get_data_of_streaming_with_metadata(
-                            answer=answer_data, metadata=self.metadata
+                            answer=prev, metadata=self.metadata
                         ),
                     )
                 )
@@ -369,13 +374,12 @@ class FlowStreamTransform(WorkflowComponent):
             prev = frame
 
         if prev is not None:
-            answer_data = prev if not isinstance(prev, dict) else json.dumps(prev, ensure_ascii=False)
             await session.write_stream(
                 OutputSchema(
                     type=STREAM_TYPE_MESSAGE_END,
                     index=idx,
                     payload=get_data_of_streaming_with_metadata(
-                        answer=answer_data, metadata=self.metadata
+                        answer=prev, metadata=self.metadata
                     ),
                 )
             )
@@ -430,7 +434,7 @@ class FlowStreamTransform(WorkflowComponent):
         async for frame in out_stream:
             import sys
             if prev is not None:
-                answer_data = prev if not isinstance(prev, dict) else json.dumps(prev, ensure_ascii=False)
+                answer_data = prev
                 yield OutputSchema(
                     type=STREAM_TYPE_PARTIAL_CONTENT,
                     index=idx,
@@ -442,7 +446,7 @@ class FlowStreamTransform(WorkflowComponent):
             prev = frame
 
         if prev is not None:
-            answer_data = prev if not isinstance(prev, dict) else json.dumps(prev, ensure_ascii=False)
+            answer_data = prev
             yield OutputSchema(
                 type=STREAM_TYPE_MESSAGE_END,
                 index=idx,

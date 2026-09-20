@@ -347,16 +347,16 @@ class StudioModelClient(OpenAIModelClient):
             from agent_runtime.context.request_context import _request_ctx
             _ctx = _request_ctx.get()
             if _ctx:
-                if _ctx.request_id:
+                if _ctx.request_id and "X-Request-Id" not in _extra:
                     _extra["X-Request-Id"] = _ctx.request_id
-                if _ctx.execution_id:
+                if _ctx.execution_id and "X-Execution-Id" not in _extra:
                     _extra["X-Execution-Id"] = _ctx.execution_id
         except ImportError:
             workflow_logger.debug("X-Request-Id propagation skipped: agent_runtime not available")
         _req_headers = _request_headers()
         if _req_headers:
             _tp = _req_headers.get("traceparent")
-            if _tp:
+            if _tp and "traceparent" not in _extra:
                 _extra["traceparent"] = _tp
         if _extra:
             params["extra_headers"] = _extra
