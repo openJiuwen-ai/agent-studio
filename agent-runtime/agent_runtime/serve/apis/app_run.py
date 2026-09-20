@@ -613,6 +613,8 @@ async def _execute_workflow_run(
     # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
     # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
     request.state.project_id = ctx.project_id
+    # 请求级 enable_history 透传给 EventHandler，落库补写本轮 query 时保持标志位
+    request.state.enable_history = body.enable_history
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
@@ -762,6 +764,8 @@ async def _execute_agent_run(
     # 注册 project 与 cancel 路径校验同口径（路径值）：stream_response 注册时优先取，
     # 避免 token 解析的 project 与路径不一致导致合法取消被误判 403
     request.state.project_id = ctx.project_id
+    # 请求级 enable_history 透传给 EventHandler，落库补写本轮 query 时保持标志位
+    request.state.enable_history = body.enable_history
 
     # body已携带会话历史时跳过Redis加载
     if body.histories:

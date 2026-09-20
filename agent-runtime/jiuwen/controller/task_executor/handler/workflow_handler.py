@@ -514,7 +514,7 @@ class WorkflowHandler(BaseHandler):
         workflow_req_params = self.prepare_workflow_params(
             workflow_req_params, workflow_context
         )
-        self._inject_start_field_defaults(workflow_req_params, workflow_context)
+        self.inject_start_field_defaults(workflow_req_params, workflow_context)
         global_variables = workflow_req_params.get("global_variables")
         logger.info(
             f"task_id: {self.task_id}| Workflow {workflow_context.workflow_name} request params with "
@@ -570,7 +570,7 @@ class WorkflowHandler(BaseHandler):
                     global_variables[key] = value
             workflow_req_params["global_variables"] = global_variables
 
-        self._inject_start_field_defaults(workflow_req_params, workflow_context)
+        self.inject_start_field_defaults(workflow_req_params, workflow_context)
         final_answer = None
         async for exe_res in self._stream_execute_workflow(
             task, workflow_context, workflow_req_params, from_pe=True
@@ -1080,7 +1080,7 @@ class WorkflowHandler(BaseHandler):
         )
 
     @staticmethod
-    def _inject_start_field_defaults(workflow_req_params: dict, workflow_context) -> None:
+    def inject_start_field_defaults(workflow_req_params: dict, workflow_context) -> None:
         """Inject Start node user field defaults into global_variables.
 
         ${_request.xxx} resolves against _request built from global_variables.
