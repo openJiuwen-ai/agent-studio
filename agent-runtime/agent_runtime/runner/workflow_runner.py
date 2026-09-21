@@ -366,7 +366,9 @@ class WorkflowRunner:
         # 用 req.resume_input or req.query，与 app_run.py 构建 resume 输入一致
         # （resume 请求可能把当轮输入放 resumeInput 而 query 为空/旧值）。
         _history = list(req.params.conversation_history or [])
-        _cur_query = req.resume_input or req.query or ""
+        # 用 is not None 区分"未提供"(None→回退 query) vs "空字符串"(""→不追加)，
+        # 避免 resumeInput="" 时 or 回退到旧 query。
+        _cur_query = req.resume_input if req.resume_input is not None else (req.query or "")
         if _cur_query:
             _last = _history[-1] if _history else None
             _last_role = getattr(_last, "role", None)
