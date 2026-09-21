@@ -92,13 +92,30 @@ export class TriggerHalfmodalComponent {
 
   edit_data: any[] = [];
 
-  public triggerType: "time" | "event" = "time";
+  public triggerType: "time" | "polling" = "time";
 
   public timeTriggerForm;
 
   public eventTriggerForm;
 
   public asyncTriggerForm;
+
+  public pollingTriggerForm;
+
+  public pollIntervalOptions = [
+    {
+      label: this.i18n.transform("triggermodalcomponent_poll_interval_unit_second"),
+      value: "seconds"
+    },
+    {
+      label: this.i18n.transform("triggermodalcomponent_poll_interval_unit_minute"),
+      value: "minute"
+    },
+    {
+      label: this.i18n.transform("triggermodalcomponent_poll_interval_unit_hour"),
+      value: "hours"
+    }
+  ];
 
   public invocationTypeOptions = [
     {
@@ -257,11 +274,19 @@ export class TriggerHalfmodalComponent {
       prompt: new FormControl("", [Validators.required])
     });
 
-    this.route.queryParams.subscribe((params) => {
+    this.pollingTriggerForm = this.fb.group({
+      name: new FormControl("", [Validators.required, this.noDuplicateKeywordsValidator()]),
+      poll_url: new FormControl("", [Validators.required, Validators.pattern(/^https?:\/\/.+/)]),
+      pollInterval: new FormControl(5, [Validators.required, Validators.min(1)]),
+      pollIntervalUnit: new FormControl("minute", []),
+      prompt: new FormControl("", [Validators.required, Validators.maxLength(500)])
+    });
+
+    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
       this.agent_id = params.agentId;
     });
 
-    this.route.queryParams.subscribe((params) => {
+    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
       this.workflow_id = params.id;
     });
 
@@ -283,6 +308,13 @@ export class TriggerHalfmodalComponent {
             IntervalDay: "1"
           });
           this.eventTriggerForm.reset({ name: "", prompt: "" });
+          this.pollingTriggerForm?.reset({
+            name: "",
+            poll_url: "",
+            pollInterval: 5,
+            pollIntervalUnit: "minute",
+            prompt: ""
+          });
           this.bodyParams = [];
         }
       });
@@ -300,6 +332,18 @@ export class TriggerHalfmodalComponent {
       this.asyncTriggerForm?.controls.invocationType.setValue(
         this.edit_data[0].invocation
       );
+      // Polling 编辑回填
+      if (this.edit_data[0].type === 'POLLING') {
+        this.triggerType = 'polling';
+        this.pollingTriggerForm?.controls.name.setValue(this.edit_data[0].name || '');
+        this.pollingTriggerForm?.controls.poll_url.setValue(this.edit_data[0].poll_url || '');
+        this.pollingTriggerForm?.controls.prompt.setValue(this.edit_data[0].prompt || '');
+        // 反向拆分 poll_interval_seconds 为数字+单位
+        const seconds = this.edit_data[0].poll_interval_seconds || 300;
+        const { interval, unit } = this.secondsToIntervalUnit(seconds);
+        this.pollingTriggerForm?.controls.pollInterval.setValue(interval);
+        this.pollingTriggerForm?.controls.pollIntervalUnit.setValue(unit);
+      }
     }
 
   }
@@ -452,7 +496,7 @@ export class TriggerHalfmodalComponent {
     this.destroy$.complete();
   }
 
-  public selectTriggerType(id: "time" | "event") {
+  public selectTriggerType(id: "time" | "polling") {
     this.triggerType = id;
   }
 
@@ -484,6 +528,43 @@ export class TriggerHalfmodalComponent {
   }
 
   public updateTrigger(type: string): void {
+    if (type === "polling") {
+      const isPass = this.checkPollingGroup();
+      if (isPass) {
+        const params = {
+          name: this.pollingTriggerForm?.controls.name?.value,
+          type: "POLLING",
+          poll_url: this.pollingTriggerForm?.controls.poll_url?.value,
+          poll_interval_seconds: this.pollIntervalToSeconds(
+            this.pollingTriggerForm?.controls.pollInterval?.value,
+            this.pollingTriggerForm?.controls.pollIntervalUnit?.value
+          ),
+          prompt: this.pollingTriggerForm?.controls.prompt?.value,
+          trigger_id: this.edit_data[0].trigger_id
+        };
+        this.appAgentServe
+          .editOneTrigger(this.agent_id, params)
+          .then((res: any) => {
+            this.agentDataServe.setTrigger({
+              trigger_id: res.trigger_id,
+              name: params.name,
+              type: "POLLING",
+              poll_url: params.poll_url,
+              poll_interval_seconds: params.poll_interval_seconds,
+              prompt: params.prompt
+            });
+            this.messageServ.success(this.i18n.transform("triggermodalcomponent_poll_updated"), { nzDuration: 3000 });
+            this.agentDataServe.setAutoSaveTime(res.created_on);
+            this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggermodalcomponent_poll_updated_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
+          });
+      }
+    }
     if (type === "time") {
       const isPass = this.checkGroup();
       if (isPass) {
@@ -510,6 +591,9 @@ export class TriggerHalfmodalComponent {
             this.agentDataServe.setAutoSaveTime(res.created_on);
             this.cdr.markForCheck();
           })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggermodalcomponent_200_failed"), { nzDuration: 3000 });
+          })
           .finally(() => {
             this.dismiss();
           });
@@ -518,10 +602,45 @@ export class TriggerHalfmodalComponent {
   }
 
   public createTrigger(type: string): void {
+    if (type === "polling") {
+      const isPass = this.checkPollingGroup();
+      if (isPass) {
+        const params = {
+          name: this.pollingTriggerForm?.controls.name?.value,
+          type: "POLLING",
+          poll_url: this.pollingTriggerForm?.controls.poll_url?.value,
+          poll_interval_seconds: this.pollIntervalToSeconds(
+            this.pollingTriggerForm?.controls.pollInterval?.value,
+            this.pollingTriggerForm?.controls.pollIntervalUnit?.value
+          ),
+          prompt: this.pollingTriggerForm?.controls.prompt?.value
+        };
+        this.appAgentServe
+          .addOneTrigger(this.agent_id, params)
+          .then((res: any) => {
+            this.agentDataServe.setTrigger({
+              trigger_id: res.trigger_id,
+              name: params.name,
+              type: "POLLING",
+              poll_url: params.poll_url,
+              poll_interval_seconds: params.poll_interval_seconds,
+              prompt: params.prompt
+            });
+            this.messageServ.success(this.i18n.transform("triggermodalcomponent_poll_created"), { nzDuration: 3000 });
+            this.agentDataServe.setAutoSaveTime(res.updated_on);
+            this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggermodalcomponent_poll_created_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
+          });
+      }
+    }
     if (type === "time") {
       const isPass = this.checkGroup();
       if (isPass) {
-        this.dismiss();
         const selectTimeData = this.getSelectDataTime(1, "");
         const params = {
           name: this.timeTriggerForm?.controls.name?.value,
@@ -542,6 +661,12 @@ export class TriggerHalfmodalComponent {
             this.messageServ.success(this.i18n.transform("triggerhalfmodalcomponent_109"),{nzDuration:3000})
             this.agentDataServe.setAutoSaveTime(res.updated_on);
             this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggerhalfmodalcomponent_109_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
           });
       }
     }
@@ -599,16 +724,63 @@ export class TriggerHalfmodalComponent {
           this.messageServ.success(this.i18n.transform("triggerhalfmodalcomponent_110"),{nzDuration:3000})
           this.agentDataServe.setAutoSaveTime(res.updated_on);
           this.cdr.markForCheck();
+        })
+        .catch((err: any) => {
+          this.messageServ.error(this.i18n.transform("triggerhalfmodalcomponent_110_failed"), { nzDuration: 3000 });
+        })
+        .finally(() => {
+          this.dismiss();
         });
     }
   }
 
   public createTriggerWorkflow(type: string): void {
+    if (type === "polling") {
+      const isPass = this.checkPollingGroup();
+      if (isPass) {
+        const params = {
+          name: this.pollingTriggerForm?.controls.name?.value,
+          type: "POLLING",
+          poll_url: this.pollingTriggerForm?.controls.poll_url?.value,
+          poll_interval_seconds: this.pollIntervalToSeconds(
+            this.pollingTriggerForm?.controls.pollInterval?.value,
+            this.pollingTriggerForm?.controls.pollIntervalUnit?.value
+          ),
+          prompt: this.pollingTriggerForm?.controls.prompt?.value,
+          invocation: this.asyncTriggerForm?.controls.invocationType?.value
+        };
+        if (this.onCreate) {
+          this.onCreate(params);
+          this.dismiss();
+          return;
+        }
+        this.appFlowRepoServ
+          .addOneTrigger(this.workflow_id, params)
+          .then((res: any) => {
+            this.appFlowServ.setTrigger({
+              trigger_id: res.trigger_id,
+              name: params.name,
+              type: "POLLING",
+              poll_url: params.poll_url,
+              poll_interval_seconds: params.poll_interval_seconds,
+              prompt: params.prompt,
+              invocation: params.invocation
+            });
+            this.messageServ.success(this.i18n.transform("triggermodalcomponent_poll_created"), { nzDuration: 3000 });
+            this.appFlowServ.setAutoSaveTime(res.update_time);
+            this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggermodalcomponent_poll_created_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
+          });
+      }
+    }
     if (type === "time") {
       const isPass = this.checkGroup();
       if (isPass) {
-        this.dismiss();
-
         const selectTimeData = this.getSelectDataTime(1, "");
 
         const params = {
@@ -621,6 +793,7 @@ export class TriggerHalfmodalComponent {
 
         if (this.onCreate) {
           this.onCreate(params);
+          this.dismiss();
           return;
         }
 
@@ -638,17 +811,65 @@ export class TriggerHalfmodalComponent {
             this.messageServ.success(this.i18n.transform("triggerhalfmodalcomponent_109"),{nzDuration:3000})
             this.appFlowServ.setAutoSaveTime(res.update_time);
             this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggerhalfmodalcomponent_109_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
           });
       }
     }
   }
 
   public updateTriggerWorkflow(type: string): void {
+    if (type === "polling") {
+      const isPass = this.checkPollingGroup();
+      if (isPass) {
+        const params = {
+          name: this.pollingTriggerForm?.controls.name?.value,
+          type: "POLLING",
+          poll_url: this.pollingTriggerForm?.controls.poll_url?.value,
+          poll_interval_seconds: this.pollIntervalToSeconds(
+            this.pollingTriggerForm?.controls.pollInterval?.value,
+            this.pollingTriggerForm?.controls.pollIntervalUnit?.value
+          ),
+          prompt: this.pollingTriggerForm?.controls.prompt?.value,
+          trigger_id: this.edit_data[0].trigger_id,
+          invocation: this.asyncTriggerForm.get("invocationType")?.value
+        };
+        if (this.onUpdate) {
+          this.onUpdate(params);
+          this.dismiss();
+          return;
+        }
+        this.appFlowRepoServ
+          .editOneTrigger(this.workflow_id, params)
+          .then((res: any) => {
+            this.appFlowServ.setTrigger({
+              trigger_id: res.trigger_id,
+              name: params.name,
+              type: "POLLING",
+              poll_url: params.poll_url,
+              poll_interval_seconds: params.poll_interval_seconds,
+              prompt: params.prompt,
+              invocation: params.invocation
+            });
+            this.messageServ.success(this.i18n.transform("triggermodalcomponent_poll_updated"), { nzDuration: 3000 });
+            this.appFlowServ.setAutoSaveTime(res.update_time);
+            this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggermodalcomponent_poll_updated_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
+          });
+      }
+    }
     if (type === "time") {
       const isPass = this.checkGroup();
       if (isPass) {
-        this.dismiss();
-
         const selectTimeData = this.getSelectDataTime(1, "");
 
         const params = {
@@ -662,6 +883,7 @@ export class TriggerHalfmodalComponent {
 
         if (this.onUpdate) {
           this.onUpdate(params);
+          this.dismiss();
           return;
         }
 
@@ -679,6 +901,12 @@ export class TriggerHalfmodalComponent {
             this.messageServ.success(this.i18n.transform("triggermodalcomponent_203"),{nzDuration:3000})
             this.appFlowServ.setAutoSaveTime(res.update_time);
             this.cdr.markForCheck();
+          })
+          .catch((err: any) => {
+            this.messageServ.error(this.i18n.transform("triggermodalcomponent_203_failed"), { nzDuration: 3000 });
+          })
+          .finally(() => {
+            this.dismiss();
           });
       }
     }
@@ -864,6 +1092,53 @@ export class TriggerHalfmodalComponent {
     }
 
     return true;
+  }
+
+  private checkPollingGroup(): boolean {
+    if (!this.pollingTriggerForm) {
+      return true;
+    }
+    // 非 workflow 时 prompt 必填
+    if (!this.showCallMethod) {
+      this.pollingTriggerForm.controls.prompt.setValidators([Validators.required, Validators.maxLength(500)]);
+    } else {
+      this.pollingTriggerForm.controls.prompt.setValidators([Validators.maxLength(500)]);
+    }
+    Object.keys(this.pollingTriggerForm.controls).forEach(key => {
+      this.pollingTriggerForm.controls[key].markAsDirty();
+      this.pollingTriggerForm.controls[key].markAsTouched();
+      this.pollingTriggerForm.controls[key].updateValueAndValidity();
+    });
+    const errors: ValidationErrors | null = this.validateForm(this.pollingTriggerForm);
+    if (errors) {
+      const firstError: any = Object.keys(errors)[0];
+      this.elementRef.nativeElement.querySelector(`[formControlName=${firstError}]`)?.focus();
+      return false;
+    }
+    return true;
+  }
+
+  private pollIntervalToSeconds(interval: number, unit: string): number {
+    switch (unit) {
+      case 'seconds':
+        return interval;
+      case 'minute':
+        return interval * 60;
+      case 'hours':
+        return interval * 3600;
+      default:
+        return interval;
+    }
+  }
+
+  private secondsToIntervalUnit(seconds: number): { interval: number; unit: string } {
+    if (seconds >= 3600 && seconds % 3600 === 0) {
+      return { interval: seconds / 3600, unit: 'hours' };
+    }
+    if (seconds >= 60 && seconds % 60 === 0) {
+      return { interval: seconds / 60, unit: 'minute' };
+    }
+    return { interval: seconds, unit: 'seconds' };
   }
 
   private extractMatches(prompt: string): string[] {
