@@ -135,21 +135,28 @@ public class WorkflowListener extends BaseEventListener {
                 // 在此补一次归并：仅 eventNum==1（每流一次），getCache 命中（resume 有旧 instance）才 copy。
                 // 新会话 getCache 返回 null → 不做，行为完全不变。
                 if (eventNum == 1) {
-                    WorkflowInstanceEntity cached = instanceService.getCache(
-                        executeParams.getExecutionId(), executeParams.getReleasedVersion(), executeParams.getUserId());
-                    if (cached != null) {
-                        instanceService.copy(cached, instance);
-                        // 对齐 processStart：cached 若为终态（SUCCEEDED/FAILED/ABORTED）清 eventList
-                        // + 重置 startTime，否则 resume 会继续累积在陈旧的已完成事件上、显示错乱；
-                        // 最后打回 RUNNING（resume 在跑）。
-                        String cachedStatus = cached.getStatus();
-                        if (WorkflowRunStatus.SUCCEEDED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
-                            || WorkflowRunStatus.FAILED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
-                            || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
-                            instance.setEventList(new ArrayList<>());
-                            instance.setStartTime(System.currentTimeMillis());
+                    // try/catch：getCache/copy/终态reset 若抛异常（Redis 故障等），不应阻断
+                    // node_wait 的 passThrough（否则前端丢失 node_wait 事件）。log 后继续透传。
+                    try {
+                        WorkflowInstanceEntity cached = instanceService.getCache(
+                            executeParams.getExecutionId(), executeParams.getReleasedVersion(), executeParams.getUserId());
+                        if (cached != null) {
+                            instanceService.copy(cached, instance);
+                            // 对齐 processStart：cached 若为终态（SUCCEEDED/FAILED/ABORTED）清 eventList
+                            // + 重置 startTime，否则 resume 会继续累积在陈旧的已完成事件上、显示错乱；
+                            // 最后打回 RUNNING（resume 在跑）。
+                            String cachedStatus = cached.getStatus();
+                            if (WorkflowRunStatus.SUCCEEDED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                                || WorkflowRunStatus.FAILED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                                || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
+                                instance.setEventList(new ArrayList<>());
+                                instance.setStartTime(System.currentTimeMillis());
+                            }
+                            instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
                         }
-                        instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
+                    } catch (Exception mergeEx) {
+                        log.warn("Failed to merge cached instance on node_wait (continuing passThrough): {}",
+                            mergeEx.getMessage());
                     }
                 }
             }
