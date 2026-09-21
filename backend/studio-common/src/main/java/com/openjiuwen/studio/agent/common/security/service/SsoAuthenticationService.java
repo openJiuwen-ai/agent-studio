@@ -133,7 +133,8 @@ public class SsoAuthenticationService {
             headers.set("Content-Type", "application/json");
             headers.set(ssoHeaderName, accessToken);
 
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            // 客户环境实测：SSO 校验接口需携带空 JSON 请求体（{}），仅 headers 会校验失败
+            HttpEntity<String> entity = new HttpEntity<>("{}", headers);
 
             Map<String, Object> responseBody = restTemplate.exchange(ssoValidateUrl, HttpMethod.POST, entity,
                 new ParameterizedTypeReference<Map<String, Object>>() {}).getBody();

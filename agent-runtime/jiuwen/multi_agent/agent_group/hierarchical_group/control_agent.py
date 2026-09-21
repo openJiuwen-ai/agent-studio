@@ -5,6 +5,7 @@
 
 import asyncio
 import time
+import logging
 from typing import Union, Any, AsyncGenerator, List, Optional, Set, Tuple
 
 from jiuwen.common.exception.status_code import StatusCode
@@ -69,12 +70,13 @@ class HierarchicalControlAgent(BaseControlAgent):
                     force_default_workflow,
                 ) = await self._select_agent_with_cycle_check(current_inputs)
                 self.current_agent_calls_count += 1
-                logger.info(
-                    f"Agent call count: {self.current_agent_calls_count}/{self.config.max_agent_calls}"
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "Agent call count: %s/%s", self.current_agent_calls_count, self.config.max_agent_calls
+                    )
 
                 if not agent_id:
-                    logger.info("No more agents available for execution")
+                    logger.debug("No more agents available for execution")
                     break
                 self.call_agent_history.append(agent_id)
                 # 2. 调用agent
@@ -87,9 +89,8 @@ class HierarchicalControlAgent(BaseControlAgent):
                     )
                     logger.debug(
                         "load conv_history related to agent_id %s: %s",
-                        agent_id,
-                        self._get_history(current_inputs),
-                        simple_log=f"load conv_history related to agent_id {agent_id}",
+                        agent_id, self._get_history(current_inputs),
+                        simple_log="load conv_history related to agent_id %s" % (agent_id),
                     )
                     send_task = asyncio.create_task(
                         self.runner.send_message(
@@ -173,14 +174,19 @@ class HierarchicalControlAgent(BaseControlAgent):
         if message.type == MemberMessageType.HANDOFF:
             target_agent = self._extract_handoff_target(message)
             if target_agent and target_agent in self.agents:
-                logger.info(f"Handoff from {agent_id} to {target_agent}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Handoff from %s to %s", agent_id, target_agent)
                 target_agent_info["agent_id"] = target_agent
                 return ExecutionAction.HANDOFF, False
-            logger.warning(f"Invalid handoff target: {target_agent}")
+            logger.warning(
+                "Invalid handoff target: %s",
+                target_agent,
+            )
             return ExecutionAction.ERROR, True
 
         if message.type == MemberMessageType.INTERRUPT:
-            logger.info(f"Agent {agent_id} requested interrupt")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Agent %s requested interrupt", agent_id)
             # 直接处理中断逻辑
             self._handle_agent_interrupt(agent_id)
             return ExecutionAction.INTERRUPT, True
@@ -189,7 +195,8 @@ class HierarchicalControlAgent(BaseControlAgent):
             _inner = getattr(message.data, "data", None)
             _err_msg = _inner.get("message") if isinstance(_inner, dict) else None
             logger.error(
-                f"Agent {agent_id} returned error: message={_err_msg}, raw={message.data}"
+                "Agent %s returned error: message=%s, raw=%s",
+                agent_id, _err_msg, message.data,
             )
             return ExecutionAction.ERROR, True
 
@@ -197,7 +204,8 @@ class HierarchicalControlAgent(BaseControlAgent):
             message.type == MemberMessageType.STREAM
             and message.data.code == StreamCode.CONTROLLER_FINISH_MESSAGE.value
         ):
-            logger.info(f"Agent {agent_id} finished control")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Agent %s finished control", agent_id)
             self.task_end = True
             return ExecutionAction.FINISH, True
 
@@ -243,7 +251,8 @@ class HierarchicalControlAgent(BaseControlAgent):
         if isinstance(inputs, dict) and "handoff_context" in inputs:
             target_agent = inputs["handoff_context"].get("to_agent")
             if target_agent and target_agent in self.agents:
-                logger.info(f"Selected agent from handoff context: {target_agent}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Selected agent from handoff context: %s", target_agent)
                 # 清除handoff上下文，避免重复使用
                 del inputs["handoff_context"]
                 return target_agent
@@ -253,13 +262,15 @@ class HierarchicalControlAgent(BaseControlAgent):
             recent_interrupted_agent = self.interrupted_agents.pop()
 
             if recent_interrupted_agent in self.agents:
-                logger.info(f"Resuming interrupted agent: {recent_interrupted_agent}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Resuming interrupted agent: %s", recent_interrupted_agent)
                 return recent_interrupted_agent
 
         # 3. 默认选择main_agent
         main_agent_id = self.config.main_agent.metadata.id
         if main_agent_id in self.agents:
-            logger.info(f"Selected main agent: {main_agent_id}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Selected main agent: %s", main_agent_id)
             return main_agent_id
 
         logger.warning("No available agents found")
@@ -282,24 +293,26 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.interrupted_agents = (
             state.interrupted_agents.copy() if state.interrupted_agents else []
         )
-        logger.info(
-            f"Loaded state: calls={self.current_agent_calls_count}, "
-            f"interrupted_agents={len(self.interrupted_agents)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Loaded state: calls=%s, interrupted_agents=%s",
+                self.current_agent_calls_count, len(self.interrupted_agents),
+            )
 
     def reset_execution_state(self) -> None:
         """重置执行状态"""
         self.current_agent_calls_count = 0
         self.interrupted_agents.clear()
-        logger.info("Execution state reset")
+        logger.debug("Execution state reset")
 
     def _log_and_yield_error(
         self, error_msg: str, agent_id: str = "control_agent", execution_id: str = ""
     ) -> Message:
         """记录日志并生成错误消息"""
         logger.error(
-            f"Error in agent {agent_id}: {error_msg}",
-            simple_log=f"Error in agent {agent_id}",
+            "Error in agent %s: %s",
+            agent_id, error_msg,
+            simple_log="Error in agent %s" % (agent_id),
         )
         return self._create_error_message(error_msg, agent_id, execution_id)
 
@@ -313,9 +326,10 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.interrupted_agents.append(agent_id)
         # 中断时不消耗调用次数，回退计数器
         self.current_agent_calls_count -= 1
-        logger.info(
-            f"Agent {agent_id} interrupted. Total interrupted: {len(self.interrupted_agents)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Agent %s interrupted. Total interrupted: %s", agent_id, len(self.interrupted_agents)
+            )
 
     def _extract_handoff_target(self, message: Message) -> Optional[str]:
         """从handoff消息中提取目标agent"""
@@ -369,9 +383,8 @@ class HierarchicalControlAgent(BaseControlAgent):
         ]
         logger.debug(
             "get chat_history for agent: %s chat_history: %s",
-            agent_id,
-            selected_chat_history,
-            simple_log=f"get chat_history for agent: {agent_id}",
+            agent_id, selected_chat_history,
+            simple_log="get chat_history for agent: %s" % (agent_id),
         )
         context = current_inputs["runtime_context"].agent_workflow_context
         context["workflow_chat_history"] = ConversationHistory(selected_chat_history)
@@ -400,8 +413,9 @@ class HierarchicalControlAgent(BaseControlAgent):
         if self.current_agent_calls_count >= self.config.max_agent_calls:
             if self._detect_cycle():
                 logger.warning(
-                    f"Cyclic repeated calls, call chain: {self.call_agent_history}",
-                    simple_log="Cyclic repeated calls.",
+                    "Cyclic repeated calls, call chain: %s",
+                    self.call_agent_history,
+                    simple_log='Cyclic repeated calls.',
                 )
                 return self.config.main_agent.metadata.id, True
             return None, False

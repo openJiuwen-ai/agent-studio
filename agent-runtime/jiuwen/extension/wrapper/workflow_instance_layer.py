@@ -156,9 +156,10 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
                 # 回到中断入口。正常完成/异常路径 post_workflow_execute 已做过
                 # 按工作流精确清理，这里只是兜底清残留。
                 await release_workflow(self.session_id, self.workflow_id)
-                logger.info(
-                    f"cleanup released checkpoint state for workflow "
-                    f"{self.workflow_id}, session: {self.session_id}"
+                logger.debug(
+                    "cleanup released checkpoint state for workflow "
+                    "%s, session: %s",
+                    self.workflow_id, self.session_id,
                 )
             else:
                 # 非 FastRedisCheckpointer：post_workflow_execute 已按工作流

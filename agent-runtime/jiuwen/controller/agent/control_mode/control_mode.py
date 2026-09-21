@@ -83,9 +83,10 @@ class ControllerMode(BaseMode):
             or not isinstance(config_global_variables, list)
             or len(config_global_variables) == 0
         ):
-            logger.info(
-                f"task_id: {self.task_id}| No need init context global_variables. cause: "
-                f"global_variables={config_global_variables}"
+            logger.debug(
+                "task_id: %s| No need init context global_variables. cause: "
+                "global_variables=%s",
+                self.task_id, config_global_variables,
             )
             return
         # 已存在global_variables则不更新
@@ -102,8 +103,9 @@ class ControllerMode(BaseMode):
         self.context_manager.set_global_variables(
             WorkflowConstants.CONTROLLER_GLOBAL_VARIABLES_KEY, global_variables
         )
-        logger.info(
-            f"task_id: {self.task_id}| Set global_variables to context successfully. data={global_variables}"
+        logger.debug(
+            "task_id: %s| Set global_variables to context successfully. data=%s",
+            self.task_id, global_variables,
         )
 
     def update_input_global_variables(self, global_variables):
@@ -122,9 +124,9 @@ class ControllerMode(BaseMode):
             self.context_manager.set_global_variables(
                 "controller_global_variables", controller_global_variables
             )
-            logger.info(
-                f"task_id: {self.task_id}| controller global variables updated from input: "
-                f"{type(controller_global_variables)}"
+            logger.debug(
+                "task_id: %s| controller global variables updated from input: %s",
+                self.task_id, type(controller_global_variables),
             )
 
     def invoke(self, **kwargs):
@@ -240,9 +242,10 @@ class ControllerMode(BaseMode):
             processed_workflow_names.remove(workflow_name)
 
         # 标记任务完成
-        logger.info(
-            f"task_id: {self.task_id}| Received completion message: {message.message_type}, "
-            f"removing task with ID {task_execution_id}"
+        logger.debug(
+            "task_id: %s| Received completion message: %s, "
+            "removing task with ID %s",
+            self.task_id, message.message_type, task_execution_id,
         )
         self.task_planner.task_queue.mark_task_completed(task_execution_id)
 
@@ -251,17 +254,19 @@ class ControllerMode(BaseMode):
             workflow_context.action_after_completion
             == ActionAfterCompletionType.WAITING_USER_INPUT
         ):
-            logger.info(
-                f"task_id: {self.task_id}| Received completion message: {message.message_type} "
-                f"with ID {task_execution_id}, waiting user input"
+            logger.debug(
+                "task_id: %s| Received completion message: %s "
+                "with ID %s, waiting user input",
+                self.task_id, message.message_type, task_execution_id,
             )
             self.terminate = True
         elif (
             workflow_context.action_after_completion
             == ActionAfterCompletionType.TERMINATE
         ):
-            logger.info(
-                f"task_id: {self.task_id}| mark all tasks completed except end workflow"
+            logger.debug(
+                "task_id: %s| mark all tasks completed except end workflow",
+                self.task_id,
             )
             self._terminate_all_workflows()
             # 发送task_terminated事件
@@ -283,9 +288,10 @@ class ControllerMode(BaseMode):
 
     def _handle_workflow_interrupt(self, message, task_execution_id):
         """处理工作流中断消息"""
-        logger.info(
-            f"task_id: {self.task_id}| Received interrupt message: {message.message_type}, "
-            f"pending task with ID {task_execution_id}"
+        logger.debug(
+            "task_id: %s| Received interrupt message: %s, "
+            "pending task with ID %s",
+            self.task_id, message.message_type, task_execution_id,
         )
         self.task_planner.task_queue.mark_task_pending(task_execution_id)
 
@@ -402,10 +408,11 @@ class ControllerMode(BaseMode):
                 execution_id=self.task_id,
             )
         while iterations < self.max_task_iterations:
-            if logger.isEnabledFor(logging.INFO):
-                logger.info(
-                    f"task_id: {self.task_id}|Stream task iteration {iterations}: "
-                    f"Processing message type {current_message.message_type}"
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "task_id: %s|Stream task iteration %s: "
+                    "Processing message type %s",
+                    self.task_id, iterations, current_message.message_type,
                 )
 
             # 1. 任务识别 - 使用流式任务规划
@@ -485,14 +492,14 @@ class ControllerMode(BaseMode):
 
             # 检查执行后的状态
             if self.terminate:
-                if logger.isEnabledFor(logging.INFO):
-                    logger.info(f"task_id: {self.task_id}| Stream task loop terminate")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("task_id: %s| Stream task loop terminate", self.task_id)
                 yield self._create_intermediate_message()
                 yield self._create_interrupt_message()
                 return
             if self.task_end:
-                if logger.isEnabledFor(logging.INFO):
-                    logger.info(f"task_id: {self.task_id}| Stream task end")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("task_id: %s| Stream task end", self.task_id)
                 yield self._create_task_end_message()
                 return
             # 使用最后一个消息作为下一轮循环的输入
@@ -505,9 +512,10 @@ class ControllerMode(BaseMode):
                 )
             current_message = task_execution.last_message
             if not current_message:
-                if logger.isEnabledFor(logging.INFO):
-                    logger.info(
-                        f"task_id: {self.task_id}| Stream task loop terminate, current_message is None"
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "task_id: %s| Stream task loop terminate, current_message is None",
+                        self.task_id,
                     )
                 yield self._create_intermediate_message()
                 yield self._create_interrupt_message()
@@ -607,11 +615,13 @@ class ControllerMode(BaseMode):
 
     def _create_intermediate_message(self):
         msgs = self.context_manager.engine.get_messages()
-        logger.info(
-            f"task_id: {self.task_id}| Intermediate message count: {len(msgs)} "
-            f"contents: {[(m.content or '')[:50] for m in msgs]}",
-            simple_log=f"task_id: {self.task_id}| Intermediate message count: {len(msgs)}",
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "task_id: %s| Intermediate message count: %s contents: %s",
+                self.task_id, len(msgs), [(m.content or '')[:50] for m in msgs],
+                simple_log="task_id: %s| Intermediate message count: %s"
+                % (self.task_id, len(msgs)),
+            )
         return StreamData(
             code=StreamCode.CONTROLLER_INTERMEDIATE_MESSAGE.value,
             msg="intermediate message",
@@ -696,7 +706,7 @@ class ControllerMode(BaseMode):
             "message": "控制器任务执行被中断",
         }
 
-        logger.info(f"task_id: {self.task_id}| Creating interrupt stream data")
+        logger.debug("task_id: %s| Creating interrupt stream data", self.task_id)
 
         return StreamData(
             code=StreamCode.CONTROLLER_AGENT_INTERRUPT_MESSAGE.value,

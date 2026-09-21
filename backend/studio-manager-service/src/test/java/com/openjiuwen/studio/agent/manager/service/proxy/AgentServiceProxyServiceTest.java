@@ -349,21 +349,6 @@ class AgentServiceProxyServiceTest {
     }
 
     @Test
-    void testCreateUserFeedback_Success() {
-        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
-            mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
-            ResponseEntity<String> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.createUserFeedback("token", "proj-1", "app-1", "conv-1", "msg-1", "agent",
-                "v1", null)).thenReturn(expected);
-
-            ResponseEntity<String> result = proxyService.createUserFeedback("proj-1", "app-1", "conv-1",
-                "msg-1", "agent", "v1", null);
-
-            assertEquals(expected, result);
-        }
-    }
-
-    @Test
     void testTextToSpeech_Success() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");

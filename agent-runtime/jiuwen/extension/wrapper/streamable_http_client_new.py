@@ -27,7 +27,7 @@ from jiuwen.plugin.models.api_utils import ApiUtils
 from jiuwen.plugin.models.request_params import RequestParamsCreator, RequestParams
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from openjiuwen.core.common.logging import logger
+from openjiuwen.core.common.logging import workflow_logger, logger
 from openjiuwen.core.foundation.tool.mcp.base import (
     McpServerConfig,
     NO_TIMEOUT,
@@ -134,7 +134,7 @@ class StreamableHttpClientNew(McpClient):
         request_params.headers[X_REQUEST_ID] = get_x_request_id()
         request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
         inject_traceparent(request_params.headers)
-        logger.debug(f"MCP HTTP request headers: {request_params.headers}")
+        workflow_logger.debug(f"MCP HTTP request headers: {request_params.headers}")
 
         self._replace_mcp_headers_extra(request_params, **kwargs)
 

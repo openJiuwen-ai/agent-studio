@@ -3,6 +3,7 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 import copy
 import json
+import logging
 import os
 import time
 from typing import Dict, Any, Generator, Optional, AsyncGenerator, List
@@ -516,10 +517,12 @@ class WorkflowHandler(BaseHandler):
         )
         self.inject_start_field_defaults(workflow_req_params, workflow_context)
         global_variables = workflow_req_params.get("global_variables")
-        logger.info(
-            f"task_id: {self.task_id}| Workflow {workflow_context.workflow_name} request params with "
-            f"global vars: {global_variables}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "task_id: %s| Workflow %s request params with "
+                "global vars: %s",
+                self.task_id, workflow_context.workflow_name, global_variables,
+            )
 
         # 调用流式执行逻辑
         async for exe_res in self._stream_execute_workflow(
@@ -1229,7 +1232,8 @@ class WorkflowHandler(BaseHandler):
                 # 拦截workflow流出的INTERMEDIATE_MESSAGE
                 if output.code == StreamCode.CONTROLLER_INTERMEDIATE_MESSAGE.value:
                     logger.debug(
-                        f"drop workflow intermediate_message data: {output}",
+                        "drop workflow intermediate_message data: %s",
+                        output,
                         simple_log="drop workflow intermediate_message data",
                     )
                     continue
@@ -1241,8 +1245,9 @@ class WorkflowHandler(BaseHandler):
                 ):
                     workflow_status["workflow_end"] = True
                     # end组件输出更新写入controller global variables全局变量
-                    logger.info(
-                        f"task_id: {self.task_id}| End Message detected in workflow stream: {output.data}",
+                    logger.debug(
+                        "task_id: %s| End Message detected in workflow stream: %s",
+                        self.task_id, output.data,
                         simple_log="End Message detected in workflow stream",
                     )
                     action_after_completion_val = output.data.get(
@@ -1283,8 +1288,9 @@ class WorkflowHandler(BaseHandler):
                 ):
                     workflow_status["questioner_interrupted"] = True
                 elif output.data.get("node_type") == NodeType.QA.value:
-                    logger.info(
-                        f"task_id: {self.task_id}| QA Message detected in workflow stream: {output}",
+                    logger.debug(
+                        "task_id: %s| QA Message detected in workflow stream: %s",
+                        self.task_id, output,
                         simple_log="QA Message detected in workflow stream",
                     )
                     if output.data.get("need_reply", True):
@@ -1403,8 +1409,9 @@ class WorkflowHandler(BaseHandler):
             for key, value in missing_parameters.items()
             if global_variables.get(key) is None
         }
-        logger.info(
-            f"task_id: {self.task_id}| missing_params: {missing_parameters}",
+        logger.debug(
+            "task_id: %s| missing_params: %s",
+            self.task_id, missing_parameters,
             simple_log="missing_params update successfully",
         )
         # 如果没有缺失参数，直接返回

@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.TypeReference;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversationInfo;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
@@ -88,6 +89,9 @@ public class ConversationHistoryService implements IConversationHistoryService {
             return new ConversationDeleteResp().setId(conversationId);
         } catch (AgentStudioException e) {
             throw e;
+        } catch (JSONException e) {
+            log.error("conversation data parse failed", e);
+            throw new AgentStudioException(StudioError.FAIL_TO_PARSE_DATA);
         } catch (Exception e) {
             log.error("delete conversation failed", e);
             throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
@@ -120,6 +124,11 @@ public class ConversationHistoryService implements IConversationHistoryService {
             log.info("retrieve: projectId={}, conversationId={}, messagesSize={} ", projectId, conversationId,
                 messageList.size());
             return messageList;
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (JSONException e) {
+            log.error("conversation data parse failed", e);
+            throw new AgentStudioException(StudioError.FAIL_TO_PARSE_DATA);
         } catch (Exception e) {
             log.error("retrieve conversation failed", e);
             throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
@@ -195,6 +204,11 @@ public class ConversationHistoryService implements IConversationHistoryService {
             log.info("update: projectId={}, conversationId={}, messagesSize={} ", conversationParams.getProjectId(),
                     conversationParams.getConversationId(), messageList.size());
             return messageList;
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (JSONException e) {
+            log.error("conversation data parse failed", e);
+            throw new AgentStudioException(StudioError.FAIL_TO_PARSE_DATA);
         } catch (Exception e) {
             log.error("redisson get bucket failed", e);
             throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);

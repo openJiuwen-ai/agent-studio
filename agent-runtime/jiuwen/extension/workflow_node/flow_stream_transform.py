@@ -20,7 +20,8 @@ FlowStreamTransform - 流式转换组件
 - 使用 OutputSchema 作为流式数据结构
 """
 
-import ast
+import json
+from dataclasses import replace as _dc_replace
 from typing import (
     Any,
     AsyncGenerator,
@@ -170,6 +171,35 @@ class FlowStreamTransform(WorkflowComponent):
                 ),
             )
 
+    def _build_transformer_config(self) -> AsyncDictStreamTransformConfig:
+        """Build transformer config, binding the input param name to the whole frame.
+
+        When a frame_template placeholder matches the input parameter name
+        (e.g. ``{{raw_output}}`` while the input param id is ``raw_output``),
+        its variable ``src_path`` is cleared so that ``_read_src`` returns the
+        entire frame instead of looking up a sub-field. This lets users
+        reference the complete input object without splitting it into
+        ``{{raw_output.a}}``/``{{raw_output.b}}``.
+        """
+        cfg = AsyncDictStreamTransformConfig.from_dict(self._transformer_conf)
+        if not self._source_field:
+            return cfg
+        new_vars = [
+            # Only clear src_path when it is the default value (src_path == name),
+            # to support whole-frame reference like {{{{raw_output}}}}.
+            # If user explicitly configures src_path to a different value,
+            # respect their configuration.
+            _dc_replace(v, src_path="")
+            if (
+                self._direct_assign_output
+                and v.name == self._source_field
+                and v.src_path == v.name
+            )
+            else v
+            for v in cfg.variables
+        ]
+        return _dc_replace(cfg, variables=new_vars)
+
     async def invoke(
         self, inputs: Input, session: Session, context: ModelContext
     ) -> Output:
@@ -207,15 +237,22 @@ class FlowStreamTransform(WorkflowComponent):
             return self._build_result(None)
 
         if not hasattr(origin_stream, "__aiter__"):
-            raise build_flow_stream_transform_error(
-                error_code=FlowStreamTransformStatusCode.INPUT_INVALID[0],
-                message=FlowStreamTransformStatusCode.INPUT_INVALID[1].format(
-                    error_msg=f"'{self._source_field}' must be an async iterable"
-                ),
-            )
+            # Handle plain string input (e.g. from batch path where streaming
+            # output was concatenated into a single string)
+            if isinstance(origin_stream, str):
+                async def _string_to_async_gen(s):
+                    yield s
+                origin_stream = _string_to_async_gen(origin_stream)
+            else:
+                raise build_flow_stream_transform_error(
+                    error_code=FlowStreamTransformStatusCode.INPUT_INVALID[0],
+                    message=FlowStreamTransformStatusCode.INPUT_INVALID[1].format(
+                        error_msg=f"'{self._source_field}' must be an async iterable or string"
+                    ),
+                )
 
         try:
-            cfg = AsyncDictStreamTransformConfig.from_dict(self._transformer_conf)
+            cfg = self._build_transformer_config()
         except Exception as e:
             raise build_flow_stream_transform_error(
                 error_code=FlowStreamTransformStatusCode.TRANSFORMER_CONFIG_ERROR[0],
@@ -250,6 +287,10 @@ class FlowStreamTransform(WorkflowComponent):
             Dict[str, Any]: 字典帧
         """
         async for item in origin_stream:
+            # Handle OutputSchema objects from plugin streaming
+            if hasattr(item, "payload") and isinstance(getattr(item, "payload", None), dict):
+                _ans = item.payload.get("answer")
+                item = _ans if _ans is not None else item.payload
             if isinstance(item, dict):
                 yield item
                 continue
@@ -277,12 +318,32 @@ class FlowStreamTransform(WorkflowComponent):
                 if s.startswith("data:"):
                     s = s[5:].strip()
                 try:
-                    obj = ast.literal_eval(s)
-                except Exception as e:
-                    workflow_logger.warning("Failed to parse JSON string: %s", e)
-                    continue
-                if isinstance(obj, dict):
-                    yield obj
+                    decoder = json.JSONDecoder()
+                    pos = 0
+                    while pos < len(s):
+                        while pos < len(s) and s[pos] in " \t\r\n":
+                            pos += 1
+                        if pos >= len(s):
+                            break
+                        obj, end_pos = decoder.raw_decode(s, pos)
+                        pos = end_pos
+                        if isinstance(obj, dict):
+                            yield obj
+                        elif obj is not None:
+                            yield {"answer": obj}
+                except Exception:
+                    remainder = s[pos:]
+                    try:
+                        import ast
+                        obj = ast.literal_eval(remainder)
+                        if isinstance(obj, dict):
+                            yield obj
+                        elif isinstance(obj, str):
+                            yield {"answer": obj}
+                    except (ValueError, SyntaxError):
+                        if remainder:
+                            yield {"answer": remainder}
+                    workflow_logger.debug("JSON parse failed, used ast fallback: %s", remainder[:100])
 
     def _build_result(self, value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """构建返回结果
@@ -364,15 +425,33 @@ class FlowStreamTransform(WorkflowComponent):
         auto_complete_abilities 授予 TRANSFORM 能力。
         此方法聚合流式输入，逐帧转换后 yield OutputSchema 给下游。
         """
-        resolved = await self._resolve_stream_inputs(inputs)
-        user_fields = (resolved or {}).get(USER_FIELDS, {}) or {}
+        # Do NOT consume AsyncGenerator - keep it alive for per-frame processing
+        if not isinstance(inputs, dict):
+            # Non-dict inputs (e.g. bare AsyncGenerator): delegate to invoke path
+            resolved = await self._resolve_stream_inputs(inputs)
+            await self.invoke(resolved, session, context)
+            return
+        user_fields = (inputs or {}).get(USER_FIELDS, {}) or {}
         origin_stream = user_fields.get(self._source_field)
 
         if origin_stream is None:
             return
 
+        if not hasattr(origin_stream, "__aiter__"):
+            if isinstance(origin_stream, str):
+                async def _str_to_gen(s):
+                    yield s
+                origin_stream = _str_to_gen(origin_stream)
+            else:
+                raise build_flow_stream_transform_error(
+                    error_code=FlowStreamTransformStatusCode.INPUT_INVALID[0],
+                    message=FlowStreamTransformStatusCode.INPUT_INVALID[1].format(
+                        error_msg=f"'{self._source_field}' must be an async iterable or string"
+                    ),
+                )
+
         try:
-            cfg = AsyncDictStreamTransformConfig.from_dict(self._transformer_conf)
+            cfg = self._build_transformer_config()
         except Exception as e:
             raise build_flow_stream_transform_error(
                 error_code=FlowStreamTransformStatusCode.TRANSFORMER_CONFIG_ERROR[0],

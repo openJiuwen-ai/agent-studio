@@ -7,18 +7,15 @@ package com.openjiuwen.studio.agent.manager.controller;
 import com.alibaba.fastjson.JSONObject;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
-import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.dto.ExecutionQueries;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
 import com.openjiuwen.studio.agent.common.dto.agent.ExecutionInfo;
-import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.FileUploadRsp;
-import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
 import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
@@ -27,7 +24,6 @@ import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq
 import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
 import com.openjiuwen.studio.agent.common.dto.run.AsrReq;
 import com.openjiuwen.studio.agent.common.dto.run.AsrRsp;
-import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
 import com.openjiuwen.studio.agent.common.dto.run.GetControllerExecutionDetailQo;
 import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
@@ -37,7 +33,6 @@ import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsResp;
 import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ResetUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationMemoryQo;
 import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationQo;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
@@ -52,7 +47,6 @@ import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
-import com.openjiuwen.studio.agent.manager.dto.BatchDeleteUserVariableMemoryRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.manager.dto.ServiceRunAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.ServiceWorkflowRunReq;
@@ -590,122 +584,6 @@ public class AgentServiceProxyController {
             conversationId, nodeId, body, httpHeaders);
     }
 
-    @Operation(summary = "指定message创建用户反馈", description = "指定message创建用户反馈", tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = String.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/apps/{app_id}/conversions/{conversation_id}/messages"
-        + "/{message_id}/feedback", produces = {"application/json"}, consumes = {"application/json"},
-        method = RequestMethod.POST)
-    public String createUserFeedback(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId,
-        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "应用ID", required = true, schema = @Schema())
-        @PathVariable("app_id") String appId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "会话ID", required = true, schema = @Schema())
-        @PathVariable("conversation_id") String conversationId,
-        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "消息ID", required = true, schema = @Schema())
-        @PathVariable("message_id") String messageId,
-        @NotNull @Size(max = 32) @ApiParam(value = "应用类型", required = true)
-        @RequestParam(value = "app_type", required = true) String appType,
-        @Size(max = 64) @ApiParam(value = "版本号") @RequestParam(value = "version_id", required = false)
-        String versionId, @ApiParam(value = "用户反馈请求体") @Valid @RequestBody(required = false) Feedback body) {
-
-        return agentServiceProxyService.createUserFeedback(projectId, appId, conversationId, messageId, appType,
-            versionId, body).getBody();
-    }
-
-    @Operation(summary = "删除指定message用户反馈", description = "删除指定message用户反馈", tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = ConversationDeleteResp.class)
-    })
-    @RequestMapping(
-        value = "/v1/{project_id}/agent-manager/apps/{app_id}/conversions/{conversation_id}/messages" + "/{message_id"
-            + "}/feedback", produces = {"application/json"}, method = RequestMethod.DELETE)
-    public ConversationDeleteResp deleteFeedback(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId,
-        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("app_id") String appId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("conversation_id") String conversationId,
-        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("message_id") String messageId,
-        @Size(max = 64) @ApiParam(value = "版本号") @RequestParam(value = "version_id", required = false)
-        String versionId) {
-
-        return agentServiceProxyService.deleteFeedback(projectId, appId, conversationId, messageId, versionId)
-            .getBody();
-    }
-
-    @Operation(summary = "批量删除用户的变量记忆", description = "批量删除用户的变量记忆（用于Agent运行时用户手动删除自己的变量记忆）", tags = {"AgentMemoryManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "批量删除变量记忆的响应体",
-            response = BatchDeleteUserVariableMemoryResponseBody.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
-        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables/batch-delete",
-        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
-    public BatchDeleteUserVariableMemoryResponseBody batchDeleteUserVariableMemory(@Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "AgentID或Agent发布之后的短编码", required = true,
-            schema = @Schema()) @PathVariable("agent_id") String agentId,
-        @Size(max = 64) @ApiParam(value = "空间ID") @RequestParam(value = "workspace_id", required = false)
-        String workspaceId, @NotNull @ApiParam(value = "批量删除变量记忆的请求体", required = true) @Valid @RequestBody
-        BatchDeleteUserVariableMemoryRequestBody body) {
-
-        return agentServiceProxyService.batchDeleteUserVariableMemory(projectId, agentId, workspaceId, body).getBody();
-    }
-
-    @Operation(summary = "查询应用中的用户的变量记忆列表", description = "查询应用中的用户的变量记忆列表（用于Agent运行时查询变量列表）", tags = {"AgentMemoryManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "变量记忆列表", response = ListUserVariableMemoryResponseBody.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
-        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables",
-        produces = {"application/json"}, method = RequestMethod.GET)
-    public ListUserVariableMemoryResponseBody listUserVariableMemory(@Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "AgentID或Agent发布之后的短编码", required = true,
-            schema = @Schema()) @PathVariable("agent_id") String agentId,
-        @Size(max = 100) @ApiParam(value = "空间ID") @RequestParam(value = "workspace_id", required = false)
-        String workspaceId) {
-
-        return agentServiceProxyService.listUserVariableMemory(projectId, agentId, workspaceId).getBody();
-    }
-
-    @Operation(summary = "重置用户的变量记忆", description = "重置用户的变量记忆（用于Agent运行时用户手动重置自己的变量记忆），重置后，用户的所有变量值将重置为默认值", tags = {"AgentMemoryManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "批量删除变量记忆的响应体",
-            response = ResetUserVariableMemoryResponseBody.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
-        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables/reset",
-        produces = {"application/json"}, method = RequestMethod.POST)
-    public ResetUserVariableMemoryResponseBody resetUserVariableMemory(@Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "AgentID或Agent发布之后的短编码", required = true,
-            schema = @Schema()) @PathVariable("agent_id") String agentId,
-        @Size(max = 64) @ApiParam(value = "空间ID") @RequestParam(value = "workspace_id", required = false)
-        String workspaceId) {
-
-        return agentServiceProxyService.resetUserVariableMemory(projectId, agentId, workspaceId).getBody();
-    }
 
     @Operation(summary = "查询当前对话中用户输入内容的列表", tags = {"WorkflowRuntime"})
     @ApiResponses(value = {
