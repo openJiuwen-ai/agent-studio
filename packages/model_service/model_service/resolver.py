@@ -274,7 +274,10 @@ def _model_from_data(data: dict) -> ModelServiceBase:
     return ModelServiceBase(
         id=str(data.get("id", "")),
         model_name=data.get("model_name", ""),
-        api_url=data.get("api_url", ""),
+        # api_url 前后空白对 URL 无意义（复制粘贴常见引入），统一剥掉避免拼出非法
+        # URL（如 " http://..." 会被 httpx 判为缺协议抛
+        # "Request URL is missing an 'http://' or 'https://' protocol." 误导用户）。
+        api_url=(data.get("api_url") or "").strip(),
         provider_id=str(data.get("provider_id", "")),
         interface_protocol=normalize_protocol(data.get("interface_protocol", "")),
         project_id=str(data.get("project_id", "")),
