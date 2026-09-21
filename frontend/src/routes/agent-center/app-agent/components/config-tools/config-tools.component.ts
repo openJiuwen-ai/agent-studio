@@ -583,6 +583,25 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
             }
           ];
         }
+        if (type === "POLLING") {
+          const is_has = this.triggerAdded.list?.some(
+            (item) => item.trigger_id === trigger_id
+          );
+          if (is_has) {
+            for (let i = 0; i < this.triggerAdded.list?.length; i++) {
+              const cur = this.triggerAdded.list[i];
+              if (cur.trigger_id === trigger_id) {
+                this.triggerAdded.list[i] = triggerAdded;
+                break;
+              }
+            }
+          } else {
+            this.triggerAdded.list = [
+              ...this.triggerAdded.list,
+              { trigger_id, name, type, poll_url: triggerAdded.poll_url, poll_interval_seconds: triggerAdded.poll_interval_seconds, prompt }
+            ];
+          }
+        }
       });
 
     this.agentDataServe?.contentReviewConfigUpdate$().pipe(takeUntil(this.destroy$))
