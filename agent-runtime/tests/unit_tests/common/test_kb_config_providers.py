@@ -322,8 +322,6 @@ def _make_ir_node(connection_id="conn-1", kb_ids=None):
 
 def test_custom_mode_kb_fallback_uses_kb_id_as_external_id(monkeypatch):
     """CUSTOM 模式下 OBS 无 reference 文件时，用 kb_id 作为 external_id。"""
-    import asyncio
-
     provider = OBSKnowledgeBaseConfigProvider()
 
     async def fake_load_connection(cid):
@@ -355,8 +353,6 @@ def test_custom_mode_kb_fallback_uses_kb_id_as_external_id(monkeypatch):
 
 def test_non_custom_mode_kb_missing_no_fallback(monkeypatch):
     """非 CUSTOM 模式下 OBS 无 reference 文件时，不生成 KB reference（保持原行为）。"""
-    import asyncio
-
     provider = OBSKnowledgeBaseConfigProvider()
 
     async def fake_load_connection(cid):
@@ -381,8 +377,6 @@ def test_non_custom_mode_kb_missing_no_fallback(monkeypatch):
 
 def test_custom_mode_kb_ref_exists_uses_ref(monkeypatch):
     """CUSTOM 模式下 OBS 有 reference 文件时，使用 reference 而非回退逻辑。"""
-    import asyncio
-
     provider = OBSKnowledgeBaseConfigProvider()
 
     async def fake_load_connection(cid):
@@ -468,18 +462,22 @@ def _clear_l1_cache():
 class TestL1CacheTtl:
     """_get_cached / _set_cached 的 TTL 语义。"""
 
-    def setup_method(self):
+    @staticmethod
+    def setup_method():
         _clear_l1_cache()
 
-    def teardown_method(self):
+    @staticmethod
+    def teardown_method():
         _clear_l1_cache()
 
-    def test_get_cached_within_ttl_returns_value(self):
+    @staticmethod
+    def test_get_cached_within_ttl_returns_value():
         """TTL 内命中缓存，返回写入的值。"""
         kb_config_providers._set_cached("k", {"a": 1})
         assert kb_config_providers._get_cached("k") == {"a": 1}
 
-    def test_get_cached_expired_returns_none_and_cleans_up(self):
+    @staticmethod
+    def test_get_cached_expired_returns_none_and_cleans_up():
         """过期后返回 None，并清理缓存条目（确定性触发，不依赖 sleep）。"""
         kb_config_providers._set_cached("k", {"a": 1})
         # 把时间戳拨回 TTL 之前，确定性触发过期
@@ -490,7 +488,8 @@ class TestL1CacheTtl:
         assert "k" not in kb_config_providers._cache
         assert "k" not in kb_config_providers._cache_ts
 
-    def test_get_cached_missing_key_returns_none(self):
+    @staticmethod
+    def test_get_cached_missing_key_returns_none():
         """不存在的 key 返回 None。"""
         assert kb_config_providers._get_cached("no-such-key") is None
 
@@ -498,10 +497,12 @@ class TestL1CacheTtl:
 class TestLoadConnectionConfigCache:
     """_load_connection_config 的 L1 缓存集成：TTL 内命中缓存，过期后重读 OBS。"""
 
-    def setup_method(self):
+    @staticmethod
+    def setup_method():
         _clear_l1_cache()
 
-    def teardown_method(self):
+    @staticmethod
+    def teardown_method():
         _clear_l1_cache()
 
     @staticmethod
