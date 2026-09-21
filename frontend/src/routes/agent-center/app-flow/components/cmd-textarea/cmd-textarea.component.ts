@@ -611,22 +611,29 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   }
 
   insertSelectedTemplate(item: CmdTextareaVariableItem) {
-    const preStartOffset = this.range?.startOffset;
-    const startNode = this.range?.startContainer;
-    if (!this.isTriggerClick) {
-      startNode.textContent = startNode.textContent
-        .slice(0, Math.max(preStartOffset - 1, 0))
-        .concat(startNode.textContent.slice(preStartOffset));
-      this.range?.setStart(startNode, Math.max(preStartOffset - 1, 0));
+    const editor = this.editor?.nativeElement;
+    if (!editor || !item) {
+      return;
     }
-
-    const node = this.getTmplNode(item.value);
-    this.range?.deleteContents();
-    this.range?.insertNode(node);
-    this.selection?.removeAllRanges();
-    this.selection?.collapse(node, 1);
-    this.showList = false;
+    // FB-4 修复：放弃 range/文本节点手术，改为基于字符偏移的纯文本模型插入。
+    // 旧实现（对 startNode.textContent 做 slice、deleteContents+insertNode）在光标
+    // 落在已 highlight 包裹的 {{var}} 块上/旁时，startContainer 会是元素节点而非干净
+    // 文本节点，textContent 切片会把整棵子树拍平，拼出坏模板（占位符落到引号外、逗号
+    // 重复），保存后过不了运行时 literal_eval 门 → body 静默丢失。
+    let { text, offset } = this.getCleanTextAndOffset();
+    if (!this.isTriggerClick) {
+      // 删除打开变量列表的触发字符（如 '{' 或 '/'）
+      const removeAt = Math.max(offset - 1, 0);
+      text = text.slice(0, removeAt) + text.slice(offset);
+      offset = removeAt;
+    }
+    const token = `{{${item.value}}}`;
+    text = text.slice(0, offset) + token + text.slice(offset);
+    // 直接置内部标志关闭列表，绕过 setter 避免二次 processContent；
+    // renderFromText 是唯一权威渲染，随后 emit 触发 CD 隐藏列表。
+    this._showList = false;
     this.isTriggerClick = false;
+    this.renderFromText(text, offset + token.length);
     this.emit();
   }
 
@@ -649,11 +656,85 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     this.blur.emit();
   }
 
-  private getTmplNode(content: string) {
-    const node = document.createElement('span');
-    node.textContent = `{{${content}}}`;
+  /**
+   * 取编辑器纯文本（剥零宽字符）及光标在其内的字符偏移。
+   * saveCursorPosition 返回的原始偏移把 \u200B 计入、<br> 记 1，与 innerText 前缀
+   * 一一对应；这里把落在 \u200B 上的计数扣除，换算成"剥零宽后 innerText"的偏移，
+   * 供 insertSelectedTemplate 做纯文本字符串拼接。
+   * 光标不在编辑器内时（saveCursorPosition 不回调）回退到文本末尾。
+   */
+  private getCleanTextAndOffset(): { text: string; offset: number } {
+    const editor = this.editor?.nativeElement;
+    if (!editor) {
+      return { text: '', offset: 0 };
+    }
+    const compute = (): number => {
+      let raw = -1;
+      this.saveCursorPosition(editor, (o: number) => {
+        raw = o;
+      });
+      return raw;
+    };
+    let rawOffset = compute();
+    if (rawOffset < 0) {
+      this.moveCursorToEnd();
+      rawOffset = compute();
+    }
+    const rawText = editor.innerText;
+    const text = rawText.replaceAll('\u200B', '');
+    if (rawOffset < 0) {
+      // 极端兜底：仍拿不到光标，置于纯文本末尾（去掉结尾换行）
+      return { text, offset: text.replace(/\n$/, '').length };
+    }
+    let offset = 0;
+    const limit = Math.min(rawOffset, rawText.length);
+    for (let i = 0; i < limit; i++) {
+      if (rawText[i] !== '\u200B') {
+        offset++;
+      }
+    }
+    return { text, offset };
+  }
 
-    return node;
+  /**
+   * 以纯文本为唯一数据源重渲染整个编辑区，遵循 processContent 的渲染约定：
+   * escapeHTML → {{var}} 包 highlight span 并尾随 \u200B → \n 转 <br> → 末尾补 <br>。
+   * 渲染后把光标恢复到 cursorOffset（纯文本字符偏移），不依赖 DOM 现状，
+   * 因此规避了 processContent 里那套针对光标读回的脆弱启发式补偿。
+   */
+  private renderFromText(plainText: string, cursorOffset: number): void {
+    const editor = this.editor?.nativeElement;
+    if (!editor) {
+      return;
+    }
+    this.editorObserver.disconnect();
+
+    let processed = this.escapeHTML(plainText);
+    const regex2 = new RegExp(`(?<var>{{[^{}\\n\\r]+?}})`, 'gi');
+    processed = processed.replace(
+      regex2,
+      '<span class="highlight">$<var></span>\u200B',
+    );
+    processed = processed.replace(/\n/g, '<br>');
+    if (!processed.endsWith('<br>')) {
+      processed = `${processed}<br>`;
+    }
+    editor.innerHTML = processed;
+
+    // restoreCursorPosition 的偏移空间 = 纯文本字符 + 每个 highlight 尾随的 1 个 \u200B；
+    // 光标前的完整变量块数即需补的零宽字符数，换算成原始偏移。
+    const before = plainText.slice(0, cursorOffset);
+    const zwCount = (before.match(/{{[^{}\n\r]+?}}/g) || []).length;
+    this.reRenderTimes++;
+    this.restoreCursorPosition(editor, cursorOffset + zwCount);
+    this.updateSelection();
+    this.scrollCursorToVisible();
+
+    this.editorObserver.observe(editor, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
   }
 
   private getEditorTextContent() {
