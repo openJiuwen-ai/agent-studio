@@ -315,11 +315,12 @@ class _FakeLoopSession:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "raw_state, parent_id, expected_state",
+    "raw_state, parent_id, expected_io_key, expected_state",
     [
         (
             {"loop-node": {"previous": "round-1"}, "preserved": {"value": 1}},
             "",
+            "loop-node",
             {"preserved": {"value": 1}},
         ),
         (
@@ -332,12 +333,13 @@ class _FakeLoopSession:
                 }
             },
             "parent.loop",
+            "parent.loop.loop-node",
             {"preserved": {"value": 1}},
         ),
     ],
 )
 async def test_advanced_loop_uses_direct_commit_for_staging_and_cleanup(
-    raw_state, parent_id, expected_state
+    raw_state, parent_id, expected_io_key, expected_state
 ):
     """Loop round writes should bypass deepcopy for both root and nested scopes."""
     node_id = "loop-node"
@@ -369,21 +371,47 @@ async def test_advanced_loop_uses_direct_commit_for_staging_and_cleanup(
     workflow_state._io_state.get_state.assert_called_once_with(copied=False)
     assert workflow_state._io_state.update_by_id.call_count == 0
     assert workflow_state._io_state.update_by_id_and_commit.call_args_list == [
-        call(node_id, {node_id: {LOOP_ID: node_id}}),
-        call(node_id, {node_id: expected_state}),
-        call(node_id, {node_id: None}),
+        call(expected_io_key, {expected_io_key: {LOOP_ID: node_id}}),
+        call(expected_io_key, {expected_io_key: expected_state}),
+        call(expected_io_key, {expected_io_key: None}),
     ]
 
 
 @pytest.mark.asyncio
-async def test_advanced_loop_can_fall_back_to_staged_state_updates():
+@pytest.mark.parametrize(
+    "raw_state, parent_id, expected_io_key, expected_outputs",
+    [
+        (
+            {
+                "loop-node": {"previous": "round-1"},
+                "preserved": {"value": 1},
+            },
+            "",
+            "loop-node",
+            {"preserved": {"value": 1}},
+        ),
+        (
+            {
+                "parent": {
+                    "loop": {
+                        "loop-node": {"previous": "round-1"},
+                        "preserved": {"value": 1},
+                    }
+                }
+            },
+            "parent.loop",
+            "parent.loop.loop-node",
+            {"preserved": {"value": 1}},
+        ),
+    ],
+)
+async def test_advanced_loop_can_fall_back_to_staged_state_updates(
+    raw_state, parent_id, expected_io_key, expected_outputs
+):
     """The direct-commit path has a process-level rollback switch."""
     node_id = "loop-node"
-    workflow_state = _FakeWorkflowState(
-        node_id,
-        {node_id: {"previous": "round-1"}, "preserved": {"value": 1}},
-    )
-    session = _FakeLoopSession(workflow_state, node_id)
+    workflow_state = _FakeWorkflowState(node_id, raw_state)
+    session = _FakeLoopSession(workflow_state, node_id, parent_id)
     node_state = MagicMock()
     node_state.get_outputs.return_value = {"result": "done"}
     node_session = MagicMock()
@@ -407,11 +435,11 @@ async def test_advanced_loop_can_fall_back_to_staged_state_updates():
     assert result == {"result": "done"}
     assert workflow_state.set_outputs.call_args_list == [
         call({LOOP_ID: node_id}),
-        call({"preserved": {"value": 1}}),
+        call(expected_outputs),
     ]
     workflow_state.commit.assert_called_once_with()
     workflow_state._io_state.update_by_id.assert_called_once_with(
-        node_id, {node_id: None}
+        expected_io_key, {expected_io_key: None}
     )
     workflow_state._io_state.update_by_id_and_commit.assert_not_called()
 

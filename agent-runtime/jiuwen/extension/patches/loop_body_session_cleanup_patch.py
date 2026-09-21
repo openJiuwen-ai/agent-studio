@@ -109,7 +109,7 @@ def _loop_body_io_scope_id(session: BaseSession) -> str:
     loop_compile_session = session.parent() if hasattr(session, "parent") else None
     if loop_compile_session is None:
         return ""
-    return loop_compile_session.node_id()
+    return loop_compile_session.executable_id()
 
 
 async def _patched_loop_group_on_invoke(
@@ -154,14 +154,16 @@ async def _patched_advanced_loop_on_invoke(
     loop_session = session
     loop_state = loop_session.state()
     node_id = loop_session.node_id()
+    parent_id = session.parent_id()
+    io_key = f"{parent_id}.{node_id}" if parent_id else node_id
     setattr(self, _NODE_ID_ATTR, node_id)
     node_session = NodeSession(loop_session, node_id)
     setattr(self, _NODE_SESSION_ATTR, node_session)
     io_state = getattr(loop_state, _IO_STATE_ATTR)
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
         io_state.update_by_id_and_commit(
-            node_id,
-            {node_id: {LOOP_ID: node_id}},
+            io_key,
+            {io_key: {LOOP_ID: node_id}},
         )
     else:
         loop_state.set_outputs({LOOP_ID: node_id})
@@ -171,7 +173,6 @@ async def _patched_advanced_loop_on_invoke(
         if _LOOP_STATE_DIRECT_COMMIT_ENABLED
         else io_state.get_state()
     )
-    parent_id = session.parent_id()
     if parent_id:
         scoped = get_value_by_nested_path(parent_id, raw_io)
         state = dict(scoped) if isinstance(scoped, dict) else {}
@@ -181,8 +182,8 @@ async def _patched_advanced_loop_on_invoke(
         del state[node_id]
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
         io_state.update_by_id_and_commit(
-            node_id,
-            {node_id: state},
+            io_key,
+            {io_key: state},
         )
     else:
         loop_state.set_outputs(state)
@@ -194,9 +195,9 @@ async def _patched_advanced_loop_on_invoke(
     await compiled.invoke(inputs, loop_session)
     result = node_session.state().get_outputs(node_id)
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
-        io_state.update_by_id_and_commit(node_id, {node_id: None})
+        io_state.update_by_id_and_commit(io_key, {io_key: None})
     else:
-        io_state.update_by_id(node_id, {node_id: None})
+        io_state.update_by_id(io_key, {io_key: None})
     return result
 
 
