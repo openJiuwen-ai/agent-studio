@@ -164,6 +164,61 @@ class PollingTriggerServiceTest {
         }
     }
 
+    @Test
+    void skipsCheckWhenStateIsNull() throws Exception {
+        when(state.getState(anyString())).thenReturn(null);
+        service.executeInternal(context);
+        verify(state, never()).completeCheck(any(), any(), any());
+        verify(lock).unlock();
+    }
+
+    @Test
+    void httpErrorCompletesCheckWithNullHash() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            try (exchange) {
+                exchange.sendResponseHeaders(500, -1);
+            }
+        });
+        server.start();
+        try {
+            setUrl(server, "/");
+            service.executeInternal(context);
+            verify(state).completeCheck(eq(job.getKey()), any(), isNull());
+            verify(lock).unlock();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void emptyBodyStillHashesAndCompletesCheck() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            try (exchange) {
+                exchange.sendResponseHeaders(200, 0);
+            }
+        });
+        server.start();
+        try {
+            setUrl(server, "/");
+            service.executeInternal(context);
+            // 空内容的 SHA-256 = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+            verify(state).completeCheck(eq(job.getKey()), any(),
+                eq("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void nonPositiveCheckTimeoutThrowsIllegalStateAndCompletesWithNull() throws Exception {
+        ReflectionTestUtils.setField(service, "checkTimeoutSeconds", 0L);
+        service.executeInternal(context);
+        verify(state).completeCheck(eq(job.getKey()), any(), isNull());
+        verify(lock).unlock();
+    }
+
     private void setUrl(HttpServer server, String path) {
         job.getJobDataMap().put(CommonConstant.POLL_URL, "http://127.0.0.1:" + server.getAddress().getPort() + path);
     }

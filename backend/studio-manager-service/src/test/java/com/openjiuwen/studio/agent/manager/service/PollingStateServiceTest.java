@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test;
 import org.quartz.*;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -74,6 +77,50 @@ class PollingStateServiceTest {
         doThrow(new IllegalStateException("target rejected")).when(target).executeTarget(any());
         service.completeCheck(key, snapshot, "after");
         verify(mapper).compareAndSetLastSeenHash("poll-1", "before", "after");
+    }
+
+    @Test
+    void casFailureSkipsTargetExecutionButStillUpdatesTimestamp() {
+        when(mapper.compareAndSetLastSeenHash("poll-1", "before", "after")).thenReturn(0);
+        service.completeCheck(key, snapshot, "after");
+        verify(mapper).updateLastCheckedAt(eq("poll-1"), any());
+        verifyNoInteractions(target);
+    }
+
+    @Test
+    void schedulerExceptionDuringIsCurrentConfigurationThrowsIllegalState() throws Exception {
+        when(scheduler.getJobDetail(key)).thenThrow(new org.quartz.SchedulerException("store unavailable"));
+        assertThrows(java.lang.IllegalStateException.class,
+            () -> service.completeCheck(key, snapshot, "after"));
+    }
+
+    @Test
+    void nullStateWithNonNullHashDiscardsCheck() {
+        when(mapper.selectForUpdate("poll-1")).thenReturn(null);
+        service.completeCheck(key, snapshot, "after");
+        verify(mapper, never()).updateLastCheckedAt(anyString(), any());
+        verify(mapper, never()).compareAndSetLastSeenHash(anyString(), any(), any());
+        verifyNoInteractions(target);
+    }
+
+    @Test
+    void resetStateDeletesAndReinitializes() {
+        service.resetState("poll-1");
+        var order = inOrder(mapper);
+        order.verify(mapper).deleteByTriggerId("poll-1");
+        order.verify(mapper).initialize("poll-1");
+    }
+
+    @Test
+    void deleteStateReturnsTrueWhenRowDeleted() {
+        when(mapper.deleteByTriggerId("poll-1")).thenReturn(1);
+        assertTrue(service.deleteState("poll-1"));
+    }
+
+    @Test
+    void deleteStateReturnsFalseWhenNoRowDeleted() {
+        when(mapper.deleteByTriggerId("poll-1")).thenReturn(0);
+        assertFalse(service.deleteState("poll-1"));
     }
 
     private JobDetail job(String pollUrl) {
