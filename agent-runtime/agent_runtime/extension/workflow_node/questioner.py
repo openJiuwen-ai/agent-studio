@@ -841,8 +841,7 @@ class QuestionerDirectReplyHandler:
         output = OutputCache()
         self._query = questioner_input.query or ""
 
-        await self._write_user_message_to_context(self._query, context)
-
+        await self._write_user_message_to_context(self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
         chat_history = await self._get_latest_chat_history(context)
 
         if self._is_set_question_content():
@@ -909,8 +908,7 @@ class QuestionerDirectReplyHandler:
         output = OutputCache(question=self._state.question, user_response=self._query)
 
         # Write user feedback message to context at USER_INTERACT state
-        await self._write_user_message_to_context(self._query, context)
-
+        await self._write_user_message_to_context(self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
         chat_history = await self._get_latest_chat_history(context)
         user_response = chat_history[-1].content if chat_history else ""
 
@@ -1791,7 +1789,7 @@ class QuestionerDirectReplyHandler:
     def _update_questioner_states_question(self, question):
         self._state.question = question
 
-    async def _write_user_message_to_context(self, content, context):
+    async def _write_user_message_to_context(self, content, context, force=False):
         if context is None or not self._config.with_chat_history:
             return
 
@@ -1800,15 +1798,18 @@ class QuestionerDirectReplyHandler:
         # 去重：若 context 已存在相同 user content（不只末条——其他节点可能在
         # workflow_runner 追加后又向 context 写了消息，使当轮 query 不再是末条），
         # 不再写入。workflow_runner 已把当轮 query 追加到 history，此处再写会重复。
-        try:
-            context_window = await context.get_context_window()
-            _msgs = context_window.get_messages() if context_window else []
-            if any(getattr(m, "role", None) == "user" and getattr(m, "content", None) == content
-                   for m in _msgs):
-                return
-        except Exception as e:
-            # 去重检查失败不阻断写入（去重是优化项，add_messages 仍执行）
-            workflow_logger.warning(f"_write_user_message_to_context dedup check failed: {e}")
+        # force=True（single_debug_recovery 路径，不走 workflow_runner、无预置
+        # 当轮 query）时跳过去重——此处是唯一写入源，跨轮重复输入也必须写。
+        if not force:
+            try:
+                context_window = await context.get_context_window()
+                _msgs = context_window.get_messages() if context_window else []
+                if any(getattr(m, "role", None) == "user" and getattr(m, "content", None) == content
+                       for m in _msgs):
+                    return
+            except Exception as e:
+                # 去重检查失败不阻断写入（去重是优化项，add_messages 仍执行）
+                workflow_logger.warning(f"_write_user_message_to_context dedup check failed: {e}")
         user_message = UserMessage(role="user", content=content)
         await context.add_messages([user_message])
 

@@ -151,6 +151,10 @@ public class WorkflowListener extends BaseEventListener {
                         if (StringUtils.isEmpty(eventExecId)) {
                             eventExecId = executeParams.getExecutionId();
                         }
+                        if (StringUtils.isEmpty(eventExecId)) {
+                            // 第三层兜底（对齐 processStart）：MDC REQUEST_ID
+                            eventExecId = MDC.get(REQUEST_ID);
+                        }
                         WorkflowInstanceEntity cached = instanceService.getCache(
                             eventExecId, executeParams.getReleasedVersion(), executeParams.getUserId());
                         if (cached != null) {
