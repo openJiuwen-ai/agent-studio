@@ -28,6 +28,7 @@ import { LinkInterceptorService } from '@services/LinkInterceptorService';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { StorageService } from '@shared/services/cfdata.service';
 import { initHistoryInterceptor } from "../utils/utils";
+import { consumeSsoAuthFromUrl } from '../utils/sso-auth.util';
 
 registerLocaleData(zh);
 
@@ -283,6 +284,8 @@ export class AppComponent implements OnInit {
 
   //如果url参数带用户信息，取出调health接口setCookie，后清除url参数
   async resetUserData() {
+    // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）
+    consumeSsoAuthFromUrl();
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
 
