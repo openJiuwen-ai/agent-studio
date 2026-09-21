@@ -1614,8 +1614,11 @@ class BpmnWorkflow(BaseWorkflow):
         if is_data_source_valid and is_streaming_api_node:
 
             if node_id not in data_source:
-                logger.warning(f"Streaming API node '{node_id}' has not been executed (possibly on an unselected branch), "
-                               f"reference '{match_str}' will be set to None.")
+                logger.warning(
+                    f"Streaming API node '{node_id}' has not been executed "
+                    f"(possibly on an unselected branch), "
+                    f"reference '{match_str}' will be set to None."
+                )
                 parent[key] = None
                 return True
 
