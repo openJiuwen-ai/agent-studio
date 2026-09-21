@@ -5331,88 +5331,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BatchCreatePluginToolRsp"
-  /v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables/reset:
-    post:
-      tags:
-      - AgentMemoryManagement
-      summary: 重置用户的变量记忆
-      description: 重置用户的变量记忆（用于Agent运行时用户手动重置自己的变量记忆），重置后，用户的所有变量值将重置为默认值
-      operationId: resetUserVariableMemory
-      parameters:
-      - name: project_id
-        in: path
-        description: 租户项目id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: agent_id
-        in: path
-        description: AgentID或Agent发布之后的短编码
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: workspace_id
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResetUserVariableMemoryResponseBody"
-  /v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables/batch-delete:
-    post:
-      tags:
-      - AgentMemoryManagement
-      summary: 批量删除用户的变量记忆
-      description: 批量删除用户的变量记忆（用于Agent运行时用户手动删除自己的变量记忆）
-      operationId: batchDeleteUserVariableMemory
-      parameters:
-      - name: project_id
-        in: path
-        description: 租户项目id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: agent_id
-        in: path
-        description: AgentID或Agent发布之后的短编码
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: workspace_id
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchDeleteUserVariableMemoryRequestBody"
-        required: true
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BatchDeleteUserVariableMemoryResponseBody"
   /v2/{project_id}/agent-builder/prompt/optimize_feedback:
     post:
       tags:
@@ -12364,125 +12282,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AppInfo"
-  /v1/{project_id}/agent-manager/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback:
-    post:
-      tags:
-      - ConversationManagement
-      summary: 指定message创建用户反馈
-      description: 指定message创建用户反馈
-      operationId: createUserFeedback
-      parameters:
-      - name: project_id
-        in: path
-        description: 租户项目id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: app_id
-        in: path
-        description: 应用ID
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      - name: conversation_id
-        in: path
-        description: 会话ID
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: message_id
-        in: path
-        description: 消息ID
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      - name: app_type
-        in: query
-        required: true
-        schema:
-          type: string
-          maxLength: 32
-          minLength: 0
-      - name: version_id
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Feedback"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: string
-    delete:
-      tags:
-      - ConversationManagement
-      summary: 删除指定message用户反馈
-      description: 删除指定message用户反馈
-      operationId: deleteFeedback
-      parameters:
-      - name: project_id
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: app_id
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      - name: conversation_id
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
-      - name: message_id
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      - name: version_id
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 0
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConversationDeleteResp"
   /v1/{project_id}/agent-manager/applications:
     get:
       tags:
@@ -15136,44 +14935,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListKnowledgeBaseConfigsResponse"
-  /v2/{project_id}/agent-manager/agents/{agent_id}/memories/variables:
-    get:
-      tags:
-      - AgentMemoryManagement
-      summary: 查询应用中的用户的变量记忆列表
-      description: 查询应用中的用户的变量记忆列表（用于Agent运行时查询变量列表）
-      operationId: listUserVariableMemory
-      parameters:
-      - name: project_id
-        in: path
-        description: 租户项目id
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: agent_id
-        in: path
-        description: AgentID或Agent发布之后的短编码
-        required: true
-        schema:
-          type: string
-          maxLength: 64
-          minLength: 1
-      - name: workspace_id
-        in: query
-        required: false
-        schema:
-          type: string
-          maxLength: 100
-          minLength: 0
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListUserVariableMemoryResponseBody"
   /v2/{project_id}/agent-builder/prompt/list:
     get:
       tags:
@@ -25221,35 +24982,6 @@ components:
       required:
       - count
       - ids
-    ResetUserVariableMemoryResponseBody:
-      type: object
-      properties:
-        result:
-          type: boolean
-    BatchDeleteUserVariableMemoryRequestBody:
-      type: object
-      properties:
-        variable_keys:
-          type: array
-          description: 变量
-          example: []
-          items:
-            type: string
-          maxItems: 100
-          minItems: 0
-    BatchDeleteUserVariableMemoryResponseBody:
-      type: object
-      properties:
-        variable_keys:
-          type: array
-          description: 变量键列表
-          example:
-          - user_name
-          - user_age
-          items:
-            type: string
-          maxItems: 100
-          minItems: 0
     PromptFeedbackRequest:
       type: object
       properties:
@@ -28479,21 +28211,6 @@ components:
           $ref: "#/components/schemas/FreeTrialQuota"
           description: 免费试用配额
           example: {}
-    Feedback:
-      type: object
-      properties:
-        app_name:
-          type: string
-          maxLength: 64
-          minLength: 1
-        rating:
-          type: integer
-          format: int32
-        reason:
-          $ref: "#/components/schemas/FeedbackReason"
-      required:
-      - app_name
-      - rating
     ApplicationListReq:
       type: object
       properties:
@@ -30255,32 +29972,6 @@ components:
             $ref: "#/components/schemas/KnowledgeBaseConfig"
           maxItems: 200
           minItems: 0
-    ListUserVariableMemoryResponseBody:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/UserVariableMemoryInfo"
-          maxItems: 100
-          minItems: 0
-      required:
-      - items
-    UserVariableMemoryInfo:
-      type: object
-      properties:
-        variable_key:
-          type: string
-          maxLength: 100
-          minLength: 1
-        variable_value:
-          type: string
-          maxLength: 500
-        update_time:
-          type: integer
-          format: int64
-      required:
-      - variable_key
     PePromptNewListVo:
       type: object
       properties:

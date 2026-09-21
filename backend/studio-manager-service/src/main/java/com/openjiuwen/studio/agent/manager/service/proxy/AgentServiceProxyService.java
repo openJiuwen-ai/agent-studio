@@ -7,14 +7,11 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.annotation.OperationLog;
-import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
-import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.FileUploadRsp;
-import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
 import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
@@ -40,14 +37,10 @@ import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
-import com.openjiuwen.studio.agent.manager.dto.BatchDeleteUserVariableMemoryRequestBody;
-import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
-import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.ExecutionQueries;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.manager.dto.MemoryVariable;
-import com.openjiuwen.studio.agent.common.dto.run.ResetUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.manager.dto.ControllerExecutionDetail;
@@ -277,49 +270,6 @@ public class AgentServiceProxyService {
             url += "&environment_id=" + environmentId;
         }
         return stream(url, httpHeaders, JsonUtils.encode(body));
-    }
-
-    public ResponseEntity<String> createUserFeedback(String projectId, String appId, String conversationId,
-        String messageId, String appType, String versionId, Feedback body) {
-
-        return runtimeClient.createUserFeedback(getToken(), projectId, appId, conversationId, messageId, appType,
-            versionId, body);
-    }
-
-    @OperationLog(
-        operationType = OperationType.DELETE,
-        resourceType = "ConversationFeedback",
-        description = "删除用户反馈",
-        resourceId = "messageId",
-        resourceName = ""
-    )
-    public ResponseEntity<ConversationDeleteResp> deleteFeedback(String projectId, String appId, String conversationId,
-        String messageId, String versionId) {
-
-        return runtimeClient.deleteFeedback(getToken(), projectId, appId, conversationId, messageId, versionId);
-    }
-
-    ;
-
-    public ResponseEntity<BatchDeleteUserVariableMemoryResponseBody> batchDeleteUserVariableMemory(String projectId,
-        String agentId, String workspaceId, BatchDeleteUserVariableMemoryRequestBody body) {
-
-        checkAgentPermission(projectId, workspaceId, agentId);
-        return runtimeClient.batchDeleteUserVariableMemory(getToken(), projectId, agentId, workspaceId, body);
-    }
-
-    public ResponseEntity<ListUserVariableMemoryResponseBody> listUserVariableMemory(String projectId, String agentId,
-        String workspaceId) {
-
-        checkAgentPermission(projectId, workspaceId, agentId);
-        return runtimeClient.listUserVariableMemory(getToken(), projectId, agentId, workspaceId);
-    }
-
-    public ResponseEntity<ResetUserVariableMemoryResponseBody> resetUserVariableMemory(String projectId, String agentId,
-        String workspaceId) {
-
-        checkAgentPermission(projectId, workspaceId, agentId);
-        return runtimeClient.resetUserVariableMemory(getToken(), projectId, agentId, workspaceId);
     }
 
 

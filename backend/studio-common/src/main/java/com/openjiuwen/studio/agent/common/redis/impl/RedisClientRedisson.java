@@ -8,8 +8,12 @@ import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.redis.RedisLock;
 import com.openjiuwen.studio.agent.common.redis.config.RedisClientConfig;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.alibaba.fastjson2.JSON;
 
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.resolver.dns.DefaultDnsCache;
@@ -176,8 +180,38 @@ public class RedisClientRedisson implements RedisClient {
 
     @Override
     public String get(String key) {
-        RBucket<String> bucket = redissonClient.getBucket(key);
-        return bucket.get();
+        try {
+            // 主路径：默认 JsonJacksonCodec，保留 Jackson 流式解码保护（双编码数据 + 溢出清理链路原样）
+            RBucket<String> bucket = redissonClient.getBucket(key);
+            return bucket.get();
+        } catch (Exception e) {
+            // 仅格式解码失败（如 runtime 单编码数据缺 @class）时 fallback StringCodec 读原文；
+            // 溢出（StreamConstraintsException）/连接故障等不 fallback，向上抛出维持原语义
+            if (isFormatDecodeError(e)) {
+                RBucket<String> fallbackBucket = redissonClient.getBucket(key, StringCodec.INSTANCE);
+                return fallbackBucket.get();
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 判断是否为格式解码失败（区别于数据溢出与连接故障）。
+     * 异常链含 StreamConstraintsException 视为溢出（不 fallback，触发清理）；其余 Jackson 解码异常视为格式失败。
+     */
+    private boolean isFormatDecodeError(Throwable e) {
+        boolean formatError = false;
+        Throwable cause = e;
+        while (cause != null) {
+            if (cause instanceof StreamConstraintsException) {
+                return false;
+            }
+            if (cause instanceof JsonProcessingException) {
+                formatError = true;
+            }
+            cause = cause.getCause();
+        }
+        return formatError;
     }
 
     @Override
