@@ -237,7 +237,7 @@ inner:
   agent-runtime:
     endpoint: ${agent_runtime_endpoint:}
     run-agent:
-      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations}
+      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations/%s}
     run-workflow:
       uri: ${agent_runtime_run-workflow:/v1/%s/workflows/%s/conversations/%s}
   exclude-tools: ${inner_exclude_tools:OCR,Read_Document}
