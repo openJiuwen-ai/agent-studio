@@ -168,6 +168,10 @@ public class WorkflowListener extends BaseEventListener {
                                 || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
                                 instance.setEventList(new ArrayList<>());
                                 instance.setStartTime(System.currentTimeMillis());
+                                // 清 endTime：copy 已把旧终态的 endTime 拷入，不清则
+                                // 新 startTime + 旧 endTime → endTime 早于 startTime、
+                                // 前端耗时/结束时间显示错误
+                                instance.setEndTime(null);
                             }
                             instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
                         }
