@@ -290,6 +290,9 @@ class CacheSettings(BaseSettings):
     model_cache_redis_ttl: int = Field(
         default=300, validation_alias="MODEL_CACHE_REDIS_TTL"
     )
+    kb_config_cache_ttl: int = Field(
+        default=300, validation_alias="KB_CONFIG_CACHE_TTL"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

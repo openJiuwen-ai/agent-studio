@@ -1,7 +1,13 @@
 # pylint: disable=protected-access  # 单元测试需直接验证内部方法行为
+import asyncio
 import json
+import time
+
+import pytest
+from pydantic import ValidationError
 
 from agent_runtime.common import kb_config_providers
+from agent_runtime.common.config import CacheSettings
 from agent_runtime.common.kb_config_providers import (
     KBConnectionConfig,
     KBReferenceConfig,
@@ -406,3 +412,142 @@ def test_custom_mode_kb_ref_exists_uses_ref(monkeypatch):
     # 使用 OBS reference 中的 external_id，而非 kb_id
     assert kbs[0]["external_id"] == "obs-external-id-123"
     assert kbs[0]["knowledge_base_name"] == "MyKB"
+
+
+# ---------------------------------------------------------------------------
+# KB_CONFIG_CACHE_TTL 配置化测试（对应三种部署方式：docker/k8s 环境变量、本地 .env）
+# ---------------------------------------------------------------------------
+
+
+class TestKBConfigCacheTtl:
+    """KB_CONFIG_CACHE_TTL 环境变量的解析行为。"""
+
+    @staticmethod
+    def test_default_300_when_env_absent(monkeypatch):
+        """未设置环境变量时默认 300（升级后行为与历史版本一致）。"""
+        monkeypatch.delenv("KB_CONFIG_CACHE_TTL", raising=False)
+        cs = CacheSettings(_env_file=None)
+        assert cs.kb_config_cache_ttl == 300
+
+    @staticmethod
+    def test_env_override(monkeypatch):
+        """环境变量覆盖默认值（docker/k8s 部署调整路径）。"""
+        monkeypatch.setenv("KB_CONFIG_CACHE_TTL", "1800")
+        cs = CacheSettings(_env_file=None)
+        assert cs.kb_config_cache_ttl == 1800
+
+    @staticmethod
+    def test_invalid_value_fails_fast(monkeypatch):
+        """非法值 fail-fast：pydantic 校验失败，报错指明环境变量名 KB_CONFIG_CACHE_TTL。"""
+        monkeypatch.setenv("KB_CONFIG_CACHE_TTL", "1800s")
+        with pytest.raises(ValidationError) as excinfo:
+            CacheSettings(_env_file=None)
+        # pydantic-settings 以 validation_alias（环境变量名）呈现错误位置
+        assert "KB_CONFIG_CACHE_TTL" in str(excinfo.value)
+        assert "valid integer" in str(excinfo.value)
+
+    @staticmethod
+    def test_module_ttl_follows_settings():
+        """模块常量 _CACHE_TTL_SECONDS 与 settings 联动（同源断言，环境无关）。"""
+        assert (
+            kb_config_providers._CACHE_TTL_SECONDS
+            == kb_config_providers.settings.cache.kb_config_cache_ttl
+        )
+
+
+# ---------------------------------------------------------------------------
+# L1 内存缓存 TTL 行为测试
+# ---------------------------------------------------------------------------
+
+
+def _clear_l1_cache():
+    kb_config_providers._cache.clear()
+    kb_config_providers._cache_ts.clear()
+
+
+class TestL1CacheTtl:
+    """_get_cached / _set_cached 的 TTL 语义。"""
+
+    def setup_method(self):
+        _clear_l1_cache()
+
+    def teardown_method(self):
+        _clear_l1_cache()
+
+    def test_get_cached_within_ttl_returns_value(self):
+        """TTL 内命中缓存，返回写入的值。"""
+        kb_config_providers._set_cached("k", {"a": 1})
+        assert kb_config_providers._get_cached("k") == {"a": 1}
+
+    def test_get_cached_expired_returns_none_and_cleans_up(self):
+        """过期后返回 None，并清理缓存条目（确定性触发，不依赖 sleep）。"""
+        kb_config_providers._set_cached("k", {"a": 1})
+        # 把时间戳拨回 TTL 之前，确定性触发过期
+        kb_config_providers._cache_ts["k"] = (
+            time.time() - (kb_config_providers._CACHE_TTL_SECONDS + 1)
+        )
+        assert kb_config_providers._get_cached("k") is None
+        assert "k" not in kb_config_providers._cache
+        assert "k" not in kb_config_providers._cache_ts
+
+    def test_get_cached_missing_key_returns_none(self):
+        """不存在的 key 返回 None。"""
+        assert kb_config_providers._get_cached("no-such-key") is None
+
+
+class TestLoadConnectionConfigCache:
+    """_load_connection_config 的 L1 缓存集成：TTL 内命中缓存，过期后重读 OBS。"""
+
+    def setup_method(self):
+        _clear_l1_cache()
+
+    def teardown_method(self):
+        _clear_l1_cache()
+
+    @staticmethod
+    def _install_fake_storage(monkeypatch):
+        """替换 storage，统计 OBS 读取次数。"""
+        counter = {"obs_reads": 0}
+
+        class _FakeStorage:
+            async def get_content(self, object_key):
+                counter["obs_reads"] += 1
+                return json.dumps(
+                    {"connectionId": "conn-1", "connectorId": "LakeSearchInside"}
+                )
+
+        monkeypatch.setattr(
+            kb_config_providers, "get_storage_provider", lambda: _FakeStorage()
+        )
+        return counter
+
+    def test_cache_hit_within_ttl_skips_obs(self, monkeypatch):
+        """TTL 内二次加载连接配置：命中 L1 缓存，不再读 OBS。"""
+        counter = self._install_fake_storage(monkeypatch)
+        provider = OBSKnowledgeBaseConfigProvider()
+
+        c1 = asyncio.run(provider._load_connection_config("conn-1"))
+        c2 = asyncio.run(provider._load_connection_config("conn-1"))
+
+        assert counter["obs_reads"] == 1
+        assert c1.connection_id == "conn-1"
+        assert c2.connection_id == "conn-1"
+
+    def test_cache_expired_rereads_obs(self, monkeypatch):
+        """缓存过期后重新读 OBS，且拿到新数据。"""
+        counter = self._install_fake_storage(monkeypatch)
+        provider = OBSKnowledgeBaseConfigProvider()
+
+        c1 = asyncio.run(provider._load_connection_config("conn-1"))
+        assert counter["obs_reads"] == 1
+
+        # 将缓存条目拨回 TTL 之前，模拟过期
+        cache_key = "conn:conn-1"
+        assert cache_key in kb_config_providers._cache
+        kb_config_providers._cache_ts[cache_key] = (
+            time.time() - (kb_config_providers._CACHE_TTL_SECONDS + 1)
+        )
+
+        c2 = asyncio.run(provider._load_connection_config("conn-1"))
+        assert counter["obs_reads"] == 2
+        assert c2.connection_id == "conn-1"
