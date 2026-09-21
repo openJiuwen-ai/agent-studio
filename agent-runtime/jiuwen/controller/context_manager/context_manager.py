@@ -481,7 +481,7 @@ class ContextManager:
         latest_msg = self.get_latest_assistant_message()
         if latest_msg:
             function_call = latest_msg.function_call
-            if isinstance(function_call, Dict):
+            if isinstance(function_call, dict):
                 result = function_call
         return result
 
@@ -491,7 +491,7 @@ class ContextManager:
         latest_msg = self.get_latest_assistant_message()
         if latest_msg:
             function_call = latest_msg.function_call
-            if isinstance(function_call, List):
+            if isinstance(function_call, list):
                 result = function_call
         return result
 
