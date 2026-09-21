@@ -11,12 +11,18 @@
  * 安全门控（防登录 CSRF / 会话固定：诱导用户打开携带攻击者 token 的链接
  * 时，以下任一条件不满足即拒绝消费，且对 URL 零改动）：
  * 1. 仅当页面处于 iframe 嵌入中（window.self !== window.top）才消费；
- * 2. 父页面来源可信：document.referrer 与 console 精确同主机（同一主机视为
- *    同一管理单元，覆盖同 IP 不同端口的部署形态；子域与跨域不隐式可信），
- *    或其 origin 在 TRUSTED_PARENT_ORIGINS 白名单内（精确 origin 匹配，
- *    含协议与端口）；
+ * 2. 父页面来源可信：document.referrer 与 console 完全同源（origin 精确
+ *    一致，含协议与端口），或其 origin 在 TRUSTED_PARENT_ORIGINS 白名单内。
+ *    同主机不同端口/协议不构成可信边界（Cookie 按域名而非端口共享）。
+ *    **部署要求：父平台与 console 非同源时，必须将其完整 origin（含协议
+ *    与端口）配置进 TRUSTED_PARENT_ORIGINS，否则 SSO 不生效**；
  * 3. referrer 缺失按不可信处理（fail-closed）。父页面不得设置
  *    Referrer-Policy: no-referrer（浏览器默认策略不受影响）。
+ *
+ * token 编码契约：token 须以 URL 原样（未 percent-encoding）拼入 src。
+ * 若父平台对 token 做了 percent-encoding（如 + → %2B、= → %3D），写入
+ * Cookie 的值与后端原始 token 不一致将导致认证失败——检测到疑似编码值
+ * 时输出告警（无法安全自动解码：无法区分编码值与本身含 % 的原始 token）。
  *
  * 顺序保证：先写入并回读校验 Cookie 值，校验通过后才剥除 URL——写入被
  * 浏览器拦截（三方 Cookie 策略 / 同名 HttpOnly Cookie 冲突 / 非法字符）
@@ -31,8 +37,8 @@ export const AUTH_PARAM_NAME = 'Auth';
 
 /**
  * 可信父平台 origin 白名单（完整 origin，含协议+主机+端口，如
- * https://customer.example.com）。默认隐式放行与 console 精确同主机的父页面；
- * 子域/跨域部署时在此按 origin 精确补充。
+ * http://122.219.72.238:8081）。默认仅隐式放行与 console 完全同源的父页面；
+ * 其余来源（含同主机不同端口/协议、子域、跨域）必须在此按 origin 精确配置。
  */
 export const TRUSTED_PARENT_ORIGINS: string[] = [];
 
@@ -44,8 +50,9 @@ const ILLEGAL_COOKIE_CHARS = /[\s;,"\\]/;
  *
  * 使用纯字符串切分而非 URLSearchParams：token 是不透明字符串，
  * URLSearchParams 会把 '+' 解码为空格、'%xx' 解码，静默损坏凭证；
- * 其余参数段按字节原样保留（顺序不变），避免影响对 URL 做裸正则
- * 匹配的消费方（如 http.service 的 peekWorkspaceId）。
+ * 其余参数段按字节原样保留（顺序与空段均不变，如 'a&&b' 剥除 Auth 后
+ * 仍是 'a&&b'），避免影响对 URL 做裸正则匹配的消费方（如 http.service
+ * 的 peekWorkspaceId），也保证"无 Auth 时 query 串逐字节不变"。
  *
  * @returns token 为 null 表示未找到非空值；query 为剥除 Auth 后的剩余串
  */
@@ -59,7 +66,8 @@ export function extractAuthParam(query: string): { token: string | null; query: 
       if (value && token === null) {
         token = value;
       }
-    } else if (seg !== '') {
+    } else {
+      // 含空段在内的其余段逐段保留，保证剥除 Auth 之外零改动
       kept.push(seg);
     }
   }
@@ -67,27 +75,23 @@ export function extractAuthParam(query: string): { token: string | null; query: 
 }
 
 /**
- * 判断 referrer 是否为可信父页面：与 console 精确同主机（同一主机视为同一
- * 管理单元，端口差异不敏感），或 origin 在 TRUSTED_PARENT_ORIGINS 白名单内
- * （含协议与端口的精确匹配）。referrer 缺失/非法按不可信处理。
+ * 判断 referrer 是否为可信父页面：与 console 完全同源（origin 精确一致，
+ * 含协议与端口），或 origin 在 TRUSTED_PARENT_ORIGINS 白名单内（精确
+ * 匹配）。referrer 缺失/非法按不可信处理。
+ * 同主机不同端口/协议不放行：Cookie 按域名而非端口共享，同主机上的其他
+ * 服务不是可信边界。
  */
 function isTrustedReferrer(referrer: string): boolean {
   if (!referrer) {
     return false;
   }
   let refOrigin = '';
-  let refHost = '';
   try {
-    const refUrl = new URL(referrer);
-    refOrigin = refUrl.origin;
-    refHost = refUrl.hostname;
+    refOrigin = new URL(referrer).origin;
   } catch (e) {
     return false;
   }
-  if (TRUSTED_PARENT_ORIGINS.includes(refOrigin)) {
-    return true;
-  }
-  return refHost === location.hostname;
+  return refOrigin === location.origin || TRUSTED_PARENT_ORIGINS.includes(refOrigin);
 }
 
 /**
@@ -230,6 +234,14 @@ export function consumeSsoAuthFromUrl(): string | null {
         console.warn('[SSO] failed to strip Auth param from url', e);
       }
       return null;
+    }
+
+    // 编码契约检查：疑似 percent-encoding 的 token 与后端原始值不一致会导致
+    // 认证失败，此处仅告警不自动解码（无法区分编码值与本身含 % 的原始 token）
+    if (/%[0-9A-Fa-f]{2}/.test(token)) {
+      console.warn(
+        '[SSO] Access-Token appears to be percent-encoded; the contract requires the raw token, authentication may fail'
+      );
     }
 
     let writeOk = false;
