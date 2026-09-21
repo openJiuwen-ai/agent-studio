@@ -886,7 +886,21 @@ export class FlowLogModalComponent implements OnChanges {
           // 的 sort 顺序（start_time 变），导致后续 start 的 groupFinishes[idx] 取到同一个 finish
           // （重配对、孤立其他 finish）。副本不 mutate → sort 稳定 → 每个 late start 取唯一 finish。
           const f = groupFinishes[curIdx - earlyCount];
-          return { node: { ...f, start_time: start_time }, additionalInfo: null };
+          const node = { ...f, start_time: start_time };
+          // 对齐上方 finish-building loop 的 inner_error 处理：loop 把 exceptionChildren
+          // 构建在局部 finish 变量上（Object.assign(finish, f)），f 本身不带；此处若不补，
+          // 带 inner_error 的最终 node_finished 的错误卡片/异常子链不渲染、错误详情丢失。
+          if (f.inner_error) {
+            const fItem = this.createTableItem(f);
+            fItem.node_status = 'exception';
+            if (!node.exceptionChildren) {
+              node.exceptionChildren = [];
+            }
+            node.exceptionChildren.push(fItem);
+            node.collapsed = false;
+            fItem.index = node.exceptionChildren.length - 1;
+          }
+          return { node, additionalInfo: null };
         } else if (curIdx >= 0) {
           // 早期 start：配时间窗 [本轮 start, 下一轮 start) 内 messages 最多的 node_wait
           const groupWaits = event_list
