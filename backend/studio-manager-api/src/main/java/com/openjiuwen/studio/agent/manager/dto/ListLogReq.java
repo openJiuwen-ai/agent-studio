@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -22,24 +23,30 @@ public class ListLogReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("startTime")
+    @Schema(description = "查询开始时间", example = "2026-01-01T00:00:00Z")
     private String startTime = null;
 
     @JsonProperty("endTime")
+    @Schema(description = "查询结束时间", example = "2026-01-01T23:59:59Z")
     private String endTime = null;
 
     @JsonProperty("keywords")
+    @Schema(description = "搜索关键词", example = "error")
     @Length(max = 128)
     private String keywords = null;
 
     @JsonProperty("limit")
+    @Schema(description = "返回条数限制", example = "100")
     @Length(max = 3)
     private String limit = null;
 
     @JsonProperty("lineNum")
+    @Schema(description = "起始行号", example = "0")
     @Length(max = 32)
     private String lineNum = null;
 
     @JsonProperty("searchType")
+    @Schema(description = "搜索类型", example = "forward")
     private String searchType = null;
 
     public String getStartTime() {

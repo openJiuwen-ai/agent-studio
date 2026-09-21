@@ -417,6 +417,8 @@
     align-items: center;
     gap: 4px;
     color: #666666;
+    // 运行时间字号与单智能体试运行（chat-item 的 .cv-time 12px）对齐
+    font-size: 12px;
   }
 
 }

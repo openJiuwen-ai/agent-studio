@@ -127,6 +127,11 @@ class ExecutionRequest(BaseModel):
         alias="resumeInput",
         description="恢复中断时的用户输入（后端自动检测会话状态决定是否使用）",
     )
+    dialogue_count: int = Field(
+        default=1,
+        alias="dialogueCount",
+        description="对话轮次计数，用于消息历史裁剪与统计",
+    )
 
 
 class StreamingChatResponse(BaseModel):

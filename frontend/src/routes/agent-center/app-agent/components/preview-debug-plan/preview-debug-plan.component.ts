@@ -65,6 +65,10 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
   @Input() shortCode?: string = "";
   @Input() agentWebInfo: any;
 
+  // statistic_data 先于 summary_response 到达时暂存耗时，
+  // 待最终答案消息创建时挂载（见 handleStatisticData / handleSummaryResponse）
+  private pendingLatency: number | undefined;
+
   agentBotPageService = inject(AgentBotPageService);
 
   msgServ = inject(NzMessageService);
@@ -81,6 +85,14 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
       if (this.dialogHistory[currentIndex]?.[0]) {
         this.dialogHistory[currentIndex][0].isFinished = true;
       }
+      // super 只标记了第一条 assistant（sceneMessage），带 plans 的消息不走 summary 底部，
+      // 这里补齐本轮全部 assistant 消息，确保最终答案消息也能展示"已停止生成"
+      this.dialogHistory[currentIndex].forEach((item) => {
+        if (item?.role === "assistant") {
+          item.terminate = true;
+        }
+      });
+      this.dialogHistory[currentIndex] = [...this.dialogHistory[currentIndex]];
     }
   }
 
@@ -140,6 +152,9 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
     this.dialogHistory = this.dialogHistory.map((conversation) =>
       conversation.filter((item) => item.role !== "followUpQuestions")
     );
+    // 新一轮开始，作废旧暂存耗时：上一轮 statistic 后异常中断（错误/超时/停止）的
+    // pendingLatency 残留不再有效，防止串到本轮 summary 显示上一轮的耗时
+    this.pendingLatency = undefined;
     this.sensitiveFlag = false;
     this.isRequesting = true;
     this.isLoading = true;
@@ -200,6 +215,8 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
       onDone: () => {
         this.isRequesting = false;
         this.isLoading = false;
+        // 本轮流结束：丢弃未被 summary_response 消费的暂存耗时，避免串到下一轮
+        this.pendingLatency = undefined;
         if (this.enable) {
           this.getNextQuestions(currentIndex);
         } else {
@@ -584,12 +601,22 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
 
     if (sceneMessage) {
       sceneMessage.time_consumption = latency;
+    } else if (this.shortCode) {
+      // 发布态网页（有 shortCode）不下发运行时间：调试信息不出现在用户侧页面
     } else {
-      const newItem = { role: "assistant", time_consumption: latency };
-      this.dialogHistory[currentIndex] = [
-        ...this.dialogHistory[currentIndex],
-        newItem
-      ];
+      // 试运行：耗时挂到最终答案（summary_response）消息上。
+      // statistic_data 通常先于 summary_response 到达，此时最终答案尚未创建，
+      // 暂存待 handleSummaryResponse 落地时挂载；旧实现 push 一条无 content 的
+      // 裸消息，模板渲染门槛（content/inputList/cards/terminate）过不去，时间永不显示
+      const summaryMessage = this.dialogHistory[currentIndex].find(
+        (item) => item.role === "assistant" && item.event === "summary_response"
+      );
+      if (summaryMessage) {
+        summaryMessage.time_consumption = latency;
+        this.dialogHistory[currentIndex] = [...this.dialogHistory[currentIndex]];
+      } else {
+        this.pendingLatency = latency;
+      }
     }
 
     this.endThink(currentIndex);
@@ -650,6 +677,11 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
       existingSummary.quoteList = quoteList;
       existingSummary.executionId = chunkDataObj.executionId;
       existingSummary.tagNum = 0;
+      // 消费 statistic_data 先行到达时暂存的耗时，挂在最终答案消息上
+      if (this.pendingLatency !== undefined) {
+        existingSummary.time_consumption = this.pendingLatency;
+        this.pendingLatency = undefined;
+      }
     } else {
       this.dialogHistory[currentIndex].push({
         role: "assistant",
@@ -659,8 +691,12 @@ export class PreviewDebugPlanComponent extends PreviewDebugComponent {
         quoteList,
         executionId: chunkDataObj.executionId,
         tagNum: 0,
-        hasAssistant: true
+        hasAssistant: true,
+        ...(this.pendingLatency !== undefined
+          ? { time_consumption: this.pendingLatency }
+          : {}),
       });
+      this.pendingLatency = undefined;
     }
 
     this.dialogHistory[currentIndex] = [...this.dialogHistory[currentIndex]];

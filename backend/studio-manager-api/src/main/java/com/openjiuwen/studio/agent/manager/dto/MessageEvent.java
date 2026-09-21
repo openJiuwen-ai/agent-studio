@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -24,77 +25,99 @@ public class MessageEvent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("text")
+    @Schema(description = "文本内容", example = "你好，请帮我查询天气")
     private String text = null;
 
     @JsonProperty("card")
+    @Schema(description = "卡片内容", example = "{}")
     @Valid
     private Object card = null;
 
     @JsonProperty("metaData")
+    @Schema(description = "元数据", example = "{}")
     @Valid
     private Object metaData = null;
 
     @JsonProperty("pack")
+    @Schema(description = "打包数据", example = "{}")
     @Valid
     private Object pack = null;
 
     @JsonProperty("instance_id")
+    @Schema(description = "实例ID", example = "instance-001")
     private String instanceId = null;
 
     @JsonProperty("card_code")
+    @Schema(description = "卡片编码", example = "card-001")
     private String cardCode = null;
 
     @JsonProperty("resource_url")
+    @Schema(description = "资源URL", example = "https://example.com/resource")
     private String resourceUrl = null;
 
     @JsonProperty("version")
+    @Schema(description = "版本号", example = "1.0.0")
     private String version = null;
 
     @JsonProperty("summary")
+    @Schema(description = "摘要", example = "这是一条消息摘要")
     private String summary = null;
 
     @JsonProperty("origin")
+    @Schema(description = "来源", example = "user")
     private String origin = null;
 
     @JsonProperty("reasoning_content")
+    @Schema(description = "推理内容", example = "正在思考中...")
     private String reasoningContent = null;
 
     @JsonProperty("original")
+    @Schema(description = "原始内容", example = "原始消息文本")
     private String original = null;
 
     @JsonProperty("index")
+    @Schema(description = "索引", example = "0")
     private Integer index = null;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node-001")
     @Length(max = 128)
     private String nodeId = null;
 
     @JsonProperty("node_type")
+    @Schema(description = "节点类型", example = "llm")
     @Length(max = 32)
     private String nodeType = null;
 
     @JsonProperty("node_name")
+    @Schema(description = "节点名称", example = "大语言模型节点")
     @Length(max = 64)
     private String nodeName = null;
 
     @JsonProperty("is_finished")
+    @Schema(description = "是否已完成", example = "false")
     private Boolean isFinished = null;
 
     @JsonProperty("parent_workflow_id")
+    @Schema(description = "父工作流ID", example = "parent-workflow-001")
     @Length(max = 32)
     private String parentWorkflowId = null;
 
     @JsonProperty("workflow_id")
+    @Schema(description = "工作流ID", example = "workflow-001")
     @Length(max = 64)
     private String workflowId = null;
 
     @JsonProperty("workflow_name")
+    @Schema(description = "工作流名称", example = "我的工作流")
     private String workflowName = null;
 
     @JsonProperty("createdTime")
+    @Schema(description = "创建时间（毫秒时间戳）", example = "1714521600000")
     private Long createdTime = null;
 
     @JsonProperty("enable_history")
+    @Schema(description = "是否启用历史记录", example = "true")
     private Boolean enableHistory = null;
 
     public String getText() {

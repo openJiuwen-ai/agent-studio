@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -30,32 +31,39 @@ public class ImportStudioSkillResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("skill_id")
+    @Schema(description = "技能ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String skillId = null;
 
     @JsonProperty("skill_name")
+    @Schema(description = "技能名称", example = "代码生成")
     @Length(min = 1, max = 64)
     private String skillName = null;
 
     @JsonProperty("description")
+    @Schema(description = "技能描述", example = "自动生成代码", required = true)
     @NotBlank
     @Length(min = 1, max = 1024)
     private String description = null;
 
     @JsonProperty("obs_url")
+    @Schema(description = "OBS存储地址", example = "https://obs.example.com/skill", required = true)
     @NotBlank
     @Length(min = 1, max = 1024)
     private String obsUrl = null;
 
     @JsonProperty("version_name")
+    @Schema(description = "版本名称", example = "v1.0.0")
     @Length(min = 1, max = 32)
     private String versionName = null;
 
     @JsonProperty("status")
+    @Schema(description = "技能状态", example = "ENABLED", required = true)
     @NotNull
     private SkillStatus status = null;
 
     @JsonProperty("source")
+    @Schema(description = "技能来源", example = "import", required = true)
     @NotNull
     private SourceEnum source = null;
 

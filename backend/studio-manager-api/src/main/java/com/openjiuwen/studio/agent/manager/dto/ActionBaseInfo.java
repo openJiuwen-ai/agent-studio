@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -25,51 +26,65 @@ public class ActionBaseInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "ID", example = "action_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "send_email")
     @Length(max = 128)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "发送邮件动作")
     @Length(max = 512)
     private String description = null;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "connector_001")
     @Length(max = 64)
     private String connectorId = null;
 
     @JsonProperty("connector_version")
+    @Schema(description = "连接器版本", example = "1.0.0")
     private String connectorVersion = null;
 
     @JsonProperty("created_time")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00Z")
     private Date createdTime = null;
 
     @JsonProperty("updated_time")
+    @Schema(description = "更新时间", example = "2026-01-01T00:00:00Z")
     private Date updatedTime = null;
 
     @JsonProperty("test_result")
+    @Schema(description = "测试结果", example = "success")
     private String testResult = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "email")
     private String category = null;
 
     @JsonProperty("swagger")
+    @Schema(description = "Swagger定义")
     @Valid
     private Object swagger = null;
 
     @JsonProperty("definition")
+    @Schema(description = "定义")
     @Valid
     private Object definition = null;
 
     @JsonProperty("connector_created_type")
+    @Schema(description = "连接器创建类型", example = "custom")
     private String connectorCreatedType = null;
 
     @JsonProperty("connector_action_html")
+    @Schema(description = "连接器动作HTML")
     private String connectorActionHtml = null;
 
     @JsonProperty("operation_id")
+    @Schema(description = "操作ID", example = "sendEmail")
     private String operationId = null;
 
     public String getId() {

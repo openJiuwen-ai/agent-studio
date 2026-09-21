@@ -22,9 +22,10 @@
             ></meta-upload-file-icon>
             <span nz-tooltip [nzTooltipTitle]="fileItem.name">{{ fileItem.name }}</span>
           </div>
-          <!-- 展示上传的图片 -->
-          <div class="uploaded-image" *ngIf="fileItem.type === 'image'">
-            <img alt="" [src]="fileItem.url || fileItem.img"/>
+          <!-- 展示上传的图片：仅在有可用图片地址时渲染，避免无 src 的 img 仍占一行行高 -->
+          <div class="uploaded-image" *ngIf="fileItem.type === 'image' && (fileItem.url || fileItem.img)">
+            <!-- 优先本地预览（blob 必定可加载），服务端 url 可能受签名/网络影响加载失败；历史消息无本地预览时回退 url -->
+            <img alt="" [src]="fileItem.img || fileItem.url"/>
           </div>
         </ng-container>
         <!-- 此处不能自动格式化保存，否则发送的用户问题开头会多一个空格，且使用trim无效 -->
@@ -62,9 +63,11 @@
           </ng-container>
         </div>
       </ng-container>
+      <!-- 带 plans 的消息不走 summary 底部，本轮无答案时停止提示展示在计划区下方 -->
+      <div *ngIf="content.terminate && content.plans?.length && !roundHasAnswer" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</div>
       <ng-template #summary>
         <div
-          *ngIf="isConversationContent(content)  && ( content?.content || content?.inputList?.length || content?.cards?.length) && (!isError ||content.event !=='error'); else error"
+          *ngIf="isConversationContent(content)  && ( content?.content || content?.inputList?.length || content?.cards?.length || content?.terminate) && (!isError ||content.event !=='error'); else error"
           class="assistant-content chat-content"
         >
           <div class="cv-content"  [ngClass]="{'no-border':!hasTool || content.hasSummary}">
@@ -134,7 +137,7 @@
 
                 <div
                   class="cv-time"
-                  *ngIf="content.time_consumption"
+                  *ngIf="content.time_consumption || isFinished || content.terminate"
                 >
                   <div *ngIf="sourceFiles?.length > 0" id="agent-base-source-detail">
                     <div *ngFor="let file of (sourceFiles | slice:0:5); let i = index"
@@ -165,8 +168,9 @@
                     >
                       <div [innerHTML]="content?.timeConsumptionStr?.overall_str | safeHtml"></div>
                     </div>
+                    <span *ngIf="content.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                     <div *ngIf="!isError" class="flex gap-[4px] split items-center">
-                      <ng-container *ngIf="content.content">
+                      <ng-container *ngIf="content.content && (isFinished || content.terminate)">
                         <div class="chat-footer-icon" nz-tooltip [nzTooltipTitle]="'copy' | i18nextEager" (click)="copy(content.content)">
                           <span nz-icon nzType="copy" nzTheme="outline" style="font-size: 16px;"></span>
                         </div>

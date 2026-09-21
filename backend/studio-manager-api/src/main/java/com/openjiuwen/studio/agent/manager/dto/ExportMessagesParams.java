@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -29,6 +31,7 @@ public class ExportMessagesParams implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("messages_ids")
+    @Schema(description = "消息列表", example = "[]")
     @Valid
     @Size(max = 200)
     private List<@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Length(max = 64) String> messagesIds = null;

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,37 +26,48 @@ public class ModelServiceInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("deployment_id")
+    @Schema(description = "部署ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String deploymentId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String projectId = null;
 
     @JsonProperty("model_id")
+    @Schema(description = "模型ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String modelId = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "LLM")
     private String modelType = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "示例名称")
     private String modelName = null;
 
     @JsonProperty("endpoint")
+    @Schema(description = "服务端点", example = "https://example.com")
     private String endpoint = null;
 
     @JsonProperty("enable_status")
+    @Schema(description = "启用状态", example = "ENABLED")
     private String enableStatus = null;
 
     @JsonProperty("enable_model")
+    @Schema(description = "启用模型", example = "ENABLED")
     private String enableModel = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "")
     @Valid
     private ModelMetadata metadata = null;
 
     @JsonProperty("is_preset")
+    @Schema(description = "是否预置", example = "false")
     private Boolean isPreset = null;
 
     public String getDeploymentId() {

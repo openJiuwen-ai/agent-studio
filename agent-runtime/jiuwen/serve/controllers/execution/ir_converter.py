@@ -60,6 +60,7 @@ from jiuwen.extension.workflow_node.flow_input import FlowInput
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 from jiuwen.extension.workflow_node.flow_message import Message
 from jiuwen.extension.workflow_node.flow_qa import FlowQA, build_struct_input_schemas
+from jiuwen.extension.workflow_node.flow_sql import FlowSql
 from jiuwen.extension.workflow_node.flow_stream_transform import FlowStreamTransform
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
@@ -2501,6 +2502,9 @@ class IRConverter:
             )
             return FlowStreamTransform(configs, metadata), node_type, configs
 
+        if node_type == "jiuwen.sql":
+            return FlowSql(configs), node_type, configs
+
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
         )
@@ -3465,8 +3469,9 @@ class IRConverter:
         if not model_id:
             return
         if model_id in _AGENT_CORE_REGISTERED_MODEL_IDS:
-            logger.info(
-                f"Agent-core model resource already registered: model_id={model_id}",
+            logger.debug(
+                "Agent-core model resource already registered: model_id=%s",
+                model_id,
                 simple_log="agent-core model resource already registered",
             )
             return

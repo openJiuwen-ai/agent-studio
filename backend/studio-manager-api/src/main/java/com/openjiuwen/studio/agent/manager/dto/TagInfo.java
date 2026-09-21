@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,12 +26,15 @@ public class TagInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tag_id")
+    @Schema(description = "标签ID", example = "example-id-123")
     private String tagId = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "示例名称")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "英文名称", example = "示例名称")
     private String nameEn = null;
 
     public String getTagId() {

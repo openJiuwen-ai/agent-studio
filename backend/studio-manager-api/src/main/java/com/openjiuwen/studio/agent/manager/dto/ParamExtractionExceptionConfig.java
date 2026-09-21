@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -25,9 +27,11 @@ public class ParamExtractionExceptionConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("max_iteration")
+    @Schema(description = "maxiteration", example = "10")
     private Integer maxIteration = null;
 
     @JsonProperty("exception_condition")
+    @Schema(description = "exceptioncondition", example = "示例字符串")
     @Valid
     @Size()
     private Map<String, Object> exceptionCondition = null;

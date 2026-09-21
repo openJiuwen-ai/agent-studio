@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -33,18 +34,22 @@ public class CreateAgentReq implements Serializable {
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!，。、？：；\"\"''《》【】,.?:;\"\"''<>\\[\\]@#$%&*+= \\n](?:[\\s\\S]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!，。、？：；\"\"''《》【】,.?:;\"\"''<>\\[\\]@#$%&*+= \\n])?$")
     @NotBlank
     @Length(min = 1, max = 64)
+    @Schema(description = "智能体名称，1~64 个字符", example = "我的助手", required = true)
     private String name = null;
 
     @JsonProperty("description")
     @NotBlank
     @Length(min = 1, max = 256)
+    @Schema(description = "智能体描述，1~256 个字符", example = "一个帮助回答问题的助手", required = true)
     private String description = null;
 
     @JsonProperty("icon")
     @Length(min = 1, max = 64)
+    @Schema(description = "智能体图标，支持 base64 或 URL，1~64 个字符", example = "data:image/png;base64,...")
     private String icon = null;
 
     @JsonProperty("type")
+    @Schema(description = "智能体类型：agent-单智能体，controller-多智能体", example = "agent")
     private TypeEnum type = null;
 
     public String getName() {

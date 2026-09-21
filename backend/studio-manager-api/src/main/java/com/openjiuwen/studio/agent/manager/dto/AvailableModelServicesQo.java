@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,51 +28,63 @@ public class AvailableModelServicesQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("provider_id")
+    @Schema(description = "供应商ID", example = "provider_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     @Length(max = 50)
     private String providerId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001", required = true)
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("service_name")
+    @Schema(description = "服务名称", example = "my_service")
     @Length(max = 1000)
     private String serviceName = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "gpt-4")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\/:| -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String modelName = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "llm")
     @Pattern(regexp = "^[a-zA-Z0-9,_-]{1,200}$")
     private String modelType = null;
 
     @JsonProperty("id")
+    @Schema(description = "模型服务ID", example = "model_001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     @Length(max = 80)
     private String id = null;
 
     @JsonProperty("functioncall")
+    @Schema(description = "是否支持函数调用", example = "true")
     private Boolean functioncall = null;
 
     @JsonProperty("publish_status")
+    @Schema(description = "发布状态", example = "all")
     @Pattern(regexp = "^(all|online)$")
     @Length(max = 7)
     private String publishStatus = "all";
 
     @JsonProperty("groupby")
+    @Schema(description = "分组字段", example = "provider")
     private String groupby = null;
 
     @JsonProperty("only_private")
+    @Schema(description = "是否仅查询私有", example = "false")
     private Boolean onlyPrivate = null;
 
     @JsonProperty("with_router")
+    @Schema(description = "是否包含路由", example = "false")
     private Boolean withRouter = false;
 
     @JsonProperty("intent_recognition")
+    @Schema(description = "是否意图识别", example = "false")
     private Boolean intentRecognition = false;
 
     public String getProviderId() {

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -30,6 +31,7 @@ public class ModifyMemoryRepoRequestBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "记忆库名称", example = "我的记忆库", required = true)
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!](?:[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！! ]*[\\u4e00-\\u9fa5a-zA-Z0-9_\\-（）()！!])?$")
     @NotBlank
@@ -37,21 +39,26 @@ public class ModifyMemoryRepoRequestBody implements Serializable {
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "记忆库描述", example = "用于存储用户对话记忆")
     @Length(max = 1000)
     private String description = null;
 
     @JsonProperty("icon")
+    @Schema(description = "记忆库图标", example = "memory-icon")
     private String icon = null;
 
     @JsonProperty("long_term_memory_strategies")
+    @Schema(description = "长期记忆策略列表", example = "[{\"type\":\"summary\"}]")
     @Valid
     @Size(max = 200)
     private List<LongTermMemoryStrategy> longTermMemoryStrategies = null;
 
     @JsonProperty("conversation_round")
+    @Schema(description = "对话轮次", example = "10")
     private Integer conversationRound = null;
 
     @JsonProperty("time_span")
+    @Schema(description = "时间跨度（秒）", example = "3600")
     private Integer timeSpan = null;
 
     public String getName() {

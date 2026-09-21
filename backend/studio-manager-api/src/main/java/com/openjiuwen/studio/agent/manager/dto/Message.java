@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -24,10 +26,12 @@ public class Message implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("role")
+    @Schema(description = "角色", example = "admin")
     @Length(min = 1, max = 64)
     private String role = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "内容示例", required = true)
     @NotBlank
     @Length(min = 1)
     private String content = null;

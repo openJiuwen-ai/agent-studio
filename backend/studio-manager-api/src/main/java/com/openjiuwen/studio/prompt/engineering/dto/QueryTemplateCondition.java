@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.prompt.engineering.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -27,35 +28,44 @@ public class QueryTemplateCondition implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("template_id")
+    @Schema(description = "模板ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     private String templateId = null;
 
     @JsonProperty("template_name")
+    @Schema(description = "模板名称", example = "示例名称")
     private String templateName = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "示例内容")
     private String content = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "示例描述")
     private String description = null;
 
     @JsonProperty("tag_list")
+    @Schema(description = "标签列表", example = "")
     @Valid
     @Size(max = 500)
     private List<@Length() String> tagList = null;
 
     @JsonProperty("industry_list")
+    @Schema(description = "行业列表", example = "")
     @Valid
     @Size(max = 500)
     private List<@Length() String> industryList = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "PLAYGROUND")
     private String source = null;
 
     @JsonProperty("offset")
+    @Schema(description = "偏移量", example = "0")
     @Range(min = 0L, max = 100000L)
     private Integer offset = 0;
 
     @JsonProperty("limit")
+    @Schema(description = "每页数量", example = "50")
     @Range(min = 1L, max = 1000L)
     private Integer limit = 50;
 

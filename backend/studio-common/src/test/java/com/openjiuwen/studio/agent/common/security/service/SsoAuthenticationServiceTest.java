@@ -261,4 +261,95 @@ public class SsoAuthenticationServiceTest {
         assertEquals("100", result.get().getDomainId());
         assertEquals("200", result.get().getProjectId());
     }
+
+    @Test
+    void authenticate_nestedResponse_shouldExtractByDotPath() {
+        AuthProperties.UserInfoConfig.ClaimsConfig claimsConfig = new AuthProperties.UserInfoConfig.ClaimsConfig();
+        claimsConfig.setUserId("result.user_id");
+        claimsConfig.setUserName("result.user_name");
+        claimsConfig.setDomainId("result.domain_id");
+        claimsConfig.setProjectId("result.project_id");
+        authProperties.getUserInfo().setClaims(claimsConfig);
+
+        Map<String, Object> nested = new HashMap<>();
+        nested.put("user_id", "nested-user");
+        nested.put("user_name", "Nested User");
+        nested.put("domain_id", "nested-domain");
+        nested.put("project_id", "nested-project");
+        Map<String, Object> ssoResponse = new HashMap<>();
+        ssoResponse.put("code", "0");
+        ssoResponse.put("result", nested);
+        mockExchangeReturn(ssoResponse, HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertEquals("nested-user", result.get().getUserId());
+        assertEquals("Nested User", result.get().getUserName());
+        assertEquals("nested-domain", result.get().getDomainId());
+        assertEquals("nested-project", result.get().getProjectId());
+    }
+
+    @Test
+    void authenticate_multiLevelNestedResponse_shouldExtractByDotPath() {
+        AuthProperties.UserInfoConfig.ClaimsConfig claimsConfig = new AuthProperties.UserInfoConfig.ClaimsConfig();
+        claimsConfig.setUserId("data.user.info.user_id");
+        claimsConfig.setUserName("data.user.info.user_name");
+        authProperties.getUserInfo().setClaims(claimsConfig);
+
+        Map<String, Object> info = new HashMap<>();
+        info.put("user_id", "deep-user");
+        info.put("user_name", "Deep User");
+        Map<String, Object> user = new HashMap<>();
+        user.put("info", info);
+        Map<String, Object> data = new HashMap<>();
+        data.put("user", user);
+        Map<String, Object> ssoResponse = new HashMap<>();
+        ssoResponse.put("data", data);
+        mockExchangeReturn(ssoResponse, HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertEquals("deep-user", result.get().getUserId());
+        assertEquals("Deep User", result.get().getUserName());
+    }
+
+    @Test
+    void authenticate_brokenPath_shouldUseDefaults() {
+        AuthProperties.UserInfoConfig.ClaimsConfig claimsConfig = new AuthProperties.UserInfoConfig.ClaimsConfig();
+        claimsConfig.setUserId("result.missing.user_id");
+        claimsConfig.setUserName("result.user_name");
+        authProperties.getUserInfo().setClaims(claimsConfig);
+
+        Map<String, Object> nested = new HashMap<>();
+        nested.put("user_name", "Nested User");
+        Map<String, Object> ssoResponse = new HashMap<>();
+        ssoResponse.put("result", nested);
+        mockExchangeReturn(ssoResponse, HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertEquals("unknown", result.get().getUserId());
+        assertEquals("Nested User", result.get().getUserName());
+    }
+
+    @Test
+    void authenticate_nonMapMiddleLayer_shouldUseDefaults() {
+        AuthProperties.UserInfoConfig.ClaimsConfig claimsConfig = new AuthProperties.UserInfoConfig.ClaimsConfig();
+        claimsConfig.setUserId("result.valid.user_id");
+        authProperties.getUserInfo().setClaims(claimsConfig);
+
+        Map<String, Object> nested = new HashMap<>();
+        nested.put("valid", true);
+        Map<String, Object> ssoResponse = new HashMap<>();
+        ssoResponse.put("result", nested);
+        mockExchangeReturn(ssoResponse, HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertEquals("unknown", result.get().getUserId());
+    }
 }

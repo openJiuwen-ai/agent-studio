@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -32,12 +34,14 @@ public class BatchCreatePluginToolRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("ids")
+    @Schema(description = "ids", example = "[]", required = true)
     @Valid
     @NotNull
     @Size()
     private List<@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Length(max = 64) String> ids = new ArrayList<String>();
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "10", required = true)
     @NotNull
     @Range(min = 0L)
     private Integer count = null;

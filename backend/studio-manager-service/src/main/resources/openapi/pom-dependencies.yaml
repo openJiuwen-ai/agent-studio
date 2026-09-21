@@ -1,6 +1,0 @@
-# 此swagger文件存放base中的依赖包信息
-swagger: '2.0'
-info:
-  description: pom dependencies import swagger file
-x-pom-gav:
-  - 'com.openjiuwen:studio-common:0.0.1'

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,6 +25,7 @@ public class TemplateResp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model_template")
+    @Schema(description = "模型模板", example = "示例文本")
     private String modelTemplate = null;
 
     public String getModelTemplate() {

@@ -90,16 +90,10 @@
           <div class="top-area">
             <div class="sub-title">{{ 'result_generation' | i18nextEager }}</div>
             <div class="right-opr-btns">
-              <span *ngIf="canCopyAnswer()" style="color: #808080;">
-                {{ chatLoop[0].showAnswer[0]?.text?.length
-                }}{{ 'character' | i18nextEager }}
-              </span>
               <div
+                *ngIf="canCopyAnswer()"
                 class="chat-header-icon"
-                nz-tooltip [nzTooltipTitle]="chatLoop[0]?.showCopiedTip ? ('replicated_tip' | i18nextEager) : ('copy' | i18nextEager)"
-                [ngClass]="
-                  (!canCopyAnswer()) ? 'disabled-icon' : 'abled-icon'
-                "
+                nz-tooltip [nzTooltipTitle]="'copy' | i18nextEager"
                 (click)="copyAnswer(chatLoop)"
               >
                 <nz-icon nzType="copy" nzTheme="outline"></nz-icon>
@@ -162,7 +156,7 @@
                   <!-- 深度思考的区域 -->
                   <div class="answer-cards" *ngIf="chatLoop[0].thinkValue">
                     <div class="flex justify-between gap-[48px]">
-                      <div class="flex gap-[12px]">
+                      <div class="flex items-center gap-[12px]">
                         <ng-container
                           *ngIf="chatLoop[0].thinking; else completed"
                         >

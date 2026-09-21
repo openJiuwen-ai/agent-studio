@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -27,92 +28,114 @@ public class SearchCriteria implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws-12345678")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识ID", example = "abc-123-def")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("ids")
+    @Schema(description = "ID列表，最多100个", example = "[]")
     @Valid
     @Size(max = 100)
     private List<@Length() String> ids = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "search-name")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("call_mode")
+    @Schema(description = "调用模式", example = "sync")
     @Length(max = 64)
     private String callMode = null;
 
     @JsonProperty("tool_chinese_name")
+    @Schema(description = "工具中文名称", example = "搜索工具")
     @Length(max = 64)
     private String toolChineseName = null;
 
     @JsonProperty("tool_desc")
+    @Schema(description = "工具描述", example = "用于搜索的工具")
     @Length(max = 64)
     private String toolDesc = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user001")
     @Length(max = 256)
     private String creator = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "agent")
     @Length(max = 64)
     private String type = null;
 
     @JsonProperty("sub_type")
+    @Schema(description = "子类型", example = "chat")
     @Length(max = 64)
     private String subType = null;
 
     @JsonProperty("intf_type")
+    @Schema(description = "接口类型", example = "rest")
     @Length(max = 64)
     private String intfType = null;
 
     @JsonProperty("tag_id")
+    @Schema(description = "标签ID", example = "tag-001")
     @Length(max = 256)
     private String tagId = null;
 
     @JsonProperty("user_id")
+    @Schema(description = "用户ID", example = "user123")
     @Length(max = 256)
     private String userId = null;
 
     @JsonProperty("source")
+    @Schema(description = "来源", example = "platform")
     @Length(max = 64)
     private String source = null;
 
     @JsonProperty("exclude_ids")
+    @Schema(description = "排除的ID列表，最多100个", example = "[]")
     @Valid
     @Size(max = 100)
     private List<@Length() String> excludeIds = null;
 
     @JsonProperty("workflow_type")
+    @Schema(description = "工作流类型", example = "standard")
     @Length(max = 16)
     private String workflowType = null;
 
     @JsonProperty("published")
+    @Schema(description = "是否已发布", example = "true")
     private Boolean published = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     @Length(max = 64)
     private String status = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "搜索条件描述")
     @Length(max = 1000)
     private String description = null;
 
     @JsonProperty("label")
+    @Schema(description = "标签", example = "label-001")
     @Length(max = 32)
     private String label = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "default")
     private String category = null;
 
     public String getWorkspaceId() {

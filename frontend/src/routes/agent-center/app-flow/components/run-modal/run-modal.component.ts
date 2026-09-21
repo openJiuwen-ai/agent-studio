@@ -55,6 +55,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { ScrollingModule } from '@angular/cdk/scrolling';
+import { MessageComponent } from '@shared/services/cfdata.service';
 
 @Component({
   selector: 'flow-run-modal',
@@ -328,7 +329,7 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
   override onDone(curIndex: number, token: any) {
     super.onDone(curIndex, token);
 
-    this.updateLLMsStatus();
+    this.finalizeUnfinishedNodes(this.isStreamFail);
     if (this.chatLoop[this.index]?.answer === '') {
       this.chatLoop[this.index].answer = ' ';
     }
@@ -339,6 +340,7 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
 
     this.isStreamFail = true;
     this.appFlowServe.setFlowStatus('failed');
+    this.finalizeUnfinishedNodes(true);
   }
 
   override onTimeout(curIndex: number) {
@@ -346,6 +348,7 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
 
     this.isStreamFail = true;
     this.appFlowServe.setFlowStatus('failed');
+    this.finalizeUnfinishedNodes(true);
   }
 
   get isShowEmptyTmpl(): boolean {
@@ -432,6 +435,25 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
       }
       this.cdr.markForCheck();
     }, 3000);
+  }
+
+  /** 一键复制最终输出结果，保留原始 markdown 结构 */
+  public handleCopyAnswer(item: any) {
+    const content = (item.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim();
+    if (!content) {
+      return;
+    }
+    this.clipboard.copy(content);
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
+  }
+
+  /** 是否存在可展示的输出：任一 answer 块有内容即显示结果区。
+   *  task 型按 node_id 分块，首块可能为空（如首个输出节点无文本），不能只看第一块 */
+  public hasAnswerText(item: any): boolean {
+    return !!item?.showAnswer?.some((sub: any) => !!sub?.text?.trim());
   }
 
   public changePluginFormCollapse(pluginForm: any) {
@@ -531,7 +553,9 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
   public stopChat() {
     this.sseInstance.close();
     this.isRequesting = false;
+    this.isStreamFail = true;
     this.appFlowServe.setFlowStatus('failed');
+    this.finalizeUnfinishedNodes(true);
     this.cdr.markForCheck();
   }
 
@@ -679,10 +703,22 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
     });
   }
 
-  /** 遇到结束标记时，更新未被引用的大模型节点状态，刷新为"运行成功" */
-  private updateLLMsStatus() {
+  /**
+   * 流式结束（正常/异常/超时）时，收尾仍处于未完成状态的调用节点。
+   * - 流式正常结束(isFailed=false)：仅将未匹配到结果的 LLM 节点补记为"运行成功"，
+   *   保持与既有 updateLLMsStatus 行为一致。
+   * - 流式异常/超时结束(isFailed=true)：将所有仍处于 loading/waiting/running 的节点
+   *   标记为 failed，避免父工作流报错后子工作流内代码节点前端持续转圈。
+   */
+  private finalizeUnfinishedNodes(isFailed: boolean): void {
+    const unfinishedStatuses = ['loading', 'waiting', 'running'];
     this.callChainInfo.list.forEach((item: any) => {
-      if (item.node_type === 'LLM' && item.node_status === 'waiting') {
+      if (!unfinishedStatuses.includes(item.node_status)) {
+        return;
+      }
+      if (isFailed) {
+        item.node_status = 'failed';
+      } else if (item.node_type === 'LLM' && item.node_status === 'waiting') {
         item.node_status = 'succeeded';
       }
     });

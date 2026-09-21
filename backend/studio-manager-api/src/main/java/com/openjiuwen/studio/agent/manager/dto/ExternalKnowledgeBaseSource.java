@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -25,18 +26,22 @@ public class ExternalKnowledgeBaseSource implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("knowledge_base_connector_id")
+    @Schema(description = "知识库连接器ID", example = "conn-001")
     @Length(min = 1, max = 100)
     private String knowledgeBaseConnectorId = null;
 
     @JsonProperty("knowledge_base_connection_id")
+    @Schema(description = "知识库连接ID", example = "kb-conn-001")
     @Length(min = 1, max = 100)
     private String knowledgeBaseConnectionId = null;
 
     @JsonProperty("knowledge_base_connection_name")
+    @Schema(description = "知识库连接名称", example = "外部知识库连接")
     @Length(max = 100)
     private String knowledgeBaseConnectionName = null;
 
     @JsonProperty("detail_page_url")
+    @Schema(description = "详情页地址", example = "https://example.com/detail")
     @Length(max = 1000)
     private String detailPageUrl = null;
 

@@ -67,7 +67,7 @@ export class ScenarioGuideModalService {
         avatar: this.getSkillAvatar(item.icon, PLUGIN_DEFAULT_ICON_BASE64_STR),
         disabled: !this.getPluginOrFloValid(item),
         skillType: SKILL_TYPE.PLUGIN,
-        name: item.plugin_display_name,
+        name: (item.plugin_display_name ?? '') + (item.tool_display_name ?? ''),
       };
     }
 

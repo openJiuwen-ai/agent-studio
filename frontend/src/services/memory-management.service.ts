@@ -10,14 +10,31 @@ import {
   IMemoryRes,
 } from '@shared/components/memory-management/memory-management.interface';
 
+/** manager v2 记忆条目单条结构（id/content/type/last_update_time） */
+interface IMemoryItemV2 {
+  id: string;
+  content: string;
+  type?: string;
+  last_update_time?: string;
+}
+
+/** manager v2 记忆条目列表响应 */
+interface IListMemoryItemsV2Response {
+  items?: IMemoryItemV2[];
+  total?: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class MemoryManagementService {
   isSupportUerPersona = false;
 
-  get prefixAgentRuntimeV1() {
-    return `${this.ctxServ.baseUrl}/agent-runtime`;
+  /**
+   * v2 manager 记忆条目资源根路径（baseUrl /v1/ → /v2/，memory_repo_id 为 path 参数）
+   */
+  private get repoPrefix(): string {
+    return `${this.ctxServ.baseUrl}/agent-manager`.replaceAll('/v1/', '/v2/');
   }
 
   constructor(
@@ -32,46 +49,61 @@ export class MemoryManagementService {
    * persona  start
    */
   /**
-   * 查看画像
+   * 查看记忆
+   * manager v2 使用 page_num/page_size 入参、items[].id 返回；
+   * 此处完成 offset/limit → page_num/page_size 与 items → memories 的转换，
+   * 对弹窗组件保持 {memories, total} 结构不变。
    */
   queryMemory(query: IMemoryQueryParams): Promise<IMemoryRes> {
-    return this.http.getAsync({
-      url: `${this.prefixAgentRuntimeV1}/memories/long-terms`,
-      query,
-    });
+    const pageNum = Math.floor(query.offset / query.limit) + 1;
+    return this.http
+      .getAsync<IListMemoryItemsV2Response>({
+        url: `${this.repoPrefix}/memory-repositories/${query.memory_repo_id}/memories`,
+        query: {
+          page_num: pageNum,
+          page_size: query.limit,
+          memory_type: query.memory_type,
+        },
+      })
+      .then(res => ({
+        memories: (res.items ?? []).map(item => ({
+          memory_id: item.id,
+          content: item.content,
+          type: item.type,
+          last_update_time: item.last_update_time,
+        })),
+        total: res.total ?? 0,
+      }));
   }
 
   /**
-   * 修改画像值
+   * 修改记忆内容（保持一次提交多条已编辑条目的语义）
    */
   changeMemoryContent(memoryData: IChangeMemoryParams, query: IMemoryBasicQuery) {
     return this.http.putAsync({
-      url: `${this.prefixAgentRuntimeV1}/memories/long-terms`,
+      url: `${this.repoPrefix}/memory-repositories/${query.memory_repo_id}/memories`,
       params: memoryData,
-      query,
     });
   }
 
   /**
-   * 删除画像
+   * 删除记忆
    */
   deleteMemory(memoryIds: string[], query: IMemoryBasicQuery) {
     return this.http.postAsync({
-      url: `${this.prefixAgentRuntimeV1}/memories/long-terms/batch-delete`,
+      url: `${this.repoPrefix}/memory-repositories/${query.memory_repo_id}/memories/batch-delete`,
       params: {
         memory_ids: memoryIds,
       },
-      query,
     });
   }
 
   /**
-   * 清空画像
+   * 清空记忆
    */
   clearMemory(query: IMemoryBasicQuery) {
     return this.http.deleteAsync({
-      url: `${this.prefixAgentRuntimeV1}/memories/long-terms`,
-      query,
+      url: `${this.repoPrefix}/memory-repositories/${query.memory_repo_id}/memories`,
     });
   }
 }

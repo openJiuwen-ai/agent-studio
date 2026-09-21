@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +27,7 @@ public class ModelListVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model_service_info_list")
+    @Schema(description = "模型Service信息列表", example = "")
     @Valid
     private List<ModelServiceInfo> modelServiceInfoList = null;
 

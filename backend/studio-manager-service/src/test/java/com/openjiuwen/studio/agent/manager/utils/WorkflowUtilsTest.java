@@ -318,4 +318,37 @@ class WorkflowUtilsTest {
             new com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.CustomIAMConfig();
         assertDoesNotThrow(() -> WorkflowUtils.buildAuthIamConfig(config, authInfo));
     }
+
+    /**
+     * 用例描述：验证URL含环境变量占位符时removeQueryParamsFromUrl原样返回URL
+     * 预制条件：无特殊前置条件
+     * 输入参数：URL含${_env.plugin_url_params.var}占位符
+     * 预期结果：返回原始URL不做任何修改
+     *
+     * Given：前置条件 / 初始状态
+     *  1. 构造含环境变量占位符的URL
+     * When：执行动作（仅1行核心调用）
+     *  执行：WorkflowUtils.removeQueryParamsFromUrl(url)
+     * Then：结果校验
+     *  1. 断言返回值等于原始URL
+     */
+    @Test
+    void testRemoveQueryParamsFromUrl_EnvPlaceholder() {
+        String url = "http://${_env.plugin_url_params.host}/sse?key=value";
+        String result = WorkflowUtils.removeQueryParamsFromUrl(url);
+        assertEquals(url, result);
+    }
+
+    /**
+     * 用例描述：验证URL含环境变量占位符时extractQueryParamsFromUrl返回空Map
+     * 预制条件：无特殊前置条件
+     * 输入参数：URL含${_env.plugin_url_params.var}占位符
+     * 预期结果：返回空Map
+     */
+    @Test
+    void testExtractQueryParamsFromUrl_EnvPlaceholder() {
+        String url = "http://${_env.plugin_url_params.host}/sse?key=value";
+        Map<String, String> result = WorkflowUtils.extractQueryParamsFromUrl(url);
+        assertTrue(result.isEmpty());
+    }
 }

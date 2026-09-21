@@ -5,8 +5,10 @@ This module contains the FlowApi class, which is a subclass of Invokable.
 FlowApi is responsible for invoking a specific API based on the configuration provided.
 """
 import json
+import re
 from typing import Any
 
+from agent_runtime.context.request_context import _request_ctx
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
@@ -19,6 +21,27 @@ from jiuwen.plugin.models.api_utils import transform_type
 from jiuwen.plugin.models.mcpapi import McpAPI
 
 TAG = " === FLOW_MCP === "
+
+_ENV_PLACEHOLDER_PATTERN = re.compile(r"\s*\$\{_env\.plugin_url_params\.([^}]+)\}\s*")
+
+
+def _resolve_env_in_url(url: str) -> str:
+    """解析 URL 中的 ``${_env.plugin_url_params.VAR}`` 环境变量占位符。"""
+    if not url or not _ENV_PLACEHOLDER_PATTERN.search(url):
+        return url
+    env_vars = getattr(_request_ctx.get(), "env_variables", None)
+    if not env_vars:
+        return url
+    params = env_vars.get("plugin_url_params") or {}
+
+    def _replace(match: re.Match) -> str:
+        name = match.group(1)
+        if name in params:
+            value = params[name]
+            return str(value).strip() if value is not None else ""
+        return match.group(0)
+
+    return _ENV_PLACEHOLDER_PATTERN.sub(_replace, url)
 
 
 class FlowMcp(Invokable):
@@ -69,7 +92,7 @@ class FlowMcp(Invokable):
         if self._conf.get("type") in ["sse", "streamable_http"]:
             self._is_older_version = not self._conf.get("arguments")
             self.api = McpAPI(
-                server_url=self._conf.get("url"),
+                server_url=_resolve_env_in_url(self._conf.get("url")),
                 name=self._conf.get("tool_name"),
                 parameters={},
                 headers=self.extends_headers(self._conf.get("headers", {})),

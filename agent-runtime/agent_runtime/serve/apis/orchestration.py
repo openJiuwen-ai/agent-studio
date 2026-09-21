@@ -4,10 +4,12 @@ Orchestration API — MVP implementation of /v1/orchestration/ir/execute
 
 import json
 import os
+import asyncio
 import time
 import uuid
 from copy import deepcopy
-from typing import Union
+from dataclasses import dataclass
+from typing import Optional, Union
 
 from agent_runtime.common.config import settings, ModelConfigStrategyType
 from agent_runtime.common.ir_exceptions import IRBuildException
@@ -49,6 +51,13 @@ from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_workflow_queue
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
+
+from agent_runtime.serve.execution_registry import RegistrationInfo, get_execution_registry
+from agent_runtime.serve.apis.run_check import (
+    _CODE_AGENT_PERMISSION,
+    _CODE_WORKFLOW_PERMISSION,
+    _build_error_response,
+)
 # 注：N2L chat 端点已随 agent_builder 抽离到 studio-builder 镜像（agent_builder/serve/apis/n2l_api.py），
 # runtime 不再 import agent_builder.nl_to_agent.nl2（避免 runtime→agent_builder 耦合）。
 
@@ -130,7 +139,7 @@ def _get_runner_by_type(agent_type: str):
     return _get_workflow_runner()
 
 
-@execution_app.get("/v1/health", response_class=PlainTextResponse)
+@execution_app.get("/v1/health", response_class=PlainTextResponse, summary="健康检查")
 async def health():
     """Restful API for server health."""
     return (
@@ -140,8 +149,16 @@ async def health():
     )
 
 
-@execution_app.post("/v1/orchestration/ir/execute")
-async def ir_execute(req_json: dict, request: Request):
+@execution_app.post(
+    "/v1/orchestration/ir/execute",
+    summary="IR 执行（流式/非流式）",
+    responses={
+        400: {
+            "description": "请求体校验失败返回 error_code=02001003 四字段错误体",
+        }
+    },
+)
+async def ir_execute(req: ExecutionRequest, request: Request):
     """
     IR execute endpoint.
     直接透传 openjiuwen 原生格式，不做额外包装
@@ -158,46 +175,34 @@ async def ir_execute(req_json: dict, request: Request):
         json.dumps(dict(request.query_params), ensure_ascii=False),
     )
     workflow_logger.debug(
-        "IR Execute Request - Body: %s", json.dumps(req_json, ensure_ascii=False)
+        "IR Execute Request - Body: %s",
+        json.dumps(req.model_dump(mode="json", by_alias=True), ensure_ascii=False),
     )
 
-    try:
-        req = ExecutionRequest.model_validate(req_json)
-        #  全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header
-        # 保留/客户 header 出现在 body → 400
-        request_ctx = _request_ctx.get()
-        try:
-            req.headers = _build_runtime_execution_headers(
-                platform_headers=request_ctx.platform_headers,
-                customer_headers=request_ctx.customer_headers,
-            )
-        except ValueError as e:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "reserved_header_in_body", "details": str(e)},
-            )
-        # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
-        cfg = get_config()
-        if cfg.enabled:
-            req.user_id = request_ctx.user_id
-        req.params = prepare_params(req)
-        req.params.global_variables = {
-            "sys": {
-                "conversationHistory": req.params.conversation_history,
-                "conversationId": req.conversation_id,
-                "userId": req.user_id,
-                "dialogueCount": req_json.get("dialogueCount", 1),
-                "currentTime": time.strftime("%Y-%m-%d %H:%M:%S"),
-            },
+    # 全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header——
+    # 以中间件捕获的服务器 headers（platform + customer）整体覆盖 req.headers，body 携带的 headers 不参与合并
+    request_ctx = _request_ctx.get()
+    req.headers = _build_runtime_execution_headers(
+        platform_headers=request_ctx.platform_headers,
+        customer_headers=request_ctx.customer_headers,
+    )
+    # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
+    cfg = get_config()
+    if cfg.enabled:
+        req.user_id = request_ctx.user_id
+    req.params = prepare_params(req)
+    req.params.global_variables = {
+        "sys": {
+            "conversationHistory": req.params.conversation_history,
             "conversationId": req.conversation_id,
             "userId": req.user_id,
-        } | req.params.global_variables
-        req.params.is_debug = req.headers.get("x-invoke-mode", "").lower() == "debug"
-    except ValidationError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "validation_failed", "details": str(e)},
-        )
+            "dialogueCount": req.dialogue_count,
+            "currentTime": time.strftime("%Y-%m-%d %H:%M:%S"),
+        },
+        "conversationId": req.conversation_id,
+        "userId": req.user_id,
+    } | req.params.global_variables
+    req.params.is_debug = req.headers.get("x-invoke-mode", "").lower() == "debug"
 
     execution_id = req.headers.get("x-execution-id", "")
 
@@ -229,8 +234,31 @@ async def ir_execute(req_json: dict, request: Request):
     runner = _get_runner_by_type(mode)
 
     if req.response_mode == ResponseMode.STREAMING:
+        entry_id = getattr(request.state, "instance_id", "")
+        # entry_id=执行入口，由 app_run 两个执行端点写入 request.state.instance_id
+        # （workflow 执行=workflow_id / agent 执行=agent_id），连同 entry_type
+        # （"agent"/"workflow"）经本函数 → stream_response → ExecutionRegistry.register
+        # 落 exec/suspend 快照，供终止接口归属校验与回显。单节点/组件调试走
+        # component_debug_execute → debug_stream_response，不经注册链路（cancel 对
+        # 其无感知）。绕过 app_run 直调 ir_execute 时为空串：归属校验静默退化，
+        # 记 warning 保证可观测（检视意见：入口校验依赖 instance_id 注入）。
+        if not entry_id:
+            workflow_logger.warning(
+                "ir_execute without entry_id: request.state.instance_id not set "
+                "(bypassed app_run endpoints?), cancel with entry query "
+                "(agent_id/workflow_id) will be rejected 403 as no entry to "
+                "compare, conv=%s",
+                req.conversation_id,
+            )
         return StreamingResponse(
-            content=stream_response(req, execution_id, runner, moderation_engine),
+            content=stream_response(
+                req, execution_id, runner, moderation_engine,
+                entry=StreamEntryContext(
+                    entry_id=entry_id,
+                    project_id=getattr(request.state, "project_id", ""),
+                    entry_type=getattr(request.state, "entry_type", ""),
+                ),
+            ),
             media_type="text/event-stream",
         )
     else:
@@ -289,7 +317,28 @@ def _fallback_terminal_done(execution_id: str) -> str:
     return f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
 
-async def stream_response(req: ExecutionRequest, execution_id: str, runner, moderation_engine=None):
+@dataclass
+class StreamEntryContext:
+    """执行入口上下文（ir_execute 从 request.state 注入，注册归属数据源）。
+
+    entry_id：执行智能体时=agent_id、执行工作流时=workflow_id（request.state.instance_id）；
+    project_id：执行端点路径 project（request.state.project_id，与 cancel 校验同口径）；
+    entry_type：入口类型 "agent"/"workflow"（request.state.entry_type，注册随快照
+    落 Redis，cancel 响应按此选择回显 key）。
+    """
+
+    entry_id: str = ""
+    project_id: str = ""
+    entry_type: str = ""
+
+
+async def stream_response(
+    req: ExecutionRequest,
+    execution_id: str,
+    runner,
+    moderation_engine=None,
+    entry: Optional[StreamEntryContext] = None,
+):
     """
     透传 OutputSchema 格式
     输出格式: data: {"type": "end node stream", "index": 0, "payload": {"response": "text"}}\n\n
@@ -303,48 +352,244 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
     的 processOnControllerDoneMessage 消费 done.data.answer 写入会话消息(getMessages →
     updateConversation)，清空会导致本轮助手答案不入会话历史、第二轮上下文缺失；故仅当 runner
     未发 done 时才构造空兜底。
+
+    执行注册（终止接口数据源）：开头注册 current_task + 归属四元组到 ExecutionRegistry
+    （agent_id=entry.entry_id、project 优先 entry.project_id，均由 ir_execute 从
+    request.state 注入：执行智能体时 entry_id=agent_id、执行工作流时=workflow_id）；
+    finally 首行注销，自然结束/异常/被取消三路径均无残留。
+    运行中被取消时本生成器被 task.cancel() 掐断，末尾无 done（无 done 即中止约定）。
     """
     execution_id = execution_id or str(uuid.uuid4())
-    pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
+    registry = get_execution_registry()
+    entry_task = asyncio.current_task()
+    entry = entry or StreamEntryContext()
+    try:
+        # 新执行开始：先清旧挂起归属快照（必须在 register 重写之前——否则清掉的是
+        # 本次刚写的；旧快照残留会使会话结束后的 cancel 按过期归属误置位）
+        try:
+            await registry.clear_suspension(req.conversation_id)
+        except Exception as clear_susp_err:  # noqa: BLE001 防御性清理，失败不阻断
+            workflow_logger.warning(
+                "Failed to clear stale suspension snapshot before register: conv=%s, %s",
+                req.conversation_id,
+                clear_susp_err,
+            )
+        try:
+            _ctx = _request_ctx.get()
+        except LookupError:
+            _ctx = None
+        # 注册 project 优先取执行端点注入的路径 project_id（ir_execute 从
+        # request.state 传入，与 cancel 的路径校验同口径）；无注入时回退 token 解析值
+        register_project_id = entry.project_id or (
+            _ctx.project_id if _ctx is not None else ""
+        )
+        await registry.register(
+            req.conversation_id,
+            entry_task,
+            execution_id,
+            info=RegistrationInfo(
+                project_id=register_project_id,
+                agent_id=entry.entry_id,
+                user_id=(_ctx.user_id if _ctx is not None else ""),
+                entry_type=entry.entry_type,
+            ),
+        )
+        pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
 
-    raw_gen = runner.run_streaming(req, execution_id)
-    moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
+        raw_gen = runner.run_streaming(req, execution_id)
+        moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
 
-    async for chunk in moderated_gen:
-        if chunk is None:
-            continue
-        if _stream_event_of(chunk) == "done":
-            # 拦截 runner 的 done，延迟到流末尾发送(出现多个 done 时保留第一个)
-            if pending_done is None:
-                pending_done = chunk
-            continue
-        # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
-        yield _serialize_stream_chunk(chunk)
+        async for chunk in moderated_gen:
+            if chunk is None:
+                continue
+            if _stream_event_of(chunk) == "done":
+                # 拦截 runner 的 done，延迟到流末尾发送(出现多个 done 时保留第一个)
+                if pending_done is None:
+                    pending_done = chunk
+                continue
+            # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
+            yield _serialize_stream_chunk(chunk)
 
-    # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
-    if pending_done is not None:
-        yield _serialize_stream_chunk(pending_done)
-    else:
-        yield _fallback_terminal_done(execution_id)
+        # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
+        if pending_done is not None:
+            yield _serialize_stream_chunk(pending_done)
+        else:
+            yield _fallback_terminal_done(execution_id)
+    finally:
+        await registry.unregister(req.conversation_id, task=entry_task)
 
 
-@execution_app.post("/v1/orchestration/ir/component/{component_id}/execute")
+@dataclass
+class CancelCheckContext:
+    """cancel 归属校验上下文：路径 project + 可选入口 query（G.FNM.03 参数封装）。"""
+
+    project_id: str
+    agent_id: str = ""
+    workflow_id: str = ""
+
+
+async def _check_before_cancel(
+    registration: dict,
+    ctx: CancelCheckContext,
+    language: str,
+):
+    """终止接口运行时归属校验（与执行接口 run_check"项目匹配 403"同规格）。
+
+    路径 project_id 强校验恒在；可选 query agent_id/workflow_id 提供任一则做入口级
+    校验（与 exec:{conv} 注册记录的 agent_id 字段比对）。不匹配返回 403 ErrorRsp
+    （403 时取消标记不置位——本函数只读不写）；无在飞注册记录幂等放行返回 None。
+    403 错误码按入口分流复用统一码表两码（零新增 i18n key）：携带 agent_id→02101016、
+    其余（携带 workflow_id 或仅 project 不匹配）→02201020。
+
+    registration 由调用方读取后传入（只读一次复用，消除校验后重读的 TOCTOU 窗口）。
+    """
+    if not registration:
+        return None  # 无在飞记录：幂等放行（US9）；是否置位由调用方按挂起态决定
+    provided_entry = ctx.agent_id or ctx.workflow_id
+    project_mismatch = registration.get("project_id") != ctx.project_id
+    entry_mismatch = (
+        bool(provided_entry) and registration.get("agent_id") != provided_entry
+    )
+    if project_mismatch or entry_mismatch:
+        code_key = _CODE_AGENT_PERMISSION if ctx.agent_id else _CODE_WORKFLOW_PERMISSION
+        workflow_logger.info(
+            "Cancel forbidden: provided_entry=%s registered_project=%s",
+            provided_entry,
+            registration.get("project_id"),
+        )
+        return _build_error_response(403, code_key, language)
+    return None
+
+
+def _entry_echo_field(
+    snapshot: dict, agent_id: str = "", workflow_id: str = ""
+) -> dict:
+    """cancel 响应的入口资源回显字段（契约 v0.7，按类型互斥单 key）。
+
+    有快照（exec 注册或 suspend 快照）时按快照 entry_type 选 key：
+    workflow → {"workflow_id": 入口ID}；agent/无标注（旧快照兼容窗口 ≤1h，
+    退回 v0.6 单字段行为）→ {"agent_id": 入口ID}。无快照（无痕）时按调用方
+    携带的入口参数回显对应 key（带 workflow_id→workflow_id；带 agent_id 或
+    都不带→agent_id）。快照 hash 存储字段名仍为 agent_id（存入口 ID），仅展示
+    层按类型换 key，归属校验逻辑不受影响。
+    """
+    if snapshot:
+        entry_id = snapshot.get("agent_id") or agent_id or workflow_id
+        if snapshot.get("entry_type") == "workflow":
+            return {"workflow_id": entry_id}
+        return {"agent_id": entry_id}
+    if workflow_id and not agent_id:
+        return {"workflow_id": workflow_id}
+    return {"agent_id": agent_id or workflow_id}
+
+
+@execution_app.post("/v1/{project_id}/conversations/{conversation_id}/cancel")
+async def cancel_execution(
+    request: Request,
+    project_id: str,
+    conversation_id: str,
+    agent_id: str = "",
+    workflow_id: str = "",
+):
+    """执行终止端点（工作流/多智能体/单智能体三类合并 1 接口，定位主键 conversation_id）。
+
+    归属校验（_check_before_cancel）→ 置协作式取消标记（所有实例可见，幂等 TTL）
+    + runtime:cancel 频道广播（持有实例本地 task.cancel 尽力即时）→ 200 五字段
+    （入口字段按执行类型互斥单 key 回显，契约 v0.7：工作流执行→workflow_id、
+    智能体执行→agent_id、无痕时按调用方携带的入口参数回显）。
+    cancelled=取消标记真实置位时 true；会话无任何痕迹（从未执行/打错会话 ID/
+    快照过期）时 false 且 message 明示，防调用方把"打错 ID"误判为终止成功；
+    running=调用时是否检测到在飞执行（仅参考，false 覆盖无在飞/已挂起/已结束，
+    不视为失败）。
+    运行中被终止的原 SSE 流末尾无 done（无 done 即中止，零改动约定）。
+    """
+    language = request.headers.get("x-language", "zh-cn")
+    registry = get_execution_registry()
+
+    # registration 只读一次：校验与回显/置位复用同一份，消除"校验后再读"的
+    # TOCTOU 窗口（两次读取间注册被替换时会绕过已完成的归属校验）
+    registration = await registry.get_registration(conversation_id)
+    forbidden_response = await _check_before_cancel(
+        registration,
+        CancelCheckContext(project_id=project_id, agent_id=agent_id, workflow_id=workflow_id),
+        language,
+    )
+    if forbidden_response is not None:
+        return forbidden_response
+
+    running = bool(registration)  # 是否检测到在飞执行（仅参考信息）
+    suspension = {}
+    if not running:
+        # 无在飞注册（从未执行/已结束/已挂起注销）：凭挂起归属快照 suspend:{conv}
+        # 校验归属后才置位。仅靠"知道 conversation_id"不得跨项目终止他人挂起会话
+        # （suspend 快照在 register 时写入、不随注销删除，覆盖 workflow 与 agent
+        # 两类挂起；新执行开始时顺带清理并随 register 重写）
+        suspension = await registry.get_suspension(conversation_id)
+        if not suspension:
+            # 无快照=从未执行或已彻底结束（打错会话 ID 也在此列）：幂等放行但绝不写
+            # 标记（无意义取消不留痕）。cancelled=false + message 明示"会话不存在，
+            # 未做任何终止"——防止调用方把打错 ID 的 200 误判为终止成功（cancelled=true
+            # 仅在标记真实置位时返回，三分语义：置位生效 / 无事发生 / 403 无权限）
+            workflow_logger.info(
+                "Cancel accepted as no-op: no in-flight registration and no "
+                "suspension snapshot, conv=%s",
+                conversation_id,
+            )
+            return JSONResponse(
+                status_code=200,
+                content={
+                    **_entry_echo_field({}, agent_id, workflow_id),
+                    "conversation_id": conversation_id,
+                    "cancelled": False,
+                    "running": False,
+                    "message": "conversation not found, nothing cancelled",
+                },
+            )
+        # 挂起态归属校验（与在飞校验同规格）：路径 project 强校验 + 可选入口级校验
+        provided_entry = agent_id or workflow_id
+        project_mismatch = suspension.get("project_id") != project_id
+        entry_mismatch = (
+            bool(provided_entry) and suspension.get("agent_id") != provided_entry
+        )
+        if project_mismatch or entry_mismatch:
+            code_key = _CODE_AGENT_PERMISSION if agent_id else _CODE_WORKFLOW_PERMISSION
+            workflow_logger.info(
+                "Cancel forbidden on suspended session: conv=%s caller_project=%s "
+                "suspended_project=%s provided_entry=%s suspended_entry=%s",
+                conversation_id,
+                project_id,
+                suspension.get("project_id"),
+                provided_entry,
+                suspension.get("agent_id"),
+            )
+            return _build_error_response(403, code_key, language)
+    await registry.mark_cancelled(conversation_id)
+    # 入口回显源：在飞取 exec 注册；无在飞（挂起/已结束≤1h）取 suspend 快照——
+    # 此前仅读 registration，挂起/已结束场景入口 ID 丢失回显为空串（缺陷修复）
+    echo_snapshot = registration if running else suspension
+    return JSONResponse(
+        status_code=200,
+        content={
+            **_entry_echo_field(echo_snapshot, agent_id, workflow_id),
+            "conversation_id": conversation_id,
+            "cancelled": True,
+            "running": running,
+            "message": "cancel signal accepted",
+        },
+    )
+
+
+@execution_app.post("/v1/orchestration/ir/component/{component_id}/execute", summary="单组件调试执行")
 async def component_debug_execute(component_id: str, req_json: dict, request: Request):
     """单组件调试端点（：与普通执行一致 — body 安全 + effective userId 服务器覆盖）"""
     try:
         req = ComponentDebugRequest.model_validate(req_json)
-        # 禁止 body 覆盖服务器认证/平台协议 Header（与 ir_execute 同规则）
+        # 禁止 body 覆盖服务器认证/平台协议 Header（与 ir_execute 同规则：服务器 headers 整体覆盖）
         request_ctx = _request_ctx.get()
-        try:
-            req.headers = _build_runtime_execution_headers(
-                platform_headers=request_ctx.platform_headers,
-                customer_headers=request_ctx.customer_headers,
-            )
-        except ValueError as e:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "reserved_header_in_body", "details": str(e)},
-            )
+        req.headers = _build_runtime_execution_headers(
+            platform_headers=request_ctx.platform_headers,
+            customer_headers=request_ctx.customer_headers,
+        )
         # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
         cfg = get_config()
         if cfg.enabled:
@@ -443,19 +688,11 @@ async def _load_ir_json(ir_path: str) -> dict:
         raise IRBuildException(f"IR file JSON format error: {ir_path}, {e}") from e
 
 
-@execution_app.delete("/v1/orchestration/ir/execute")
-async def delete_ir_execution_instance(req_json: dict):
+@execution_app.delete("/v1/orchestration/ir/execute", summary="删除执行实例")
+async def delete_ir_execution_instance(req: DeleteExecutionInstanceRequest):
     """
     Restful API for delete Agent instance and Workflow instance by executionId.
     """
-    # Verifying and preprocessing the user request
-    try:
-        req = DeleteExecutionInstanceRequest.model_validate(req_json)
-    except ValidationError as e:
-        raise JiuWenBaseException(
-            error_code=StatusCode.PARAM_CHECK_FAILED_ERROR.code,
-            message=StatusCode.PARAM_CHECK_FAILED_ERROR.errmsg,
-        ) from e
     try:
         await AsyncStateManager().delete_state(key=req.conversation_id)
         # 清除 WorkFlow spec缓存
@@ -491,14 +728,16 @@ def _get_additional_questions_service() -> AdditionalQuestionsService:
 
 
 @execution_app.post(
-    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions"
+    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions",
+    summary="生成追问（智能体场景）",
+    response_model=AdditionalQuestionsResponse,
 )
 async def agent_additional_questions(
     project_id: str,
     agent_id: str,
     conversation_id: str,
     workspace_id: str = Query(...),
-    req_json: dict = Body(...),
+    req: AdditionalQuestionsRequest = Body(...),
 ):
     """自动生成追问（Agent 场景）。"""
     ctx = AdditionalQuestionsContext(
@@ -508,18 +747,20 @@ async def agent_additional_questions(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
     )
-    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+    return await _handle_additional_questions(ctx=ctx, req=req)
 
 
 @execution_app.post(
-    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions"
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions",
+    summary="生成追问（工作流场景）",
+    response_model=AdditionalQuestionsResponse,
 )
 async def workflow_additional_questions(
     project_id: str,
     workflow_id: str,
     conversation_id: str,
     workspace_id: str = Query(...),
-    req_json: dict = Body(...),
+    req: AdditionalQuestionsRequest = Body(...),
 ):
     """自动生成追问（Workflow 场景）。"""
     ctx = AdditionalQuestionsContext(
@@ -529,12 +770,12 @@ async def workflow_additional_questions(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
     )
-    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+    return await _handle_additional_questions(ctx=ctx, req=req)
 
 
 async def _handle_additional_questions(
     ctx: AdditionalQuestionsContext,
-    req_json: dict,
+    req: AdditionalQuestionsRequest,
 ):
     """追问接口统一处理入口 — 解析请求、调用 Service、返回响应。"""
     workflow_logger.debug(
@@ -542,14 +783,6 @@ async def _handle_additional_questions(
         "conversation_id=%s, workspace_id=%s",
         ctx.resource_type, ctx.resource_id, ctx.conversation_id, ctx.workspace_id,
     )
-    try:
-        req = AdditionalQuestionsRequest.model_validate(req_json)
-    except ValidationError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "validation_failed", "details": str(e)},
-        )
-
     service = _get_additional_questions_service()
     try:
         from agent_runtime.context.request_context import _request_ctx
@@ -560,7 +793,7 @@ async def _handle_additional_questions(
             request=req,
             headers=headers,
         )
-        return JSONResponse(content=result.model_dump())
+        return result
     except JiuWenBaseException as e:
         workflow_logger.error(
             "Additional questions error: code=%s, message=%s",

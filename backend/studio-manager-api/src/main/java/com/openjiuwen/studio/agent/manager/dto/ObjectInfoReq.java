@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -27,20 +28,24 @@ public class ObjectInfoReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "对象名称", example = "自定义对象1", required = true)
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$")
     @NotBlank
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("schemas")
+    @Schema(description = "对象结构", example = "{\"key\":\"value\"}", required = true)
     @NotBlank
     private String schemas = null;
 
     @JsonProperty("description")
+    @Schema(description = "对象描述", example = "对象描述信息")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("id")
+    @Schema(description = "对象ID", example = "obj-001")
     @Length(max = 64)
     private String id = null;
 

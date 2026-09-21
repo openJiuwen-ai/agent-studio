@@ -175,4 +175,46 @@ class EnvironmentCacheUtilTest {
 
         assertThrows(AgentStudioException.class, () -> environmentCacheUtil.refreshCachedEnvironmentVariables());
     }
+
+    @Test
+    void testUpdateDefaultEnvironmentCache_WithValues() {
+        environmentCacheUtil.updateDefaultEnvironmentCache("p1", "env1");
+        verify(redisClient).set(eq("project:p1:default_environment"), eq("env1"), any(Duration.class));
+    }
+
+    @Test
+    void testUpdateDefaultEnvironmentCache_WithBlankProjectId() {
+        environmentCacheUtil.updateDefaultEnvironmentCache("", "env1");
+        verify(redisClient, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void testUpdateDefaultEnvironmentCache_WithNullProjectId() {
+        environmentCacheUtil.updateDefaultEnvironmentCache(null, "env1");
+        verify(redisClient, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void testUpdateDefaultEnvironmentCache_WithBlankEnvId() {
+        environmentCacheUtil.updateDefaultEnvironmentCache("p1", "");
+        verify(redisClient, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void testDeleteDefaultEnvironmentCache_WithProjectId() {
+        environmentCacheUtil.deleteDefaultEnvironmentCache("p1");
+        verify(redisClient).delete("project:p1:default_environment");
+    }
+
+    @Test
+    void testDeleteDefaultEnvironmentCache_WithBlankProjectId() {
+        environmentCacheUtil.deleteDefaultEnvironmentCache("");
+        verify(redisClient, never()).delete(anyString());
+    }
+
+    @Test
+    void testDeleteDefaultEnvironmentCache_WithNullProjectId() {
+        environmentCacheUtil.deleteDefaultEnvironmentCache(null);
+        verify(redisClient, never()).delete(anyString());
+    }
 }

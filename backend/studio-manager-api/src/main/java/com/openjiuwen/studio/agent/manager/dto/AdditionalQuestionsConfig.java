@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,13 +27,16 @@ public class AdditionalQuestionsConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("enable")
+    @Schema(description = "是否启用追问", example = "true", required = true)
     @NotNull
     private Boolean enable = null;
 
     @JsonProperty("rounds")
+    @Schema(description = "追问轮数", example = "3")
     private Integer rounds = null;
 
     @JsonProperty("prompt")
+    @Schema(description = "追问提示词", example = "请根据用户回答继续追问")
     @Length(max = 512)
     private String prompt = null;
 

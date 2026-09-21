@@ -1,4 +1,9 @@
 #model-test {
+  /* 图像理解上传：满 5 张后隐藏上传触发卡片（picture-card 的灰色空框） */
+  ::ng-deep .upload-full .ant-upload.ant-upload-select {
+    display: none;
+  }
+
   .top-title-area {
     display: flex;
     justify-content: space-between;

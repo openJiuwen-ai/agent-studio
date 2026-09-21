@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,35 +28,44 @@ public class ControllerWorkflowIR implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作流ID", example = "wf_001")
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作流名称", example = "问答工作流")
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "工作流描述", example = "用于问答场景的工作流")
     private String description = null;
 
     @JsonProperty("intent")
+    @Schema(description = "意图配置", example = "{}")
     @Valid
     private WorkflowNodeConfigVOIntent intent = null;
 
     @JsonProperty("workflow_type")
+    @Schema(description = "工作流类型", example = "chat")
     private String workflowType = null;
 
     @JsonProperty("ir_path")
+    @Schema(description = "IR路径", example = "/workflow/ir_001.json")
     private String irPath = null;
 
     @JsonProperty("arguments")
+    @Schema(description = "参数列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldIR> arguments = null;
 
     @JsonProperty("response")
+    @Schema(description = "响应字段列表", example = "[]")
     @Valid
     @Size()
     private List<WorkflowFieldIR> response = null;
 
     @JsonProperty("action_after_completion")
+    @Schema(description = "完成后的动作", example = "close")
     private String actionAfterCompletion = null;
 
     public String getId() {

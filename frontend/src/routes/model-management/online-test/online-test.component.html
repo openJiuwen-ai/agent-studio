@@ -136,8 +136,9 @@
               [(nzFileList)]="fileList"
               [nzBeforeUpload]="beforeUploadImage2Text"
               [nzRemove]="onRemoveItemsNz"
-              [nzLimit]="5"
               [nzMultiple]="true"
+              [nzDisabled]="fileList.length >= 5"
+              [class.upload-full]="fileList.length >= 5"
               nzAccept=".png,.jpg,.jpeg"
             >
               <div *ngIf="fileList.length < 5" class="flex flex-col items-center justify-center text-gray-400">

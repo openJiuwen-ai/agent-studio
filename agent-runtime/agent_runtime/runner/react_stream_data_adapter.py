@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
@@ -64,6 +64,10 @@ class ReactStreamDataAdapter:
         # 用于累积工具调用和结果
         self._tool_calls: List[Dict] = []
         self._tool_results: List[Dict] = []
+        # plugin invoke_id -> 开始时间，用于 finish 时计算真实耗时
+        self._plugin_start_times: Dict[str, datetime] = {}
+        # chain 开始时间，用于 chain 结束事件计算真实耗时
+        self._chain_start_time: Optional[datetime] = None
 
     @property
     def start_time(self) -> Optional[int]:
@@ -314,6 +318,10 @@ class ReactStreamDataAdapter:
         if status == "start":
             plugin_name = meta_data.get("class_name", name)
             tool_inputs = inputs.get("inputs", {}) if isinstance(inputs, dict) else inputs
+            start_time = datetime.now(tz=timezone.utc).astimezone().replace(tzinfo=None)
+
+            # 记录插件开始时间，finish 时用于计算真实耗时
+            self._plugin_start_times[invoke_id] = start_time
 
             # 记录工具调用信息，用于生成完整的 intermediate_message
             self._tool_calls.append({
@@ -353,7 +361,7 @@ class ReactStreamDataAdapter:
                     invoke_id=invoke_id,
                     invoke_type="plugin",
                     name=plugin_name,
-                    start_time=datetime.now(),
+                    start_time=start_time,
                     inputs=tool_inputs,
                     meta_data={
                         "instance_attributes": {
@@ -367,6 +375,12 @@ class ReactStreamDataAdapter:
             plugin_name = meta_data.get("class_name", name)
             output_data = outputs.get("outputs", {}) if isinstance(outputs, dict) else outputs
             tool_inputs = inputs.get("inputs", {}) if isinstance(inputs, dict) else inputs
+            end_time = datetime.now(tz=timezone.utc).astimezone().replace(tzinfo=None)
+
+            # 取出 start 分支记录的开始时间，计算真实耗时
+            start_time = self._plugin_start_times.pop(invoke_id, end_time)
+            elapsed = self._calc_elapsed_time(start_time, end_time) or "0.00s"
+            elapsed_ms = round((end_time - start_time).total_seconds() * 1000)
 
             # 记录工具结果，用于生成完整的 intermediate_message
             self._tool_results.append({
@@ -387,9 +401,9 @@ class ReactStreamDataAdapter:
                             "content": {
                                 "error_code": output_data.get("errCode", 0) if isinstance(output_data, dict) else 0,
                                 "result": output_data.get("data", {}) if isinstance(output_data, dict) else output_data,
-                                "latency": 0,
+                                "latency": elapsed_ms,
                             },
-                            "time_consumption": {"plugin_latency": 0, "overall_latency": 0},
+                            "time_consumption": {"plugin_latency": elapsed_ms, "overall_latency": elapsed_ms},
                         }
                     },
                 )
@@ -400,9 +414,9 @@ class ReactStreamDataAdapter:
                     invoke_id=invoke_id,
                     invoke_type="plugin",
                     name=plugin_name,
-                    start_time=datetime.now(),
-                    end_time=datetime.now(),
-                    elapsed="0.00s",
+                    start_time=start_time,
+                    end_time=end_time,
+                    elapsed=elapsed,
                     inputs=tool_inputs,
                     outputs=output_data,
                     meta_data={
@@ -513,11 +527,14 @@ class ReactStreamDataAdapter:
             meta_data: Optional[Dict] = None,
     ) -> Dict:
         """创建 agent_node_message 开始事件"""
+        start_time = datetime.now(tz=timezone.utc).astimezone().replace(tzinfo=None)
+        if invoke_type == "chain":
+            self._chain_start_time = start_time
         return self._create_agent_node_event(
             invoke_id=invoke_id or str(uuid.uuid4()),
             invoke_type=invoke_type,
             name=name,
-            start_time=datetime.now(),
+            start_time=start_time,
             inputs=inputs,
             child_invokes=child_invokes,
             meta_data=meta_data,
@@ -534,13 +551,20 @@ class ReactStreamDataAdapter:
             child_invokes: Optional[List[str]] = None,
     ) -> Dict:
         """创建 agent_node_message 结束事件"""
+        end_time = datetime.now(tz=timezone.utc).astimezone().replace(tzinfo=None)
+        if invoke_type == "chain" and self._chain_start_time is not None:
+            start_time = self._chain_start_time
+            elapsed = self._calc_elapsed_time(start_time, end_time) or "0.00s"
+        else:
+            start_time = end_time
+            elapsed = "0.00s"
         return self._create_agent_node_event(
             invoke_id=invoke_id,
             invoke_type=invoke_type,
             name=name,
-            start_time=datetime.now(),
-            end_time=datetime.now(),
-            elapsed="0.00s",
+            start_time=start_time,
+            end_time=end_time,
+            elapsed=elapsed,
             inputs=inputs,
             outputs=outputs,
         )

@@ -128,6 +128,7 @@ export abstract class NodeBaseComponent
           end_time,
           node_type,
           parent_node_id,
+          loop_node_id,
           outputs,
         } = data || {};
 
@@ -139,8 +140,10 @@ export abstract class NodeBaseComponent
           node_id = node_id?.substring(10, 28);
           node_type = 'ParamExtraction';
         }
-        // 过滤子工作流节点里的insight信息，避免结束节点卡片上的状态先匹配到子工作流里的
-        if (parent_node_id) {
+        // 过滤子工作流内部节点的事件（其 node_id 可能与父画布节点冲突，如 node_start/node_end，
+        // 避免结束节点卡片上的状态先匹配到子工作流里的）；
+        // 循环节点体内的事件（带 loop_node_id）属于本画布，放行以显示循环体节点运行状态
+        if (parent_node_id && !loop_node_id) {
           return;
         }
 

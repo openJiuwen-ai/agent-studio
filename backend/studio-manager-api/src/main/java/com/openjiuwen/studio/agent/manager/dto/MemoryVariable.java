@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,23 +26,29 @@ public class MemoryVariable implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("name")
+    @Schema(description = "记忆变量名称", example = "user_preference", required = true)
     @NotBlank
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "记忆变量描述", example = "用户偏好设置")
     private String description = null;
 
     @JsonProperty("default_value")
+    @Schema(description = "记忆变量默认值", example = "dark_mode")
     private String defaultValue = null;
 
     @JsonProperty("life_cycle")
+    @Schema(description = "记忆变量生命周期", example = "session", required = true)
     @NotBlank
     private String lifeCycle = null;
 
     @JsonProperty("value")
+    @Schema(description = "记忆变量当前值", example = "dark_mode")
     private String value = null;
 
     @JsonProperty("updated_on")
+    @Schema(description = "最后更新时间戳", example = "1693526400000")
     private Long updatedOn = null;
 
     public String getName() {

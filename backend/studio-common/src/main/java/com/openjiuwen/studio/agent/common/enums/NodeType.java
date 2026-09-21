@@ -270,7 +270,17 @@ public enum NodeType {
     /**
      * 迭代开始节点
      */
-    ITERATION_START("LoopInput", false, null, null, "iteration-start");
+    ITERATION_START("LoopInput", false, null, null, "iteration-start"),
+
+    /**
+     * SQL节点，直接编写SQL语句
+     */
+    SQL("Sql", false, "jiuwen.sql", "jiuwen.sql", "sql"),
+
+    /**
+     * 数据查询节点，可视化查询条件构建SQL
+     */
+    DATA_QUERY("DataQuery", false, "jiuwen.sql", "jiuwen.sql", "data-query");
 
 
     /**

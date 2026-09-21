@@ -13,7 +13,7 @@ done.data.answer 写入会话历史 getMessages→updateConversation)。仅当 r
 # pylint: disable=no-self-use
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -73,6 +73,21 @@ def _parse_events(frames) -> list[dict]:
         if isinstance(payload, dict):
             events.append(payload)
     return events
+
+
+@pytest.fixture(autouse=True)
+def _mock_execution_registry(monkeypatch):
+    """隔离 ExecutionRegistry 依赖（REQ-2026-002 注册改造）。
+
+    本文件只关注 SSE 帧逻辑（R-20）；注册/注销行为在 test_cancel_execution.py 覆盖。
+    """
+    registry = MagicMock()
+    registry.register = AsyncMock()
+    registry.unregister = AsyncMock()
+    monkeypatch.setattr(
+        "agent_runtime.serve.apis.orchestration.get_execution_registry", lambda: registry
+    )
+    return registry
 
 
 class TestStreamResponseTerminalDone:

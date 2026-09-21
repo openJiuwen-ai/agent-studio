@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,22 +27,28 @@ public class DataProcessBaseInfoDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "dp-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "文本处理服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "text_processor")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "提供文本分割和清洗功能")
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "服务类型", example = "tool")
     private String type = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具信息", example = "{\"name\":\"text_splitter\"}")
     @Valid
     private McpDataProcessTool tools = null;
 

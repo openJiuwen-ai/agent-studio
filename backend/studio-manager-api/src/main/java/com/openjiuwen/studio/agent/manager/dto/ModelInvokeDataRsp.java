@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.Valid;
 
@@ -23,22 +24,28 @@ public class ModelInvokeDataRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "chat")
     private String modelType = null;
 
     @JsonProperty("api_url")
+    @Schema(description = "API地址", example = "https://api.example.com/v1/chat/completions")
     private String apiUrl = null;
 
     @JsonProperty("auth_type")
+    @Schema(description = "认证类型", example = "bearer")
     private String authType = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{\"token\":\"xxx\"}")
     @Valid
     private Object authInfo = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "gpt-4")
     private String modelName = null;
 
     @JsonProperty("interface_protocol")
+    @Schema(description = "接口协议", example = "OpenAI")
     private String interfaceProtocol = null;
 
     public String getModelType() {

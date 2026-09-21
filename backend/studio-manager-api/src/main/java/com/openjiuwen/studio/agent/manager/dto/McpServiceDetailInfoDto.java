@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,99 +28,130 @@ public class McpServiceDetailInfoDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "服务ID", example = "550e8400-e29b-41d4-a716-446655440000")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "服务名称", example = "my-mcp-service")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "服务英文名称", example = "my-mcp-service")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "服务描述", example = "这是一个MCP服务")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "服务英文描述", example = "This is an MCP service")
     private String descriptionEn = null;
 
     @JsonProperty("readme")
+    @Schema(description = "服务说明文档", example = "服务使用说明")
     private String readme = null;
 
     @JsonProperty("org_type")
+    @Schema(description = "组织类型", example = "enterprise")
     private String orgType = null;
 
     @JsonProperty("deploy_type")
+    @Schema(description = "部署类型", example = "function")
     private String deployType = null;
 
     @JsonProperty("server_config")
+    @Schema(description = "服务端配置", example = "{}")
     private String serverConfig = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具列表", example = "[]")
     private String tools = null;
 
     @JsonProperty("fc_instance_url")
+    @Schema(description = "函数计算实例URL", example = "https://fc.example.com/instance")
     private String fcInstanceUrl = null;
 
     @JsonProperty("fc_region")
+    @Schema(description = "函数计算区域", example = "cn-north-4")
     private String fcRegion = null;
 
     @JsonProperty("fc_instance_id")
+    @Schema(description = "函数计算实例ID", example = "instance-001")
     private String fcInstanceId = null;
 
     @JsonProperty("fc_instance_status")
+    @Schema(description = "函数计算实例状态", example = "running")
     private String fcInstanceStatus = null;
 
     @JsonProperty("fail_reason_detail")
+    @Schema(description = "失败原因详情", example = "{}")
     @Valid
     private McpFailReasonDetailDto failReasonDetail = null;
 
     @JsonProperty("apig_group_id")
+    @Schema(description = "API网关分组ID", example = "group-001")
     private String apigGroupId = null;
 
     @JsonProperty("apig_instance_id")
+    @Schema(description = "API网关实例ID", example = "instance-001")
     private String apigInstanceId = null;
 
     @JsonProperty("agency_name")
+    @Schema(description = "委托名称", example = "agency-001")
     private String agencyName = null;
 
     @JsonProperty("enterprise_project_id")
+    @Schema(description = "企业项目ID", example = "project-001")
     private String enterpriseProjectId = null;
 
     @JsonProperty("function_application_name")
+    @Schema(description = "函数应用名称", example = "my-function-app")
     private String functionApplicationName = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-url")
     private String icon = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1714521600000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "1714521600000")
     private Long lastUpdatedDate = null;
 
     @JsonProperty("type")
+    @Schema(description = "服务类型", example = "mcp")
     private String type = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见性", example = "public")
     private String visibility = null;
 
     @JsonProperty("auth_type")
+    @Schema(description = "认证类型", example = "none")
     private String authType = null;
 
     @JsonProperty("mcp_servers")
+    @Schema(description = "MCP服务运行时信息", example = "{}")
     @Valid
     private McpServerRuntimeVo mcpServers = null;
 
     @JsonProperty("third_resource")
+    @Schema(description = "第三方资源标识", example = "third-resource-001")
     private String thirdResource = null;
 
     @JsonProperty("third_id")
+    @Schema(description = "第三方ID", example = "third-001")
     private String thirdId = null;
 
     @JsonProperty("third_version_id")
+    @Schema(description = "第三方版本ID", example = "version-001")
     private String thirdVersionId = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo authInfo = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -30,56 +31,69 @@ public class ModelConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("user")
+    @Schema(description = "用户标识", example = "user-001")
     @Length(max = 255)
     private String user = null;
 
     @JsonProperty("temperature")
+    @Schema(description = "温度参数，控制生成随机性，取值范围0-1", example = "0.7")
     @DecimalMin(value = "0")
     @DecimalMax(value = "1")
     private Double temperature = null;
 
     @JsonProperty("top_p")
+    @Schema(description = "Top-P采样参数，取值范围0-1", example = "0.9")
     @DecimalMin(value = "0")
     @DecimalMax(value = "1")
     private Double topP = null;
 
     @JsonProperty("max_tokens")
+    @Schema(description = "最大生成token数", example = "2048")
     @Range(min = 1L, max = 2147483647L)
     private Integer maxTokens = null;
 
     @JsonProperty("token")
+    @Schema(description = "认证令牌", example = "sk-xxxx")
     private String token = null;
 
     @JsonProperty("presence_penalty")
+    @Schema(description = "存在惩罚参数，取值范围-2到2", example = "0")
     @DecimalMin(value = "-2")
     @DecimalMax(value = "2")
     private Double presencePenalty = null;
 
     @JsonProperty("n")
+    @Schema(description = "生成数量，取值范围1-2", example = "1")
     @Range(min = 1L, max = 2L)
     private Integer n = null;
 
     @JsonProperty("endpoint")
+    @Schema(description = "模型服务端点地址", example = "https://api.example.com/v1")
     @Pattern(regexp = "^(https?://)([\\\\w.-]+)(:[0-9]{1,5})?(/.*)?$")
     @Length(max = 1000)
     private String endpoint = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj-001")
     @NotBlank
     private String projectId = null;
 
     @JsonProperty("deployment_id")
+    @Schema(description = "部署ID", example = "deploy-001")
     @NotBlank
     private String deploymentId = null;
 
     @JsonProperty("model_id")
-    @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+    @Schema(description = "模型ID（UUID格式）", example = "550e8400-e29b-41d4-a716-446655440000")
+    @Pattern(regexp = "(^$)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private String modelId = null;
 
     @JsonProperty("model_source")
+    @Schema(description = "模型来源", example = "maas")
     private String modelSource = null;
 
     @JsonProperty("id")
+    @Schema(description = "标识ID", example = "config-001")
     private String id = null;
 
     public String getUser() {

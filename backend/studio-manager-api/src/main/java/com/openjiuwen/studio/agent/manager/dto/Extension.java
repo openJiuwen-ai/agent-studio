@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,14 +27,17 @@ public class Extension implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("key")
+    @Schema(description = "密钥", example = "example-token-value", required = true)
     @NotBlank
     private String key = null;
 
     @JsonProperty("value")
+    @Schema(description = "值", example = "示例字符串", required = true)
     @NotBlank
     private String value = null;
 
     @JsonProperty("secretLevel")
+    @Schema(description = "密钥level", example = "{}")
     private SecretLevel secretLevel = null;
 
     public String getKey() {

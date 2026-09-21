@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -28,28 +29,35 @@ public class OptimizationTaskListVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("data")
+    @Schema(description = "数据列表", example = "")
     @Valid
     @Size(max = 500)
     private List<PeOptimizationTaskVo> data = null;
 
     @JsonProperty("total_page")
+    @Schema(description = "总页数", example = "10", required = true)
     @NotNull
     private Integer totalPage = null;
 
     @JsonProperty("count")
+    @Schema(description = "数量", example = "100", required = true)
     @NotNull
     private Long count = null;
 
     @JsonProperty("failed_count")
+    @Schema(description = "失败数量", example = "2")
     private Long failedCount = null;
 
     @JsonProperty("finished_count")
+    @Schema(description = "完成数量", example = "8")
     private Long finishedCount = null;
 
     @JsonProperty("optimizing_count")
+    @Schema(description = "优化中数量", example = "0")
     private Long optimizingCount = null;
 
     @JsonProperty("has_next_page")
+    @Schema(description = "是否有下一页", example = "false", required = true)
     @NotNull
     private Boolean hasNextPage = false;
 

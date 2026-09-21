@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -29,24 +30,29 @@ public class StructMessage implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "结构化信息ID", example = "msg001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "结构化信息名称", example = "问候语")
     @Length(max = 500)
     private String name = null;
 
     @JsonProperty("category")
+    @Schema(description = "分类", example = "greeting")
     @Length(max = 500)
     private String category = null;
 
     @JsonProperty("content")
+    @Schema(description = "内容", example = "{\"key\":\"value\"}")
     @Valid
     @Size()
     private Map<String, Object> content = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见范围", example = "personal")
     @Length(max = 500)
     private String visibility = null;
 

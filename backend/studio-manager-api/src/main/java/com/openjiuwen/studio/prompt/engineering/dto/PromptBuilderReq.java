@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -26,14 +27,17 @@ public class PromptBuilderReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("instruct")
+    @Schema(description = "instruct", example = "示例文本", required = true)
     @NotBlank
     private String instruct = null;
 
     @JsonProperty("modelInfo")
+    @Schema(description = "模型信息", example = "")
     @Valid
     private ModelProperties modelInfo = null;
 
     @JsonProperty("stream")
+    @Schema(description = "流", example = "true")
     private Boolean stream = true;
 
     public String getInstruct() {

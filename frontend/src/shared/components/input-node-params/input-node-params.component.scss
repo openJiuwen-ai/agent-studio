@@ -11,6 +11,16 @@
     display: block;
     height: fit-content;
     overflow-y: auto;
+
+    /* label 占整行，控件（文件列表）换行从左侧开始 */
+    nz-form-item {
+      flex-direction: column;
+      align-items: stretch;
+
+      .ant-form-item-label {
+        width: 100%;
+      }
+    }
   }
 }
 

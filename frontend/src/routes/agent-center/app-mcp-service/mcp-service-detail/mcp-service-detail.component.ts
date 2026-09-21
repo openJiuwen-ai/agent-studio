@@ -491,6 +491,9 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
   }
 
   private commonTools() {
+    if (!this.mcpServiceDetail.tools || this.mcpServiceDetail.tools.length === 0) {
+      return;
+    }
     for (let index = 0; index < this.mcpServiceDetail.tools.length; index++) {
       this.mcpServiceDetail.tools[index].isCollapsed = true;
     }

@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.openjiuwen.studio.agent.common.dto.agent.FeedbackReason;
 
 import jakarta.validation.Valid;
@@ -28,58 +29,73 @@ public class WorkflowMessage implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("role")
+    @Schema(description = "消息角色", example = "user")
     @Length(min = 1, max = 64)
     private String role = null;
 
     @JsonProperty("content")
+    @Schema(description = "消息内容", example = "你好")
     private String content = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createTime = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称")
     @Valid
     private Object name = null;
 
     @JsonProperty("function_call")
+    @Schema(description = "函数调用")
     @Valid
     private Object functionCall = null;
 
     @JsonProperty("tool_calls")
+    @Schema(description = "工具调用列表")
     @Valid
     private Object toolCalls = null;
 
     @JsonProperty("tool_call_id")
+    @Schema(description = "工具调用ID")
     @Valid
     private Object toolCallId = null;
 
     @JsonProperty("enable_history")
+    @Schema(description = "是否启用历史记录", example = "true")
     private Boolean enableHistory = null;
 
     @JsonProperty("intent")
+    @Schema(description = "意图列表", example = "[]")
     @Valid
     @Size()
     private List<@Length() String> intent = null;
 
     @JsonProperty("execution_id")
+    @Schema(description = "执行ID", example = "exec_001")
     private String executionId = null;
 
     @JsonProperty("node_id")
+    @Schema(description = "节点ID", example = "node_001")
     private String nodeId = null;
 
     @JsonProperty("agent_id")
+    @Schema(description = "智能体ID", example = "agent_001")
     private String agentId = null;
 
     @JsonProperty("rating")
+    @Schema(description = "评分", example = "1")
     @Range(min = -1L, max = 1L)
     private Integer rating = null;
 
     @JsonProperty("files")
+    @Schema(description = "文件列表", example = "[]")
     @Valid
     @Size()
     private List<Object> files = null;
 
     @JsonProperty("reason")
+    @Schema(description = "反馈原因")
     @Valid
     private FeedbackReason reason = null;
 

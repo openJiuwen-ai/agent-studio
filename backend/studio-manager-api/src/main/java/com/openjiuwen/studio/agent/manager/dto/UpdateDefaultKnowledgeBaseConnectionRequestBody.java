@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,12 +29,15 @@ public class UpdateDefaultKnowledgeBaseConnectionRequestBody implements Serializ
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("changed")
+    @Schema(description = "changed", example = "true")
     private Boolean changed = false;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "example-id-123")
     private String connectorId = null;
 
     @JsonProperty("params")
+    @Schema(description = "参数", example = "[]")
     @Valid
     @Size()
     private List<ConnectionParamInfo> params = null;

@@ -164,8 +164,10 @@ export class InputNodeParamsComponent {
 
   public async onUploadFile(e: Event, inputItem: InputParamConfig, uploadType = 'multi'): Promise<void> {
     const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
     if (uploadType === 'single') {
-      const file: File = input.files[0];
+      const file: File = files[0];
       if (!file) {
         return;
       }
@@ -217,7 +219,7 @@ export class InputNodeParamsComponent {
           this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
         });
     } else {
-      const len = input?.files?.length;
+      const len = files?.length;
       if (!len) {
         return;
       }
@@ -225,16 +227,31 @@ export class InputNodeParamsComponent {
       if (!inputItem.uploadDatas) {
         inputItem.uploadDatas = [];
       }
-      if (len + inputItem.uploadDatas.length > 10) {
+      if (len + inputItem.uploadDatas.length > 20) {
         MessageComponent.showWarn(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
+        );
+        return;
+      }
+      // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
+      if (
+        Array.from(files as any as File[]).some((f) =>
+          inputItem.uploadDatas.some(
+            (u) => u.name.toLowerCase() === f.name.toLowerCase(),
+          ),
+        )
+      ) {
+        MessageComponent.showWarn(
+          this.i18n.transform('duplicate_files_rejected_tip'),
         );
         return;
       }
       this.inputIndex = this.inputList.findIndex(
         (item) => item.name === inputItem.name,
       );
-      for (const file of input.files as any) {
+      // 批次开始置位、整批结束复位，驱动一键清空/添加按钮的上传中禁用
+      this.isUploading = true;
+      for (const file of files as any) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
           extension,
@@ -251,6 +268,7 @@ export class InputNodeParamsComponent {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
         });
       }
+      this.isUploading = false;
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue(
         inputItem.uploadDatas,
       );
@@ -275,6 +293,14 @@ export class InputNodeParamsComponent {
       inputItem.uploadDatas?.length > 0 &&
       this.disabled !== 'confirmed'
     );
+  }
+
+  public clearMultiFiles(inputItem): void {
+    if (this.isUploading) {
+      return;
+    }
+    inputItem.uploadDatas = [];
+    this.parameterFromGroup.controls[inputItem.uniqueId]?.setValue([]);
   }
 
   public addMultiFile(index): void {

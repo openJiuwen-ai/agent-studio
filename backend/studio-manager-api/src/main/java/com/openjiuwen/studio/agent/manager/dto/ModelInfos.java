@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,15 +26,19 @@ public class ModelInfos implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("model")
+    @Schema(description = "模型标识", example = "gpt-4")
     private String model = null;
 
     @JsonProperty("model_source")
+    @Schema(description = "模型来源", example = "openai")
     private String modelSource = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "GPT-4")
     private String modelName = null;
 
     @JsonProperty("headers")
+    @Schema(description = "请求头信息", example = "{\"Content-Type\":\"application/json\"}")
     @Valid
     private Object headers = null;
 

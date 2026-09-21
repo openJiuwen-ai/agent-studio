@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -29,100 +30,127 @@ public class Tool implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tool_id")
+    @Schema(description = "工具ID", example = "my-tool-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 84)
     private String toolId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "my-project-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("tool_display_name")
+    @Schema(description = "工具展示名称", example = "weather_tool")
     @Pattern(regexp = "^[a-zA-Z0-9_]+$")
     @Length(max = 64)
     private String toolDisplayName = null;
 
     @JsonProperty("tool_chinese_name")
+    @Schema(description = "工具中文名称", example = "天气查询工具")
     @Length(min = 1, max = 64)
     private String toolChineseName = null;
 
     @JsonProperty("tool_desc")
+    @Schema(description = "工具描述", example = "查询指定城市的天气信息")
     @Length(max = 256)
     private String toolDesc = null;
 
     @JsonProperty("icon")
+    @Schema(description = "工具图标", example = "icon-weather")
     private String icon = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见性", example = "private")
     private String visibility = null;
 
     @JsonProperty("input_schema")
+    @Schema(description = "输入参数Schema", example = "{\"type\":\"object\",\"properties\":{}}")
     @Length(max = 200000)
     private String inputSchema = null;
 
     @JsonProperty("is_input_list")
+    @Schema(description = "输入是否为列表", example = "false")
     private Boolean isInputList = null;
 
     @JsonProperty("output_schema")
+    @Schema(description = "输出参数Schema", example = "{\"type\":\"object\",\"properties\":{}}")
     @Length(max = 200000)
     private String outputSchema = null;
 
     @JsonProperty("is_output_list")
+    @Schema(description = "输出是否为列表", example = "false")
     private Boolean isOutputList = null;
 
     @JsonProperty("intf_type")
+    @Schema(description = "接口类型", example = "rest")
     private String intfType = null;
 
     @JsonProperty("type")
+    @Schema(description = "工具类型", example = "custom")
     @Length(max = 32)
     private String type = null;
 
     @JsonProperty("score")
+    @Schema(description = "评分", example = "0.95")
     private Float score = null;
 
     @JsonProperty("request_info")
+    @Schema(description = "请求信息", example = "{}")
     @Valid
     private RequestInfo requestInfo = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo authInfo = null;
 
     @JsonProperty("test_status")
+    @Schema(description = "测试状态", example = "success")
     private String testStatus = null;
 
     @JsonProperty("last_version_id")
+    @Schema(description = "最新版本ID", example = "v1-0-0")
     private String lastVersionId = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{\"key\":\"value\"}")
     @Length(max = 4096)
     private String metadata = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "admin")
     private String creator = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user-001")
     private String creatorId = null;
 
     @JsonProperty("credentials")
+    @Schema(description = "凭证信息", example = "{}")
     @Valid
     private ToolCredential credentials = null;
 
     @JsonProperty("credential_status")
+    @Schema(description = "凭证状态", example = "valid")
     @Length(max = 32)
     private String credentialStatus = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "2024-01-01T00:00:00.000Z")
     private Date createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2024-01-01T00:00:00.000Z")
     private Date updateTime = null;
 
     @JsonProperty("auth_required")
+    @Schema(description = "是否需要认证", example = "false")
     private Boolean authRequired = false;
 
     public String getToolId() {

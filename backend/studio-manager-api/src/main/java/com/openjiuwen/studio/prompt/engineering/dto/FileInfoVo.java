@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,10 +26,12 @@ public class FileInfoVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("file_id")
+    @Schema(description = "文件ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @NotBlank
     private String fileId = null;
 
     @JsonProperty("tempUrl")
+    @Schema(description = "temp地址", example = "示例文本", required = true)
     @NotBlank
     private String tempUrl = null;
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -28,15 +29,19 @@ public class ComplexIntentImportRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("succeed_len")
+    @Schema(description = "导入成功数量", example = "10")
     private Integer succeedLen = 0;
 
     @JsonProperty("failed_len")
+    @Schema(description = "导入失败数量", example = "2")
     private Integer failedLen = 0;
 
     @JsonProperty("success")
+    @Schema(description = "是否成功", example = "true")
     private Boolean success = false;
 
     @JsonProperty("intent_ids")
+    @Schema(description = "意图ID列表", example = "[\"intent_001\"]")
     @Valid
     @Size()
     private List<@Length() String> intentIds = null;

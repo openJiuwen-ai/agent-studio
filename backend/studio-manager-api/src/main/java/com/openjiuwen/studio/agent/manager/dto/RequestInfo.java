@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,25 +34,30 @@ public class RequestInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("url")
+    @Schema(description = "请求地址", example = "https://example.com/api", required = true)
     @Pattern(regexp = "^(http|https)://(?![^/]*@)(?!.*\\.\\.)[^ ]*$")
     @NotBlank
     @Length(min = 8, max = 256)
     private String url = null;
 
     @JsonProperty("method")
+    @Schema(description = "请求方法", example = "GET", required = true)
     @NotNull
     private MethodEnum method = null;
 
     @JsonProperty("headers")
+    @Schema(description = "请求头", example = "{\"Content-Type\":\"application/json\"}")
     @Valid
     @Size()
     private Map<@Length(min = 1, max = 20000) String, @Length(min = 1, max = 20000) String> headers = null;
 
     @JsonProperty("path_params")
+    @Schema(description = "路径参数", example = "{}")
     @Length(max = 2000)
     private String pathParams = null;
 
     @JsonProperty("input_schema")
+    @Schema(description = "输入Schema", example = "{}")
     @Length(max = 200000)
     private String inputSchema = null;
 

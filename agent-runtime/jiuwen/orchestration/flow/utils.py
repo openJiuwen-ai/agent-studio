@@ -270,6 +270,24 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
     def _convert_one_of_type(data, expected_type, current_path, definition):
         """Oneof类型参数转换"""
         expected_types = [t.strip() for t in expected_type.split("|")]
+        # None + null 是合法子类型 → 直接返回 None，避免进入其他分支报错
+        if data is None and "null" in expected_types:
+            return None
+        # 空字符串仅当 string 不是合法子类型时才视为 null（如 integer|null、
+        # object|null 的可选参数未填写）；string|null 场景 "" 是有效字符串值，
+        # 保持原有语义按 string 分支返回 ""，不改成 None。
+        # 必填参数空串保留校验错误，与 _convert_object/_convert_array 的
+        # 必填分支对齐，避免未填写被静默转成 None 吞掉；
+        # None 分支不检查 required，与 _convert_object(None)/_convert_array(None)
+        # 的上游行为一致（None 多来自引用解析结果，报错会误伤引用场景）
+        if data == "" and "null" in expected_types and STRING not in expected_types:
+            if definition.get("required"):
+                errors.append(
+                    SCHEMA_VALIDATION_WRONG_TYPE.format(
+                        k=current_path, t=expected_type
+                    )
+                )
+            return None
         for sub_expected_type in expected_types:
             if sub_expected_type == OBJECT:
                 try:
@@ -306,6 +324,15 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         if inputs is None:
             return TYPE_DEFAULT_VALUE_DICT.get(OBJECT)
         if isinstance(inputs, str):
+            # 空字符串视为空值（如 MCP 可选 object 参数未填写），返回默认值而非报错；
+            # 必填参数保留校验错误，避免未填写被静默吞掉
+            if inputs == "":
+                if definition.get("required"):
+                    errors.append(
+                        SCHEMA_VALIDATION_WRONG_TYPE.format(k=current_path, t=OBJECT)
+                    )
+                    return TYPE_DEFAULT_VALUE_DICT.get(ERROR)
+                return TYPE_DEFAULT_VALUE_DICT.get(OBJECT)
             try:
                 converted_value = json.loads(inputs)
             except (ValueError, TypeError):
@@ -355,6 +382,15 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         if inputs is None:
             return TYPE_DEFAULT_VALUE_DICT.get(ARRAY)
         if isinstance(inputs, str):
+            # 空字符串视为空值（如 MCP 可选 array 参数未填写），返回默认值而非报错；
+            # 必填参数保留校验错误，避免未填写被静默吞掉
+            if inputs == "":
+                if definition.get("required"):
+                    errors.append(
+                        SCHEMA_VALIDATION_WRONG_TYPE.format(k=current_path, t=ARRAY)
+                    )
+                    return TYPE_DEFAULT_VALUE_DICT.get(ERROR)
+                return TYPE_DEFAULT_VALUE_DICT.get(ARRAY)
             try:
                 converted_value = json.loads(inputs)
             except (ValueError, TypeError):

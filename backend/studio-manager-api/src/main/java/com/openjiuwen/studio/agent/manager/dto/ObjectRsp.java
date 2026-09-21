@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
@@ -26,33 +27,41 @@ public class ObjectRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "对象ID", example = "obj_001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "proj_001")
     @Length(max = 64)
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws_001")
     @Length(max = 64)
     private String workspaceId = null;
 
     @JsonProperty("name")
+    @Schema(description = "对象名称", example = "my_object")
     @Length(max = 64)
     private String name = null;
 
     @JsonProperty("description")
+    @Schema(description = "对象描述", example = "自定义对象")
     @Length(max = 1024)
     private String description = null;
 
     @JsonProperty("schemas")
+    @Schema(description = "对象Schema定义", example = "{}")
     private String schemas = null;
 
     @JsonProperty("creator_id")
+    @Schema(description = "创建者ID", example = "user_001")
     @Length(max = 1024)
     private String creatorId = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "2026-01-01T00:00:00Z")
     private Date updateTime = null;
 
     public String getId() {

@@ -66,7 +66,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "创建第三方知识库连接请求体", required = true) @Valid @RequestBody
         CreateThirdPartyKnowledgeBaseConnectionRequestBody body);
@@ -89,7 +91,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "第三方知识库连接id", required = true, schema = @Schema())
         @PathVariable("knowledge_base_connection_id") String knowledgeBaseConnectionId);
@@ -176,7 +180,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "第三方知识库连接id", required = true, schema = @Schema())
         @PathVariable("knowledge_base_connection_id") String knowledgeBaseConnectionId);
@@ -200,7 +206,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "测试第三方知识库连接请求体", required = true) @Valid @RequestBody
         TestConnectionThirdPartyKnowledgeBaseConnectionRequestBody body);
@@ -227,7 +235,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @PathVariable("project_id") String projectId,
         @Parameter(in = ParameterIn.PATH, description = "知识库连接id", required = true, schema = @Schema())
         @PathVariable("knowledge_base_connection_id") String knowledgeBaseConnectionId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
     @ApiOperation(value = "编辑第三方知识库连接", nickname = "updateThirdPartyKnowledgeBaseConnection",
@@ -249,7 +259,9 @@ import org.springframework.web.bind.annotation.RequestParam;
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
+        @NotNull
+        @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema())
+        @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId, @Size(min = 1, max = 64)
         @Parameter(in = ParameterIn.PATH, description = "第三方知识库连接id", required = true, schema = @Schema())
         @PathVariable("knowledge_base_connection_id") String knowledgeBaseConnectionId,

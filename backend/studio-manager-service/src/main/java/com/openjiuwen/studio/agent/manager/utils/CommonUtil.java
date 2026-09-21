@@ -336,6 +336,11 @@ public class CommonUtil {
         if (trimmedUrlString.isEmpty()) {
             return null; // 空白字符串也视为没有查询
         }
+        // URL 含环境变量占位符 ${_env.plugin_url_params.VAR} 时跳过 URI 解析，
+        // 占位符可能出现在 query 参数中导致 URI 解析异常，真实 query 由运行期解析后拼接
+        if (trimmedUrlString.contains("${_env.")) {
+            return null;
+        }
         try {
             // 2. 使用 URI 类解析 URL 结构
             // URI 比 URL 更适合纯粹的解析和组件访问，不会尝试建立连接。

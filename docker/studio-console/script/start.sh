@@ -22,8 +22,8 @@ function update_nginx_config_for_https() {
 }
 
 function update_nginx_config_for_http() {
-  sed -i "s/listen ${POD_IP}:443 ssl;/#listen ${POD_IP}:443 ssl;/g" $nginx_conf/nginx.conf
-  sed -i "s/#listen ${POD_IP}:80;/listen ${POD_IP}:80;/g" $nginx_conf/nginx.conf
+  sed -i "s/listen ${POD_IP}:8443 ssl;/#listen ${POD_IP}:8443 ssl;/g" $nginx_conf/nginx.conf
+  sed -i "s/#listen ${POD_IP}:8080;/listen ${POD_IP}:8080;/g" $nginx_conf/nginx.conf
   sed -i 's/ssl_protocols/#ssl_protocols/g' $nginx_conf/nginx.conf
   sed -i 's/ssl_session_timeout/#ssl_session_timeout/g' $nginx_conf/nginx.conf
   sed -i 's/ssl_session_cache/#ssl_session_cache/g' $nginx_conf/nginx.conf
@@ -44,11 +44,6 @@ function update_nginx_config_for_http() {
 function init_config_file() {
   cd /home/service/
   cp /home/conf/nginx.conf $nginx_conf
-
-  touch /opt/cloud/wiseagent-nginx/logs/access.log
-  chmod 640 /opt/cloud/wiseagent-nginx/logs/access.log
-  touch /opt/cloud/wiseagent-nginx/logs/error.log
-  chmod 640 /opt/cloud/wiseagent-nginx/logs/error.log
 
   export POD_IP=$(ip addr | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | awk -F '/' '{print $1}' | head -1)
   sed -i "s/pod_ip/${POD_IP}/g" $nginx_conf/nginx.conf

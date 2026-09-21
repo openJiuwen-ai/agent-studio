@@ -12,6 +12,7 @@ import com.openjiuwen.studio.agent.common.dto.knowledge.SplitConf;
 import com.openjiuwen.studio.agent.manager.dto.ExternalKnowledgeBaseSource;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -34,102 +35,127 @@ public class ShowKnowledgeRepoResponseBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("knowledge_repo_id")
+    @Schema(description = "知识库ID", example = "knowledge-repo-001")
     @Length(min = 1, max = 64)
     private String knowledgeRepoId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-001")
     @Length(min = 1, max = 64)
     private String projectId = null;
 
     @JsonProperty("display_name")
+    @Schema(description = "知识库显示名称", example = "我的知识库", required = true)
     @NotBlank
     @Length(min = 1, max = 64)
     private String displayName = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     @Length(min = 1, max = 64)
     private String workspaceId = null;
 
     @JsonProperty("description")
+    @Schema(description = "知识库描述", example = "用于存储产品文档的知识库")
     @Length(max = 100)
     private String description = null;
 
     @JsonProperty("type")
+    @Schema(description = "知识库类型，external表示外部引用，internal表示平台内部创建", example = "internal", required = true)
     @NotNull
     private TypeEnum type = null;
 
     @JsonProperty("repo_type")
+    @Schema(description = "知识库来源类型", example = "external")
     @Length(min = 1, max = 32)
     private String repoType = null;
 
     @JsonProperty("size")
+    @Schema(description = "知识库当前已用大小（字节）", example = "1024")
     @Range(min = 0L, max = 102400000000L)
     private Long size = null;
 
     @JsonProperty("max_size")
+    @Schema(description = "知识库最大容量（字节）", example = "1073741824")
     @Range(min = 0L, max = 102400000000L)
     private Long maxSize = null;
 
     @JsonProperty("remain_size")
+    @Schema(description = "知识库剩余可用空间（字节）", example = "1073740800")
     @Range(min = 0L, max = 102400000000L)
     private Long remainSize = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "user001")
     @Length(max = 64)
     private String creator = null;
 
     @JsonProperty("update_user_name")
+    @Schema(description = "最近更新者用户名", example = "user002")
     @Length(max = 64)
     private String updateUserName = null;
 
     @JsonProperty("parse_conf")
+    @Schema(description = "文档解析配置", example = "{}")
     @Valid
     private ParseConf parseConf = null;
 
     @JsonProperty("split_conf")
+    @Schema(description = "文档切分配置", example = "{}")
     @Valid
     private SplitConf splitConf = null;
 
     @JsonProperty("embedding_model")
+    @Schema(description = "向量化模型名称", example = "text-embedding-ada-002")
     @Length(max = 32)
     private String embeddingModel = null;
 
     @JsonProperty("rerank_model")
+    @Schema(description = "重排序模型名称", example = "rerank-model-001")
     @Length(max = 32)
     private String rerankModel = null;
 
     @JsonProperty("icon")
+    @Schema(description = "知识库图标数据", example = "data:image/png;base64,iVBORw0KGgo=")
     @Length(max = 1024000)
     private String icon = null;
 
     @JsonProperty("icon_name")
+    @Schema(description = "知识库图标名称", example = "icon.png")
     @Length(max = 64)
     private String iconName = null;
 
     @JsonProperty("status")
+    @Schema(description = "知识库状态", example = "active")
     @Length(max = 16)
     private String status = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "知识库元数据", example = "{\"key\":\"value\"}")
     @Length(max = 4096)
     private String metadata = null;
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间（毫秒时间戳）", example = "1714521600000")
     @Range(min = 0L, max = 253402214400000L)
     private Long createTime = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间（毫秒时间戳）", example = "1714608000000")
     @Range(min = 0L, max = 253402214400000L)
     private Long updateTime = null;
 
     @JsonProperty("rag_chunk_parser_conf")
+    @Schema(description = "RAG分块解析配置", example = "{}")
     @Valid
     private RagChunkParserConf ragChunkParserConf = null;
 
     @JsonProperty("share_scope")
+    @Schema(description = "知识库可见范围，可选值：SELF、GLOBAL、ALL", example = "GLOBAL")
     private ShareScopeEnum shareScope = ShareScopeEnum.GLOBAL;
 
     @JsonProperty("source")
+    @Schema(description = "外部知识库来源信息", example = "{}")
     private ExternalKnowledgeBaseSource source = null;
 
     public String getKnowledgeRepoId() {

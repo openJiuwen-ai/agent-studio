@@ -69,9 +69,9 @@
         </td>
         <td [title]="row.name" class="ellipsis-cell">{{ row.name }}</td>
         <td [title]="row.type" class="ellipsis-cell">{{ row.type }}</td>
-        <td [title]="row.description" class="ellipsis-cell">{{ row.description }}</td>
-        <td [title]="row.creator" class="ellipsis-cell">{{ row.creator }}</td>
-        <td [title]="row.update_time | formateTime" class="ellipsis-cell">{{ row.update_time | formateTime}}</td>
+        <td [title]="row.desc" class="ellipsis-cell">{{ row.desc }}</td>
+        <td [title]="row.createdBy" class="ellipsis-cell">{{ row.createdBy }}</td>
+        <td [title]="row.updatedOn | formateTime" class="ellipsis-cell">{{ row.updatedOn | formateTime}}</td>
         <td>
           <a nz-dropdown [nzDropdownMenu]="menu">
             <span nz-icon nzType="more"></span>
@@ -96,7 +96,7 @@
         <app-new-common-no-data-with-btn
           [type]="searchNameIsEmpty ? 'noData' : 'filterNoData'"
           [firstLineData]="'no_data' | i18nextEager"
-          [noDataBtnStr]="'create_message_template1' | i18nextEager"
+          [noDataBtnStr]="'connect_data_source' | i18nextEager"
           (create)="createDatasource()"
           (clear)="handleClickClearSearch()"
         />

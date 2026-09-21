@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.hibernate.validator.constraints.Length;
@@ -26,21 +27,25 @@ public class KnowledgeTagInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "标签ID", example = "tag_001", required = true)
     @NotBlank
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "标签名称", example = "重要文档", required = true)
     @NotBlank
     @Length(min = 1, max = 64)
     private String name = null;
 
     @JsonProperty("color")
+    @Schema(description = "标签颜色", example = "red", required = true)
     @NotBlank
     @Length(min = 1, max = 10)
     private String color = "red";
 
     @JsonProperty("create_time")
+    @Schema(description = "创建时间", example = "1735689600000")
     private Long createTime = null;
 
     public String getId() {

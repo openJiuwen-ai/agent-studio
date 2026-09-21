@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -31,56 +32,71 @@ public class ThirdPartyKnowledgeBaseConnectionDetail implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "连接ID", example = "conn-001")
     private String id = null;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "connector-001")
     private String connectorId = null;
 
     @JsonProperty("connector_name")
+    @Schema(description = "连接器名称", example = "Weaviate")
     private String connectorName = null;
 
     @JsonProperty("status")
+    @Schema(description = "连接状态", example = "OPEN")
     private StatusEnum status = null;
 
     @JsonProperty("name")
+    @Schema(description = "连接名称", example = "我的知识库连接")
     private String name = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标地址", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("description")
+    @Schema(description = "连接描述", example = "知识库连接描述")
     private String description = null;
 
     @JsonProperty("params")
+    @Schema(description = "连接参数列表", example = "[]")
     @Valid
     @Size()
     private List<ConnectionParamInfo> params = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     @Length(max = 100)
     private String workspaceId = null;
 
     @JsonProperty("domain_name")
+    @Schema(description = "域名", example = "example.com")
     @Length(max = 100)
     private String domainName = null;
 
     @JsonProperty("create_user_id")
+    @Schema(description = "创建用户ID", example = "user-001")
     @Length(max = 100)
     private String createUserId = null;
 
     @JsonProperty("create_user_name")
+    @Schema(description = "创建用户名称", example = "张三")
     @Length(max = 100)
     private String createUserName = null;
 
     @JsonProperty("update_time")
+    @Schema(description = "更新时间", example = "1700000000000")
     @Range(min = 0L, max = 9223372036854775807L)
     private Long updateTime = null;
 
     @JsonProperty("update_user_id")
+    @Schema(description = "更新用户ID", example = "user-002")
     @Length(max = 100)
     private String updateUserId = null;
 
     @JsonProperty("update_user_name")
+    @Schema(description = "更新用户名称", example = "李四")
     @Length(max = 100)
     private String updateUserName = null;
 

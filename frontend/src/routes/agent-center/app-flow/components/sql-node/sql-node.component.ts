@@ -14,6 +14,7 @@ import { WORKFLOW_SVGS } from '../../flow.const';
 import { AppFlowService } from '../../app-flow.service';
 import { NodeService } from '../../node.service';
 import { type ISqlNode } from '../../node.type';
+import type { IDataQueryNode } from '../../node.type';
 import { MODULES } from '@shared/modules';
 import { takeUntil } from 'rxjs';
 import { FlowUtils } from '../../utils/flow-utils';
@@ -31,9 +32,13 @@ import { FlowUtils } from '../../utils/flow-utils';
   ],
 })
 export class SqlNodeComponent extends NodeBaseComponent implements OnInit {
-  @Input('nodeInfo') nodeInfo: ISqlNode;
+  @Input('nodeInfo') nodeInfo: ISqlNode | IDataQueryNode;
 
-  public icon = WORKFLOW_SVGS.Sql;
+  public get icon(): string {
+    return this.nodeInfo?.type === 'DataQuery'
+      ? WORKFLOW_SVGS.DataQuery
+      : WORKFLOW_SVGS.Sql;
+  }
 
   constructor(
     protected override appFlowServ: AppFlowService,

@@ -68,6 +68,10 @@ class ModelServiceBase:
     workspace_id: str
     auth_id: str
     throttling_policy: Optional[int] = None      # 限流字段，当前未使用
+    # Python 侧补充字段（Java 无对应）：api_url 由哪些 ${_env.plugin_url_params.VAR}
+    # 占位符解析而来（逗号分隔变量名；非占位符模型为 None）。供上游调用失败时在
+    # MD_INVOKE_MODEL_SERVICE_FAIL 消息中提示用户检查环境变量取值，_build_detail 填充。
+    api_url_env_placeholders: Optional[str] = None
 
 
 @dataclass
@@ -221,10 +225,13 @@ async def _build_detail(
 
     api_url 含 ``${_env.plugin_url_params.VAR}`` 占位符时，用 env_vars 替换为真实值
     （跨环境迁移的字面量 apiUrl 在此解析，与管理侧 ``UrlCheckUtils.validateEnvVarPlaceholders``
-    校验同源）。用了占位符但未配置/加载全局环境（env_vars/plugin_url_params 为空）时，
-    fail-fast 抛 ``MD_ENV_VAR_UNRESOLVED``（对应 Java ``MODEL_ENV_VAR_UNRESOLVED`` / 1082，
-    消息说明「未配全局环境」）；环境已配置但缺对应变量时由 ``resolve_env_placeholders``
-    抛同 code（消息说明「环境无对应变量」）。无占位符时跳过、保持 verbatim。
+    校验同源）。用了占位符但当前环境未加载到任何变量（env_vars/plugin_url_params 为空；
+    含未绑定环境且未回填默认环境、或默认环境未配置任何变量的情形）时，fail-fast 抛
+    ``MD_ENV_VAR_UNRESOLVED``（对应 Java ``MODEL_ENV_VAR_UNRESOLVED`` / 1082，消息说明
+    「当前/默认环境没有配置对应的环境变量」）；环境已配置部分变量但缺对应变量时由
+    ``resolve_env_placeholders`` 抛同 code（消息说明「环境无对应变量」）。解析成功时在返回的
+    model 上记录 ``api_url_env_placeholders``（变量名清单），供上游调用失败时追加「检查环境变量
+    取值」提示（``env_resolver.env_url_error_hint``）。无占位符时跳过、保持 verbatim。
     """
     if has_env_placeholder(model.api_url):
         if not ctx.env_vars or not ctx.env_vars.get("plugin_url_params"):
@@ -236,10 +243,19 @@ async def _build_detail(
             raise ModelServiceError(
                 "MD_ENV_VAR_UNRESOLVED",
                 f"模型服务API地址配置有误：api_url 使用了环境变量占位符 {user_friendly_url!r}，"
-                f"但当前未加载/配置全局环境变量。请为当前环境配置所需的环境变量：{names}",
+                f"但当前环境（未显式绑定时为项目默认环境）下没有配置对应的环境变量：{names}。"
+                f"请前往环境管理，为默认环境或所绑定的环境配置上述变量",
             )
         model = replace(
-            model, api_url=resolve_env_placeholders(model.api_url, ctx.env_vars),
+            model,
+            # 环境变量值常带复制粘贴引入的前后空白（对 URL 无意义），剥掉避免拼出
+            # 非法 URL（SDK 构造时直接抛异常）；连带剥掉模板自身边缘空白（导入的
+            # " ${...}" 混合形态）。非占位符模型的 api_url 有前后端正则校验，不经此处。
+            api_url=resolve_env_placeholders(model.api_url, ctx.env_vars).strip(),
+            # 记录占位符来源（变量名清单），供上游调用失败（MD_INVOKE_MODEL_SERVICE_FAIL）
+            # 时提示用户检查环境管理中对应变量的取值（详见 env_resolver.env_url_error_hint）
+            api_url_env_placeholders=", ".join(
+                ENV_PLACEHOLDER_PATTERN.findall(model.api_url or "")) or None,
         )
     auth_proj = _auth_project_id(model.project_id, ctx.project_id)
     if auth_id:
@@ -258,7 +274,10 @@ def _model_from_data(data: dict) -> ModelServiceBase:
     return ModelServiceBase(
         id=str(data.get("id", "")),
         model_name=data.get("model_name", ""),
-        api_url=data.get("api_url", ""),
+        # api_url 前后空白对 URL 无意义（复制粘贴常见引入），统一剥掉避免拼出非法
+        # URL（如 " http://..." 会被 httpx 判为缺协议抛
+        # "Request URL is missing an 'http://' or 'https://' protocol." 误导用户）。
+        api_url=(data.get("api_url") or "").strip(),
         provider_id=str(data.get("provider_id", "")),
         interface_protocol=normalize_protocol(data.get("interface_protocol", "")),
         project_id=str(data.get("project_id", "")),

@@ -59,6 +59,7 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "EI.ComplexIntentDetection": "EI.ComplexIntentDetection",
     "jiuwen.paramExtraction": "jiuwen.paramExtraction",
     "FlowMcp": "jiuwen.mcp",
+    "FlowSql": "jiuwen.sql",
 }
 
 # 控制流节点componentId关键字，命中则跳过调试事件

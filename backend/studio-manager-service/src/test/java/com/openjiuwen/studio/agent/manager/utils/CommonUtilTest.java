@@ -379,4 +379,35 @@ class CommonUtilTest {
     void testValidateProjectAndWorkspaceId() {
         assertDoesNotThrow(() -> CommonUtil.validateProjectAndWorkspaceId("proj", "ws"));
     }
+
+    /**
+     * 用例描述：验证URL含环境变量占位符时getRawQueryString跳过URI解析直接返回null
+     * 预制条件：无特殊前置条件
+     * 输入参数：URL含${_env.plugin_url_params.var}占位符（环境变量引用场景）
+     * 预期结果：返回null，不进行URI解析
+     *
+     * Given：前置条件 / 初始状态
+     *  1. 构造含环境变量占位符的URL字符串
+     * When：执行动作（仅1行核心调用）
+     *  执行：CommonUtil.getRawQueryString(url)
+     * Then：结果校验（三重校验）
+     *  1. 断言返回结果为null
+     */
+    @Test
+    void testGetRawQueryString_EnvPlaceholder() {
+        String url = "http://${_env.plugin_url_params.host}/sse?key=value";
+        assertNull(CommonUtil.getRawQueryString(url));
+    }
+
+    /**
+     * 用例描述：验证含环境变量占位符但带空格的URL仍被识别为占位符URL返回null
+     * 预制条件：无特殊前置条件
+     * 输入参数：URL首尾有空格，含${_env.占位符
+     * 预期结果：返回null（先trim再检测占位符）
+     */
+    @Test
+    void testGetRawQueryString_EnvPlaceholderWithSpaces() {
+        String url = "  http://${_env.plugin_url_params.host}/sse  ";
+        assertNull(CommonUtil.getRawQueryString(url));
+    }
 }

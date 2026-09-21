@@ -16,7 +16,8 @@ from typing import Optional
 
 from agent_runtime.common.config import settings
 from agent_runtime.common.ir_interfaces import ModelConfigProvider
-from agent_runtime.context.request_context import _request_ctx
+from agent_runtime.context.request_context import _request_ctx, inject_traceparent
+from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
@@ -76,6 +77,15 @@ def _extract_auth_headers(headers: dict) -> dict:
     if deployment_id:
         custom_headers["X-Deployment-Id"] = deployment_id
 
+    # X-Request-Id: propagate from request context for trace correlation
+    ctx = _request_ctx.get()
+    if ctx and ctx.request_id:
+        custom_headers["X-Request-Id"] = ctx.request_id
+
+    # W3C traceparent: enable cross-service distributed tracing
+    inject_traceparent(custom_headers)
+
+    workflow_logger.debug(f"LLM custom_headers: {custom_headers}")
     return custom_headers
 
 
@@ -165,6 +175,13 @@ class Nl2ModelConfigProvider:
         if deployment_id:
             custom_headers["X-Deployment-Id"] = deployment_id
 
+        # X-Request-Id: propagate from request context for trace correlation
+        if ctx and ctx.request_id:
+            custom_headers["X-Request-Id"] = ctx.request_id
+        # W3C traceparent: enable cross-service distributed tracing
+        inject_traceparent(custom_headers)
+
+        workflow_logger.debug(f"LLM custom_headers (EnvVar): {custom_headers}")
         model_client_config = ModelClientConfig(
             client_provider="openai",
             api_key=base.api_key,
@@ -444,7 +461,13 @@ class IRModelConfigProvider(ModelConfigProvider):
         ctx = _request_ctx.get()
         auth_token = ctx.headers.get("X-Auth-Token", "") if ctx else ""
         custom_headers = {"X-Auth-Id": auth_id, "X-Auth-Token": auth_token}
+        # X-Request-Id: propagate from request context for trace correlation
+        if ctx and ctx.request_id:
+            custom_headers["X-Request-Id"] = ctx.request_id
+        # W3C traceparent: enable cross-service distributed tracing
+        inject_traceparent(custom_headers)
 
+        workflow_logger.debug(f"LLM custom_headers (IR): {custom_headers}")
         # Build client config
         model_client_config = ModelClientConfig(
             client_provider="openai",

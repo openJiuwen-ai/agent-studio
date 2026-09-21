@@ -111,7 +111,9 @@ class TaskExecutor:
             return
 
         # 记录开始执行
-        logger.info(f"Stream executing task: {task.id}, type: {task.task_type}")
+        logger.debug(
+            "Stream executing task: %s, type: %s", task.id, task.task_type
+        )
         start_time = time.time()
 
         try:
@@ -123,8 +125,9 @@ class TaskExecutor:
 
             # 记录执行完成
             execution_time = time.time() - start_time
-            logger.info(
-                f"Task stream executed successfully: {task.id}, execution time: {execution_time:.2f}s"
+            logger.debug(
+                "Task stream executed successfully: %s, execution time: %.2fs",
+                task.id, execution_time,
             )
 
         except Exception as e:

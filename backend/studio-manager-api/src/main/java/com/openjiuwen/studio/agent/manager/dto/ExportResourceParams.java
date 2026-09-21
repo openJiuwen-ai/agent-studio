@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -30,20 +31,24 @@ public class ExportResourceParams implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("resource_ids")
+    @Schema(description = "资源ID列表", example = "[\"res-001\"]")
     @Valid
     @Size()
     private List<@Length() String> resourceIds = new ArrayList<String>();
 
     @JsonProperty("resource_versions")
+    @Schema(description = "资源版本列表", example = "[{\"id\":\"res-001\",\"version\":\"1.0\"}]")
     @Valid
     @Size()
     private List<ExportResourceVersion> resourceVersions = null;
 
     @JsonProperty("resource_type")
+    @Schema(description = "资源类型", example = "skill", required = true)
     @NotNull
     private String resourceType = null;
 
     @JsonProperty("mode")
+    @Schema(description = "模式", example = "all")
     private String mode = null;
 
     public List<String> getResourceIds() {

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -30,71 +31,88 @@ public class WorkspaceInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "工作空间ID", example = "ws001")
     @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$")
     @Length(min = 1, max = 64)
     private String id = null;
 
     @JsonProperty("name")
+    @Schema(description = "工作空间名称", example = "default")
     @Pattern(regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$")
     @Length(min = 1, max = 64)
     private String name = null;
 
     @JsonProperty("projectId")
+    @Schema(description = "项目ID", example = "proj001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String projectId = null;
 
     @JsonProperty("flag")
+    @Schema(description = "标识", example = "flag001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 64)
     private String flag = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-workspace")
     private String icon = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "团队空间描述信息")
     @Length(max = 256)
     private String description = null;
 
     @JsonProperty("tenantId")
+    @Schema(description = "租户ID", example = "tenant001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 128)
     private String tenantId = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "team")
     @Length(min = 1, max = 32)
     private String type = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     @Length(min = 1, max = 64)
     private String status = null;
 
     @JsonProperty("creator")
+    @Schema(description = "创建者", example = "张三")
     private String creator = null;
 
     @JsonProperty("creatorId")
+    @Schema(description = "创建者ID", example = "user001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 128)
     private String creatorId = null;
 
     @JsonProperty("createdOn")
+    @Schema(description = "创建时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date createdOn = null;
 
     @JsonProperty("updater")
+    @Schema(description = "更新者", example = "李四")
     private String updater = null;
 
     @JsonProperty("updaterId")
+    @Schema(description = "更新者ID", example = "user002")
     @Pattern(regexp = "^[a-zA-Z0-9_-]+$")
     @Length(min = 1, max = 128)
     private String updaterId = null;
 
     @JsonProperty("updatedOn")
+    @Schema(description = "更新时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date updatedOn = null;
 
     @JsonProperty("role")
+    @Schema(description = "角色", example = "admin")
     private String role = null;
 
     @JsonProperty("externalMappingInfo")
+    @Schema(description = "外部映射信息", example = "外部映射信息列表")
     @Valid
     @Size()
     private List<ExternalMappingInfo> externalMappingInfo = null;

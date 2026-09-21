@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,18 +25,23 @@ public class TaskConfirmVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("eval_task_num")
+    @Schema(description = "评估任务数量", example = "1")
     private Integer evalTaskNum = null;
 
     @JsonProperty("variable_num")
+    @Schema(description = "变量数量", example = "1")
     private Integer variableNum = null;
 
     @JsonProperty("prompt_num")
+    @Schema(description = "提示词数量", example = "1")
     private Integer promptNum = null;
 
     @JsonProperty("history_prompt_num")
+    @Schema(description = "history提示词数量", example = "1")
     private Integer historyPromptNum = null;
 
     @JsonProperty("executing_eval_task_num")
+    @Schema(description = "executing评估任务数量", example = "1")
     private Integer executingEvalTaskNum = null;
 
     public Integer getEvalTaskNum() {

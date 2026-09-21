@@ -9,6 +9,7 @@ import pytest
 
 from common_utils.env_variables_loader import (
     _parse_env_variables,
+    load_default_environment_id,
     load_environment_variables,
 )
 
@@ -173,3 +174,80 @@ class TestLoadEnvironmentVariables:
             result = await load_environment_variables("env-123", None)
         assert result["plugin_url_params"]["host"] == "localhost"
         mock_client.get.assert_awaited_once_with("environment:env-123:workspaceId:")
+
+
+class TestLoadDefaultEnvironmentId:
+    """项目默认环境 id 加载测试（runtime 直连时按 project_id 兜底读默认环境）."""
+
+    @pytest.mark.asyncio
+    async def test_empty_project_id(self):
+        """project_id 为空 -> 不访问 Redis，直接返回 None."""
+        with patch(
+            "common_utils.env_variables_loader.get_redis_client",
+            side_effect=AssertionError("redis should not be touched"),
+        ):
+            result = await load_default_environment_id(None)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_empty_string_project_id(self):
+        """project_id 为空白串 -> 直接返回 None."""
+        with patch(
+            "common_utils.env_variables_loader.get_redis_client",
+            side_effect=AssertionError("redis should not be touched"),
+        ):
+            result = await load_default_environment_id("")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_redis_key_missing_returns_none(self):
+        """Redis key 不存在（老项目从未写默认环境）-> 返回 None 由调用方降级."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=None)
+
+        with patch(
+            "common_utils.env_variables_loader.get_redis_client",
+            return_value=mock_client,
+        ):
+            result = await load_default_environment_id("proj-1")
+        assert result is None
+        mock_client.get.assert_awaited_once_with("project:proj-1:default_environment")
+
+    @pytest.mark.asyncio
+    async def test_redisson_quoted_value_json_loads(self):
+        """Redisson 默认 codec 存带引号值 b'\"9abd-...\"' -> json.loads 还原为纯 id."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=b'"9abd-1234-5678"')
+
+        with patch(
+            "common_utils.env_variables_loader.get_redis_client",
+            return_value=mock_client,
+        ):
+            result = await load_default_environment_id("proj-1")
+        assert result == "9abd-1234-5678"
+
+    @pytest.mark.asyncio
+    async def test_plain_string_returns_as_is(self):
+        """Redis 存纯字符串（手动写入/其他写入方）-> 原样返回."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=b"env-plain-id")
+
+        with patch(
+            "common_utils.env_variables_loader.get_redis_client",
+            return_value=mock_client,
+        ):
+            result = await load_default_environment_id("proj-1")
+        assert result == "env-plain-id"
+
+    @pytest.mark.asyncio
+    async def test_redis_exception_returns_none(self):
+        """Redis 访问异常 -> 记录日志并返回 None，不向上抛."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=Exception("redis down"))
+
+        with patch(
+            "common_utils.env_variables_loader.get_redis_client",
+            return_value=mock_client,
+        ):
+            result = await load_default_environment_id("proj-1")
+        assert result is None

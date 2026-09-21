@@ -57,9 +57,13 @@ public interface ConversationHistoryApi {
         @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "conversation_id", required = true, schema = @Schema())
         @PathVariable("conversation_id") String conversationId,
-        @Size(max = 32) @ApiParam(value = "版本号") @RequestParam(value = "version_id", required = false)
+        @Size(max = 32)
+        @Parameter(in = ParameterIn.QUERY, description = "版本号", required = false, schema = @Schema())
+        @ApiParam(value = "版本号") @RequestParam(value = "version_id", required = false)
         String versionId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId);
 
     @ApiOperation(value = "根据conversation_id查询会话", nickname = "retrieveConversationHistory",
@@ -87,6 +91,8 @@ public interface ConversationHistoryApi {
         @PathVariable("conversation_id") String conversationId,
         @ApiParam(value = "RetrieveConversationQo: converted from multi query params") @Valid
         RetrieveConversationQo retrieveConversationQo,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = false, schema = @Schema())
+        @ApiParam(value = "项目空间id")
         @RequestParam(value = "workspace_id", required = false) String workspaceId);
 }

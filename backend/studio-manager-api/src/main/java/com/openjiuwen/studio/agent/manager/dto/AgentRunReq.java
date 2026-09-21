@@ -7,6 +7,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -27,14 +29,17 @@ public class AgentRunReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("query")
+    @Schema(description = "查询内容", example = "查询内容示例", required = true)
     @NotBlank
     @Length(min = 1, max = 8192)
     private String query = null;
 
     @JsonProperty("version")
+    @Schema(description = "版本号", example = "1")
     private Long version = null;
 
     @JsonProperty("long_term_memory")
+    @Schema(description = "长期记忆", example = "1")
     @Valid
     private LongTermMemoryRuntime longTermMemory = null;
 

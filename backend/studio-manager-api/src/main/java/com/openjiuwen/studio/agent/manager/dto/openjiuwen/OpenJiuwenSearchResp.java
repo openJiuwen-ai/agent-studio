@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.dto.openjiuwen;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -21,6 +22,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class OpenJiuwenSearchResp {
 
+    @Schema(description = "检索结果列表", example = "[]")
     private List<SearchResultItem> results;
 
     /**
@@ -31,10 +33,13 @@ public class OpenJiuwenSearchResp {
     @AllArgsConstructor
     public static class SearchResultItem {
 
+        @Schema(description = "检索文本内容", example = "Agent是一种智能助手")
         private String text;
 
+        @Schema(description = "相似度得分", example = "0.95")
         private Double score;
 
+        @Schema(description = "元数据", example = "{}")
         private Map<String, Object> metadata;
     }
 }

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.prompt.engineering.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -28,29 +29,36 @@ public class PromptIterationResultVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     private String id = null;
 
     @JsonProperty("taskId")
+    @Schema(description = "任务ID", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890", required = true)
     @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     @NotBlank
     private String taskId = null;
 
     @JsonProperty("iterNum")
+    @Schema(description = "迭代序号", example = "1", required = true)
     @NotNull
     @Range(min = 0L, max = 100L)
     private Integer iterNum = null;
 
     @JsonProperty("oriPt")
+    @Schema(description = "oriPt", example = "示例文本")
     private String oriPt = null;
 
     @JsonProperty("resPt")
+    @Schema(description = "结果Pt", example = "示例文本")
     private String resPt = null;
 
     @JsonProperty("resAcc")
+    @Schema(description = "结果Acc", example = "示例文本")
     private String resAcc = null;
 
     @JsonProperty("createdTime")
+    @Schema(description = "创建时间", example = "1700000000000")
     private Long createdTime = null;
 
     public String getId() {

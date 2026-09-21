@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 
@@ -28,55 +29,69 @@ public class ModifyToolReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tool_display_name")
+    @Schema(description = "工具显示名称", example = "my_tool")
     @Pattern(regexp = "^[a-zA-Z0-9_]+$")
     @Length(max = 64)
     private String toolDisplayName = null;
 
     @JsonProperty("tool_chinese_name")
+    @Schema(description = "工具中文名称", example = "我的工具")
     @Length(min = 1, max = 64)
     private String toolChineseName = null;
 
     @JsonProperty("tool_desc")
+    @Schema(description = "工具描述", example = "用于数据处理的工具")
     @Length(max = 600)
     private String toolDesc = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "https://example.com/icon.png")
     private String icon = null;
 
     @JsonProperty("intf_type")
+    @Schema(description = "接口类型", example = "rest")
     @Length(max = 64)
     private String intfType = null;
 
     @JsonProperty("request_info")
+    @Schema(description = "请求信息")
     @Valid
     private RequestInfo requestInfo = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息")
     @Valid
     private AuthInfo authInfo = null;
 
     @JsonProperty("input_schema")
+    @Schema(description = "输入Schema", example = "{}")
     @Length(max = 200000)
     private String inputSchema = null;
 
     @JsonProperty("is_input_list")
+    @Schema(description = "输入是否为列表", example = "false")
     private Boolean isInputList = null;
 
     @JsonProperty("output_schema")
+    @Schema(description = "输出Schema", example = "{}")
     @Length(max = 200000)
     private String outputSchema = null;
 
     @JsonProperty("is_output_list")
+    @Schema(description = "输出是否为列表", example = "false")
     private Boolean isOutputList = null;
 
     @JsonProperty("test_status")
+    @Schema(description = "测试状态", example = "success")
     private String testStatus = null;
 
     @JsonProperty("metadata")
+    @Schema(description = "元数据", example = "{}")
     @Length(max = 4096)
     private String metadata = null;
 
     @JsonProperty("customize_node")
+    @Schema(description = "是否自定义节点", example = "false")
     private Boolean customizeNode = null;
 
     public String getToolDisplayName() {

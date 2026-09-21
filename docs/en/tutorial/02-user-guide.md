@@ -45,6 +45,16 @@
         - [5.5.1 Call a Workflow via API](#551-call-a-workflow-via-api)
         - [5.5.2 Use Workflows in Single Agent Applications](#552-use-workflows-in-single-agent-applications)
         - [5.5.3 Use Workflows in Multi-Agent Applications](#553-use-workflows-in-multi-agent-applications)
+        - [5.5.4 Run Workflow Tasks Asynchronously](#554-run-workflow-tasks-asynchronously)
+            - [5.5.4.1 Enter the Async Task Page](#5541-enter-the-async-task-page)
+            - [5.5.4.2 Create an Async Task](#5542-create-an-async-task)
+            - [5.5.4.3 Run an Async Task](#5543-run-an-async-task)
+            - [5.5.4.4 View the Task List](#5544-view-the-task-list)
+            - [5.5.4.5 View Test Run Details](#5545-view-test-run-details)
+            - [5.5.4.6 Resume Task Execution](#5546-resume-task-execution)
+            - [5.5.4.7 Cancel an Async Task](#5547-cancel-an-async-task)
+            - [5.5.4.8 Modify Task Name](#5548-modify-task-name)
+            - [5.5.4.9 Delete an Async Task](#5549-delete-an-async-task)
     - [5.6 Manage Workflows](#56-manage-workflows)
     - [5.7 Basic Nodes](#57-basic-nodes)
         - [5.7.1 Start Node](#571-start-node)
@@ -1695,6 +1705,198 @@ Step 2 After adding workflows, click the dropdown box to select published workfl
 Step 3 After adding and saving workflows, you can view currently added workflows in the canvas.
 
 Step 4 Add start, default, and end workflows by clicking the dropdown box to select and "Save."
+
+### 5.5.4 Run Workflow Tasks Asynchronously
+
+Running workflow tasks asynchronously means that after submitting a workflow execution request from the workflow editing page, the system automatically schedules execution in the background without requiring continuous waiting. This is suitable for long-running workflow tasks or scenarios requiring management of multiple execution tasks simultaneously.
+
+The async task page uses a three-column layout: the left column shows the task list, the center column shows the task execution area, and the right column shows the test run details.
+
+Async tasks support two types:
+- **Chat-type workflow**: Supports multi-turn interactions. The task may enter a waiting state during execution, requiring user input to continue.
+- **Task-type workflow**: Executes once and outputs results directly.
+
+**Table 5-12 Async Task Status**
+
+| Status | Description |
+|--------|-------------|
+| INIT | Initialized, task created and pending execution, waiting for system scheduler |
+| RUNNING | In progress, workflow is executing |
+| PENDING | Waiting, task created without input, or chat-type workflow waiting for user to continue input |
+| COMPLETED | Completed, workflow execution succeeded |
+| FAILED | Failed, workflow execution failed or timed out |
+| CANCELLED | Cancelled, task was manually cancelled |
+
+#### Prerequisites
+
+- A workflow has been created and configured.
+- The logged-in user is a workspace owner, workspace admin, or development engineer. For details, see Managing Workspace Members.
+
+#### Constraints and Limitations
+
+- The maximum execution time for async tasks is 48 hours (172,800,000 milliseconds). You can set a timeout when creating a task, but it cannot exceed the maximum.
+- Completed tasks are retained for 7 days by default and are automatically cleaned up after expiration.
+- Async tasks run in debug mode, supporting debug detail viewing.
+
+#### 5.5.4.1 Enter the Async Task Page
+
+Step 1 Log in to the OpenJiuwen platform. In the left navigation pane under "Personal Space," select the target space.
+
+Step 2 Click "Development Center > Agent Management" in the left navigation. Click the "Workflow" tab to enter the workflow management page.
+
+Step 3 Click the target workflow to enter the workflow editing page.
+
+Step 4 Click the "Async Tasks" button in the top-right area of the canvas. The system first validates the workflow node configuration, and upon successful validation, navigates to the async task page.
+
+Note
+- The "Async Tasks" button is displayed in the top toolbar of the workflow editing page, next to the "Test Run" button.
+- If the workflow node configuration is incomplete, the system will display the corresponding error message. Please complete the node configuration before entering.
+
+#### 5.5.4.2 Create an Async Task
+
+Step 1 On the async task page, click the "New Task" button at the top of the left column.
+
+Step 2 The system automatically creates a new task with the default name "New Task" and status PENDING (waiting).
+
+Step 3 The newly created task is automatically selected and displayed in the center column execution area. The task list refreshes simultaneously.
+
+Note
+- After creating a task, you need to configure input parameters and run it in the execution area for the task to enter the execution queue.
+- The center column execution area layout differs between chat-type and task-type workflows. See below for details.
+
+#### 5.5.4.3 Run an Async Task
+
+The run operation interface varies depending on the workflow type and the start node's parameter configuration.
+
+**Chat-Type Workflow**
+
+The center column interface for chat-type workflows varies depending on whether the start node has input parameters configured beyond the default `query` parameter.
+
+Case 1: Start node has only the default `query` parameter (most common)
+
+Step 1 In the center column execution area, the content area displays the workflow avatar and name, and the message input box is displayed at the bottom.
+
+Step 2 Type content in the message input box and press Enter or click the send button. The task enters the execution queue and the status changes to INIT.
+
+Step 3 For subsequent conversation rounds, simply type content in the message input box and send it. No parameters need to be filled in again.
+
+Case 2: Start node has multiple input parameters (parameters other than `query`)
+
+Step 1 In the center column execution area, the content area displays the workflow avatar and name, and the parameter input form is displayed at the bottom. Fill in the input parameters according to the start node configuration.
+
+Step 2 In the "Timeout Settings" area below the parameter form, you can set the task timeout (in milliseconds). The default value is 3,600,000 (1 hour).
+
+Step 3 Click the "Save and Run" button. The task enters the execution queue and the status changes to INIT.
+
+Step 4 For subsequent conversation rounds, you do not need to fill in parameters again. Simply type content in the message input box at the bottom and send it.
+
+Note
+- On the first run, if the task name is still the default "New Task," the system will automatically rename it to the user's input content (truncated to 32 characters) after running.
+- While a task is running, the right column displays test run details and call chains in real time.
+
+**Task-Type Workflow**
+
+Step 1 In the center column execution area, when the task is in PENDING status, the system displays the start node's parameter input form. Fill in the input parameters according to the start node configuration.
+
+Step 2 Click the "Start Run" button. The task enters the execution queue and the status changes to INIT.
+
+Step 3 During execution, the center column shows a loading animation. After execution completes, the center column displays the output results.
+
+Note
+- The timeout for task-type workflows defaults to 3,600,000 milliseconds (1 hour) and cannot be customized in the UI.
+- If the task fails, the center column displays error information.
+
+#### 5.5.4.4 View the Task List
+
+Step 1 In the left column of the async task page, you can view the task list. Tasks are grouped by creation time into five groups: "Today," "Yesterday," "Last 7 Days," "Last 30 Days," and "Older."
+
+Step 2 The top of the left column displays running status statistics, including "Running" (INIT and RUNNING), "Success" (COMPLETED), and "Failed" (FAILED and CANCELLED) counts.
+
+Step 3 Click any task item in the task list to view its execution details in the center column. The right column synchronously displays test run details.
+
+Note
+- If there are running tasks in the list, the system automatically refreshes the task list every 20 seconds to update task statuses in real time.
+- Each task item displays a status icon on the left: a spinning animation icon for running, a waiting icon for pending, a success icon for completed, and a failure icon for failed or cancelled.
+
+#### 5.5.4.5 View Test Run Details
+
+Step 1 After selecting a task, the right column displays the "Test Run Details" area, including run results and call chain sections.
+
+Step 2 In the "Run Results" area, you can view the task's status, start time, end time, and other information. When the task succeeds, the output is displayed in Markdown format. When the task fails, error information is shown.
+
+Step 3 In the "Call Chain" area, click the view switch icon to toggle between "List View" and "Sequence Diagram View."
+
+Step 4 In list view, each call node can be expanded/collapsed to view the node name, node type, duration, status, inputs, and outputs.
+
+Step 5 In sequence diagram view, the call chain is displayed as a sequence diagram. Click a node to expand its call details.
+
+Note
+- For chat-type workflows, the top of the right column displays a date filter and execution record selector, allowing you to filter by date and switch between different conversation rounds' execution details. Task-type workflows do not display this selector.
+- The call chain supports viewing sub-workflow call chains and loop node call chains. Click the corresponding entry to view them.
+
+#### 5.5.4.6 Resume Task Execution
+
+For PENDING tasks (e.g., chat-type workflow requiring user input), you can resume execution in the center column.
+
+**Chat-Type Workflow**
+
+Step 1 In the center column conversation area, when the task is in PENDING status, the system displays an input parameter form within the assistant message.
+
+Step 2 Fill in the input parameters as required by the form.
+
+Step 3 Click the "Confirm" button. The system submits the input content, and the task re-enters the execution queue with status changing to INIT.
+
+Step 4 Alternatively, type content directly in the message input box at the bottom and press Enter or click the send button to continue the conversation.
+
+**Task-Type Workflow**
+
+Step 1 In the center column execution area, when the task is in PENDING status, the system displays the input parameter form.
+
+Step 2 Fill in the input parameters as required by the form.
+
+Step 3 Click the "Start Run" button. The task re-enters the execution queue.
+
+Note
+- Chat-type workflows: Tasks in PENDING, COMPLETED, FAILED, and CANCELLED status can be resumed. PENDING resumes the current conversation, while COMPLETED, FAILED, and CANCELLED start a new conversation round. INIT and RUNNING tasks cannot be resumed.
+- Task-type workflows: Only PENDING tasks can be resumed. All other statuses cannot be resumed.
+
+#### 5.5.4.7 Cancel an Async Task
+
+For chat-type workflow tasks that are currently executing (INIT or RUNNING status), you can cancel execution.
+
+Step 1 In the center column, click the "Stop" button in the message input box area at the bottom.
+
+Step 2 The system cancels the current task execution, and the task status changes to CANCELLED.
+
+Step 3 The left column task list refreshes synchronously to show the latest status.
+
+Note
+- Only INIT and RUNNING tasks can be cancelled.
+- After cancellation, the task status becomes CANCELLED, and the system releases thread pool resources.
+
+#### 5.5.4.8 Modify Task Name
+
+Step 1 In the left column task list, hover the mouse over the target task and click the "Edit" icon that appears.
+
+Step 2 The task name becomes editable. Modify the task name in the input box (max 64 characters).
+
+Step 3 Click the "Confirm" icon to save the change, or click the "Cancel" icon to discard the change.
+
+Step 4 Upon successful modification, the system displays "Async task name modified successfully!"
+
+Note
+- The task name supports a maximum of 64 characters.
+- If the input is empty, the system will prompt "Please enter an async task name!"
+
+#### 5.5.4.9 Delete an Async Task
+
+Step 1 In the left column task list, hover the mouse over the target task and click the "Delete" icon that appears.
+
+Step 2 The system deletes the task directly, and the task list refreshes synchronously.
+
+Note
+- Deletion is irreversible. Please proceed with caution.
+- Deleting a task also removes its execution records and test run details.
 
 ## 5.6 Manage Workflows
 

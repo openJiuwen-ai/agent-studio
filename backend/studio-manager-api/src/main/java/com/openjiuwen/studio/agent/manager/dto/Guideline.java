@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -27,15 +28,19 @@ public class Guideline implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "指南ID", example = "1")
     private Integer id = null;
 
     @JsonProperty("condition")
+    @Schema(description = "条件", example = "condition1")
     private String condition = null;
 
     @JsonProperty("action")
+    @Schema(description = "动作", example = "action1")
     private String action = null;
 
     @JsonProperty("tools")
+    @Schema(description = "工具列表", example = "[{\"name\":\"tool1\"}]")
     @Valid
     @Size()
     private List<ToolSkills> tools = null;

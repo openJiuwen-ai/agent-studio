@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner, build_skills_prompt, register_skill_tools
+from jiuwen.extension.wrapper.mcp_server_loader import convert_ir_to_server_config
 
 
 class TestRunBlocking:
@@ -80,6 +81,65 @@ class TestRunBlocking:
 
         # run_blocking 应能拼接多条 message 事件
         assert "第一" in result and "第二" in result or result == ""
+
+
+class TestRegisterMcpServers:
+    """单智能体 MCP 注册使用当前运行环境。"""
+
+    @pytest.mark.asyncio
+    async def test_environment_variables_are_passed_to_mcp_config(self):
+        runner = ReActAgentRunner(api_key="test")
+        agent = MagicMock()
+        mcp_conf = {
+            "id": "mcp-id",
+            "name": "weather",
+            "type": "streamable_http",
+            "url": "http://${_env.plugin_url_params.ip}:${_env.plugin_url_params.port}/mcp",
+        }
+        ir_json = {"configs": {"mcps": [mcp_conf]}}
+        environment_variables = {
+            "plugin_url_params": {"ip": "127.0.0.1", "port": "8766"}
+        }
+        mcp_config = MagicMock()
+        register_mcp_servers = getattr(runner, "_register_mcp_servers")
+
+        with patch(
+            "jiuwen.extension.wrapper.mcp_server_loader.load_mcp_server_from_ir",
+            new=AsyncMock(return_value=["weather-tool-id"]),
+        ) as load_mcp, patch(
+            "jiuwen.extension.wrapper.mcp_server_loader.convert_ir_to_server_config",
+            return_value=mcp_config,
+        ) as convert_config:
+            tool_ids = await register_mcp_servers(
+                ir_json, agent, "agent-id", environment_variables
+            )
+
+        assert tool_ids == ["weather-tool-id"]
+        load_mcp.assert_awaited_once_with(
+            mcp_conf,
+            tag="agent-id",
+            environment_variables=environment_variables,
+        )
+        convert_config.assert_called_once_with(
+            mcp_conf,
+            environment_variables=environment_variables,
+        )
+
+    @staticmethod
+    def test_mcp_url_uses_environment_variables():
+        config = convert_ir_to_server_config(
+            {
+                "id": "mcp-id",
+                "name": "weather",
+                "type": "streamable_http",
+                "url": "http://${_env.plugin_url_params.ip}:${_env.plugin_url_params.port}/mcp",
+            },
+            environment_variables={
+                "plugin_url_params": {"ip": "127.0.0.1", "port": 8766}
+            },
+        )
+
+        assert config.server_path == "http://127.0.0.1:8766/mcp"
 
 
 class TestBuildSkillsPrompt:
@@ -244,6 +304,144 @@ class TestResolveUserQuery:
         req = SimpleNamespace(query="", resume_input=None)
 
         assert ReActAgentRunner._resolve_user_query(req) == "Hello"
+
+
+class TestConversationHistory:
+    """单智能体历史由 ReAct ContextEngine 统一管理。"""
+
+    @staticmethod
+    def test_history_size_configures_context_window_with_current_turn():
+        runner = ReActAgentRunner(api_key="test")
+        ir_json = {
+            "agentId": "agent-1",
+            "configs": {"modelConfig": {"historySize": 1}},
+        }
+        config = MagicMock()
+        agent = MagicMock()
+
+        with patch(
+            "agent_runtime.runner.react_agent_runner.ReActAgentConfig",
+            return_value=config,
+        ), patch(
+            "agent_runtime.runner.react_agent_runner.ReActAgent",
+            return_value=agent,
+        ):
+            result, _ = getattr(runner, "_create_agent")(ir_json)
+
+        assert result is agent
+        config.configure_context_engine.assert_called_once_with(
+            default_window_round_num=2
+        )
+
+    @staticmethod
+    def test_prompt_does_not_duplicate_conversation_history():
+        runner = ReActAgentRunner(api_key="test")
+        prompt = getattr(runner, "_parse_prompt_template")(
+            {"configs": {"sysPromptTemplate": "系统提示词"}}
+        )[0]["content"]
+
+        assert "系统提示词" in prompt
+        assert "## 对话历史" not in prompt
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_seed_history_uses_request_history_and_saves_session():
+        runner = ReActAgentRunner(api_key="test")
+        converted_history = [object(), object()]
+        context_engine = SimpleNamespace(
+            create_context=AsyncMock(),
+            save_contexts=AsyncMock(),
+        )
+        agent = SimpleNamespace(context_engine=context_engine)
+        session = object()
+
+        with patch(
+            "agent_runtime.runner.react_agent_runner.convert_conversation_history",
+            return_value=converted_history,
+        ) as converter:
+            await getattr(runner, "_seed_conversation_history")(
+                agent,
+                session,
+                [MagicMock(), MagicMock()],
+                enable_history=True,
+            )
+
+        converter.assert_called_once()
+        context_engine.create_context.assert_awaited_once_with(
+            session=session,
+            history_messages=converted_history,
+        )
+        context_engine.save_contexts.assert_awaited_once_with(session)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_enabled_empty_history_preserves_checkpoint_context():
+        runner = ReActAgentRunner(api_key="test")
+        context_engine = SimpleNamespace(
+            create_context=AsyncMock(),
+            save_contexts=AsyncMock(),
+        )
+        agent = SimpleNamespace(context_engine=context_engine)
+
+        with patch(
+            "agent_runtime.runner.react_agent_runner.convert_conversation_history"
+        ) as converter:
+            await getattr(runner, "_seed_conversation_history")(
+                agent,
+                object(),
+                [],
+                enable_history=True,
+            )
+
+        converter.assert_not_called()
+        context_engine.create_context.assert_not_awaited()
+        context_engine.save_contexts.assert_not_awaited()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_disabled_history_clears_seeded_context():
+        runner = ReActAgentRunner(api_key="test")
+        context_engine = SimpleNamespace(
+            create_context=AsyncMock(),
+            save_contexts=AsyncMock(),
+        )
+        agent = SimpleNamespace(context_engine=context_engine)
+        session = object()
+
+        with patch(
+            "agent_runtime.runner.react_agent_runner.convert_conversation_history"
+        ) as converter:
+            await getattr(runner, "_seed_conversation_history")(
+                agent,
+                session,
+                [MagicMock()],
+                enable_history=False,
+            )
+
+        converter.assert_not_called()
+        context_engine.create_context.assert_awaited_once_with(
+            session=session,
+            history_messages=[],
+        )
+        context_engine.save_contexts.assert_awaited_once_with(session)
+
+    @pytest.mark.parametrize(
+        ("model_config", "expected"),
+        [
+            ({}, 20),
+            ({"historySize": None}, 20),
+            ({"historySize": "invalid"}, 20),
+            ({"historySize": 0}, 20),
+            ({"historySize": -1}, 20),
+            ({"historySize": "2"}, 2),
+        ],
+    )
+    def test_invalid_history_size_falls_back_to_agent_default(
+        self, model_config, expected
+    ):
+        assert getattr(ReActAgentRunner, "_parse_history_size")(
+            {"configs": {"modelConfig": model_config}}
+        ) == expected
 
 
 class TestRegisterWorkflows:

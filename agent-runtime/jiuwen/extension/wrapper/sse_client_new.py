@@ -20,13 +20,14 @@ from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.common.log.base import get_x_request_id, get_x_execution_id
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
 from jiuwen.orchestration.flow.constant import X_EXECUTION_ID, X_REQUEST_ID
+from agent_runtime.context.request_context import inject_traceparent
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.models.api_utils import ApiUtils
 from jiuwen.plugin.models.request_params import RequestParamsCreator, RequestParams
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-from openjiuwen.core.common.logging import logger
+from openjiuwen.core.common.logging import workflow_logger, logger
 from openjiuwen.core.foundation.tool.mcp.base import (
     McpServerConfig,
     NO_TIMEOUT,
@@ -132,6 +133,8 @@ class SSEClientNew(McpClient):
 
         request_params.headers[X_REQUEST_ID] = get_x_request_id()
         request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
+        inject_traceparent(request_params.headers)
+        workflow_logger.debug(f"MCP SSE request headers: {request_params.headers}")
 
         self._replace_mcp_headers_extra(request_params, **kwargs)
 

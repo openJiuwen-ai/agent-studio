@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
@@ -26,10 +28,12 @@ public class CreateDefaultKnowledgeBaseConnectionRequestBody implements Serializ
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("connector_id")
+    @Schema(description = "连接器ID", example = "example-id-123")
     @Length(max = 128)
     private String connectorId = null;
 
     @JsonProperty("params")
+    @Schema(description = "参数", example = "[]")
     @Valid
     @Size(min = 1, max = 10)
     private List<ConnectionParamInfo> params = null;

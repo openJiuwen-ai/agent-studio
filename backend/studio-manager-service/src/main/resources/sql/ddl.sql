@@ -1540,22 +1540,6 @@ CREATE TABLE IF NOT EXISTS `t_router_strategy_backup` (
     INDEX `SB_PW_ID_INDEX`(`PROJECT_ID`, `WORKSPACE_ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE IF NOT EXISTS `t_api_keys` (
-    `API_KEY_ID` VARCHAR(80) NOT NULL COMMENT 'API Key 唯一标识，UUID',
-    `API_KEY_NAME` VARCHAR(64) NOT NULL COMMENT 'API Key 名称',
-    `API_KEY_VALUE` VARCHAR(256) NOT NULL COMMENT 'API Key 加密后的值',
-    `DOMAIN_ID` varchar(64)  NOT NULL COMMENT 'DOMAINID',
-    `PROJECT_ID` varchar(64)  NOT NULL COMMENT '项目ID',
-    `WORKSPACE_ID` varchar(64)  NOT NULL COMMENT '空间ID',
-    `CREATED_BY_USER_NAME` varchar(64)  NULL DEFAULT 'SYSTEM' COMMENT '创建人',
-    `LAST_UPDATED_BY_USER_NAME` varchar(64)  NULL DEFAULT NULL COMMENT '最近使用人',
-    `CREATED_DATE` BIGINT(20) NULL DEFAULT NULL COMMENT '创建时间',
-    `DESCRIPTION` VARCHAR(1024) NOT NULL COMMENT 'API Key 描述',
-    `USER_ID` VARCHAR(64) NOT NULL COMMENT '用户ID',
-    PRIMARY KEY (`API_KEY_ID`) ,
-    INDEX `AK_PW_ID_INDEX`(`PROJECT_ID`, `WORKSPACE_ID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 CREATE TABLE IF NOT EXISTS `t_provider_auth_bound_records`(
     `ID` varchar(64) NOT NULL COMMENT '主键Id',
     `PROVIDER_AUTH_ID` varchar(64) NOT NULL COMMENT '模型供应商鉴权信息配置id',
@@ -1926,42 +1910,6 @@ CREATE TABLE IF NOT EXISTS `t_history_op_task` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='历史提示词优化任务表' ROW_FORMAT=DYNAMIC;
 
 -- tool tables
-CREATE TABLE IF NOT EXISTS `t_mcp` (
-    `server_id`     VARCHAR(64) NOT NULL COMMENT 'mcp 服务唯一标识',
-    `project_id`    VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '租户唯一标识',
-    `server_name`   VARCHAR(64) NOT NULL COMMENT 'mcp 服务名称',
-    `server_name_en` VARCHAR(64) NULL COMMENT '服务英文名',
-    `server_desc`   VARCHAR(1000) NOT NULL COMMENT 'mcp 服务描述',
-    `icon`          MEDIUMTEXT NULL COMMENT 'mcp 服务图标',
-    `icon_name`     VARCHAR(64)   NULL COMMENT 'icon图标名称',
-    `tools`         TEXT NOT NULL COMMENT 'mcp 服务暴露的工具',
-    `visibility`    VARCHAR(32) NOT NULL DEFAULT 'project' COMMENT '可见范围：user,project(默认),workspace,domain,global',
-    `url`           VARCHAR(256) NOT NULL COMMENT 'mcp 服务地址',
-    `auth`          VARCHAR(4096) NULL COMMENT 'mcp 认证配置',
-    `type`          VARCHAR(32) NOT NULL COMMENT 'mcp 服务类型，取值为inner或custom，添加的服务为custom类型',
-    `category`      VARCHAR(32) NULL COMMENT '服务类别：public,template',
-    `creator`       VARCHAR(64) NOT NULL COMMENT '创建者',
-    `creator_id`    VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '创建者 user id',
-    `created_on`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_on`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`server_id`),
-    UNIQUE INDEX `idx_t_mcp_project_id_mcp_server_name_en` (`project_id`, `server_name_en`),
-    KEY `idx_t_mcp_server_updated_on` (`updated_on`)
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = DYNAMIC COMMENT = 'mcp服务';
-
-CREATE TABLE IF NOT EXISTS `t_mcp_config`(
-    `id`          VARCHAR(64) NOT NULL COMMENT 'Config唯一标识ID',
-    `server_id`   VARCHAR(64) NOT NULL COMMENT 'mcp服务id',
-    `project_id`  VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '租户 project id',
-    `auth_keys`   VARCHAR(4096) NOT NULL COMMENT 'mcp 认证配置',
-    `creator_id`  VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '租户 user id',
-    `created_on`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_on`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY(`id`),
-    UNIQUE INDEX `idx_t_mcp_config_creator_id_project_id_server_id`(`server_id`, `creator_id`, `project_id`),
-    KEY `idx_t_mcp_config_updated_on`(`updated_on`)
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = DYNAMIC COMMENT = 'mcp服务配置';
-
 CREATE TABLE ws_mcp_server_def
 (
     id                      varchar(64)       not null primary key,
@@ -2181,4 +2129,22 @@ CREATE TABLE IF NOT EXISTS `t_task` (
     INDEX `idx_status_time`(`status` ASC, `create_time` ASC) USING BTREE,
     INDEX `idx_finish_time`(`finish_time` ASC) USING BTREE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='任务记录表';
+
+CREATE TABLE IF NOT EXISTS `t_agent_datasource` (
+    `id`                VARCHAR(64)     NOT NULL COMMENT '数据源ID，主键',
+    `project_id`        VARCHAR(64)     NOT NULL COMMENT '项目ID',
+    `workspace_id`      VARCHAR(64)     NOT NULL COMMENT '工作空间ID',
+    `name`              VARCHAR(64)     NOT NULL COMMENT '数据源名称',
+    `type`              VARCHAR(16)     NOT NULL COMMENT '数据源类型（MYSQL/POSTGRESQL/GAUSSDB）',
+    `desc`              VARCHAR(2048)   NULL COMMENT '数据源描述',
+    `connection_info`   TEXT            NULL COMMENT '连接信息（加密存储密码）',
+    `status`            VARCHAR(32)     NULL COMMENT '连通性检测状态',
+    `last_error_message` VARCHAR(2048)  NULL COMMENT '最后一次错误信息',
+    `created_by`        VARCHAR(64)     NULL COMMENT '创建人',
+    `created_on`        TIMESTAMP       NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_by`        VARCHAR(64)     NULL COMMENT '修改人',
+    `updated_on`        TIMESTAMP       NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    INDEX `idx_project_workspace` (`project_id`, `workspace_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据源配置表';
 

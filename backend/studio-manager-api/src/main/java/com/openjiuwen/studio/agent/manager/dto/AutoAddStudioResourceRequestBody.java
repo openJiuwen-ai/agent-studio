@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.springframework.validation.annotation.Validated;
 
@@ -24,15 +25,19 @@ public class AutoAddStudioResourceRequestBody implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("instructions")
+    @Schema(description = "操作指令描述", example = "添加一个知识库资源")
     private String instructions = null;
 
     @JsonProperty("type")
+    @Schema(description = "资源类型", example = "knowledge_base")
     private String type = null;
 
     @JsonProperty("limit")
+    @Schema(description = "添加数量上限", example = "10")
     private Integer limit = null;
 
     @JsonProperty("confidence")
+    @Schema(description = "置信度阈值", example = "0.85")
     private Double confidence = 0.85d;
 
     public String getInstructions() {

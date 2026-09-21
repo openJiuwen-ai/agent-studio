@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -22,10 +24,12 @@ public class ConnectionParamInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("code")
+    @Schema(description = "状态码", example = "200")
     @Length(max = 100)
     private String code = null;
 
     @JsonProperty("value")
+    @Schema(description = "值", example = "示例字符串")
     @Length(max = 1000)
     private String value = null;
 

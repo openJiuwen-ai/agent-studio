@@ -107,7 +107,7 @@ class ConflictResolution:
                 if output:
                     return output
             except json.JSONDecodeError as e:
-                if attempt <= retries - 1:
+                if attempt < retries - 1:
                     continue
                 logger.error(f"categories model output format error: {e.msg}")
         return []

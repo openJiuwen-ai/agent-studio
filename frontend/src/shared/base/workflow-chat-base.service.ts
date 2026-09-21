@@ -135,6 +135,10 @@ export abstract class WorkflowChatBaseComponent {
   // 是否重新点击【试运行】按钮
   protected isRetryRunning = false;
 
+  // 本轮（段）SSE 发起时刻。用于 onDone 兜底结算 latency：
+  // 多智能体(task_end)与含 Input 节点的交互式分段流均无 workflow_finished 事件
+  protected roundStartTime: number | null = null;
+
   // 工作流是否运行失败（3种标识：event:error/onError/onTimeout）
   // 遇到event:error的流式块，之后再遇到workflow_finished，不会刷新工作流运行状态
   protected isStreamFail = false;
@@ -219,6 +223,9 @@ export abstract class WorkflowChatBaseComponent {
   }
 
   protected handleSSEEvents(curIndex: number, callbackFn?) {
+    // 记录本轮（段）SSE 发起时刻：多智能体(task_end)与含 Input 节点的交互式分段流
+    // 均不触发 workflow_finished，onDone 兜底结算 latency 依赖此时刻
+    this.roundStartTime = Date.now();
     this.testStatusObj.show = true;
     this.testStatusObj.status = 'run';
     this.testStatusObj.text = this.i18n.transform('workflow_chat_run', {time: ''});
@@ -488,11 +495,15 @@ export abstract class WorkflowChatBaseComponent {
         this.previousNodeId = '';
         const prevAns = this.chatLoop[curIndex].showAnswer?.[this.index];
         // 修复消息节点返回空输出的情况：结构化信息走 summary 字段，非 text
+        // Input 节点的 summary 是表单构造元数据（inputs 定义），不是输出内容，不能写入 text
         if (prevAns && (!prevAns?.text || !text)) {
-          prevAns.text = prevAns?.text || summary || ' ';
+          if (node_type !== 'Input') {
+            prevAns.text = prevAns?.text || summary || ' ';
+            prevAns.messageId = createdTime;
+          }
+          // Input 的 loading 由下方 is_finished 处理器置 false，此处保留无害
           prevAns.loading = false;
-          prevAns.messageId = createdTime;
-        } else if (!text) {
+        } else if (!text && node_type !== 'Input') {
           this.chatLoop[curIndex].showAnswer.push({
             text: summary || ' ',
             loading: false,
@@ -681,6 +692,15 @@ export abstract class WorkflowChatBaseComponent {
     }
 
     if (this.type === 'multi') {
+      // 中断轮（如等待用户输入）：后端在 agent_interrupted 中注入 start_time/end_time，
+      // 同样计算本轮运行时间，保持与正常完成轮（task_end）显示一致
+      if (event === 'agent_interrupted' && data?.start_time && data?.end_time) {
+        this.chatLoop[curIndex].latency = flowCommonLogic.calcElapsedTime(
+          data.start_time,
+          data.end_time,
+        );
+        this.isClearRunStatus = true;
+      }
       if(event === 'task_end') {
         this.chatLoop[curIndex].thinkLoading = false;
         this.chatLoop[curIndex].thinking = false;
@@ -688,6 +708,12 @@ export abstract class WorkflowChatBaseComponent {
           plan.status = 'finished';
         });
         this.isPlanMode = false;
+        if (data?.start_time && data?.end_time) {
+          this.chatLoop[curIndex].latency = flowCommonLogic.calcElapsedTime(
+            data.start_time,
+            data.end_time,
+          );
+        }
       }
       if (event === 'task_end' && data.executionId) {
         this.chatLoop[curIndex].execution_id = data.executionId;
@@ -760,7 +786,17 @@ export abstract class WorkflowChatBaseComponent {
       curQA.plans?.forEach(plan => {
         plan.status = 'finished';
       });
+      // 兜底结算运行时长：多智能体(task_end)、含 Input 节点的交互式分段流
+      // 均不触发 workflow_finished（latency 唯一常规写入点），流关闭时用
+      // 本段发起时刻补算，保证"运行时间"在各工作流形态下都能显示
+      if (!curQA.latency && this.roundStartTime) {
+        curQA.latency = flowCommonLogic.calcElapsedTime(
+          this.roundStartTime,
+          Date.now(),
+        );
+      }
     }
+    this.roundStartTime = null;
     this.isRequesting = false;
     this.cdr.markForCheck();
   }

@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -21,6 +23,7 @@ public class SuccessInfo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("message")
+    @Schema(description = "消息", example = "操作成功")
     private String message = null;
 
     public String getMessage() {

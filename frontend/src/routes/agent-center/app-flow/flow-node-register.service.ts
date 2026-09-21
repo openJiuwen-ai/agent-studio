@@ -92,6 +92,7 @@ export class FlowNodeRegisterService {
     this.registerSubWorkflowNode(injector);
     this.registerQANode(injector);
     this.registerSqlNode(injector);
+    this.registerDataQueryNode(injector);
     this.registerExceptionNode(injector);
     this.registerParamExtractionNode(injector);
     this.registerCommentNode(injector);
@@ -498,6 +499,12 @@ export class FlowNodeRegisterService {
   private registerSqlNode(injector: Injector) {
     register(
       this.commonRegisterNode('op-sql-node', injector, SqlNodeComponent),
+    );
+  }
+
+  private registerDataQueryNode(injector: Injector) {
+    register(
+      this.commonRegisterNode('op-dataquery-node', injector, SqlNodeComponent),
     );
   }
 

@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
@@ -25,19 +26,24 @@ public class QueryWorkspaceMemberListQo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "ws-001", required = true)
     @NotBlank
     private String workspaceId = null;
 
     @JsonProperty("member_name")
+    @Schema(description = "成员名称", example = "user001")
     private String memberName = null;
 
     @JsonProperty("role")
+    @Schema(description = "角色", example = "admin")
     private String role = null;
 
     @JsonProperty("page_num")
+    @Schema(description = "页码", example = "1")
     private Integer pageNum = 1;
 
     @JsonProperty("page_size")
+    @Schema(description = "每页数量", example = "10")
     private Integer pageSize = 10;
 
     public String getWorkspaceId() {

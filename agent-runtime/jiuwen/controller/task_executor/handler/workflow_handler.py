@@ -3,6 +3,7 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 import copy
 import json
+import logging
 import os
 import time
 from typing import Dict, Any, Generator, Optional, AsyncGenerator, List
@@ -514,12 +515,14 @@ class WorkflowHandler(BaseHandler):
         workflow_req_params = self.prepare_workflow_params(
             workflow_req_params, workflow_context
         )
-        self._inject_start_field_defaults(workflow_req_params, workflow_context)
+        self.inject_start_field_defaults(workflow_req_params, workflow_context)
         global_variables = workflow_req_params.get("global_variables")
-        logger.info(
-            f"task_id: {self.task_id}| Workflow {workflow_context.workflow_name} request params with "
-            f"global vars: {global_variables}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "task_id: %s| Workflow %s request params with "
+                "global vars: %s",
+                self.task_id, workflow_context.workflow_name, global_variables,
+            )
 
         # 调用流式执行逻辑
         async for exe_res in self._stream_execute_workflow(
@@ -570,7 +573,7 @@ class WorkflowHandler(BaseHandler):
                     global_variables[key] = value
             workflow_req_params["global_variables"] = global_variables
 
-        self._inject_start_field_defaults(workflow_req_params, workflow_context)
+        self.inject_start_field_defaults(workflow_req_params, workflow_context)
         final_answer = None
         async for exe_res in self._stream_execute_workflow(
             task, workflow_context, workflow_req_params, from_pe=True
@@ -978,9 +981,12 @@ class WorkflowHandler(BaseHandler):
             ):
                 yield exec_res
 
-            logger.info(
-                f"task_id: {self.task_id}| Stream execute workflow current_node: {current_node}, "
-                f"workflow_status: {workflow_status}"
+            logger.debug(
+                "task_id: %s| Stream execute workflow current_node: %s, "
+                "workflow_status: %s",
+                self.task_id,
+                current_node,
+                workflow_status,
             )
 
             # 处理中断状态
@@ -1077,7 +1083,7 @@ class WorkflowHandler(BaseHandler):
         )
 
     @staticmethod
-    def _inject_start_field_defaults(workflow_req_params: dict, workflow_context) -> None:
+    def inject_start_field_defaults(workflow_req_params: dict, workflow_context) -> None:
         """Inject Start node user field defaults into global_variables.
 
         ${_request.xxx} resolves against _request built from global_variables.
@@ -1226,7 +1232,8 @@ class WorkflowHandler(BaseHandler):
                 # 拦截workflow流出的INTERMEDIATE_MESSAGE
                 if output.code == StreamCode.CONTROLLER_INTERMEDIATE_MESSAGE.value:
                     logger.debug(
-                        f"drop workflow intermediate_message data: {output}",
+                        "drop workflow intermediate_message data: %s",
+                        output,
                         simple_log="drop workflow intermediate_message data",
                     )
                     continue
@@ -1238,8 +1245,9 @@ class WorkflowHandler(BaseHandler):
                 ):
                     workflow_status["workflow_end"] = True
                     # end组件输出更新写入controller global variables全局变量
-                    logger.info(
-                        f"task_id: {self.task_id}| End Message detected in workflow stream: {output.data}",
+                    logger.debug(
+                        "task_id: %s| End Message detected in workflow stream: %s",
+                        self.task_id, output.data,
                         simple_log="End Message detected in workflow stream",
                     )
                     action_after_completion_val = output.data.get(
@@ -1280,8 +1288,9 @@ class WorkflowHandler(BaseHandler):
                 ):
                     workflow_status["questioner_interrupted"] = True
                 elif output.data.get("node_type") == NodeType.QA.value:
-                    logger.info(
-                        f"task_id: {self.task_id}| QA Message detected in workflow stream: {output}",
+                    logger.debug(
+                        "task_id: %s| QA Message detected in workflow stream: %s",
+                        self.task_id, output,
                         simple_log="QA Message detected in workflow stream",
                     )
                     if output.data.get("need_reply", True):
@@ -1379,11 +1388,11 @@ class WorkflowHandler(BaseHandler):
         properties = workflow_context.workflow_parameters.get("parameters", {}).get(
             "properties", {}
         )
-        # 初始化missing_parameters，排除query参数
+        # 初始化missing_parameters，排除query、sys、conversationHistory参数
         missing_parameters = {
             key: value.get("description", "")
             for key, value in properties.items()
-            if value.get("required", False) and key not in ("query", "sys")
+            if value.get("required", False) and key not in ("query", "sys", "conversationHistory")
         }
         # 获取workflow_req_params
         workflow_req_params = self.context_manager.get_global_variables(
@@ -1400,8 +1409,9 @@ class WorkflowHandler(BaseHandler):
             for key, value in missing_parameters.items()
             if global_variables.get(key) is None
         }
-        logger.info(
-            f"task_id: {self.task_id}| missing_params: {missing_parameters}",
+        logger.debug(
+            "task_id: %s| missing_params: %s",
+            self.task_id, missing_parameters,
             simple_log="missing_params update successfully",
         )
         # 如果没有缺失参数，直接返回
@@ -1918,8 +1928,11 @@ class WorkflowHandler(BaseHandler):
             self.context_manager.set_global_variables(
                 REQUEST_VARIABLES, request_variables
             )
-            logger.info(
-                f"task_id: {self.task_id}| REQUEST variables synced to ContextManager: {request_variables}, "
-                f"controller_global_variables synced : {controller_global_variables}",
+            logger.debug(
+                "task_id: %s| REQUEST variables synced to ContextManager: %s, "
+                "controller_global_variables synced : %s",
+                self.task_id,
+                request_variables,
+                controller_global_variables,
                 simple_log="REQUEST variables synced to ContextManager",
             )

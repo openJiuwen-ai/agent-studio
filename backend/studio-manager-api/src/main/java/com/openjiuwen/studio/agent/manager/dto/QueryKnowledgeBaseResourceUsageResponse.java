@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
@@ -24,9 +26,11 @@ public class QueryKnowledgeBaseResourceUsageResponse implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("max_value")
+    @Schema(description = "值", example = "1")
     private Long maxValue = null;
 
     @JsonProperty("used_value")
+    @Schema(description = "已使用", example = "1")
     private Long usedValue = null;
 
     public Long getMaxValue() {

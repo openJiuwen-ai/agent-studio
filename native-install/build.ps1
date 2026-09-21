@@ -30,6 +30,13 @@ $dist = Join-Path $NativeRoot 'dist'
 function B-Log($m){ Write-Host "[build] $m" -ForegroundColor Cyan }
 function B-Die($m){ Write-Host "[build fatal] $m" -ForegroundColor Red; exit 1 }
 
+# -Skip* 守卫：staging 每次构建都会整体重置（下方 Remove-Item），跳过任一阶段必然产出
+# 缺 apps/deps/wheels 的残包且不报错（实测 -SkipDeps -SkipWheels 产出 255MB 残包 vs 完整 722MB）。
+# 如需复用已有依赖，正确姿势是 -SeedDeps <上次构建目录或解压后的包根>。
+if ($SkipApps -or $SkipDeps -or $SkipWheels) {
+  B-Die "不允许 -SkipApps/-SkipDeps/-SkipWheels：staging 每次构建整体重置，跳过阶段必然产出残包。复用依赖请用 -SeedDeps <包根/暂存目录>"
+}
+
 B-Log "WORKSPACE=$Workspace  STAGING=$staging  VER=$ver"
 
 # ── 0. 初始化 staging ──────────────────────────────────────────────────────

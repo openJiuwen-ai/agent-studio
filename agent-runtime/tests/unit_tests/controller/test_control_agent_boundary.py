@@ -1,13 +1,14 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-# pylint: disable=protected-access  # 单元测试需直接验证内部方法 _select_agent_with_cycle_check 行为
-"""Tests for control_agent.py — max_agent_calls 边界判断 (>= 语义, 对齐 lumina-engine upstream)。
+"""Tests for control_agent.py — max_agent_calls 边界行为。
 
-修复前(2fe87a96): current_agent_calls_count > max_agent_calls 才进入循环检测
-修复后(af74e40):   current_agent_calls_count >= max_agent_calls 进入循环检测
-即 "恰好达到最大次数" 时触发 _detect_cycle()：检测到循环 → 返回 (main_agent, True)
-走默认工作流；未检测到循环 → 返回 (None, False) 正常结束，不报错。
+两处条件职责不同(2026-09 A' 修复,经原 2fe87a96 作者评审认可):
+- after-loop error 检查用 >: "恰好达到最大次数"是正常完成,不报错(2fe87a96 修复,保留)
+- select 侧循环检测用 >=: count==max 时(第 max+1 次选择)进入循环检测——
+  检出乒乓 → 强制 main 的 default workflow 优雅收尾;未检出 → 干净退出 None。
+  2fe87a96 曾将此处一并改为 >,导致循环检测永不可达(103302 ping-pong 回归)
 """
+# pylint: disable=protected-access
 import os
 import sys
 
@@ -39,31 +40,29 @@ def _make_agent(max_agent_calls=5):
 
 
 class TestSelectAgentWithCycleCheckBoundary:
-    """_select_agent_with_cycle_check — >= 边界判断。"""
+    """_select_agent_with_cycle_check — count/max 边界行为。"""
 
     @pytest.mark.asyncio
-    async def test_count_equal_max_without_cycle_returns_none(self):
-        """执行次数恰好等于最大调用次数且无循环时，返回 (None, False) 正常结束。"""
+    async def test_count_equal_max_triggers_cycle_check_without_cycle(self):
+        """count==max 时进入循环检测:未检出循环 → 干净退出 None,不正常 select。"""
         agent = _make_agent(max_agent_calls=5)
         agent.current_agent_calls_count = 5  # 恰好等于 max
 
-        # mock select_agent 确保循环检测分支下不被调用
         agent.select_agent = AsyncMock(return_value="agent-1")
-        # mock _detect_cycle 返回 False（无循环 → 正常结束）
         agent._detect_cycle = MagicMock(return_value=False)
 
         result_agent_id, has_cycle = await agent._select_agent_with_cycle_check({})
 
-        # count >= max → 进入循环检测，_detect_cycle 返回 False → 返回 (None, False)
+        # count=5 >= max=5 → 进入循环检测,_detect_cycle 返回 False → (None, False)
         assert result_agent_id is None
         assert has_cycle is False
         agent.select_agent.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_count_equal_max_with_cycle_returns_main(self):
-        """执行次数恰好等于最大调用次数且检测到循环时，返回 (main_agent, True) 走默认工作流。"""
+    async def test_count_equal_max_with_cycle_detected_forces_main_default(self):
+        """count==max 且检出乒乓 → 返回 main agent 并标记 force_default(A' 核心行为)。"""
         agent = _make_agent(max_agent_calls=5)
-        agent.current_agent_calls_count = 5  # 恰好等于 max
+        agent.current_agent_calls_count = 5
         agent.call_agent_history = ["agent-a", "agent-b", "agent-a", "agent-b"]
 
         agent.select_agent = AsyncMock(return_value="agent-1")
@@ -124,7 +123,7 @@ class TestSelectAgentWithCycleCheckBoundary:
 
     @pytest.mark.asyncio
     async def test_count_equal_max_with_zero_max(self):
-        """边界: max_agent_calls=0, count=0 → 恰好相等进入循环检测分支。"""
+        """边界: max_agent_calls=0, count=0 → 进入循环检测,无循环 → 干净退出 None。"""
         agent = _make_agent(max_agent_calls=0)
         agent.current_agent_calls_count = 0
 
@@ -133,6 +132,6 @@ class TestSelectAgentWithCycleCheckBoundary:
 
         result_agent_id, has_cycle = await agent._select_agent_with_cycle_check({})
 
-        # count >= max(0) → 进入循环检测，无循环 → 返回 (None, False)
         assert result_agent_id is None
         assert has_cycle is False
+        agent.select_agent.assert_not_awaited()

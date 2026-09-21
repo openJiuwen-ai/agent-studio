@@ -9,10 +9,7 @@ StreamProcessor 包成等流的 generator 饿死 → 渲染全空、默认值消
 修复（2026-09-07，纯 batch guard）：消息节点 inputs 若只引用 batch 值
 （start userFields / 记忆变量），即使上游有 stream LLM，也不加入
 ``stream_input_target_ids``、``_is_stream_connection`` 返回 False → 走普通
-INVOKE 路径（batch 注册，从 state 读默认值）。三处判定链保持同步：
-``stream_input_target_ids`` 收集 / ``_is_stream_connection`` / ``is_stream_join_edge``
-（并行 join 的 lane-done 注册，否则 done 为 TRANSFORM 却连普通边 →
-运行期 GRAPH_VERTEX_STREAM_CALL_ERROR）。
+INVOKE 路径（batch 注册，从 state 读默认值）。
 
 本文件覆盖：
 1. ``_message_schema_has_stream_ref`` 判定（单元）
@@ -20,8 +17,6 @@ INVOKE 路径（batch 注册，从 state 读默认值）。三处判定链保持
 3. ``async_ir_to_workflow`` 集成构建：LLM stream + 消息纯 batch 引用 → 消息
    以 batch 注册（stream_inputs_schema 为空）；对照：消息引用 LLM 输出 →
    仍走流式注册。
-4. 并行 fork/join 汇聚到消息节点：纯 batch → lane-done 注册 INVOKE + 普通边；
-   引用 LLM 输出 → lane-done 保持 TRANSFORM + 流边。
 """
 
 from __future__ import annotations

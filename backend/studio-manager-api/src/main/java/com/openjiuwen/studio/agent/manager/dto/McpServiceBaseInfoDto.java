@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import io.swagger.annotations.ApiModel;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 
 import org.hibernate.validator.constraints.Length;
@@ -27,67 +28,87 @@ public class McpServiceBaseInfoDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "唯一标识ID", example = "mcp-001")
     @Length(max = 64)
     private String id = null;
 
     @JsonProperty("icon")
+    @Schema(description = "图标", example = "icon-url")
     private String icon = null;
 
     @JsonProperty("name")
+    @Schema(description = "名称", example = "MCP服务")
     private String name = null;
 
     @JsonProperty("name_en")
+    @Schema(description = "英文名称", example = "MCP Service")
     private String nameEn = null;
 
     @JsonProperty("description")
+    @Schema(description = "描述", example = "这是一个MCP服务")
     private String description = null;
 
     @JsonProperty("description_en")
+    @Schema(description = "英文描述", example = "This is an MCP service")
     private String descriptionEn = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "tool")
     private String type = null;
 
     @JsonProperty("deploy_type")
+    @Schema(description = "部署类型", example = "cloud")
     private String deployType = null;
 
     @JsonProperty("fc_instance_status")
+    @Schema(description = "函数计算实例状态", example = "running")
     private String fcInstanceStatus = null;
 
     @JsonProperty("fail_reason_detail")
+    @Schema(description = "失败原因详情", example = "{}")
     @Valid
     private McpFailReasonDetailDto failReasonDetail = null;
 
     @JsonProperty("view_times")
+    @Schema(description = "浏览次数", example = "1024")
     private Long viewTimes = null;
 
     @JsonProperty("install_times")
+    @Schema(description = "安装次数", example = "256")
     private Long installTimes = null;
 
     @JsonProperty("node_type")
+    @Schema(description = "节点类型", example = "server")
     private String nodeType = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1717200000000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "1717286400000")
     private Long lastUpdatedDate = null;
 
     @JsonProperty("visibility")
+    @Schema(description = "可见性", example = "public")
     private String visibility = null;
 
     @JsonProperty("resource")
+    @Schema(description = "资源标识", example = "resource-001")
     private String resource = null;
 
     @JsonProperty("mcp_servers")
+    @Schema(description = "MCP服务运行时信息", example = "{}")
     @Valid
     private McpServerRuntimeVo mcpServers = null;
 
     @JsonProperty("auth_info")
+    @Schema(description = "认证信息", example = "{}")
     @Valid
     private AuthInfo authInfo = null;
 
     @JsonProperty("is_share")
+    @Schema(description = "是否共享", example = "1")
     private Integer isShare = null;
 
     public String getId() {

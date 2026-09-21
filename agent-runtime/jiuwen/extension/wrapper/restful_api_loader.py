@@ -123,7 +123,9 @@ def _build_input_params_schema(params: List[Param]) -> dict:
         if default_value is not None:
             property_schema["default"] = default_value
         properties[p.name] = property_schema
-        if getattr(p, "required", False):
+        # required 可能是 bool 或 "true"/"false" 字符串，直接作 truthy 判断
+        # 会把非空字符串 "false" 误判为必填，归一化后判断（与 FlowMcp 一致）
+        if str(getattr(p, "required", False)).lower() == "true":
             required.append(p.name)
     schema: dict = {"type": "object", "properties": properties}
     if required:
@@ -177,6 +179,27 @@ def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
     url = ir_data.get("url", "")
     headers = copy.deepcopy(ir_data.get(HEADERS, {}))
 
+    # 旧格式插件（资产广场/预置/OpenAPI导入）的 Headers 请求头（如 Content-Type）
+    # 仅存在于 headers 中，不在 arguments 里；而插件详情 DTO 会把 headers 合并进
+    # schema 展示，工作流节点因此保存了这些入参。这里把 headers 中未定义为参数的
+    # 键补成 Headers 位置参数，与 DTO 对齐，避免运行时报 101743 param not defined
+    # （同时自愈存量已发布工作流 IR，无需重新发布）。
+    param_names = {p.name for p in params}
+    for header_key, header_value in headers.items():
+        if header_key in param_names:
+            continue
+        params.append(
+            Param(
+                name=header_key,
+                description=header_key,
+                param_type="string",
+                # 仅字符串值作为默认值，避免非字符串值触发默认值类型校验
+                default_value=header_value if isinstance(header_value, str) else None,
+                required=False,
+                method=_PARAM_LOC_HEADERS,
+            )
+        )
+
     auth = ir_data.get(AUTH, {})
     auth = extend_auth(auth, ir_data)
 
@@ -226,6 +249,30 @@ def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
     return card
 
 
+def _unique_non_null_type(type_candidates: list) -> str:
+    """从类型候选列表中提取唯一的非 null 类型
+
+    JSON Schema 中 type 允许为字符串或字符串数组（如 {"type": ["object", "null"]}），
+    数组形式的候选项会被展开；非字符串项直接丢弃，避免 list/dict 流入
+    Param → Type → ValueTypeEnum 对非字符串调用 .lower()/.startswith() 崩溃。
+
+    Args:
+        type_candidates: 类型候选列表，元素可为 str / list / 其他类型
+
+    Returns:
+        str: 去重后唯一的非 null 类型；无有效项或不唯一时返回 ""
+    """
+    non_null_types = set()
+    for candidate in type_candidates or []:
+        sub_types = candidate if isinstance(candidate, list) else [candidate]
+        for sub_type in sub_types:
+            if isinstance(sub_type, str) and sub_type and sub_type != "null":
+                non_null_types.add(sub_type)
+    if len(non_null_types) == 1:
+        return next(iter(non_null_types))
+    return ""
+
+
 def param_deserialization(
     arguments: list, allow_schema_is_empty: bool = False
 ) -> List[Param]:
@@ -251,21 +298,48 @@ def param_deserialization(
             )
         if isinstance(p.get(level_key), str) and p.get(level_key).isdigit():
             p[level_key] = int(p.get(level_key))
-        params.append(
-            Param(
-                name=p.get("name", ""),
-                description=p.get("description", ""),
-                default_value=p.get("default_value"),
-                param_type=p.get("type", ""),
-                required=p.get("required", False),
-                visible=p.get("visible", True),
-                level=p.get(level_key, 0),
-                method=p.get("method", "Body"),
-                schema=p.get("schema", []),
-                actual_type=p.get("actual_type", ""),
-                allow_schema_is_empty=allow_schema_is_empty,
+        # 处理 oneOf/anyOf 类型：当 type 缺失但存在 oneOf/anyOf 定义时，
+        # 提取非 null 子类型作为实际类型（如 oneOf: [object, null] → "object"）。
+        # 避免 Param.__init__ 将 type 默认为 "string"，导致下游类型判断错误。
+        # 仅当非 null 子类型（去重后）唯一时才提取：多个不同非 null 子类型
+        # （如 object+array）无法确定实际类型，取第一个会错误归类，
+        # 保持缺省走 string 兜底。
+        param_type = p.get("type", "")
+        if isinstance(param_type, list):
+            # JSON Schema 允许顶层 type 为数组（如 ["object", "null"]），
+            # 直接传入 Param 会对 list 调用字符串方法而崩溃
+            param_type = _unique_non_null_type(param_type)
+        elif not isinstance(param_type, str):
+            param_type = ""
+        if not param_type:
+            union_schemas = (
+                p.get("one_of") or p.get("oneOf")
+                or p.get("any_of") or p.get("anyOf")
             )
+            if isinstance(union_schemas, list):
+                param_type = _unique_non_null_type(
+                    [item.get("type") for item in union_schemas
+                     if isinstance(item, dict)]
+                )
+        param = Param(
+            name=p.get("name", ""),
+            description=p.get("description", ""),
+            default_value=p.get("default_value"),
+            param_type=param_type,
+            required=p.get("required", False),
+            visible=p.get("visible", True),
+            level=p.get(level_key, 0),
+            method=p.get("method", "Body"),
+            schema=p.get("schema", []),
+            actual_type=p.get("actual_type", ""),
+            allow_schema_is_empty=allow_schema_is_empty,
         )
+        # 标记类型是否为推断缺省（IR 无 type/数组形式 type 无法归一，
+        # 且 oneOf/anyOf 无法提取唯一非 null 子类型）。
+        # FlowMcp 的 JSON 启发式仅对该类参数或显式 object/array 参数生效，
+        # 显式声明 string 的参数不做 JSON 转换，避免破坏原样接收字符串的工具。
+        param.type_inferred = not param_type
+        params.append(param)
     return params
 
 

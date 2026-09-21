@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import jakarta.validation.constraints.Pattern;
 
@@ -23,140 +24,183 @@ public class ModelServiceRsp implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("id")
+    @Schema(description = "模型服务ID", example = "model-service-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String id = null;
 
     @JsonProperty("provider_id")
+    @Schema(description = "提供商ID", example = "provider-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String providerId = null;
 
     @JsonProperty("type")
+    @Schema(description = "类型", example = "model-service")
     private String type = null;
 
     @JsonProperty("service_name")
+    @Schema(description = "服务名称", example = "智能问答服务")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\/:|\\ -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String serviceName = null;
 
     @JsonProperty("service_key")
+    @Schema(description = "服务标识", example = "qa-service")
     private String serviceKey = null;
 
     @JsonProperty("model_name")
+    @Schema(description = "模型名称", example = "glm-4")
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\/:|\\ -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String modelName = null;
 
     @JsonProperty("logo")
+    @Schema(description = "Logo地址", example = "https://example.com/logo.png")
     private String logo = null;
 
     @JsonProperty("provider_name")
+    @Schema(description = "提供商名称", example = "智谱AI")
     private String providerName = null;
 
     @JsonProperty("provider_name_en")
+    @Schema(description = "提供商英文名称", example = "ZhipuAI")
     private String providerNameEn = null;
 
     @JsonProperty("is_reasoning")
+    @Schema(description = "是否为推理模型", example = "true")
     private Boolean isReasoning = null;
 
     @JsonProperty("is_support_close_reasoning")
+    @Schema(description = "是否支持关闭推理", example = "true")
     private Boolean isSupportCloseReasoning = null;
 
     @JsonProperty("is_network")
+    @Schema(description = "是否支持联网", example = "true")
     private Boolean isNetwork = null;
 
     @JsonProperty("is_public")
+    @Schema(description = "是否公开", example = "true")
     private Boolean isPublic = null;
 
     @JsonProperty("model_type")
+    @Schema(description = "模型类型", example = "chat")
     private String modelType = null;
 
     @JsonProperty("model_tags")
+    @Schema(description = "模型标签", example = "general,chat")
     private String modelTags = null;
 
     @JsonProperty("model_description")
+    @Schema(description = "模型描述", example = "通用对话模型")
     private String modelDescription = null;
 
     @JsonProperty("model_description_en")
+    @Schema(description = "模型英文描述", example = "General chat model")
     private String modelDescriptionEn = null;
 
     @JsonProperty("model_deploy_type")
+    @Schema(description = "模型部署类型", example = "online")
     private String modelDeployType = null;
 
     @JsonProperty("domain_id")
+    @Schema(description = "域名ID", example = "domain-001")
     private String domainId = null;
 
     @JsonProperty("project_id")
+    @Schema(description = "项目ID", example = "project-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String projectId = null;
 
     @JsonProperty("workspace_id")
+    @Schema(description = "工作空间ID", example = "workspace-001")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
     private String workspaceId = null;
 
     @JsonProperty("created_by_user")
+    @Schema(description = "创建用户", example = "user-001")
     private String createdByUser = null;
 
     @JsonProperty("created_date")
+    @Schema(description = "创建时间", example = "1717200000000")
     private Long createdDate = null;
 
     @JsonProperty("last_updated_date")
+    @Schema(description = "最后更新时间", example = "1717200000000")
     private Long lastUpdatedDate = null;
 
     @JsonProperty("api_url")
+    @Schema(description = "API地址", example = "https://api.example.com/v1")
     private String apiUrl = null;
 
     @JsonProperty("is_support_function")
+    @Schema(description = "是否支持函数调用", example = "true")
     private Boolean isSupportFunction = null;
 
     @JsonProperty("interface_protocol")
+    @Schema(description = "接口协议", example = "https")
     private String interfaceProtocol = null;
 
     @JsonProperty("auth_metadata_id")
+    @Schema(description = "认证元数据ID", example = "auth-meta-001")
     private String authMetadataId = null;
 
     @JsonProperty("auth_id")
+    @Schema(description = "认证ID", example = "auth-001")
     private String authId = null;
 
     @JsonProperty("publish_status")
+    @Schema(description = "发布状态", example = "published")
     private String publishStatus = null;
 
     @JsonProperty("is_support_stream")
+    @Schema(description = "是否支持流式输出", example = "true")
     private Boolean isSupportStream = null;
 
     @JsonProperty("throttling_policy")
+    @Schema(description = "限流策略", example = "100")
     private Integer throttlingPolicy = null;
 
     @JsonProperty("status")
+    @Schema(description = "状态", example = "active")
     private String status = null;
 
     @JsonProperty("disclaimer")
+    @Schema(description = "免责声明", example = "本模型仅供参考")
     private String disclaimer = null;
 
     @JsonProperty("is_subscribed")
+    @Schema(description = "是否已订阅", example = "true")
     private Boolean isSubscribed = null;
 
     @JsonProperty("context_length")
+    @Schema(description = "上下文长度", example = "8192")
     private String contextLength = null;
 
     @JsonProperty("model_series")
+    @Schema(description = "模型系列", example = "glm")
     private String modelSeries = null;
 
     @JsonProperty("is_in_free_trial")
+    @Schema(description = "是否在免费试用期内", example = "false")
     private Boolean isInFreeTrial = false;
 
     @JsonProperty("template_id")
+    @Schema(description = "模板ID", example = "template-001")
     private String templateId = null;
 
     @JsonProperty("is_support_deep_thinking")
+    @Schema(description = "是否支持深度思考", example = "true")
     private Boolean isSupportDeepThinking = null;
 
     @JsonProperty("is_preparing_for_offline")
+    @Schema(description = "是否准备下线", example = "false")
     private Boolean isPreparingForOffline = false;
 
     @JsonProperty("resident_model_id")
+    @Schema(description = "常驻模型ID", example = "resident-001")
     private String residentModelId = null;
 
     @JsonProperty("is_auth_configured")
+    @Schema(description = "是否已配置认证", example = "true")
     private Boolean isAuthConfigured = null;
 
     public String getId() {

@@ -52,7 +52,9 @@ import org.springframework.web.multipart.MultipartFile;
         @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         @Parameter(in = ParameterIn.PATH, description = "Skill ID。", required = true, schema = @Schema())
         @PathVariable("skill_id") String skillId,
-        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "空间ID", required = true)
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
@@ -73,7 +75,9 @@ import org.springframework.web.multipart.MultipartFile;
         @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         @Parameter(in = ParameterIn.PATH, description = "Skill ID。", required = true, schema = @Schema())
         @PathVariable("skill_id") String skillId,
-        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "空间ID", required = true)
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
@@ -91,7 +95,9 @@ import org.springframework.web.multipart.MultipartFile;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/skills/import", produces = {"application/json"},
         consumes = {"multipart/form-data"}, method = RequestMethod.POST)
     ResponseEntity<ImportStudioSkillResponseBody> importStudioSkill(
-        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "空间ID", required = true)
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
@@ -131,7 +137,9 @@ import org.springframework.web.multipart.MultipartFile;
         @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         @Parameter(in = ParameterIn.PATH, description = "Skill ID。", required = true, schema = @Schema())
         @PathVariable("skill_id") String skillId,
-        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "空间ID", required = true)
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
