@@ -506,17 +506,24 @@ export abstract class WorkflowChatBaseComponent {
           (!this.hasValidText(prevAns?.text) || !this.hasValidText(text))
         ) {
           if (node_type !== 'Input') {
-            // 0/false 等合法 falsy 输出不得被 summary 覆盖（与流式分片同口径）
+            // 兜底链取最靠前的有效值：已流式的 prevAns.text > 本事件携带的
+            // text（含 0/false 合法 falsy）> summary；有效 text 不得被 summary
+            // 吞掉（断线重连等分片缺失时最终值只随 is_finished 事件到达）
             prevAns.text = this.hasValidText(prevAns.text)
               ? prevAns.text
-              : summary || ' ';
+              : this.hasValidText(text)
+                ? text
+                : summary || ' ';
             prevAns.messageId = createdTime;
           }
           // Input 的 loading 由下方 is_finished 处理器置 false，此处保留无害
           prevAns.loading = false;
-        } else if (!this.hasValidText(text) && node_type !== 'Input') {
+        } else if (!prevAns && node_type !== 'Input') {
+          // 走到这里 = 该节点未建过答案块（is_finished 先于任何流式分片到达）：
+          // 有效 text（含 0/false）按最终答案渲染，无效 text 退回 summary，
+          // 不得整块静默丢弃
           this.chatLoop[curIndex].showAnswer.push({
-            text: summary || ' ',
+            text: this.hasValidText(text) ? text : summary || ' ',
             loading: false,
             isShowInputParams: false,
             isConfirmed: 'init',
