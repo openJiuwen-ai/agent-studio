@@ -1797,17 +1797,18 @@ class QuestionerDirectReplyHandler:
 
         if not content:
             return
-        # 去重：若 context 已存在相同 user content（不只末条——其他节点可能在
-        # workflow_runner 追加后又向 context 写了消息，使当轮 query 不再是末条），
-        # 不再写入。workflow_runner 已把当轮 query 追加到 history，此处再写会重复。
-        # force=True（single_debug_recovery 路径，不走 workflow_runner、无预置
-        # 当轮 query）时跳过去重——此处是唯一写入源，跨轮重复输入也必须写。
+        # 去重：若 context 末条已是相同 user content，不再写入。
+        # workflow_runner/astream 已把当轮 query 追加到 history 末尾，此处再写会重复。
+        # 不用 any() 全量匹配——非预置路径（非 force）若用户跨轮重复输入相同内容，
+        # any 会误判已存在而跳过当轮写入。查末条精确覆盖预置路径（末条=当轮 query）；
+        # single_debug_recovery（force=True）不走预置，直接写。
+        # "其他节点写入后末条≠当轮"场景罕见（提问器通常是当轮末节点），不在此覆盖。
         if not force:
             try:
                 context_window = await context.get_context_window()
                 _msgs = context_window.get_messages() if context_window else []
-                if any(getattr(m, "role", None) == "user" and getattr(m, "content", None) == content
-                       for m in _msgs):
+                if _msgs and getattr(_msgs[-1], "role", None) == "user" \
+                        and getattr(_msgs[-1], "content", None) == content:
                     return
             except Exception as e:
                 # 去重检查失败不阻断写入（去重是优化项，add_messages 仍执行）

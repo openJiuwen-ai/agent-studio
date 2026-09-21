@@ -872,8 +872,10 @@ export class FlowLogModalComponent implements OnChanges {
         .sort((a, b) => (a.start_time || 0) - (b.start_time || 0));
       const groupFinishes = event_list
         .filter(i => i.node_id === node_id && i.parent_node_id === parent_node_id && i.node_status === 'node_finished')
-        .slice()
-        .sort((a, b) => (a.start_time || 0) - (b.start_time || 0));
+        .slice();
+        // 不按 start_time 排序：既有 finish-building loop（line 830）会对缺 start_time 的
+        // node_finished 原地写入 start_time（首轮值），sort 会据此错位。用 event_list 顺序
+        // （= 事件发射顺序 = 时序），与 groupStarts 的 start_time 顺序天然对应。
       const finishCount = groupFinishes.length;
       const earlyCount = groupStarts.length - finishCount;
       if (groupStarts.length > finishCount && finishCount > 0) {
