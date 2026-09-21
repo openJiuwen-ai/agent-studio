@@ -128,6 +128,58 @@ public class WorkflowListener extends BaseEventListener {
             // node_wait 事件不在 JiuwenEventType 枚举中，但需要保存 taskId 以支持中断恢复
             if ("node_wait".equalsIgnoreCase(event)) {
                 saveTaskIdOnInterrupt();
+                // Bug1①: resume 轮首个事件通常是 node_wait，走此 early-return 跳过了 processStart
+                //（processStart 只在 eventNum==1 且非 early-return 时触发 getCache+copy 归并）。
+                // 不归并的话，每轮 saveInsightMessage 用各自的空 instance 覆写共享 execution_id
+                // 的 Redis 记录 → 只剩末轮事件 → "只显示最后一轮"。
+                // 在此补一次归并：仅 eventNum==1（每流一次），getCache 命中（resume 有旧 instance）才 copy。
+                // 新会话 getCache 返回 null → 不做，行为完全不变。
+                if (eventNum == 1) {
+                    // try/catch：getCache/copy/终态reset 若抛异常（Redis 故障等），不应阻断
+                    // node_wait 的 passThrough（否则前端丢失 node_wait 事件）。log 后继续透传。
+                    try {
+                        // 对齐 processStart：优先从事件 JSON 取 executionId（子工作流场景事件
+                        // 携带子工作流 executionId，executeParams 是顶层，直接用会取错 key），
+                        // 空则回退 executeParams。
+                        String eventExecId = null;
+                        try {
+                            JiuwenEvent eventObj = JSONObject.parseObject(eventStr, JiuwenEvent.class);
+                            eventExecId = eventObj.getExecutionId();
+                        } catch (Exception parseEx) {
+                            // eventStr 非标准 JiuwenEvent JSON（node_wait 可能无 executionId 字段）
+                        }
+                        if (StringUtils.isEmpty(eventExecId)) {
+                            eventExecId = executeParams.getExecutionId();
+                        }
+                        if (StringUtils.isEmpty(eventExecId)) {
+                            // 第三层兜底（对齐 processStart）：MDC REQUEST_ID
+                            eventExecId = MDC.get(REQUEST_ID);
+                        }
+                        WorkflowInstanceEntity cached = instanceService.getCache(
+                            eventExecId, executeParams.getReleasedVersion(), executeParams.getUserId());
+                        if (cached != null) {
+                            instanceService.copy(cached, instance);
+                            // 对齐 processStart：cached 若为终态（SUCCEEDED/FAILED/ABORTED）清 eventList
+                            // + 重置 startTime，否则 resume 会继续累积在陈旧的已完成事件上、显示错乱；
+                            // 最后打回 RUNNING（resume 在跑）。
+                            String cachedStatus = cached.getStatus();
+                            if (WorkflowRunStatus.SUCCEEDED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                                || WorkflowRunStatus.FAILED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                                || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
+                                instance.setEventList(new ArrayList<>());
+                                instance.setStartTime(System.currentTimeMillis());
+                                // 清 endTime：copy 已把旧终态的 endTime 拷入，不清则
+                                // 新 startTime + 旧 endTime → endTime 早于 startTime、
+                                // 前端耗时/结束时间显示错误
+                                instance.setEndTime(null);
+                            }
+                            instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
+                        }
+                    } catch (Exception mergeEx) {
+                        log.warn("Failed to merge cached instance on node_wait (continuing passThrough): {}",
+                            mergeEx.getMessage());
+                    }
+                }
             }
             log.warn("not support event:{}, passThrough anyway.", event);
             passThrough(eventStr);
@@ -275,6 +327,9 @@ public class WorkflowListener extends BaseEventListener {
                 || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
                 instance.setEventList(new ArrayList<>());
                 instance.setStartTime(System.currentTimeMillis());
+                // 清 endTime：copy 已把旧终态的 endTime 拷入，不清则新 startTime + 旧 endTime
+                // → endTime 早于 startTime、前端耗时/结束时间显示错误
+                instance.setEndTime(null);
             }
             instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
         }

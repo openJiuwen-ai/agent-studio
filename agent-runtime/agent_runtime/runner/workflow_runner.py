@@ -22,6 +22,7 @@ from agent_runtime.runner.memory_extraction_context import MemoryExtractionConte
 from agent_runtime.runner.workflow_stream_data_wrapper import WorkflowStreamDataWrapper
 from agent_runtime.schemas.orchestration_mgr import (
     ComponentDebugRequest,
+    ConversationHistoryMessage,
     ExecutionRequest,
 )
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
@@ -357,10 +358,27 @@ class WorkflowRunner:
 
         # 3. 创建对话上下文
         t_context = time.perf_counter()
+        # 追加当轮 query 到历史末尾：试运行 resume 时 conversation_history(body.messages)
+        # 末条是上轮 assistant 问话，当轮用户输入在 req.resume_input/req.query 而非 history →
+        # 提问器 _get_latest_chat_history 读 context 末条是 assistant，回退 self._query（首轮输入）
+        # → trace 三轮都写首轮内容、字段提取取错轮。与 workflow_instance_layer.astream
+        # 的 _current_query 追加对齐（controller 路径），此处覆盖试运行(workflow-self)路径。
+        # 用 req.resume_input or req.query，与 app_run.py 构建 resume 输入一致
+        # （resume 请求可能把当轮输入放 resumeInput 而 query 为空/旧值）。
+        _history = list(req.params.conversation_history or [])
+        # 用 is not None 区分"未提供"(None→回退 query) vs "空字符串"(""→不追加)，
+        # 避免 resumeInput="" 时 or 回退到旧 query。
+        _cur_query = req.resume_input if req.resume_input is not None else (req.query or "")
+        if _cur_query:
+            _last = _history[-1] if _history else None
+            _last_role = getattr(_last, "role", None)
+            _last_content = getattr(_last, "content", None)
+            if not (_last_role == "user" and _last_content == _cur_query):
+                _history.append(ConversationHistoryMessage(role="user", content=str(_cur_query)))
         context = create_conversation_context(
             context_id=req.ir_path,
             session_id=req.conversation_id,
-            history=req.params.conversation_history,
+            history=_history,
         )
         performance_logger.info(
             f"context_creation|{round((time.perf_counter() - t_context) * 1000)}"
