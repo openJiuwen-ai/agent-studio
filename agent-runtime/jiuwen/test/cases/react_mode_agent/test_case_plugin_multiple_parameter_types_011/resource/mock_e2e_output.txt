@@ -1,0 +1,18 @@
+data: {"event":"start","data":{},"createdTime":1776321146965,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"function_call_end","data":{},"createdTime":1776321146970,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"function_call","data":{"answer":{"function_call":{"name":"mock_plugin_header","arguments":"{\"query\": \"Jerry\"}"},"time_consumption":{"total_latency":0.0,"model_latency":null,"wait_latency":null,"overall_latency":0.07},"is_workflow":false}},"createdTime":1776321147031,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"api_exec_data","data":{"answer":{"role":"function","name":"mock_plugin_header","content":{"error_code":0,"result":{"outname":"Host: fakeIp:5003\r\nQuery: Jerry\r\nX-Request-Id: f56a8045-d547-464a-aa03-2d91eb1d8316\r\nX-Execution-Id: 053e4bcb-2b36-4529-8c47-c0e4f2570401\r\nAccept: */*\r\nAccept-Encoding: gzip, deflate\r\nUser-Agent: Python/3.11 aiohttp/3.13.3\r\nContent-Length: 2\r\nContent-Type: application/json\r\n\r\n"},"latency":0.06},"time_consumption":{"plugin_latency":0.06,"overall_latency":0.07}}},"createdTime":1776321147032,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"start","data":{},"createdTime":1776321147032,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"done","data":{},"createdTime":1776321147036,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"intermediate_message","data":{"answer":[{"role":"assistant","content":"mock_plugin_header|{\"query\": \"Jerry\"}","tool_calls":[{"type":"function","id":"","function":{"name":"mock_plugin_header","arguments":"{\"query\": \"Jerry\"}"}}]},{"role":"tool","name":"mock_plugin_header","content":"{\"outname\": \"Host: fakeIp:5003\\r\\nQuery: Jerry\\r\\nX-Request-Id: f56a8045-d547-464a-aa03-2d91eb1d8316\\r\\nX-Execution-Id: 053e4bcb-2b36-4529-8c47-c0e4f2570401\\r\\nAccept: */*\\r\\nAccept-Encoding: gzip, deflate\\r\\nUser-Agent: Python/3.11 aiohttp/3.13.3\\r\\nContent-Length: 2\\r\\nContent-Type: application/json\\r\\n\\r\\n\"}","tool_call_id":""},{"role":"assistant","content":"{\"outname\": \"Host: fakeIp:5003\\r\\nQuery: Jerry\\r\\nX-Request-Id: f56a8045-d547-464a-aa03-2d91eb1d8316\\r\\nX-Execution-Id: 053e4bcb-2b36-4529-8c47-c0e4f2570401\\r\\nAccept: */*\\r\\nAccept-Encoding: gzip, deflate\\r\\nUser-Agent: Python/3.11 aiohttp/3.13.3\\r\\nContent-Length: 2\\r\\nContent-Type: application/json\\r\\n\\r\\n\"}"}]},"createdTime":1776321147036,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+
+data: {"event":"statistic_data","data":{"answer":{"total_latency":0.0,"model_latency":null,"wait_latency":null,"overall_latency":0.07}},"createdTime":1776321147036,"isStructMessage":false}
+
+data: {"event":"summary_response","data":{"answer":{"role":"assistant","content":"{\"outname\": \"Host: fakeIp:5003\\r\\nQuery: Jerry\\r\\nX-Request-Id: f56a8045-d547-464a-aa03-2d91eb1d8316\\r\\nX-Execution-Id: 053e4bcb-2b36-4529-8c47-c0e4f2570401\\r\\nAccept: */*\\r\\nAccept-Encoding: gzip, deflate\\r\\nUser-Agent: Python/3.11 aiohttp/3.13.3\\r\\nContent-Length: 2\\r\\nContent-Type: application/json\\r\\n\\r\\n\"}"}},"createdTime":1776321147036,"executionId":"053e4bcb-2b36-4529-8c47-c0e4f2570401","isStructMessage":false}
+

@@ -1,0 +1,167 @@
+{
+  "workflowId": "controller_flow_api",
+  "workflowName": "controller_flow_api",
+  "components": [
+    {
+      "id": "node_start",
+      "type": "jiuwen.start",
+      "name": "Start",
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "query",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "input",
+              "description": "sys",
+              "id": "sys",
+              "type": "object",
+              "required": true,
+              "schema": []
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "query",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "input",
+              "description": "sys",
+              "id": "sys",
+              "type": "object",
+              "required": true,
+              "schema": []
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      }
+    },
+    {
+      "id": "node_component",
+      "type": "jiuwen.api",
+      "name": "API",
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "id": "controller_api_tool",
+        "name": "controller_api_tool",
+        "description": "mock controller api tool",
+        "url": "https://example.com/mock-api",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "auth": {},
+        "arguments": [
+          {
+            "name": "query",
+            "description": "query",
+            "type": "string",
+            "required": true,
+            "method": "Query"
+          }
+        ],
+        "response": [
+          {
+            "name": "result",
+            "description": "mock result",
+            "type": "string",
+            "required": false
+          }
+        ],
+        "pluginDependency": {},
+        "asyncInvoke": {},
+        "inputParameters": {},
+        "userFields": {
+          "outputs": [
+            {
+              "id": "result",
+              "required": true
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {
+          "query": "{start.systemFields.query}"
+        },
+        "systemFields": {
+          "query": "{start.systemFields.query}",
+          "sys": "{start.systemFields.sys}"
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "type": "jiuwen.end",
+      "name": "End",
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_component"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_component"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ]
+}

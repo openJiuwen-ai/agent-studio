@@ -1,57 +1,11 @@
 <nz-content class="bg-[#ffffff] assert-banner" [ngStyle]="{ paddingLeft: !isShowDom ? '0px' : '', paddingRight: !isShowDom ? '0px' : '' }">
-  <div *ngIf="isShowDom">
-    <nz-tabset id="app-center-tabs" class="top-level-tab" [(nzSelectedIndex)]="appCenterTabIndex" (nzSelectedIndexChange)="tabChangeByIndex($event)">
-      <nz-tab class="text-[14px]" *ngFor="let tab of appCenterTabs; let i = index" [nzTitle]="tab.title"> </nz-tab>
-    </nz-tabset>
-    @if (activeTabIsOfficial()) {
-      <nz-tabset id="tab-sub" class="h-[30px]" [(nzSelectedIndex)]="appTabIndex" (nzSelectedIndexChange)="changeAppTabByIndex($event)">
-        <nz-tab *ngFor="let tab of appTabs; let i = index" [nzTitle]="tab.title"></nz-tab>
-      </nz-tabset>
-    } @else {
-      <nz-tabset id="app-share-tabs" class="h-[30px]" [(nzSelectedIndex)]="shareTabIndex" (nzSelectedIndexChange)="shareTabChangeByIndex($event)">
-        <nz-tab *ngFor="let tab of AppShareTabs; let i = index" [nzTitle]="tab.title"></nz-tab>
-      </nz-tabset>
-    }
-    <div class="w-full flex justify-between items-center mt-6 mb-6">
-      <div class="com-center-title">
-        {{ pageTitle() }}<ng-container *ngIf="pageCount">{{ pageCount }}</ng-container>
-      </div>
-      <button *ngIf="!activeTabIsOfficial() && shareTabIndex > 0" nz-button nzType="primary" [disabled]="!subscribeBtnStatus" (click)="creatShare()">
-        {{ 'appcentermanagement_1' | i18nextEager }}
-      </button>
-    </div>
+  <!-- 数字员工：嵌入智能体管理（单智能体） -->
+  <div *ngIf="expertTopTab === ExpertTopTab.DIGITAL_EMPLOYEE || digitalEmployeeActivated" [hidden]="expertTopTab !== ExpertTopTab.DIGITAL_EMPLOYEE">
+    <meta-application-management appType="agent"></meta-application-management>
   </div>
-  <ng-container *ngIf="activeTabId() || !isShowDom">
-    <div class="flex items-center justify-between gap-2 mb-[16px]" *ngIf="isShowDom">
-      <nz-input-group style="flex: 1; height: 28px" [nzSuffix]="suffixIconSearch">
-        <input nz-input [(ngModel)]="keyword" (keyup.enter)="initList()" [placeholder]="'input_keyword_placeholder' | i18nextEager" />
-      </nz-input-group>
-      <ng-template #suffixIconSearch>
-        <div class="flex items-center gap-1">
-          <span *ngIf="keyword" class="cursor-pointer" (click)="clearSearchData()">
-            <nz-icon nzType="close" nzTheme="outline" />
-          </span>
-          <span class="cursor-pointer" (click)="initList()">
-            <nz-icon nzType="search" nzTheme="outline" />
-          </span>
-        </div>
-      </ng-template>
-      <button class="shrink-0 grow-0" nz-button type="button" id="mybutton" (click)="initList()">
-        <nz-icon nzType="reload" nzTheme="outline" />
-      </button>
-    </div>
-    <div>
-      <meta-app-center-cards
-        #centerCards
-        [limit]="limit"
-        [offset]="offset"
-        [isShowDom]="isShowDom"
-        [appTabs]="appTabs"
-        [isFromOverview]="isFromOverview"
-        [selectType]="selectedType"
-        [isFresh]="isFreshData"
-        (clear)="clearSearchData()"
-      ></meta-app-center-cards>
-    </div>
-  </ng-container>
+
+  <!-- 数字小队：嵌入智能体管理（多智能体） -->
+  <div *ngIf="expertTopTab === ExpertTopTab.DIGITAL_SQUAD || digitalSquadActivated" [hidden]="expertTopTab !== ExpertTopTab.DIGITAL_SQUAD">
+    <meta-application-management appType="controller"></meta-application-management>
+  </div>
 </nz-content>

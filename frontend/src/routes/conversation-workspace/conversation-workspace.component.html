@@ -1,0 +1,172 @@
+<div class="conversation-workspace">
+  <!-- 聊天区（居中卡片） -->
+  <div class="chat-area">
+    <div class="chat-header">
+      <span>{{ currentSession?.title || '任务空间' }}</span>
+    </div>
+
+    <div class="message-list" #messageList>
+      <div *ngIf="!messages.length" class="chat-empty">
+        选择左侧任务或新建任务，选择模型后开始对话
+      </div>
+      <div
+        *ngFor="let message of messages; let i = index"
+        class="turn-card"
+      >
+        <div class="turn-user" *ngIf="message.userContent || message.userFiles?.length">
+          <div class="message-role">我</div>
+          <div class="turn-user-content" *ngIf="message.userContent">{{ message.userContent }}</div>
+          <div class="user-file-names" *ngIf="message.userFiles?.length">
+            <div class="user-file-name" *ngFor="let file of message.userFiles">
+              <meta-upload-file-icon [fileName]="file.fileName"></meta-upload-file-icon>
+              <span>{{ file.fileName }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="message-bubble">
+          <div class="message-role">助手</div>
+          <div class="message-content">
+            <ng-container *ngFor="let seg of message.segments">
+              <app-markdown-answer
+                *ngIf="seg.type === 'message'"
+                class="segment-message markdown-segment"
+                [answer]="seg.content"
+              ></app-markdown-answer>
+            </ng-container>
+            <span *ngIf="message.loading" class="loading-dots">…</span>
+          </div>
+          <details class="turn-details" *ngIf="message.detailSegments?.length || message.subAgents?.length">
+            <summary>查看思考与执行过程</summary>
+            <ng-container *ngFor="let seg of message.detailSegments">
+              <div *ngIf="seg.type === 'reasoning'" class="segment-reasoning">
+                <div class="segment-reasoning-title">思考</div>
+                <div class="segment-reasoning-content">{{ seg.content }}</div>
+              </div>
+              <div *ngIf="seg.type === 'tool'" class="segment-tool">
+                <span class="segment-tool-name">工具：{{ seg.toolId }}</span>
+                <span *ngIf="seg.content" class="segment-tool-result">{{ seg.content }}</span>
+              </div>
+            </ng-container>
+            <div class="sub-agent-detail" *ngFor="let sub of message.subAgents">
+              <div class="message-role">子 Agent{{ sub.agentId ? ' · ' + sub.agentId.slice(0, 8) : '' }}</div>
+              <ng-container *ngFor="let seg of sub.segments">
+                <div *ngIf="seg.type === 'reasoning'" class="segment-reasoning-content">{{ seg.content }}</div>
+                <app-markdown-answer
+                *ngIf="seg.type === 'message'"
+                class="segment-message markdown-segment"
+                [answer]="seg.content"
+              ></app-markdown-answer>
+                <div *ngIf="seg.type === 'tool'" class="segment-tool">
+                  <span class="segment-tool-name">工具：{{ seg.toolId }}</span>
+                  <span *ngIf="seg.content" class="segment-tool-result">{{ seg.content }}</span>
+                </div>
+              </ng-container>
+            </div>
+          </details>
+          <div *ngIf="message.error" class="message-error">请求失败，请重试</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-composer">
+      <div *ngIf="uploadedFiles.length" class="conversation-attachments" aria-label="本轮附件">
+        <div *ngFor="let file of uploadedFiles" class="conversation-attachment" [class.attachment-failed]="file.progress === 'failed'">
+          <nz-icon *ngIf="file.progress === 'loading'" nzType="loading" nzTheme="outline"></nz-icon>
+          <meta-upload-file-icon *ngIf="file.progress !== 'loading'" [fileName]="file.fileName"></meta-upload-file-icon>
+          <span class="attachment-name" [title]="file.fileName">{{ file.fileName }}</span>
+          <span class="attachment-status" *ngIf="file.progress === 'failed'">上传失败</span>
+          <button nz-button nzType="text" nzShape="circle" class="attachment-remove" nz-tooltip nzTooltipTitle="移除附件" (click)="removeUploadedFile(file.fileId)">
+            <nz-icon nzType="close" nzTheme="outline"></nz-icon>
+          </button>
+        </div>
+      </div>
+      <div *ngIf="skillCatalogUnavailable" class="skill-catalog-notice">
+        当前无法加载工作空间 Skill，本轮仍可普通对话
+      </div>
+      <app-skill-selector
+        [skills]="skillCatalog"
+        [disabled]="isSending"
+        [value]="inputText"
+        (valueChange)="inputText = $event"
+        (selectedSkillsChange)="recommendedSkills = $event"
+        (sendRequested)="send()"
+      ></app-skill-selector>
+
+      <div *ngIf="activatedSkills.length" class="activated-skills" aria-label="已激活技能">
+        已激活技能：<span *ngFor="let skill of activatedSkills; let last = last">{{ skill.name }}<span *ngIf="!last">、</span></span>
+      </div>
+
+      <div class="composer-toolbar">
+        <div class="composer-tools">
+          <button
+            nz-button
+            class="tool-btn"
+            nz-tooltip
+            nzTooltipTitle="上传办公文件"
+            [disabled]="isSending || uploadedFiles.length >= 10"
+            (click)="openFilePicker()"
+          >
+            <nz-icon nzType="upload" nzTheme="outline"></nz-icon>
+          </button>
+          <input #fileInput type="file" class="hidden" [accept]="acceptedFileTypes" multiple (change)="onFilesSelected($event)" />
+          <button
+            nz-button
+            class="tool-btn"
+            disabled
+            nz-tooltip
+            nzTooltipTitle="语音（暂未开放）"
+          >
+            <nz-icon nzType="audio" nzTheme="outline"></nz-icon>
+          </button>
+          <button
+            nz-button
+            class="tool-btn"
+            disabled
+            nz-tooltip
+            nzTooltipTitle="Token 用量（暂未开放）"
+          >
+            <nz-icon nzType="number" nzTheme="outline"></nz-icon>
+          </button>
+        </div>
+
+        <div class="composer-actions">
+          <nz-cascader
+            class="execution-target-picker"
+            [nzOptions]="executionTargetOptions"
+            [ngModel]="selectedExecutionPath"
+            (ngModelChange)="onExecutionPathChange($event)"
+            nzPlaceHolder="选择执行目标"
+            nzSize="small"
+          ></nz-cascader>
+
+          <nz-select
+            *ngIf="modelOptions.length"
+            class="model-pill"
+            nzPlaceHolder="选择模型"
+            [(ngModel)]="selectedModel"
+            nzSize="small"
+          >
+            <nz-option
+              *ngFor="let model of modelOptions"
+              [nzValue]="model.deployment_id"
+              [nzLabel]="model.label"
+            ></nz-option>
+          </nz-select>
+          <span *ngIf="!modelOptions.length" class="model-empty">暂无可用模型</span>
+
+          <button
+            nz-button
+            nzType="primary"
+            nzShape="circle"
+            class="send-btn"
+            [nzLoading]="streaming"
+            [disabled]="!inputText.trim() || isSending || hasPendingUploads || !selectedExecutionTarget || (selectedExecutionTarget === 'default-team' && !selectedModel)"
+            (click)="send()"
+          >
+            <nz-icon nzType="send" nzTheme="outline"></nz-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

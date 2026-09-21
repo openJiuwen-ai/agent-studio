@@ -1,0 +1,203 @@
+{
+  "agentId": "d4c90802-9243-4667-aaaa-e7ace9985b29",
+  "agentName": "智能外呼_bgc",
+  "agentVersion": "0.6.0",
+  "configs": {
+    "chatHistoryMaxTurn": 10,
+    "global_intents": [
+      {
+        "action_after_completion": "Terminal",
+        "description": "其他",
+        "handler": "好的，祝您生活愉快，再见！",
+        "handler_type": "Text",
+        "intent_id": "0",
+        "name": "其他"
+      },
+      {
+        "action_after_completion": "Terminal",
+        "description": "利率是多少",
+        "handler": {
+          "arguments": [
+            {
+              "description": "用户输入",
+              "method": "Body",
+              "name": "query",
+              "required": true,
+              "type": "string",
+              "visible": true
+            }
+          ],
+          "description": "利率是多少",
+          "id": "5710b24a-490f-419a-96d4-7eff0da204be",
+          "ir_path": "workflow/ir/利率是多少.json",
+          "name": "利率是多少",
+          "response": [
+            {
+              "description": "最终输出",
+              "name": "response_content",
+              "type": "string"
+            }
+          ]
+        },
+        "handler_type": "Workflow",
+        "intent_id": "1752051077288",
+        "name": "利率是多少"
+      },
+      {
+        "action_after_completion": "Terminal",
+        "description": "投诉",
+        "handler": "求别投诉",
+        "handler_type": "Text",
+        "intent_id": "1752138961590",
+        "name": "投诉"
+      }
+    ],
+    "global_variables": [
+      {
+        "default": "1",
+        "description": "xx",
+        "name": "age",
+        "type": "string"
+      },
+      {
+        "default": "1",
+        "description": "xx",
+        "name": "dataId",
+        "type": "string"
+      },
+      {
+        "default": "1",
+        "description": "x1",
+        "name": "huashu_result",
+        "type": "string"
+      },
+      {
+        "default": "123",
+        "description": "xx",
+        "name": "ActivityTime",
+        "type": "string"
+      },
+      {
+        "default": true,
+        "description": "xxx",
+        "name": "continue",
+        "type": "boolean"
+      },
+      {
+        "default": "张三",
+        "description": "姓名",
+        "name": "name",
+        "type": "string"
+      }
+    ],
+    "maxIteration": 5,
+    "mode": "Controller",
+    "modelConfig": {
+      "deploymentId": "mock_model_name",
+      "modelName": "mock_model_name",
+      "modelType": "customer_chat_llm",
+      "hyperParameters": {
+        "temperature": 0.1,
+        "top_p": 0.2
+      },
+      "extension": {}
+    },
+    "plugins": [],
+    "specify_workflow_order": false,
+    "sysPromptTemplate": "你是一个多工作流控制器，具备精准分析用户意图的能力，能够从所配置的业务工作流中挑选出最合适的工作流，若无法选出工作流，则返回 \"none_exist\"",
+    "workflows": [
+      {
+        "action_after_completion": "Continue",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "名字",
+            "method": "Body",
+            "name": "name",
+            "required": true,
+            "type": "string",
+            "visible": true
+          },
+          {
+            "default_value": "true",
+            "description": "感兴趣",
+            "method": "Body",
+            "name": "continue",
+            "required": true,
+            "type": "boolean",
+            "visible": true
+          },
+          {
+            "default_value": "",
+            "description": "年龄",
+            "method": "Body",
+            "name": "age",
+            "required": true,
+            "type": "integer",
+            "visible": true
+          }
+        ],
+        "description": "LL开始工作流",
+        "id": "start_62a1838d-5fd0-4b8e-bc49-fae81a4569d2",
+        "ir_path": "workflow/ir/开始工作流.json",
+        "name": "开始工作流_bgc",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          },
+          {
+            "description": "",
+            "name": "age"
+          },
+          {
+            "description": "",
+            "name": "continue",
+            "type": "boolean"
+          }
+        ],
+        "workflow_type": "Start"
+      },
+      {
+        "action_after_completion": "Terminal",
+        "arguments": [
+          {
+            "description": "用户输入",
+            "method": "Body",
+            "name": "query",
+            "required": true,
+            "type": "string",
+            "visible": true
+          }
+        ],
+        "description": "LL结束工作流",
+        "id": "end_498a4164-4726-433d-be9e-f56e22b5e65c",
+        "ir_path": "workflow/ir/结束工作流.json",
+        "name": "结束工作流-廖立乐_调测版",
+        "response": [
+          {
+            "description": "最终输出",
+            "name": "response_content",
+            "type": "string"
+          }
+        ],
+        "workflow_type": "End"
+      }
+    ]
+  },
+  "description": "智能外呼_bgc",
+  "metadata": {
+    "projectId": "project_mock",
+    "updatedAt": "1753068651707"
+  },
+  "schemaVersion": "0.6.0"
+}

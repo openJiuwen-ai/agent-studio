@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "0.6.0",
+  "agentId": "cef322c1-6735-44cb-ad85-67f4c2d2177b",
+  "agentName": "异常检测",
+  "agentVersion": "0.6.0",
+  "description": "异常检测",
+  "configs": {
+    "mode": "ReAct",
+    "workflowSwitchEnabled": false,
+    "sysPromptTemplate": "你是一个小助手哦",
+    "modelConfig": {
+      "modelName": "mock_model_name",
+      "modelType": "customer_chat_llm",
+      "hyperParameters": {
+        "temperature": 0.1,
+        "top_p": 0.2
+      },
+      "extension": {}
+    },
+    "plugins": [],
+    "maxIteration": 20,
+    "mcps": [],
+    "workflows": [
+    ],
+    "skills": {
+      "skill_dir": "skills",
+      "skill_info": [
+        {
+          "name": "exception-analyzer",
+          "description": "exception-analyzer 是一个异常分析技能。当遇到异常错误码和错误信息时，使用此技能对异常进行诊断、分类和给出修复建议。",
+          "skill_path": "obs/xxx"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "memoryVariables": null,
+    "projectId": "project_mock",
+    "triggerConfigs": null,
+    "updatedAt": "2025-09-24 09:02:30"
+  }
+}

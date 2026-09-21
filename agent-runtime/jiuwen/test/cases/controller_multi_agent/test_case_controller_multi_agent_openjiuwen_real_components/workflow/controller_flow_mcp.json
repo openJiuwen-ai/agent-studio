@@ -1,0 +1,152 @@
+{
+  "workflowId": "controller_flow_mcp",
+  "workflowName": "controller_flow_mcp",
+  "components": [
+    {
+      "id": "node_start",
+      "type": "jiuwen.start",
+      "name": "Start",
+      "outputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      },
+      "configs": {
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "systemFields": {
+          "inputs": [
+            {
+              "sourceType": "input",
+              "description": "query",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "input",
+              "description": "sys",
+              "id": "sys",
+              "type": "object",
+              "required": true,
+              "schema": []
+            }
+          ],
+          "outputs": [
+            {
+              "sourceType": "input",
+              "description": "query",
+              "id": "query",
+              "type": "string",
+              "required": true
+            },
+            {
+              "sourceType": "input",
+              "description": "sys",
+              "id": "sys",
+              "type": "object",
+              "required": true,
+              "schema": []
+            }
+          ]
+        }
+      },
+      "inputs": {
+        "userFields": {},
+        "systemFields": {
+          "query": "",
+          "sys": {}
+        }
+      }
+    },
+    {
+      "id": "node_component",
+      "type": "jiuwen.mcp",
+      "name": "MCP",
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "type": "sse",
+        "url": "http://localhost:3000/mcp",
+        "name": "controller_mcp_server",
+        "tool_name": "mock_tool",
+        "description": "mock controller mcp tool",
+        "headers": {
+          "Authorization": "Bearer test-token"
+        },
+        "auth": {
+          "headers": {},
+          "query": {},
+          "scope": "SERVICE"
+        },
+        "arguments": [
+          {
+            "name": "query",
+            "description": "query",
+            "type": "string",
+            "required": true,
+            "method": "Body"
+          }
+        ]
+      },
+      "inputs": {
+        "userFields": {
+          "query": "{start.systemFields.query}"
+        },
+        "systemFields": {
+          "query": "{start.systemFields.query}",
+          "sys": "{start.systemFields.sys}"
+        }
+      }
+    },
+    {
+      "id": "node_end",
+      "type": "jiuwen.end",
+      "name": "End",
+      "outputs": {
+        "userFields": {},
+        "responseContent": ""
+      },
+      "configs": {
+        "responseMode": "directResponse",
+        "userFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "responseTemplate": "",
+        "systemFields": {
+          "inputs": [],
+          "outputs": []
+        },
+        "isStreamOut": true
+      },
+      "inputs": {
+        "userFields": {}
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": {
+        "componentId": "node_start"
+      },
+      "target": {
+        "componentId": "node_component"
+      }
+    },
+    {
+      "source": {
+        "componentId": "node_component"
+      },
+      "target": {
+        "componentId": "node_end"
+      }
+    }
+  ]
+}

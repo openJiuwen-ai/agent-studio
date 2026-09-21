@@ -1,0 +1,9 @@
+rails:
+  input:
+    - input_trigger:
+        - mock_action
+triggers_config:
+  input_trigger:
+    type: "default"
+    keywords:
+      - "点"

@@ -18,6 +18,12 @@ import { EditShareModalComponent } from '../components/edit-share-modal/edit-sha
 import { SHARE_PAGE } from '../components/edit-share-modal/edit-share-modal.config';
 import { NzDrawerService } from 'ng-zorro-antd/drawer';
 import { CommonService } from '@services/common.service';
+import { ApplicationManagementComponent } from '@routes/agent-center/home/application-management.component';
+
+export enum ExpertTopTab {
+  DIGITAL_EMPLOYEE = 'DIGITAL_EMPLOYEE',
+  DIGITAL_SQUAD = 'DIGITAL_SQUAD',
+}
 
 @Component({
   selector: 'app-center-management',
@@ -28,6 +34,7 @@ import { CommonService } from '@services/common.service';
     COMMON_MODULES,
     MODULES,
     AppCenterCardsComponent,
+    ApplicationManagementComponent,
   ],
   providers: [
     {
@@ -43,6 +50,13 @@ export class AppCenterManagementComponent implements OnInit, OnDestroy {
   @Input() offset: number = -1;
   @Input() isFromOverview: boolean = false;
   @ViewChild('centerCards') centerCards: AppCenterCardsComponent;
+
+  /** 专家页面顶层 Tab：数字员工 / 数字小队 */
+  public expertTopTab = ExpertTopTab.DIGITAL_EMPLOYEE;
+  public ExpertTopTab = ExpertTopTab;
+  /** 记录数字员工/数字小队 Tab 是否已被激活过，用于保持组件存活 */
+  public digitalEmployeeActivated = true;
+  public digitalSquadActivated = false;
 
   private destroy$ = new Subject<void>();
   public searchName = '';
@@ -224,6 +238,17 @@ export class AppCenterManagementComponent implements OnInit, OnDestroy {
       activeShareTabId: this.activeShareTabId(),
     }
     this.centerCards?.cardInit(params);
+  }
+
+  /** 专家页面顶层 Tab 切换 */
+  public onExpertTopTabChange(index: number): void {
+    if (index === 0) {
+      this.expertTopTab = ExpertTopTab.DIGITAL_EMPLOYEE;
+      this.digitalEmployeeActivated = true;
+    } else {
+      this.expertTopTab = ExpertTopTab.DIGITAL_SQUAD;
+      this.digitalSquadActivated = true;
+    }
   }
 
   public tabChangeByIndex(index: number): void {
