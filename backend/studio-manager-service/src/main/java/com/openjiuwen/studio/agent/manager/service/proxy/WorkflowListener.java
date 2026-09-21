@@ -138,8 +138,21 @@ public class WorkflowListener extends BaseEventListener {
                     // try/catch：getCache/copy/终态reset 若抛异常（Redis 故障等），不应阻断
                     // node_wait 的 passThrough（否则前端丢失 node_wait 事件）。log 后继续透传。
                     try {
+                        // 对齐 processStart：优先从事件 JSON 取 executionId（子工作流场景事件
+                        // 携带子工作流 executionId，executeParams 是顶层，直接用会取错 key），
+                        // 空则回退 executeParams。
+                        String eventExecId = null;
+                        try {
+                            JiuwenEvent eventObj = JSONObject.parseObject(eventStr, JiuwenEvent.class);
+                            eventExecId = eventObj.getExecutionId();
+                        } catch (Exception parseEx) {
+                            // eventStr 非标准 JiuwenEvent JSON（node_wait 可能无 executionId 字段）
+                        }
+                        if (StringUtils.isEmpty(eventExecId)) {
+                            eventExecId = executeParams.getExecutionId();
+                        }
                         WorkflowInstanceEntity cached = instanceService.getCache(
-                            executeParams.getExecutionId(), executeParams.getReleasedVersion(), executeParams.getUserId());
+                            eventExecId, executeParams.getReleasedVersion(), executeParams.getUserId());
                         if (cached != null) {
                             instanceService.copy(cached, instance);
                             // 对齐 processStart：cached 若为终态（SUCCEEDED/FAILED/ABORTED）清 eventList
