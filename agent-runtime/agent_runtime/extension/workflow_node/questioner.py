@@ -841,7 +841,8 @@ class QuestionerDirectReplyHandler:
         output = OutputCache()
         self._query = questioner_input.query or ""
 
-        await self._write_user_message_to_context(self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
+        await self._write_user_message_to_context(
+            self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
         chat_history = await self._get_latest_chat_history(context)
 
         if self._is_set_question_content():
@@ -908,7 +909,8 @@ class QuestionerDirectReplyHandler:
         output = OutputCache(question=self._state.question, user_response=self._query)
 
         # Write user feedback message to context at USER_INTERACT state
-        await self._write_user_message_to_context(self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
+        await self._write_user_message_to_context(
+            self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
         chat_history = await self._get_latest_chat_history(context)
         user_response = chat_history[-1].content if chat_history else ""
 
