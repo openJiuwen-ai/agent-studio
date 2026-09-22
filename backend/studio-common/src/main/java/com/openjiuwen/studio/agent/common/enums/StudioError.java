@@ -4727,7 +4727,12 @@ public enum StudioError {
      * 记忆策略类型重复（同一记忆库不能配置多个同类型策略）
      * args: [0]=重复的策略类型
      */
-    MEMORY_STRATEGY_DUPLICATE(BAD_REQUEST, MEMORY, "1006"),
+    MEMORY_STRATEGY_DUPLICATE(BAD_REQUEST, MEMORY, "1009"),
+
+    /**
+     * 记忆策略参数不合法（列表为空/含空策略项，service 直调路径兜底）
+     */
+    MEMORY_STRATEGY_INVALID(BAD_REQUEST, MEMORY, "1010"),
 
 
     /**

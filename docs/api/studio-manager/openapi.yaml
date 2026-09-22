@@ -454,6 +454,125 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CommonDeleteRsp"
+  /v2/{project_id}/agent-manager/memory-service-instances/{instance_id}:
+    get:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 查询外部记忆服务实例详情
+      description: 查询外部记忆服务实例详情
+      operationId: showMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowMemoryServiceInstanceResponseBody"
+    put:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 修改外部记忆服务实例
+      description: 修改外部记忆服务实例
+      operationId: modifyMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModifyMemoryServiceInstanceRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+    delete:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 删除外部记忆服务实例
+      description: 删除外部记忆服务实例
+      operationId: deleteMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
   /v2/{project_id}/agent-manager/memory-repositories/{memory_repo_id}:
     get:
       tags:
@@ -786,7 +905,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ShowDefaultKnowledgeBaseConnectionDetailResponseBody"
+                $ref: "#/components/schemas/ErrorRsp"
         "403":
           description: Forbidden 没有操作权限
           content:
@@ -853,7 +972,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UpdateDefaultKnowledgeBaseConnectionResponse"
+                $ref: "#/components/schemas/ErrorRsp"
         "403":
           description: Forbidden 没有操作权限
           content:
@@ -4943,6 +5062,123 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestConnectionThirdPartyKnowledgeBaseResponseBody"
+  /v2/{project_id}/agent-manager/memory-service-instances:
+    get:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 获取外部记忆服务实例列表
+      description: 获取外部记忆服务实例列表
+      operationId: listMemoryServiceInstances
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      - name: name
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMemoryServiceInstancesResponseBody"
+    post:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 创建外部记忆服务实例
+      description: 创建外部记忆服务实例
+      operationId: createMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemoryServiceInstanceRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateMemoryServiceInstanceResponseBody"
+  /v2/{project_id}/agent-manager/memory-service-instances/{instance_id}/health:
+    post:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 健康检查外部记忆服务实例
+      description: 调 agent-memory GET /health 检查实例可达性
+      operationId: healthCheckMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowMemoryServiceInstanceResponseBody"
   /v2/{project_id}/agent-manager/memory-repositories:
     get:
       tags:
@@ -5303,7 +5539,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CreateDefaultKnowledgeBaseConnectionResponse"
+                $ref: "#/components/schemas/ErrorRsp"
         "403":
           description: Forbidden 没有操作权限
           content:
@@ -5363,7 +5599,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+                $ref: "#/components/schemas/ErrorRsp"
         "403":
           description: Forbidden 没有操作权限
           content:
@@ -5423,7 +5659,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+                $ref: "#/components/schemas/ErrorRsp"
         "403":
           description: Forbidden 没有操作权限
           content:
@@ -15054,7 +15290,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ListDefaultKnowledgeBaseConnectorsResponseBody"
+                $ref: "#/components/schemas/ErrorRsp"
         "403":
           description: Forbidden 没有操作权限
           content:
@@ -21149,6 +21385,27 @@ components:
           example: example-id-123
           maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
+    ModifyMemoryServiceInstanceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 实例名称
+          example: 我的记忆服务
+          maxLength: 128
+          minLength: 1
+        base_url:
+          type: string
+          description: agent-memory服务地址
+          example: http://mem-svc-a:8000
+          maxLength: 512
+          minLength: 0
+        api_key:
+          type: string
+          description: MEMORY_API_KEY，加密存储，不入IR。为空表示不修改
+        deploy_meta:
+          type: string
+          description: 展示用JSON：vector_store_type/db_type等
     LongTermMemoryStrategy:
       type: object
       properties:
@@ -21205,6 +21462,17 @@ components:
           format: int32
           description: 时间跨度（秒）
           example: 3600
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN/EXTERNAL
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时必填）
+          example: instance-001
+        scope_model_config:
+          type: string
+          description: scope级模型配置JSON，由manager推送到实例，不进IR
       required:
       - name
     ModifyMemoryRepoResponseBody:
@@ -24938,6 +25206,74 @@ components:
           type: boolean
           description: 结果
           example: true
+    CreateMemoryServiceInstanceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 实例名称
+          example: 我的记忆服务
+          maxLength: 128
+          minLength: 1
+        base_url:
+          type: string
+          description: agent-memory服务地址
+          example: http://mem-svc-a:8000
+          maxLength: 512
+          minLength: 0
+        api_key:
+          type: string
+          description: MEMORY_API_KEY，加密存储，不入IR
+          example: sk-xxxx
+        deploy_meta:
+          type: string
+          description: 展示用JSON：vector_store_type/db_type等
+      required:
+      - base_url
+      - name
+    CreateMemoryServiceInstanceResponseBody:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: 实例ID
+          example: instance-001
+    ShowMemoryServiceInstanceResponseBody:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: 实例ID
+        name:
+          type: string
+          description: 实例名称
+        base_url:
+          type: string
+          description: agent-memory服务地址
+        health_status:
+          type: string
+          description: 健康检查状态
+        last_check_at:
+          type: string
+          format: date-time
+          description: 最近健康检查时间
+        deploy_meta:
+          type: string
+          description: 展示用JSON
+        created_user_id:
+          type: string
+          description: 创建人ID
+        created_user_name:
+          type: string
+          description: 创建人名
+        create_time:
+          type: string
+          format: date-time
+          description: 创建时间
+        update_time:
+          type: string
+          format: date-time
+          description: 更新时间
     CreateMemoryRepoRequestBody:
       type: object
       properties:
@@ -24977,6 +25313,17 @@ components:
           format: int32
           description: 时间跨度（秒）
           example: 3600
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN（内置）/EXTERNAL（外部），默认BUILTIN
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时必填）
+          example: instance-001
+        scope_model_config:
+          type: string
+          description: scope级模型配置JSON（LLM/Embedding + enable_*），由manager推送到实例，不进IR
       required:
       - long_term_memory_strategies
       - name
@@ -29682,6 +30029,59 @@ components:
           description: 更新用户名称
           example: 李四
           maxLength: 100
+    ListMemoryServiceInstancesResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          description: 实例列表
+          items:
+            $ref: "#/components/schemas/MemoryServiceInstanceListItem"
+        total:
+          type: integer
+          format: int64
+          description: 总数
+          example: 10
+    MemoryServiceInstanceListItem:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: 实例ID
+          example: instance-001
+        name:
+          type: string
+          description: 实例名称
+          example: 我的记忆服务
+        base_url:
+          type: string
+          description: agent-memory服务地址
+          example: http://mem-svc-a:8000
+        health_status:
+          type: string
+          description: 健康检查状态
+          example: HEALTHY
+        last_check_at:
+          type: string
+          format: date-time
+          description: 最近健康检查时间
+        deploy_meta:
+          type: string
+          description: 展示用JSON
+        created_user_id:
+          type: string
+          description: 创建人ID
+        created_user_name:
+          type: string
+          description: 创建人名
+        create_time:
+          type: string
+          format: date-time
+          description: 创建时间
+        update_time:
+          type: string
+          format: date-time
+          description: 更新时间
     ListMemoryReposResponseBody:
       type: object
       properties:
@@ -29763,6 +30163,14 @@ components:
           format: date-time
           description: 更新时间
           example: 2024-01-02T00:00:00Z
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN/EXTERNAL
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时非空）
+          example: instance-001
     ShowMemoryRepoResponseBody:
       type: object
       properties:
@@ -29834,6 +30242,17 @@ components:
           format: int32
           description: 时间跨度（天）
           example: 30
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN/EXTERNAL
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时非空）
+          example: instance-001
+        scope_model_config:
+          type: string
+          description: scope级模型配置JSON
     ExternalKnowledgeBaseSource:
       type: object
       properties:

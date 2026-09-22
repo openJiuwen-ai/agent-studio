@@ -105,10 +105,17 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
     }
 
     private void checkLongMemoryStrategies(List<LongTermMemoryStrategy> longTermMemoryStrategies) {
-        // 空/元素 type 为空已由 DTO 层校验拦截（@NotNull/@Size(min=1) 级联），此处仅校验跨元素唯一性
+        // DTO 层（@NotNull/@Size(min=1) 级联）已拦截 Controller 路径的空值；此处兜底 service 直调路径
+        if (longTermMemoryStrategies == null || longTermMemoryStrategies.isEmpty()) {
+            throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
+        }
         Set<LongTermMemoryStrategy.TypeEnum> strategyTypes = new HashSet<>();
         for (LongTermMemoryStrategy strategy : longTermMemoryStrategies) {
-            if (strategy != null && !strategyTypes.add(strategy.getType())) {
+            // @Valid 不校验 List 中的 null 元素，此处显式拦截避免静默持久化
+            if (strategy == null) {
+                throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
+            }
+            if (!strategyTypes.add(strategy.getType())) {
                 throw new AgentStudioException(StudioError.MEMORY_STRATEGY_DUPLICATE, strategy.getType());
             }
         }

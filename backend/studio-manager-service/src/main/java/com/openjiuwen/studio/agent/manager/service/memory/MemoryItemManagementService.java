@@ -180,14 +180,14 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
     @Override
     public ListMemoryItemResponseBody searchMemoryItems(String projectId, String memoryRepoId,
         SearchMemoryItemRequestBody body) {
-        // 记忆库存在性预检，避免把"资源不存在"变成下游 runtime 调用异常
-        if (memoryRepoMapper.selectById(memoryRepoId) == null) {
-            throw new AgentStudioException(StudioError.MEMORY_REPO_NOT_EXIST);
-        }
-
         String userId = RequestContextUtils.getRequestUserId();
         if (userId == null || userId.isEmpty()) {
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
+        }
+
+        // 记忆库存在性预检，避免把"资源不存在"变成下游 runtime 调用异常（置于鉴权之后，避免未认证探测）
+        if (memoryRepoMapper.selectById(memoryRepoId) == null) {
+            throw new AgentStudioException(StudioError.MEMORY_REPO_NOT_EXIST);
         }
 
         // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
