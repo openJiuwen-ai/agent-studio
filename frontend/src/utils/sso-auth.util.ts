@@ -54,6 +54,17 @@ const MAX_WRITE_FAILURES_BEFORE_CLEANUP = 2;
 /** 同一会话内的写入失败计数（写入成功后归零） */
 let writeFailureCount = 0;
 
+/**
+ * 原生 history.replaceState 的模块加载期引用。utils.ts 的
+ * initHistoryInterceptor 会在应用初始化时包装 replaceState：对非 '#' 开头
+ * 的 URL 执行无 base 的 new URL 解析（相对 URL 会抛 TypeError，导致剥除
+ * 静默失败），其参数搬移与重编码也会破坏本工具的字节级 URL 重建。
+ * 本模块加载早于拦截器安装，在此绑定原生实现，使启动路径与
+ * hashchange（运行期换 token）路径的剥除行为一致。拦截器包装后派发的
+ * 自定义事件全工程无监听方，绕过无副作用。
+ */
+const nativeReplaceState: typeof history.replaceState = history.replaceState.bind(history);
+
 /** RFC 6265 cookie-value 非法字符（空白、双引号、逗号、分号、反斜杠） */
 const ILLEGAL_COOKIE_CHARS = /[\s;,"\\]/;
 
@@ -240,7 +251,7 @@ export function consumeSsoAuthFromUrl(): string | null {
           ? `?${searchRes.query}`
           : ''
         : search;
-      history.replaceState(
+      nativeReplaceState(
         history.state,
         '',
         window.location.pathname + newSearch + newHash
