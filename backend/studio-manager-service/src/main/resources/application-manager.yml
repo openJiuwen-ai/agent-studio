@@ -816,6 +816,7 @@ isHcs: ${is_hcs:false}   # hcs环境或者lite版本，启动时预置资产中�
 saml:
   enabled: ${saml_enabled:false}
   idp-metadata-url: ${saml_idp_url:}
+  idp-issuer: ${saml_idp_issuer:}
   domainId: ${saml_domainId:0}
   projectId: ${saml_projectId:0}
   redirectUrl: ${saml_redirectUrl:https://127.0.0.1:30001/modelarts/agent-builder/#/home/overview}
