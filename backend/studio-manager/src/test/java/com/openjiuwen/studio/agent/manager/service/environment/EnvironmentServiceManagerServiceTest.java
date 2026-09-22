@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.Constants;
@@ -155,10 +156,13 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
     @Test
     @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testQueryEnvironment() {
-        Environment result1 = environmentServiceManagerService.queryEnvironment(Constants.TEST_PROJECT_ID, "test_env_not_exist");
-        Assertions.assertNotNull(result1);
+        // 越权修复：环境查询走 findByIdAndProjectId，环境不存在时抛 ENVIRONMENT_NOT_EXIST
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> environmentServiceManagerService.queryEnvironment(Constants.TEST_PROJECT_ID, "test_env_not_exist"));
+        Assertions.assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
         Environment result3 = environmentServiceManagerService.queryEnvironment(Constants.TEST_PROJECT_ID, "9c7d551a-0644-4ac2-be48-6d5666918c2d");
         Assertions.assertNotNull(result3);
+        Assertions.assertEquals("test_environment", result3.getName());
     }
 
     @Test
@@ -285,10 +289,14 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
     @Test
     @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testShowEnvironmentVariables() {
-        EnvironmentVariables result = this.environmentServiceManagerService.showEnvironmentVariables(Constants.TEST_PROJECT_ID, "test_env_not_exist", Constants.TEST_WORKSPACE_ID);
-        Assertions.assertNotNull(result);
+        // 越权修复：环境查询走 findByIdAndProjectId，环境不存在时抛 ENVIRONMENT_NOT_EXIST
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> this.environmentServiceManagerService.showEnvironmentVariables(Constants.TEST_PROJECT_ID, "test_env_not_exist", Constants.TEST_WORKSPACE_ID));
+        Assertions.assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
         EnvironmentVariables result2 = this.environmentServiceManagerService.showEnvironmentVariables(Constants.TEST_PROJECT_ID, "9c7d551a-0644-4ac2-be48-6d5666928c25", Constants.TEST_WORKSPACE_ID);
         Assertions.assertNotNull(result2);
+        Assertions.assertNotNull(result2.getVariables());
+        Assertions.assertEquals(2, result2.getVariables().size());
     }
 
     @Test

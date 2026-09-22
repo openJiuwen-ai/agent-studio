@@ -244,6 +244,23 @@ class TestProcessPluginData:
         retriever = ResourceRetriever(resources, agent_type="workflows")
         assert len(retriever.plugin_data) == 1
 
+    @staticmethod
+    def test_null_subfields_do_not_raise():
+        """resources 各子字段为 None 时（B3 判空修复）初始化不抛异常且数据为空"""
+        resources = {"plugins": None, "knowledge_base": None, "workflows": None}
+        retriever = ResourceRetriever(resources, agent_type="agents")
+        assert retriever.plugin_data == []
+        assert retriever.knowledge_data == []
+        assert retriever.workflow_data == []
+
+    @staticmethod
+    def test_none_resources_do_not_raise():
+        """resources 整体为 None 时初始化不抛异常且数据为空"""
+        retriever = ResourceRetriever(None, agent_type="agents")
+        assert retriever.plugin_data == []
+        assert retriever.knowledge_data == []
+        assert retriever.workflow_data == []
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

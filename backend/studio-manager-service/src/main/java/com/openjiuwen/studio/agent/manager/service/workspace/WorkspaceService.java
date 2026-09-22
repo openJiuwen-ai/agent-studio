@@ -330,7 +330,7 @@ public class WorkspaceService implements IWorkspaceService {
         WorkspaceEntity workspaceEntity = workspaceMapper.getWorkspaceByWorkspaceId(projectId, workspaceId);
 
         if (workspaceEntity == null) {
-            return workspaceInfo;
+            throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED);
         }
 
         BeanUtils.copyProperties(workspaceEntity, workspaceInfo);

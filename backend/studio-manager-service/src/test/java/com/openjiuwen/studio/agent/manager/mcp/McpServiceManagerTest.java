@@ -17,10 +17,13 @@ import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
+import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariableValue;
 import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
+import com.openjiuwen.studio.agent.manager.entity.McpServerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
+import com.openjiuwen.studio.agent.manager.entity.ServerScore;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
 import com.openjiuwen.studio.agent.manager.service.mcp.McpClientService;
@@ -28,6 +31,7 @@ import com.openjiuwen.studio.agent.manager.service.mcp.McpServiceManager;
 import com.openjiuwen.studio.agent.manager.service.mcp.auth.IMcpBase;
 import com.openjiuwen.studio.agent.manager.service.mcp.local.McpUpdateTask;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerDao;
+import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerRatingDao;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServiceDao;
 import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
 import com.openjiuwen.studio.agent.manager.utils.McpJsonUtils;
@@ -73,6 +77,9 @@ class McpServiceManagerTest {
 
     @Mock
     private McpServerDao serverDao;
+
+    @Mock
+    private McpServerRatingDao mcpServerRatingDao;
 
     @Mock
     private EncryptionAdapter encryptionAdapter;
@@ -745,6 +752,79 @@ class McpServiceManagerTest {
         value.setSecret(secret);
         var.setValue(value);
         return McpJsonUtils.toJson(List.of(var));
+    }
+
+    // --- queryServerDetail 测试 ---
+
+    /**
+     * 用例描述：查询MCP服务详情时服务不存在，应抛出 MCP_SERVICE_NOT_EXIST 异常
+     * 预制条件：serverDao.selectById 返回 null
+     * 输入参数：projectId=p1, workspaceId=ws1, serverId=server-not-exist
+     * 预期结果：抛出 AgentStudioException，错误码为 MCP_SERVICE_NOT_EXIST
+     */
+    @Test
+    void testQueryServerDetail_ServerNotFound_ThrowsException() {
+        when(serverDao.selectById("server-not-exist")).thenReturn(null);
+
+        AgentStudioException ex = Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpServiceManager.queryServerDetail("p1", "ws1", "server-not-exist"));
+        Assertions.assertEquals(StudioError.MCP_SERVICE_NOT_EXIST, ex.getErrorCode());
+    }
+
+    /**
+     * 用例描述：查询MCP服务详情时服务存在，应正常返回详情DTO
+     * 预制条件：serverDao.selectById 返回非空实体（type=public 跳过权限校验），mcpUtil 转换返回DTO
+     * 输入参数：projectId=p1, workspaceId=ws1, serverId=server-1
+     * 预期结果：返回非空 McpServerDetailInfoDto，且 score 和 scoreAvg 被正确设置
+     */
+    @Test
+    void testQueryServerDetail_Success() {
+        McpServerEntity serverEntity = new McpServerEntity();
+        serverEntity.setId("server-1");
+        serverEntity.setType("public");
+
+        McpServerDetailInfoDto detailDto = new McpServerDetailInfoDto();
+        detailDto.setId("server-1");
+
+        when(serverDao.selectById("server-1")).thenReturn(serverEntity);
+        when(mcpUtil.serverEntity2McpServerDetailInfoDto(serverEntity)).thenReturn(detailDto);
+        when(mcpServerRatingDao.queryScoreByServerIdAndTenantId("server-1", TENANT_ID)).thenReturn(null);
+        when(mcpServerRatingDao.queryScoreByServerId("server-1")).thenReturn(Collections.emptyList());
+
+        McpServerDetailInfoDto result = mcpServiceManager.queryServerDetail("p1", "ws1", "server-1");
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("server-1", result.getId());
+        Assertions.assertEquals(0.0, result.getScore());
+    }
+
+    /**
+     * 用例描述：查询MCP服务详情时服务为private类型且租户匹配，应跳过权限校验正常返回
+     * 预制条件：serverEntity.type=private，tenantId 匹配当前用户，deptCode 匹配
+     * 输入参数：projectId=p1, workspaceId=ws1, serverId=server-private
+     * 预期结果：返回非空 McpServerDetailInfoDto，权限校验通过
+     */
+    @Test
+    void testQueryServerDetail_PrivateTypeWithMatchingTenant_Success() {
+        McpServerEntity serverEntity = new McpServerEntity();
+        serverEntity.setId("server-private");
+        serverEntity.setType("private");
+        serverEntity.setTenantId(TENANT_ID);
+        serverEntity.setDeptCode("dept-1");
+
+        McpServerDetailInfoDto detailDto = new McpServerDetailInfoDto();
+        detailDto.setId("server-private");
+
+        when(serverDao.selectById("server-private")).thenReturn(serverEntity);
+        commonUtilMock.when(() -> CommonUtil.getDeptCode()).thenReturn("dept-1");
+        when(mcpUtil.serverEntity2McpServerDetailInfoDto(serverEntity)).thenReturn(detailDto);
+        when(mcpServerRatingDao.queryScoreByServerIdAndTenantId("server-private", TENANT_ID)).thenReturn(null);
+        when(mcpServerRatingDao.queryScoreByServerId("server-private")).thenReturn(Collections.emptyList());
+
+        McpServerDetailInfoDto result = mcpServiceManager.queryServerDetail("p1", "ws1", "server-private");
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("server-private", result.getId());
     }
 
 }

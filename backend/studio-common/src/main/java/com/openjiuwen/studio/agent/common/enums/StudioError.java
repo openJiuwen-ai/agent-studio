@@ -785,7 +785,7 @@ public enum StudioError {
     /**
      * Agent版本不存在
      */
-    AGENT_VERSION_NOT_EXIST(INTERNAL_SERVER_ERROR, AGENT, "1021"),
+    AGENT_VERSION_NOT_EXIST(NOT_FOUND, AGENT, "1021"),
 
     /**
      * agent发布通道不存在
@@ -1074,7 +1074,7 @@ public enum StudioError {
     /**
      * 工作流异步任务不存在
      */
-    WORKFLOW_ASYNC_TASK_NOT_FOUND(INTERNAL_SERVER_ERROR, WORKFLOW, "1023"),
+    WORKFLOW_ASYNC_TASK_NOT_FOUND(NOT_FOUND, WORKFLOW, "1023"),
 
     /**
      * 工作流异步任务状态不为PENDING
@@ -1360,7 +1360,7 @@ public enum StudioError {
     /**
      * 资源不存在
      */
-    RESOURCE_NOT_EXISTS(BAD_REQUEST, WORKFLOW, "1083"),
+    RESOURCE_NOT_EXISTS(NOT_FOUND, WORKFLOW, "1083"),
 
     /**
      * 获取工作流调试事件失败
@@ -2549,7 +2549,7 @@ public enum StudioError {
     /**
      * MCP服务不存在
      */
-    MCP_SERVICE_NOT_EXIST(BAD_REQUEST, COMPONENT, "1095"),
+    MCP_SERVICE_NOT_EXIST(NOT_FOUND, COMPONENT, "1095"),
 
     /**
      * MCP服务配置不是json格式
@@ -3904,7 +3904,7 @@ public enum StudioError {
     /**
      * The workspace is not existed.
      */
-    WORKSPACE_NOT_EXISTED(BAD_REQUEST, WORKSPACE, "1008"),
+    WORKSPACE_NOT_EXISTED(NOT_FOUND, WORKSPACE, "1008"),
 
     /**
      * The workspace owner cannot exit the workspace before transferring it.
@@ -4518,7 +4518,7 @@ public enum StudioError {
     /**
      * 环境信息不存在
      */
-    ENVIRONMENT_NOT_EXIST(INTERNAL_SERVER_ERROR, Module.ENVIRONMENT_MANAGER, "1017"),
+    ENVIRONMENT_NOT_EXIST(NOT_FOUND, Module.ENVIRONMENT_MANAGER, "1017"),
 
     /**
      * 创建环境超过限额
