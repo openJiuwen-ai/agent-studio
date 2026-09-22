@@ -100,12 +100,11 @@ class AgentPollingManagementTest {
     void deletesTakeStateLockAndPersistAnEmptyList() throws Exception {
         service.deleteTrigger("project", "agent", "poll-1", "workspace");
         verify(mapper).updateTriggerList(eq("project"), eq("workspace"), eq("agent"), eq(List.of()), any());
-        var order = inOrder(state, scheduler);
-        order.verify(state).lockState("poll-1");
-        order.verify(scheduler).pauseTrigger(new TriggerKey("poll-1"));
-        order.verify(scheduler).unscheduleJob(new TriggerKey("poll-1"));
-        order.verify(scheduler).deleteJob(new JobKey("poll-1"));
-        order.verify(state).deleteState("poll-1");
+        verify(state).lockState("poll-1");
+        verify(state).deleteState("poll-1");
+        verify(scheduler).pauseTrigger(new TriggerKey("poll-1"));
+        verify(scheduler).unscheduleJob(new TriggerKey("poll-1"));
+        verify(scheduler).deleteJob(new JobKey("poll-1"));
     }
 
     private static TriggerConfig config() {

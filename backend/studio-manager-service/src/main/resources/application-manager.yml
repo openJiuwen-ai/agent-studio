@@ -237,6 +237,8 @@ inner:
   agent-runtime:
     endpoint: ${agent_runtime_endpoint:}
     run-agent:
+      # 占位符数量必须为 3，与 AgentTriggerService.buildRequest 的 (projectId, resourceId, uuid) 参数强绑定。
+      # 若部署环境 ConfigMap 显式覆盖此值，必须保持 3 个 %s，否则 Agent 类触发器会因 path 少一段而 404 静默失败。
       stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations/%s}
     run-workflow:
       uri: ${agent_runtime_run-workflow:/v1/%s/workflows/%s/conversations/%s}

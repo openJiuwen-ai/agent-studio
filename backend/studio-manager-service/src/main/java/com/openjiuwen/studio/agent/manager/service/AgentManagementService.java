@@ -186,6 +186,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -811,69 +813,87 @@ public class AgentManagementService implements IAgentManagementService {
             }
         }
 
-        if (TriggerType.TIMER.name().equals(body.getType())) {
-            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
-            try {
-                if (scheduler.getTrigger(triggerKey) == null) {
-                    Trigger trigger = TriggerBuilder.newTrigger()
-                        .withIdentity(triggerKey)
-                        .withSchedule(CronScheduleBuilder.cronSchedule(body.getCron()))
-                        .build();
-                    JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
-                        .withIdentity(body.getName() + '_' + body.getTriggerId())
-                        .usingJobData(CommonConstant.PROJECT_ID, projectId)
-                        .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
-                        .usingJobData(CommonConstant.AGENT_ID, agentId)
-                        .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
-                        .usingJobData(CommonConstant.PROMPT, body.getPrompt())
-                        .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
-                        .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
-                        .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
-                        .build();
-                    scheduler.scheduleJob(jobDetail, trigger);
-                    if (!scheduler.isShutdown()) {
-                        scheduler.start();
+        // Quartz 调度移到事务提交后执行：LocalDataSourceJobStore 用独立 Connection，不参与 Spring 事务，
+        // 若在事务内调度，DB 回滚无法撤销已提交的调度副作用，导致孤儿 Job（DB 无记录但 Quartz 持续触发）。
+        // afterCommit 阶段 Quartz 失败时 DB 已提交，用户可重试 editTrigger 恢复，相比孤儿 Job 可发现可修复。
+        // 无事务上下文（如单元测试直接调用）时回退到同步执行，保持向后兼容。
+        final TriggerConfig triggerConfig = body;
+        final String capturedProjectId = projectId;
+        final String capturedAgentId = agentId;
+        final String capturedWorkspaceId = workspaceId;
+        Runnable quartzAction = () -> {
+            if (TriggerType.TIMER.name().equals(triggerConfig.getType())) {
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                try {
+                    if (scheduler.getTrigger(triggerKey) == null) {
+                        Trigger trigger = TriggerBuilder.newTrigger()
+                            .withIdentity(triggerKey)
+                            .withSchedule(CronScheduleBuilder.cronSchedule(triggerConfig.getCron()))
+                            .build();
+                        JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
+                            .withIdentity(triggerConfig.getName() + '_' + triggerConfig.getTriggerId())
+                            .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                            .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                            .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                            .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                            .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                            .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                            .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                            .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                            .build();
+                        scheduler.scheduleJob(jobDetail, trigger);
+                        if (!scheduler.isShutdown()) {
+                            scheduler.start();
+                        }
                     }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler add job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
                 }
-            } catch (SchedulerException e) {
-                log.error("Scheduler add job failed.", e);
-                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
             }
-        }
 
-        if (TriggerType.POLLING.name().equals(body.getType())) {
-            JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
-                .withIdentity(body.getTriggerId(), Scheduler.DEFAULT_GROUP)
-                .usingJobData(CommonConstant.PROJECT_ID, projectId)
-                .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
-                .usingJobData(CommonConstant.AGENT_ID, agentId)
-                .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
-                .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
-                .usingJobData(CommonConstant.POLL_URL, body.getPollUrl())
-                .usingJobData(CommonConstant.PROMPT, body.getPrompt())
-                .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
-                .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
-                .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
-                .build();
-            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
-            Trigger trigger = TriggerBuilder.newTrigger()
-                .withIdentity(triggerKey)
-                .withSchedule(SimpleScheduleBuilder.simpleSchedule()
-                    .withIntervalInSeconds(body.getPollIntervalSeconds())
-                    .repeatForever()
-                    .withMisfireHandlingInstructionNextWithRemainingCount())
-                .build();
-            try {
-                if (scheduler.getTrigger(triggerKey) == null) {
-                    scheduler.scheduleJob(jobDetail, trigger);
-                    if (!scheduler.isShutdown()) {
-                        scheduler.start();
+            if (TriggerType.POLLING.name().equals(triggerConfig.getType())) {
+                JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
+                    .withIdentity(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP)
+                    .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                    .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                    .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
+                    .usingJobData(CommonConstant.POLL_URL, triggerConfig.getPollUrl())
+                    .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                    .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                    .build();
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                    .withIdentity(triggerKey)
+                    .withSchedule(SimpleScheduleBuilder.simpleSchedule()
+                        .withIntervalInSeconds(triggerConfig.getPollIntervalSeconds())
+                        .repeatForever()
+                        .withMisfireHandlingInstructionNextWithRemainingCount())
+                    .build();
+                try {
+                    if (scheduler.getTrigger(triggerKey) == null) {
+                        scheduler.scheduleJob(jobDetail, trigger);
+                        if (!scheduler.isShutdown()) {
+                            scheduler.start();
+                        }
                     }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler add polling job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
                 }
-            } catch (SchedulerException e) {
-                log.error("Scheduler add polling job failed.", e);
-                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
             }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    quartzAction.run();
+                }
+            });
+        } else {
+            quartzAction.run();
         }
         uploadAgentIr(getAgent(projectId, agentId));
         return body;
@@ -1163,28 +1183,46 @@ public class AgentManagementService implements IAgentManagementService {
 
         persistTriggerList(projectId, workspaceId, agentId, triggerList);
 
-        if (TriggerType.TIMER.name().equals(currentConfig.getType())) {
-            try {
-                scheduler.pauseTrigger(TriggerKey.triggerKey(triggerId));
-                scheduler.unscheduleJob(TriggerKey.triggerKey(triggerId));
-                scheduler.deleteJob(new JobKey(currentConfig.getName() + '_' + triggerId));
-            } catch (SchedulerException e) {
-                log.error("Scheduler delete job failed.", e);
-                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
-            }
-        }
-
         if (TriggerType.POLLING.name().equals(currentConfig.getType())) {
             pollingStateService.lockState(triggerId);
-            try {
-                scheduler.pauseTrigger(TriggerKey.triggerKey(triggerId));
-                scheduler.unscheduleJob(TriggerKey.triggerKey(triggerId));
-                scheduler.deleteJob(new JobKey(triggerId, Scheduler.DEFAULT_GROUP));
-            } catch (SchedulerException e) {
-                log.error("Scheduler delete polling job failed.", e);
-                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
-            }
             pollingStateService.deleteState(triggerId);
+        }
+
+        // Quartz 调度移到事务提交后执行：LocalDataSourceJobStore 用独立 Connection，不参与 Spring 事务，
+        // 若在事务内删除，DB 回滚会导致 DB 仍有记录但 Quartz 已删除的反向孤儿 Job。
+        // 无事务上下文时回退到同步执行，保持向后兼容。
+        final TriggerConfig capturedConfig = currentConfig;
+        final String capturedTriggerId = triggerId;
+        Runnable quartzAction = () -> {
+            if (TriggerType.TIMER.name().equals(capturedConfig.getType())) {
+                try {
+                    scheduler.pauseTrigger(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.unscheduleJob(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.deleteJob(new JobKey(capturedConfig.getName() + '_' + capturedTriggerId));
+                } catch (SchedulerException e) {
+                    log.error("Scheduler delete job failed, triggerId: {}", capturedTriggerId, e);
+                }
+            }
+
+            if (TriggerType.POLLING.name().equals(capturedConfig.getType())) {
+                try {
+                    scheduler.pauseTrigger(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.unscheduleJob(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.deleteJob(new JobKey(capturedTriggerId, Scheduler.DEFAULT_GROUP));
+                } catch (SchedulerException e) {
+                    log.error("Scheduler delete polling job failed, triggerId: {}", capturedTriggerId, e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    quartzAction.run();
+                }
+            });
+        } else {
+            quartzAction.run();
         }
         uploadAgentIr(getAgent(projectId, agentId));
         return null;
@@ -1233,79 +1271,103 @@ public class AgentManagementService implements IAgentManagementService {
 
         persistTriggerList(projectId, workspaceId, agentId, triggerList);
 
-        if (TriggerType.TIMER.name().equals(body.getType())) {
-            // Build and validate the replacement before removing the current schedule.
-            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
-            Trigger trigger = TriggerBuilder.newTrigger()
-                .withIdentity(triggerKey)
-                .withSchedule(CronScheduleBuilder.cronSchedule(body.getCron()))
-                .build();
-            JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
-                .withIdentity(body.getName() + '_' + body.getTriggerId())
-                .usingJobData(CommonConstant.PROJECT_ID, projectId)
-                .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
-                .usingJobData(CommonConstant.AGENT_ID, agentId)
-                .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
-                .usingJobData(CommonConstant.PROMPT, body.getPrompt())
-                .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
-                .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
-                .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
-                .build();
-            try {
-                scheduler.pauseTrigger(triggerKey);
-                scheduler.unscheduleJob(triggerKey);
-                scheduler.deleteJob(new JobKey(currentConfig.getName() + '_' + body.getTriggerId()));
-                scheduler.scheduleJob(jobDetail, trigger);
-                if (!scheduler.isShutdown()) {
-                    scheduler.start();
-                }
-            } catch (SchedulerException e) {
-                log.error("Scheduler edit job failed.", e);
-                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
-            }
-        }
-
         if (TriggerType.POLLING.name().equals(body.getType())) {
             boolean urlChanged = !Objects.equals(currentConfig.getPollUrl(), body.getPollUrl());
             pollingStateService.lockState(body.getTriggerId());
-            JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
-                .withIdentity(body.getTriggerId(), Scheduler.DEFAULT_GROUP)
-                .usingJobData(CommonConstant.PROJECT_ID, projectId)
-                .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
-                .usingJobData(CommonConstant.AGENT_ID, agentId)
-                .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
-                .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
-                .usingJobData(CommonConstant.POLL_URL, body.getPollUrl())
-                .usingJobData(CommonConstant.PROMPT, body.getPrompt())
-                .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
-                .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
-                .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
-                .build();
-            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
-            Trigger trigger = TriggerBuilder.newTrigger()
-                .withIdentity(triggerKey)
-                .withSchedule(SimpleScheduleBuilder.simpleSchedule()
-                    .withIntervalInSeconds(body.getPollIntervalSeconds())
-                    .repeatForever()
-                    .withMisfireHandlingInstructionNextWithRemainingCount())
-                .build();
-            try {
-                scheduler.pauseTrigger(triggerKey);
-                scheduler.unscheduleJob(triggerKey);
-                scheduler.deleteJob(new JobKey(body.getTriggerId(), Scheduler.DEFAULT_GROUP));
-                if (pollingStateService.getState(body.getTriggerId()) == null) {
-                    pollingStateService.initializeState(body.getTriggerId());
-                } else if (urlChanged) {
-                    pollingStateService.resetState(body.getTriggerId());
+            if (pollingStateService.getState(body.getTriggerId()) == null) {
+                if (!pollingStateService.initializeState(body.getTriggerId())) {
+                    log.error("Initialize polling state failed during edit, triggerId: {}", body.getTriggerId());
+                    throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
                 }
-                scheduler.scheduleJob(jobDetail, trigger);
-                if (!scheduler.isShutdown()) {
-                    scheduler.start();
-                }
-            } catch (SchedulerException e) {
-                log.error("Scheduler edit polling job failed.", e);
-                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            } else if (urlChanged) {
+                pollingStateService.resetState(body.getTriggerId());
             }
+        }
+
+        // Quartz 调度移到事务提交后执行：LocalDataSourceJobStore 用独立 Connection，不参与 Spring 事务，
+        // 若在事务内调度，DB 回滚无法撤销已提交的调度副作用，导致孤儿 Job 或 DB 与 Quartz 不一致。
+        // 无事务上下文时回退到同步执行，保持向后兼容。
+        final TriggerConfig triggerConfig = body;
+        final TriggerConfig capturedCurrentConfig = currentConfig;
+        final String capturedProjectId = projectId;
+        final String capturedAgentId = agentId;
+        final String capturedWorkspaceId = workspaceId;
+        Runnable quartzAction = () -> {
+            if (TriggerType.TIMER.name().equals(triggerConfig.getType())) {
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                    .withIdentity(triggerKey)
+                    .withSchedule(CronScheduleBuilder.cronSchedule(triggerConfig.getCron()))
+                    .build();
+                JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
+                    .withIdentity(triggerConfig.getName() + '_' + triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                    .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                    .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                    .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                    .build();
+                try {
+                    scheduler.pauseTrigger(triggerKey);
+                    scheduler.unscheduleJob(triggerKey);
+                    scheduler.deleteJob(new JobKey(capturedCurrentConfig.getName() + '_'
+                        + triggerConfig.getTriggerId()));
+                    scheduler.scheduleJob(jobDetail, trigger);
+                    if (!scheduler.isShutdown()) {
+                        scheduler.start();
+                    }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler edit job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
+                }
+            }
+
+            if (TriggerType.POLLING.name().equals(triggerConfig.getType())) {
+                JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
+                    .withIdentity(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP)
+                    .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                    .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                    .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
+                    .usingJobData(CommonConstant.POLL_URL, triggerConfig.getPollUrl())
+                    .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                    .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                    .build();
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                    .withIdentity(triggerKey)
+                    .withSchedule(SimpleScheduleBuilder.simpleSchedule()
+                        .withIntervalInSeconds(triggerConfig.getPollIntervalSeconds())
+                        .repeatForever()
+                        .withMisfireHandlingInstructionNextWithRemainingCount())
+                    .build();
+                try {
+                    scheduler.pauseTrigger(triggerKey);
+                    scheduler.unscheduleJob(triggerKey);
+                    scheduler.deleteJob(new JobKey(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP));
+                    scheduler.scheduleJob(jobDetail, trigger);
+                    if (!scheduler.isShutdown()) {
+                        scheduler.start();
+                    }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler edit polling job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    quartzAction.run();
+                }
+            });
+        } else {
+            quartzAction.run();
         }
         uploadAgentIr(getAgent(projectId, agentId));
         return body;
