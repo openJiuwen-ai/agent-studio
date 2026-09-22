@@ -11,11 +11,12 @@
  * 安全门控（防登录 CSRF / 会话固定：诱导用户打开携带攻击者 token 的链接
  * 时，以下任一条件不满足即拒绝消费，且对 URL 零改动）：
  * 1. 仅当页面处于 iframe 嵌入中（window.self !== window.top）才消费；
- * 2. 父页面来源可信：document.referrer 与 console 完全同源（origin 精确
- *    一致，含协议与端口），或其 origin 在 TRUSTED_PARENT_ORIGINS 白名单内。
- *    同主机不同端口/协议不构成可信边界（Cookie 按域名而非端口共享）。
- *    **部署要求：父平台与 console 非同源时，必须将其完整 origin（含协议
- *    与端口）配置进 TRUSTED_PARENT_ORIGINS，否则 SSO 不生效**；
+ * 2. 父页面来源可信：document.referrer 的 origin 在 TRUSTED_PARENT_ORIGINS
+ *    白名单内（精确 origin 匹配，含协议与端口）。不做任何隐式放行——
+ *    同源也不例外（同源页面上若存在攻击者可影响的内容，同样构成注入
+ *    面；且同源脚本本可直接写 Cookie，隐式放行不增加安全只增加模糊性）。
+ *    **部署要求：必须将父平台完整 origin（含协议与端口）配置进
+ *    TRUSTED_PARENT_ORIGINS，否则 SSO 不生效**；
  * 3. referrer 缺失按不可信处理（fail-closed）。父页面不得设置
  *    Referrer-Policy: no-referrer（浏览器默认策略不受影响）。
  *
@@ -24,9 +25,11 @@
  * Cookie 的值与后端原始 token 不一致将导致认证失败——检测到疑似编码值
  * 时输出告警（无法安全自动解码：无法区分编码值与本身含 % 的原始 token）。
  *
- * 顺序保证：先写入并回读校验 Cookie 值，校验通过后才剥除 URL——写入被
- * 浏览器拦截（三方 Cookie 策略 / 同名 HttpOnly Cookie 冲突 / 非法字符）
- * 时保留 Auth 供 reload 重试，避免"地址栏已清但认证未落盘"的不可重试状态。
+ * 顺序保证：先写入并回读校验 Cookie 值，校验通过后才剥除 URL。写入失败
+ * 时保留 Auth 供重试，但同会话内失败达到上限（含首次共
+ * MAX_WRITE_FAILURES_BEFORE_CLEANUP 次）后改为强制清理 URL，防止凭据在
+ * 持续被拦截的环境（Safari/ITP、三方 Cookie 策略、HttpOnly 冲突）中
+ * 无限期驻留地址栏与历史记录。
  */
 
 /** 与后端 auth.sso.header 默认配置（application-manager.yml）对齐的 Cookie 名 */
@@ -37,10 +40,19 @@ export const AUTH_PARAM_NAME = 'Auth';
 
 /**
  * 可信父平台 origin 白名单（完整 origin，含协议+主机+端口，如
- * http://122.219.72.238:8081）。默认仅隐式放行与 console 完全同源的父页面；
- * 其余来源（含同主机不同端口/协议、子域、跨域）必须在此按 origin 精确配置。
+ * http://122.219.72.238:8081）。**唯一放行依据，无任何隐式信任**——
+ * 同源/同主机/子域/跨域一律须在此显式配置。
  */
 export const TRUSTED_PARENT_ORIGINS: string[] = [];
+
+/**
+ * 同一会话内写入失败的保留上限（含首次）：达到后不再保留 URL 中的 Auth
+ * 供重试，而是强制清理以限制凭据暴露面。
+ */
+const MAX_WRITE_FAILURES_BEFORE_CLEANUP = 2;
+
+/** 同一会话内的写入失败计数（写入成功后归零） */
+let writeFailureCount = 0;
 
 /** RFC 6265 cookie-value 非法字符（空白、双引号、逗号、分号、反斜杠） */
 const ILLEGAL_COOKIE_CHARS = /[\s;,"\\]/;
@@ -75,11 +87,10 @@ export function extractAuthParam(query: string): { token: string | null; query: 
 }
 
 /**
- * 判断 referrer 是否为可信父页面：与 console 完全同源（origin 精确一致，
- * 含协议与端口），或 origin 在 TRUSTED_PARENT_ORIGINS 白名单内（精确
- * 匹配）。referrer 缺失/非法按不可信处理。
- * 同主机不同端口/协议不放行：Cookie 按域名而非端口共享，同主机上的其他
- * 服务不是可信边界。
+ * 判断 referrer 是否为可信父页面：origin 在 TRUSTED_PARENT_ORIGINS 白名单
+ * 内（精确匹配，含协议与端口）。referrer 缺失/非法按不可信处理。
+ * 不做同源/同主机隐式放行：同源页面上攻击者可影响的内容同样构成注入面，
+ * 且同源脚本本可直接写 Cookie，隐式放行只增加规则模糊性。
  */
 function isTrustedReferrer(referrer: string): boolean {
   if (!referrer) {
@@ -91,7 +102,7 @@ function isTrustedReferrer(referrer: string): boolean {
   } catch (e) {
     return false;
   }
-  return refOrigin === location.origin || TRUSTED_PARENT_ORIGINS.includes(refOrigin);
+  return TRUSTED_PARENT_ORIGINS.includes(refOrigin);
 }
 
 /**
@@ -146,6 +157,14 @@ export function writeSsoCookie(token: string): boolean {
   const attrs = ['path=/'];
   if (location.protocol === 'https:') {
     attrs.push('SameSite=None', 'Secure', 'Partitioned');
+  } else {
+    // 非安全上下文：无法设置 Secure（连同 SameSite=None/Partitioned 一并不可用）。
+    // 凭证将以非 Secure Cookie 明文暴露——但 token 本就以明文 URL 传输，
+    // 拒绝写入并不能保护它，故选择强告警而非拒绝；根治手段是 https 部署。
+    console.warn(
+      '[SSO] Access-Token cookie is being written WITHOUT Secure over insecure http: ' +
+        'the credential is exposed in plaintext; deploy console over https'
+    );
   }
   document.cookie = `${SSO_COOKIE_NAME}=${token}; ${attrs.join('; ')}`;
   // 回读值校验：检出三方 Cookie 策略静默拦截、同名 HttpOnly Cookie 拒绝
@@ -163,8 +182,10 @@ export function writeSsoCookie(token: string): boolean {
  * 组合入口：解析 Auth（hash 主通道 + search 防御）→ 安全门控 → 写入并校验
  * Cookie → 校验通过后剥除 URL。
  *
- * 失败语义：写入被拒绝/拦截时保留 URL 中的 Auth（页面 reload 可整体重试），
- * 不写 Cookie、不剥除 URL；门控拒绝时对 URL 零改动。
+ * 失败语义：写入被拒绝/拦截时保留 URL 中的 Auth 供重试（页面 reload 或父
+ * 平台变更 hash 触发的再次消费均可整体重试）；同会话内失败达到上限
+ * （MAX_WRITE_FAILURES_BEFORE_CLEANUP）后强制清理 URL 以限制凭据暴露。
+ * 门控拒绝时对 URL 零改动。
  *
  * @returns 成功消费（Cookie 已落盘校验一致）返回 token；URL 无 Auth 参数、
  *          安全门控拒绝或写入失败时返回 null
@@ -251,12 +272,27 @@ export function consumeSsoAuthFromUrl(): string | null {
       console.warn('[SSO] failed to write Access-Token cookie', e);
     }
     if (!writeOk) {
-      // 保留 URL 中的 Auth：reload 可整体重试，避免"地址栏已清但认证未落盘"
+      writeFailureCount++;
+      if (writeFailureCount >= MAX_WRITE_FAILURES_BEFORE_CLEANUP) {
+        // 持续失败（Safari/ITP、三方 Cookie 策略、HttpOnly 冲突等）：放弃重试
+        // 并强制清理，防止凭据无限期驻留地址栏与历史记录
+        console.warn(
+          '[SSO] Access-Token write failed repeatedly, strip Auth from url to limit credential exposure'
+        );
+        try {
+          stripAuthFromUrl();
+        } catch (e) {
+          console.warn('[SSO] failed to strip Auth param from url', e);
+        }
+        return null;
+      }
+      // 首次失败：保留 URL 中的 Auth，reload 或父平台 hash 变更可整体重试
       console.warn(
         '[SSO] Access-Token cookie not landed, keep Auth in url for reload retry'
       );
       return null;
     }
+    writeFailureCount = 0;
 
     try {
       stripAuthFromUrl();
