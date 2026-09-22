@@ -108,15 +108,22 @@ class ControllerRunner:
             # the multi-agent's memory repo (not the sub-workflow's own) for
             # memory retrieval, and can resolve the user_id needed to query it.
             # This ensures memory extraction and retrieval share the same repo.
-            controller_memory_repo_id = (
+            controller_memory_config = (
                 (ir_json.get("configs") or {}).get("memory") or {}
-            ).get("memory_repo_id", "")
+            )
+            controller_memory_repo_id = controller_memory_config.get("memory_repo_id", "")
             if controller_memory_repo_id:
                 from jiuwen.controller.common.constants import WorkflowConstants
                 req_params = runtime_context.agent_workflow_context.get(
                     WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY, {}
                 )
                 req_params["memory_repo_id"] = controller_memory_repo_id
+                # Inject the full memory_config (backend_type/instance_id/
+                # instance_base_url) so the multi-agent LLM node can dispatch
+                # EXTERNAL retrieval to ExternalMemoryClient instead of
+                # silently falling back to BUILTIN get_ltm() (which finds
+                # nothing for external repos).
+                req_params["memory_config"] = controller_memory_config
                 # ContextManager.prepare_execution reads params["app_id"] as the
                 # memory scope id (memory_app_id); ExecutionParams has no app_id
                 # field so it is always "" and get_memory_message returns None.

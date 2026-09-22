@@ -13,8 +13,17 @@ import com.openjiuwen.studio.agent.manager.dto.BatchDeleteMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.ListMemoryItemResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SearchMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.UpdateMemoryItemRequestBody;
+import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
+import com.openjiuwen.studio.agent.manager.entity.MemoryServiceInstanceEntity;
+import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
+import com.openjiuwen.studio.agent.manager.mapper.MemoryServiceInstanceMapper;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.IMemoryItemManagementService;
+import com.openjiuwen.studio.agent.manager.utils.OkHttpUtils;
+import com.openjiuwen.studio.agent.manager.entity.plugin.RequestResult;
+import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
+
+import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,12 +46,30 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
     @Autowired
     private AgentRuntimeClient agentRuntimeClient;
 
+    @Autowired
+    private MemoryRepoMapper memoryRepoMapper;
+
+    @Autowired
+    private MemoryServiceInstanceMapper memoryServiceInstanceMapper;
+
+    @Autowired
+    private OkHttpUtils okHttpUtils;
+
+    @Autowired
+    private EncryptionAdapter encryptionAdapter;
+
     @Override
     public ListMemoryItemResponseBody listMemoryItems(String projectId, String memoryRepoId, Integer pageNum,
         Integer pageSize, String memoryType) {
         String userId = RequestContextUtils.getRequestUserId();
         if (userId == null || userId.isEmpty()) {
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
+        }
+
+        // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
+        MemoryRepoEntity repo = memoryRepoMapper.selectById(memoryRepoId);
+        if (repo != null && "EXTERNAL".equalsIgnoreCase(repo.getMemoryBackendType())) {
+            return listMemoryItemsExternal(repo, userId.toLowerCase(Locale.ROOT), pageNum, pageSize);
         }
 
         try {
@@ -113,6 +140,13 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
         }
 
+        // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
+        MemoryRepoEntity repo = memoryRepoMapper.selectById(memoryRepoId);
+        if (repo != null && "EXTERNAL".equalsIgnoreCase(repo.getMemoryBackendType())) {
+            batchDeleteMemoryItemsExternal(repo, memoryIds, userId.toLowerCase(Locale.ROOT));
+            return;
+        }
+
         try {
             Map<String, List<String>> requestBody = new HashMap<>();
             requestBody.put("memory_ids", memoryIds);
@@ -149,6 +183,12 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
         String userId = RequestContextUtils.getRequestUserId();
         if (userId == null || userId.isEmpty()) {
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
+        }
+
+        // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
+        MemoryRepoEntity repo = memoryRepoMapper.selectById(memoryRepoId);
+        if (repo != null && "EXTERNAL".equalsIgnoreCase(repo.getMemoryBackendType())) {
+            return searchMemoryItemsExternal(repo, userId.toLowerCase(Locale.ROOT), body);
         }
 
         try {
@@ -262,6 +302,13 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
         }
 
+        // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
+        MemoryRepoEntity repo = memoryRepoMapper.selectById(memoryRepoId);
+        if (repo != null && "EXTERNAL".equalsIgnoreCase(repo.getMemoryBackendType())) {
+            clearUserMemoryItemsExternal(repo, userId.toLowerCase(Locale.ROOT));
+            return;
+        }
+
         try {
             // 静态代码检查G.OTH.04：toLowerCase指定Locale.ROOT，避免在土耳其语等环境下产生大小写转换异常
             ResponseEntity<Object> response = agentRuntimeClient.clearUserMemories(
@@ -279,6 +326,250 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
             log.error("Failed to clear memories from runtime for repo {}: {}", memoryRepoId, e.getMessage(), e);
             throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
                 "Failed to clear memories: " + e.getMessage());
+        }
+    }
+
+    // ==================== EXTERNAL branch: agent-memory 2.0 API calls ====================
+
+    private MemoryServiceInstanceEntity resolveInstance(MemoryRepoEntity repo) {
+        String instanceId = repo.getMemoryServiceInstanceId();
+        if (instanceId == null || instanceId.isEmpty()) {
+            throw new AgentStudioException(StudioError.MEMORY_SERVICE_INSTANCE_NOT_EXIST,
+                "EXTERNAL repo has no instance_id");
+        }
+        MemoryServiceInstanceEntity instance = memoryServiceInstanceMapper.selectById(instanceId);
+        if (instance == null) {
+            throw new AgentStudioException(StudioError.MEMORY_SERVICE_INSTANCE_NOT_EXIST);
+        }
+        return instance;
+    }
+
+    private Map<String, String> buildAuthHeaders(MemoryServiceInstanceEntity instance) {
+        Map<String, String> headers = new HashMap<>();
+        String apiKey = encryptionAdapter.decrypt(instance.getApiKey(),
+            RequestContextUtils.getRequestUserDomainId());
+        if (apiKey != null && !apiKey.isEmpty()) {
+            headers.put("Authorization", "Bearer " + apiKey);
+        }
+        return headers;
+    }
+
+    private JSONObject buildScope(String repoId, String userId) {
+        JSONObject scope = new JSONObject();
+        scope.put("org", "studio");
+        scope.put("space", "");
+        scope.put("user", repoId + ":" + userId);
+        scope.put("agent", "");
+        scope.put("session", "");
+        return scope;
+    }
+
+    private ListMemoryItemResponseBody listMemoryItemsExternal(
+        MemoryRepoEntity repo, String userId, Integer pageNum, Integer pageSize) {
+        MemoryServiceInstanceEntity instance = resolveInstance(repo);
+        try {
+            String url = instance.getBaseUrl().replaceAll("/+$", "") + "/v1/list";
+            Map<String, String> headers = buildAuthHeaders(instance);
+
+            JSONObject body = new JSONObject();
+            body.put("scope", buildScope(repo.getId(), userId));
+            body.put("offset", (pageNum != null ? pageNum - 1 : 0) * (pageSize != null ? pageSize : 10));
+            body.put("limit", pageSize != null ? pageSize : 10);
+
+            RequestResult result = okHttpUtils.call(url, OkHttpUtils.Method.POST, headers, body.toJSONString());
+            if (!result.isSuccess() || result.getResponse() == null) {
+                return emptyListResponse(pageNum, pageSize);
+            }
+
+            JSONObject resp = JSONObject.parseObject(result.getResponse());
+            int total = resp.getIntValue("count", 0);
+            JSONArray itemsArray = resp.getJSONArray("items");
+
+            ListMemoryItemResponseBody response = new ListMemoryItemResponseBody();
+            response.setPageNum(pageNum);
+            response.setPageSize(pageSize);
+            response.setTotal(total);
+
+            if (itemsArray != null && !itemsArray.isEmpty()) {
+                List<ListMemoryItemResponseBody.MemoryItemInfo> items = itemsArray.stream()
+                    .map(obj -> {
+                        JSONObject mem = (JSONObject) obj;
+                        ListMemoryItemResponseBody.MemoryItemInfo item = new ListMemoryItemResponseBody.MemoryItemInfo();
+                        item.setId(mem.getString("id"));
+                        // 2.0: content is in segments[0].content, not top-level
+                        JSONArray segments = mem.getJSONArray("segments");
+                        if (segments != null && !segments.isEmpty()) {
+                            JSONObject firstSeg = (JSONObject) segments.get(0);
+                            item.setContent(firstSeg.getString("content"));
+                        }
+                        item.setType(mem.getString("tier"));
+                        item.setUserId(userId);
+                        item.setAgentId(null);
+                        item.setScore(null);
+                        return item;
+                    })
+                    .collect(Collectors.toList());
+                response.setItems(items);
+            } else {
+                response.setItems(Collections.emptyList());
+            }
+            return response;
+        } catch (Exception e) {
+            log.error("Failed to list external memories for repo {}: {}", repo.getId(), e.getMessage(), e);
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to list external memories: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 清空当前用户在 EXTERNAL 记忆库下的全部记忆。
+     * agent-memory 2.0 的 delete 不接受仅按 scope 的 selector（需 unit_ids/tags/before/filters 之一），
+     * 故采用分页 list 取全量 id → 按 unit_ids purge 的循环，直至列表清空。
+     */
+    private void clearUserMemoryItemsExternal(MemoryRepoEntity repo, String userId) {
+        MemoryServiceInstanceEntity instance = resolveInstance(repo);
+        String baseUrl = instance.getBaseUrl().replaceAll("/+$", "");
+        Map<String, String> headers = buildAuthHeaders(instance);
+        JSONObject scope = buildScope(repo.getId(), userId);
+        try {
+            int pageSize = 200;
+            // 上限防御：避免异常响应导致死循环
+            int maxRounds = 1000;
+            for (int round = 0; round < maxRounds; round++) {
+                JSONObject listBody = new JSONObject();
+                listBody.put("scope", scope);
+                listBody.put("offset", 0);
+                listBody.put("limit", pageSize);
+                RequestResult listResult = okHttpUtils.call(baseUrl + "/v1/list",
+                    OkHttpUtils.Method.POST, headers, listBody.toJSONString());
+                if (!listResult.isSuccess() || listResult.getResponse() == null) {
+                    throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                        "Failed to list external memories for clear: HTTP " + listResult.getCode());
+                }
+                JSONArray items = JSONObject.parseObject(listResult.getResponse()).getJSONArray("items");
+                if (items == null || items.isEmpty()) {
+                    return;
+                }
+                List<String> ids = items.stream()
+                    .map(obj -> ((JSONObject) obj).getString("id"))
+                    .filter(StringUtils::isNotBlank)
+                    .collect(Collectors.toList());
+                if (ids.isEmpty()) {
+                    log.warn("External clear for repo {} got items without ids, aborting", repo.getId());
+                    return;
+                }
+
+                JSONObject selector = new JSONObject();
+                selector.put("unit_ids", ids);
+                selector.put("scope", scope);
+                selector.put("mode", "purge");
+                JSONObject deleteBody = new JSONObject();
+                deleteBody.put("selector", selector);
+                RequestResult deleteResult = okHttpUtils.call(baseUrl + "/v1/delete",
+                    OkHttpUtils.Method.POST, headers, deleteBody.toJSONString());
+                if (!deleteResult.isSuccess()) {
+                    throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                        "Failed to clear external memories: HTTP " + deleteResult.getCode());
+                }
+            }
+            log.error("External clear for repo {} exceeded {} rounds, aborting", repo.getId(), maxRounds);
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to clear external memories: too many rounds");
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Exception clearing external memories for repo {}: {}",
+                repo.getId(), e.getMessage(), e);
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to clear external memories: " + e.getMessage());
+        }
+    }
+
+    private void batchDeleteMemoryItemsExternal(MemoryRepoEntity repo, List<String> memoryIds, String userId) {
+        MemoryServiceInstanceEntity instance = resolveInstance(repo);
+        try {
+            String url = instance.getBaseUrl().replaceAll("/+$", "") + "/v1/delete";
+            Map<String, String> headers = buildAuthHeaders(instance);
+
+            JSONObject selector = new JSONObject();
+            selector.put("unit_ids", memoryIds);
+            selector.put("scope", buildScope(repo.getId(), userId));
+            selector.put("mode", "purge");
+            JSONObject body = new JSONObject();
+            body.put("selector", selector);
+
+            RequestResult result = okHttpUtils.call(url, OkHttpUtils.Method.POST, headers, body.toJSONString());
+            if (!result.isSuccess()) {
+                log.error("Failed to batch delete external memories for repo {}: code={}",
+                    repo.getId(), result.getCode());
+                throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                    "Failed to delete external memories: HTTP " + result.getCode());
+            }
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Exception batch deleting external memories for repo {}: {}",
+                repo.getId(), e.getMessage(), e);
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to delete external memories: " + e.getMessage());
+        }
+    }
+
+    private ListMemoryItemResponseBody searchMemoryItemsExternal(
+        MemoryRepoEntity repo, String userId, SearchMemoryItemRequestBody body) {
+        MemoryServiceInstanceEntity instance = resolveInstance(repo);
+        try {
+            String url = instance.getBaseUrl().replaceAll("/+$", "") + "/v1/search";
+            Map<String, String> headers = buildAuthHeaders(instance);
+
+            JSONObject scope = buildScope(repo.getId(), userId);
+            JSONObject context = new JSONObject();
+            context.put("scope", scope);
+
+            JSONObject searchBody = new JSONObject();
+            searchBody.put("query", body.getQuery());
+            searchBody.put("context", context);
+            searchBody.put("top_k", body.getTopK() != null ? body.getTopK() : 10);
+            searchBody.put("disclosure", "l2");
+            searchBody.put("with_trajectory", false);
+
+            RequestResult result = okHttpUtils.call(url, OkHttpUtils.Method.POST, headers, searchBody.toJSONString());
+            if (!result.isSuccess() || result.getResponse() == null) {
+                ListMemoryItemResponseBody response = new ListMemoryItemResponseBody();
+                response.setItems(Collections.emptyList());
+                response.setTotal(0);
+                return response;
+            }
+
+            JSONObject resp = JSONObject.parseObject(result.getResponse());
+            JSONArray itemsArray = resp.getJSONArray("items");
+            int count = resp.getIntValue("count", itemsArray != null ? itemsArray.size() : 0);
+
+            ListMemoryItemResponseBody response = new ListMemoryItemResponseBody();
+            response.setTotal(count);
+
+            if (itemsArray != null && !itemsArray.isEmpty()) {
+                List<ListMemoryItemResponseBody.MemoryItemInfo> items = itemsArray.stream()
+                    .map(obj -> {
+                        JSONObject mem = (JSONObject) obj;
+                        ListMemoryItemResponseBody.MemoryItemInfo item = new ListMemoryItemResponseBody.MemoryItemInfo();
+                        item.setId(mem.getString("unit_id"));
+                        item.setContent(mem.getString("content"));
+                        item.setUserId(userId);
+                        item.setAgentId(null);
+                        item.setScore(mem.getDouble("score") != null ? mem.getDouble("score").floatValue() : null);
+                        return item;
+                    })
+                    .collect(Collectors.toList());
+                response.setItems(items);
+            } else {
+                response.setItems(Collections.emptyList());
+            }
+            return response;
+        } catch (Exception e) {
+            log.error("Failed to search external memories for repo {}: {}", repo.getId(), e.getMessage(), e);
+            throw new AgentStudioException(StudioError.CSS_UNI_SEARCH_SERVICE_EXCEPTION,
+                "Failed to search external memories: " + e.getMessage());
         }
     }
 

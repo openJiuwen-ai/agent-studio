@@ -234,6 +234,15 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.warning(f"S3 async storage client initialization failed (non-critical): {e}")
 
+    # 初始化外部记忆凭证解析器（从 OBS auth 文件惰性取 api_key，镜像 model-auth 约定）
+    try:
+        from agent_runtime.memory.backend.instance_credential_resolver import get_resolver
+        resolver = get_resolver()
+        resolver.set_storage_provider(S3StorageProvider.instance())
+        logger.info("Memory instance credential resolver initialized")
+    except Exception as e:
+        logger.warning(f"Memory instance credential resolver init failed (non-critical): {e}")
+
     # 注册 flow_code 专用的 SysOperation（local mode）
     # 注意：当 LOCAL_CODE_EXEC_MODE=inprocess（默认）时，代码节点使用进程内 exec() 执行，
     # 不依赖此 sys_operation。仅 LOCAL_CODE_EXEC_MODE=subprocess 时才会使用。

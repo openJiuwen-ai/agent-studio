@@ -362,74 +362,131 @@ class UserProfileMemoryExtractor:
                         topic_to_extract.tags.append(tag_to_extract)
                 topics_to_extract.append(topic_to_extract)
 
-        # Extract memory via LTM (replaces HTTP POST to memory-service)
+        # Extract memory — branch dispatch by backend_type
+        # BUILTIN: via LTM (replaces HTTP POST to memory-service); EXTERNAL: via ExternalMemoryClient
+        configs = ir_data.get("configs") if ir_data.get("configs") else {}
+        memory_config = configs.get("memory") if configs.get("memory") else {}
+        backend_type = memory_config.get("memory_backend_type", "BUILTIN")
+
         try:
-            ltm = get_ltm()
-            if ltm is None:
-                logger.info(
-                    "LTM not initialized, skipping memory extraction for user: %s",
-                    user_id,
+            if backend_type.upper() == "EXTERNAL":
+                # EXTERNAL branch: push messages to agent-memory 2.0 via ExternalMemoryClient
+                # 2.0 uses add(content, scope, system_metadata={infer:"true"}) which
+                # auto-triggers LLM extraction — no separate evolve call needed.
+                instance_id = memory_config.get("instance_id", "")
+                base_url = memory_config.get("instance_base_url", "")
+                if not instance_id or not base_url:
+                    logger.warning(
+                        "EXTERNAL memory config missing instance_id or base_url, "
+                        "skipping extraction for user: %s, conversation: %s",
+                        user_id, conversation_id,
+                    )
+                    return
+
+                from agent_runtime.memory.backend.external_memory_client import (
+                    get_external_client,
                 )
-                return
+                client = await get_external_client(instance_id, base_url)
+                if client is None:
+                    logger.warning(
+                        "Failed to create ExternalMemoryClient for instance %s, "
+                        "skipping extraction for user: %s",
+                        instance_id, user_id,
+                    )
+                    return
 
-            # Ensure scope config exists with strategy prompts from IR
-            try:
-                existing_cfg = await ltm.get_scope_config(memory_repo_id)
-                if existing_cfg is None:
-                    from agent_runtime.memory.adapter.ltm_manager import build_scope_config
-                    scope_cfg = build_scope_config()
-                    configs = ir_data.get("configs") if ir_data.get("configs") else {}
-                    memory_config = configs.get("memory") if configs.get("memory") else {}
-                    strategies = memory_config.get("strategies") if memory_config.get("strategies") else []
-                    for strategy in strategies:
-                        strategy_type = strategy.get("type", "")
-                        prompt = strategy.get("prompt", "")
-                        if not prompt:
+                # 2.0: iterate over messages and call add(content, infer=true) for each.
+                # infer=true triggers the server-side LLM extraction pipeline automatically.
+                uid = user_id.lower()
+                all_ok = True
+                for chat_turn in cached_conversation_to_extract.chat_turns:
+                    for msg in chat_turn.messages:
+                        if not msg.content:
                             continue
-                        if strategy_type == "user_profile":
-                            scope_cfg.user_profile_definition = prompt
-                        elif strategy_type == "semantic_memory":
-                            scope_cfg.semantic_memory_definition = prompt
-                        elif strategy_type == "episodic_memory":
-                            scope_cfg.episodic_memory_definition = prompt
-                    await ltm.set_scope_config(memory_repo_id, scope_cfg)
-            except Exception as e:
-                logger.warning("Failed to ensure scope config for %s (non-blocking): %s", memory_repo_id, e)
+                        ok = await client.add(
+                            content=msg.content,
+                            space=memory_repo_id,
+                            user=uid,
+                            infer=True,
+                        )
+                        if not ok:
+                            all_ok = False
 
-            base_messages: list[BaseMessage] = []
-            for chat_turn in cached_conversation_to_extract.chat_turns:
-                for msg in chat_turn.messages:
-                    if msg.role == "user":
-                        base_messages.append(UserMessage(content=msg.content))
-                    else:
-                        base_messages.append(AssistantMessage(content=msg.content))
+                if all_ok:
+                    logger.info(
+                        "External memory extraction completed for user: %s, conversation: %s",
+                        user_id, conversation_id,
+                    )
+                else:
+                    logger.warning(
+                        "External memory extraction partially failed (degraded) for user: %s, conversation: %s",
+                        user_id, conversation_id,
+                    )
 
-            if not base_messages:
-                return
+            else:
+                # BUILTIN branch: existing LTM path — unchanged (built-in zero-intrusion)
+                ltm = get_ltm()
+                if ltm is None:
+                    logger.info(
+                        "LTM not initialized, skipping memory extraction for user: %s",
+                        user_id,
+                    )
+                    return
 
-            agent_config = AgentMemoryConfig()
+                # Ensure scope config exists with strategy prompts from IR
+                try:
+                    existing_cfg = await ltm.get_scope_config(memory_repo_id)
+                    if existing_cfg is None:
+                        from agent_runtime.memory.adapter.ltm_manager import build_scope_config
+                        scope_cfg = build_scope_config()
+                        strategies = memory_config.get("strategies") if memory_config.get("strategies") else []
+                        for strategy in strategies:
+                            strategy_type = strategy.get("type", "")
+                            prompt = strategy.get("prompt", "")
+                            if not prompt:
+                                continue
+                            if strategy_type == "user_profile":
+                                scope_cfg.user_profile_definition = prompt
+                            elif strategy_type == "semantic_memory":
+                                scope_cfg.semantic_memory_definition = prompt
+                            elif strategy_type == "episodic_memory":
+                                scope_cfg.episodic_memory_definition = prompt
+                        await ltm.set_scope_config(memory_repo_id, scope_cfg)
+                except Exception as e:
+                    logger.warning("Failed to ensure scope config for %s (non-blocking): %s", memory_repo_id, e)
 
-            configs = ir_data.get("configs") if ir_data.get("configs") else {}
-            memory_config = configs.get("memory") if configs.get("memory") else {}
-            strategies = memory_config.get("strategies") if memory_config.get("strategies") else []
-            strategy_types = {s.get("type") for s in strategies if s.get("type")}
-            if strategy_types:
-                agent_config.enable_user_profile = "user_profile" in strategy_types
-                agent_config.enable_semantic_memory = "semantic_memory" in strategy_types
-                agent_config.enable_episodic_memory = "episodic_memory" in strategy_types
+                base_messages: list[BaseMessage] = []
+                for chat_turn in cached_conversation_to_extract.chat_turns:
+                    for msg in chat_turn.messages:
+                        if msg.role == "user":
+                            base_messages.append(UserMessage(content=msg.content))
+                        else:
+                            base_messages.append(AssistantMessage(content=msg.content))
 
-            await ltm.add_messages(
-                messages=base_messages,
-                agent_config=agent_config,
-                user_id=user_id.lower(),
-                scope_id=memory_repo_id,
-                session_id=conversation_id,
-            )
-            logger.info(
-                "LTM memory extraction completed for user: %s, conversation: %s",
-                user_id,
-                conversation_id,
-            )
+                if not base_messages:
+                    return
+
+                agent_config = AgentMemoryConfig()
+
+                strategies = memory_config.get("strategies") if memory_config.get("strategies") else []
+                strategy_types = {s.get("type") for s in strategies if s.get("type")}
+                if strategy_types:
+                    agent_config.enable_user_profile = "user_profile" in strategy_types
+                    agent_config.enable_semantic_memory = "semantic_memory" in strategy_types
+                    agent_config.enable_episodic_memory = "episodic_memory" in strategy_types
+
+                await ltm.add_messages(
+                    messages=base_messages,
+                    agent_config=agent_config,
+                    user_id=user_id.lower(),
+                    scope_id=memory_repo_id,
+                    session_id=conversation_id,
+                )
+                logger.info(
+                    "LTM memory extraction completed for user: %s, conversation: %s",
+                    user_id,
+                    conversation_id,
+                )
 
         except Exception as e:
             logger.error(

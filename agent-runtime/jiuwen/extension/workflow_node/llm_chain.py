@@ -985,6 +985,8 @@ class LLMChain(WorkflowComponent):
             scope_id = self._session.get_global_state("memory_repo_id")
             if not scope_id:
                 return
+            # Read full memory_config for backend_type dispatch (EXTERNAL → ExternalMemoryClient)
+            memory_config = self._session.get_global_state("memory_config") or {}
             gv = self._session.get_global_state("global_variables") or {}
             user_id = ""
             if isinstance(gv, dict):
@@ -1006,7 +1008,8 @@ class LLMChain(WorkflowComponent):
             from agent_runtime.memory.memory_retrieval import retrieve_memory_prompt
 
             memory_prompt = await retrieve_memory_prompt(
-                user_id=user_id, scope_id=scope_id, query=query
+                user_id=user_id, scope_id=scope_id, query=query,
+                memory_config=memory_config,
             )
             if not memory_prompt:
                 return

@@ -1219,10 +1219,39 @@ CREATE TABLE IF NOT EXISTS `t_memory_repo` (
     `created_user_name` varchar(255) NOT NULL COMMENT '创建人（用户名）',
     `last_update_user_id` varchar(64) DEFAULT NULL COMMENT '更新人（用户id）',
     `last_update_user_name` varchar(255) DEFAULT NULL COMMENT '更新人（用户名）',
+    `memory_backend_type` varchar(16) NOT NULL DEFAULT 'BUILTIN' COMMENT '记忆后端类型：BUILTIN内置/EXTERNAL外部',
+    `memory_service_instance_id` varchar(64) DEFAULT NULL COMMENT '外部记忆服务实例ID（EXTERNAL时必填）',
+    `scope_model_config` TEXT NULL COMMENT 'scope级模型配置JSON（LLM/Embedding+enable_*），由manager推送到实例，不进IR',
     `create_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='记忆库表';
+
+-- migrate: add new columns to existing t_memory_repo.
+ALTER TABLE `t_memory_repo` ADD COLUMN `memory_backend_type` varchar(16) NOT NULL DEFAULT 'BUILTIN' COMMENT '记忆后端类型：BUILTIN内置/EXTERNAL外部';
+ALTER TABLE `t_memory_repo` ADD COLUMN `memory_service_instance_id` varchar(64) DEFAULT NULL COMMENT '外部记忆服务实例ID（EXTERNAL时必填）';
+ALTER TABLE `t_memory_repo` ADD COLUMN `scope_model_config` TEXT NULL COMMENT 'scope级模型配置JSON';
+
+-- memory service instance table (external agent-memory registration)
+CREATE TABLE IF NOT EXISTS `t_memory_service_instance` (
+    `id` varchar(64) NOT NULL COMMENT '主键id',
+    `name` varchar(128) NOT NULL COMMENT '实例名称',
+    `base_url` varchar(512) NOT NULL COMMENT 'agent-memory服务地址（如http://mem-svc-a:8000）',
+    `api_key` varchar(1024) DEFAULT NULL COMMENT 'MEMORY_API_KEY，加密存储，不入IR',
+    `workspace_id` varchar(64) NOT NULL COMMENT '项目空间ID',
+    `project_id` varchar(64) NOT NULL COMMENT '租户唯一标识',
+    `domain_id` varchar(64) NOT NULL COMMENT 'IAM账号ID，租户ID',
+    `health_status` varchar(16) DEFAULT 'UNKNOWN' COMMENT '健康检查状态：HEALTHY/UNHEALTHY/UNKNOWN',
+    `last_check_at` TIMESTAMP NULL DEFAULT NULL COMMENT '最近健康检查时间',
+    `deploy_meta` TEXT NULL COMMENT '展示用JSON：vector_store_type/db_type等',
+    `created_user_id` varchar(64) NOT NULL COMMENT '创建人（用户ID）',
+    `created_user_name` varchar(255) NOT NULL COMMENT '创建人（用户名）',
+    `last_update_user_id` varchar(64) DEFAULT NULL COMMENT '更新人（用户id）',
+    `last_update_user_name` varchar(255) DEFAULT NULL COMMENT '更新人（用户名）',
+    `create_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外部记忆服务实例注册表';
 
 -- model tables
 CREATE TABLE IF NOT EXISTS `t_sys_model_service_provider` (

@@ -6,13 +6,13 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe, I18NextModule } from 'angular-i18n
 import { Subject, takeUntil } from 'rxjs';
 
 // NG-ZORRO 导入
-import { NzPageHeaderModule } from 'ng-zorro-antd/page-header';
-import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
 import { NzTableModule } from 'ng-zorro-antd/table';
-import { NzCardModule } from 'ng-zorro-antd/card';
+import { NzTagModule } from 'ng-zorro-antd/tag';
+import { NzTypographyModule } from 'ng-zorro-antd/typography';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzDrawerModule } from 'ng-zorro-antd/drawer';
@@ -23,8 +23,6 @@ import { MemoryLibApiService } from '@routes/memory-lib/memory-lib-api.service';
 import { MEMORY_STRATEGY_MAP } from '@routes/memory-lib/memory-lib-constants';
 import { IMemoryLibDetail } from '@routes/memory-lib/memory-lib-interfaces';
 import { MemoryLibService } from '@routes/memory-lib/memory-lib.service';
-import { CommonService } from '@services/common.service';
-import { HttpService } from '@services/http.service';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 
 import { PipesModule } from '../../../pipes/pipes.module';
@@ -42,13 +40,13 @@ import { SafeHtmlPipe } from '../../../pipes/safehtml.pipe';
     PipesModule,
     SafeHtmlPipe,
     // NG-ZORRO
-    NzPageHeaderModule,
-    NzBreadCrumbModule,
     NzButtonModule,
+    NzBreadCrumbModule,
     NzIconModule,
     NzDescriptionsModule,
     NzTableModule,
-    NzCardModule,
+    NzTagModule,
+    NzTypographyModule,
     NzSpinModule,
     NzToolTipModule,
     NzDrawerModule,
@@ -67,8 +65,6 @@ export class MemoryLibDetailComponent implements OnInit, OnDestroy {
   readonly i18n = inject(I18NextEagerPipe);
   readonly route = inject(ActivatedRoute);
   readonly router = inject(Router);
-  readonly http = inject(HttpService);
-  readonly commonService = inject(CommonService);
   readonly memoryLibService = inject(MemoryLibService);
   readonly memoryLibApiService = inject(MemoryLibApiService);
   readonly message = inject(NzMessageService);
@@ -77,6 +73,17 @@ export class MemoryLibDetailComponent implements OnInit, OnDestroy {
   memoryLibId = signal('');
   memLibDetail = signal<IMemoryLibDetail | null>(null);
   loading = signal(false);
+
+  crumbItems = signal<any[]>([
+    {
+      label: this.i18n.transform('memory.management.title'),
+      routerLink: '/home/agent-center/library-home',
+      queryParams: { tabId: 'memoryLib' },
+    },
+    {
+      label: this.i18n.transform('memory.detail.crumb.memoryLibDetail'),
+    },
+  ]);
 
   operators = signal<any[]>([
     {
@@ -97,26 +104,10 @@ export class MemoryLibDetailComponent implements OnInit, OnDestroy {
     },
   ]);
 
-  crumbItems = signal<any[]>([
-    {
-      label: this.i18n.transform('memory.management.title'),
-      routerLink: '/home/agent-center/library-home',
-      queryParams: { tabId: 'memoryLib' },
-    },
-    {
-      label: this.i18n.transform('memory.detail.crumb.memoryLibDetail'),
-    },
-  ]);
-
-  subtitle = signal<any>({
-    items: [],
-  });
-
   private destroy$ = new Subject<void>();
 
   constructor() {
     this.#setMemoryLibId();
-    this.#getResourceInfo();
   }
 
   getMappedIcon(tinyIcon: string): string {
@@ -141,18 +132,20 @@ export class MemoryLibDetailComponent implements OnInit, OnDestroy {
   #setMemoryLibId() {
     this.route.params.pipe(takeUntil(this.destroy$)).subscribe(params => {
       this.memoryLibId.set(params.id);
+      this.#getResourceInfo();
     });
   }
 
   #getResourceInfo(): void {
+    const id = this.memoryLibId();
+    if (!id) {
+      return;
+    }
     this.loading.set(true);
     this.memoryLibApiService
-      .queryMemoryLibDetail(this.memoryLibId())
+      .queryMemoryLibDetail(id)
       .then(detail => {
         this.memLibDetail.set(detail);
-        this.subtitle.set({
-          items: [{ label: detail.name ?? '' }],
-        });
       })
       .catch(() => this.memLibDetail.set(null))
       .finally(() => this.loading.set(false));

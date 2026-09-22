@@ -3,6 +3,7 @@ import { I18NEXT_NAMESPACE, I18NextModule } from 'angular-i18next';
 
 // 替换为 NG-ZORRO 模块
 import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
@@ -20,6 +21,7 @@ import { MemoryLibService } from '@routes/memory-lib/memory-lib.service';
   imports: [
     I18NextModule,
     NzIconModule,
+    NzTagModule,
     NzToolTipModule,
     NzSpinModule,
     NzTypographyModule

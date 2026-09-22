@@ -24,6 +24,9 @@
           </div>
 
           <div class="memory-lib-tag-container gap-2 flex">
+            <nz-tag [nzColor]="(memoryLib.memory_backend_type ?? 'BUILTIN') === 'EXTERNAL' ? 'purple' : 'blue'">
+              {{ ((memoryLib.memory_backend_type ?? 'BUILTIN') === 'EXTERNAL' ? 'memory.management.backend.external' : 'memory.management.backend.builtin') | i18nextEager }}
+            </nz-tag>
             @for (tag of resolveStrategyTags(memoryLib); track $index) {
               <nz-tag nzColor="default">{{ tag | i18nextEager }}</nz-tag>
             }

@@ -4699,6 +4699,21 @@ public enum StudioError {
     MEMORY_REPO_NOT_EXIST(BAD_REQUEST, MEMORY, "1004"),
 
     /**
+     * 外部记忆服务实例不存在
+     */
+    MEMORY_SERVICE_INSTANCE_NOT_EXIST(BAD_REQUEST, MEMORY, "1006"),
+
+    /**
+     * 外部记忆服务实例已被记忆库引用，无法删除
+     */
+    MEMORY_SERVICE_INSTANCE_IN_USE(BAD_REQUEST, MEMORY, "1007"),
+
+    /**
+     * 外部记忆服务实例不可达
+     */
+    MEMORY_SERVICE_INSTANCE_UNREACHABLE(BAD_REQUEST, MEMORY, "1008"),
+
+    /**
      *
      */
     AGENT_TYPE_MEMORY_REPO_NOT_SUPPORT(BAD_REQUEST, MEMORY, "1005"),

@@ -364,6 +364,14 @@ def build_req_json_from_workflow(
         "enableHistory": body.enable_history,
         **_long_term_memory_params(body.long_term_memory),
     }
+    # Pass long_term_memory config (enable_memory_retrieve/extract + memory_repo_id)
+    # to runtime params so the workflow runner can trigger memory retrieval/extraction.
+    if body.long_term_memory:
+        ltm = body.long_term_memory
+        params["enableMemoryRetrieve"] = ltm.get("enable_retrieve", False)
+        params["enableMemoryExtract"] = ltm.get("enable_extract", False)
+        if ltm.get("memory_repo_id"):
+            params["memoryRepoId"] = ltm["memory_repo_id"]
     if secret_env_keys:
         params["secretEnvKeys"] = secret_env_keys
 
@@ -399,6 +407,13 @@ def build_req_json_from_agent(
         "enableHistory": body.enable_history,
         **_long_term_memory_params(body.long_term_memory),
     }
+    # Pass long_term_memory config (enable_memory_retrieve/extract + memory_repo_id)
+    if body.long_term_memory:
+        ltm = body.long_term_memory
+        params["enableMemoryRetrieve"] = ltm.get("enable_retrieve", False)
+        params["enableMemoryExtract"] = ltm.get("enable_extract", False)
+        if ltm.get("memory_repo_id"):
+            params["memoryRepoId"] = ltm["memory_repo_id"]
     if environment_variables:
         params["environmentVariables"] = environment_variables
     if secret_env_keys:
