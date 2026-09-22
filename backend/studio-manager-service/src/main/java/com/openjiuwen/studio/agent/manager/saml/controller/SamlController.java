@@ -53,6 +53,9 @@ public class SamlController {
     @Value("${saml.redirectUrl:0}")
     private String redirectUrl;
 
+    @Value("${saml.idp-issuer:}")
+    private String idpIssuer;
+
     /**
      * SAML响应处理端点 - 接收SAML身份提供商的响应
      * 为了满足IDP要求
@@ -69,7 +72,8 @@ public class SamlController {
         }
         try {
             vld = new SAMLResponseValidatorImpl(
-                new String(new Base64().decode(samlResp.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
+                new String(new Base64().decode(samlResp.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8),
+                idpIssuer);
             vld.validate();
 
             // 验证成功，返回用户信息
@@ -95,10 +99,13 @@ public class SamlController {
                 throw new SAMLException("Session creation failed");
             }
 
-            // 设置会话cookie
-            setSessionCookie(response, SimpleConstants.AGENT_SID, uid + "|" + projectId);
-            setSessionCookie(response, "AUTH_SESSION", session.getSessionId());
-            ServletUtils.setSidToCookie(response, uid + "|" + projectId);
+            // HTTP 下不能带 Secure，否则浏览器不会保存会话 Cookie
+            boolean secureCookie = request.isSecure();
+            setSessionCookie(response, SimpleConstants.AGENT_SID, uid + "|" + projectId, secureCookie);
+            setSessionCookie(response, "AUTH_SESSION", session.getSessionId(), secureCookie);
+            if (secureCookie) {
+                ServletUtils.setSidToCookie(response, uid + "|" + projectId);
+            }
 
             // 验证重定向URL
             String finalRedirectUrl = (redirectUrl != null && !redirectUrl.trim().isEmpty()) ? redirectUrl : "/";
@@ -166,12 +173,13 @@ public class SamlController {
     /**
      * 设置会话cookie
      */
-    private void setSessionCookie(HttpServletResponse response, String cookieKey, String cookieValue) {
+    private void setSessionCookie(HttpServletResponse response, String cookieKey, String cookieValue,
+        boolean secure) {
         Cookie cookie = new Cookie(cookieKey, cookieValue);
         cookie.setPath("/");
         cookie.setHttpOnly(true);
         cookie.setMaxAge(30 * 60); // 30分钟
-        cookie.setSecure(true);
+        cookie.setSecure(secure);
         response.addCookie(cookie);
     }
 

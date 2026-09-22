@@ -27,6 +27,11 @@ public class SamlConfig {
     private String idpMetadataUrl;
 
     /**
+     * 身份提供商 Issuer，对应配置项 saml_idp_issuer
+     */
+    private String idpIssuer;
+
+    /**
      * SAML服务的基础URL
      */
     private String baseUrl;

@@ -20,6 +20,8 @@ public class RequestBuilder {
 
     private final String serviceUrl;
 
+    private final String destination;
+
     private final PrivateKeyEntry privateKeyEntry;
 
     private String digestAlgorithm;
@@ -27,8 +29,13 @@ public class RequestBuilder {
     private String signatureAlgorithm;
 
     public RequestBuilder(String issuer, String serviceUrl, PrivateKeyEntry privateKeyEntry) {
+        this(issuer, serviceUrl, null, privateKeyEntry);
+    }
+
+    public RequestBuilder(String issuer, String serviceUrl, String destination, PrivateKeyEntry privateKeyEntry) {
         this.issuer = issuer;
         this.serviceUrl = serviceUrl;
+        this.destination = destination;
         this.privateKeyEntry = privateKeyEntry;
     }
 
@@ -37,7 +44,11 @@ public class RequestBuilder {
      * @throws SAMLException
      */
     public String build() throws SAMLException {
-        AuthnRequest authnRequest = new AuthnRequest(this.issuer, this.issuer, this.serviceUrl);
+        String issueInstant = java.time.format.DateTimeFormatter
+            .ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            .withZone(java.time.ZoneOffset.UTC)
+            .format(java.time.Instant.now());
+        AuthnRequest authnRequest = new AuthnRequest(this.issuer, issueInstant, this.serviceUrl, this.destination);
         authnRequest.setDigestAlgorithm(digestAlgorithm);
         authnRequest.setSignatureAlgorithm(signatureAlgorithm);
         Request request = new Request(authnRequest, this.privateKeyEntry);
