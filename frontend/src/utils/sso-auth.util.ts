@@ -258,6 +258,10 @@ const TWO_PART_PUBLIC_SUFFIXES = new Set([
   'com.au', 'net.au', 'org.au',
   'co.jp', 'or.jp', 'ne.jp',
   'co.kr', 'co.nz', 'com.br', 'com.mx', 'com.tr',
+  // 常见私有后缀（PSL 私有域）：命中时各子域互为独立注册域（站点），
+  // 防止 a.github.io 与 b.github.io 被误判为同站导致 Cookie 静默失效
+  'github.io', 'gitlab.io', 'pages.dev', 'vercel.app',
+  'netlify.app', 'web.app', 'firebaseapp.com', 'herokuapp.com',
 ]);
 
 /**
@@ -301,6 +305,9 @@ function isSameSite(refUrl: URL): boolean {
  * document.cookie 与请求 Cookie 头均按 path 长度降序列出同名 Cookie
  * （RFC 6265 §5.4）：若存在更具体 path 的同名旧 Cookie，后端优先读到
  * 旧值（遮蔽本工具写入的 path=/ 值）。
+ * 注意：§5.4 的排序是 SHOULD 而非 MUST——主流浏览器均实现该排序，本
+ * 校验依赖它；极端不排序的实现中遮蔽可能被误判为 ok，表现为后端 401
+ * （旧 Cookie 生效），以接口报错为排障信号。
  *
  * @returns 'ok' 首条同名 Cookie 即目标值（后端读到正确 token）；
  *          'shadowed' 目标值存在但被更具体 path 的同名旧 Cookie 遮蔽
@@ -409,6 +416,29 @@ export function writeSsoCookie(token: string, crossSite: boolean): boolean {
 }
 
 /**
+ * 判断 URL 的 hash/search 中是否存在 Auth 参数（无论能否消费成功）。
+ * 写入失败时 Auth 会保留在 URL 供重试，此时本函数返回 true——供调用方
+ * 感知"父平台已表达身份意图"，在消费失败时同样触发旧用户态清理，
+ * 避免新凭证意图与旧用户身份不一致。
+ */
+export function hasAuthParamInUrl(): boolean {
+  try {
+    const hash = window.location.hash;
+    const hashBody = hash.startsWith('#') ? hash.slice(1) : '';
+    const qIndex = hashBody.indexOf('?');
+    const hashQuery = qIndex >= 0 ? hashBody.slice(qIndex + 1) : '';
+    const search = window.location.search;
+    const searchQuery = search.startsWith('?') ? search.slice(1) : '';
+    return (
+      extractAuthParam(hashQuery).query !== hashQuery ||
+      extractAuthParam(searchQuery).query !== searchQuery
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * 组合入口：解析 Auth（hash 主通道 + search 防御）→ 安全门控 → 写入并校验
  * Cookie → 校验通过后剥除 URL。
  *
@@ -485,17 +515,16 @@ export function consumeSsoAuthFromUrl(): string | null {
     }
 
     // ---- 安全门控：非可信 iframe 嵌入时拒绝消费，但仍清理 URL 中的凭证
-    // （疑似截断时保持 URL 不变，与截断观察契约一致，不做部分清理）----
+    // （统一原则：清理一切可识别的凭证片段——疑似截断时 Auth= 首段同样
+    // 剥除，& 后的残段无法可靠判定边界故保留，与成功路径的取舍一致）----
     if (!isTrustedEmbedding()) {
       console.warn(
         '[SSO] Auth param ignored: page is not embedded by a trusted parent (login-CSRF protection)'
       );
-      if (!suspectTruncated) {
-        try {
-          stripAuthFromUrl();
-        } catch (e) {
-          console.warn('[SSO] failed to strip Auth param from url', e);
-        }
+      try {
+        stripAuthFromUrl();
+      } catch (e) {
+        console.warn('[SSO] failed to strip Auth param from url', e);
       }
       return null;
     }

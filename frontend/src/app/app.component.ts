@@ -28,7 +28,8 @@ import { LinkInterceptorService } from '@services/LinkInterceptorService';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { StorageService } from '@shared/services/cfdata.service';
 import { initHistoryInterceptor } from "../utils/utils";
-import { consumeSsoAuthFromUrl } from '../utils/sso-auth.util';
+import { consumeSsoAuthFromUrl, hasAuthParamInUrl } from '../utils/sso-auth.util';
+import { PE_SESSION_KEY } from '@constants/exp-tmpl-config.const';
 
 registerLocaleData(zh);
 
@@ -161,7 +162,7 @@ export class AppComponent implements OnInit {
       // 不会清除该 Cookie，而 resetUserData 仅在 AGENT_SID 为空时才调 getHealth，
       // 不清除将沿用旧用户身份初始化，造成页面身份与新凭证不一致
       if (consumeSsoAuthFromUrl()) {
-        StorageService.delCookie('AGENT_SID');
+        this.clearStaleUserState();
         window.location.reload();
       }
     };
@@ -292,13 +293,24 @@ export class AppComponent implements OnInit {
     this.initUserDate({ userId, projectId });
   }
 
+  // SSO 换凭证时清理旧用户态：AGENT_SID Cookie 与本地存储中的会话/空间信息，
+  // 确保按新凭证重新初始化（否则首个 getHealth 前的请求会读到旧 workspace/
+  // 用户态，造成新凭证与旧状态不一致）
+  clearStaleUserState(): void {
+    StorageService.delCookie('AGENT_SID');
+    StorageService.delLocalStorage(PE_SESSION_KEY);
+    StorageService.delLocalStorage(POC_JS_SESSION_KEY);
+    StorageService.delSessionStorage('CUR_SPACE_OPTIONS');
+  }
+
   //如果url参数带用户信息，取出调health接口setCookie，后清除url参数
   async resetUserData() {
-    // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）；
-    // 消费到 token 意味着身份以新凭证为准——清除旧 AGENT_SID，确保无 x-user-id
-    // 参数时也会走 getHealth 按新凭证重建用户态（否则旧 Cookie 会跳过初始化）
-    if (consumeSsoAuthFromUrl()) {
-      StorageService.delCookie('AGENT_SID');
+    // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）。
+    // 只要 URL 中存在 Auth（无论写入成败），父平台已表达身份意图——清理旧用户态
+    // （AGENT_SID 与本地存储的会话/空间信息），确保按新凭证而非旧状态初始化；
+    // 写入失败时同样清理：让应用可见地降级为未登录，而不是沿用旧用户身份
+    if (consumeSsoAuthFromUrl() || hasAuthParamInUrl()) {
+      this.clearStaleUserState();
     }
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
