@@ -20,7 +20,11 @@
  *    TRUSTED_PARENT_ORIGINS（支持 index.html 运行期注入免构建，见其
  *    注释），否则 SSO 不生效**；
  * 3. referrer 缺失按不可信处理（fail-closed）。父页面不得设置
- *    Referrer-Policy: no-referrer（浏览器默认策略不受影响）。
+ *    Referrer-Policy: no-referrer（浏览器默认策略不受影响）；
+ * 4. 已知绕过面：document.referrer 会反映重定向链——若可信父平台自身
+ *    存在开放重定向/可控跳转端点，攻击者可借其使 referrer 呈现为可信
+ *    origin。根治需父平台消除开放重定向，或升级为 postMessage + origin
+ *    校验握手（需父平台配合改造，超出本工具范围）。
  *
  * token 编码契约：token 须以 URL 原样（未 percent-encoding）拼入 src，
  * 且不得包含 '&'（URL 按 & 切分查询串，token 会被截断）。Auth 段后紧跟
@@ -101,10 +105,20 @@ let writeFailureCount = 0;
 /** 上一次写入失败的 token：父平台换发新 token 时重置计数，给予完整重试预算 */
 let lastFailedToken: string | null = null;
 
-/** 跨 reload 的失败计数持久化状态 */
+/** 跨 reload 的失败计数持久化状态（仅存 token 指纹，不落明文凭证） */
 interface PersistedWriteFailure {
-  token: string;
+  fingerprint: string;
   count: number;
+}
+
+/** token 去重指纹（FNV-1a 32 位；非安全用途，仅避免明文凭证落入 sessionStorage） */
+function tokenFingerprint(token: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < token.length; i++) {
+    hash ^= token.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 /** 读取持久化失败计数（存储被禁用/解析失败时返回 null，回退会话内计数） */
@@ -117,7 +131,7 @@ function readPersistedWriteFailure(): PersistedWriteFailure | null {
     const parsed = JSON.parse(raw);
     if (
       parsed &&
-      typeof parsed.token === 'string' &&
+      typeof parsed.fingerprint === 'string' &&
       typeof parsed.count === 'number'
     ) {
       return parsed;
@@ -527,11 +541,13 @@ export function consumeSsoAuthFromUrl(): string | null {
       }
       writeFailureCount++;
       // 跨 reload 累计：主重试路径是页面 reload（模块计数会重置），
-      // 取持久化计数（同 token）与内存计数的大者，防止失败预算无限刷新
+      // 取持久化计数（同 token 指纹）与内存计数的大者，防止失败预算无限刷新
+      const fingerprint = tokenFingerprint(token);
       const persisted = readPersistedWriteFailure();
-      const persistedCount = persisted && persisted.token === token ? persisted.count : 0;
+      const persistedCount =
+        persisted && persisted.fingerprint === fingerprint ? persisted.count : 0;
       writeFailureCount = Math.max(writeFailureCount, persistedCount + 1);
-      writePersistedWriteFailure({ token, count: writeFailureCount });
+      writePersistedWriteFailure({ fingerprint, count: writeFailureCount });
       if (writeFailureCount >= MAX_WRITE_FAILURES_BEFORE_CLEANUP) {
         // 持续失败（Safari/ITP、三方 Cookie 策略、HttpOnly 冲突等）：放弃重试
         // 并强制清理，防止凭据无限期驻留地址栏与历史记录（保留持久化计数，

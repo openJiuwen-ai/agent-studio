@@ -151,21 +151,25 @@ export class AppComponent implements OnInit {
 
     this.initPocServiceType();
 
-    await this.initLiteUserDate();
-
-    initHistoryInterceptor();
-    this.changeRouter();
-
+    // 尽早注册 hashchange：初始化期间（含 getHealth 网络往返）父平台变更
+    // hash 换 token 的事件不再丢失
     window.onhashchange = () => {
       // 监听hashchange事件
       this.changeRouter();
       // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费；
-      // 消费成功（可能关联不同用户）则整体 reload，使 AGENT_SID/workspace/权限
-      // 等用户态按新凭证重新初始化，避免页面身份与请求凭证不一致
+      // 消费成功（可能关联不同用户）先清除旧 AGENT_SID 再整体 reload——reload
+      // 不会清除该 Cookie，而 resetUserData 仅在 AGENT_SID 为空时才调 getHealth，
+      // 不清除将沿用旧用户身份初始化，造成页面身份与新凭证不一致
       if (consumeSsoAuthFromUrl()) {
+        StorageService.delCookie('AGENT_SID');
         window.location.reload();
       }
     };
+
+    await this.initLiteUserDate();
+
+    initHistoryInterceptor();
+    this.changeRouter();
   }
 
   judgeHostAndPathName(){
@@ -290,8 +294,12 @@ export class AppComponent implements OnInit {
 
   //如果url参数带用户信息，取出调health接口setCookie，后清除url参数
   async resetUserData() {
-    // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）
-    consumeSsoAuthFromUrl();
+    // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）；
+    // 消费到 token 意味着身份以新凭证为准——清除旧 AGENT_SID，确保无 x-user-id
+    // 参数时也会走 getHealth 按新凭证重建用户态（否则旧 Cookie 会跳过初始化）
+    if (consumeSsoAuthFromUrl()) {
+      StorageService.delCookie('AGENT_SID');
+    }
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
 
