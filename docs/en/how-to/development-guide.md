@@ -214,12 +214,15 @@ Client → sends request with auth Token to platform → platform extracts Token
    | User unique identifier | `user_id` | Response body | Yes | `user_info_claims_user_id` |
    | User name | `user_name` | Response body | Yes | `user_info_claims_user_name` |
    | Domain identifier | `domain_id` | Response body | No (defaults to `0` if missing) | `user_info_claims_domain_id` |
+   | Domain name | `domain_name` | Response body | No (defaults to `0` if missing) | `user_info_claims_domain_name` |
    | Project identifier | `project_id` | Response body | No (defaults to `0` if missing) | `user_info_claims_project_id` |
+
+   > **Domain name (`domain_name`)**: some platform features (e.g. the team workspace "Add member" picker querying the user list via IAM) exchange the domain name for an IAM domain token. If the SSO response does not return this field, the platform defaults to `0`; you can also customize the default via `user_info_defaults_domain_name`. A missing value never causes an interface error.
 
    Example: The platform by default extracts the user unique identifier from the `user_id` field in the SSO response. If the field is named `account_id` in the SSO response, configure `user_info_claims_user_id=account_id`. The same applies to other fields; modify the corresponding environment variable when inconsistent with defaults.
 
    > The following configurations generally do not need modification but can be adjusted as needed:
-   > - Values when domain/project identifiers are missing can be modified via `user_info_defaults_domain_id`, `user_info_defaults_project_id` (default `0`)
+   > - Values when domain/project identifiers are missing can be modified via `user_info_defaults_domain_id`, `user_info_defaults_domain_name`, `user_info_defaults_project_id` (default `0`)
    > - Auth-exempt paths via `auth_path_excluded` config (default `/v1/health, /health`), multiple paths comma-separated, supports Ant wildcards (e.g. `/v3/**`)
 
 2. **Configure `auth_sso_validate_url` to enable SSO auth**: Set `auth_sso_validate_url` to the SSO Server's auth interface URL; modify environment variables for any inconsistent items in Step 1; restart studio-manager / studio-runtime services to take effect.

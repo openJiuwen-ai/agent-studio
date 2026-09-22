@@ -190,6 +190,8 @@ public class SsoAuthenticationService {
             .userId(getValueOrDefault(extractClaim(ssoUserInfo, claims.getUserId()), "unknown"))
             .userName(getValueOrDefault(extractClaim(ssoUserInfo, claims.getUserName()), "unknown"))
             .domainId(getValueOrDefault(extractClaim(ssoUserInfo, claims.getDomainId()), defaults.getDomainId()))
+            .domainName(
+                getValueOrDefault(extractClaim(ssoUserInfo, claims.getDomainName()), defaults.getDomainName()))
             .projectId(getValueOrDefault(extractClaim(ssoUserInfo, claims.getProjectId()), defaults.getProjectId()))
             .build();
     }

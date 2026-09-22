@@ -48,13 +48,14 @@ export class AddUserComponent implements OnInit, OnDestroy {
     private modalRef: NzModalRef
   ) {}
 
- async ngOnInit() {
+  async ngOnInit() {
     const lang = CommonUtils.getLanguage();
-   this.integrationTabsOption = this.roles_all.map((item) => {
-      item.disabled = item.roleId === 'OWNER';
-      item.roleName = lang === 'zh-cn' ? item.roleNameCn : CommonUtils.titleCase3(item.roleNameEn)
+    // nz-select 的 [nzOptions] 需要 { label, value } 结构，否则下拉选项显示为空白
+    this.integrationTabsOption = this.roles_all.map((item) => {
       return {
-        ...item,
+        label: lang === 'zh-cn' ? item.roleNameCn : CommonUtils.titleCase3(item.roleNameEn),
+        value: item.roleId,
+        disabled: item.roleId === 'OWNER',
       };
     });
     await this.get_space_members();
@@ -133,6 +134,33 @@ export class AddUserComponent implements OnInit, OnDestroy {
     this.checkedArray = this.checkedArray.filter(
       (item) => item.memberId !== data.memberId,
     );
+    this.syncCheckAll();
+  }
+
+  /** 单个成员是否已勾选（按 memberId 比较，避免对象引用差异导致状态不同步） */
+  isChecked(item: any): boolean {
+    return this.checkedArray.some((c) => c.memberId === item.memberId);
+  }
+
+  /** 单个成员勾选变化：同步到 checkedArray，左侧勾选态与右侧“已选”才会响应 */
+  onItemChecked(item: any, checked: boolean) {
+    if (checked) {
+      if (!this.isChecked(item)) {
+        this.checkedArray = [...this.checkedArray, item];
+      }
+    } else {
+      this.checkedArray = this.checkedArray.filter(
+        (c) => c.memberId !== item.memberId,
+      );
+    }
+    this.syncCheckAll();
+  }
+
+  /** 根据当前勾选情况回填“全部”复选框 */
+  syncCheckAll() {
+    const selectable = this.dataArray1.filter((item) => !item.disabled);
+    this.checkAll =
+      selectable.length > 0 && selectable.every((item) => this.isChecked(item));
   }
 
   async getAllUsersFn() {
@@ -176,16 +204,10 @@ export class AddUserComponent implements OnInit, OnDestroy {
       this.dataArray1 = this.originDataArray1;
       return;
     }
-    this.dataArray1 = this.dataArray1.filter(
+    // 始终基于完整列表过滤，避免在已过滤结果上二次过滤导致结果丢失
+    this.dataArray1 = this.originDataArray1.filter(
       (item) => item.memberName.indexOf(value) > -1,
     );
-  }
-
-  onSelectChange(info) {
-    if (!info) {
-      this.dataArray1 = this.originDataArray1;
-      return;
-    }
   }
 
   onNgcheckAll(info) {
