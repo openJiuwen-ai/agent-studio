@@ -27,7 +27,7 @@ import type {
   IParamRef,
   ISqlNode,
   IDataQueryNode,
-  IWFViewWithMultiType,
+  IWFView,
   IWorkflowField,
 } from '../../node.type';
 import { AccBlockComponent } from '../acc-block/acc-block.component';
@@ -40,7 +40,6 @@ import { InputTreeSelect } from 'src/routes/agent-center/app-flow/components/inp
 import { NonEmptyValidatorDirective, ValueValidityValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { RefSelectedRequireDirective } from '@shared/directives/common-validator.directive';
 import { IDatasourceList, IDatasourceItem } from '@routes/agent-center/types/datasource.types';
-import { FlowUtils } from '../../utils/flow-utils';
 
 @Component({
   selector: 'meta-sql-modal',
@@ -97,7 +96,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
 
   public sql = '';
 
-  public outputParams: IWFViewWithMultiType[] = [];
+  public outputParams: IWFView[] = [];
 
   public outputDataTypes = getOutputParamTypes();
   public noneObjDataTypes = getNoneObjOutputParamTypes();
@@ -144,7 +143,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
       });
     }
 
-    this.outputParams = FlowUtils.fields2Views(
+    this.outputParams = NodeUtils.fields2Views(
       (this.nodeInfo as ISqlNode).outputs,
     );
 
@@ -185,7 +184,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
         ...this.nodeInfo,
         inputs: NodeUtils.getDtoInputs(this.inputParams),
         configs,
-        outputs: NodeUtils.multiTypeViews2Fields(this.outputParams),
+        outputs: NodeUtils.views2Fields(this.outputParams),
       },
     });
     if (this.updateTimeout) {
@@ -246,7 +245,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     this.onSave();
   }
 
-  showDelete(param: IWFViewWithMultiType) {
+  showDelete(param: IWFView) {
     if (this.disableEdit(param)) {
       return false;
     }
@@ -256,7 +255,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     return true;
   }
 
-  disableEdit(param: IWFViewWithMultiType) {
+  disableEdit(param: IWFView) {
     return param.name === 'output_list' || param.name === 'row_num';
   }
 
@@ -266,7 +265,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     });
   }
 
-  getOutputNames(param: IWFViewWithMultiType): { existingValues: string[] } {
+  getOutputNames(param: IWFView): { existingValues: string[] } {
     let names: string[] = [];
     if (param.depth === 0) {
       names = this.outputParams.map((arg) => arg.name);
@@ -278,7 +277,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     return { existingValues: names };
   }
 
-  private findParentNode(nodes: IWFViewWithMultiType[], target: any): IWFViewWithMultiType | null {
+  private findParentNode(nodes: IWFView[], target: any): IWFView | null {
     for (const node of nodes) {
       if (node.children?.includes(target)) {
         return node;
@@ -291,8 +290,8 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     return null;
   }
 
-  deleteOutputParam(param: IWFViewWithMultiType) {
-    const removeNode = (nodes: IWFViewWithMultiType[], target: any): boolean => {
+  deleteOutputParam(param: IWFView) {
+    const removeNode = (nodes: IWFView[], target: any): boolean => {
       const idx = nodes.indexOf(target);
       if (idx >= 0) {
         nodes.splice(idx, 1);
