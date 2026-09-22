@@ -40,6 +40,9 @@
  *    SameSite=None; Secure; Partitioned，且必须先由部署方在后端 Origin
  *    校验上线后设置 window.__SSO_CSRF_PROTECTION_CONFIRMED__ = true
  *    （index.html 注入），否则拒绝写入该 Cookie。
+ * 站点关系按 SameSite 语义近似判定（scheme 一致 + 注册域相同，公共后缀
+ * 表非全量）：误判只影响可用性不影响安全性——同站误判为跨站会多要求
+ * 一次 CSRF 确认，跨站误判为同站写入的 Lax Cookie 不会被跨站携带。
  *
  * 顺序保证：先写入并回读校验 Cookie 值，校验通过后才剥除 URL。写入失败
  * 时保留 Auth 供重试，失败计数经 sessionStorage 跨 reload 累计（存储
@@ -234,6 +237,51 @@ function isTrustedEmbedding(): boolean {
   return isTrustedReferrer(document.referrer);
 }
 
+/** 常见二级公共后缀（近似 PSL 的非全量子集，覆盖主流部署） */
+const TWO_PART_PUBLIC_SUFFIXES = new Set([
+  'co.uk', 'org.uk', 'ac.uk', 'gov.uk',
+  'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
+  'com.au', 'net.au', 'org.au',
+  'co.jp', 'or.jp', 'ne.jp',
+  'co.kr', 'co.nz', 'com.br', 'com.mx', 'com.tr',
+]);
+
+/**
+ * 近似计算注册域（eTLD+1）：IP 地址整串为站点单位；末两段命中二级公共
+ * 后缀表时取末三段，否则取末两段。公共后缀表非全量，未知后缀场景的
+ * 误差只影响可用性不影响安全性（Lax Cookie 不会跨站携带）。
+ */
+function registrableDomainOf(hostname: string): string {
+  const host = hostname.toLowerCase();
+  if (host.includes(':')) {
+    return host; // IPv6 整串
+  }
+  const labels = host.split('.');
+  if (labels.every((label) => /^\d+$/.test(label))) {
+    return host; // IPv4 整串
+  }
+  if (labels.length <= 2) {
+    return host;
+  }
+  const lastTwo = labels.slice(-2).join('.');
+  if (TWO_PART_PUBLIC_SUFFIXES.has(lastTwo)) {
+    return labels.slice(-3).join('.');
+  }
+  return lastTwo;
+}
+
+/**
+ * SameSite 语义的近似同站判定：scheme 一致（schemeful same-site，http 与
+ * https 互为跨站）且注册域相同。修复此前 hostname 前后缀比较对兄弟子域
+ * （a.example.com vs b.example.com，共享注册域属同站）与协议差异的误判。
+ */
+function isSameSite(refUrl: URL): boolean {
+  if (refUrl.protocol !== location.protocol) {
+    return false;
+  }
+  return registrableDomainOf(refUrl.hostname) === registrableDomainOf(location.hostname);
+}
+
 /**
  * 回读校验 Access-Token Cookie 是否为生效值。
  * document.cookie 与请求 Cookie 头均按 path 长度降序列出同名 Cookie
@@ -405,8 +453,9 @@ export function consumeSsoAuthFromUrl(): string | null {
       hashRes.suspectTruncated || searchRes.suspectTruncated;
     if (suspectTruncated) {
       console.warn(
-        '[SSO] Auth value may be truncated by an unencoded & (or followed by a ' +
-          'value-less flag param); consuming the first segment, verify the token on the parent side'
+        '[SSO] Auth value may be truncated by an unencoded & (or followed by a value-less ' +
+          'flag param); consuming and stripping only the first segment (truncated tokens may ' +
+          'leave a residual fragment in the url), verify the token on the parent side'
       );
     }
 
@@ -426,15 +475,11 @@ export function consumeSsoAuthFromUrl(): string | null {
       return null;
     }
 
-    // ---- 父页面站点关系（供 Cookie 属性与拓扑告警决策）----
+    // ---- 父页面站点关系（供 Cookie 属性与拓扑告警决策；按 SameSite 语义
+    // 近似判定：scheme 一致 + 注册域相同，见 isSameSite）----
     let crossSiteParent = false;
     try {
-      const refHost = new URL(document.referrer).hostname;
-      crossSiteParent = !(
-        refHost === location.hostname ||
-        refHost.endsWith(`.${location.hostname}`) ||
-        location.hostname.endsWith(`.${refHost}`)
-      );
+      crossSiteParent = !isSameSite(new URL(document.referrer));
     } catch (e) {
       // referrer 已在门控校验过，此处不可达；保守视为同站点
     }
@@ -506,6 +551,9 @@ export function consumeSsoAuthFromUrl(): string | null {
     lastFailedToken = null;
     writePersistedWriteFailure(null);
 
+    // 注：疑似截断时成功路径仍剥除 Auth 段——与门控拒绝分支（未消费任何
+    // 内容故整体保持不变）的非对称是有意的：布尔参数场景（Auth=token&flag）
+    // 不能让有效凭据驻留 URL；真截断场景残段属已失效凭据的碎片，无认证价值。
     try {
       stripAuthFromUrl();
     } catch (e) {
