@@ -52,6 +52,14 @@ public interface ComplexIntentMapper {
     ComplexIntentEntity getByKey(@Param("intentId") String intentId, @Param("projectId") String projectId);
 
     /**
+     * 按主键获取数据（主键全表唯一，不区分项目/空间；创建前 id 冲突预检用）
+     *
+     * @param intentId 意图id
+     * @return 数据
+     */
+    ComplexIntentEntity getByIntentId(@Param("intentId") String intentId);
+
+    /**
      * 根据意图ID、项目ID和工作区ID获取复杂的意图实体。
      *
      * @param intentId    意图的唯一标识符。

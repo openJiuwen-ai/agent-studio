@@ -173,6 +173,13 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
         // 校验名称是否重复
         checkIntentNameRepeat(body.getName(), projectId, workspaceId, complexIntent.getIntentId());
 
+        // 客户端/导入场景指定 id 时，插入前按全局主键预检 id 冲突，避免撞主键落 500
+        if (StringUtils.isNotEmpty(body.getId())
+            && complexIntentMapper.getByIntentId(body.getId()) != null) {
+            log.error("intent package id already exists, id:{}", body.getId());
+            throw new AgentStudioException(StudioError.COMPLEX_INTENT_EXIST);
+        }
+
         complexIntentMapper.createEntity(complexIntent);
         if (body.getBranches() == null || body.getBranches().isEmpty()) {
             return new ComplexIntentBriefRsp().setIntentId(complexIntent.getIntentId());

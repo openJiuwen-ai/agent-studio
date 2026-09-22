@@ -160,6 +160,50 @@ class ComplexIntentManagementServiceTest {
     }
 
     @Test
+    void testCreateComplexIntent_DuplicateId() {
+        try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
+            reqCtx.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+            reqCtx.when(RequestContextUtils::getRequestUserName).thenReturn("userName");
+            reqCtx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            ComplexIntentInfoReq body = new ComplexIntentInfoReq();
+            body.setName("NewIntent");
+            body.setId("existing-id");
+
+            ComplexIntentEntity existingEntity = new ComplexIntentEntity();
+            existingEntity.setIntentId("existing-id");
+
+            when(complexIntentMapper.getEntitiesAccurate(any())).thenReturn(new ArrayList<>());
+            when(complexIntentMapper.getByIntentId("existing-id")).thenReturn(existingEntity);
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body));
+            assertEquals(StudioError.COMPLEX_INTENT_EXIST, ex.getErrorCode());
+        }
+    }
+
+    @Test
+    void testCreateComplexIntent_SpecifiedId_NotExists() {
+        try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
+            reqCtx.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+            reqCtx.when(RequestContextUtils::getRequestUserName).thenReturn("userName");
+            reqCtx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            ComplexIntentInfoReq body = new ComplexIntentInfoReq();
+            body.setName("NewIntent");
+            body.setId("brand-new-id");
+
+            when(complexIntentMapper.getEntitiesAccurate(any())).thenReturn(new ArrayList<>());
+            when(complexIntentMapper.getByIntentId("brand-new-id")).thenReturn(null);
+
+            ComplexIntentBriefRsp result = complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body);
+            assertNotNull(result);
+            assertEquals("brand-new-id", result.getIntentId());
+            verify(complexIntentMapper).createEntity(any());
+        }
+    }
+
+    @Test
     void testCreateComplexIntentBranch_Success() {
         try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
             reqCtx.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");

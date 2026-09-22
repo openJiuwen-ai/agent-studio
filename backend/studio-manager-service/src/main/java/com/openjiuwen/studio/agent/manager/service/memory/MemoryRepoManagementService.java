@@ -105,18 +105,11 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
     }
 
     private void checkLongMemoryStrategies(List<LongTermMemoryStrategy> longTermMemoryStrategies) {
-        if (longTermMemoryStrategies == null || longTermMemoryStrategies.isEmpty()) {
-            throw new InvalidParameterException("至少需要一个长期记忆策略");
-        }
-        // 检查策略类型是否唯一
+        // 空/元素 type 为空已由 DTO 层校验拦截（@NotNull/@Size(min=1) 级联），此处仅校验跨元素唯一性
         Set<LongTermMemoryStrategy.TypeEnum> strategyTypes = new HashSet<>();
         for (LongTermMemoryStrategy strategy : longTermMemoryStrategies) {
-            if (strategy == null || strategy.getType() == null) {
-                throw new InvalidParameterException("记忆策略类型不能为空");
-            }
-
-            if (!strategyTypes.add(strategy.getType())) {
-                throw new InvalidParameterException("记忆策略类型重复: " + strategy.getType());
+            if (strategy != null && !strategyTypes.add(strategy.getType())) {
+                throw new AgentStudioException(StudioError.MEMORY_STRATEGY_DUPLICATE, strategy.getType());
             }
         }
     }

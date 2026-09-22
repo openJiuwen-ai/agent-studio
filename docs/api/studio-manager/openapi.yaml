@@ -770,11 +770,41 @@ paths:
           minLength: 1
       responses:
         "200":
-          description: OK
+          description: 知识库
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShowDefaultKnowledgeBaseConnectionDetailResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowDefaultKnowledgeBaseConnectionDetailResponseBody"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
     put:
       tags:
       - knowledge-base-connection-config-management-api-controller
@@ -807,11 +837,41 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 编辑第三方知识库响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UpdateDefaultKnowledgeBaseConnectionResponse"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateDefaultKnowledgeBaseConnectionResponse"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-builder/prompt:
     get:
       tags:
@@ -5227,11 +5287,41 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 创建默认知识库连接响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateDefaultKnowledgeBaseConnectionResponse"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateDefaultKnowledgeBaseConnectionResponse"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/knowledge-bases/configurations/default-connections/{connection_id}/test-connection:
     post:
       tags:
@@ -5257,11 +5347,41 @@ paths:
           type: string
       responses:
         "200":
-          description: OK
+          description: 测试默认知识库连接响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/knowledge-bases/configurations/default-connections/test-connection:
     post:
       tags:
@@ -5287,11 +5407,41 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 测试默认知识库连接响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/batchtools:
     post:
       tags:
@@ -14888,11 +15038,41 @@ paths:
           minimum: 1
       responses:
         "200":
-          description: OK
+          description: 知识库
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListDefaultKnowledgeBaseConnectorsResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListDefaultKnowledgeBaseConnectorsResponseBody"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/knowledge-bases/configs:
     get:
       tags:
@@ -20984,6 +21164,8 @@ components:
           description: 提示词
           example: 请输入...
           maxLength: 1000
+      required:
+      - type
     ModifyMemoryRepoRequestBody:
       type: object
       properties:
@@ -21112,6 +21294,44 @@ components:
           example: example-id-123
           maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
+    ErrorDetail:
+      type: object
+      properties:
+        error_code:
+          type: string
+          description: 错误码
+          example: 400
+        error_msg:
+          type: string
+          description: 错误消息
+          example: 参数校验失败
+    ErrorRsp:
+      type: object
+      properties:
+        error_code:
+          type: string
+          description: 错误码
+          example: 400
+        error_msg:
+          type: string
+          description: 错误消息
+          example: 参数校验失败
+        error_reason:
+          type: string
+          description: 错误原因
+          example: name不能为空
+        error_suggestion:
+          type: string
+          description: 修复建议
+          example: 请提供name参数
+        details:
+          type: array
+          description: 错误详情列表
+          example: []
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+          maxItems: 2147483647
+          minItems: 0
     PePromptTemplateNewVo:
       type: object
       properties:
@@ -21512,6 +21732,13 @@ components:
           - "200"
           - ""
           example: 10
+      required:
+      - api_url
+      - interface_protocol
+      - model_name
+      - model_type
+      - provider_id
+      - service_name
     ModelServiceProviderReq:
       type: object
       properties:
@@ -22892,6 +23119,10 @@ components:
           type: boolean
           description: 是否为默认安全组
           example: false
+      required:
+      - name
+      - subnetId
+      - vpcId
     DatasourceConnectionInfo:
       type: object
       properties:
@@ -24735,7 +24966,7 @@ components:
           items:
             $ref: "#/components/schemas/LongTermMemoryStrategy"
           maxItems: 200
-          minItems: 0
+          minItems: 1
         conversation_round:
           type: integer
           format: int32
@@ -24747,6 +24978,7 @@ components:
           description: 时间跨度（秒）
           example: 3600
       required:
+      - long_term_memory_strategies
       - name
     CreateMemoryRepoResponseBody:
       type: object
@@ -26672,7 +26904,6 @@ components:
           description: 版本ID
           example: v1.0
           maxLength: 10000
-          minLength: 1
         channel_type:
           type: string
           description: 通道类型
@@ -26737,7 +26968,6 @@ components:
           example: 100
       required:
       - channel_type
-      - version_id
     WorkflowFrontParam:
       type: object
       properties:
