@@ -28,6 +28,7 @@ from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error, ExecutionError
 from jiuwen.common.exception.status_code import StatusCode as JiuWenStatusCode
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.prompt.agent.common.utils import convert_json_schema
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.foundation.prompt import PromptTemplate
@@ -679,12 +680,23 @@ class LLMChain(WorkflowComponent):
                 "- Make sure your explanation is concise and easy to understand, "
                 "not verbose.\n"
                 "- Strictly return the answer in a valid json format only, and "
-                '"DO NOT ADD ANY COMMENTS BEFORE OR AFTER IT".\n'
+                '"DO NOT ADD ANY COMMENTS BEFORE OR AFTER IT" '
+                "to ensure it could be formatted as a JSON instance that "
+                "conforms to the JSON schema below. Here is the JSON schema:"
+                "${json_schema}.\n"
                 "The question is: ${query}."
             )
             instruction = response_format.get("jsonInstruction") or default_instruction
             if not instruction.strip():
                 instruction = default_instruction
+            # 将 outputs 配置转换为 JSON schema 并注入到指令中,
+            # 与 orchestration 栈 format_prompt 的 default_request 保持一致,
+            # 确保模型能感知正确的输出结构,对用户提示词中的格式错误有容错能力。
+            outputs_list = self._get_outputs_list_from_conf()
+            json_schema = convert_json_schema(outputs_list)
+            instruction = instruction.replace(
+                "${json_schema}", json.dumps(json_schema, ensure_ascii=False)
+            )
         else:
             return messages
 
