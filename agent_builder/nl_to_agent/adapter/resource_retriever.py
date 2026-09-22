@@ -14,7 +14,7 @@ class ResourceRetriever:
             resources (dict): 包含plugins、knowledge_base、workflows的字典
             agent_type (str): agent类型，如 "agents" 或 "workflows"
         """
-        self.resource = resources
+        self.resource = resources or {}
         self.agent_type = agent_type
 
         # 从resources中获取数据

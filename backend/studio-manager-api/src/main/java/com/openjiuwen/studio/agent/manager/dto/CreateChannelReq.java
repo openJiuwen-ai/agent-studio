@@ -34,6 +34,7 @@ public class CreateChannelReq implements Serializable {
 
     @JsonProperty("version_id")
     @Schema(description = "版本ID", example = "v1.0")
+    @NotBlank
     @Length(max = 10000)
     private String versionId = null;
 

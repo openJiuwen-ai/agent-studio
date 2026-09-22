@@ -25060,6 +25060,7 @@ components:
         resource:
           $ref: "#/components/schemas/NLResource"
       required:
+      - model
       - query
     NLResource:
       type: object
@@ -26671,6 +26672,7 @@ components:
           description: 版本ID
           example: v1.0
           maxLength: 10000
+          minLength: 1
         channel_type:
           type: string
           description: 通道类型
@@ -26735,6 +26737,7 @@ components:
           example: 100
       required:
       - channel_type
+      - version_id
     WorkflowFrontParam:
       type: object
       properties:

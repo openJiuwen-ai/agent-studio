@@ -411,7 +411,7 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         EnvironmentManagerEntity envInfo = environmentManagerMapper
             .findByIdAndProjectId(environmentId, projectId);
         if (envInfo == null) {
-            return new Environment();
+            throw new AgentStudioException(ENVIRONMENT_NOT_EXIST);
         }
         Environment environment = new Environment();
         BeanUtils.copyProperties(envInfo, environment);
@@ -843,9 +843,9 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
     @Override
     public EnvironmentVariables showEnvironmentVariables(String projectId, String environmentId, String workspaceId) {
 
-        EnvironmentManagerEntity envInfo = environmentManagerMapper.findById(environmentId);
+        EnvironmentManagerEntity envInfo = environmentManagerMapper.findByIdAndProjectId(environmentId, projectId);
         if (envInfo == null) {
-            return new EnvironmentVariables();
+            throw new AgentStudioException(ENVIRONMENT_NOT_EXIST);
         }
         String variableInfo = this.environmentCacheUtil.getEnvironmentCache(envInfo.getId(), workspaceId);
         if (StringUtils.isBlank(variableInfo)) {
