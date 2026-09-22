@@ -326,23 +326,27 @@ export class TriggerHalfmodalComponent {
     this.edit_data = this.nzModalData.edit_data;
     this.showCallMethod = this.nzModalData.showCallMethod;
     if (this.edit_data.length > 0) {
-      this.timeTriggerForm?.controls.name.setValue(this.edit_data[0].name);
-      this.timeTriggerForm?.controls.prompt.setValue(this.edit_data[0].prompt);
-      this.getSelectDataTime(2, this.edit_data[0].cron);
-      this.asyncTriggerForm?.controls.invocationType.setValue(
-        this.edit_data[0].invocation
-      );
-      // Polling 编辑回填
-      if (this.edit_data[0].type === 'POLLING') {
+      const editItem = this.edit_data[0];
+      // invocation 两种类型都可能需要，统一设置
+      this.asyncTriggerForm?.controls.invocationType.setValue(editItem.invocation);
+
+      if (editItem.type === 'POLLING') {
+        // Polling 编辑回填：只填 pollingTriggerForm，切到 polling 视图
         this.triggerType = 'polling';
-        this.pollingTriggerForm?.controls.name.setValue(this.edit_data[0].name || '');
-        this.pollingTriggerForm?.controls.poll_url.setValue(this.edit_data[0].poll_url || '');
-        this.pollingTriggerForm?.controls.prompt.setValue(this.edit_data[0].prompt || '');
+        this.pollingTriggerForm?.controls.name.setValue(editItem.name || '');
+        this.pollingTriggerForm?.controls.poll_url.setValue(editItem.poll_url || '');
+        this.pollingTriggerForm?.controls.prompt.setValue(editItem.prompt || '');
         // 反向拆分 poll_interval_seconds 为数字+单位
-        const seconds = this.edit_data[0].poll_interval_seconds || 300;
+        const seconds = editItem.poll_interval_seconds || 300;
         const { interval, unit } = this.secondsToIntervalUnit(seconds);
         this.pollingTriggerForm?.controls.pollInterval.setValue(interval);
         this.pollingTriggerForm?.controls.pollIntervalUnit.setValue(unit);
+      } else {
+        // TIMER 编辑回填：只填 timeTriggerForm，保持 time 视图
+        this.triggerType = 'time';
+        this.timeTriggerForm?.controls.name.setValue(editItem.name);
+        this.timeTriggerForm?.controls.prompt.setValue(editItem.prompt);
+        this.getSelectDataTime(2, editItem.cron);
       }
     }
 
