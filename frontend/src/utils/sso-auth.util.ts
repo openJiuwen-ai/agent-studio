@@ -9,20 +9,23 @@
  * 通过后从 URL 中剥除该参数（凭证不得留在地址栏与历史栈）。
  *
  * 安全门控（防登录 CSRF / 会话固定：诱导用户打开携带攻击者 token 的链接
- * 时，以下任一条件不满足即拒绝消费，且对 URL 零改动）：
+ * 时，以下任一条件不满足即拒绝消费——不写 Cookie，但仍从 URL 清理 Auth
+ * 凭证，防其驻留地址栏/历史栈或被 reArrangeSearchParam 搬移进 hash）：
  * 1. 仅当页面处于 iframe 嵌入中（window.self !== window.top）才消费；
  * 2. 父页面来源可信：document.referrer 的 origin 在 TRUSTED_PARENT_ORIGINS
  *    白名单内（精确 origin 匹配，含协议与端口）。不做任何隐式放行——
  *    同源也不例外（同源页面上若存在攻击者可影响的内容，同样构成注入
  *    面；且同源脚本本可直接写 Cookie，隐式放行不增加安全只增加模糊性）。
  *    **部署要求：必须将父平台完整 origin（含协议与端口）配置进
- *    TRUSTED_PARENT_ORIGINS，否则 SSO 不生效**；
+ *    TRUSTED_PARENT_ORIGINS（支持 index.html 运行期注入免构建，见其
+ *    注释），否则 SSO 不生效**；
  * 3. referrer 缺失按不可信处理（fail-closed）。父页面不得设置
  *    Referrer-Policy: no-referrer（浏览器默认策略不受影响）。
  *
  * token 编码契约：token 须以 URL 原样（未 percent-encoding）拼入 src，
- * 且不得包含 '&'（URL 按 & 切分查询串，token 会被截断——检测到疑似截断
- * 时输出告警）。若父平台对 token 做了 percent-encoding（如 + → %2B、
+ * 且不得包含 '&'（URL 按 & 切分查询串，token 会被截断——检测到疑似
+ * 截断时放弃消费并保持 URL 不变，无法可靠判定 token 边界故不做部分
+ * 清理）。若父平台对 token 做了 percent-encoding（如 + → %2B、
  * = → %3D），写入 Cookie 的值与后端原始 token 不一致将导致认证失败——
  * 检测到疑似编码值时输出告警（无法安全自动解码：无法区分编码值与本身
  * 含 % 的原始 token）。
@@ -46,12 +49,30 @@ export const SSO_COOKIE_NAME = 'Access-Token';
 /** iframe src 中传递 token 的参数名（契约约定，大小写敏感） */
 export const AUTH_PARAM_NAME = 'Auth';
 
+/** 运行期配置注入键：index.html 内联脚本可免构建配置白名单 */
+const RUNTIME_ORIGINS_KEY = '__SSO_TRUSTED_PARENT_ORIGINS__';
+
+/** 读取 index.html 注入的运行期可信 origin（非数组/非字符串项忽略） */
+function readRuntimeOrigins(): string[] {
+  const injected = (window as any)[RUNTIME_ORIGINS_KEY];
+  if (!Array.isArray(injected)) {
+    return [];
+  }
+  return injected.filter((origin): origin is string => typeof origin === 'string');
+}
+
 /**
  * 可信父平台 origin 白名单（完整 origin，含协议+主机+端口，如
  * http://122.219.72.238:8081）。**唯一放行依据，无任何隐式信任**——
- * 同源/同主机/子域/跨域一律须在此显式配置。
+ * 同源/同主机/子域/跨域一律须显式配置。
+ *
+ * 配置入口（二选一）：
+ * 1. 运行期注入（免构建）：index.html 内联脚本
+ *    `window.__SSO_TRUSTED_PARENT_ORIGINS__ = ['http://父平台:端口'];`
+ *    （须置于 bundle 脚本之前，本模块加载时读取）
+ * 2. 构建期配置：直接修改本数组后重新构建
  */
-export const TRUSTED_PARENT_ORIGINS: string[] = [];
+export const TRUSTED_PARENT_ORIGINS: string[] = [...readRuntimeOrigins()];
 
 /**
  * 同一会话内写入失败的保留上限（含首次）：达到后不再保留 URL 中的 Auth
@@ -73,6 +94,13 @@ let lastFailedToken: string | null = null;
  * 本模块加载早于拦截器安装，在此绑定原生实现，使启动路径与
  * hashchange（运行期换 token）路径的剥除行为一致。拦截器包装后派发的
  * 自定义事件全工程无监听方，绕过无副作用。
+ *
+ * 已知取舍（绕过包装器的两方面差异）：
+ * 1. search 中剩余的非白名单参数不会被本工具提前搬进 hash——应用侧
+ *    既有规则会在下一次经过包装器的 pushState/replaceState 时照常搬移，
+ *    本工具只是不做提前归一化，不改变最终行为；
+ * 2. 包装器派发的 'replaceState' 自定义事件被跳过——当前无监听方；
+ *    未来若有模块依赖该事件同步状态，需重新评估此处绕过。
  */
 const nativeReplaceState: typeof history.replaceState = history.replaceState.bind(history);
 
@@ -88,11 +116,18 @@ const ILLEGAL_COOKIE_CHARS = /[\s;,"\\]/;
  * 仍是 'a&&b'），避免影响对 URL 做裸正则匹配的消费方（如 http.service
  * 的 peekWorkspaceId），也保证"无 Auth 时 query 串逐字节不变"。
  *
- * @returns token 为 null 表示未找到非空值；query 为剥除 Auth 后的剩余串
+ * @returns token 为 null 表示未找到非空值；query 为剥除 Auth 后的剩余串；
+ *          suspectTruncated 为 true 表示 Auth 段后紧跟无 '=' 的裸段，
+ *          疑似 token 内含未编码的 & 被切分截断（调用方应放弃消费）
  */
-export function extractAuthParam(query: string): { token: string | null; query: string } {
+export function extractAuthParam(query: string): {
+  token: string | null;
+  query: string;
+  suspectTruncated: boolean;
+} {
   const kept: string[] = [];
   let token: string | null = null;
+  let suspectTruncated = false;
   const segs = query.split('&');
   for (let i = 0; i < segs.length; i++) {
     const seg = segs[i];
@@ -101,13 +136,11 @@ export function extractAuthParam(query: string): { token: string | null; query: 
       // 取第一个非空值；空值 Auth= 同样从 URL 中剥除
       if (value && token === null) {
         token = value;
-        // 启发式检测：Auth 段后紧跟无 '=' 的裸段，疑似 token 内含未编码的 &
-        // 被切分截断（截断值会写入 Cookie 并在后端校验失败，无前端信号）
+        // 检测：Auth 段后紧跟无 '=' 的裸段，疑似 token 内含未编码的 &
+        // 被切分截断（截断值写入 Cookie 只会在后端静默校验失败）
         const next = segs[i + 1];
         if (next !== undefined && next !== '' && !next.includes('=')) {
-          console.warn(
-            '[SSO] Auth value may be truncated by an unencoded & in the token; the contract requires URL-safe tokens'
-          );
+          suspectTruncated = true;
         }
       }
     } else {
@@ -115,7 +148,7 @@ export function extractAuthParam(query: string): { token: string | null; query: 
       kept.push(seg);
     }
   }
-  return { token, query: kept.join('&') };
+  return { token, query: kept.join('&'), suspectTruncated };
 }
 
 /**
@@ -239,7 +272,8 @@ export function writeSsoCookie(token: string): boolean {
  * 失败语义：写入被拒绝/拦截时保留 URL 中的 Auth 供重试（页面 reload 或父
  * 平台变更 hash 触发的再次消费均可整体重试）；同会话内失败达到上限
  * （MAX_WRITE_FAILURES_BEFORE_CLEANUP）后强制清理 URL 以限制凭据暴露。
- * 门控拒绝时对 URL 零改动。
+ * 门控拒绝时清理 URL 中的 Auth（凭证防驻留）；疑似 token 截断时放弃
+ * 消费且保持 URL 不变。
  *
  * @returns 成功消费（Cookie 已落盘校验一致）返回 token；URL 无 Auth 参数、
  *          安全门控拒绝或写入失败时返回 null
@@ -276,10 +310,42 @@ export function consumeSsoAuthFromUrl(): string | null {
     // hash 为主通道，search 兜底
     const token = hashRes.token !== null ? hashRes.token : searchRes.token;
 
-    // ---- 安全门控：非可信 iframe 嵌入时拒绝消费，且对 URL 零改动 ----
+    // ---- 剥除动作（门控拒绝与写入成功两处复用；原生引用 + 自身异常不外抛）----
+    const stripAuthFromUrl = () => {
+      const newHash = hashChanged
+        ? `#${route}${hashRes.query ? `?${hashRes.query}` : ''}`
+        : hash;
+      const newSearch = searchChanged
+        ? searchRes.query
+          ? `?${searchRes.query}`
+          : ''
+        : search;
+      nativeReplaceState(
+        history.state,
+        '',
+        window.location.pathname + newSearch + newHash
+      );
+    };
+
+    // ---- 安全门控：非可信 iframe 嵌入时拒绝消费，但仍清理 URL 中的凭证 ----
     if (!isTrustedEmbedding()) {
       console.warn(
         '[SSO] Auth param ignored: page is not embedded by a trusted parent (login-CSRF protection)'
+      );
+      try {
+        stripAuthFromUrl();
+      } catch (e) {
+        console.warn('[SSO] failed to strip Auth param from url', e);
+      }
+      return null;
+    }
+
+    // ---- 契约校验：疑似 token 含未编码 & 被截断 → 放弃消费且保持 URL
+    // 不变（无法可靠判定 token 边界，不做部分清理，由父平台修正后重挂）----
+    if (hashRes.suspectTruncated || searchRes.suspectTruncated) {
+      console.warn(
+        '[SSO] Auth value appears truncated by an unencoded &; abort consuming ' +
+          'and keep url unchanged, fix the token on the parent side'
       );
       return null;
     }
@@ -303,23 +369,6 @@ export function consumeSsoAuthFromUrl(): string | null {
         // referrer 已在门控校验过，解析异常不在此处理
       }
     }
-
-    // ---- 剥除动作（仅在校验通过的写入之后执行；自身异常不外抛）----
-    const stripAuthFromUrl = () => {
-      const newHash = hashChanged
-        ? `#${route}${hashRes.query ? `?${hashRes.query}` : ''}`
-        : hash;
-      const newSearch = searchChanged
-        ? searchRes.query
-          ? `?${searchRes.query}`
-          : ''
-        : search;
-      nativeReplaceState(
-        history.state,
-        '',
-        window.location.pathname + newSearch + newHash
-      );
-    };
 
     // ---- 写入阶段：空值属垃圾参数，直接剥除；非空值须写入校验通过才剥除 ----
     if (!token) {
