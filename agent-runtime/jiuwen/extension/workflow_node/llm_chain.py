@@ -692,11 +692,23 @@ class LLMChain(WorkflowComponent):
             # 将 outputs 配置转换为 JSON schema 并注入到指令中,
             # 与 orchestration 栈 format_prompt 的 default_request 保持一致,
             # 确保模型能感知正确的输出结构,对用户提示词中的格式错误有容错能力。
-            outputs_list = self._get_outputs_list_from_conf()
-            json_schema = convert_json_schema(outputs_list)
-            instruction = instruction.replace(
+            try:
+                outputs_list = self._get_outputs_list_from_conf()
+                json_schema = convert_json_schema(outputs_list)
+            except (KeyError, TypeError, AttributeError) as e:
+                raise build_error(
+                    StatusCode.COMPONENT_LLM_CONFIG_INVALID,
+                    error_msg="Failed to convert outputs config to JSON schema",
+                ) from e
+            # 先替换 ${query} 再替换 ${json_schema}:若 outputs 的 description
+            # 字段包含 ${query} 字面量,先替换 schema 会使该字面量在第二次
+            # replace 时被用户内容误替换,污染注入的 schema。
+            messages[last_user_idx]["content"] = instruction.replace(
+                "${query}", user_content
+            ).replace(
                 "${json_schema}", json.dumps(json_schema, ensure_ascii=False)
             )
+            return messages
         else:
             return messages
 
