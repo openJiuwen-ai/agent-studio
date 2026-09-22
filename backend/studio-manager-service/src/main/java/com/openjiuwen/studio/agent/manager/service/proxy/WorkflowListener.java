@@ -32,6 +32,9 @@ import org.springframework.http.HttpHeaders;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 工作流（Workflow）SSE事件监听器
@@ -46,6 +49,20 @@ public class WorkflowListener extends BaseEventListener {
     private final JiuwenEventProcessor eventProcessor;
 
     private final AgentRuntimeService agentRuntimeService;
+
+    /**
+     * 旁路线程池，用于 node_wait 的 saveTaskId 异步写 Redis，避免阻塞 SSE 事件透传。
+     */
+    private final Executor persistenceExecutor;
+
+    /**
+     * node_wait 透传节流窗口（毫秒）。循环节点密集 node_wait 逐个同步 sseEmitter.send 会阻塞
+     * OkHttp SSE 回调线程导致事件积压（如 796a5338 runtime 退出后 manager 仍拖延 23s）。
+     * 窗口内只 passThrough 一条 node_wait，其余仅 saveTaskId 异步落盘、跳过 send。
+     */
+    private static final long NODE_WAIT_PASSTHROUGH_THROTTLE_MS = 50L;
+
+    private final ConcurrentHashMap<String, AtomicLong> nodeWaitLastPassThrough = new ConcurrentHashMap<>();
 
     protected final ExecuteParams executeParams;
 
@@ -69,6 +86,7 @@ public class WorkflowListener extends BaseEventListener {
         instanceService = SpringBeanUtils.getBean(WorkflowInstanceService.class);
         eventProcessor = SpringBeanUtils.getBean(JiuwenEventProcessor.class);
         agentRuntimeService = SpringBeanUtils.getBean(AgentRuntimeService.class);
+        persistenceExecutor = SpringBeanUtils.getBean("insightPersistenceExecutor", Executor.class);
         this.executeParams = executeParams;
         this.result = result;
         eventNum = 0;
@@ -180,8 +198,15 @@ public class WorkflowListener extends BaseEventListener {
                             mergeEx.getMessage());
                     }
                 }
+                // node_wait 节流透传：密集循环节点 node_wait 逐个同步 send 会阻塞 SSE 回调线程。
+                // 前端 node_wait 仅用于 updateCallNode 状态更新，不触发交互（交互靠 node_started），
+                // 窗口内跳过 send 不影响最终结果；saveTaskId 已异步落盘，调试历史不受影响。
+                if (shouldThrottleNodeWaitPassThrough(executeParams.getExecutionId())) {
+                    return JiuwenEventType.NOT_EXIST;
+                }
+            } else {
+                log.warn("not support event:{}, passThrough anyway.", event);
             }
-            log.warn("not support event:{}, passThrough anyway.", event);
             passThrough(eventStr);
             return JiuwenEventType.NOT_EXIST;
         }
@@ -257,9 +282,9 @@ public class WorkflowListener extends BaseEventListener {
             }
             case WORKFLOW_NODE_MESSAGE -> {
                 processWorkflowNodeMessage(eventData);
-                // debug模式异步实时存储insight事件
+                // debug模式实时旁路存储insight事件：异步执行，避免 Redis 写入阻塞事件透传
                 if (executeParams.isDebug()) {
-                    instanceService.saveInsightMessage(result.getInstance(), executeParams.getReleasedVersion(),
+                    instanceService.saveInsightMessageAsync(result.getInstance(), executeParams.getReleasedVersion(),
                         executeParams.getUserId(),
                         executeParams.getAsyncTaskParamHolder() != null
                             && executeParams.getAsyncTaskParamHolder().isAsync());
@@ -337,22 +362,55 @@ public class WorkflowListener extends BaseEventListener {
     }
 
     /**
-     * 中断时保存 taskId，确保恢复时 queryTaskId 能取到同一 execution_id
+     * 中断时保存 taskId，确保恢复时 queryTaskId 能取到同一 execution_id。
+     * 异步执行：node_wait 事件在循环节点密集到达时可能每秒数次，同步写 Redis 会阻塞
+     * SSE 回调线程上的事件透传。taskId 保存是旁路写，丢失一次只影响极端中断恢复，
+     * 不影响当前执行，适合走 insightPersistenceExecutor 异步。
      */
     private void saveTaskIdOnInterrupt() {
-        try {
-            String taskId = MDC.get(Constant.TASK_ID);
-            if (StringUtils.isEmpty(taskId)) {
-                taskId = executeParams.getExecutionId();
-            }
-            if (!StringUtils.isEmpty(taskId)) {
-                agentRuntimeService.saveTaskId(executeParams.getWorkflowId(), executeParams.getConversationId(), taskId);
-                log.info("Saved taskId on node_wait: workflowId={}, conversationId={}, taskId={}",
-                    executeParams.getWorkflowId(), executeParams.getConversationId(), taskId);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to save taskId on interrupt: {}", e.getMessage());
+        String taskId = MDC.get(Constant.TASK_ID);
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = executeParams.getExecutionId();
         }
+        if (StringUtils.isEmpty(taskId)) {
+            return;
+        }
+        final String resolvedTaskId = taskId;
+        final String workflowId = executeParams.getWorkflowId();
+        final String conversationId = executeParams.getConversationId();
+        try {
+            persistenceExecutor.execute(() -> {
+                try {
+                    agentRuntimeService.saveTaskId(workflowId, conversationId, resolvedTaskId);
+                    log.info("Saved taskId on node_wait: workflowId={}, conversationId={}, taskId={}",
+                        workflowId, conversationId, resolvedTaskId);
+                } catch (Throwable e) {
+                    log.warn("Failed to save taskId on interrupt (async): {}", e.getMessage());
+                }
+            });
+        } catch (Throwable e) {
+            // 线程池拒绝（DiscardPolicy 静默丢弃）或 shutdown 时走到这里，降级为不保存
+            log.debug("Submit saveTaskId async rejected. {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 判断 node_wait 是否应节流（跳过 passThrough）。
+     * 按 executionId 维度，距上次透传不足 NODE_WAIT_PASSTHROUGH_THROTTLE_MS 则节流。
+     * OkHttp SSE 回调单线程串行处理同 executionId 事件，无并发，AtomicLong 足够。
+     */
+    private boolean shouldThrottleNodeWaitPassThrough(String execId) {
+        if (execId == null || execId.isEmpty()) {
+            return false;
+        }
+        AtomicLong last = nodeWaitLastPassThrough.computeIfAbsent(execId, k -> new AtomicLong(0));
+        long now = System.currentTimeMillis();
+        long lastTime = last.get();
+        if (now - lastTime < NODE_WAIT_PASSTHROUGH_THROTTLE_MS) {
+            return true;
+        }
+        last.set(now);
+        return false;
     }
 
     private void doClose(String eventType) {
@@ -367,6 +425,11 @@ public class WorkflowListener extends BaseEventListener {
             log.error("on closed failed.", e);
             throw new AgentStudioException(StudioError.UNEXPECTED_ERROR);
         } finally {
+            // 清理 node_wait 节流状态，防内存泄漏
+            String execId = executeParams.getExecutionId();
+            if (execId != null) {
+                nodeWaitLastPassThrough.remove(execId);
+            }
             sseEmitter.complete();
         }
     }
@@ -388,7 +451,8 @@ public class WorkflowListener extends BaseEventListener {
         if (instance.getEndTime() == null) {
             instance.setEndTime(System.currentTimeMillis());
         }
-        instanceService.save(instance, executeParams);
+        // 终态保存：分 key 模式下 saveTerminal 会先写 meta，再全量落盘 events List
+        instanceService.saveTerminal(instance, executeParams);
     }
 
     /**

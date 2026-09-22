@@ -211,6 +211,27 @@ public class RedisClientWrapper implements RedisClient {
     }
 
     @Override
+    public void rPushAll(String key, List<String> values, Duration duration) {
+        run(() -> redisClient.rPushAll(key, values, duration), "rPushAll");
+    }
+
+    @Override
+    public List<String> lRange(String key, int start, int end) {
+        return run(() -> redisClient.lRange(key, start, end), "lRange");
+    }
+
+    @Override
+    public void lTrim(String key, int start, int end) {
+        run(() -> redisClient.lTrim(key, start, end), "lTrim");
+    }
+
+    @Override
+    public long lLen(String key) {
+        Long result = run(() -> redisClient.lLen(key), "lLen");
+        return result == null ? 0L : result;
+    }
+
+    @Override
     public void setAndKeepTtl(String key, String value, Duration initialDuration) {
         run(() -> redisClient.setAndKeepTtl(key, value, initialDuration), "set");
     }

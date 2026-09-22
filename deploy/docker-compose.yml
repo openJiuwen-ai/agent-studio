@@ -192,6 +192,14 @@ services:
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}
+      # 调试记录实时旁路写总开关（新增特性，默认关闭）。false=运行中不写 Redis（仅终态落盘）；true=按下面两项节流实时写。默认 false
+      workflow_insight_bypass_write_enabled: ${WORKFLOW_INSIGHT_BYPASS_WRITE_ENABLED:-false}
+      # 调试记录分 key 存储开关：true=meta/events 分离（旁路写 O(1)，终态全量 RPUSH events）；false=单 key 全量序列化。默认 false
+      workflow_insight_multi_key_enabled: ${WORKFLOW_INSIGHT_MULTI_KEY_ENABLED:-false}
+      # insight 实时旁路写节流：距上次写入超过该间隔(ms)才真正写 Redis。默认 3000
+      workflow_insight_flush_interval_ms: ${WORKFLOW_INSIGHT_FLUSH_INTERVAL_MS:-3000}
+      # insight 实时旁路写节流：累计跳过超过该次数才真正写 Redis。默认 20
+      workflow_insight_flush_max_skip: ${WORKFLOW_INSIGHT_FLUSH_MAX_SKIP:-20}
       # 知识库模式（可选，默认 LakeSearch 行为不变）：LakeSearch/CUSTOM
       knowledge_source: ${KNOWLEDGE_SOURCE:-LakeSearch}
       # LakeSearch 地址（可选，CUSTOM 模式必填，默认空）

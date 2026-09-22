@@ -601,6 +601,21 @@ workflow:
   instance-expire: ${workflow_instance_expire:10}
   conversation-expire: ${workflow_conversation_expire:7}
   max-conversation-size: ${workflow_max_conversation_size:20}
+  # 调试记录事件流 List key 前缀（meta 与 events 分离存储，避免单 key 全量序列化导致 O(N²) 读写阻塞）
+  insight-exec-events: ${workflow_insight_exec_events:insight_exec_events_%s_%s}
+  # 调试记录分 key 存储开关。true=meta 与 events 分离存储（旁路写 O(1)，终态全量 RPUSH events）；
+  # false=保持原样（单 key 全量序列化）。读取始终兼容两种格式，切换不影响已有数据。默认 false。
+  insight-multi-key-enabled: ${workflow_insight_multi_key_enabled:false}
+  # insight 调试记录实时旁路写的节流配置。
+  # 每个 WORKFLOW_NODE_MESSAGE 事件都会触发 saveInsightMessageAsync，
+  # 但只有距上次写入超过 insight-flush-interval-ms 或累计跳过超过 insight-flush-max-skip 次时才真正写 Redis。
+  # 被跳过的事件不会丢失：eventList 在内存持续累积，终态保存(saveInstance)会兜底写入完整数据。
+  insight-flush-interval-ms: ${workflow_insight_flush_interval_ms:3000}
+  insight-flush-max-skip: ${workflow_insight_flush_max_skip:20}
+  # 调试记录实时旁路写总开关（默认关闭）。
+  # false=运行中不对节点事件写 Redis（saveInsightMessageAsync 短路为 no-op），仅终态落盘完整数据；
+  # true=按 insight-flush-* 节流实时旁路写。默认 false。
+  insight-bypass-write-enabled: ${workflow_insight_bypass_write_enabled:false}
   max-query-length: ${workflow_max_query_length:100000}
   sse-timeout-milliseconds: ${workflow_sse_timeout_milliseconds:900000}
 # ==========================================工作流相关配置end=======================================

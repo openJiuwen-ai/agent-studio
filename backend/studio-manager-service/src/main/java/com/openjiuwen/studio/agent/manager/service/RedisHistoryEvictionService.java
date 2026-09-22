@@ -91,7 +91,9 @@ public class RedisHistoryEvictionService {
      * 清理 WorkflowInstanceEntity 或 AgentExecutionInfo 中的历史数据
      * 当 JSON 包含 eventList 时按 startTime 排序保留最近的事件；
      * 当 JSON 包含 invoke_list 时按 start_time 排序保留最近的调用记录；
-     * 同时截断顶层 inputs/outputs 等大字符串字段
+     * 同时截断顶层 inputs/outputs 等大字符串字段。
+     * 兼容分 key 新格式：新格式 meta 不含 eventList（以 eventCount 标记），eventList 分支自动跳过，
+     * 仅截断 inputs/outputs/error_info；events List 单 element 已裁剪且用 StringCodec 解码，不触发溢出。
      */
     private String evictWorkflowInstance(String key) {
         String jsonStr = readRawJson(key);

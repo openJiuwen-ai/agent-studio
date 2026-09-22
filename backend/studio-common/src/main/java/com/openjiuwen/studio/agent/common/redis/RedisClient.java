@@ -155,6 +155,43 @@ public interface RedisClient {
     void deleteByPrefix(String prefix);
 
     /**
+     * 向 Redis List 追加元素（RPUSH）。若 key 不存在则创建，并按 duration 设置生存时间。
+     * 用于调试记录事件流的增量追加，避免将整个 eventList 序列化为单个大 String 导致的 O(N²) 读写阻塞。
+     *
+     * @param key      键
+     * @param values   要追加的元素列表
+     * @param duration 生存时间
+     */
+    void rPushAll(String key, List<String> values, Duration duration);
+
+    /**
+     * 获取 Redis List 指定范围的元素（LRANGE）。end=-1 表示取到末尾。
+     *
+     * @param key   键
+     * @param start 起始索引（含）
+     * @param end   结束索引（含），-1 表示末尾
+     * @return 元素列表，key 不存在时返回空列表
+     */
+    List<String> lRange(String key, int start, int end);
+
+    /**
+     * 裁剪 Redis List，只保留 [start, end] 范围内的元素（LTRIM）。end=-1 表示到末尾。
+     *
+     * @param key   键
+     * @param start 起始索引（含）
+     * @param end   结束索引（含），-1 表示末尾
+     */
+    void lTrim(String key, int start, int end);
+
+    /**
+     * 获取 Redis List 的长度（LLEN）。
+     *
+     * @param key 键
+     * @return 列表长度，key 不存在时返回 0
+     */
+    long lLen(String key);
+
+    /**
      * 设置值，并保持 ttl 不变
      *
      * @param key 键

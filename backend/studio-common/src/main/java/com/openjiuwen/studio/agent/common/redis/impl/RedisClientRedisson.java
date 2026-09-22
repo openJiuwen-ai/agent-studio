@@ -27,6 +27,7 @@ import org.redisson.Redisson;
 import org.redisson.api.HostPortNatMapper;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RBucket;
+import org.redisson.api.RList;
 import org.redisson.api.RLock;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
@@ -325,6 +326,35 @@ public class RedisClientRedisson implements RedisClient {
     @Override
     public void deleteByPrefix(String prefix) {
         redissonClient.getKeys().deleteByPattern(prefix + "*");
+    }
+
+    @Override
+    public void rPushAll(String key, List<String> values, Duration duration) {
+        RList<String> list = redissonClient.getList(key, StringCodec.INSTANCE);
+        if (values != null && !values.isEmpty()) {
+            list.addAll(values);
+        }
+        // 刷新 TTL，活跃事件流保活
+        list.expire(duration);
+    }
+
+    @Override
+    public List<String> lRange(String key, int start, int end) {
+        RList<String> list = redissonClient.getList(key, StringCodec.INSTANCE);
+        List<String> range = list.range(start, end);
+        return range == null ? new ArrayList<>() : range;
+    }
+
+    @Override
+    public void lTrim(String key, int start, int end) {
+        RList<String> list = redissonClient.getList(key, StringCodec.INSTANCE);
+        list.trim(start, end);
+    }
+
+    @Override
+    public long lLen(String key) {
+        RList<String> list = redissonClient.getList(key, StringCodec.INSTANCE);
+        return list.size();
     }
 
     @Override
