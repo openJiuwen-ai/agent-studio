@@ -33,6 +33,19 @@
     flex-direction: column;
     gap: 8px;
 
+    .url-blocked-tip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      line-height: 18px;
+      color: #808080;
+      background: #fafafa;
+      border: 1px dashed #c2c2c2;
+      border-radius: 8px;
+    }
+
     .url-textarea {
       width: 100%;
       resize: vertical;
@@ -50,6 +63,11 @@
         color: #808080;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .url-pane-actions {
+        display: flex;
+        gap: 8px;
       }
     }
 

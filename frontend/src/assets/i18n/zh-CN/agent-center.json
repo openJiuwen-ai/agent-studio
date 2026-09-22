@@ -1228,6 +1228,8 @@
   "url_invalid_extension": "文件扩展名须为 {{extensions}}",
   "url_single_only": "该参数仅支持录入一个URL",
   "url_dedup_tip": "已自动去除重复URL",
+  "url_blocked_by_local_files": "已存在本地上传的文件，请先清空文件后再添加URL",
+  "upload_blocked_by_url_files": "已存在URL链接录入的文件，请先清空文件后再本地上传",
   "image_size_cannot_exceed_5mb": "图片大小不能超过5MB",
   "file_size_cannot_exceed_128mb": "文件大小不能超过60MB",
   "file_size_cannot_exceed_128": "文件大小不能超过128MB",

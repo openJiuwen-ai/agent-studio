@@ -1211,6 +1211,8 @@
   "url_invalid_extension": "File extension must be one of {{extensions}}",
   "url_single_only": "Only one URL is allowed for this parameter",
   "url_dedup_tip": "Duplicate URLs have been removed automatically",
+  "url_blocked_by_local_files": "Local files exist. Clear the files before adding URLs.",
+  "upload_blocked_by_url_files": "URL-linked files exist. Clear the files before uploading local ones.",
   "image_size_cannot_exceed_5mb": "The image size cannot exceed 5MB",
   "file_size_cannot_exceed_128mb": "The file size cannot exceed 60MB",
   "file_size_cannot_exceed_128": "The file size cannot exceed 128MB",

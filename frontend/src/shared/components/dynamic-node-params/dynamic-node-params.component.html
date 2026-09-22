@@ -7,7 +7,11 @@
       <nz-form-label>
         <div class="flex items-center justify-between">
           <div class="flex-center-left">
-            <span nz-typography nzEllipsis class="dynamic-param-label">
+            <span
+              class="dynamic-param-label"
+              nz-tooltip
+              [nzTooltipTitle]="inputItem?.front_name || inputItem?.name"
+            >
               {{ inputItem?.front_name || inputItem?.name }}
             </span>
             <span *ngIf="!inputItem.required">{{'optional' | i18nextEager }}</span>
@@ -146,8 +150,11 @@
             [type]="inputItem.type"
             [(mode)]="inputItem.urlMode"
             [disabled]="isUploading"
+            [localEntriesExist]="hasLocalFileEntries(inputItem)"
             [existingUrls]="getExistingUrls(inputItem)"
+            [editRequest]="inputItem.urlEditReq"
             (addUrls)="onAddUrlEntries(inputItem, $event)"
+            (saveEdit)="onSaveUrlEntry(inputItem, $event)"
           ></file-url-input>
           <div
             *ngIf="inputItem.urlMode !== 'url' && !inputItem.file && !inputItem?.uploadData?.name"
@@ -170,6 +177,14 @@
             <div class="file-desc mt-[6px] text-[#808080]">
               {{ inputItem.type | fileDesc }}
             </div>
+          </div>
+          <!-- 互斥：已存在 URL 录入条目时阻断本地上传 -->
+          <div
+            *ngIf="inputItem.urlMode !== 'url' && hasUrlFileEntries(inputItem)"
+            class="flex w-full items-center gap-[6px] rounded-[8px] border border-dashed border-[#c2c2c2] bg-[#fafafa] px-[16px] py-[12px] text-[12px] text-[#808080]"
+          >
+            <nz-icon nzType="info-circle" nzTheme="outline"></nz-icon>
+            {{ 'upload_blocked_by_url_files' | i18nextEager }}
           </div>
           <div
             *ngIf="inputItem.file || inputItem?.uploadData?.name"
@@ -201,7 +216,16 @@
               >
               {{ inputItem.uploadData.name }}</span
               >
-              <nz-icon nzType="delete" nzTheme="outline" class="ml-auto cursor-pointer text-[16px]" (click)="removeFile(inputItem)" />
+              <span class="ml-auto flex items-center gap-[8px]">
+                <nz-icon
+                  *ngIf="inputItem.uploadData?.fromUrl && inputItem.uploadData.progress !== 'loading'"
+                  nzType="edit"
+                  nzTheme="outline"
+                  class="cursor-pointer text-[16px]"
+                  (click)="editUrlEntry(inputItem)"
+                />
+                <nz-icon nzType="delete" nzTheme="outline" class="cursor-pointer text-[16px]" (click)="removeFile(inputItem)" />
+              </span>
             </div>
           </div>
           <div
@@ -233,8 +257,11 @@
             [type]="inputItem.type"
             [(mode)]="inputItem.urlMode"
             [disabled]="isUploading"
+            [localEntriesExist]="hasLocalFileEntries(inputItem)"
             [existingUrls]="getExistingUrls(inputItem)"
+            [editRequest]="inputItem.urlEditReq"
             (addUrls)="onAddUrlEntries(inputItem, $event)"
+            (saveEdit)="onSaveUrlEntry(inputItem, $event)"
           ></file-url-input>
           <div
             *ngIf="inputItem.urlMode !== 'url' && !inputItem.uploadDatas?.length"
@@ -257,6 +284,14 @@
             <div class="file-desc mt-[6px] text-[#808080]">
               {{ inputItem.type | fileDesc }}
             </div>
+          </div>
+          <!-- 互斥：已存在 URL 录入条目时阻断本地上传 -->
+          <div
+            *ngIf="inputItem.urlMode !== 'url' && hasUrlFileEntries(inputItem)"
+            class="flex w-full items-center gap-[6px] rounded-[8px] border border-dashed border-[#c2c2c2] bg-[#fafafa] px-[16px] py-[12px] text-[12px] text-[#808080]"
+          >
+            <nz-icon nzType="info-circle" nzTheme="outline"></nz-icon>
+            {{ 'upload_blocked_by_url_files' | i18nextEager }}
           </div>
           <div
             *ngIf="inputItem.uploadDatas?.length"
@@ -290,16 +325,28 @@
               >
               {{ fileItem.name }}</span
               >
-              <nz-icon
-                nzType="delete" nzTheme="outline" class="ml-auto cursor-pointer text-[16px]"
-                [ngStyle]="{
-                display: fileItem.isHover ? 'inline-block' : 'none'
-              }"
-                (click)="removeFile(inputItem, fileItem)"
-                [ngClass]="{
-                'disabled-delete': isUploading && inputIndex !== i
-              }"
-              />
+              <span class="ml-auto flex items-center gap-[8px]">
+                <nz-icon
+                  *ngIf="fileItem.fromUrl && fileItem.progress !== 'loading'"
+                  nzType="edit"
+                  nzTheme="outline"
+                  class="cursor-pointer text-[16px]"
+                  [ngStyle]="{
+                  display: fileItem.isHover ? 'inline-block' : 'none'
+                }"
+                  (click)="editUrlEntry(inputItem, fileItem)"
+                />
+                <nz-icon
+                  nzType="delete" nzTheme="outline" class="cursor-pointer text-[16px]"
+                  [ngStyle]="{
+                  display: fileItem.isHover ? 'inline-block' : 'none'
+                }"
+                  (click)="removeFile(inputItem, fileItem)"
+                  [ngClass]="{
+                  'disabled-delete': isUploading && inputIndex !== i
+                }"
+                />
+              </span>
             </div>
           </div>
         </div>

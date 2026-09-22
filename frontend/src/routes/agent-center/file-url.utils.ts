@@ -146,6 +146,20 @@ export function createUrlFileItem(url: string): FileItem {
   };
 }
 
+/** 条目列表中是否存在本地上传来源的条目（URL 条目带 fromUrl: true 标记） */
+export function hasLocalFileItems(
+  items?: Array<{ fromUrl?: boolean }>,
+): boolean {
+  return (items || []).some((item) => item?.fromUrl !== true);
+}
+
+/** 条目列表中是否存在 URL 录入来源的条目 */
+export function hasUrlFileItems(
+  items?: Array<{ fromUrl?: boolean }>,
+): boolean {
+  return (items || []).some((item) => item?.fromUrl === true);
+}
+
 function decodePath(path: string): string {
   try {
     return decodeURIComponent(path);

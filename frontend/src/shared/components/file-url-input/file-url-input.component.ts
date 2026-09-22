@@ -1,4 +1,11 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnChanges,
+  Output,
+  SimpleChanges,
+} from '@angular/core';
 import { I18nNamespace } from '@i18n';
 import { I18NEXT_NAMESPACE } from 'angular-i18next';
 import { MODULES } from '@shared/modules';
@@ -36,15 +43,35 @@ export type FileUrlMode = 'upload' | 'url';
     },
   ],
 })
-export class FileUrlInputComponent {
+export class FileUrlInputComponent implements OnChanges {
   /** 参数完整类型（file/image、array<file/video> 等，与 fileAcc 管道同键） */
   @Input() type = '';
 
-  /** 当前模式（上传 | URL），宿主可双向绑定用于隐藏各自的上传入口 */
-  @Input() mode: FileUrlMode = 'upload';
+  /**
+   * 当前模式（上传 | URL），宿主可双向绑定用于隐藏各自的上传入口。
+   * 宿主回填参数的 urlMode 初始为 undefined，若不归一为 upload：
+   * 1) 首开无 Tab 高亮（与 §4.1「默认选中本地上传」不符）；
+   * 2) 点「本地上传」会绕过 switchMode 同值早退、照发 modeChange。
+   */
+  @Input()
+  public set mode(mode: FileUrlMode) {
+    this._mode = mode || 'upload';
+  }
+
+  public get mode(): FileUrlMode {
+    return this._mode;
+  }
+
+  private _mode: FileUrlMode = 'upload';
 
   /** 禁用（宿主上传中 / 已确认态） */
   @Input() disabled = false;
+
+  /**
+   * 互斥：宿主已存在本地上传来源的条目时，URL 录入被阻断（提示先清空文件）。
+   * 仅阻断 URL 录入，不影响页签切换（用户仍可切回本地上传）。
+   */
+  @Input() localEntriesExist = false;
 
   /** 宿主当前已有条目的 URL 列表（用于全等去重） */
   @Input() existingUrls: string[] = [];
@@ -52,12 +79,38 @@ export class FileUrlInputComponent {
   /** array 形态条数上限（对齐上传 20 条） */
   @Input() maxCount = 20;
 
+  /**
+   * 宿主发起的「编辑回填」请求（URL 条目编辑入口）：每次传入新对象触发，
+   * 把被编辑条目的 URL 载入输入框待修改。条目保留在宿主列表中（原位编辑），
+   * 用户修改后点「保存」提交（saveEdit），点「取消」或切换页签放弃编辑。
+   */
+  @Input()
+  public set editRequest(req: { url: string } | null) {
+    if (!req?.url) {
+      return;
+    }
+    this.urlText = req.url;
+    this.editingUrl = req.url;
+    this.error = null;
+    this.errorParams = null;
+    this.dedupedTip = false;
+  }
+
   @Output() modeChange = new EventEmitter<FileUrlMode>();
 
   /** 校验通过、去重后的新增 URL 列表 */
   @Output() addUrls = new EventEmitter<string[]>();
 
+  /** 编辑态保存：originalUrl 定位被编辑条目，url 为修改后的值（宿主原位替换） */
+  @Output() saveEdit = new EventEmitter<{
+    originalUrl: string;
+    url: string;
+  }>();
+
   public urlText = '';
+
+  /** 正在编辑的条目原 URL（null = 新增态） */
+  public editingUrl: string | null = null;
 
   public error: FileUrlCheckError | 'url_single_only' | 'upload_max_files_tip' | null =
     null;
@@ -66,6 +119,22 @@ export class FileUrlInputComponent {
 
   /** 本批次存在重复 URL 被自动去重的提示 */
   public dedupedTip = false;
+
+  /**
+   * 被编辑条目已从宿主列表移除（单条删除/清空文件）时自动退出编辑态，
+   * 避免「保存」指向已不存在的条目（点击不生效）。
+   * 宿主的 existingUrls 每轮变更检测新构造数组，此钩子随之触发，
+   * 判定成本为一次 includes。
+   */
+  ngOnChanges(changes: SimpleChanges): void {
+    if (
+      this.editingUrl &&
+      changes['existingUrls'] &&
+      !(this.existingUrls || []).includes(this.editingUrl)
+    ) {
+      this.onCancelEdit();
+    }
+  }
 
   get showUrlTab(): boolean {
     return isSupportedUrlType(this.type);
@@ -85,16 +154,27 @@ export class FileUrlInputComponent {
       return;
     }
     this.mode = mode;
-    // 两模式输入互斥：切换时清空未提交的 URL 输入内容
+    // 两模式输入互斥：切换时清空未提交的 URL 输入内容；
+    // 编辑态随切换一并放弃（条目保留在宿主列表中，不丢数据）
     this.urlText = '';
+    this.editingUrl = null;
     this.error = null;
     this.errorParams = null;
     this.dedupedTip = false;
     this.modeChange.emit(mode);
   }
 
+  /** 取消编辑：放弃未保存的修改（被编辑条目保留原值，无需通知宿主） */
+  public onCancelEdit(): void {
+    this.urlText = '';
+    this.editingUrl = null;
+    this.error = null;
+    this.errorParams = null;
+    this.dedupedTip = false;
+  }
+
   public onAdd(): void {
-    if (this.disabled) {
+    if (this.disabled || this.localEntriesExist) {
       return;
     }
     const urls = splitUrlText(this.urlText);
@@ -104,7 +184,8 @@ export class FileUrlInputComponent {
     if (!urls.length) {
       return;
     }
-    if (!this.isMulti && urls.length > 1) {
+    // 编辑态针对单条目，只允许提交一条；单文件类型同理
+    if ((this.editingUrl || !this.isMulti) && urls.length > 1) {
       this.error = 'url_single_only';
       return;
     }
@@ -122,10 +203,14 @@ export class FileUrlInputComponent {
       }
     }
 
-    // 批内 + 与宿主已有条目全等去重（去重后仍提交去重结果）
+    // 批内 + 与宿主已有条目全等去重（去重后仍提交去重结果）；
+    // 编辑态排除被编辑条目的原 URL（允许不改原值直接保存）
     const existing = new Set(
       (this.existingUrls || []).map((url) => (url || '').trim()).filter(Boolean),
     );
+    if (this.editingUrl) {
+      existing.delete(this.editingUrl);
+    }
     const uniqueUrls: string[] = [];
     let deduped = false;
     for (const url of urls) {
@@ -136,6 +221,21 @@ export class FileUrlInputComponent {
       existing.add(url);
       uniqueUrls.push(url);
     }
+
+    // 编辑态：原位保存被编辑条目（不增条数，跳过条数上限）
+    if (this.editingUrl) {
+      if (!uniqueUrls.length) {
+        // 新值与其它条目重复：保留输入内容与编辑态，仅提示
+        this.dedupedTip = deduped;
+        return;
+      }
+      const originalUrl = this.editingUrl;
+      this.urlText = '';
+      this.editingUrl = null;
+      this.saveEdit.emit({ originalUrl, url: uniqueUrls[0] });
+      return;
+    }
+
     if (!uniqueUrls.length) {
       this.urlText = '';
       this.dedupedTip = deduped;

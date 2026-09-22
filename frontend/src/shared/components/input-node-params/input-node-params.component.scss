@@ -28,12 +28,23 @@
   height: 24px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  min-width: 0;
+
+  /* （可选）/类型 chip 禁止折行与收缩，避免窄容器下被挤成竖排 */
+  > span:not(.dynamic-param-label) {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 }
 
 .dynamic-param-label {
-  width: fit-content;
-  flex-shrink: 0;
+  /* 唯一可收缩元素：空间不足时省略号截断，悬停经 tooltip 看全名 */
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #191919;
 }
 
