@@ -126,7 +126,8 @@ def set_thread_session(trace_id):
     Parameters:
     trace_id (int): The session ID to be set for the current thread.
     """
-    request_ctx.get()[TRACE_ID] = trace_id
+    # copy-then-set: 原地写入会污染 ContextVar 的模块级共享默认字典
+    request_ctx.set({**(request_ctx.get() or {}), TRACE_ID: trace_id})
 
 
 def set_x_request_id(request_id):
@@ -136,7 +137,7 @@ def set_x_request_id(request_id):
     Parameters:
     trace_id (int): The request ID to be set for the current thread.
     """
-    request_ctx.get()[REQUEST_ID] = request_id
+    request_ctx.set({**(request_ctx.get() or {}), REQUEST_ID: request_id})
 
 
 def set_x_execution_id(execution_id):
@@ -146,14 +147,16 @@ def set_x_execution_id(execution_id):
     Parameters:
     trace_id (int): The execution ID to be set for the current thread.
     """
-    request_ctx.get()[EXECUTION_ID] = execution_id
+    request_ctx.set({**(request_ctx.get() or {}), EXECUTION_ID: execution_id})
 
 
 def set_thread_gray_debug(log_level: str):
     """
     Set the thread gray for the current thread
     """
-    request_ctx.get()[GRAY_DEBUG_ENABLED] = log_level.upper() == "DEBUG"
+    request_ctx.set(
+        {**(request_ctx.get() or {}), GRAY_DEBUG_ENABLED: log_level.upper() == "DEBUG"}
+    )
 
 
 def get_thread_gray_debug():
