@@ -39,6 +39,7 @@ import com.openjiuwen.studio.agent.manager.workflow.convert.adapt.ThirdpartyWork
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -1312,6 +1313,455 @@ class WorkflowManagementServiceTest {
         ModifyChannelReq body = new ModifyChannelReq();
         assertThrows(AgentStudioException.class, () ->
             workflowManagementService.modifyWorkflowChannel("p1", "wf-1", "ch-1", "w1", body));
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 新建通道分支查询版本为空时，抛出 WORKFLOW_VERSION_NOT_FOUND
+     * 预制条件：工作流存在，通道不存在（走新建分支），版本查询返回 null
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1, channelType=WEB_PAGE, versionId=v-not-exist
+     * 预期结果：抛出 AgentStudioException，错误码为 WORKFLOW_VERSION_NOT_FOUND
+     */
+    @Test
+    void testCreateWorkflowChannel_VersionNotFound_ThrowsException() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(null);
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(null);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        body.setVersionId("v-not-exist");
+        body.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body));
+            assertEquals(StudioError.WORKFLOW_VERSION_NOT_FOUND, ex.getErrorCode());
+        }
+    }
+
+    /**
+     * 用例描述：modifyWorkflowChannel 修改通道时版本查询为空，抛出 WORKFLOW_VERSION_NOT_FOUND
+     * 预制条件：工作流存在，通道存在（oldChannel 非空），版本查询返回 null
+     * 输入参数：projectId=p1, workflowId=wf-1, channelId=ch-1, workspaceId=w1, versionId=v-not-exist
+     * 预期结果：抛出 AgentStudioException，错误码为 WORKFLOW_VERSION_NOT_FOUND
+     */
+    @Test
+    void testModifyWorkflowChannel_VersionNotFound_ThrowsException() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setWorkspaceId("w1");
+        when(releaseChannelMapper.selectByIdAppIdWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(oldChannel);
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(null);
+
+        ModifyChannelReq body = new ModifyChannelReq();
+        body.setVersionId("v-not-exist");
+        body.setVisibilityScope(ModifyChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> workflowManagementService.modifyWorkflowChannel("p1", "wf-1", "ch-1", "w1", body));
+        assertEquals(StudioError.WORKFLOW_VERSION_NOT_FOUND, ex.getErrorCode());
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 新建通道分支版本存在，应正常返回 VersionChannelInfo
+     * 预制条件：工作流存在，通道不存在（走新建分支），版本查询返回有效版本
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1, channelType=WEB_PAGE, versionId=v-1
+     * 预期结果：返回非空 VersionChannelInfo，insert 与 agent-runtime createReleaseInfo 被调用
+     */
+    @Test
+    void testCreateWorkflowChannel_NewChannelSuccess() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(null);
+
+        ReleaseVersion version = new ReleaseVersion();
+        version.setVersionId("v-1");
+        version.setVersionName("Version 1.0");
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(version);
+
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setId("channel-1");
+        channel.setAppId("wf-1");
+        channel.setAppType("WORKFLOW");
+        channel.setVersionId("v-1");
+        channel.setVersionName("Version 1.0");
+        channel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        channel.setStatus("released");
+        when(releaseChannelMapper.selectByPrimaryKey(any())).thenReturn(channel);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        body.setVersionId("v-1");
+        body.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+
+            VersionChannelInfo result = workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body);
+
+            assertNotNull(result);
+            assertEquals("channel-1", result.getId());
+            assertEquals("v-1", result.getVersionId());
+            verify(releaseChannelMapper).insert(any(ReleaseChannel.class));
+            verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq("p1"), any());
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 通道已存在（更新分支），版本存在时直接更新通道记录
+     * 预制条件：工作流存在，通道已存在（oldChannel 非空，WEB_PAGE 渠道）
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1, channelType=WEB_PAGE, versionId=v-1
+     * 预期结果：updateByPrimaryKeySelective 被调用，同步删除旧发布信息并新建发布信息
+     */
+    @Test
+    void testCreateWorkflowChannel_UpdateBranchSuccess() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        oldChannel.setShortCode("short-001");
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(oldChannel);
+
+        ReleaseVersion version = new ReleaseVersion();
+        version.setVersionId("v-1");
+        version.setVersionName("Version 1.0");
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(version);
+
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setId("ch-1");
+        channel.setAppId("wf-1");
+        channel.setAppType("WORKFLOW");
+        channel.setVersionId("v-1");
+        channel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        channel.setStatus("released");
+        when(releaseChannelMapper.selectByPrimaryKey(any())).thenReturn(channel);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        body.setVersionId("v-1");
+        body.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+
+            VersionChannelInfo result = workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body);
+
+            assertNotNull(result);
+            assertEquals("ch-1", result.getId());
+            verify(releaseChannelMapper).updateByPrimaryKeySelective(any(ReleaseChannel.class));
+            verify(agentRuntimeClient).deleteReleaseInfo(eq("token"), eq("p1"), eq("short-001"),
+                eq(CommonConstant.WEB_PAGE_CHANNEL), any());
+            verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq("p1"), any());
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 发布到 agentBuilder 空间时直接调用 agentSpaceService.publish
+     * 预制条件：工作流存在，channelType=agentBuilder
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1
+     * 预期结果：返回非空 VersionChannelInfo，agentSpaceService.publish 被调用
+     */
+    @Test
+    void testCreateWorkflowChannel_AgentBuilderChannel() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        entity.setWorkflowType("chat");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.AGENT_BUILDER);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            VersionChannelInfo result = workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body);
+
+            assertNotNull(result);
+            verify(agentSpaceService).publish(any(ReleaseChannel.class));
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 百宝箱发布通道未启用时抛出 WORKFLOW_CHANNEL_TYPE_INCORRECT
+     * 预制条件：工作流存在，publishAppEnable=false（默认），channelType=APP_STORE
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1
+     * 预期结果：抛出 AgentStudioException，错误码为 WORKFLOW_CHANNEL_TYPE_INCORRECT
+     */
+    @Test
+    void testCreateWorkflowChannel_AppStoreNotSupported() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.APP_STORE_CHANNEL);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body));
+            assertEquals(StudioError.WORKFLOW_CHANNEL_TYPE_INCORRECT, ex.getErrorCode());
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 通道类型非法时抛出 WORKFLOW_CHANNEL_TYPE_INCORRECT
+     * 预制条件：工作流存在，channelType=INVALID
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1
+     * 预期结果：抛出 AgentStudioException，错误码为 WORKFLOW_CHANNEL_TYPE_INCORRECT
+     */
+    @Test
+    void testCreateWorkflowChannel_InvalidChannelType() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType("INVALID");
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body));
+            assertEquals(StudioError.WORKFLOW_CHANNEL_TYPE_INCORRECT, ex.getErrorCode());
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 更新分支（通道已存在）版本查询为空时，抛出 WORKFLOW_VERSION_NOT_FOUND
+     * 预制条件：工作流存在，通道已存在（oldChannel 非空，WEB_PAGE 渠道），版本查询返回 null
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1, channelType=WEB_PAGE, versionId=v-not-exist
+     * 预期结果：抛出 AgentStudioException 错误码 WORKFLOW_VERSION_NOT_FOUND，且不执行通道更新
+     */
+    @Test
+    void testCreateWorkflowChannel_UpdateBranchVersionNotFound_ThrowsException() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        oldChannel.setShortCode("short-001");
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(oldChannel);
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(null);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        body.setVersionId("v-not-exist");
+        body.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body));
+            assertEquals(StudioError.WORKFLOW_VERSION_NOT_FOUND, ex.getErrorCode());
+            verify(releaseChannelMapper, never()).updateByPrimaryKeySelective(any(ReleaseChannel.class));
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 更新分支版本存在时，正确设置 versionId/versionName 并更新通道记录
+     * 预制条件：工作流存在，通道已存在（oldChannel 非空，WEB_PAGE 渠道），版本查询返回 v-1/Version 1.0
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1, channelType=WEB_PAGE, versionId=v-1
+     * 预期结果：updateByPrimaryKeySelective 更新参数中 versionId=v-1、versionName=Version 1.0
+     */
+    @Test
+    void testCreateWorkflowChannel_UpdateBranchShouldSetVersionInfo() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        oldChannel.setShortCode("short-001");
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(oldChannel);
+
+        ReleaseVersion version = new ReleaseVersion();
+        version.setVersionId("v-1");
+        version.setVersionName("Version 1.0");
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(version);
+
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setId("ch-1");
+        channel.setAppId("wf-1");
+        channel.setAppType("WORKFLOW");
+        channel.setVersionId("v-1");
+        channel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        channel.setStatus("released");
+        when(releaseChannelMapper.selectByPrimaryKey(any())).thenReturn(channel);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        body.setVersionId("v-1");
+        body.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+
+            VersionChannelInfo result = workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body);
+
+            assertNotNull(result);
+            assertEquals("ch-1", result.getId());
+            ArgumentCaptor<ReleaseChannel> captor = ArgumentCaptor.forClass(ReleaseChannel.class);
+            verify(releaseChannelMapper).updateByPrimaryKeySelective(captor.capture());
+            ReleaseChannel updated = captor.getValue();
+            assertEquals("v-1", updated.getVersionId());
+            assertEquals("Version 1.0", updated.getVersionName());
+        }
+    }
+
+    /**
+     * 用例描述：createWorkflowChannel 更新分支为 CLOUD_STORE 渠道时，同样校验版本并同步删除旧发布信息
+     * 预制条件：工作流存在，通道已存在（oldChannel 非空，CLOUD_STORE 渠道），版本查询返回 v-1/Version 1.0
+     * 输入参数：projectId=p1, workflowId=wf-1, workspaceId=w1, channelType=CLOUD_STORE, versionId=v-1
+     * 预期结果：updateByPrimaryKeySelective 参数 versionId/versionName 正确，
+     *           deleteReleaseInfo 以 CLOUD_STORE 渠道调用
+     */
+    @Test
+    void testCreateWorkflowChannel_UpdateBranchCloudStoreShouldSyncReleaseInfo() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setChannelType(CommonConstant.CLOUD_STORE_CHANNEL);
+        oldChannel.setShortCode("short-002");
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(oldChannel);
+
+        ReleaseVersion version = new ReleaseVersion();
+        version.setVersionId("v-1");
+        version.setVersionName("Version 1.0");
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(version);
+
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setId("ch-1");
+        channel.setAppId("wf-1");
+        channel.setAppType("WORKFLOW");
+        channel.setVersionId("v-1");
+        channel.setChannelType(CommonConstant.CLOUD_STORE_CHANNEL);
+        channel.setStatus("released");
+        when(releaseChannelMapper.selectByPrimaryKey(any())).thenReturn(channel);
+
+        CreateChannelReq body = new CreateChannelReq();
+        body.setChannelType(CommonConstant.CLOUD_STORE_CHANNEL);
+        body.setVersionId("v-1");
+        body.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+
+            VersionChannelInfo result = workflowManagementService.createWorkflowChannel("p1", "wf-1", "w1", body);
+
+            assertNotNull(result);
+            assertEquals("ch-1", result.getId());
+            ArgumentCaptor<ReleaseChannel> captor = ArgumentCaptor.forClass(ReleaseChannel.class);
+            verify(releaseChannelMapper).updateByPrimaryKeySelective(captor.capture());
+            ReleaseChannel updated = captor.getValue();
+            assertEquals("v-1", updated.getVersionId());
+            assertEquals("Version 1.0", updated.getVersionName());
+            verify(agentRuntimeClient).deleteReleaseInfo(eq("token"), eq("p1"), eq("short-002"),
+                eq(CommonConstant.CLOUD_STORE_CHANNEL), any());
+            verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq("p1"), any());
+        }
+    }
+
+    /**
+     * 用例描述：modifyWorkflowChannel 版本存在时正常修改通道并同步发布信息
+     * 预制条件：工作流存在，通道存在（WEB_PAGE 渠道），版本查询返回有效版本
+     * 输入参数：projectId=p1, workflowId=wf-1, channelId=ch-1, workspaceId=w1, versionId=v-2
+     * 预期结果：返回非空 VersionChannelInfo，updateByPrimaryKeySelective 与 createReleaseInfo 被调用
+     */
+    @Test
+    void testModifyWorkflowChannel_Success() {
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setWorkspaceId("w1");
+        oldChannel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        oldChannel.setShortCode("short-001");
+        when(releaseChannelMapper.selectByIdAppIdWorkspaceId(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(oldChannel);
+
+        ReleaseVersion version = new ReleaseVersion();
+        version.setVersionId("v-2");
+        version.setVersionName("Version 2.0");
+        when(releaseVersionMapper.selectByAppIdAndVersionId(anyString(), anyString())).thenReturn(version);
+
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setId("ch-1");
+        channel.setAppId("wf-1");
+        channel.setAppType("WORKFLOW");
+        channel.setVersionId("v-2");
+        channel.setChannelType(CommonConstant.WEB_PAGE_CHANNEL);
+        when(releaseChannelMapper.selectByPrimaryKey("ch-1")).thenReturn(channel);
+
+        ModifyChannelReq body = new ModifyChannelReq();
+        body.setVersionId("v-2");
+        body.setVisibilityScope(ModifyChannelReq.VisibilityScopeEnum.TENANT);
+        body.setCallCount(100);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+
+            VersionChannelInfo result = workflowManagementService.modifyWorkflowChannel("p1", "wf-1", "ch-1", "w1", body);
+
+            assertNotNull(result);
+            assertEquals("ch-1", result.getId());
+            assertEquals("v-2", result.getVersionId());
+            verify(releaseChannelMapper).updateByPrimaryKeySelective(any(ReleaseChannel.class));
+            verify(agentRuntimeClient).deleteReleaseInfo(eq("token"), eq("p1"), eq("short-001"),
+                eq(CommonConstant.WEB_PAGE_CHANNEL), any());
+            verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq("p1"), any());
+        }
     }
 
     // ==================== exportWorkflows ====================

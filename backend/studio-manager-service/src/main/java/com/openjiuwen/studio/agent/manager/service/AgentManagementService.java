@@ -3030,6 +3030,12 @@ public class AgentManagementService implements IAgentManagementService {
                 newReleaseChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             }
             newReleaseChannel.setVersionId(createChannelReq.getVersionId());
+            ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId,
+                createChannelReq.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+            }
+            newReleaseChannel.setVersionName(version.getVersionName());
             newReleaseChannel.setVisibilityScope(createChannelReq.getVisibilityScope().toString());
             newReleaseChannel.setCallCount(createChannelReq.getCallCount());
             newReleaseChannel.setWorkspaceId(workspaceId);

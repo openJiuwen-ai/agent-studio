@@ -3,7 +3,6 @@
  */
 package com.openjiuwen.studio.agent.manager.service;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -511,34 +510,36 @@ public class TaskManagementServiceTest {
 
     /**
      * 用例描述：resumeTask 触发 checkStatus，status 为 null 或未匹配非法值时，fromValue 返回 null，
-     * checkStatus 入口对 null 做保护直接返回（不抛 NPE），resumeTask 继续执行并将任务状态置为 INIT
+     * checkStatus 入口对 null 抛 WORKFLOW_ASYNC_NOT_PENDING，resumeTask 不再继续执行
      * 预制条件：asyncTaskMapper.getTaskEntity 返回 status=null / UNKNOWN 的任务实体
      * 输入参数：status=null / UNKNOWN
-     * 预期结果：不抛任何异常，返回 TaskRsp.status 为 INIT
+     * 预期结果：抛出 AgentStudioException，errorCode 为 WORKFLOW_ASYNC_NOT_PENDING
      */
     @Test
-    public void testResumeTaskShouldNotThrowWhenStatusInvalidOrNull() {
+    public void testResumeTaskShouldThrowNotPendingWhenStatusInvalidOrNull() {
         for (String statusValue : Arrays.asList(null, "UNKNOWN")) {
             TaskEntity entity = buildTaskEntity(statusValue);
             when(asyncTaskMapper.getTaskEntity(any(), any(), any())).thenReturn(List.of(entity));
 
-            TaskRsp rsp = taskManagementService.resumeTask(PROJECT_ID, WORKFLOW_ID, TASK_ID, WORKSPACE_ID,
-                    new ResumeTaskReq());
-            assertEquals(TaskStatus.INIT, rsp.getStatus(),
-                    "status [" + statusValue + "] 经 fromValue 转 null 后，checkStatus 应直接返回，resumeTask 不抛异常");
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> taskManagementService.resumeTask(PROJECT_ID, WORKFLOW_ID, TASK_ID, WORKSPACE_ID,
+                    new ResumeTaskReq()));
+            assertEquals(StudioError.WORKFLOW_ASYNC_NOT_PENDING, ex.getErrorCode(),
+                "status [" + statusValue + "] 经 fromValue 转 null 后，checkStatus 应抛 WORKFLOW_ASYNC_NOT_PENDING");
         }
     }
 
     /**
-     * 用例描述：checkStatus 入口对 currentStatus 为 null 时直接返回，不进入 switch，不抛任何异常
+     * 用例描述：checkStatus 入口对 currentStatus 为 null 时抛出 WORKFLOW_ASYNC_NOT_PENDING
      * 预制条件：无（checkStatus 为公开方法，直接调用）
      * 输入参数：currentStatus=null, workflowType=chat / null
-     * 预期结果：方法正常返回，不抛异常（修复前 switch(null) 会抛 NPE）
+     * 预期结果：抛出 AgentStudioException，errorCode 为 WORKFLOW_ASYNC_NOT_PENDING
      */
     @Test
-    public void testCheckStatusShouldReturnEarlyWhenStatusNull() {
-        assertDoesNotThrow(() -> taskManagementService.checkStatus(null, "chat"));
-        assertDoesNotThrow(() -> taskManagementService.checkStatus(null, null));
+    public void testCheckStatusShouldThrowNotPendingWhenStatusNull() {
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> taskManagementService.checkStatus(null, "chat"));
+        assertEquals(StudioError.WORKFLOW_ASYNC_NOT_PENDING, ex.getErrorCode());
     }
 
     /**
@@ -585,20 +586,19 @@ public class TaskManagementServiceTest {
     }
 
     /**
-     * 用例描述：deleteTask 遇到 id 为空的任务实体时，跳过 deleteByIds，仅返回响应
-     * 预制条件：asyncTaskMapper.getTaskEntity 返回 id=null 的任务实体
+     * 用例描述：deleteTask 查询的任务在库中不存在时，getTaskEntityById 查空抛任务不存在异常，deleteByIds 不被调用
+     * 预制条件：asyncTaskMapper.getTaskEntity 返回空列表
      * 输入参数：projectId=project-1, workflowId=workflow-1, taskId=task-1, workspaceId=workspace-1
-     * 预期结果：返回 CommonDeleteRsp.id=task-1，deleteByIds 未被调用
+     * 预期结果：抛出 AgentStudioException，errorCode 为 WORKFLOW_ASYNC_TASK_NOT_FOUND，deleteByIds 未被调用
      */
     @Test
-    public void testDeleteTaskShouldNotDeleteWhenTaskIdBlank() {
-        TaskEntity entity = buildTaskEntity(TaskStatus.COMPLETED.getValue());
-        entity.setId(null);
-        when(asyncTaskMapper.getTaskEntity(any(), any(), any())).thenReturn(List.of(entity));
+    public void testDeleteTaskShouldThrowNotFoundWhenTaskMissing() {
+        when(asyncTaskMapper.getTaskEntity(any(), any(), any())).thenReturn(Collections.emptyList());
 
-        CommonDeleteRsp rsp = taskManagementService.deleteTask(PROJECT_ID, WORKFLOW_ID, TASK_ID, WORKSPACE_ID);
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> taskManagementService.deleteTask(PROJECT_ID, WORKFLOW_ID, TASK_ID, WORKSPACE_ID));
 
-        assertEquals(TASK_ID, rsp.getId());
+        assertEquals(StudioError.WORKFLOW_ASYNC_TASK_NOT_FOUND, ex.getErrorCode());
         verify(asyncTaskMapper, never()).deleteByIds(any());
     }
 

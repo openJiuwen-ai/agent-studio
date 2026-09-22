@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +47,7 @@ import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigServi
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
@@ -133,6 +135,9 @@ class AgentManagementServiceTest {
     private ShareResourceMapper shareResourceMapper;
 
     @Mock
+    private ShareResourceManagerService shareResourceManagerService;
+
+    @Mock
     private AgentRuntimeClient agentRuntimeClient;
 
     @Mock
@@ -155,6 +160,7 @@ class AgentManagementServiceTest {
             agentMemoryConfigService, assetFreeTrialMgmtService
         );
         ReflectionTestUtils.setField(agentManagementService, "shareResourceMapper", shareResourceMapper);
+        ReflectionTestUtils.setField(agentManagementService, "shareResourceManagerService", shareResourceManagerService);
         ReflectionTestUtils.setField(agentManagementService, "agentRuntimeClient", agentRuntimeClient);
         ReflectionTestUtils.setField(agentManagementService, "agentSpaceService", agentSpaceService);
         ReflectionTestUtils.setField(agentManagementService, "workflowValidationService", workflowValidationService);
@@ -278,7 +284,7 @@ class AgentManagementServiceTest {
         expectedInfo.setAgentId(agentId);
         expectedInfo.setName("Test Agent");
 
-        when(agentCommonService.getAgent(projectId, workspaceId, agentId)).thenReturn(agent);
+        when(agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId)).thenReturn(agent);
         when(agentCommonService.buildComplexAgentInfo(agent)).thenReturn(expectedInfo);
 
         AgentInfo result = agentManagementService.retrieveAgent(projectId, agentId, workspaceId);
@@ -294,8 +300,8 @@ class AgentManagementServiceTest {
         String agentId = "agent-1";
         String workspaceId = "workspace-1";
 
-        when(agentCommonService.getAgent(projectId, workspaceId, agentId))
-            .thenThrow(new AgentStudioException(StudioError.AGENT_NOT_EXIST));
+        when(agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId)).thenReturn(null);
+        when(shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, agentId)).thenReturn(false);
 
         assertThrows(AgentStudioException.class,
             () -> agentManagementService.retrieveAgent(projectId, agentId, workspaceId));
@@ -519,6 +525,213 @@ class AgentManagementServiceTest {
             assertEquals("WEB_PAGE", result.getChannelType());
             verify(releaseChannelMapper).insert(any(ReleaseChannel.class));
             verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq(projectId), any());
+        }
+    }
+
+    /**
+     * 用例描述：创建发布渠道时通道已存在（更新分支），版本不存在（version 为 null），应抛出 AGENT_VERSION_NOT_EXIST
+     * 预制条件：Agent 存在，通道类型为 WEB_PAGE，oldChannel 非空（走更新分支），version 查询返回 null
+     * 输入参数：projectId=project-1, agentId=agent-1, workspaceId=workspace-1, channelType=WEB_PAGE, versionId=v-not-exist
+     * 预期结果：抛出 AgentStudioException，错误码为 AGENT_VERSION_NOT_EXIST，updateByPrimaryKeySelective 不被调用
+     */
+    @Test
+    void testCreateAgentChannel_UpdateBranchVersionNotFound_ThrowsException() {
+        String projectId = "project-1";
+        String agentId = "agent-1";
+        String workspaceId = "workspace-1";
+
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setProjectId(projectId);
+
+        when(agentCommonService.getAgent(projectId, workspaceId, agentId)).thenReturn(agent);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setChannelType("WEB_PAGE");
+        oldChannel.setVersionId("v-old");
+
+        CreateChannelReq req = new CreateChannelReq();
+        req.setChannelType("WEB_PAGE");
+        req.setVersionId("v-not-exist");
+        req.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        req.setCallCount(100);
+
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(agentId, "WEB_PAGE", projectId, workspaceId))
+            .thenReturn(oldChannel);
+        when(releaseVersionMapper.selectByAppIdAndVersionId(agentId, "v-not-exist")).thenReturn(null);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> agentManagementService.createAgentChannel(projectId, agentId, workspaceId, req));
+            assertEquals(StudioError.AGENT_VERSION_NOT_EXIST, ex.getErrorCode());
+            verify(releaseChannelMapper, never()).updateByPrimaryKeySelective(any());
+        }
+    }
+
+    /**
+     * 用例描述：创建发布渠道时通道已存在（更新分支），版本存在时正常更新通道记录并回填版本名
+     * 预制条件：Agent 存在，通道类型为 WEB_PAGE，oldChannel 非空（走更新分支），version 查询返回有效版本
+     * 输入参数：projectId=project-1, agentId=agent-1, workspaceId=workspace-1, channelType=WEB_PAGE, versionId=v-1
+     * 预期结果：返回非空 VersionChannelInfo，updateByPrimaryKeySelective 被调用且携带新版本名
+     */
+    @Test
+    void testCreateAgentChannel_UpdateBranchSuccess() {
+        String projectId = "project-1";
+        String agentId = "agent-1";
+        String workspaceId = "workspace-1";
+
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setProjectId(projectId);
+
+        when(agentCommonService.getAgent(projectId, workspaceId, agentId)).thenReturn(agent);
+
+        ReleaseChannel oldChannel = new ReleaseChannel();
+        oldChannel.setId("ch-1");
+        oldChannel.setChannelType("WEB_PAGE");
+        oldChannel.setVersionId("v-old");
+        oldChannel.setShortCode("short-001");
+
+        CreateChannelReq req = new CreateChannelReq();
+        req.setChannelType("WEB_PAGE");
+        req.setVersionId("v-1");
+        req.setVisibilityScope(CreateChannelReq.VisibilityScopeEnum.TENANT);
+        req.setCallCount(100);
+
+        ReleaseVersion version = new ReleaseVersion();
+        version.setVersionId("v-1");
+        version.setVersionName("Version 1.0");
+
+        when(releaseChannelMapper.selectByAppIdAndTypeAndWorkspaceId(agentId, "WEB_PAGE", projectId, workspaceId))
+            .thenReturn(oldChannel);
+        when(releaseVersionMapper.selectByAppIdAndVersionId(agentId, "v-1")).thenReturn(version);
+
+        ReleaseChannel channel = new ReleaseChannel();
+        channel.setId("ch-1");
+        channel.setAppId(agentId);
+        channel.setAppType("AGENT");
+        channel.setVersionId("v-1");
+        channel.setVersionName("Version 1.0");
+        channel.setChannelType("WEB_PAGE");
+        channel.setShortCode("short-001");
+        channel.setStatus("released");
+        when(releaseChannelMapper.selectByPrimaryKey(any())).thenReturn(channel);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+
+            VersionChannelInfo result = agentManagementService.createAgentChannel(projectId, agentId, workspaceId, req);
+
+            assertNotNull(result);
+            assertEquals("ch-1", result.getId());
+            assertEquals("v-1", result.getVersionId());
+            // 更新分支回填版本名（MR 2380：更新分支补 version 判空 + setVersionName）
+            ArgumentCaptor<ReleaseChannel> captor = ArgumentCaptor.forClass(ReleaseChannel.class);
+            verify(releaseChannelMapper).updateByPrimaryKeySelective(captor.capture());
+            assertEquals("Version 1.0", captor.getValue().getVersionName());
+            verify(releaseChannelMapper, never()).insert(any(ReleaseChannel.class));
+            verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq(projectId), any());
+        }
+    }
+
+    /**
+     * 用例描述：创建发布渠道类型为 agentBuilder 时直接发布到 agentBuilder 空间
+     * 预制条件：Agent 存在（type 非空），channelType=agentBuilder
+     * 输入参数：projectId=project-1, agentId=agent-1, workspaceId=workspace-1
+     * 预期结果：返回非空 VersionChannelInfo，agentSpaceService.publish 被调用
+     */
+    @Test
+    void testCreateAgentChannel_AgentBuilderChannel() {
+        String projectId = "project-1";
+        String agentId = "agent-1";
+        String workspaceId = "workspace-1";
+
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setProjectId(projectId);
+        agent.setType("AGENT");
+
+        when(agentCommonService.getAgent(projectId, workspaceId, agentId)).thenReturn(agent);
+
+        CreateChannelReq req = new CreateChannelReq();
+        req.setChannelType("agentBuilder");
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            VersionChannelInfo result = agentManagementService.createAgentChannel(projectId, agentId, workspaceId, req);
+
+            assertNotNull(result);
+            verify(agentSpaceService).publish(any(ReleaseChannel.class));
+        }
+    }
+
+    /**
+     * 用例描述：创建发布渠道类型为 APP_STORE 但百宝箱发布未启用时抛出 AGENT_CHANNEL_TYPE_INCORRECT
+     * 预制条件：Agent 存在，publishAppEnable=false（默认），channelType=APP_STORE
+     * 输入参数：projectId=project-1, agentId=agent-1, workspaceId=workspace-1
+     * 预期结果：抛出 AgentStudioException，错误码为 AGENT_CHANNEL_TYPE_INCORRECT
+     */
+    @Test
+    void testCreateAgentChannel_AppStoreNotSupported() {
+        String projectId = "project-1";
+        String agentId = "agent-1";
+        String workspaceId = "workspace-1";
+
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setProjectId(projectId);
+
+        when(agentCommonService.getAgent(projectId, workspaceId, agentId)).thenReturn(agent);
+
+        CreateChannelReq req = new CreateChannelReq();
+        req.setChannelType("APP_STORE");
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> agentManagementService.createAgentChannel(projectId, agentId, workspaceId, req));
+            assertEquals(StudioError.AGENT_CHANNEL_TYPE_INCORRECT, ex.getErrorCode());
+        }
+    }
+
+    /**
+     * 用例描述：创建发布渠道类型非法时抛出 AGENT_CHANNEL_TYPE_INCORRECT
+     * 预制条件：Agent 存在，channelType=INVALID
+     * 输入参数：projectId=project-1, agentId=agent-1, workspaceId=workspace-1
+     * 预期结果：抛出 AgentStudioException，错误码为 AGENT_CHANNEL_TYPE_INCORRECT
+     */
+    @Test
+    void testCreateAgentChannel_InvalidChannelType() {
+        String projectId = "project-1";
+        String agentId = "agent-1";
+        String workspaceId = "workspace-1";
+
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setProjectId(projectId);
+
+        when(agentCommonService.getAgent(projectId, workspaceId, agentId)).thenReturn(agent);
+
+        CreateChannelReq req = new CreateChannelReq();
+        req.setChannelType("INVALID");
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> agentManagementService.createAgentChannel(projectId, agentId, workspaceId, req));
+            assertEquals(StudioError.AGENT_CHANNEL_TYPE_INCORRECT, ex.getErrorCode());
         }
     }
 

@@ -785,7 +785,7 @@ public enum StudioError {
     /**
      * Agent版本不存在
      */
-    AGENT_VERSION_NOT_EXIST(INTERNAL_SERVER_ERROR, AGENT, "1021"),
+    AGENT_VERSION_NOT_EXIST(NOT_FOUND, AGENT, "1021"),
 
     /**
      * agent发布通道不存在

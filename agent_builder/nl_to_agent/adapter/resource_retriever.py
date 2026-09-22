@@ -17,10 +17,10 @@ class ResourceRetriever:
         self.resource = resources or {}
         self.agent_type = agent_type
 
-        # 从resources中获取数据
-        raw_plugin_data = self.resource.get("plugins", {})
-        raw_knowledge_data = self.resource.get("knowledge_base", {})
-        raw_workflow_data = self.resource.get("workflows", {})
+        # 从resources中获取数据（子字段可能为 null，需判空）
+        raw_plugin_data = self.resource.get("plugins") or {}
+        raw_knowledge_data = self.resource.get("knowledge_base") or {}
+        raw_workflow_data = self.resource.get("workflows") or {}
 
         plugin_list = raw_plugin_data.get("plugin_list", [])
         knowledge_list = raw_knowledge_data.get("items", [])  # 知识库数据在 items 键中

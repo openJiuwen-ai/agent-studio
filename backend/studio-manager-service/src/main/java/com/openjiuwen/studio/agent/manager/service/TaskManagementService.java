@@ -167,9 +167,7 @@ public class TaskManagementService implements ITaskManagementService {
     public CommonDeleteRsp deleteTask(String projectId, String workflowId, String taskId, String workspaceId) {
         TaskEntity taskEntity = getTaskEntityById(projectId, workflowId, taskId, workspaceId);
         CommonDeleteRsp commonDeleteRsp = new CommonDeleteRsp().setId(taskId);
-        if (!StringUtils.isEmpty(taskEntity.getId())) {
-            asyncTaskMapper.deleteByIds(Collections.singletonList(taskId));
-        }
+        asyncTaskMapper.deleteByIds(Collections.singletonList(taskId));
         return commonDeleteRsp;
     }
 
@@ -286,7 +284,7 @@ public class TaskManagementService implements ITaskManagementService {
 
     public void checkStatus(TaskStatus currentStatus, String workflowType) {
         if (currentStatus == null) {
-            return;
+            throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_NOT_PENDING);
         }
         switch (currentStatus) {
             case INIT, RUNNING:

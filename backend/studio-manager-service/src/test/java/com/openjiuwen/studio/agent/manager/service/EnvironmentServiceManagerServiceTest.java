@@ -321,7 +321,7 @@ public class EnvironmentServiceManagerServiceTest {
 
     @Test
     void testQueryEnvironmentVariablesById_Success() {
-        when(environmentManagerMapper.findById("test_env_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
             .thenReturn(testEnvironmentEntity);
         when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
             .thenReturn(null);
@@ -333,17 +333,23 @@ public class EnvironmentServiceManagerServiceTest {
             TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
 
         assertEquals("", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
     }
 
     @Test
     void testQueryEnvironmentVariablesById_NotFound() {
-        when(environmentManagerMapper.findById("not_exist_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
         String result = environmentServiceManagerService.queryEnvironmentVariables(
             TEST_PROJECT_ID, "not_exist_id", TEST_WORKSPACE_ID);
 
         assertEquals("", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
     }
 
     @Test
@@ -1068,13 +1074,13 @@ public class EnvironmentServiceManagerServiceTest {
 
     /**
      * 用例描述：queryEnvironmentVariables(projectId, environmentId, workspaceId) 缓存命中时直接返回缓存值
-     * 预制条件：环境存在（findById 返回实体），缓存中存在非空变量串
+     * 预制条件：环境存在（findByIdAndProjectId 返回实体），缓存中存在非空变量串
      * 输入参数：projectId、环境 ID、workspaceId
      * 预期结果：返回缓存中的变量串，不查询 DB
      */
     @Test
     void testQueryEnvironmentVariablesByIdShouldReturnCachedValue() {
-        when(environmentManagerMapper.findById("test_env_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
             .thenReturn(testEnvironmentEntity);
         when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
             .thenReturn("[{\"name\":\"KEY\",\"value\":{\"type\":\"string\",\"content\":\"val\",\"secret\":false}}]");
@@ -1083,6 +1089,9 @@ public class EnvironmentServiceManagerServiceTest {
             TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
 
         assertEquals("[{\"name\":\"KEY\",\"value\":{\"type\":\"string\",\"content\":\"val\",\"secret\":false}}]", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
         verify(environmentVariableMapper, Mockito.never())
             .findByProjectIdAndWorkspaceIdAndEnvId(anyString(), anyString(), anyString());
     }
@@ -1098,7 +1107,7 @@ public class EnvironmentServiceManagerServiceTest {
         EnvironmentVariableEntity variableEntity = new EnvironmentVariableEntity();
         variableEntity.setEnvVariable("db-variable-json");
 
-        when(environmentManagerMapper.findById("test_env_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
             .thenReturn(testEnvironmentEntity);
         when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
             .thenReturn(null);
@@ -1110,6 +1119,9 @@ public class EnvironmentServiceManagerServiceTest {
             TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
 
         assertEquals("db-variable-json", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
     }
 
     /**

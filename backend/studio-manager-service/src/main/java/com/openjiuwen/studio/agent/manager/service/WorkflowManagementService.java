@@ -2386,6 +2386,12 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 releaseWorkflowChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             }
             releaseWorkflowChannel.setWorkspaceId(workspaceId);
+            ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(workflowId, body.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.WORKFLOW_VERSION_NOT_FOUND);
+            }
+            releaseWorkflowChannel.setVersionId(body.getVersionId());
+            releaseWorkflowChannel.setVersionName(version.getVersionName());
             releaseChannelMapper.updateByPrimaryKeySelective(releaseWorkflowChannel);
 
             // 如果发布渠道为网页或云商店，更新通道记录需要先同步删除agent-runtime的发布信息（以老的shortCode为key）
@@ -2404,6 +2410,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             releaseWorkflowChannel.setChannelType(channelType);
             releaseWorkflowChannel.setStatus(RELEASED);
             ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(workflowId, body.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.WORKFLOW_VERSION_NOT_FOUND);
+            }
             releaseWorkflowChannel.setVersionName(version.getVersionName());
             releaseWorkflowChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             releaseWorkflowChannel.setProjectId(projectId);
@@ -2551,6 +2560,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         newChannel.setId(oldChannel.getId());
         newChannel.setVersionId(body.getVersionId());
         ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(workflowId, body.getVersionId());
+        if (version == null) {
+            throw new AgentStudioException(StudioError.WORKFLOW_VERSION_NOT_FOUND);
+        }
         newChannel.setVersionName(version.getVersionName());
         newChannel.setCreatorId(RequestContextUtils.getRequestUserId());
         newChannel.setCallCount(body.getCallCount());
