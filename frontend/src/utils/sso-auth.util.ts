@@ -23,22 +23,28 @@
  *    Referrer-Policy: no-referrer（浏览器默认策略不受影响）。
  *
  * token 编码契约：token 须以 URL 原样（未 percent-encoding）拼入 src，
- * 且不得包含 '&'（URL 按 & 切分查询串，token 会被截断——检测到疑似
- * 截断时放弃消费并保持 URL 不变，无法可靠判定 token 边界故不做部分
- * 清理）。若父平台对 token 做了 percent-encoding（如 + → %2B、
- * = → %3D），写入 Cookie 的值与后端原始 token 不一致将导致认证失败——
- * 检测到疑似编码值时输出告警（无法安全自动解码：无法区分编码值与本身
- * 含 % 的原始 token）。
+ * 且不得包含 '&'（URL 按 & 切分查询串，token 会被截断）。Auth 段后紧跟
+ * 无 '=' 的裸段时输出疑似截断告警并仍消费首段——该特征与合法的布尔型
+ * 参数（如 &flag）不可区分，为不破坏契约合规的 URL 只能告警不强拦；
+ * 截断值会在后端校验失败，以告警为排障入口。若父平台对 token 做了
+ * percent-encoding（如 + → %2B、= → %3D），写入 Cookie 的值与后端原始
+ * token 不一致将导致认证失败——检测到疑似编码值时输出告警（无法安全
+ * 自动解码：无法区分编码值与本身含 % 的原始 token）。
  *
- * CSRF 要求：SameSite=None 使该 Cookie 随所有发往 console 源的跨站请求
- * 自动携带，而后端安全链当前禁用了 CSRF 且无 Origin/Referer 校验
- * （OAuth2SecurityConfig csrf.disable）——任何第三方站点可借已登录用户
- * 身份发起 console 请求。后端必须为 SSO 开启场景补充 Origin 白名单校验
- * （建议在 SsoAuthenticationFilter 内实现），本前端无法自愈此风险。
+ * CSRF 要求：SameSite=None 会使凭据 Cookie 随跨站请求自动携带，而后端
+ * 安全链当前禁用了 CSRF 且无 Origin/Referer 校验（OAuth2SecurityConfig
+ * csrf.disable）。为避免本前端单独合入即引入跨站请求伪造暴露面：
+ * 1. https 且父页面与 console 同站点时不写 SameSite（Lax 默认即可携带，
+ *    不扩大跨站暴露面）；
+ * 2. 仅 https 且跨站点父页面（真正需要 None 的拓扑）才写
+ *    SameSite=None; Secure; Partitioned，且必须先由部署方在后端 Origin
+ *    校验上线后设置 window.__SSO_CSRF_PROTECTION_CONFIRMED__ = true
+ *    （index.html 注入），否则拒绝写入该 Cookie。
  *
  * 顺序保证：先写入并回读校验 Cookie 值，校验通过后才剥除 URL。写入失败
- * 时保留 Auth 供重试，但同会话内失败达到上限（含首次共
- * MAX_WRITE_FAILURES_BEFORE_CLEANUP 次）后改为强制清理 URL，防止凭据在
+ * 时保留 Auth 供重试，失败计数经 sessionStorage 跨 reload 累计（存储
+ * 被禁用的环境回退会话内计数），达到上限（含首次共
+ * MAX_WRITE_FAILURES_BEFORE_CLEANUP 次）后强制清理 URL，防止凭据在
  * 持续被拦截的环境（Safari/ITP、三方 Cookie 策略、HttpOnly 冲突）中
  * 无限期驻留地址栏与历史记录。
  */
@@ -51,6 +57,12 @@ export const AUTH_PARAM_NAME = 'Auth';
 
 /** 运行期配置注入键：index.html 内联脚本可免构建配置白名单 */
 const RUNTIME_ORIGINS_KEY = '__SSO_TRUSTED_PARENT_ORIGINS__';
+
+/** CSRF 确认注入键：后端 Origin 校验上线后由部署方置 true，方启用跨站 Cookie */
+const CSRF_ACK_KEY = '__SSO_CSRF_PROTECTION_CONFIRMED__';
+
+/** 写入失败计数的持久化键（跨 reload 累计；存储不可用时回退会话内计数） */
+const WRITE_FAILURE_STORAGE_KEY = '__SSO_WRITE_FAILURE__';
 
 /** 读取 index.html 注入的运行期可信 origin（非数组/非字符串项忽略） */
 function readRuntimeOrigins(): string[] {
@@ -85,6 +97,47 @@ let writeFailureCount = 0;
 
 /** 上一次写入失败的 token：父平台换发新 token 时重置计数，给予完整重试预算 */
 let lastFailedToken: string | null = null;
+
+/** 跨 reload 的失败计数持久化状态 */
+interface PersistedWriteFailure {
+  token: string;
+  count: number;
+}
+
+/** 读取持久化失败计数（存储被禁用/解析失败时返回 null，回退会话内计数） */
+function readPersistedWriteFailure(): PersistedWriteFailure | null {
+  try {
+    const raw = sessionStorage.getItem(WRITE_FAILURE_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.token === 'string' &&
+      typeof parsed.count === 'number'
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch (e) {
+    // 三方 iframe 内 sessionStorage 可能被分区/禁用，访问即抛错——回退内存计数
+    return null;
+  }
+}
+
+/** 写入/清除持久化失败计数（存储不可用时静默忽略） */
+function writePersistedWriteFailure(state: PersistedWriteFailure | null): void {
+  try {
+    if (state === null) {
+      sessionStorage.removeItem(WRITE_FAILURE_STORAGE_KEY);
+    } else {
+      sessionStorage.setItem(WRITE_FAILURE_STORAGE_KEY, JSON.stringify(state));
+    }
+  } catch (e) {
+    // 存储不可用时忽略，仅影响跨 reload 累计
+  }
+}
 
 /**
  * 原生 history.replaceState 的模块加载期引用。utils.ts 的
@@ -214,10 +267,12 @@ function verifySsoCookieValue(token: string): 'ok' | 'shadowed' | 'missing' {
  *   编码会导致含 '+'/'/' 的 token 校验失败
  * - 会话级（不设 expires）：iframe 每次挂载都会重带 Auth，且应用内
  *   reload 不丢失认证
- * - https 下补 SameSite=None; Secure; Partitioned（CHIPS）：跨站 iframe
- *   必需，Partitioned 是 Chrome 三方 Cookie 封禁下的回退；http 下不加
- *   SameSite（浏览器在非安全上下文会拒绝 SameSite=None，也无法设置
- *   需 Secure 的 Partitioned）
+ * - https 且跨站点父页面（crossSite=true）时写 SameSite=None; Secure;
+ *   Partitioned（CHIPS，Chrome 三方 Cookie 封禁的回退），且须部署方先
+ *   置 window.__SSO_CSRF_PROTECTION_CONFIRMED__ = true 确认后端 Origin
+ *   校验已上线，否则拒绝写入；https 同站点父页面不写 SameSite（Lax 默认
+ *   即可携带，不扩大跨站暴露面）；http 下不加 SameSite（浏览器在非安全
+ *   上下文会拒绝 SameSite=None，也无法设置需 Secure 的 Partitioned）
  * - 含非法 Cookie 字符的 token 直接拒绝写入（写入也会在分号处截断，
  *   残缺 token 只会导致后端校验失败）
  * - 已知限制：JS 无法设置 HttpOnly，本 Cookie 可被页面脚本读取——XSS
@@ -229,14 +284,29 @@ function verifySsoCookieValue(token: string): 'ok' | 'shadowed' | 'missing' {
  *
  * @returns 写入并回读校验通过返回 true；被拒绝/拦截/校验不一致返回 false
  */
-export function writeSsoCookie(token: string): boolean {
+export function writeSsoCookie(token: string, crossSite: boolean): boolean {
   if (ILLEGAL_COOKIE_CHARS.test(token)) {
     console.warn('[SSO] Access-Token contains illegal cookie characters, reject writing');
     return false;
   }
   const attrs = ['path=/'];
   if (location.protocol === 'https:') {
-    attrs.push('SameSite=None', 'Secure', 'Partitioned');
+    if (crossSite) {
+      // 跨站点父页面必须 SameSite=None 才能携带，但 None 会把凭据暴露给
+      // 任意跨站请求（后端当前 csrf.disable 无 Origin 校验）——必须由部署方
+      // 在后端 Origin 校验上线后显式确认，否则拒绝写入（防本前端单独合入
+      // 即引入 CSRF 暴露面）
+      if ((window as any)[CSRF_ACK_KEY] !== true) {
+        console.warn(
+          '[SSO] cross-site https cookie (SameSite=None) refused: backend Origin/CSRF ' +
+            'validation not confirmed; set window.__SSO_CSRF_PROTECTION_CONFIRMED__ = true ' +
+            'after deploying backend Origin checks'
+        );
+        return false;
+      }
+      attrs.push('SameSite=None', 'Secure', 'Partitioned');
+    }
+    // 同站点父页面：Lax 默认即可携带，不写 SameSite（不扩大跨站暴露面）
   } else {
     // 非安全上下文：无法设置 Secure（连同 SameSite=None/Partitioned 一并不可用），
     // 且未显式 SameSite 的 Cookie 默认按 Lax 处理——跨站 iframe 的请求不会
@@ -270,10 +340,11 @@ export function writeSsoCookie(token: string): boolean {
  * Cookie → 校验通过后剥除 URL。
  *
  * 失败语义：写入被拒绝/拦截时保留 URL 中的 Auth 供重试（页面 reload 或父
- * 平台变更 hash 触发的再次消费均可整体重试）；同会话内失败达到上限
+ * 平台变更 hash 触发的再次消费均可整体重试）；失败计数在 sessionStorage
+ * 持久化以跨 reload 累计（存储被禁用的环境回退会话内计数），达到上限
  * （MAX_WRITE_FAILURES_BEFORE_CLEANUP）后强制清理 URL 以限制凭据暴露。
- * 门控拒绝时清理 URL 中的 Auth（凭证防驻留）；疑似 token 截断时放弃
- * 消费且保持 URL 不变。
+ * 门控拒绝时清理 URL 中的 Auth（凭证防驻留）；疑似 token 截断（Auth 段后
+ * 跟无 '=' 的裸段，与布尔型参数不可区分）仅告警不强拦。
  *
  * @returns 成功消费（Cookie 已落盘校验一致）返回 token；URL 无 Auth 参数、
  *          安全门控拒绝或写入失败时返回 null
@@ -327,47 +398,51 @@ export function consumeSsoAuthFromUrl(): string | null {
       );
     };
 
-    // ---- 安全门控：非可信 iframe 嵌入时拒绝消费，但仍清理 URL 中的凭证 ----
+    // ---- 契约观察：Auth 段后紧跟无 '=' 的裸段——可能是 token 含未编码 &
+    // 被截断，也可能是合法的布尔型参数（如 &flag），二者不可区分；
+    // 为不破坏契约合规的 URL，仅告警不强拦（截断值会在后端校验失败）----
+    const suspectTruncated =
+      hashRes.suspectTruncated || searchRes.suspectTruncated;
+    if (suspectTruncated) {
+      console.warn(
+        '[SSO] Auth value may be truncated by an unencoded & (or followed by a ' +
+          'value-less flag param); consuming the first segment, verify the token on the parent side'
+      );
+    }
+
+    // ---- 安全门控：非可信 iframe 嵌入时拒绝消费，但仍清理 URL 中的凭证
+    // （疑似截断时保持 URL 不变，与截断观察契约一致，不做部分清理）----
     if (!isTrustedEmbedding()) {
       console.warn(
         '[SSO] Auth param ignored: page is not embedded by a trusted parent (login-CSRF protection)'
       );
-      try {
-        stripAuthFromUrl();
-      } catch (e) {
-        console.warn('[SSO] failed to strip Auth param from url', e);
-      }
-      return null;
-    }
-
-    // ---- 契约校验：疑似 token 含未编码 & 被截断 → 放弃消费且保持 URL
-    // 不变（无法可靠判定 token 边界，不做部分清理，由父平台修正后重挂）----
-    if (hashRes.suspectTruncated || searchRes.suspectTruncated) {
-      console.warn(
-        '[SSO] Auth value appears truncated by an unencoded &; abort consuming ' +
-          'and keep url unchanged, fix the token on the parent side'
-      );
-      return null;
-    }
-
-    // ---- http + 跨站 iframe 拓扑告警：未显式 SameSite 的 Cookie 默认按
-    // Lax 处理，跨站子资源请求不会携带——该拓扑下 SSO 必然失败 ----
-    if (location.protocol !== 'https:') {
-      try {
-        const refHost = new URL(document.referrer).hostname;
-        const sameSite =
-          refHost === location.hostname ||
-          refHost.endsWith(`.${location.hostname}`) ||
-          location.hostname.endsWith(`.${refHost}`);
-        if (!sameSite) {
-          console.warn(
-            '[SSO] http deployment with cross-site iframe: the default-Lax cookie will ' +
-              'not be sent on cross-site requests, SSO cannot work; use https or same-site topology'
-          );
+      if (!suspectTruncated) {
+        try {
+          stripAuthFromUrl();
+        } catch (e) {
+          console.warn('[SSO] failed to strip Auth param from url', e);
         }
-      } catch (e) {
-        // referrer 已在门控校验过，解析异常不在此处理
       }
+      return null;
+    }
+
+    // ---- 父页面站点关系（供 Cookie 属性与拓扑告警决策）----
+    let crossSiteParent = false;
+    try {
+      const refHost = new URL(document.referrer).hostname;
+      crossSiteParent = !(
+        refHost === location.hostname ||
+        refHost.endsWith(`.${location.hostname}`) ||
+        location.hostname.endsWith(`.${refHost}`)
+      );
+    } catch (e) {
+      // referrer 已在门控校验过，此处不可达；保守视为同站点
+    }
+    if (location.protocol !== 'https:' && crossSiteParent) {
+      console.warn(
+        '[SSO] http deployment with cross-site iframe: the default-Lax cookie will ' +
+          'not be sent on cross-site requests, SSO cannot work; use https or same-site topology'
+      );
     }
 
     // ---- 写入阶段：空值属垃圾参数，直接剥除；非空值须写入校验通过才剥除 ----
@@ -390,7 +465,7 @@ export function consumeSsoAuthFromUrl(): string | null {
 
     let writeOk = false;
     try {
-      writeOk = writeSsoCookie(token);
+      writeOk = writeSsoCookie(token, crossSiteParent);
     } catch (e) {
       console.warn('[SSO] failed to write Access-Token cookie', e);
     }
@@ -401,9 +476,16 @@ export function consumeSsoAuthFromUrl(): string | null {
         lastFailedToken = token;
       }
       writeFailureCount++;
+      // 跨 reload 累计：主重试路径是页面 reload（模块计数会重置），
+      // 取持久化计数（同 token）与内存计数的大者，防止失败预算无限刷新
+      const persisted = readPersistedWriteFailure();
+      const persistedCount = persisted && persisted.token === token ? persisted.count : 0;
+      writeFailureCount = Math.max(writeFailureCount, persistedCount + 1);
+      writePersistedWriteFailure({ token, count: writeFailureCount });
       if (writeFailureCount >= MAX_WRITE_FAILURES_BEFORE_CLEANUP) {
         // 持续失败（Safari/ITP、三方 Cookie 策略、HttpOnly 冲突等）：放弃重试
-        // 并强制清理，防止凭据无限期驻留地址栏与历史记录
+        // 并强制清理，防止凭据无限期驻留地址栏与历史记录（保留持久化计数，
+        // 父平台重发同 token 时立即再次清理）
         console.warn(
           '[SSO] Access-Token write failed repeatedly, strip Auth from url to limit credential exposure'
         );
@@ -422,6 +504,7 @@ export function consumeSsoAuthFromUrl(): string | null {
     }
     writeFailureCount = 0;
     lastFailedToken = null;
+    writePersistedWriteFailure(null);
 
     try {
       stripAuthFromUrl();
