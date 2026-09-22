@@ -319,8 +319,9 @@ function verifySsoCookieValue(token: string): 'ok' | 'shadowed' | 'missing' {
  *   Partitioned（CHIPS，Chrome 三方 Cookie 封禁的回退），且须部署方先
  *   置 window.__SSO_CSRF_PROTECTION_CONFIRMED__ = true 确认后端 Origin
  *   校验已上线，否则拒绝写入；https 同站点父页面不写 SameSite（Lax 默认
- *   即可携带，不扩大跨站暴露面）；http 下不加 SameSite（浏览器在非安全
- *   上下文会拒绝 SameSite=None，也无法设置需 Secure 的 Partitioned）
+ *   即可携带，不扩大跨站暴露面）但加 Secure（防同域名 http 明文携带）；
+ *   http + 跨站点父页面拒绝写入（Lax Cookie 必然不被携带，走失败路径
+ *   保留 Auth 供重试）；http 同站点不加 SameSite（非安全上下文无法设置）
  * - 含非法 Cookie 字符的 token 直接拒绝写入（写入也会在分号处截断，
  *   残缺 token 只会导致后端校验失败）
  * - 已知限制：JS 无法设置 HttpOnly，本 Cookie 可被页面脚本读取——XSS
@@ -353,12 +354,22 @@ export function writeSsoCookie(token: string, crossSite: boolean): boolean {
         return false;
       }
       attrs.push('SameSite=None', 'Secure', 'Partitioned');
+    } else {
+      // 同站点父页面：Lax 默认即可携带，不写 SameSite（不扩大跨站暴露面）；
+      // 仍加 Secure——防止同域名 http 服务把该会话 Cookie 明文携带出去
+      attrs.push('Secure');
     }
-    // 同站点父页面：Lax 默认即可携带，不写 SameSite（不扩大跨站暴露面）
+  } else if (crossSite) {
+    // http + 跨站点：默认 Lax 的 Cookie 不会被跨站请求携带，写入了也必然
+    // 不可用——拒绝写入并走失败路径（保留 URL 中的 Auth 供拓扑修正后
+    // 重试），与拓扑告警语义一致，避免"回读成功即剥除"造成的静默失败
+    console.warn(
+      '[SSO] http deployment with cross-site iframe: the default-Lax cookie will ' +
+        'not be sent on cross-site requests, SSO cannot work; use https or same-site topology'
+    );
+    return false;
   } else {
-    // 非安全上下文：无法设置 Secure（连同 SameSite=None/Partitioned 一并不可用），
-    // 且未显式 SameSite 的 Cookie 默认按 Lax 处理——跨站 iframe 的请求不会
-    // 携带，http 部署仅同站点拓扑可用（consume 处会输出拓扑告警）。
+    // http 同站点：无法设置 Secure（连同 SameSite=None/Partitioned 一并不可用）。
     // 凭证将以非 Secure Cookie 明文暴露——但 token 本就以明文 URL 传输，
     // 拒绝写入并不能保护它，故选择强告警而非拒绝；根治手段是 https 部署。
     console.warn(
@@ -475,19 +486,13 @@ export function consumeSsoAuthFromUrl(): string | null {
       return null;
     }
 
-    // ---- 父页面站点关系（供 Cookie 属性与拓扑告警决策；按 SameSite 语义
-    // 近似判定：scheme 一致 + 注册域相同，见 isSameSite）----
+    // ---- 父页面站点关系（供 Cookie 属性决策；按 SameSite 语义近似判定：
+    // scheme 一致 + 注册域相同，见 isSameSite；http+跨站的拒绝在 writeSsoCookie）----
     let crossSiteParent = false;
     try {
       crossSiteParent = !isSameSite(new URL(document.referrer));
     } catch (e) {
       // referrer 已在门控校验过，此处不可达；保守视为同站点
-    }
-    if (location.protocol !== 'https:' && crossSiteParent) {
-      console.warn(
-        '[SSO] http deployment with cross-site iframe: the default-Lax cookie will ' +
-          'not be sent on cross-site requests, SSO cannot work; use https or same-site topology'
-      );
     }
 
     // ---- 写入阶段：空值属垃圾参数，直接剥除；非空值须写入校验通过才剥除 ----

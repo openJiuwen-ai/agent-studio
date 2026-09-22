@@ -159,8 +159,12 @@ export class AppComponent implements OnInit {
     window.onhashchange = () => {
       // 监听hashchange事件
       this.changeRouter();
-      // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费
-      consumeSsoAuthFromUrl();
+      // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费；
+      // 消费成功（可能关联不同用户）则整体 reload，使 AGENT_SID/workspace/权限
+      // 等用户态按新凭证重新初始化，避免页面身份与请求凭证不一致
+      if (consumeSsoAuthFromUrl()) {
+        window.location.reload();
+      }
     };
   }
 
