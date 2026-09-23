@@ -160,6 +160,22 @@ class MemoryRepoManagementServiceTest {
     }
 
     @Test
+    void test_createMemoryRepo_strategies_type_null_should_throw() {
+        // Given
+        LongTermMemoryStrategy s1 = new LongTermMemoryStrategy();
+        s1.setType(null);
+        s1.setPrompt("p1");
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(List.of(s1));
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
     void test_createMemoryRepo_strategies_duplicate_type_should_throw() {
         // Given
         LongTermMemoryStrategy s1 = new LongTermMemoryStrategy();

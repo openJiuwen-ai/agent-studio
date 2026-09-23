@@ -115,6 +115,10 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
             if (strategy == null) {
                 throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
             }
+            // DTO 级联仅覆盖 Controller 路径，service 直调路径下 type 为空需显式拦截
+            if (strategy.getType() == null) {
+                throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
+            }
             if (!strategyTypes.add(strategy.getType())) {
                 throw new AgentStudioException(StudioError.MEMORY_STRATEGY_DUPLICATE, strategy.getType());
             }
