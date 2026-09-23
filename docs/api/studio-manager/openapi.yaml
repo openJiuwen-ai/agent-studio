@@ -3731,7 +3731,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EnvironmentInfoRequest"
+              $ref: "#/components/schemas/ModifyEnvironmentInfoRequestBody"
         required: true
       responses:
         "200":
@@ -21916,6 +21916,7 @@ components:
           description: 供应商ID
           example: provider_001
           maxLength: 40
+          minLength: 1
         service_name:
           type: string
           description: 服务名称
@@ -21948,6 +21949,7 @@ components:
           description: API地址
           example: https://api.example.com/v1
           maxLength: 255
+          minLength: 1
         is_support_function:
           type: boolean
           description: 是否支持函数调用
@@ -21976,6 +21978,7 @@ components:
           type: string
           description: 接口协议
           example: OpenAI
+          minLength: 1
         is_support_stream:
           type: boolean
           description: 是否支持流式输出
@@ -23351,46 +23354,14 @@ components:
       required:
       - auth_info
       - auth_type
-    EnvironmentInfoRequest:
+    ModifyEnvironmentInfoRequestBody:
       type: object
       properties:
-        name:
-          type: string
-          description: 安全组名称
-          example: my-security-group
-          pattern: "^[a-zA-Z][a-zA-Z0-9-]{3,47}$"
-        id:
-          type: string
-          description: 安全组ID
-          example: sg-001
-          maxLength: 64
-          pattern: "^[a-zA-Z0-9_-]+$"
         description:
           type: string
           description: 安全组描述
           example: 用于Agent运行的安全组
-          maxLength: 128
-          pattern: "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$"
-        vpcId:
-          type: string
-          description: VPC ID
-          example: vpc-001
-          maxLength: 64
-          minLength: 1
-        subnetId:
-          type: string
-          description: 子网ID
-          example: subnet-001
-          maxLength: 64
-          minLength: 1
-        isDefault:
-          type: boolean
-          description: 是否为默认安全组
-          example: false
-      required:
-      - name
-      - subnetId
-      - vpcId
+          maxLength: 1024
     DatasourceConnectionInfo:
       type: object
       properties:
@@ -28397,6 +28368,46 @@ components:
           minLength: 1
       required:
       - id
+    EnvironmentInfoRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 安全组名称
+          example: my-security-group
+          pattern: "^[a-zA-Z][a-zA-Z0-9-]{3,47}$"
+        id:
+          type: string
+          description: 安全组ID
+          example: sg-001
+          maxLength: 64
+          pattern: "^[a-zA-Z0-9_-]+$"
+        description:
+          type: string
+          description: 安全组描述
+          example: 用于Agent运行的安全组
+          maxLength: 128
+          pattern: "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$"
+        vpcId:
+          type: string
+          description: VPC ID
+          example: vpc-001
+          maxLength: 64
+          minLength: 1
+        subnetId:
+          type: string
+          description: 子网ID
+          example: subnet-001
+          maxLength: 64
+          minLength: 1
+        isDefault:
+          type: boolean
+          description: 是否为默认安全组
+          example: false
+      required:
+      - name
+      - subnetId
+      - vpcId
     EnvironmentVariable:
       type: object
       properties:
