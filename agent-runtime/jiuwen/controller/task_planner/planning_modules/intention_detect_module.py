@@ -55,7 +55,6 @@ from jiuwen.prompt import TemplateManager, Prompt, Template
 DEFAULT_INTENT = "意图不明"
 WORKFLOW_HANDLER_TYPE = "WORKFLOW"
 AGENT_HANDLER_TYPE = "AGENT"
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 def _get_config_info(model_name: str):

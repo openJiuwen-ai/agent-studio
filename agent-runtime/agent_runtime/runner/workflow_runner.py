@@ -37,6 +37,7 @@ from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactor
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 from openjiuwen.core.session.stream import BaseStreamMode
 from agent_runtime.common.trace_compat import create_workflow_session_with_trace
+from agent_runtime.error_contract.factory import is_plugin_response_format_error
 
 try:
     from opentelemetry import trace as otel_trace
@@ -656,6 +657,13 @@ class WorkflowRunner:
                     if e.node_type:
                         node_type = e.node_type
                 else:
+                    # P5-R3a: openjiuwen 引擎(vertex)在节点能力执行期把
+                    # JiuWenBaseException(105015)(Exception 子类,非 BaseError)
+                    # 包成 ExecutionError(cause=原异常)。包装路径同样不得
+                    # yield 裸 105015 error event——re-raise 传播到 catch 端
+                    # (from_plugin_exception 认 __cause__ 链)→ canonical 12100006。
+                    if is_plugin_response_format_error(e):
+                        raise
                     error_code = _resolve_error_code_from_exception(e)
                     error_msg = _format_error_message(error_code, e.message)
                     yield {
@@ -695,6 +703,10 @@ class WorkflowRunner:
                 node_id = last_node.get("node_id", "")
                 node_type = last_node.get("node_type", "")
                 node_name = _resolve_node_name(node_defs, workflow_id, node_id)
+                # P5-R3a: 同 except ExecutionError——引擎包装路径的 105015
+                # 不得 yield 裸码,re-raise 传播到 catch 端 → canonical 12100006。
+                if is_plugin_response_format_error(e):
+                    raise
                 error_code = _resolve_error_code_from_exception(e)
                 error_msg = _format_error_message(error_code, e.message)
                 workflow_logger.error(f"Workflow execution failed: {e}, type={type(e).__name__}")
@@ -725,6 +737,15 @@ class WorkflowRunner:
                     "createdTime": int(time.time() * 1000),
                 }
             except Exception as e:
+                # SYNC-01 P5-R3 Phase 5 决策 A: 105015(PLUGIN_RESPONSE_FORMAT_ERROR,
+                # 未发布)不在此 yield raw error event（会外露 105015 + str(exc)含哨兵）;
+                # re-raise 让其传播到 stream_response except(流式 from_plugin_exception
+                # → 12100006 SSE)/ run_blocking → ir_execute → middleware → server.py
+                # JiuWen handler(非流式 12100006)。其余异常仍 yield error event(保语义)。
+                # P5-R3a: 改用 is_plugin_response_format_error(覆盖直接 + __cause__
+                # 链)——下方 cause 遍历原本会把 cause 链中的 105015 yield 成裸码。
+                if is_plugin_response_format_error(e):
+                    raise
                 workflow_logger.error(f"Workflow execution failed: {e}, type={type(e).__name__}", exc_info=True)
                 last_node = workflow_wrapper.get_last_node() if workflow_wrapper else {}
                 node_id = last_node.get("node_id", "")
@@ -878,6 +899,13 @@ class WorkflowRunner:
                 for event in formatter.format(stream_data):
                     yield event
         except Exception as e:
+            # P5-R3a: 组件调试期 105015（直接 JiuWenBaseException 或引擎包装）
+            # 同样不 yield 裸码——re-raise 传播到 debug 端点 catch（debug_stream
+            # 无 SseTerminalGuard/首帧预取，StreamingResponse 已 commit 后由
+            # server.py generic handler 兜底 from_plugin_exception→12100006；
+            # debug SSE error frame 优雅化属 COM-03 §3 debug 端点完整化后续）。
+            if is_plugin_response_format_error(e):
+                raise
             workflow_logger.error(
                 f"Debug component execution failed: {e}", exc_info=True
             )
