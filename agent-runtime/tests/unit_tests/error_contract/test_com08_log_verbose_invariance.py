@@ -37,7 +37,7 @@ def _make_jiuwen_exc(message: str = "boom", error_code: str = "120001") -> JiuWe
 
 
 def _handle_error_bytes(item) -> bytes:
-    return asyncio.run(exec_utils._handle_error_response(item))  # noqa: G.CLS.11
+    return asyncio.run(exec_utils._handle_error_response(item))  # pylint: disable=protected-access
 
 
 def _wire_json(wire: bytes) -> dict:
@@ -92,7 +92,7 @@ def test_handle_error_response_no_sensitive_sentinel():
 def test_handle_error_response_contains_code_and_safe_message():
     wire = _handle_error_bytes(_make_jiuwen_exc(error_code="120001"))
     assert b"120001" in wire
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in wire  # noqa: G.CLS.11
+    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in wire  # pylint: disable=protected-access
 
 
 def test_handle_error_response_logger_no_raw_message(caplog):
@@ -152,7 +152,7 @@ def _drive_process_streaming_output(item) -> list[bytes]:
 
     async def collect():
         out = []
-        async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # noqa: G.CLS.11
+        async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # pylint: disable=protected-access
             out.append(chunk)
         return out
 
@@ -184,7 +184,7 @@ def test_process_streaming_output_contains_code_and_safe_message():
     wire = _drive_process_streaming_output(_make_error_item(code="120002"))
     joined = b"".join(wire)
     assert b"120002" in joined
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # noqa: G.CLS.11
+    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
 # ---------------- §4.7C #6/#7: async_execution 不透传 e.message ------------
@@ -218,7 +218,7 @@ class _FakeAESM:
     def set_state_status(self, conv, status):
         pass
 
-    def get_state_parsed(self, conv):  # noqa: G.CLS.07
+    def get_state_parsed(self, conv):  # pylint: disable=add-staticmethod-or-classmethod-decorator
         return SimpleNamespace(status=None)
 
 
@@ -239,7 +239,7 @@ def _drive_format_component_output(item, monkeypatch):
 
     async def collect():
         out = []
-        async for chunk in exec_utils._format_component_output(  # noqa: G.CLS.11
+        async for chunk in exec_utils._format_component_output(  # pylint: disable=protected-access
             "conv-1", origin(), exec_data, stub_wf
         ):
             out.append(chunk)
@@ -339,7 +339,7 @@ def test_format_component_output_no_sensitive_sentinel(monkeypatch):
     joined = b"".join(wire)
     assert _SENTINEL.encode() not in joined
     assert b"SECRET-TOKEN" not in joined
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # noqa: G.CLS.11
+    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
 def test_format_component_output_two_configs_identical(monkeypatch):
@@ -355,7 +355,7 @@ def test_post_process_workflow_streaming_output_no_sentinel(monkeypatch):
     wire = _drive_post_process_workflow_streaming_output(_make_error_item(), monkeypatch)
     joined = b"".join(wire)
     assert _SENTINEL.encode() not in joined
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # noqa: G.CLS.11
+    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
 def test_post_process_workflow_streaming_output_two_configs_identical(monkeypatch):
@@ -372,7 +372,7 @@ def test_post_process_async_persisted_message_no_sentinel(monkeypatch):
     blob = "\n".join(v.model_dump_json(by_alias=True, exclude_none=True)
                      for _, v in captured if hasattr(v, "model_dump_json"))
     assert _SENTINEL not in blob
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # noqa: G.CLS.11
+    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # pylint: disable=protected-access
 
 
 def test_post_process_async_two_configs_identical(monkeypatch):
@@ -399,7 +399,7 @@ def test_handle_init_exceptions_no_sensitive_in_persisted(monkeypatch):
         for _, v in captured if hasattr(v, "model_dump_json")
     )
     assert _SENTINEL not in blob
-    assert async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # noqa: G.CLS.11
+    assert async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # pylint: disable=protected-access
 
 
 def test_handle_init_exceptions_two_configs_identical(monkeypatch):
@@ -426,7 +426,7 @@ def test_async_exec_post_process_7_no_sentinel(monkeypatch):
         for _, v in captured if hasattr(v, "model_dump_json")
     )
     assert _SENTINEL not in blob
-    assert async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # noqa: G.CLS.11
+    assert async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # pylint: disable=protected-access
 
 
 def test_async_exec_post_process_7_two_configs_identical(monkeypatch):
@@ -448,7 +448,7 @@ def test_async_exec_post_process_7_two_configs_identical(monkeypatch):
 
 
 def test_async_execution_safe_message_constant_no_sentinel():
-    assert _SENTINEL not in async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE  # noqa: G.CLS.11
+    assert _SENTINEL not in async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE  # pylint: disable=protected-access
 
 
 # ---------------- §4.7C: WorkflowAbortException :729+:843 双路径排除证据 ---
@@ -504,7 +504,7 @@ def test_arun_except_workflow_abort_real_path():
     """§4.7C: 真实经过 Workflow._arun() 的 :729 except 分支。"""
     exc = _abort_exception({"user_field": "user-value"})
     stub = _arun_stub(exc)
-    result = asyncio.run(Workflow._arun(stub, "query", False, {}))  # noqa: G.CLS.11
+    result = asyncio.run(Workflow._arun(stub, "query", False, {}))  # pylint: disable=protected-access
     assert result["code"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.code
     assert result["message"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.errmsg
     assert result["user_field"] == "user-value"
@@ -515,7 +515,7 @@ def test_get_output_isinstance_workflow_abort_real_path():
     """§4.7C: 真实经过 Workflow._get_output() 的 :843 isinstance 分支。"""
     exc = _abort_exception({"user_field": "user-value"})
     stub = _get_output_stub(exc)
-    result = asyncio.run(Workflow._get_output(stub))  # noqa: G.CLS.11
+    result = asyncio.run(Workflow._get_output(stub))  # pylint: disable=protected-access
     assert result["code"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.code
     assert result["message"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.errmsg
     assert result["user_field"] == "user-value"
@@ -524,8 +524,8 @@ def test_get_output_isinstance_workflow_abort_real_path():
 
 def test_abort_two_real_paths_identical_and_safe():
     exc = _abort_exception({"user_field": "user-value"})
-    arun_result = asyncio.run(Workflow._arun(_arun_stub(exc), "q", False, {}))  # noqa: G.CLS.11
-    getout_result = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # noqa: G.CLS.11
+    arun_result = asyncio.run(Workflow._arun(_arun_stub(exc), "q", False, {}))  # pylint: disable=protected-access
+    getout_result = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # pylint: disable=protected-access
     assert arun_result == getout_result
     assert arun_result["message"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.errmsg
 
@@ -534,12 +534,12 @@ def test_abort_two_real_paths_no_log_verbose_dependency(monkeypatch):
     """§4.7C §6.3 §8: 四格双配置矩阵——_arun 与 _get_output 分别在 false/true 下精确一致。"""
     monkeypatch.setenv("LOG_VERBOSE", "false")
     exc_f = _abort_exception({"user_field": "v"})
-    arun_false = asyncio.run(Workflow._arun(_arun_stub(exc_f), "q", False, {}))  # noqa: G.CLS.11
-    getout_false = asyncio.run(Workflow._get_output(_get_output_stub(exc_f)))  # noqa: G.CLS.11
+    arun_false = asyncio.run(Workflow._arun(_arun_stub(exc_f), "q", False, {}))  # pylint: disable=protected-access
+    getout_false = asyncio.run(Workflow._get_output(_get_output_stub(exc_f)))  # pylint: disable=protected-access
     monkeypatch.setenv("LOG_VERBOSE", "true")
     exc_t = _abort_exception({"user_field": "v"})
-    arun_true = asyncio.run(Workflow._arun(_arun_stub(exc_t), "q", False, {}))  # noqa: G.CLS.11
-    getout_true = asyncio.run(Workflow._get_output(_get_output_stub(exc_t)))  # noqa: G.CLS.11
+    arun_true = asyncio.run(Workflow._arun(_arun_stub(exc_t), "q", False, {}))  # pylint: disable=protected-access
+    getout_true = asyncio.run(Workflow._get_output(_get_output_stub(exc_t)))  # pylint: disable=protected-access
     # 四格矩阵
     assert arun_false == arun_true          # _arun(false) == _arun(true)
     assert getout_false == getout_true      # _get_output(false) == _get_output(true)
@@ -558,7 +558,7 @@ def test_abort_message_not_user_custom_text():
 # ---------------- §4.7C #8/#9: 上游生产点→下游消费者真实链路 ------------
 
 
-def test_8_task_done_callback_wraps_non_jiuwen_with_canonical(monkeypatch):  # noqa: G.CMT.03
+def test_8_task_done_callback_wraps_non_jiuwen_with_canonical(monkeypatch):  # pylint: disable=function-docstring-indents-four
     """#8 _task_done_callback：非 JiuWenBaseException task 异常（含哨兵 str）被包装为
     固定 canonical WORKFLOW_EXECUTE_ERROR，哨兵不进包装后的 message。"""
     from jiuwen.common.exception.status_code import StatusCode as SC
@@ -591,7 +591,7 @@ def test_8_task_done_callback_wraps_non_jiuwen_with_canonical(monkeypatch):  # n
     )
 
     async def _run():
-        Workflow._task_done_callback(stub, task)  # noqa: G.CLS.11
+        Workflow._task_done_callback(stub, task)  # pylint: disable=protected-access
         await asyncio.gather(*chat_manager.tasks)
         return captured.get("exc")
 
@@ -604,13 +604,13 @@ def test_8_task_done_callback_wraps_non_jiuwen_with_canonical(monkeypatch):  # n
     assert SC.WORKFLOW_EXECUTE_ERROR.errmsg in wrapped.message
 
 
-def test_9_get_output_jiuwen_branch_chain_to_downstream_no_sentinel(monkeypatch):  # noqa: G.CMT.03
+def test_9_get_output_jiuwen_branch_chain_to_downstream_no_sentinel(monkeypatch):  # pylint: disable=function-docstring-indents-four
     """#9 _get_output JiuWenBaseException 分支产出（含上游哨兵 message）→ 送入下游 #2
     _process_streaming_output → 最终 wire 不含哨兵、含 _SAFE。"""
     upstream_exc = JiuWenBaseException(error_code="120099", message=_SENTINEL)
     stub = _get_output_stub(upstream_exc)
     # 真实 #9：_get_output 的 JiuWenBaseException 分支（:855）
-    produced = asyncio.run(Workflow._get_output(stub))  # noqa: G.CLS.11
+    produced = asyncio.run(Workflow._get_output(stub))  # pylint: disable=protected-access
     assert produced["code"] == "120099"
     # #9 的 message 含上游哨兵（#9 本身透传 output.message）——证明需要下游兜底
     assert _SENTINEL in produced["message"]
@@ -625,16 +625,16 @@ def test_9_get_output_jiuwen_branch_chain_to_downstream_no_sentinel(monkeypatch)
     wire = _drive_process_streaming_output(downstream_item)
     joined = b"".join(wire)
     assert _SENTINEL.encode() not in joined  # 下游 #2 用 _SAFE 兜底
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # noqa: G.CLS.11
+    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
 def test_8_9_chain_two_configs_identical(monkeypatch):
     """#8/#9 上游生产 false/true 下产出一致（不读 LOG_VERBOSE）。"""
     monkeypatch.setenv("LOG_VERBOSE", "false")
     exc = JiuWenBaseException(error_code="120099", message="stable upstream")
-    produced_false = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # noqa: G.CLS.11
+    produced_false = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # pylint: disable=protected-access
     monkeypatch.setenv("LOG_VERBOSE", "true")
-    produced_true = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # noqa: G.CLS.11
+    produced_true = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # pylint: disable=protected-access
     assert produced_false == produced_true
 
 
@@ -646,7 +646,7 @@ def test_error_contract_zero_log_verbose_read():
     import subprocess
 
     root = "agent_runtime/error_contract"
-    r = subprocess.run(  # noqa: G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05
         ["grep", "-rn", "LOG_VERBOSE", root],
         capture_output=True, text=True,
     )
@@ -657,7 +657,7 @@ def test_no_test_error_message_in_production():
     """§6.5: 生产代码不再包含面向响应的 'test error message'。"""
     import subprocess
 
-    r = subprocess.run(  # noqa: G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05
         ["grep", "-rn", "test error message", "jiuwen"],
         capture_output=True, text=True,
     )
@@ -674,7 +674,7 @@ def test_no_log_verbose_mode_usage_in_production():
     """§6.5: 生产代码不再有 LOG_VERBOSE_MODE 用法（仅 diagnostics 读 env）。"""
     import subprocess
 
-    r = subprocess.run(  # noqa: G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05
         ["grep", "-rn", "LOG_VERBOSE_MODE", "jiuwen"],
         capture_output=True, text=True,
     )
@@ -690,7 +690,7 @@ def test_only_diagnostics_reads_log_verbose_env():
     """§6.5: 生产代码仅 diagnostics.py 调用 os.getenv('LOG_VERBOSE')。"""
     import subprocess
 
-    r = subprocess.run(  # noqa: G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05
         ["grep", "-rn", 'getenv("LOG_VERBOSE"', "jiuwen"],
         capture_output=True, text=True,
     )
@@ -709,7 +709,7 @@ def _drive_normal_end_item(item):
 
     async def collect():
         out = []
-        async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # noqa: G.CLS.11
+        async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # pylint: disable=protected-access
             out.append(chunk)
         return out
 
@@ -720,7 +720,7 @@ def _events_of(wire):
     return [obj.get("event") for obj in _wire_list_json(wire)]
 
 
-def test_normal_end_no_error_frame_two_configs(monkeypatch, caplog):  # noqa: G.CMT.03
+def test_normal_end_no_error_frame_two_configs(monkeypatch, caplog):  # pylint: disable=function-docstring-indents-four
     """§4.8/§6.3: 正常结束（FINISH）经 #2 精确产生 start+唯一 done 终态，
     无 error/额外 END；两配置 wire 一致；无 ERROR 日志。"""
     import logging
@@ -748,7 +748,7 @@ def test_normal_end_no_error_frame_two_configs(monkeypatch, caplog):  # noqa: G.
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
-def test_message_end_no_error_frame_two_configs(monkeypatch, caplog):  # noqa: G.CMT.03
+def test_message_end_no_error_frame_two_configs(monkeypatch, caplog):  # pylint: disable=function-docstring-indents-four
     """§4.8/§6.3: MESSAGE_END 经 #2 精确产生 start+唯一 message_end 终态，
     无 error；两配置一致；无 ERROR 日志。"""
     import logging
@@ -773,7 +773,7 @@ def test_message_end_no_error_frame_two_configs(monkeypatch, caplog):  # noqa: G
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
-def test_cancel_propagates_no_synthetic_error_two_configs(monkeypatch, caplog):  # noqa: G.CMT.03
+def test_cancel_propagates_no_synthetic_error_two_configs(monkeypatch, caplog):  # pylint: disable=function-docstring-indents-four
     """§4.8/§6.3: 取消（CancelledError）经 #2：
     - CancelledError 传播（不被吞成 error 帧）；
     - 已产生的 wire 不含 error、无 done/END（取消后无终态帧）；
@@ -798,7 +798,7 @@ def test_cancel_propagates_no_synthetic_error_two_configs(monkeypatch, caplog): 
         holder = []
 
         async def collect():
-            async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # noqa: G.CLS.11
+            async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # pylint: disable=protected-access
                 holder.append(chunk)
 
         try:

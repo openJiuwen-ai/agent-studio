@@ -76,14 +76,14 @@ def _parse_sse_events(text):
         payload = line[len("data: "):].strip()
         try:
             obj = json.loads(payload)
-        except (json.JSONDecodeError, ValueError):  # noqa: G.ERR.09
+        except (json.JSONDecodeError, ValueError):  # pylint: disable=not-get-same-exception
             continue
         evt = obj.get("event")
         data = obj.get("data", obj)
         if isinstance(data, str):
             try:
                 data = json.loads(data)
-            except (json.JSONDecodeError, ValueError):  # noqa: G.ERR.09
+            except (json.JSONDecodeError, ValueError):  # pylint: disable=not-get-same-exception
                 pass
         events.append({"event": evt, "data": data})
     return events
@@ -92,7 +92,7 @@ def _parse_sse_events(text):
 class _BoomRunner:
     async def run_streaming(self, req, execution_id):
         raise RuntimeError("runner exploded before first event")
-        yield  # noqa: G.CTL.02
+        yield  # pylint: disable=resize-unreachable-code
 
 
 class _BoomAfterFirstRunner:
@@ -302,7 +302,7 @@ def test_pending_done_after_start_returns_sse_error(monkeypatch):
     assert err_data["request_id"] == "req-done-post-start"
 
 
-def test_midstream_plugin_105015_maps_to_12100006(monkeypatch):  # noqa: G.CMT.03
+def test_midstream_plugin_105015_maps_to_12100006(monkeypatch):  # pylint: disable=function-docstring-indents-four
     """P5-R3 决策 A 端到端：流式 mid-stream JiuWenBaseException(105015)（_process_exception
     包成形态，有 .error_code 无 .code）→ stream_response except Exception →
     from_plugin_exception(.error_code==105015) → SSE error event openjiuwen.12100006。
@@ -386,7 +386,7 @@ class _WrappedNon105015AfterFirstRunner:
         yield b'data: {"event": "done", "data": {}}\n\n'
 
 
-def test_midstream_wrapped_non_105015_keeps_error_event(monkeypatch):  # noqa: G.CMT.03
+def test_midstream_wrapped_non_105015_keeps_error_event(monkeypatch):  # pylint: disable=function-docstring-indents-four
     """反证：非 105015 业务码（105001）经包装路径 → runner 层保原 yield
     error event（原码透传）+ done 终态——不被 guard 误改/吞掉。"""
     _patch_deps(monkeypatch, _WrappedNon105015AfterFirstRunner)
@@ -462,7 +462,7 @@ def test_prefetched_stream_yields_first_then_rest():
 
         async def __anext__(self):
             if not hasattr(self, "_count"):
-                self._count = 0  # noqa: G.CLS.08
+                self._count = 0  # pylint: disable=class-attribute-defined-outside-init
             self._count += 1
             if self._count == 1:
                 return b"second"

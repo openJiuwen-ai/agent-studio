@@ -199,7 +199,7 @@ class TestWireLocalReceiver(unittest.TestCase):
         captured = {}
 
         class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):  # noqa: G.NAM.01
+            def do_POST(self):  # pylint: disable=huawei-invalid-name
                 captured["headers"] = dict(self.headers)
                 self.send_response(200)
                 self.send_header("Content-Length", "2")
@@ -248,7 +248,7 @@ class TestWireLocalReceiver(unittest.TestCase):
         captured = {}
 
         class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):  # noqa: G.NAM.01
+            def do_POST(self):  # pylint: disable=huawei-invalid-name
                 captured["headers"] = dict(self.headers)
                 self.send_response(200)
                 self.send_header("Content-Length", "2")
@@ -286,9 +286,9 @@ class TestWireLocalReceiver(unittest.TestCase):
 
 class _FakeTracerManager:
     """异步 tracer 替身——生产 ainvoke/astream 会 await on_plugin_start/end。"""
-    async def on_plugin_start(self, inputs): pass  # noqa: G.FMT.08
-    async def on_plugin_end(self, *a, **kw): pass  # noqa: G.FMT.08
-    async def on_plugin_error(self, error): pass  # noqa: G.FMT.08
+    async def on_plugin_start(self, inputs): pass  # pylint: disable=multiple-statements
+    async def on_plugin_end(self, *a, **kw): pass  # pylint: disable=multiple-statements
+    async def on_plugin_error(self, error): pass  # pylint: disable=multiple-statements
 
 
 class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
@@ -306,7 +306,7 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
         api.headers = {}
         api.async_switch = None  # 走 _async_send_request 分支
         api.request_params_creator = type("C", (), {})()
-        api.request_params_creator.create = lambda inputs, **kw: type("RP", (), {  # noqa: G.EXP.03
+        api.request_params_creator.create = lambda inputs, **kw: type("RP", (), {  # pylint: disable=lambda-assign
             "headers": {"Authorization": "Bearer safe"},
             "ip_address_url": "http://127.0.0.1:1/x",
             "query_params_in_inputs": {},
@@ -361,26 +361,26 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
             rp.headers["traceparent"] = "00-forged"
 
         class FakeResp:
-            async def __aenter__(self): return self  # noqa: G.FMT.08
-            async def __aexit__(self, *a): pass  # noqa: G.FMT.08
-            async def read(self): return b"{}"  # noqa: G.FMT.08
+            async def __aenter__(self): return self  # pylint: disable=multiple-statements
+            async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements
+            async def read(self): return b"{}"  # pylint: disable=multiple-statements
             status = 200
             headers = {}
-            @property  # noqa: G.FMT.03
+            @property  # pylint: disable=blank-line
             def content(self):
                 # async iterable: yield nothing, return immediately
                 class _EmptyContent:
-                    def __aiter__(self_inner):  # noqa: G.NAM.03
+                    def __aiter__(self_inner):  # pylint: disable=no-self-argument
                         return self_inner
-                    async def __anext__(self_inner):  # noqa: G.FMT.03
+                    async def __anext__(self_inner):  # pylint: disable=blank-line
                         raise StopAsyncIteration
                 return _EmptyContent()
 
         class FakeSession:
-            def __init__(self, **kw): pass  # noqa: G.FMT.08
-            async def __aenter__(self): return self  # noqa: G.FMT.08
-            async def __aexit__(self, *a): pass  # noqa: G.FMT.08
-            def request(self, **kw):  # noqa: G.FMT.03
+            def __init__(self, **kw): pass  # pylint: disable=multiple-statements
+            async def __aenter__(self): return self  # pylint: disable=multiple-statements
+            async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements
+            def request(self, **kw):  # pylint: disable=blank-line
                 captured["headers"] = dict(kw.get("headers", {}))
                 return FakeResp()
 
@@ -400,34 +400,34 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
 
 
 class _FakeTracerManager:
-    async def on_plugin_start(self, inputs): pass  # noqa: G.FMT.08
-    async def on_plugin_end(self, content): pass  # noqa: G.FMT.08
-    async def on_plugin_error(self, error): pass  # noqa: G.FMT.08
+    async def on_plugin_start(self, inputs): pass  # pylint: disable=multiple-statements
+    async def on_plugin_end(self, content): pass  # pylint: disable=multiple-statements
+    async def on_plugin_error(self, error): pass  # pylint: disable=multiple-statements
 
 
 class _FakeMcpCtx:
     """async context manager for streamablehttp_client / sse_client."""
     def __init__(self, captured, kw):
         captured.update(kw)
-    async def __aenter__(self):  # noqa: G.FMT.03
+    async def __aenter__(self):  # pylint: disable=blank-line
         return (None, None, None)  # streamable_http: (read, write, _)
-    async def __aexit__(self, *a): pass  # noqa: G.FMT.03
+    async def __aexit__(self, *a): pass  # pylint: disable=blank-line
 
 
 class _FakeMcpSseCtx:
     """SSE returns 2-tuple."""
     def __init__(self, captured, kw):
         captured.update(kw)
-    async def __aenter__(self):  # noqa: G.FMT.03
+    async def __aenter__(self):  # pylint: disable=blank-line
         return (None, None)  # sse: (read, write)
-    async def __aexit__(self, *a): pass  # noqa: G.FMT.03
+    async def __aexit__(self, *a): pass  # pylint: disable=blank-line
 
 
 class _FakeClientSession:
-    async def __aenter__(self): return self  # noqa: G.FMT.08
-    async def __aexit__(self, *a): pass  # noqa: G.FMT.08
-    async def initialize(self): pass  # noqa: G.FMT.08
-    async def call_tool(self, name, args):  # noqa: G.FMT.03
+    async def __aenter__(self): return self  # pylint: disable=multiple-statements
+    async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements
+    async def initialize(self): pass  # pylint: disable=multiple-statements
+    async def call_tool(self, name, args):  # pylint: disable=blank-line
         return type("R", (), {"content": []})()
 
 
@@ -459,8 +459,8 @@ class TestMcpStreamableHttpSendBoundary(unittest.IsolatedAsyncioTestCase):
 
         api.request_params_creator = type("C", (), {"create": fake_create})()
 
-        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM,              mock.patch.object(api, "replace_mcp_headers_extra", evil_hook),              mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None),              mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None),              mock.patch("jiuwen.plugin.models.mcpapi.streamablehttp_client",  # noqa: G.FMT.02
-                        lambda *a, **kw: _FakeMcpCtx(captured, kw)),              mock.patch("jiuwen.plugin.models.mcpapi.ClientSession",  # noqa: G.FMT.02
+        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM,              mock.patch.object(api, "replace_mcp_headers_extra", evil_hook),              mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None),              mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None),              mock.patch("jiuwen.plugin.models.mcpapi.streamablehttp_client",  # pylint: disable=line-too-long
+                        lambda *a, **kw: _FakeMcpCtx(captured, kw)),              mock.patch("jiuwen.plugin.models.mcpapi.ClientSession",  # pylint: disable=line-too-long
                         lambda *a: _FakeClientSession()), \
              mock.patch.object(api, "_transform_result", lambda r: []):
             TM.generate_manager.return_value = _FakeTracerManager()
@@ -500,8 +500,8 @@ class TestMcpSseSendBoundary(unittest.IsolatedAsyncioTestCase):
 
         api.request_params_creator = type("C", (), {"create": fake_create})()
 
-        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM,              mock.patch.object(api, "replace_mcp_headers_extra", evil_hook),              mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None),              mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None),              mock.patch("jiuwen.plugin.models.mcpapi.sse_client",  # noqa: G.FMT.02
-                        lambda *a, **kw: _FakeMcpSseCtx(captured, kw)),              mock.patch("jiuwen.plugin.models.mcpapi.ClientSession",  # noqa: G.FMT.02
+        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM,              mock.patch.object(api, "replace_mcp_headers_extra", evil_hook),              mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None),              mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None),              mock.patch("jiuwen.plugin.models.mcpapi.sse_client",  # pylint: disable=line-too-long
+                        lambda *a, **kw: _FakeMcpSseCtx(captured, kw)),              mock.patch("jiuwen.plugin.models.mcpapi.ClientSession",  # pylint: disable=line-too-long
                         lambda *a: _FakeClientSession()), \
              mock.patch.object(api, "_transform_result", lambda r: []):
             TM.generate_manager.return_value = _FakeTracerManager()

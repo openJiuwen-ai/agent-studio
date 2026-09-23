@@ -291,7 +291,7 @@ class HeaderLogGuardFaultInjection(unittest.TestCase):
         self._rejected('from logging import info\ninfo("h %s", headers)\n')
         self._rejected("from logger import error\nerror(headers)\n")
 
-    def test_conservative_name_call_boundary(self):  # noqa: G.CMT.03
+    def test_conservative_name_call_boundary(self):  # pylint: disable=function-docstring-indents-four
         """边界（98b7cf9e 复核 §2）：直接名称调用不追溯来源——普通同名函数
         传 Header 保守误拒（有意行为，非 bug）；白名单安全值不误拒。"""
         # 保守误拒（有意）：普通同名函数/非日志来源传裸容器

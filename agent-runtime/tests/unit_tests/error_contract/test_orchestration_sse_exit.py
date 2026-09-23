@@ -101,7 +101,7 @@ async def test_before_first_frame_failure_raises_http():
     class _BoomBeforeFirstChunk:
         async def run_streaming(self, req, execution_id):
             raise RuntimeError("runner exploded before first frame")
-            yield  # make it a generator (unreachable)  # noqa: G.CTL.02
+            yield  # make it a generator (unreachable)  # pylint: disable=resize-unreachable-code
 
     from agent_runtime.serve.apis.orchestration import stream_response
 
