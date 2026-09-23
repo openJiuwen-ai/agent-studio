@@ -325,11 +325,11 @@ def test_generic_handler_wrapped_105015_maps_to_12100006():
     105015 达不到 12100006）。
     """
     from jiuwen.common.exception.base import JiuWenBaseException
-    from openjiuwen.core.common.exception.codes import StatusCode
+    from openjiuwen.core.common.exception.codes import StatusCode as CoreStatusCode
     from openjiuwen.core.common.exception.errors import ExecutionError
 
     wrapped = ExecutionError(
-        StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+        CoreStatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
         cause=JiuWenBaseException(error_code=105015, message=f"plugin {_SENTINEL}"))
     r = _with_policy(True, lambda: _call_handler(Exception, wrapped))
     body = _resp_body(r)

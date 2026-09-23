@@ -19,14 +19,6 @@ def test_i18n_three_segments_non_empty(defn, locale):
     assert suggestion, f"{defn.error_code} {locale} suggestion is empty"
 
 
-def test_i18n_resolver_loads_both_locales():
-    """resolver 必须加载两个 locale 的资源文件。"""
-    assert "zh_cn" in factory.runtime_i18n_resolver._locales
-    assert "en_us" in factory.runtime_i18n_resolver._locales
-    assert factory.runtime_i18n_resolver._locales["zh_cn"]
-    assert factory.runtime_i18n_resolver._locales["en_us"]
-
-
 def test_i18n_zh_and_en_differ():
     """中英文文案必须不同（证明双语资源实际加载）。"""
     defn = catalog.INTERNAL_ERROR

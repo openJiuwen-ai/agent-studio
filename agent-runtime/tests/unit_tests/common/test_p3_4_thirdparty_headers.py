@@ -370,9 +370,9 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
             def content(self):
                 # async iterable: yield nothing, return immediately
                 class _EmptyContent:
-                    def __aiter__(self_inner):  # pylint: disable=no-self-argument
-                        return self_inner
-                    async def __anext__(self_inner):  # pylint: disable=blank-line  # noqa
+                    def __aiter__(self):  # pylint: disable=blank-line  # noqa
+                        return self
+                    async def __anext__(self):  # pylint: disable=blank-line  # noqa
                         raise StopAsyncIteration
                 return _EmptyContent()
 

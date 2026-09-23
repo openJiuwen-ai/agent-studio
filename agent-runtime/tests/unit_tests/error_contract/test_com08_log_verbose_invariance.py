@@ -14,6 +14,9 @@ import asyncio
 import json
 import re
 from types import SimpleNamespace
+import shutil
+import subprocess
+from pathlib import Path
 
 
 from jiuwen.common.exception.base import JiuWenBaseException, WorkflowAbortException
@@ -23,6 +26,21 @@ from jiuwen.orchestration.flow.stream.base import StreamCode
 from jiuwen.orchestration.flow.workflow import Workflow
 from jiuwen.serve.controllers.async_execution import utils as async_exec_utils
 from jiuwen.serve.controllers.execution import utils as exec_utils
+
+
+_RUNTIME_ROOT = Path(__file__).resolve().parents[3]
+_GREP = shutil.which("grep")
+
+
+def _run_grep(*args: str) -> subprocess.CompletedProcess[str]:
+    assert _GREP is not None, "grep is required by the governance tests"
+    result = subprocess.run(
+        [_GREP, *args],
+        cwd=_RUNTIME_ROOT,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode in (0, 1), result.stderr
+    return result
 
 
 _SENTINEL = "SECRET-TOKEN-abc-123-sensitivedetail"
@@ -643,24 +661,14 @@ def test_8_9_chain_two_configs_identical(monkeypatch):
 
 def test_error_contract_zero_log_verbose_read():
     """§6.5: error_contract 模块不读取 LOG_VERBOSE。"""
-    import subprocess
-
     root = "agent_runtime/error_contract"
-    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
-        ["grep", "-rn", "LOG_VERBOSE", root],
-        capture_output=True, text=True,
-    )
+    r = _run_grep("-rn", "LOG_VERBOSE", root)
     assert r.stdout == "", f"error_contract 读取了 LOG_VERBOSE:\n{r.stdout}"
 
 
 def test_no_test_error_message_in_production():
     """§6.5: 生产代码不再包含面向响应的 'test error message'。"""
-    import subprocess
-
-    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
-        ["grep", "-rn", "test error message", "jiuwen"],
-        capture_output=True, text=True,
-    )
+    r = _run_grep("-rn", "test error message", "jiuwen")
     # 仅允许出现在注释中（grep -n 输出格式 file:line:content，取 content 判断）
     for line in r.stdout.splitlines():
         parts = line.split(":", 2)
@@ -672,12 +680,7 @@ def test_no_test_error_message_in_production():
 
 def test_no_log_verbose_mode_usage_in_production():
     """§6.5: 生产代码不再有 LOG_VERBOSE_MODE 用法（仅 diagnostics 读 env）。"""
-    import subprocess
-
-    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
-        ["grep", "-rn", "LOG_VERBOSE_MODE", "jiuwen"],
-        capture_output=True, text=True,
-    )
+    r = _run_grep("-rn", "LOG_VERBOSE_MODE", "jiuwen")
     for line in r.stdout.splitlines():
         parts = line.split(":", 2)
         content = parts[2] if len(parts) >= 3 else line
@@ -688,12 +691,7 @@ def test_no_log_verbose_mode_usage_in_production():
 
 def test_only_diagnostics_reads_log_verbose_env():
     """§6.5: 生产代码仅 diagnostics.py 调用 os.getenv('LOG_VERBOSE')。"""
-    import subprocess
-
-    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
-        ["grep", "-rn", 'getenv("LOG_VERBOSE"', "jiuwen"],
-        capture_output=True, text=True,
-    )
+    r = _run_grep("-rn", 'getenv("LOG_VERBOSE"', "jiuwen")
     hits = [line for line in r.stdout.splitlines() if line]
     # 仅 diagnostics.py 应出现
     for line in hits:
