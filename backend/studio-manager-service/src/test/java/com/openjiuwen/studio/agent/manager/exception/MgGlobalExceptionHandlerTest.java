@@ -31,6 +31,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -182,6 +183,22 @@ class MgGlobalExceptionHandlerTest {
 
         assertNotNull(response);
         assertNotNull(response.getBody());
+    }
+
+    @Test
+    void testHandleMissingRequestHeaderException() {
+        MissingRequestHeaderException ex = mock(MissingRequestHeaderException.class);
+        when(ex.getHeaderName()).thenReturn("X-Subject-Token");
+        when(i18nUtil.getMessage(any(StudioError.class))).thenReturn("validation error");
+        when(i18nUtil.getSuggestion(any(StudioError.class))).thenReturn("fix it");
+
+        ResponseEntity<ErrorRsp> response = handler.handleMissingRequestHeaderException(ex);
+
+        assertNotNull(response);
+        assertNotNull(response.getBody());
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(StudioError.METHOD_ARGUMENT_NOT_VALID.getFullCode(), response.getBody().getErrorCode());
+        assertEquals("缺少必填请求头：X-Subject-Token", response.getBody().getErrorReason());
     }
 
     @Test
