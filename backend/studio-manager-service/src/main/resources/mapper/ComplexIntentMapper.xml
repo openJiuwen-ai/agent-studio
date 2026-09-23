@@ -96,12 +96,6 @@
         where intent_id = #{intentId,jdbcType=VARCHAR}
         and project_id = #{projectId,jdbcType=VARCHAR}
     </select>
-    <select id="getByIntentId" parameterType="map" resultMap="BaseResultMap">
-        select
-        <include refid="Base_Column_List" />
-        from t_complex_intent
-        where intent_id = #{intentId,jdbcType=VARCHAR}
-    </select>
     <select id="getByKeyAndWorkspaceId" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List" />

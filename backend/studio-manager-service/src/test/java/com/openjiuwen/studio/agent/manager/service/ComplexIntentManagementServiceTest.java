@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
@@ -40,6 +41,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.MessageSource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -170,11 +172,9 @@ class ComplexIntentManagementServiceTest {
             body.setName("NewIntent");
             body.setId("existing-id");
 
-            ComplexIntentEntity existingEntity = new ComplexIntentEntity();
-            existingEntity.setIntentId("existing-id");
-
             when(complexIntentMapper.getEntitiesAccurate(any())).thenReturn(new ArrayList<>());
-            when(complexIntentMapper.getByIntentId("existing-id")).thenReturn(existingEntity);
+            doThrow(new DuplicateKeyException("Duplicate entry 'existing-id'"))
+                .when(complexIntentMapper).createEntity(any());
 
             AgentStudioException ex = assertThrows(AgentStudioException.class,
                 () -> complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body));
@@ -194,7 +194,6 @@ class ComplexIntentManagementServiceTest {
             body.setId("brand-new-id");
 
             when(complexIntentMapper.getEntitiesAccurate(any())).thenReturn(new ArrayList<>());
-            when(complexIntentMapper.getByIntentId("brand-new-id")).thenReturn(null);
 
             ComplexIntentBriefRsp result = complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body);
             assertNotNull(result);

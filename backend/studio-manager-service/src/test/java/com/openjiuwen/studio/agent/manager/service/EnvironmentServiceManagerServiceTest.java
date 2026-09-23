@@ -488,7 +488,7 @@ public class EnvironmentServiceManagerServiceTest {
 
     @Test
     void testModifyEnvironmentInfo_Success() {
-        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        ModifyEnvironmentInfoRequestBody request = new ModifyEnvironmentInfoRequestBody();
         request.setDescription("updated description");
 
         when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
@@ -504,7 +504,7 @@ public class EnvironmentServiceManagerServiceTest {
 
     @Test
     void testModifyEnvironmentInfo_NotFound() {
-        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        ModifyEnvironmentInfoRequestBody request = new ModifyEnvironmentInfoRequestBody();
         request.setDescription("updated description");
 
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
@@ -961,7 +961,7 @@ public class EnvironmentServiceManagerServiceTest {
      */
     @Test
     void testModifyEnvironmentInfoShouldThrowModifyFailWhenUpdateFails() {
-        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        ModifyEnvironmentInfoRequestBody request = new ModifyEnvironmentInfoRequestBody();
         request.setDescription("updated description");
 
         when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
@@ -1031,7 +1031,7 @@ public class EnvironmentServiceManagerServiceTest {
     @Test
     void testModifyEnvironmentInfoShouldThrowNotSupportWhenStatusNotReady() {
         testEnvironmentEntity.setStatus("creating");
-        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        ModifyEnvironmentInfoRequestBody request = new ModifyEnvironmentInfoRequestBody();
         request.setDescription("updated description");
 
         when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
