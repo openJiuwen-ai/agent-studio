@@ -105,9 +105,13 @@ def _configure_family(binary, chain, uid, internal_cidrs, dns_servers):
 def _run(cmd, check=True):
     env = os.environ.copy()
     env.setdefault('XTABLES_LOCKFILE', '/tmp/openjiuwen_sandbox_xtables.lock')
-    result = subprocess.run(
-        cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )
+    try:
+        result = subprocess.run(
+            cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f'Command timed out after 30s: {" ".join(cmd)}') from exc
     if check and result.returncode != 0:
         raise RuntimeError(f'Command failed: {" ".join(cmd)}\n{result.stderr.strip()}')
     return result
