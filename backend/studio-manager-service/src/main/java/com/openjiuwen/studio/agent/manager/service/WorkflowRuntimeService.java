@@ -63,14 +63,6 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
 
     private static final String JIUWEN_EXCEPTION_NODE_ID = "jiuwen_exception_node_id";
 
-    /**
-     * 子工作流内部首帧扫描窗口：子工作流节点自身 started/finished 帧与其内部首帧之间
-     * 可能夹杂的非内部帧数量上限（如恢复轮重放的父链帧），超出视为无内部事件。
-     * 上限取 3：实测帧序中干扰帧为 0~2 帧；同时保证多轮循环场景下不会越过
-     * 下一轮同节点内部帧（距扫描起点至少 6 帧：cycle_begin/llm/B started 等 5 帧间隔）。
-     */
-    private static final int SUB_WORKFLOW_FIRST_FRAME_SCAN_WINDOW = 3;
-
     @Autowired
     private WorkflowInstanceService workflowInstanceService;
 
@@ -449,20 +441,24 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
     }
 
     /**
-     * 定位子工作流内部首帧：从 startIndex 起在有限窗口内向后扫描，
-     * 返回首个 parent_node_id 等于 nodeIdFlag 的帧下标；窗口内未找到返回 -1。
+     * 定位子工作流内部首帧：从 startIndex 起向后扫描，返回首个 parent_node_id 等于
+     * nodeIdFlag 的帧下标；未找到返回 -1。
      *
-     * 子工作流节点自身的 started 帧与其内部首帧之间可能夹杂少量非内部帧
-     * （如恢复轮重放的父链帧、子工作流自身的中间帧），固定偏移会跳过内部首帧，
-     * 甚至落在非内部帧上使整段收集为空；按 parent 精确匹配不依赖帧数假设，
-     * 窗口上限仅用于避免无内部帧时的无效扫描（parent 精确匹配保证不会跨段误收）。
+     * 扫描区间以"下一个 nodeId 等于 nodeIdFlag 的帧"为边界（子工作流自身的 finished 帧，
+     * 多轮场景下也可能是下一轮同名节点的 started 帧），两者均标志本轮内部帧区间结束，
+     * 因此区间内 parent 匹配的帧必属于本轮，不会跨轮误收；该边界不依赖固定窗口与
+     * 帧数假设，边界帧序变化时仍能正确定位，避免内部帧泄漏到外层循环被误判
+     * （如被 isLlmNode 识别覆盖 round 的 moduleInput/Output）。
      */
     private int findSubWorkflowFirstFrame(List<NodeRunInfo> nodeRunInfos, int startIndex, String nodeIdFlag) {
-        int scanLimit = Math.min(startIndex + SUB_WORKFLOW_FIRST_FRAME_SCAN_WINDOW, nodeRunInfos.size());
-        for (int index = startIndex; index < scanLimit; index++) {
+        for (int index = startIndex; index < nodeRunInfos.size(); index++) {
             NodeRunInfo node = nodeRunInfos.get(index);
-            if (node.getParentNodeId() != null && node.getParentNodeId().equals(nodeIdFlag)) {
+            if (nodeIdFlag.equals(node.getParentNodeId())) {
                 return index;
+            }
+            if (nodeIdFlag.equals(node.getNodeId())) {
+                // 子工作流自身的 finished 帧或下一轮同名节点的 started 帧：本轮区间结束
+                return -1;
             }
         }
         return -1;
