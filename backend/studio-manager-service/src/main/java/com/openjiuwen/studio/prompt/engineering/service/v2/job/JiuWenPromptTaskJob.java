@@ -4,13 +4,33 @@
 package com.openjiuwen.studio.prompt.engineering.service.v2.job;
 
 import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.error.DownstreamService;
+import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestHeaderHolderUtils;
+import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerSseErrorEventBuilder;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMappingCatalog;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMapper;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorParser;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailure;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailureException;
+import com.openjiuwen.studio.agent.manager.exception.downstream.FailurePhase;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamWebClientAdapter;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthMetadata;
 import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthMetadataMapper;
+import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
+import com.openjiuwen.studio.agent.manager.observability.MdcScope;
+import com.openjiuwen.studio.agent.manager.observability.OutboundCorrelationPolicy;
+import com.openjiuwen.studio.agent.manager.observability.WebClientCorrelationHeaderApplier;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.prompt.engineering.constant.CommonConstant;
 import com.openjiuwen.studio.prompt.engineering.dto.Case;
@@ -37,8 +57,10 @@ import com.openjiuwen.studio.prompt.engineering.service.model.v2.jiuwen.JiuWenPr
 import com.openjiuwen.studio.prompt.engineering.service.v2.PromptEngineerDataSetService;
 import com.openjiuwen.studio.prompt.engineering.utils.JsonUtil;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -50,7 +72,6 @@ import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -62,9 +83,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -111,8 +133,44 @@ public class JiuWenPromptTaskJob implements Job {
     @Value("${agent_builder_endpoint:}")
     private String agentBuilderEndpoint;
 
-    @Resource(name = "remoteClientTemplate")
+    // COM-04 §6.4：Builder 调用改用 builderClientTemplate（BUILDER 策略 + origin 校验）
+    @Resource(name = "builderClientTemplate")
     private ClientTemplate clientTemplate;
+
+    // COM-04 响应 §5.3：统一 WebClient 下游解析器（Builder 身份）——替代原文日志 + catch-all 二次改码
+    private final DownstreamErrorParser builderDownstreamParser = new DownstreamErrorParser(
+        new DownstreamErrorMappingCatalog(new ManagerErrorCatalog()));
+
+    // COM-04 响应 P1-new：reactive Flux<String> SSE 出口 onErrorResume → Manager error envelope
+    private final DownstreamErrorMapper builderDownstreamMapper = new DownstreamErrorMapper(
+        new DownstreamErrorMappingCatalog(new ManagerErrorCatalog()));
+    private ManagerSseErrorEventBuilder sseErrorBuilder;
+
+    @PostConstruct
+    void initSseErrorBuilder() {
+        ManagerHttpErrorResponseBuilder.I18nResolver resolver = createI18nResolver();
+        sseErrorBuilder = new ManagerSseErrorEventBuilder(resolver);
+    }
+
+    private static ManagerHttpErrorResponseBuilder.I18nResolver createI18nResolver() {
+        try {
+            I18nUtil i18n = SpringBeanUtils.getBean(I18nUtil.class);
+            if (i18n != null) {
+                return (key, locale) -> i18n.getMessage(key, locale);
+            }
+        } catch (Exception e) {
+            // no Spring context
+        }
+        return (key, locale) -> {
+            if (key.endsWith(".reason")) {
+                return "A downstream service returned an error or was unreachable.";
+            }
+            if (key.endsWith(".suggestion")) {
+                return "Please retry later; contact support if the issue persists.";
+            }
+            return "Downstream service call failed.";
+        };
+    }
 
     @Autowired
     private WebClient webClient;
@@ -138,7 +196,14 @@ public class JiuWenPromptTaskJob implements Job {
             String taskParam = jobExecutionContext.getJobDetail().getJobDataMap().getString("taskParam");
             String token = jobExecutionContext.getJobDetail().getJobDataMap().getString("token");
             PromptTaskDetailVo promptTaskDetailVo = JsonUtils.json2ObjQuietly(taskParam, PromptTaskDetailVo.class);
-            execTask(promptTaskDetailVo, token);
+            // COM-04 §7：后台任务无上游请求——入口生成 request UUID，trace 按契约取 request 值；
+            // scope 覆盖 Builder 调用链，使 ClientTemplate/WebClient 适配器从 MDC 读权威值。Provider 不生成 ID。
+            String requestId = java.util.UUID.randomUUID().toString();
+            try (MdcScope scope = MdcScope.open(Map.of(
+                    MdcKeys.REQUEST_ID, requestId,
+                    MdcKeys.TRACE_ID, requestId))) {
+                execTask(promptTaskDetailVo, token);
+            }
         } catch (Exception e) {
             log.error("schedule create prompt task error open, {}", e.getMessage());
             throw new JobExecutionException(e);
@@ -238,15 +303,21 @@ public class JiuWenPromptTaskJob implements Job {
                 log.warn("optimize template delete failed, response code: {}", jIuWenPromptBaseRes.getCode());
                 throw new AgentStudioException(StudioError.OPTIMIZE_TEMPLATE_DELETE_FAILED);
             }
-        } catch (HttpServerErrorException e) {
-            String responseBody = e.getResponseBodyAsString();
-            if (responseBody != null && responseBody.contains("\"code\":102155")) {
+        } catch (DownstreamFailureException e) {
+            DownstreamFailure failure = e.getFailure();
+            if (failure.getPhase() == FailurePhase.TRANSPORT) {
+                log.error("optimization template service access failed, taskId: {}",
+                    promptTaskDetailVo.getJiuwenTaskId(), e);
+                throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
+            }
+            String trustedCode = failure.getDownstreamErrorCode();
+            if ("102155".equals(trustedCode)) {
                 log.warn("jiuwen optimization job not found, taskId: {}, skip remote delete",
                     promptTaskDetailVo.getJiuwenTaskId());
                 return;
             }
-            log.error("jiuwen server returned error, taskId: {}, response: {}",
-                promptTaskDetailVo.getJiuwenTaskId(), responseBody);
+            log.error("jiuwen server returned error, taskId: {}, trustedCode: {}",
+                promptTaskDetailVo.getJiuwenTaskId(), trustedCode);
             throw new AgentStudioException(StudioError.DELETE_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage());
@@ -276,15 +347,21 @@ public class JiuWenPromptTaskJob implements Job {
                 throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK);
             }
             return response.getBody();
-        } catch (HttpServerErrorException e) {
-            String responseBody = e.getResponseBodyAsString();
-            if (responseBody != null && responseBody.contains("\"code\":102155")) {
+        } catch (DownstreamFailureException e) {
+            DownstreamFailure failure = e.getFailure();
+            if (failure.getPhase() == FailurePhase.TRANSPORT) {
+                log.error("optimization template service access failed, taskId: {}",
+                    promptTaskDetailVo.getJiuwenTaskId(), e);
+                throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
+            }
+            String trustedCode = failure.getDownstreamErrorCode();
+            if ("102155".equals(trustedCode)) {
                 log.warn("jiuwen optimization job not found, taskId: {}, skip remote getDetail",
                     promptTaskDetailVo.getJiuwenTaskId());
                 throw new AgentStudioException(StudioError.JOB_NOT_FOUND_IN_BUILDER);
             }
-            log.error("jiuwen server returned error, taskId: {}, response: {}",
-                promptTaskDetailVo.getJiuwenTaskId(), responseBody);
+            log.error("jiuwen server returned error, taskId: {}, trustedCode: {}",
+                promptTaskDetailVo.getJiuwenTaskId(), trustedCode);
             throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage());
@@ -375,6 +452,14 @@ public class JiuWenPromptTaskJob implements Job {
                 }
                 throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK);
             }
+        } catch (DownstreamFailureException e) {
+            DownstreamFailure failure = e.getFailure();
+            if (failure.getPhase() == FailurePhase.TRANSPORT) {
+                log.error("optimization template service access failed", e);
+                throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
+            }
+            log.error("jiuwen server returned error, trustedCode: {}", failure.getDownstreamErrorCode(), e);
+            throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
@@ -403,6 +488,14 @@ public class JiuWenPromptTaskJob implements Job {
                 }
                 throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK);
             }
+        } catch (DownstreamFailureException e) {
+            DownstreamFailure failure = e.getFailure();
+            if (failure.getPhase() == FailurePhase.TRANSPORT) {
+                log.error("optimization template service access failed", e);
+                throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
+            }
+            log.error("jiuwen server returned error, trustedCode: {}", failure.getDownstreamErrorCode(), e);
+            throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
@@ -412,43 +505,58 @@ public class JiuWenPromptTaskJob implements Job {
     public Flux<String> generatePrompt(String projectId, String workspaceId, PromptBuildRequest body, String token) {
         log.info("start to generate prompt, projectId: {}, workspaceId: {}", projectId, workspaceId);
 
+        // COM-04 P1-new: 提前捕获 requestId + locale（onErrorResume 回调线程可能不在请求线程）
+        String rawRid = MDC.get("request-id");
+        String requestId = (rawRid == null || rawRid.isBlank()) ? "unknown" : rawRid;
+        Locale requestLocale = resolveRequestLocale();
+
         // 补充 modelInfo 的 url、api_key 等字段
         if (body.getModelInfo() != null) {
             enrichExecConfig(body.getModelInfo(), projectId, workspaceId);
         }
 
+        // COM-04 §6.3：Builder origin + BUILDER 策略（HTTP 入站 scope 提供 MDC）
+        String genUrl = agentBuilderEndpoint + PROMPT_GENERATE_API;
         Flux<String> dataFlux = webClient.post()
-            .uri(agentBuilderEndpoint + PROMPT_GENERATE_API)
+            .uri(genUrl)
+            .headers(WebClientCorrelationHeaderApplier.apply(OutboundCorrelationPolicy.BUILDER,
+                agentBuilderEndpoint, genUrl))
             .contentType(MediaType.APPLICATION_JSON)
             .header(CommonConstant.X_AUTH_TOKEN, token)
             .header(CommonConstant.X_WORKSPACE_ID, workspaceId)
             .bodyValue(body)
             .retrieve()
+            // COM-04 响应 §5.3：非 2xx 统一 adapter——受限读 body → parser → DownstreamFailureException
+            // （不再拼接/记录原始 errorBody，不再二次改码）
             .onStatus(status -> !status.is2xxSuccessful(),
-                response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                    AgentStudioException mapped = mapBuilderError(response.statusCode(), errorBody);
-                    log.error("Prompt generate failed: status={}, builderCode={}",
-                        response.statusCode(), mapped.getMessage());
-                    return Mono.error(mapped);
-                }))
+                DownstreamWebClientAdapter.onStatusHandler(DownstreamService.BUILDER, builderDownstreamParser))
             .bodyToFlux(String.class)
             .mapNotNull(chunk -> {
+                // COM-04 响应 §5.3: 先检测 SSE 流内 error event——
+                // 检测到则转为 DownstreamFailureException（经 onErrorResume 原样传播），
+                // 错误终态后 Flux.concat 不订阅 doneFlux → [Done] 不拼接
+                Optional<DownstreamFailure> sseError = DownstreamWebClientAdapter.detectSseErrorEvent(
+                    DownstreamService.BUILDER, builderDownstreamParser, chunk);
+                if (sseError.isPresent()) {
+                    throw new DownstreamFailureException(sseError.get());
+                }
                 PromptBuildResponse response = JsonUtils.json2ObjQuietly(chunk, PromptBuildResponse.class);
                 return response != null ? chunk : ""; // 过滤无效 JSON
             })
             .filter(chunk -> chunk != null && !chunk.trim().isEmpty())
-            .onErrorResume(Exception.class, e -> {
-                if (e instanceof AgentStudioException) {
-                    return Flux.error(e);
-                }
-                log.error("Prompt generate transport error: {}", e.getMessage());
-                return Flux.error(new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED));
-            });
+            // COM-04 响应 §5.3：已分类异常原样传播；未分类（transport）转 DownstreamFailure
+            // （不再 catch-all 覆盖为 Builder 不可访问）
+            .onErrorResume(e -> DownstreamWebClientAdapter.propagateOrTransportFailure(
+                DownstreamService.BUILDER, builderDownstreamParser, e));
 
         Flux<String> doneFlux = Flux.just("[Done]");
 
         log.info("prompt generation completed, projectId: {}, workspaceId: {}", projectId, workspaceId);
-        return Flux.concat(dataFlux, doneFlux);
+        // COM-04 P1-new: reactive Flux<String> SSE 出口——首帧后错误不静默终止，
+        // 而是 emit Manager SSE error envelope 作为终态 data（替代 [Done]）
+        return Flux.concat(dataFlux, doneFlux)
+            .onErrorResume(DownstreamFailureException.class, e ->
+                Flux.just(buildManagerSseErrorEnvelope(e, requestId, requestLocale)));
     }
 
     public Flux<String> optimizeFeedback(String projectId, String workspaceId, PromptFeedbackRequest body,
@@ -488,36 +596,99 @@ public class JiuWenPromptTaskJob implements Job {
                 body.setFeedback(body.getFeedback() + "\n" + feeback);
             }
 
+            // COM-04 §6.3：Builder origin + BUILDER 策略
+            String fbUrl = agentBuilderEndpoint + PROMPT_FEEDBACK_API;
+            // COM-04 P1-new: 提前捕获 requestId + locale（onErrorResume 回调线程可能不在请求线程）
+            String rawRid = MDC.get("request-id");
+            String requestId = (rawRid == null || rawRid.isBlank()) ? "unknown" : rawRid;
+            Locale requestLocale = resolveRequestLocale();
             Flux<String> dataFlux = webClient.post()
-                .uri(agentBuilderEndpoint + PROMPT_FEEDBACK_API)
+                .uri(fbUrl)
+                .headers(WebClientCorrelationHeaderApplier.apply(OutboundCorrelationPolicy.BUILDER,
+                    agentBuilderEndpoint, fbUrl))
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(CommonConstant.X_AUTH_TOKEN, token)
                 .bodyValue(body)
                 .retrieve()
+                // COM-04 响应 §5.3：非 2xx 统一 adapter（不再原文日志 + catch-all 改码）
                 .onStatus(status -> !status.is2xxSuccessful(),
-                    response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                        AgentStudioException mapped = mapBuilderError(response.statusCode(), errorBody);
-                        log.error("Prompt optimize feedback failed: status={}, builderCode={}",
-                            response.statusCode(), mapped.getMessage());
-                        return Mono.error(mapped);
-                    }))
+                    DownstreamWebClientAdapter.onStatusHandler(DownstreamService.BUILDER, builderDownstreamParser))
                 .bodyToFlux(String.class)
                 .mapNotNull(chunk -> {
+                    // COM-04 响应 §5.3: 先检测 SSE 流内 error event——
+                    // 检测到则转为 DownstreamFailureException（经 onErrorResume 原样传播），
+                    // 错误终态后 Flux.concat 不订阅 doneFlux → [Done] 不拼接
+                    Optional<DownstreamFailure> sseError = DownstreamWebClientAdapter.detectSseErrorEvent(
+                        DownstreamService.BUILDER, builderDownstreamParser, chunk);
+                    if (sseError.isPresent()) {
+                        throw new DownstreamFailureException(sseError.get());
+                    }
                     PromptBuildResponse response = JsonUtils.json2ObjQuietly(chunk, PromptBuildResponse.class);
                     return response != null ? chunk : ""; // 过滤无效 JSON
                 })
                 .filter(chunk -> chunk != null && !chunk.trim().isEmpty())
-                .onErrorResume(Exception.class, e -> {
-                    if (e instanceof AgentStudioException) {
-                        return Flux.error(e);
-                    }
-                    log.error("Prompt optimize feedback transport error: {}", e.getMessage());
-                    return Flux.error(
-                        new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED));
-                });
+                .onErrorResume(e -> DownstreamWebClientAdapter.propagateOrTransportFailure(
+                    DownstreamService.BUILDER, builderDownstreamParser, e));
             Flux<String> doneFlux = Flux.just("[Done]");
 
-            return Flux.concat(dataFlux, doneFlux);
+            // COM-04 P1-new: reactive Flux<String> SSE 出口——首帧后错误不静默终止，
+            // 而是 emit Manager SSE error envelope 作为终态 data（替代 [Done]）
+            return Flux.concat(dataFlux, doneFlux)
+                .onErrorResume(DownstreamFailureException.class, e ->
+                    Flux.just(buildManagerSseErrorEnvelope(e, requestId, requestLocale)));
+        }
+    }
+
+    /**
+     * COM-04 P1（审视意见 §3.2）: 从请求线程捕获规范化 locale。
+     * Reactor 回调不得读取可能已清理的线程本地状态。
+     */
+    static Locale resolveRequestLocale() {
+        try {
+            String lang = RequestHeaderHolderUtils.getRequestLanguage();
+            if (lang != null && !lang.isBlank()) {
+                return Locale.forLanguageTag(lang);
+            }
+        } catch (Exception e) {
+            // 无请求上下文
+        }
+        return Locale.getDefault();
+    }
+
+    /**
+     * COM-04 P1-new: 构造 Manager SSE error envelope JSON 字符串。
+     * 用于 reactive Flux&lt;String&gt; SSE 出口 onErrorResume——
+     * 将 DownstreamFailureException 一次映射为 Manager error envelope，
+     * 作为终态 data emit，替代静默终止。
+     */
+    String buildManagerSseErrorEnvelope(DownstreamFailureException e, String requestId, Locale locale) {
+        try {
+            DownstreamFailure failure = e.getFailure();
+            ErrorDescriptor descriptor;
+            if (failure.getService() == DownstreamService.BUILDER
+                    && failure.hasTrustedErrorCode()
+                    && failure.getPhase() != FailurePhase.TRANSPORT) {
+                // 保 sync_01（P5-R2 方案 b）：Builder 5xx 裸 int code 经 mapBuilderError 分类
+                // （LLM→CALL_LLM_EXECUTION_ERROR / else→OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR），
+                // 不走 mapper 默认 502。
+                AgentStudioException mapped = mapBuilderError(failure.getDownstreamErrorCode());
+                descriptor = new ManagerErrorDescriptorFactory(new ManagerErrorCatalog())
+                    .fromAgentStudioException(mapped, requestId);
+            } else {
+                descriptor = builderDownstreamMapper.map(failure, requestId);
+            }
+            Map<String, Object> envelope = sseErrorBuilder.buildEnvelope(descriptor, locale);
+            log.error("Prompt downstream failure: service={} managerCode={}",
+                failure.getService(), descriptor.getErrorCode(), e);
+            return com.alibaba.fastjson2.JSON.toJSONString(envelope);
+        } catch (Throwable ex) {
+            log.warn("Failed to build Manager SSE error envelope: {}", ex.getMessage());
+            // fail-closed: 硬编码安全 envelope
+            return "{\"event\":\"error\",\"data\":{\"error_code\":\"openjiuwen.02001131\","
+                + "\"error_msg\":\"Internal server error.\","
+                + "\"error_reason\":\"An internal error occurred while processing the request.\","
+                + "\"error_suggestion\":\"Please retry later; contact support if the issue persists.\","
+                + "\"request_id\":\"" + requestId + "\"}}";
         }
     }
 
@@ -656,24 +827,22 @@ public class JiuWenPromptTaskJob implements Job {
         return config;
     }
 
-    /**
-     * 把 Builder 非成功响应映射为 Manager 业务异常。只解析可靠的 code 字段，不把 Builder 原始 message
-     * 带回前端。message 字段仅用于内部日志，便于排障。
-     *
-     * 映射策略见"提示词优化-错误码透传修复-整合方案" §7.1：
-     * - 模型类错误码 → CALL_LLM_EXECUTION_ERROR（02701026）
-     * - 模板/编排/未知/损坏 → OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR（02701120）
-     * - HTTP 状态 4xx/5xx 但解析不到 code 时，按 5xx 视为服务异常，4xx 视为参数类错误（同归到 LLM 码）
-     */
-    private AgentStudioException mapBuilderError(HttpStatusCode status, String errorBody) {
-        OptionalInt builderCode = parseBuilderCode(errorBody);
-        if (builderCode.isEmpty()) {
-            log.warn("Builder error body unparseable, status={}, bodyLen={}", status,
-                errorBody == null ? 0 : errorBody.length());
+    // sync_01 独有 LLM 码分类（62eb22ef RhoneLiu 2026-08-20）：Builder 裸 int 码 LLM vs 编排分类。
+    // P5-R2：接 COM-03 路径——trustedCode 由 DownstreamErrorParser 桥接解析传入（不再 re-parse body）。
+    private AgentStudioException mapBuilderError(String trustedCode) {
+        if (trustedCode == null || trustedCode.isBlank()) {
+            log.warn("Builder error unparseable, no trustedCode");
             return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
                 "unparseable");
         }
-        int code = builderCode.getAsInt();
+        int code;
+        try {
+            code = Integer.parseInt(trustedCode);
+        } catch (NumberFormatException ex) {
+            log.warn("Builder error code not int: {}", trustedCode);
+            return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
+                trustedCode);
+        }
         if (isLlmRelatedCode(code)) {
             return new AgentStudioException(StudioError.CALL_LLM_EXECUTION_ERROR,
                 String.valueOf(code));
@@ -682,42 +851,38 @@ public class JiuWenPromptTaskJob implements Job {
             String.valueOf(code));
     }
 
-    private OptionalInt parseBuilderCode(String errorBody) {
+    private java.util.OptionalInt parseBuilderCode(String errorBody) {
         if (StringUtils.isEmpty(errorBody)) {
-            return OptionalInt.empty();
+            return java.util.OptionalInt.empty();
         }
         try {
             Map<String, Object> body = JsonUtils.json2ObjQuietly(errorBody, Map.class);
             if (body == null) {
-                return OptionalInt.empty();
+                return java.util.OptionalInt.empty();
             }
             Object code = body.get("code");
             if (code instanceof Number) {
-                return OptionalInt.of(((Number) code).intValue());
+                return java.util.OptionalInt.of(((Number) code).intValue());
             }
             if (code instanceof String) {
-                return OptionalInt.of(Integer.parseInt((String) code));
+                return java.util.OptionalInt.of(Integer.parseInt((String) code));
             }
-            return OptionalInt.empty();
+            return java.util.OptionalInt.empty();
         } catch (Exception e) {
-            return OptionalInt.empty();
+            return java.util.OptionalInt.empty();
         }
     }
 
     private boolean isLlmRelatedCode(int code) {
-        // 100002 参数校验失败（modelInfo.api_key/url/model 等模型配置类问题占大多数，归到 LLM 码）
         if (code == 100002) {
             return true;
         }
-        // 100021-100029 LLM 配置/加载/类型/格式/结果类
         if (code >= 100021 && code <= 100029) {
             return true;
         }
-        // 102003/102004/102011/102207 LLM 连接/生成/服务类型
         if (code == 102003 || code == 102004 || code == 102011 || code == 102207) {
             return true;
         }
         return false;
     }
-
 }

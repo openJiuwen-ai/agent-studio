@@ -38,10 +38,10 @@ import java.util.stream.Collectors;
 
 
 /**
- * Global exception handler class
+ * @deprecated COM-03 §7.1 第 8 点：@ControllerAdvice 已移除，异常处理统一由
+ * MgGlobalExceptionHandler 承载。
  */
-@ControllerAdvice
-@Order(Ordered.LOWEST_PRECEDENCE)
+@Deprecated
 public class ExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ExceptionHandler.class);
 

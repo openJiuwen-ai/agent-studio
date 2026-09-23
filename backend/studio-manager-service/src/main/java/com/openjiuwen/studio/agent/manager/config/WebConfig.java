@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.config;
 
 import com.openjiuwen.studio.agent.manager.filter.WorkspaceInterceptor;
+import com.openjiuwen.studio.agent.manager.observability.ConversationContextInterceptor;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -36,6 +37,11 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // COM-05 §12.2：conversation 拦截器先于 WorkspaceInterceptor，
+        // 使 Workspace 日志能看到已安装的 conversation-id
+        registry.addInterceptor(new ConversationContextInterceptor())
+            .addPathPatterns("/v1/**")
+            .addPathPatterns("/v2/**");
         // 注册拦截器，并指定拦截的路径
         registry.addInterceptor(workspaceInterceptor)
             .addPathPatterns("/v1/{project_id}/**")

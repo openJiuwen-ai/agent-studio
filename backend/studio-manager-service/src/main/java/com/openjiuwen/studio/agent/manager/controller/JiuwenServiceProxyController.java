@@ -12,6 +12,7 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestHeaderHolderUtils;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListKnowledgeBasesQo;
+import com.openjiuwen.studio.agent.manager.observability.ConversationIdValidator;
 import com.openjiuwen.studio.agent.manager.dto.ListKnowledgeBasesResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ListPluginsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
@@ -40,6 +41,8 @@ import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -93,7 +96,9 @@ public class JiuwenServiceProxyController {
     })
     @PostMapping("/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat")
     public Object generatorAgentOrWorkflow(@PathVariable("project_id") String projectId,
-        @PathVariable("agent_type") String agentType, @PathVariable("cid") String cid,
+        @PathVariable("agent_type") String agentType,
+        @Pattern(regexp = ConversationIdValidator.N2L_CONVERSATION_REGEXP) @Size(min = 1, max = 128)
+        @PathVariable("cid") String cid,
         @RequestParam("workspace_id") String workspaceId, @RequestBody @Valid NLChatReq body) {
         String token = RequestContextUtils.getRequestAuthToken();
         checkPermission(body, projectId, workspaceId);

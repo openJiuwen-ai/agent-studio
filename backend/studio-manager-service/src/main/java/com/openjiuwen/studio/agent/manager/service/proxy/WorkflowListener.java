@@ -4,12 +4,13 @@
 
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
+import static com.openjiuwen.studio.agent.manager.constant.Constant.REQUEST_ID;
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.dto.agent.NodeRunInfo;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
-import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.dto.JiuwenEvent;
 import com.openjiuwen.studio.agent.manager.dto.JiuwenEventData;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowInstanceEntity;
@@ -17,6 +18,7 @@ import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.enums.JiuwenEventType;
 import com.openjiuwen.studio.agent.manager.enums.WorkflowRunStatus;
 import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
+import com.openjiuwen.studio.agent.manager.observability.CorrelationIdValidator;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.JiuwenEventProcessor;
 import com.openjiuwen.studio.agent.manager.service.WorkflowInstanceService;
@@ -41,6 +43,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * 基于 OkHttp SSE（Server-Sent Events）机制，实时监听工作流执行过程中由九问（Jiuwen）引擎推送的各类事件流，
  * 完成事件解析、状态维护、前端透传和持久化存储等核心职责。
  *
+ * <p>DEF-02：四个公开回调已由 {@link BaseEventListener} 声明为 {@code final} 并用快照 scope 包装，
+ * 本类只覆盖 protected hook；中断保存、实例 ID 一律使用 {@code executeParams.executionId}
+ * （Manager 选定权威值），不再从回调线程 MDC 或 {@code requestId} 兜底。
  */
 @Slf4j
 public class WorkflowListener extends BaseEventListener {
@@ -93,29 +98,28 @@ public class WorkflowListener extends BaseEventListener {
     }
 
     @Override
-    public void onEvent(@NotNull EventSource eventSource, @Nullable String id, @Nullable String type,
-        @NotNull String data) {
+    protected void onEventBusinessHook(@Nullable String id, @Nullable String type, @NotNull String data) {
         ++eventNum;
         process(data);
     }
 
     @Override
-    public void onFailure(@NotNull EventSource eventSource, @Nullable Throwable t, @Nullable Response response) {
-        MDC.put(REQUEST_ID, requestId);
+    protected void onFailureInternal(@Nullable Throwable t, @Nullable Response response) {
+        // DEF-02: 不再 MDC.put(REQUEST_ID)，快照 scope 已在 BaseEventListener.onFailure 安装并恢复
         try {
-            executeParams.setSuccess(-1);
-            log.error("Workflow process failed. Throwable: {}, Response: {}", t, response);
-            if (executeParams.isCanceled()) {
-                closed("canceled.");
-            } else {
-                log.error("Workflow process failed.");
+            // COM-04 响应 §5.4: handleTerminalFailure 返回赢家 descriptor（非赢家 null）
+            // 完整栈只由赢家记录一次（handleTerminalFailure → logDownstreamFailureOnce）
+            ErrorDescriptor descriptor = handleTerminalFailure(t, response);
+            if (descriptor != null) {
+                executeParams.setSuccess(-1);
+                if (executeParams.isCanceled()) {
+                    closed("canceled.");
+                }
             }
-            this.errorRsp = createErrorRsp(t, response).orElse(null);
-            this.openConnect = true;
         } catch (Exception e) {
             log.error("Fail handler response. {}", e.getMessage());
-            this.openConnect = true;
         } finally {
+            latch.countDown();
             try {
                 sseEmitter.complete();
             } catch (Throwable e) {
@@ -125,7 +129,7 @@ public class WorkflowListener extends BaseEventListener {
     }
 
     @Override
-    public void onClosed(@NotNull EventSource eventSource) {
+    protected void onClosedBusinessHook() {
         log.info("Workflow request is closed.");
         doClose("onClosed");
     }
@@ -145,7 +149,7 @@ public class WorkflowListener extends BaseEventListener {
         } catch (Exception e) {
             // node_wait 事件不在 JiuwenEventType 枚举中，但需要保存 taskId 以支持中断恢复
             if ("node_wait".equalsIgnoreCase(event)) {
-                saveTaskIdOnInterrupt();
+                saveResumeExecutionIdOnInterrupt();
                 // Bug1①: resume 轮首个事件通常是 node_wait，走此 early-return 跳过了 processStart
                 //（processStart 只在 eventNum==1 且非 early-return 时触发 getCache+copy 归并）。
                 // 不归并的话，每轮 saveInsightMessage 用各自的空 instance 覆写共享 execution_id
@@ -200,7 +204,7 @@ public class WorkflowListener extends BaseEventListener {
                 }
                 // node_wait 节流透传：密集循环节点 node_wait 逐个同步 send 会阻塞 SSE 回调线程。
                 // 前端 node_wait 仅用于 updateCallNode 状态更新，不触发交互（交互靠 node_started），
-                // 窗口内跳过 send 不影响最终结果；saveTaskId 已异步落盘，调试历史不受影响。
+                // 窗口内跳过 send 不影响最终结果；saveResumeExecutionId 已同步落盘，调试历史不受影响。
                 if (shouldThrottleNodeWaitPassThrough(executeParams.getExecutionId())) {
                     return JiuwenEventType.NOT_EXIST;
                 }
@@ -222,13 +226,19 @@ public class WorkflowListener extends BaseEventListener {
 
         // 非EXCEPTION事件，正常解析
         JiuwenEvent eventObj = JSONObject.parseObject(eventStr, JiuwenEvent.class);
+        // DEF-02 §4.4-6：Runtime 事件携带 execution ID 时先校验且与既定值一致；
+        // 冲突或非法值不得覆盖权威值，只记录不含原值的安全告警并继续使用 Manager 既定值
         String eventExecId = eventObj.getExecutionId();
-        if (StringUtils.isEmpty(eventExecId)) {
-            eventExecId = executeParams.getExecutionId();
+        if (StringUtils.isNotEmpty(eventExecId)
+            && (!CorrelationIdValidator.isValid(eventExecId)
+                || (StringUtils.isNotEmpty(executeParams.getExecutionId())
+                    && !eventExecId.equals(executeParams.getExecutionId())))) {
+            log.warn("Runtime event executionId conflicts or is invalid; keeping Manager-selected value");
         }
-        executeParams.setExecutionId(eventExecId);
-        String instId = StringUtils.isEmpty(eventExecId) ? requestId : eventExecId;
-        result.getInstance().setId(instId);
+        // DEF-02 §4.4-7：instance ID 统一使用 Manager 选定的 executeParams.executionId，不再 requestId 兜底
+        if (StringUtils.isNotEmpty(executeParams.getExecutionId())) {
+            result.getInstance().setId(executeParams.getExecutionId());
+        }
 
         eventProcessor.recordEvent(eventObj, eventType, result.getInstance());
         JiuwenEventData eventData = eventObj.getData();
@@ -243,7 +253,8 @@ public class WorkflowListener extends BaseEventListener {
                 passThrough(eventStr);
             }
             case ERROR -> {
-                passThrough(eventStr);
+                // COM-04 响应 §5.4: 不透传原始 error 事件——基类已拦截并产出 Manager SSE error
+                // guard TERMINATED 后 passThrough 被 allowMessage() 阻止
                 result.setTaskEnd(true);
                 processError(eventData);
             }
@@ -272,12 +283,12 @@ public class WorkflowListener extends BaseEventListener {
                     instanceEntity.setStatus(WorkflowRunStatus.SUCCEEDED.getStatus().getDesc());
                 }
                 instanceEntity.setEndTime(System.currentTimeMillis());
-                // Delete taskId from Redis to prevent reuse by next execution in same conversation
+                // Delete resume executionId from Redis to prevent reuse by next execution in same conversation
                 try {
-                    agentRuntimeService.deleteTaskId(
+                    agentRuntimeService.deleteResumeExecutionId(
                         executeParams.getWorkflowId(), executeParams.getConversationId());
                 } catch (Exception e) {
-                    log.warn("Failed to delete taskId on workflow finish: {}", e.getMessage());
+                    log.warn("Failed to delete resume executionId on workflow finish: {}", e.getMessage());
                 }
             }
             case WORKFLOW_NODE_MESSAGE -> {
@@ -317,8 +328,9 @@ public class WorkflowListener extends BaseEventListener {
     private void processError(JiuwenEventData eventData) {
         WorkflowInstanceEntity instance = result.getInstance();
         instance.setStatus(WorkflowRunStatus.FAILED.getStatus().getDesc());
-        if (eventData != null && eventData.getMessage() != null) {
-            instance.setErrorInfo(eventData.getMessage());
+        // COM-04 响应 §5.5.3: 实例诊断只用 Manager 稳定错误码，不保存下游 message
+        if (lastErrorDescriptor != null) {
+            instance.setErrorInfo(lastErrorDescriptor.getErrorCode());
         }
     }
 
@@ -327,13 +339,11 @@ public class WorkflowListener extends BaseEventListener {
      */
     private void processStart(JiuwenEvent eventObj) {
         WorkflowInstanceEntity instance = result.getInstance();
-        String eventExecId = eventObj.getExecutionId();
+        // DEF-02 §4.4-7：统一使用 Manager 选定的 executeParams.executionId，不再 requestId 兜底
+        String eventExecId = executeParams.getExecutionId();
         if (StringUtils.isEmpty(eventExecId)) {
-            eventExecId = executeParams.getExecutionId();
-        }
-        if (StringUtils.isEmpty(eventExecId)) {
-            log.warn("start event executionId is null, fallback to requestId!");
-            eventExecId = MDC.get(REQUEST_ID);
+            log.warn("start event has no authoritative executionId; skip instance id assignment");
+            return;
         }
         instance.setId(eventExecId);
         WorkflowInstanceEntity instanceEntity = instanceService.getCache(eventExecId, executeParams.getReleasedVersion(),
@@ -362,35 +372,20 @@ public class WorkflowListener extends BaseEventListener {
     }
 
     /**
-     * 中断时保存 taskId，确保恢复时 queryTaskId 能取到同一 execution_id。
-     * 异步执行：node_wait 事件在循环节点密集到达时可能每秒数次，同步写 Redis 会阻塞
-     * SSE 回调线程上的事件透传。taskId 保存是旁路写，丢失一次只影响极端中断恢复，
-     * 不影响当前执行，适合走 insightPersistenceExecutor 异步。
+     * 中断时保存 resume executionId，确保恢复时 queryResumeExecutionId 能取到同一 execution_id。
+     * DEF-02 §4.4-5：保存值直接取自 executeParams.executionId，不再从回调线程 MDC task-id 读取。
      */
-    private void saveTaskIdOnInterrupt() {
-        String taskId = MDC.get(Constant.TASK_ID);
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = executeParams.getExecutionId();
-        }
-        if (StringUtils.isEmpty(taskId)) {
-            return;
-        }
-        final String resolvedTaskId = taskId;
-        final String workflowId = executeParams.getWorkflowId();
-        final String conversationId = executeParams.getConversationId();
+    private void saveResumeExecutionIdOnInterrupt() {
         try {
-            persistenceExecutor.execute(() -> {
-                try {
-                    agentRuntimeService.saveTaskId(workflowId, conversationId, resolvedTaskId);
-                    log.info("Saved taskId on node_wait: workflowId={}, conversationId={}, taskId={}",
-                        workflowId, conversationId, resolvedTaskId);
-                } catch (Throwable e) {
-                    log.warn("Failed to save taskId on interrupt (async): {}", e.getMessage());
-                }
-            });
-        } catch (Throwable e) {
-            // 线程池拒绝（DiscardPolicy 静默丢弃）或 shutdown 时走到这里，降级为不保存
-            log.debug("Submit saveTaskId async rejected. {}", e.getMessage());
+            String executionId = executeParams.getExecutionId();
+            if (StringUtils.isNotEmpty(executionId)) {
+                agentRuntimeService.saveResumeExecutionId(
+                    executeParams.getWorkflowId(), executeParams.getConversationId(), executionId);
+                log.info("Saved resume executionId on node_wait: workflowId={}, conversationId={}",
+                    executeParams.getWorkflowId(), executeParams.getConversationId());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to save resume executionId on interrupt: {}", e.getMessage());
         }
     }
 
@@ -439,8 +434,9 @@ public class WorkflowListener extends BaseEventListener {
         if (instance == null) {
             return;
         }
-        if (StringUtils.isEmpty(instance.getId())) {
-            instance.setId(MDC.get(REQUEST_ID));
+        // DEF-02 §4.4-7：不再用 MDC.get(REQUEST_ID) 兜底 instance ID；权威值缺失视为编程错误，不造假保存
+        if (StringUtils.isEmpty(instance.getId()) && StringUtils.isNotEmpty(executeParams.getExecutionId())) {
+            instance.setId(executeParams.getExecutionId());
         }
         if (result.isWorkflowEnd()) {
             if (StringUtils.isEmpty(instance.getStatus()) || WorkflowRunStatus.RUNNING.getStatus()

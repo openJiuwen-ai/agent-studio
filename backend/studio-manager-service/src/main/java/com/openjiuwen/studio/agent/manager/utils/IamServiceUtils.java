@@ -140,7 +140,7 @@ public class IamServiceUtils {
             int statusCode = response.code();
             if (statusCode < 200 || statusCode >= 300) {
                 String errorBody = response.body() != null ? response.body().string() : "";
-                log.error("Failed to query domain token, status={}, response={}", statusCode, errorBody);
+                log.error("Failed to query domain token, status={}", statusCode);
                 return "";
             }
 

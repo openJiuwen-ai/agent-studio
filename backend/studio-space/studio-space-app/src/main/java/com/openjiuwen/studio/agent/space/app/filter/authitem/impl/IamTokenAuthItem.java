@@ -87,7 +87,7 @@ public class IamTokenAuthItem implements AuthItem {
             ResponseEntity<String> responseEntity = iamConsoleFeignClient.ValidateToken(header);
             int status = responseEntity.getStatusCode().value();
             if (status >= 300) {
-                log.error("Verify iamToken failed. code: {}, body: {}", status, responseEntity.getBody());
+                log.error("Verify iamToken failed. code: {}", status);
                 BuildResponseUtil.createOpenApiErrResponse(response, HttpServletResponse.SC_UNAUTHORIZED,
                         "Verify iamToken failed.");
                 return false;

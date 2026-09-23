@@ -33,6 +33,11 @@ import com.openjiuwen.studio.agent.common.utils.*;
 import com.openjiuwen.studio.agent.manager.bo.FileCheckWrapper;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.constant.Constant;
+import com.openjiuwen.studio.agent.manager.observability.ExecutionIdSelector;
+import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
+import com.openjiuwen.studio.agent.manager.observability.MdcScope;
+import com.openjiuwen.studio.agent.manager.observability.OkHttpCorrelationHeaderApplier;
+import com.openjiuwen.studio.agent.manager.observability.OutboundCorrelationPolicy;
 import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
@@ -110,13 +115,16 @@ import java.util.stream.Collectors;
 @Slf4j
 @SuppressWarnings("checkstyle: all")
 public class AgentServiceProxyService {
-    private static final String REQUEST_ID = "request-id";
+    /** MDC key for request-id，权威来源为 {@link MdcKeys}（COM-02 白名单）。 */
+    private static final String REQUEST_ID = MdcKeys.REQUEST_ID;
 
     private final AgentRuntimeClient runtimeClient;
 
     private final AgentBuilderClient builderClient;
 
     private final RedisClient redisClient;
+
+    private final ExecutionIdSelector executionIdSelector = new ExecutionIdSelector();
 
     private final AgentMapper agentMapper;
 
@@ -195,6 +203,12 @@ public class AgentServiceProxyService {
     @Value("${workflow.sse-timeout-milliseconds}")
     private long workflowSseTimeoutMilliSec;
 
+    @Value("${manager.stream-open-await-timeout-seconds:30}")
+    private long streamOpenAwaitTimeoutSeconds;
+
+    @Value("${manager.http-failed-publish-await-seconds:10}")
+    private long httpFailedPublishAwaitSeconds;
+
     private Set<String> allowedIconType = new HashSet<>();
 
     private Set<String> allowedImgType = new HashSet<>();
@@ -269,7 +283,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             url += "&environment_id=" + environmentId;
         }
-        return stream(url, httpHeaders, JsonUtils.encode(body));
+        return streamWithExecutionContext(url, httpHeaders, JsonUtils.encode(body));
     }
 
 
@@ -378,7 +392,7 @@ public class AgentServiceProxyService {
                 url += "&api_url_env_vars=" + URLEncoder.encode(apiUrlEnvVars, StandardCharsets.UTF_8);
             }
 
-            return stream(url, headers, JsonUtils.encode(request));
+            return streamForBuilder(url, headers, JsonUtils.encode(request));
         }
         String environmentId = headers.getFirst("X-Environment-Id");
         try {
@@ -560,7 +574,9 @@ public class AgentServiceProxyService {
             if (StringUtils.hasText(environmentId)) {
                 url = url + "&environment_id=" + environmentId;
             }
-            return stream(url, httpHeaders, JsonUtils.encode(body));
+            try (MdcScope scope = establishExecutionScope(httpHeaders)) {
+                return stream(url, httpHeaders, JsonUtils.encode(body));
+            }
         }
         return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId, environmentId,
             body, false).getBody();
@@ -653,7 +669,9 @@ public class AgentServiceProxyService {
             if (StringUtils.hasText(environmentId)) {
                 url = url + "&environment_id=" + environmentId;
             }
-            return stream(url, httpHeaders, JsonUtils.encode(body));
+            try (MdcScope scope = establishExecutionScope(httpHeaders)) {
+                return stream(url, httpHeaders, JsonUtils.encode(body));
+            }
         }
         return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId, body).getBody();
     }
@@ -806,51 +824,15 @@ public class AgentServiceProxyService {
     }
 
     public Object stream(String url, HttpHeaders headers, String bodyJson, Long timeout) {
-        RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
-
-        Request.Builder builder = new Request.Builder();
-        headers.forEach((key, value) -> {
-            if (value != null && !value.isEmpty()) {
-                builder.addHeader(key, String.join(",", value));
-            }
-        });
-
-        Request request = builder.url(url).post(body).build();
-        EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
-        SseEmitter sseEmitter = new SseEmitter(timeout);
-
-        String requestId = MDC.get(REQUEST_ID);
-
-        CountDownLatch latch = new CountDownLatch(1);
-        ProxyEventSourceListener listener = new ProxyEventSourceListener(MDC.get(REQUEST_ID), latch, sseEmitter);
-
-        // 创建事件
-        log.info("http stream request, url: {}", url);
-        EventSource eventSource = factory.newEventSource(request, listener);
-        try {
-            latch.await(30, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            log.error("Request agent service timeout.", e);
-            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
-        }
-        if (listener.getErrorRsp() != null) {
-            return listener.getErrorRsp();
-        }
-        return sseEmitter;
+        return streamNoListener(url, headers, bodyJson, timeout,
+            OutboundCorrelationPolicy.RUNTIME_EXECUTION, runtimeEndpoint);
     }
 
     public Object stream(String url, HttpHeaders headers, String bodyJson, Long timeout, BaseEventListener listener) {
-        RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
-
-        Request.Builder builder = new Request.Builder();
-        headers.forEach((key, value) -> {
-            if (value != null && !value.isEmpty()) {
-                builder.addHeader(key, String.join(",", value));
-            }
-        });
-
-        Request request = builder.url(url).post(body).build();
-        EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
+        Request request = buildStreamRequest(url, headers, bodyJson,
+            OutboundCorrelationPolicy.RUNTIME_EXECUTION, runtimeEndpoint);
+        EventSource.Factory factory =
+            EventSources.createFactory(OkHttpCorrelationHeaderApplier.withoutRedirects(okHttpClientUtils.getHttpClient()));
         SseEmitter sseEmitter = new SseEmitter(timeout);
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -873,28 +855,191 @@ public class AgentServiceProxyService {
     }
 
     /**
+     * COM-04 §6.2：构建出站 SSE 请求——先排除三个关联 Header（防调用方伪造重复变体），
+     * 再由 {@link OkHttpCorrelationHeaderApplier} 按策略从当前线程 MDC 读取权威值先删后写。
+     */
+    private okhttp3.Request buildStreamRequest(String url, HttpHeaders headers, String bodyJson,
+        OutboundCorrelationPolicy policy, String allowedOrigin) {
+        RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
+        Request.Builder builder = new Request.Builder();
+        headers.forEach((key, value) -> {
+            if (value != null && !value.isEmpty() && !OkHttpCorrelationHeaderApplier.isCorrelationHeader(key)) {
+                builder.addHeader(key, String.join(",", value));
+            }
+        });
+        builder.url(url).post(body);
+        OkHttpCorrelationHeaderApplier.apply(policy, allowedOrigin, url, builder);
+        return builder.build();
+    }
+
+    /**
+     * COM-04 §6.2：无自定义 listener 的流式调用——5-arg {@link ProxyEventSourceListener}，
+     * 禁用重定向的客户端变体（防关联 Header 被携带到新 origin），COM-03 awaitStreamOpen 协议。
+     */
+    private Object streamNoListener(String url, HttpHeaders headers, String bodyJson, Long timeout,
+        OutboundCorrelationPolicy policy, String allowedOrigin) {
+        Request request = buildStreamRequest(url, headers, bodyJson, policy, allowedOrigin);
+        EventSource.Factory factory =
+            EventSources.createFactory(OkHttpCorrelationHeaderApplier.withoutRedirects(okHttpClientUtils.getHttpClient()));
+        SseEmitter sseEmitter = new SseEmitter(timeout);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        // COM-03 §5.1: 入口 locale 快照——从请求 Header 捕获,不用线程默认 locale
+        String langHeader = org.apache.commons.lang3.StringUtils.defaultIfEmpty(
+            org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() != null
+                ? ((org.springframework.web.context.request.ServletRequestAttributes)
+                    org.springframework.web.context.request.RequestContextHolder.getRequestAttributes())
+                    .getRequest().getHeader("x-language")
+                : null,
+            "zh-CN");
+        java.util.Locale localeSnapshot = java.util.Locale.forLanguageTag(langHeader);
+        ProxyEventSourceListener listener = new ProxyEventSourceListener(
+            MDC.get(MdcKeys.REQUEST_ID), latch, sseEmitter,
+            (key, loc) -> i18nUtil.getMessage(key, loc), localeSnapshot);
+
+        log.info("http stream request, url: {}", url);
+        EventSource eventSource = factory.newEventSource(request, listener);
+        // COM-03 复审8 §4.2: SseEmitter 生命周期回调——客户端断开/超时/完成时
+        // 幂等取消上游 EventSource，防止下游继续占用连接与生成资源
+        listener.bindEmitterLifecycle(sseEmitter, eventSource);
+        return awaitStreamOpen(latch, listener, sseEmitter, eventSource);
+    }
+
+    /**
+     * COM-03 复审10 §3.2: 统一流式等待协议——OPENED→emitter / HTTP_FAILED→errorRsp /
+     * CANCELLED / WAIT_TIMEOUT / INTERRUPTED，含二次 await + guard 竞争处理。
+     */
+    Object awaitStreamOpen(CountDownLatch latch, ProxyEventSourceListener listener,
+            SseEmitter sseEmitter, EventSource eventSource) {
+        boolean opened;
+        try {
+            opened = latch.await(streamOpenAwaitTimeoutSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Stream open wait interrupted.", e);
+            listener.tryCancelTerminal();
+            cleanupStreamResources(listener, sseEmitter, eventSource);
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        if (listener.getErrorRsp() != null) {
+            return listener.getErrorRsp();
+        }
+        if (opened && !listener.isCancelled()) {
+            return sseEmitter;
+        }
+        if (listener.tryAbortBeforeOpen()) {
+            log.error("Stream open wait timed out; abort before open.");
+            cleanupStreamResources(listener, sseEmitter, eventSource);
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        if (listener.isCancelled()) {
+            log.error("Stream cancelled before open.");
+            cleanupStreamResources(listener, sseEmitter, eventSource);
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        if (listener.isHttpFailed()) {
+            log.warn("Stream open wait timed out while HTTP failure result pending publish.");
+            boolean published;
+            try {
+                published = latch.await(httpFailedPublishAwaitSeconds, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("HTTP failure publish wait interrupted.", e);
+                cleanupStreamResources(listener, sseEmitter, eventSource);
+                throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+            }
+            if (published && listener.getErrorRsp() != null) {
+                return listener.getErrorRsp();
+            }
+            cleanupStreamResources(listener, sseEmitter, eventSource);
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        cleanupStreamResources(listener, sseEmitter, eventSource);
+        throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+    }
+
+    private void cleanupStreamResources(ProxyEventSourceListener listener,
+            SseEmitter sseEmitter, EventSource eventSource) {
+        listener.cancelUpstream(eventSource);
+        try {
+            sseEmitter.complete();
+        } catch (Throwable ignored) {
+            // already closing — complete 异常不替换主异常
+        }
+    }
+
+    /**
+     * COM-04 §6.3：Builder 流式调用——固定 BUILDER 策略，注入 request/trace、删除 execution，
+     * origin 校验与 {@code agentBuilderEndpoint} 一致。
+     */
+    public Object streamForBuilder(String url, HttpHeaders headers, String bodyJson) {
+        return streamNoListener(url, headers, bodyJson, workflowSseTimeoutMilliSec,
+            OutboundCorrelationPolicy.BUILDER, agentBuilderEndpoint);
+    }
+
+    /**
+     * DEF-02 §4.1：为无 executeParams 的执行入口（如 node_execute）选定 execution ID，
+     * 在当前线程建立 EXECUTION_ID 的 partial-override scope（close 恢复）。
+     */
+    public Object streamWithExecutionContext(String url, HttpHeaders headers, String bodyJson) {
+        return streamWithExecutionContext(url, headers, bodyJson, workflowSseTimeoutMilliSec);
+    }
+
+    public Object streamWithExecutionContext(String url, HttpHeaders headers, String bodyJson, Long timeout) {
+        ExecutionIdSelector.Result selection = executionIdSelector.select(
+            null, MDC.get(MdcKeys.EXECUTION_ID), headers.getFirst("X-Execution-Id"));
+        if (selection.isRestoreIllegal()) {
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        String executionId = selection.getValue();
+        try (MdcScope scope = MdcScope.open(Map.of(MdcKeys.EXECUTION_ID, executionId))) {
+            return stream(url, headers, bodyJson, timeout);
+        }
+    }
+
+    /**
+     * DEF-02 §4.1：从当前线程 MDC 读取 execution-id 候选，建立 EXECUTION_ID scope 供 runWeb* 路径包装。
+     */
+    public MdcScope establishExecutionScope(HttpHeaders headers) {
+        ExecutionIdSelector.Result selection = executionIdSelector.select(
+            null, MDC.get(MdcKeys.EXECUTION_ID), headers.getFirst("X-Execution-Id"));
+        if (selection.isRestoreIllegal()) {
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        return MdcScope.open(Map.of(MdcKeys.EXECUTION_ID, selection.getValue()));
+    }
+
+    /**
      * Agent专用流式方法，根据executeType选择LLMAgentListener或ControllerAgentListener处理事件并存储调测数据
      */
     public Object agentStream(String url, HttpHeaders headers, String bodyJson, AgentExecuteParams executeParams) {
-        String taskId = agentRuntimeService.queryTaskId(executeParams.getAgentId(), executeParams.getExecutionId());
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = MDC.get(REQUEST_ID);
+        // DEF-02 §4.1：四级优先级选值——恢复值(Redis) > 内部 executeParams.executionId > 入站 X-Execution-Id > 生成
+        String restored = "";
+        if (!StringUtils.isEmpty(executeParams.getConversationId())) {
+            restored = agentRuntimeService.queryResumeExecutionId(
+                executeParams.getAgentId(), executeParams.getConversationId());
         }
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = headers.getFirst("X-Execution-Id");
+        ExecutionIdSelector.Result selection = executionIdSelector.select(
+            restored, executeParams.getExecutionId(), headers.getFirst("X-Execution-Id"));
+        if (selection.isRestoreIllegal()) {
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
         }
-        MDC.put(Constant.TASK_ID, taskId);
-        headers.set("X-Execution-Id", taskId);
-        executeParams.setExecutionId(taskId);
+        String executionId = selection.getValue();
+        executeParams.setExecutionId(executionId);
 
-        if (Constant.AppType.CONTROLLER.equals(executeParams.getExecuteType())) {
-            ControllerAgentListener listener = new ControllerAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
-            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
-        } else if (Constant.AppType.AGENT.equals(executeParams.getExecuteType())) {
-            LLMAgentListener listener = new LLMAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
-            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
-        } else {
-            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, new BaseEventListener(MDC.get(REQUEST_ID), headers));
+        try (MdcScope scope = MdcScope.open(Map.of(MdcKeys.EXECUTION_ID, executionId))) {
+            if (Constant.AppType.CONTROLLER.equals(executeParams.getExecuteType())) {
+                ControllerAgentListener listener =
+                    new ControllerAgentListener(MDC.get(MdcKeys.REQUEST_ID), executeParams, headers);
+                return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
+            } else if (Constant.AppType.AGENT.equals(executeParams.getExecuteType())) {
+                LLMAgentListener listener =
+                    new LLMAgentListener(MDC.get(MdcKeys.REQUEST_ID), executeParams, headers);
+                return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
+            } else {
+                return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec,
+                    new BaseEventListener(MDC.get(MdcKeys.REQUEST_ID), headers));
+            }
         }
     }
 
@@ -903,26 +1048,22 @@ public class AgentServiceProxyService {
      */
     public Object workflowStream(String url, HttpHeaders headers, String bodyJson, WorkflowRunResult result,
         ExecuteParams executeParams) {
-        // 恢复场景：从 Redis 查询上一次中断时保存的 taskId，保持 execution_id 一致
-        String taskId = agentRuntimeService.queryTaskId(executeParams.getWorkflowId(), executeParams.getConversationId());
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = executeParams.getExecutionId();
+        // 恢复场景：从 Redis 查询上一次中断时保存的 resume executionId，保持 execution_id 一致
+        String restored = agentRuntimeService.queryResumeExecutionId(
+            executeParams.getWorkflowId(), executeParams.getConversationId());
+        ExecutionIdSelector.Result selection = executionIdSelector.select(
+            restored, executeParams.getExecutionId(), headers.getFirst("X-Execution-Id"));
+        if (selection.isRestoreIllegal()) {
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
         }
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = headers.getFirst("X-Execution-Id");
-        }
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = MDC.get(REQUEST_ID);
-        }
-        if (StringUtils.isEmpty(taskId)) {
-            taskId = UUID.randomUUID().toString();
-        }
-        MDC.put(Constant.TASK_ID, taskId);
-        headers.set("X-Execution-Id", taskId);
-        executeParams.setExecutionId(taskId);
+        String executionId = selection.getValue();
+        executeParams.setExecutionId(executionId);
 
-        WorkflowListener listener = new WorkflowListener(MDC.get(REQUEST_ID), executeParams, result, headers);
-        return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
+        try (MdcScope scope = MdcScope.open(Map.of(MdcKeys.EXECUTION_ID, executionId))) {
+            WorkflowListener listener =
+                new WorkflowListener(MDC.get(MdcKeys.REQUEST_ID), executeParams, result, headers);
+            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
+        }
     }
 
     @OperationLog(
