@@ -217,7 +217,11 @@ Client → sends request with auth Token to platform → platform extracts Token
    | Domain name | `domain_name` | Response body | No (defaults to `0` if missing) | `user_info_claims_domain_name` |
    | Project identifier | `project_id` | Response body | No (defaults to `0` if missing) | `user_info_claims_project_id` |
 
-   > **Domain name (`domain_name`)**: some platform features (e.g. the team workspace "Add member" picker querying the user list via IAM) exchange the domain name for an IAM domain token. If the SSO response does not return this field, the platform defaults to `0`; you can also customize the default via `user_info_defaults_domain_name`. A missing value never causes an interface error.
+   > **Domain name (`domain_name`) — must be confirmed at deployment**: some platform features (e.g. the team workspace "Add member" picker querying the user list via IAM) exchange the domain name for an IAM domain token, and that domain name must actually exist in IAM.
+   > - If the SSO response carries a domain name: set `user_info_claims_domain_name` to the corresponding field name (default `domain_name`);
+   > - If the SSO response does not carry it: you **must** set `user_info_defaults_domain_name` to the real IAM domain name.
+   >
+   > When unset, the platform falls back to `0` (no NPE; a single WARN is logged by studio-manager), but `0` is normally not a real domain, so the IAM-backed features above will fail and the member list will still be empty. Do not rely on this fallback.
 
    Example: The platform by default extracts the user unique identifier from the `user_id` field in the SSO response. If the field is named `account_id` in the SSO response, configure `user_info_claims_user_id=account_id`. The same applies to other fields; modify the corresponding environment variable when inconsistent with defaults.
 

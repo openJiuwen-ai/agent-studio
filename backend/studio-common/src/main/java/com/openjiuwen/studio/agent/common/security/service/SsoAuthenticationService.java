@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * SSO 远程鉴权服务
@@ -61,6 +62,9 @@ public class SsoAuthenticationService {
     private final AuthProperties authProperties;
 
     private final ConcurrentHashMap<String, CachedUserInfo> tokenCache = new ConcurrentHashMap<>();
+
+    /** 域名称回退告警只打一次，避免每个请求刷屏 */
+    private final AtomicBoolean domainNameFallbackWarned = new AtomicBoolean(false);
 
     /**
      * 构造 SSO 鉴权服务，初始化支持跳过 SSL 校验的 RestTemplate
@@ -186,14 +190,36 @@ public class SsoAuthenticationService {
         AuthProperties.UserInfoConfig.ClaimsConfig claims = userInfoConfig.getClaims();
         AuthProperties.UserInfoConfig.DefaultsConfig defaults = userInfoConfig.getDefaults();
 
+        String domainName = extractClaim(ssoUserInfo, claims.getDomainName());
+        if (domainName == null || domainName.isBlank()) {
+            domainName = defaults.getDomainName();
+            warnDomainNameFallback(claims.getDomainName(), domainName);
+        }
+
         return SimpleUser.builder()
             .userId(getValueOrDefault(extractClaim(ssoUserInfo, claims.getUserId()), "unknown"))
             .userName(getValueOrDefault(extractClaim(ssoUserInfo, claims.getUserName()), "unknown"))
             .domainId(getValueOrDefault(extractClaim(ssoUserInfo, claims.getDomainId()), defaults.getDomainId()))
-            .domainName(
-                getValueOrDefault(extractClaim(ssoUserInfo, claims.getDomainName()), defaults.getDomainName()))
+            .domainName(domainName)
             .projectId(getValueOrDefault(extractClaim(ssoUserInfo, claims.getProjectId()), defaults.getProjectId()))
             .build();
+    }
+
+    /**
+     * SSO 响应未携带域名称、回退到默认值时告警一次（进程内只打一次，避免每请求刷屏）。
+     *
+     * <p>默认值通常不是真实 IAM 域名：依赖 IAM 的功能（如团队空间「添加成员」的用户列表）会因此
+     * 调用失败、列表仍为空。现场需据日志配置 user_info_claims_domain_name（从 SSO 响应映射字段）
+     * 或 user_info_defaults_domain_name（直接指定真实域名）。</p>
+     */
+    private void warnDomainNameFallback(String claimPath, String fallback) {
+        if (domainNameFallbackWarned.compareAndSet(false, true)) {
+            log.warn("SSO response has no domain name (claim path '{}'), falling back to '{}'. "
+                    + "IAM-backed features (e.g. team workspace member list) will fail unless '{}' is the real "
+                    + "domain name. Configure 'user_info_claims_domain_name' to map the field from the SSO "
+                    + "response, or 'user_info_defaults_domain_name' to the real domain name.",
+                claimPath, fallback, fallback);
+        }
     }
 
     /**
