@@ -365,6 +365,9 @@ public class AgentManagementService implements IAgentManagementService {
     @Autowired
     private EnvironmentServiceManagerService environmentServiceManagerService;
 
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
+
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
 
@@ -1113,6 +1116,7 @@ public class AgentManagementService implements IAgentManagementService {
                 agentId);
             throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
         }
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "delete", false);
 
         if (shareResourceMapper.countResourceByResourceId(projectId, agentId) > 0) {
             log.error("the agent has been shared,you can't delete it");
@@ -1640,10 +1644,11 @@ public class AgentManagementService implements IAgentManagementService {
             checkKnowledgeType(body);
         }
 
-        Agent agent = agentMapper.selectById(agentId);
+        Agent agent = getAgent(projectId, workspaceId, agentId);
         if (agent == null) {
             throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
         }
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "edit", false);
 
         AgentType agentType = AgentType.naValueOf(body.getType() == null ? agent.getType() : body.getType().toString());
 
@@ -2666,6 +2671,9 @@ public class AgentManagementService implements IAgentManagementService {
     )
     public Void createAgentVersion(String projectId, String agentId, String workspaceId,
         CreateVersionReq createVersionReq) {
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的版本
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "version-create", false);
         // 校验发布版本数量
         List<ReleaseVersion> releaseVersionList = releaseVersionMapper.selectByAppId(agentId);
         if (releaseVersionList.size() > releaseMaxSize) {
@@ -2682,7 +2690,6 @@ public class AgentManagementService implements IAgentManagementService {
         }
 
         AgentInfo agentInfo = retrieveAgent(projectId, agentId, workspaceId);
-        Agent agent = getAgent(projectId, workspaceId, agentId);
         ReleaseVersion releaseVersion = new ReleaseVersion();
         String versionId = String.valueOf(System.currentTimeMillis());
 
@@ -2986,6 +2993,8 @@ public class AgentManagementService implements IAgentManagementService {
     )
     public CommonDeleteRsp deleteAgentVersion(String projectId, String agentId, String versionId, String workspaceId) {
         Agent agent = getAgent(projectId, workspaceId, agentId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的版本
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "version-delete", false);
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(agent.getAgentId(), versionId);
         if (releaseVersion == null) {
             log.error("agent version is not found, agentId = {}, versionId = {}", agentId, versionId);
@@ -3082,7 +3091,10 @@ public class AgentManagementService implements IAgentManagementService {
     public BatchDeleteVersionsResponseBody batchDeleteAgentVersions(String projectId, String agentId,
         String workspaceId, BatchDeleteVersionsRequestBody body) {
         // 资源归属校验，防止横向越权（与deleteAgentVersion对齐）
-        getAgent(projectId, workspaceId, agentId);
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的版本
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(),
+            "version-batch-delete", false);
 
         // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
         ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
@@ -3200,6 +3212,8 @@ public class AgentManagementService implements IAgentManagementService {
 
         // 校验Agent是否存在
         Agent agent = getAgent(projectId, workspaceId, agentId);
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的渠道
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "channel-create", false);
 
         ReleaseChannel newReleaseChannel = new ReleaseChannel();
         newReleaseChannel.setCreator(RequestContextUtils.getRequestUserName());
@@ -3345,6 +3359,13 @@ public class AgentManagementService implements IAgentManagementService {
         resourceName = ""
     )
     public Void deleteAgentChannel(String projectId, String agentId, String channelId, String workspaceId) {
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的渠道
+        // 兜底孤儿数据:agent 已删但渠道残留时，agentMapper 返回 null，跳过创建人校验继续清理渠道
+        Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId);
+        if (agent != null) {
+            workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "channel-delete", false);
+        }
+
         // 发布到agent-builder空间，agentId和channelId相同
         if (publishAgentBuilderEnable && agentId.equals(channelId)) {
             agentSpaceService.unpublish(workspaceId, agentId);
@@ -3450,6 +3471,10 @@ public class AgentManagementService implements IAgentManagementService {
     )
     public VersionChannelInfo modifyAgentChannel(String projectId, String agentId, String channelId, String workspaceId,
         ModifyChannelReq body) {
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的渠道
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "channel-modify", false);
+
         ReleaseChannel oldChannel = releaseChannelMapper.selectByIdAppIdWorkspaceId(channelId, agentId, projectId,
             workspaceId);
         if (ObjectUtils.isEmpty(oldChannel)) {
@@ -3761,6 +3786,14 @@ public class AgentManagementService implements IAgentManagementService {
         List<String> permissions = permissionService.getMergedPermissions().get(role);
         Map<String, List<String>> result = new HashMap<>();
         result.put(role, permissions);
+        // 返回当前角色需创建人校验的权限列表(METHOD#URI)，供前端按创建人显隐编辑/删除按钮
+        List<String> creatorCheckPermissions = permissionService.getMergedCreatorCheckPermissions().get(role);
+        result.put("creatorCheckPermissions",
+            creatorCheckPermissions == null ? Collections.emptyList() : creatorCheckPermissions);
+        // 返回当前用户标识，供前端对比资源 creator 显隐按钮
+        // 工作流/智能体 creatorId 对比 userId；模型供应商/服务 createdByUser 对比 userName
+        result.put("currentUserId", Collections.singletonList(RequestContextUtils.getRequestUserId()));
+        result.put("currentUserName", Collections.singletonList(RequestContextUtils.getRequestUserName()));
         return result;
     }
 

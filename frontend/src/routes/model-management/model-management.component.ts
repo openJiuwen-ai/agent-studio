@@ -30,6 +30,8 @@ import { NzEmptyModule } from 'ng-zorro-antd/empty';
 import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzDrawerModule, NzDrawerService } from 'ng-zorro-antd/drawer';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { PermissionService } from '@services/permission.service';
+import { CanModifyDirective } from '@shared/directives/can-modify.directive';
 @Component({
   selector: 'meta-model-management',
   standalone: true,
@@ -49,6 +51,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
     NzEmptyModule,
     NzModalModule,
     NzDrawerModule,
+    CanModifyDirective,
   ],
   templateUrl: './model-management.component.html',
   styleUrls: ['./model-management.component.scss'],
@@ -91,7 +94,8 @@ export class ModalManagementComponent implements OnInit, OnDestroy {
     private router: Router,
     private commonService: CommonService,
     private http: HttpService,
-    private sidebarVisibilityServ: SetSidebarVisibilityService
+    private sidebarVisibilityServ: SetSidebarVisibilityService,
+    private permissionService: PermissionService
   ) {}
 
   ngOnInit() {
