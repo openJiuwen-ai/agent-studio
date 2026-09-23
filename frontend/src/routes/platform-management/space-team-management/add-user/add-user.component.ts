@@ -156,9 +156,14 @@ export class AddUserComponent implements OnInit, OnDestroy {
     this.syncCheckAll();
   }
 
-  /** 根据当前勾选情况回填“全部”复选框 */
+  /** 当前列表中可勾选的成员（搜索过滤后即为可见项；已存在成员 disabled，不参与） */
+  private get selectableMembers(): Array<any> {
+    return this.dataArray1.filter((item) => !item.disabled);
+  }
+
+  /** 根据当前列表的勾选情况回填“全部”复选框 */
   syncCheckAll() {
-    const selectable = this.dataArray1.filter((item) => !item.disabled);
+    const selectable = this.selectableMembers;
     this.checkAll =
       selectable.length > 0 && selectable.every((item) => this.isChecked(item));
   }
@@ -192,32 +197,45 @@ export class AddUserComponent implements OnInit, OnDestroy {
       this.dataArray1 = list;
       this.originDataArray1 = list;
       this.checkedArray = this.has_add_user;
+      this.syncCheckAll();
     });
   }
 
   onClear() {
     this.dataArray1 = this.originDataArray1;
+    this.syncCheckAll();
   }
 
   onSearch(value: string) {
     if (!value) {
       this.dataArray1 = this.originDataArray1;
-      return;
+    } else {
+      // 始终基于完整列表过滤，避免在已过滤结果上二次过滤导致结果丢失
+      this.dataArray1 = this.originDataArray1.filter(
+        (item) => item.memberName.indexOf(value) > -1,
+      );
     }
-    // 始终基于完整列表过滤，避免在已过滤结果上二次过滤导致结果丢失
-    this.dataArray1 = this.originDataArray1.filter(
-      (item) => item.memberName.indexOf(value) > -1,
-    );
+    // 可见列表变化后同步“全部”复选框状态
+    this.syncCheckAll();
   }
 
   onNgcheckAll(info) {
+    const selectable = this.selectableMembers;
     if (info) {
-      const has_no_add = this.dataArray1.filter(
-        (item) => !this.has_add_user_id.includes(item.memberId),
+      // 全选：仅补齐当前列表中尚未勾选的成员，保留其余已勾选项
+      // （含搜索前已勾选、当前被过滤隐藏的成员，避免整体重建导致勾选丢失）
+      const checkedIds = this.checkedArray.map((c) => c.memberId);
+      const toAdd = selectable.filter(
+        (item) => !checkedIds.includes(item.memberId),
       );
-      this.checkedArray = [...this.has_add_user, ...has_no_add];
+      this.checkedArray = [...this.checkedArray, ...toAdd];
     } else {
-      this.checkedArray = this.has_add_user;
+      // 取消全选：仅移除当前列表中的成员，保留其余已勾选项
+      const selectableIds = selectable.map((item) => item.memberId);
+      this.checkedArray = this.checkedArray.filter(
+        (c) => !selectableIds.includes(c.memberId),
+      );
     }
+    this.syncCheckAll();
   }
 }
