@@ -56,7 +56,7 @@ def test_prefetch_failure_returns_http_error_not_stream():
 
     async def _boom_runner():
         raise RuntimeError("runner exploded before first event")
-        yield  # make it a generator
+        yield  # make it a generator  # noqa: G.CTL.02
 
     token = _set_ctx("req-asgi-001")
     try:
@@ -137,7 +137,7 @@ def test_request_id_not_unknown():
 
     async def _boom():
         raise RuntimeError("boom")
-        yield
+        yield  # noqa: G.CTL.02
 
     token = _set_ctx("req-real-not-unknown")
     try:

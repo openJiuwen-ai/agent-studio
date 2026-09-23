@@ -63,7 +63,7 @@ def _make_stream_exc(exc: BaseException):
 
     async def _stream(inputs, session, context=None, stream_modes=None):
         raise exc
-        yield  # pragma: no cover — 使本函数成为 async generator
+        yield  # pragma: no cover — 使本函数成为 async generator  # noqa: G.CTL.02
 
     return _stream
 
@@ -123,14 +123,14 @@ async def _drive(stream_exc: BaseException):
     re-raise 场景 raised_exc 为传播出的异常；正常 yield 场景为 None。
     """
     runner = _runner()
-    runner._is_session_interrupted = AsyncMock(return_value=False)
-    runner._is_session_cancelled = AsyncMock(return_value=False)
-    runner._clear_session_cancelled = AsyncMock()
-    runner._extract_start_user_field_defaults = MagicMock(return_value={})
-    runner._build_global_state_params = MagicMock(return_value={})
-    runner._trigger_memory_extraction = AsyncMock()
-    runner._retrieve_memory = AsyncMock(return_value=None)
-    runner._ir_converter = MagicMock(
+    runner._is_session_interrupted = AsyncMock(return_value=False)  # noqa: G.CLS.11
+    runner._is_session_cancelled = AsyncMock(return_value=False)  # noqa: G.CLS.11
+    runner._clear_session_cancelled = AsyncMock()  # noqa: G.CLS.11
+    runner._extract_start_user_field_defaults = MagicMock(return_value={})  # noqa: G.CLS.11
+    runner._build_global_state_params = MagicMock(return_value={})  # noqa: G.CLS.11
+    runner._trigger_memory_extraction = AsyncMock()  # noqa: G.CLS.11
+    runner._retrieve_memory = AsyncMock(return_value=None)  # noqa: G.CLS.11
+    runner._ir_converter = MagicMock(  # noqa: G.CLS.11
         async_ir_to_workflow=AsyncMock(
             return_value=MagicMock(stream=_make_stream_exc(stream_exc))))
 
@@ -178,7 +178,7 @@ class TestWrapped105015Guard:
         assert not [e for e in events if e.get("event") == "error"]
 
     @pytest.mark.asyncio
-    async def test_base_error_wrapped_105015_reraised(self):
+    async def test_base_error_wrapped_105015_reraised(self):  # noqa: G.CMT.03
         """except BaseError 分支（非 ExecutionError 的 BaseError 直接实例）：
         cause 链 105015 → 同一 guard re-raise。"""
         wrapped = BaseError(
@@ -191,7 +191,7 @@ class TestWrapped105015Guard:
         assert not [e for e in events if e.get("event") == "error"]
 
     @pytest.mark.asyncio
-    async def test_direct_jiuwen_105015_reraised(self):
+    async def test_direct_jiuwen_105015_reraised(self):  # noqa: G.CMT.03
         """except Exception 分支：直接 JiuWenBaseException(105015)（非
         BaseError）→ guard re-raise（P5-R3a 改用公共判定，行为与
         Phase 5 的 .error_code 判定等价并覆盖 cause 链）。"""
@@ -207,7 +207,7 @@ class TestNon105015KeepsBehavior:
     """反证：非 105015 业务码不被 guard 误改（保既有 yield 行为）。"""
 
     @pytest.mark.asyncio
-    async def test_execution_error_wrapped_non_105015_yields_original_code(self):
+    async def test_execution_error_wrapped_non_105015_yields_original_code(self):  # noqa: G.CMT.03
         """ExecutionError(cause=105001) → 不 re-raise，error event 携带
         原码 105001（_resolve cause 链提取，保基线行为）+ done 终态。"""
         wrapped = ExecutionError(
@@ -222,7 +222,7 @@ class TestNon105015KeepsBehavior:
         assert len(done_events) == 1  # 基线 error→done 终态保留
 
     @pytest.mark.asyncio
-    async def test_direct_jiuwen_non_105015_yields_original_code(self):
+    async def test_direct_jiuwen_non_105015_yields_original_code(self):  # noqa: G.CMT.03
         """except Exception 分支反证：直接 JiuWenBaseException(105001) →
         不 re-raise，yield error event 原码（str 形态，基线行为）。"""
         direct = JiuWenBaseException(error_code=105001, message="biz err")
@@ -270,7 +270,7 @@ async def _drive_debug(stream_exc: BaseException):
     # 故障注入：wrapper.astream 抛注入异常（签名 inputs=/execution_id=）
     async def _astream(*, inputs, execution_id):
         raise stream_exc
-        yield  # pragma: no cover — async generator
+        yield  # pragma: no cover — async generator  # noqa: G.CTL.02
     wrapper_instance = MagicMock()
     wrapper_instance.astream = _astream
     wrapper_cls = MagicMock(return_value=wrapper_instance)
@@ -324,7 +324,7 @@ class TestDebugStream105015Guard:
         assert not [e for e in events if e.get("event") == "error"]
 
     @pytest.mark.asyncio
-    async def test_debug_non_105015_keeps_error_event(self):
+    async def test_debug_non_105015_keeps_error_event(self):  # noqa: G.CMT.03
         """反证：组件调试期 105001 → 不 re-raise，yield error event 原码
         （保基线调试错误回显行为）。"""
         direct = JiuWenBaseException(error_code=105001, message="biz err")
