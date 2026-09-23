@@ -249,6 +249,9 @@ public class WorkflowValidationService {
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
 
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
+
     @Value("${workflow.system-fields:}")
     private String systemFields;
 
@@ -1571,7 +1574,8 @@ public class WorkflowValidationService {
      *
      * @param workflowEntity 工作流实例
      */
-    public void validateModifyPrivilege(WorkflowEntity workflowEntity, String projectId, String workspaceId) {
+    public void validateModifyPrivilege(WorkflowEntity workflowEntity, String projectId, String workspaceId,
+        String requestMethod) {
         // 管理租户不校验
         if (Strings.CS.equals(RequestContextUtils.getRequestProjectId(), opSvcProjectId)) {
             return;
@@ -1583,6 +1587,10 @@ public class WorkflowValidationService {
                 workflowEntity.getProjectId(), projectId, workflowEntity.getWorkspaceId(), workspaceId);
             throw new AgentStudioException(StudioError.PRIVILEGE_ERROR);
         }
+        // 角色与创建人校验(配置驱动):OWNER/ADMIN 全权;DEVELOPER/OPERATOR 仅限自己创建的
+        // delete 用 "delete"，update 用 "edit" 语义 action
+        String action = "DELETE".equals(requestMethod) ? "delete" : "edit";
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(), action, false);
     }
 
     /**

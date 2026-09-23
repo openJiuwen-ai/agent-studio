@@ -41,7 +41,7 @@
           <div class="opearte-area" *ngIf="subscribeBtnStatus">
             <ng-container *ngIf="activeName === 'CUSTOM'; else elseTemplate">
               <div
-                *ngFor="let item of itemsTab2"
+                *ngFor="let item of visibleItemsTab2"
                 class="flex items-center gap-[4px]"
                 (click)="onSelectTop(item)"
                 [ngClass]="{ 'cursor-pointer': !item.disabled, 'cursor-disable': item.disabled }"
@@ -53,7 +53,7 @@
             <ng-template #elseTemplate>
               <div *ngIf="basicData && basicData['auth_configs'] && basicData['auth_configs'][0].auth_type != 'IAM'">
                 <div
-                  *ngFor="let item of itemsTab1"
+                  *ngFor="let item of visibleItemsTab1"
                   class="flex items-center gap-[4px]"
                   [ngClass]="{ 'cursor-pointer': !item.disabled, 'cursor-disable': item.disabled }"
                   (click)="onSelectTop(item)"

@@ -347,6 +347,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     WorkflowValidationService workflowValidationService;
 
     @Autowired
+    WorkspacePermissionValidator workspacePermissionValidator;
+
+    @Autowired
     IrAdapterService irAdapterService;
 
     @Autowired
@@ -1219,7 +1222,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         }
 
         // 权限校验
-        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId);
+        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "DELETE");
         shareResourceManagerService.checkResourceSharedOrNot(projectId, workflowId);
         workflowEntity.setUpdatedAt(System.currentTimeMillis());
 
@@ -1580,6 +1583,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 workflowId, projectId, workspaceId, ThreadLocalUtils.getWorkspaceId());
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的版本
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "version-create", false);
         List<ReleaseVersion> releaseVersionList = releaseVersionMapper.selectByAppId(workflowId);
 
         Set<String> existedVersionNameSet =
@@ -1700,6 +1706,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         if (workflowEntity == null) {
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的触发器
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "trigger-add", false);
         List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
         if (!CollectionUtils.isEmpty(triggerList) && triggerList.size() >= CommonConstant.MAX_TRIGGER_WORKFLOW_NUMS) {
             throw new AgentStudioException(StudioError.AGENT_TRIGGER_SIZE_LIMIT);
@@ -1810,6 +1819,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         if (workflowEntity == null) {
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的触发器
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "trigger-delete", false);
         List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
         int triggerIndex = -1;
         if (triggerList != null) {
@@ -1881,6 +1893,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         if (workflowEntity == null) {
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的触发器
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "trigger-edit", false);
         List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
         int triggerIndex = -1;
         if (triggerList != null) {
@@ -2003,6 +2018,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             log.error("Workflow does not exist.");
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能修改自己创建的工作流的调试状态
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "test-status", false);
 
         // 设置试运行成功状态:1,成功; 0,失败
         workflowEntity.setTestStatus(status ? 1 : 0);
@@ -2029,15 +2047,18 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     public CommonDeleteRsp deleteWorkflowVersion(String projectId, String workflowId, String versionId,
         String workspaceId) {
         // 获取工作流并校验权限
-        checkWorkflowExist(projectId, workspaceId, workflowId);
+        WorkflowEntity workflowEntity = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的版本
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "version-delete", false);
 
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(workflowId, versionId);
         if (releaseVersion == null) {
             log.error("workflow version is not found, workflowId = {}, versionId = {}", workflowId, versionId);
             throw new AgentStudioException(StudioError.WORKFLOW_VERSION_NOT_FOUND);
         }
-        WorkflowEntity workflowEntity = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
-        if (!Strings.CS.equals(RequestContextUtils.getRequestWorkspaceId(), workflowEntity.getWorkspaceId())) {
+        WorkflowEntity workflowEntity2 = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (!Strings.CS.equals(RequestContextUtils.getRequestWorkspaceId(), workflowEntity2.getWorkspaceId())) {
             log.error("No permission to delete workflow version.");
             throw new AgentStudioException(StudioError.NO_PERMISSION_DELETE_WORKFLOW_VERSION);
         }
@@ -2171,7 +2192,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     public BatchDeleteVersionsResponseBody batchDeleteWorkflowVersions(String projectId, String workflowId,
         String workspaceId, BatchDeleteVersionsRequestBody body) {
         // 资源归属校验，防止横向越权（与deleteWorkflowVersion对齐）
-        checkWorkflowExist(projectId, workspaceId, workflowId);
+        WorkflowEntity workflowEntity = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的版本
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "version-batch-delete", false);
 
         // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
         ShareResourceEntity shareResource = shareResourceManagerService.queryShareResourceEntityByResourceId(workflowId);
@@ -2535,6 +2559,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         CreateChannelReq body) {
         // 检查工作流是否存在
         WorkflowEntity workflow = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的渠道
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflow.getCreatorId(), "channel-create", false);
 
         ReleaseChannel releaseWorkflowChannel = new ReleaseChannel();
         releaseWorkflowChannel.setCreator(RequestContextUtils.getRequestUserName());
@@ -2689,6 +2715,13 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     )
     public CommonDeleteRsp deleteWorkflowChannel(String projectId, String workflowId, String channelId,
         String workspaceId) {
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的渠道
+        // 兜底孤儿数据:workflow 已删但渠道残留时，workflowMapper 返回 null，跳过创建人校验继续清理渠道
+        WorkflowEntity workflow = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflow != null) {
+            workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflow.getCreatorId(), "channel-delete", false);
+        }
+
         // 发布到agent-builder空间，agentId和channelId相同
         if (publishAgentBuilderEnable && workflowId.equals(channelId)) {
             agentSpaceService.unpublish(workspaceId, workflowId);
@@ -2748,7 +2781,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     public VersionChannelInfo modifyWorkflowChannel(String projectId, String workflowId, String channelId,
         String workspaceId, ModifyChannelReq body) {
         // 校验流是否存在
-        checkWorkflowExist(projectId, workspaceId, workflowId);
+        WorkflowEntity workflow = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的渠道
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflow.getCreatorId(), "channel-modify", false);
 
         ReleaseChannel oldChannel =
             releaseChannelMapper.selectByIdAppIdWorkspaceId(channelId, workflowId, projectId, workspaceId);
@@ -2894,7 +2929,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         }
 
         // 权限校验
-        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId);
+        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "PUT");
     /*    if (!Objects.equals(workflowEntity.getUpdatedAt(), body.getUpdateTime())) {
             log.error("workflow version does not match, latest = {}, now = {}", workflowEntity.getUpdatedAt(),
                 body.getUpdateTime());
