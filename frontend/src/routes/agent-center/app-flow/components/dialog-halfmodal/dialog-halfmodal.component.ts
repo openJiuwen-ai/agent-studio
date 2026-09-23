@@ -219,6 +219,18 @@ export class DialogHalfmodalComponent
     isRetrieve: true,
   };
 
+  /** Controller 系统参数弹窗可见性（activeWorkflows/workflowSequence，仅 multi 模式） */
+  public isSystemParamsModalVisible = false;
+
+  /** 弹窗编辑草稿：换行/逗号分隔的工作流 id 文本 */
+  public systemParamsDraft = { activeWorkflows: '', workflowSequence: '' };
+
+  /** 已生效的 Controller 系统参数（解析后的 id 数组；未配置的键不落，后端按"未传"处理） */
+  public controllerSystemParams: {
+    activeWorkflows?: string[];
+    workflowSequence?: string[];
+  } = {};
+
   // 自动追问接口是否失败。若失败，则隐藏【你可以继续提问】
   public isQuestionsFailed = false;
   public isQuestionsLoading = false;
@@ -233,6 +245,19 @@ export class DialogHalfmodalComponent
     return this.currWorkflow?.memory_config?.memory_repo_id ??
       this.currWorkflow?.workflow_details?.configs?.memory_config?.memory_repo_id ??
       this.currWorkflow?.workflow_details?.memory_config?.memory_repo_id ?? '';
+  }
+
+  /** 多智能体(Controller)模式：activeWorkflows/workflowSequence 系统参数仅此模式生效 */
+  public get isMultiAgentMode(): boolean {
+    return this.type === 'multi';
+  }
+
+  /** 弹窗里是否已配置任一系统参数（按钮高亮提示收窄参数生效中） */
+  public get hasControllerSystemParams(): boolean {
+    return Boolean(
+      this.controllerSystemParams.activeWorkflows?.length ||
+        this.controllerSystemParams.workflowSequence?.length,
+    );
   }
 
   constructor(
@@ -647,6 +672,39 @@ export class DialogHalfmodalComponent
     this.sendQuestion({ content });
   }
 
+  /** 打开 Controller 系统参数弹窗，以当前生效值回填草稿 */
+  public openSystemParamsModal(): void {
+    this.systemParamsDraft = {
+      activeWorkflows: (this.controllerSystemParams.activeWorkflows ?? []).join('\n'),
+      workflowSequence: (this.controllerSystemParams.workflowSequence ?? []).join('\n'),
+    };
+    this.isSystemParamsModalVisible = true;
+  }
+
+  public closeSystemParamsModal(): void {
+    this.isSystemParamsModalVisible = false;
+  }
+
+  /** 确认弹窗：解析草稿文本为 id 数组；未填的键不落（后端按"未传"=全部业务工作流处理） */
+  public confirmSystemParamsModal(): void {
+    const activeWorkflows = this.parseWorkflowIdList(this.systemParamsDraft.activeWorkflows);
+    const workflowSequence = this.parseWorkflowIdList(this.systemParamsDraft.workflowSequence);
+    this.controllerSystemParams = {
+      ...(activeWorkflows.length ? { activeWorkflows } : {}),
+      ...(workflowSequence.length ? { workflowSequence } : {}),
+    };
+    this.isSystemParamsModalVisible = false;
+    this.cdr.markForCheck();
+  }
+
+  /** 解析弹窗输入的工作流 id 列表：支持逗号/分号/换行分隔，忽略空白项 */
+  private parseWorkflowIdList(text: string): string[] {
+    return (text ?? '')
+      .split(/[,;\n]/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
   public sendQuestion(e: any): void {
     this.questionInputed = e.content;
     if (!this.canSend()) {
@@ -677,6 +735,16 @@ export class DialogHalfmodalComponent
       return acc;
     }, {});
     startInputs.query = this.questionInputed;
+    // Controller(multi)模式：注入弹窗配置的系统参数（不填=不传，保持后端全量/默认语义）
+    if (this.type === 'multi') {
+      const { activeWorkflows, workflowSequence } = this.controllerSystemParams;
+      if (activeWorkflows?.length) {
+        startInputs.activeWorkflows = [...activeWorkflows];
+      }
+      if (workflowSequence?.length) {
+        startInputs.workflowSequence = [...workflowSequence];
+      }
+    }
     const pluginConfs = this.buildPluginConfigs();
     this.debugWorkflow(startInputs, pluginConfs, this.chatLoop.length - 1, globalInputs);
     this.questionInputed = '';
