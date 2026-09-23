@@ -51,9 +51,18 @@ spring:
       queueCapacity: ${agent_settings_pools_asyncExecutor_queueCapacity:10}
       threadNamePrefix: asyncExecutor-
       keepAliveSeconds: ${agent_settings_pools_asyncExecutor_keepAliveSeconds:60}
+    pollingCheckExecutor:
+      corePoolSize: ${agent_settings_pools_pollingCheckExecutor_corePoolSize:32}
+      maxPoolSize: ${agent_settings_pools_pollingCheckExecutor_maxPoolSize:32}
+      queueCapacity: ${agent_settings_pools_pollingCheckExecutor_queueCapacity:64}
+      threadNamePrefix: polling-check-
+      keepAliveSeconds: ${agent_settings_pools_pollingCheckExecutor_keepAliveSeconds:60}
+      awaitTerminationSeconds: ${agent_settings_pools_pollingCheckExecutor_awaitTerminationSeconds:25}
   # quartz自动化配置
   quartz:
     job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
     properties:
       org:
         quartz:
@@ -107,6 +116,17 @@ spring:
             url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
             connectTimeout: ${feign.agentRuntime.connectTimeout:10000}
             readTimeout: ${feign.agentRuntime.readTimeout:120000}
+
+trigger:
+  polling:
+    default-interval-seconds: ${trigger_polling_default_interval_seconds:300}
+    min-interval-seconds: ${trigger_polling_min_interval_seconds:60}
+    max-interval-seconds: ${trigger_polling_max_interval_seconds:86400}
+    max-url-length: ${trigger_polling_max_url_length:2048}
+    max-response-bytes: ${trigger_polling_max_response_bytes:10485760}
+    max-redirects: ${trigger_polling_max_redirects:3}
+    check-timeout-seconds: ${trigger_polling_check_timeout_seconds:30}
+    read-timeout-seconds: ${trigger_polling_read_timeout_seconds:10}
 
 # 审计日志配置
 studio:
@@ -217,7 +237,9 @@ inner:
   agent-runtime:
     endpoint: ${agent_runtime_endpoint:}
     run-agent:
-      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations}
+      # 占位符数量必须为 3，与 AgentTriggerService.buildRequest 的 (projectId, resourceId, uuid) 参数强绑定。
+      # 若部署环境 ConfigMap 显式覆盖此值，必须保持 3 个 %s，否则 Agent 类触发器会因 path 少一段而 404 静默失败。
+      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations/%s}
     run-workflow:
       uri: ${agent_runtime_run-workflow:/v1/%s/workflows/%s/conversations/%s}
   exclude-tools: ${inner_exclude_tools:OCR,Read_Document}

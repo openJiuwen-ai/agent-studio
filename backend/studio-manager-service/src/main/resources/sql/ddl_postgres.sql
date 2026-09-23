@@ -2118,3 +2118,13 @@ CREATE INDEX IF NOT EXISTS idx_t_mapping_tool_function_updated_on ON t_mapping_t
 CREATE INDEX IF NOT EXISTS idx_create_time ON t_task (create_time);
 CREATE INDEX IF NOT EXISTS idx_status_time ON t_task (status, create_time);
 CREATE INDEX IF NOT EXISTS idx_finish_time ON t_task (finish_time);
+
+CREATE TABLE IF NOT EXISTS t_polling_trigger_state (
+    trigger_id          VARCHAR(64)   NOT NULL,
+    last_seen_hash      CHAR(64)      NULL,
+    last_checked_at     TIMESTAMP     NULL,
+    created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (trigger_id)
+);
+COMMENT ON TABLE t_polling_trigger_state IS 'Polling触发器运行状态表';

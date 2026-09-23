@@ -857,6 +857,25 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             {name, type, trigger_id, prompt, hook_url},
           ];
         }
+        if (type === 'POLLING') {
+          const is_has = this.triggerAdded.list.some(
+            (item) => item.trigger_id === trigger_id,
+          );
+          if (is_has) {
+            for (let i = 0; i < this.triggerAdded.list.length; i++) {
+              const cur = this.triggerAdded.list[i];
+              if (cur?.trigger_id === trigger_id) {
+                this.triggerAdded.list[i] = triggerAdded;
+                break;
+              }
+            }
+          } else {
+            this.triggerAdded.list = [
+              ...this.triggerAdded.list,
+              {name, type, trigger_id, poll_url: triggerAdded.poll_url, poll_interval_seconds: triggerAdded.poll_interval_seconds, prompt, invocation},
+            ];
+          }
+        }
       });
 
     this.appFlowServ

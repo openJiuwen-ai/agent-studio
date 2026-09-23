@@ -433,6 +433,16 @@
         ORDER BY updated_at desc
     </select>
 
+    <update id="updateTriggerList">
+        UPDATE t_agent
+        SET trigger_list = #{triggerList,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.TriggerConfigArrayHandler},
+            updated_on = #{updatedOn,jdbcType=TIMESTAMP}
+        WHERE agent_id = #{agentId,jdbcType=VARCHAR}
+          AND project_id = #{projectId,jdbcType=VARCHAR}
+          AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+          AND deleted = false
+    </update>
+
     <update id="updateByPrimaryKeySelective"
         parameterType="com.openjiuwen.studio.agent.manager.entity.Agent">
         update t_agent
