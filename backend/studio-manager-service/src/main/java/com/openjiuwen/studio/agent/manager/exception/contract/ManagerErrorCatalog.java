@@ -19,7 +19,7 @@ public class ManagerErrorCatalog {
      * 从 StudioError 枚举构建 ErrorDefinition。
      */
     public ErrorDefinition resolve(StudioError error) {
-        String fullCode = "openjiuwen." + error.getModule().getSubCode() + error.getCode();
+        String fullCode = error.getFullCode();
         return new ErrorDefinition(fullCode, error.getHttpStatus().value(), fullCode);
     }
 

@@ -6,7 +6,6 @@ package com.openjiuwen.studio.agent.manager.exception.downstream;
 
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -52,7 +51,7 @@ public class DownstreamClientTemplateErrorHandler extends DefaultResponseErrorHa
         byte[] boundedBody = null;
         try (InputStream body = response.getBody()) {
             if (body != null) {
-                boundedBody = readBounded(body);
+                boundedBody = DownstreamErrorParser.readBounded(body);
             }
         } catch (IOException e) {
             boundedBody = null;  // IO 异常 → 无可信原码（安全降级）
@@ -69,24 +68,5 @@ public class DownstreamClientTemplateErrorHandler extends DefaultResponseErrorHa
         DownstreamFailure failure = parser.parseHttp(service, Transport.CLIENT_TEMPLATE,
             status, contentType, boundedBody, null);
         throw new DownstreamFailureException(failure);
-    }
-
-    /** 受限读取：最多 {@link DownstreamErrorParser#MAX_BODY_BYTES}+1 字节（超限由 parser 安全降级）。 */
-    private static byte[] readBounded(InputStream is) throws IOException {
-        int limit = DownstreamErrorParser.MAX_BODY_BYTES + 1;
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = is.read(buf)) != -1) {
-            int remaining = limit - baos.size();
-            if (remaining <= 0) {
-                break;
-            }
-            baos.write(buf, 0, Math.min(n, remaining));
-            if (baos.size() >= limit) {
-                break;
-            }
-        }
-        return baos.toByteArray();
     }
 }

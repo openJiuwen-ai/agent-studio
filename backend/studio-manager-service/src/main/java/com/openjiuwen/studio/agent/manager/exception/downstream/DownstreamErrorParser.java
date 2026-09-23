@@ -10,6 +10,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -168,5 +171,27 @@ public final class DownstreamErrorParser {
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(bytes))
             .toString();
+    }
+
+    /**
+     * 受限读取 InputStream：最多 {@value #MAX_BODY_BYTES}+1 字节（多读 1 字节用于检测超限，
+     * 由 parser 安全降级）。IO 异常向上抛由调用方决定降级策略。
+     */
+    static byte[] readBounded(InputStream is) throws IOException {
+        int limit = MAX_BODY_BYTES + 1;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = is.read(buf)) != -1) {
+            int remaining = limit - baos.size();
+            if (remaining <= 0) {
+                break;
+            }
+            baos.write(buf, 0, Math.min(n, remaining));
+            if (baos.size() >= limit) {
+                break;
+            }
+        }
+        return baos.toByteArray();
     }
 }

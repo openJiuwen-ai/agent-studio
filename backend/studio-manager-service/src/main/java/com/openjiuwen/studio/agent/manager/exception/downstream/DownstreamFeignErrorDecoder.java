@@ -9,7 +9,6 @@ import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import feign.Response;
 import feign.codec.ErrorDecoder;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -66,27 +65,10 @@ public final class DownstreamFeignErrorDecoder implements ErrorDecoder {
      * （多读 1 字节用于检测超限，由 parser 安全降级）。读取/IO 异常 → 返回 null。
      */
     private static byte[] readBounded(Response response) {
-        int limit = DownstreamErrorParser.MAX_BODY_BYTES + 1;
         try (InputStream is = response.body().asInputStream()) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) != -1) {
-                int remaining = limit - baos.size();
-                if (remaining <= 0) {
-                    break;
-                }
-                int toWrite = Math.min(n, remaining);
-                baos.write(buf, 0, toWrite);
-                if (baos.size() >= limit) {
-                    break;
-                }
-            }
-            return baos.toByteArray();
-        } catch (IOException e) {
-            // IO 异常 → 无可信原码（parser 的 null body 路径）
-            return null;
-        } catch (RuntimeException e) {
+            return DownstreamErrorParser.readBounded(is);
+        } catch (IOException | RuntimeException e) {
+            // 读取/IO 异常 → 无可信原码（parser 的 null body 路径）
             return null;
         }
     }

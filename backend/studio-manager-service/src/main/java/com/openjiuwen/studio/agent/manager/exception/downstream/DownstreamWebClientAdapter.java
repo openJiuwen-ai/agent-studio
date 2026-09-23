@@ -52,6 +52,9 @@ public final class DownstreamWebClientAdapter {
      */
     public static Function<ClientResponse, Mono<? extends Throwable>> onStatusHandler(
             DownstreamService service, DownstreamErrorParser parser) {
+        // 注意：bodyToMono(byte[].class) 先全量缓冲进内存（受 WebClient maxInMemorySize 默认 256KB 约束）；
+        // 超 256KB 抛 DataBufferLimitException 未分类，绕过 propagateOrTransportFailure 安全降级。
+        // 待 part2b WebClient 配置显式设 maxInMemorySize 或改 DataBufferUtils 受限读取。
         return response -> response.bodyToMono(byte[].class)
             .defaultIfEmpty(new byte[0])
             .map(body -> {
