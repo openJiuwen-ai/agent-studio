@@ -317,7 +317,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                         "conversationId" in body_json:
                     body_value = body_json["conversationId"]
                     if not isinstance(body_value, str) or body_value != path_cid:
-                        return _conflict_response(request_id, request.headers.get("x-language", "zh-cn") if request else "zh-cn")
+                        lang = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+                        return _conflict_response(request_id, lang)
                 conversation_id = path_cid
             elif source == SOURCE_BODY:
                 if body_json is not None:

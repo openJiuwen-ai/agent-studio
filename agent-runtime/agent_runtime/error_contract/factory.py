@@ -43,9 +43,9 @@ def normalize_locale(language: Optional[str]) -> str:
     return "zh_cn"
 
 
-def _build(defn, request_id: str, safe_details=None, cause=None,
+def _build(defn, request_id: str, safe_details=None, cause=None,  # pylint: disable=huawei-too-many-arguments
            downstream_service=None, downstream_error_code=None,
-           http_status=None) -> ErrorDescriptor:  # pylint: disable=huawei-too-many-arguments - ErrorDescriptor 构造参数，具名封装过度
+           http_status=None) -> ErrorDescriptor:
     return ErrorDescriptor(
         error_code=defn.error_code,
         http_status=http_status or defn.http_status,
