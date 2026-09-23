@@ -182,6 +182,11 @@ async def ir_execute(req: ExecutionRequest, request: Request):
     # 全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header——
     # 以中间件捕获的服务器 headers（platform + customer）整体覆盖 req.headers，body 携带的 headers 不参与合并
     request_ctx = _request_ctx.get()
+    # COM-03 §3.3/§4: entry 点读取 request_id + locale，供异常路径（async_ir_load/首帧前失败）使用
+    _entry_rid = request_ctx.request_id or None
+    _entry_lang = (
+        request_ctx.headers.get("x-language", "zh-cn") if request_ctx.headers else "zh-cn"
+    )
     req.headers = _build_runtime_execution_headers(
         platform_headers=request_ctx.platform_headers,
         customer_headers=request_ctx.customer_headers,
