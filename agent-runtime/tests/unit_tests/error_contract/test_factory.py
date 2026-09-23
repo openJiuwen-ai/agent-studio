@@ -294,9 +294,11 @@ def test_from_plugin_exception_wrapped_105015_maps_to_12100006():
 
 
 def test_from_plugin_exception_wrapped_non_105015_keeps_internal():
-    """反证：ExecutionError(cause=105001) → from_internal(12100004)，
+    """反证：ExecutionError(cause=105001) → from_internal(12100004)。
+
     非 105015 业务码不被误映射（分支级 yield 行为由 workflow_runner
-    guard 测试另行锁定）。"""
+    guard 测试另行锁定）。
+    """
     wrapped = _openjiuwen_exec_error(cause=_JiuWenExc(105001))
     assert factory.from_plugin_exception(wrapped, _rid()).error_code == \
         "openjiuwen.12100004"

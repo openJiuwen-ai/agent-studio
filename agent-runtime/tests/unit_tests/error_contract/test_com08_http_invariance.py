@@ -342,8 +342,10 @@ def test_generic_handler_wrapped_105015_maps_to_12100006():
 
 
 def test_generic_handler_non_105015_keeps_internal():
-    """反证：generic handler 对普通未处理异常 → 仍 from_internal(12100004,500)——
-    from_plugin_exception 改造不影响非 105015 兜底行为。"""
+    """反证：generic handler 对普通未处理异常 → 仍 from_internal(12100004,500)。
+
+    from_plugin_exception 改造不影响非 105015 兜底行为。
+    """
     r = _with_policy(True, lambda: _call_handler(Exception, RuntimeError(f"x {_SENTINEL}")))
     body = _resp_body(r)
     assert r.status_code == 500
