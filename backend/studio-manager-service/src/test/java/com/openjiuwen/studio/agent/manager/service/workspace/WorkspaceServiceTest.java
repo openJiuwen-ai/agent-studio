@@ -141,8 +141,9 @@ class WorkspaceServiceTest {
             req.setId("ws-1");
             req.setName("New Name");
 
-            assertThrows(AgentStudioException.class, () ->
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
                 workspaceService.updateWorkspace("p1", req));
+            assertEquals(StudioError.WORKSPACE_NOT_EXISTED, ex.getErrorCode());
         }
     }
 

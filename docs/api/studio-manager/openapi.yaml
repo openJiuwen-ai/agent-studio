@@ -1519,11 +1519,17 @@ paths:
         example: 示例字符串
       responses:
         "200":
-          description: OK
+          description: 获取团队空间列表响应体。
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetWorkspaceListRsp"
+        "400":
+          description: 请求参数错误。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
     put:
       tags:
       - workspace-api-controller
@@ -1545,11 +1551,23 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 是否更新成功。
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceInfo"
+        "400":
+          description: 请求参数错误。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
     post:
       tags:
       - workspace-api-controller
@@ -1571,11 +1589,17 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 是否创建成功。
           content:
             application/json:
               schema:
                 type: string
+        "400":
+          description: 请求参数错误。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
     delete:
       tags:
       - workspace-api-controller
@@ -1597,11 +1621,17 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 删除成功。
           content:
             application/json:
               schema:
                 type: string
+        "400":
+          description: 请求参数错误。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v1/{project_id}/agent-manager/workspace/member/ownership:
     put:
       tags:
@@ -7534,11 +7564,17 @@ paths:
           default: user
       responses:
         "200":
-          description: OK
+          description: 获取团队空间列表响应体。
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetWorkspaceListRsp"
+        "400":
+          description: 请求参数错误。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v1/{project_id}/agent-manager/workflows:
     get:
       tags:
@@ -16628,11 +16664,17 @@ paths:
           type: string
       responses:
         "200":
-          description: OK
+          description: 获取团队空间详情。
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceInfo"
+        "400":
+          description: 请求参数错误。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v1/{project_id}/agent-manager/workspace/users:
     get:
       tags:
@@ -20398,18 +20440,6 @@ paths:
             application/json:
               schema:
                 type: string
-  /authui/logout:
-    get:
-      tags:
-      - auth-controller
-      operationId: loginOut
-      responses:
-        "200":
-          description: OK
-          content:
-            application/text:
-              schema:
-                type: string
   /auth/token:
     get:
       tags:
@@ -22325,6 +22355,15 @@ components:
           description: 回调URL
           example: http://example.com/hook
           maxLength: 500
+        poll_url:
+          type: string
+          description: Polling检查地址
+          example: https://example.com/feed.rss
+        poll_interval_seconds:
+          type: integer
+          format: int32
+          description: Polling检查间隔，单位为秒
+          example: 300
         created_on:
           type: string
           format: date-time

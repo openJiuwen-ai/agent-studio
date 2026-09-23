@@ -191,7 +191,7 @@ public class KnowledgeBaseFaqFileServiceImpl implements IKnowledgeFaqFileManagem
         String fileStr = redisClient.get(Constants.KNOWLEDGE_FILE_CACHE_PREFIX + fileAccessKey);
         if (StringUtils.isBlank(fileStr)) {
             log.error("file is not exist in current knowledgeBase {} or is expired.", knowledgeBaseId);
-            throw new AgentBaseException(ErrorCode.FILE_NOT_EXIST_OR_EXPIRED);
+            throw new AgentBaseException(ErrorCode.RESOURCE_NOT_EXIST);
         }
         String[] fileDetail = fileStr.split(",");
         String realKnowledgeBaseId = fileDetail[0];

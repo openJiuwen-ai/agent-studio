@@ -190,7 +190,7 @@ public class WorkspaceService implements IWorkspaceService {
 
         if (existedWorkspaceEntity == null) {
             log.error("the workspace of id {} in projectId {} is not exist", updateWorkspaceReq.getId(), projectId);
-            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+            throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED);
         }
 
         WorkspaceMemberInfo workspaceMemberInfo = workspaceMemberService.queryWorkspaceMemberDetail(projectId,

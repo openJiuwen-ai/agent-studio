@@ -149,7 +149,7 @@ public class KnowledgeBaseConnectionValidateService {
             projectId);
         if (entity == null) {
             log.error("You have no permission to operate knowledge base connection{}", knowledgeBaseConnectionId);
-            throw new AgentBaseException(ErrorCode.NO_PERMISSION);
+            throw new AgentBaseException(ErrorCode.RESOURCE_NOT_EXIST);
         }
         return entity;
     }

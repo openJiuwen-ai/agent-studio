@@ -15,11 +15,12 @@ import com.openjiuwen.studio.agent.manager.dto.WorkspaceInfo;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
-import io.swagger.annotations.ApiResponse;
-import io.swagger.annotations.ApiResponses;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
@@ -40,8 +41,10 @@ import org.springframework.web.bind.annotation.RequestParam;
     @ApiOperation(value = "", nickname = "createWorkspace", notes = "创建团队空间。", response = String.class,
         tags = {"Workspace"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "是否创建成功。", response = String.class),
-        @ApiResponse(code = 400, message = "请求参数错误。", response = ErrorRsp.class)
+        @ApiResponse(responseCode = "200", description = "是否创建成功。",
+            content = @Content(schema = @Schema(implementation = String.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace", produces = {"application/json"},
         consumes = {"application/json"}, method = RequestMethod.POST)
@@ -53,8 +56,10 @@ import org.springframework.web.bind.annotation.RequestParam;
     @ApiOperation(value = "", nickname = "deleteWorkspace", notes = "删除团队空间。", response = String.class,
         tags = {"Workspace"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "删除成功。", response = String.class),
-        @ApiResponse(code = 400, message = "请求参数错误。", response = ErrorRsp.class)
+        @ApiResponse(responseCode = "200", description = "删除成功。",
+            content = @Content(schema = @Schema(implementation = String.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace", produces = {"application/json"},
         consumes = {"application/json"}, method = RequestMethod.DELETE)
@@ -67,8 +72,10 @@ import org.springframework.web.bind.annotation.RequestParam;
         notes = "用户空间初始化，如果用户没有个人空间，给用户创建个人空间，初始化后返回用户所在的空间列表。",
         response = GetWorkspaceListRsp.class, tags = {"Workspace"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "获取团队空间列表响应体。", response = GetWorkspaceListRsp.class),
-        @ApiResponse(code = 400, message = "请求参数错误。", response = ErrorRsp.class)
+        @ApiResponse(responseCode = "200", description = "获取团队空间列表响应体。",
+            content = @Content(schema = @Schema(implementation = GetWorkspaceListRsp.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace/init", produces = {"application/json"},
         method = RequestMethod.POST)
@@ -83,8 +90,10 @@ import org.springframework.web.bind.annotation.RequestParam;
     @ApiOperation(value = "", nickname = "queryWorkspace", notes = "查询团队空间列表。",
         response = GetWorkspaceListRsp.class, tags = {"Workspace"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "获取团队空间列表响应体。", response = GetWorkspaceListRsp.class),
-        @ApiResponse(code = 400, message = "请求参数错误。", response = ErrorRsp.class)
+        @ApiResponse(responseCode = "200", description = "获取团队空间列表响应体。",
+            content = @Content(schema = @Schema(implementation = GetWorkspaceListRsp.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace", produces = {"application/json"},
         method = RequestMethod.GET)
@@ -97,8 +106,10 @@ import org.springframework.web.bind.annotation.RequestParam;
     @ApiOperation(value = "", nickname = "queryWorkspaceById", notes = "查询指定ID的空间信息。",
         response = WorkspaceInfo.class, tags = {"Workspace"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "获取团队空间详情。", response = WorkspaceInfo.class),
-        @ApiResponse(code = 400, message = "请求参数错误。", response = ErrorRsp.class)
+        @ApiResponse(responseCode = "200", description = "获取团队空间详情。",
+            content = @Content(schema = @Schema(implementation = WorkspaceInfo.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace/{workspace_id}", produces = {"application/json"},
         method = RequestMethod.GET)
@@ -111,8 +122,12 @@ import org.springframework.web.bind.annotation.RequestParam;
     @ApiOperation(value = "", nickname = "updateWorkspace", notes = "修改工作空间。", response = WorkspaceInfo.class,
         tags = {"Workspace"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "是否更新成功。", response = WorkspaceInfo.class),
-        @ApiResponse(code = 400, message = "请求参数错误。", response = ErrorRsp.class)
+        @ApiResponse(responseCode = "200", description = "是否更新成功。",
+            content = @Content(schema = @Schema(implementation = WorkspaceInfo.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class))),
+        @ApiResponse(responseCode = "404", description = "Not Found 找不到资源",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace", produces = {"application/json"},
         consumes = {"application/json"}, method = RequestMethod.PUT)
