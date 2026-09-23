@@ -676,7 +676,12 @@ public enum StudioError {
     /**
      * 请求方法不支持（如对仅支持GET的接口使用POST调用）
      */
-    METHOD_NOT_SUPPORTED(METHOD_NOT_ALLOWED, COMMON, "1129"),
+    METHOD_NOT_SUPPORTED(org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED, COMMON, "1129"),
+
+    /**
+     * 下游服务依赖调用失败（COM-03 框架 502）
+     */
+    DOWNSTREAM_DEPENDENCY_FAILED(BAD_GATEWAY, COMMON, "1131"),
 
 
     /**
