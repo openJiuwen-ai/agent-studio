@@ -89,6 +89,12 @@ function readRuntimeOrigins(): string[] {
  *    被攻击者用于注入 iframe（登录 CSRF）。**存在用户可控页面的平台
  *    必须使用路径前缀条目**；前缀建议以 / 结尾（'/embed' 会同时匹配
  *    '/embedded' 等兄弟路径）。
+ *    **重要限制**：浏览器默认 Referrer-Policy（strict-origin-when-cross-origin）
+ *    下，跨源 iframe 的 document.referrer 只保留父页面 origin（pathname 被
+ *    归一为 /），路径前缀条目将永远匹配不到。使用路径前缀条目的平台必须
+ *    同时在 iframe 上设置 referrerpolicy="no-referrer-when-downgrade"（同
+ *    协议下传完整 URL）或 "unsafe-url"，否则前缀防御在跨源场景失效、
+ *    仅等效于纯 origin 条目。
  * **唯一放行依据，无任何隐式信任**——同源/同主机/子域/跨域一律须显式配置。
  *
  * 配置入口（二选一）：
@@ -267,7 +273,26 @@ function isTrustedReferrer(referrer: string): boolean {
   } catch (e) {
     return false;
   }
-  return TRUSTED_PARENT_ORIGINS.some((entry) => matchesTrustedEntry(refUrl, entry));
+  const matched = TRUSTED_PARENT_ORIGINS.some((entry) =>
+    matchesTrustedEntry(refUrl, entry)
+  );
+  if (!matched && refUrl.pathname === '/') {
+    // 诊断信号：referrer 被 Referrer-Policy 归一为 origin（pathname='/'）时
+    // 路径前缀条目必然失配——提示部署方设置 iframe referrerpolicy（见
+    // TRUSTED_PARENT_ORIGINS 注释的重要限制）
+    const hasPrefixEntry = TRUSTED_PARENT_ORIGINS.some((entry) => {
+      const schemeEnd = entry.indexOf('://');
+      return schemeEnd >= 0 && entry.indexOf('/', schemeEnd + 3) >= 0;
+    });
+    if (hasPrefixEntry) {
+      console.warn(
+        '[SSO] referrer is origin-only (Referrer-Policy stripped the path); ' +
+          'path-prefix whitelist entries cannot match. Set referrerpolicy on the iframe ' +
+          '(no-referrer-when-downgrade / unsafe-url) or use plain origin entries'
+      );
+    }
+  }
+  return matched;
 }
 
 /**
