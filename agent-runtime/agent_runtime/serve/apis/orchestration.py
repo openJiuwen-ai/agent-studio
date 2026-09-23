@@ -154,7 +154,7 @@ async def health():
     summary="IR 执行（流式/非流式）",
     responses={
         400: {
-            "description": "请求体校验失败返回 error_code=02001003 四字段错误体",
+            "description": "请求体校验失败返回 openjiuwen.12100001 五字段 canonical 错误体",
         }
     },
 )

@@ -23,6 +23,18 @@ def _make_app(request_id="req-real-ir-001", lang="zh-cn"):
         finally:
             _request_ctx.reset(token)
 
+    # 注册与生产 server.py 一致的 COM-03 RequestValidationError handler（避免 FastAPI 默认 422）
+    from fastapi import Request
+    from fastapi.exceptions import RequestValidationError
+    from agent_runtime.error_contract import factory as error_factory
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_handler(request: Request, exc: RequestValidationError):
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_validation(
+            exc, getattr(request.state, "request_id", None) if request else None)
+        return error_factory.build_json_response(descriptor, language)
+
     app.include_router(execution_app)
     return app
 
