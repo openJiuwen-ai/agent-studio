@@ -167,8 +167,8 @@ async def ir_execute(req: ExecutionRequest, request: Request):
         "IR Execute Request - URL: %s %s", request.method, request.url
     )
     workflow_logger.debug(
-        "IR Execute Request - Headers: %s",
-        json.dumps(dict(request.headers), ensure_ascii=False),
+        "IR Execute Request - Header keys: %s",
+        list(request.headers.keys()),
     )
     workflow_logger.debug(
         "IR Execute Request - Query Params: %s",
@@ -213,10 +213,9 @@ async def ir_execute(req: ExecutionRequest, request: Request):
         ir_json = await async_ir_load(ir_path)
     except Exception as e:
         workflow_logger.error(f"Failed to load IR from {ir_path}: {e}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={"error": "ir_load_failed", "details": str(e)},
-        )
+        from agent_runtime.error_contract import factory as _ef
+        return _ef.build_json_response(
+            _ef.from_internal(e, _entry_rid), _entry_lang)
 
     mode = (ir_json.get("configs") or {}).get("mode", "workflow")
 
@@ -250,15 +249,33 @@ async def ir_execute(req: ExecutionRequest, request: Request):
                 "compare, conv=%s",
                 req.conversation_id,
             )
-        return StreamingResponse(
-            content=stream_response(
-                req, execution_id, runner, moderation_engine,
-                entry=StreamEntryContext(
-                    entry_id=entry_id,
-                    project_id=getattr(request.state, "project_id", ""),
-                    entry_type=getattr(request.state, "entry_type", ""),
-                ),
+        # COM-03 §3: 首帧预取——在 HTTP commit 前确认 runner 能产出首事件。
+        # 预取失败→HTTP error;成功→组合首事件+剩余流交 StreamingResponse。
+        from agent_runtime.error_contract import factory as error_factory
+
+        gen = stream_response(
+            req, execution_id, runner, moderation_engine,
+            entry=StreamEntryContext(
+                entry_id=entry_id,
+                project_id=getattr(request.state, "project_id", ""),
+                entry_type=getattr(request.state, "entry_type", ""),
             ),
+        )
+        try:
+            _first_event = await anext(gen)
+        except StopAsyncIteration:
+            # 生成器未产出任何事件——空成功流
+            return StreamingResponse(content=iter([]), media_type="text/event-stream")
+        except Exception as e:
+            # COM-03 §3: 首帧前失败 → 标准 HTTP error（HTTP 尚未 commit）
+            # P5-R3 Phase 3 决策 A: from_plugin_exception(105015→12100006, 其余→12100004)
+            workflow_logger.error(
+                f"Pre-fetch first event failed: {type(e).__name__}: {e}", exc_info=True)
+            descriptor = error_factory.from_plugin_exception(e, _entry_rid)
+            return error_factory.build_json_response(descriptor, _entry_lang)
+
+        return StreamingResponse(
+            content=_prefetched_stream(_first_event, gen),
             media_type="text/event-stream",
         )
     else:
@@ -317,6 +334,22 @@ def _fallback_terminal_done(execution_id: str) -> str:
     return f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
 
+async def _prefetched_stream(_first, _gen):
+    """COM-03 §3: 预取包装生成器——先输出已预取首事件,再透传剩余。
+
+    finally 中安全关闭原生成器,防止客户端取消/发送失败时泄漏。
+    """
+    try:
+        yield _first
+        async for chunk in _gen:
+            yield chunk
+    finally:
+        try:
+            await _gen.aclose()
+        except Exception:
+            pass  # already closed or cleanup error — safe to ignore
+
+
 @dataclass
 class StreamEntryContext:
     """执行入口上下文（ir_execute 从 request.state 注入，注册归属数据源）。
@@ -363,6 +396,19 @@ async def stream_response(
     registry = get_execution_registry()
     entry_task = asyncio.current_task()
     entry = entry or StreamEntryContext()
+    # COM-03 §6.2: 流中异常 → SSE error 帧（经统一 builder + guard 唯一终态控制）
+    from agent_runtime.error_contract.factory import build_sse_error_event
+    from agent_runtime.error_contract.stream_state import SseTerminalGuard
+    _sse_guard = SseTerminalGuard()
+    _sse_guard.begin_streaming()
+    _stream_started = False
+    try:
+        _ctx = _request_ctx.get()
+    except LookupError:
+        _ctx = None
+    # COM-03 §3.2: request_id 从 COM-05 已校验的请求上下文读取,不用 execution_id 兜底
+    _request_id = (_ctx.request_id if _ctx else "") or "unknown"
+    _locale = (_ctx.headers.get("x-language", "zh-cn") if _ctx and _ctx.headers else "zh-cn")
     try:
         # 新执行开始：先清旧挂起归属快照（必须在 register 重写之前——否则清掉的是
         # 本次刚写的；旧快照残留会使会话结束后的 cancel 按过期归属误置位）
@@ -374,10 +420,6 @@ async def stream_response(
                 req.conversation_id,
                 clear_susp_err,
             )
-        try:
-            _ctx = _request_ctx.get()
-        except LookupError:
-            _ctx = None
         # 注册 project 优先取执行端点注入的路径 project_id（ir_execute 从
         # request.state 传入，与 cancel 的路径校验同口径）；无注入时回退 token 解析值
         register_project_id = entry.project_id or (
@@ -408,6 +450,8 @@ async def stream_response(
                     pending_done = chunk
                 continue
             # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
+            # COM-03 §3.3: _stream_started 只在对外 yield 前置 True（pending done 不算对外开始）
+            _stream_started = True
             yield _serialize_stream_chunk(chunk)
 
         # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
@@ -415,6 +459,20 @@ async def stream_response(
             yield _serialize_stream_chunk(pending_done)
         else:
             yield _fallback_terminal_done(execution_id)
+    except Exception as e:
+        # COM-03 §3.2: 流中异常 → SSE error 帧（guard 原子抢占终态,只有赢家产出）
+        if _stream_started:
+            # 首帧后失败——只记一次完整栈,发 SSE error
+            workflow_logger.error(
+                f"Stream failure: {type(e).__name__}: {e}", exc_info=True)
+            error_event = build_sse_error_event(
+                _request_id, e, _locale, _sse_guard)
+            if error_event:
+                yield error_event
+            return  # error 是唯一终态——不再 yield done
+        else:
+            # 首帧前失败——不记日志,由 endpoint 首帧预取的 except 统一记录 + HTTP error
+            raise
     finally:
         await registry.unregister(req.conversation_id, task=entry_task)
 

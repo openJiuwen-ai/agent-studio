@@ -17,23 +17,21 @@ from typing import Any, List, Optional
 from urllib.parse import urlencode
 
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
-from jiuwen.common.log.base import get_x_request_id, get_x_execution_id
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
-from jiuwen.orchestration.flow.constant import X_EXECUTION_ID, X_REQUEST_ID
-from agent_runtime.context.request_context import inject_traceparent
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.models.api_utils import ApiUtils
 from jiuwen.plugin.models.request_params import RequestParamsCreator, RequestParams
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from openjiuwen.core.common.logging import workflow_logger, logger
+from openjiuwen.core.common.logging import logger
 from openjiuwen.core.foundation.tool.mcp.base import (
     McpServerConfig,
     NO_TIMEOUT,
     McpToolCard,
 )
 from openjiuwen.core.foundation.tool.mcp.client.mcp_client import McpClient
+from agent_runtime.context.request_context import strip_correlation_headers
 
 mcp_time_out_seconds = float(os.getenv("MCP_TIME_OUT_SECONDS", 120))
 
@@ -131,11 +129,6 @@ class StreamableHttpClientNew(McpClient):
         )
         request_params = request_params_creator.create(inputs, **kwargs)
 
-        request_params.headers[X_REQUEST_ID] = get_x_request_id()
-        request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
-        inject_traceparent(request_params.headers)
-        workflow_logger.debug(f"MCP HTTP request headers: {request_params.headers}")
-
         self._replace_mcp_headers_extra(request_params, **kwargs)
 
         self._execute_auth_hook(request_params, kwargs.get("name"))
@@ -143,6 +136,10 @@ class StreamableHttpClientNew(McpClient):
         #  同构：MCP 出站剥 auth_keys 的 cust- 前缀 + captured 覆盖（auth_hook 后、出站前）
         from jiuwen.extension.wrapper.customer_header_inject import inject_customer_headers_to_mcp
         inject_customer_headers_to_mcp(request_params)
+
+        # D-02/B07（SYNC-01 P3.4）：最终第三方发送边界——全部钩子后剥离平台保留
+        # 关联 Header（含预置/钩子重引入的伪造值，大小写不敏感）；鉴权/客户 Header 保留。
+        strip_correlation_headers(request_params.headers)
 
         return request_params
 

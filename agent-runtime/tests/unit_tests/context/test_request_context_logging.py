@@ -40,6 +40,7 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
             captured["trace_id"] = record.trace_id
             captured["execution_id"] = record.execution_id
             captured["request_id"] = record.request_id
+            captured["conversation_id"] = record.conversation_id
             captured["ir_load_cache"] = _request_ctx.get().ir_load_cache
             return Response("ok")
 
@@ -60,11 +61,15 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
         await middleware.dispatch(request, call_next)
 
-        self.assertEqual(
-            captured["trace_id"], "122212412c92-6543-4c40-ac19-2f678995e7e9"
-        )
+        # DEF-03：trace_id 只来自合法 TraceID，缺失时回退 request_id；
+        # 不得用 conversation_id 派生/覆盖 trace_id。conversation_id 独立字段，
+        # /v1/orchestration/ir/execute 是 BODY 来源路由 → 从请求体取值。
+        self.assertEqual(captured["trace_id"], "00957491")
         self.assertEqual(captured["execution_id"], "exec-1")
         self.assertEqual(captured["request_id"], "00957491")
+        self.assertEqual(
+            captured["conversation_id"], "122212412c92-6543-4c40-ac19-2f678995e7e9"
+        )
         self.assertEqual(captured["ir_load_cache"], {})
 
     async def test_jiuwen_context_receives_request_id_and_execution_id(self):

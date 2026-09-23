@@ -54,6 +54,7 @@ from agent_runtime.common import settings
 from agent_runtime.common.checkpointer_config import build_redis_checkpointer_config
 from agent_runtime.common.exception.errors import AgentBuilderError
 from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
+from agent_runtime.error_contract import factory as error_factory
 from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
 from agent_runtime.common.logging_context import COMMON_LOG_FORMAT
 from common_utils.redis_manager import RedisClientManager
@@ -335,66 +336,61 @@ def instance_app(config: dict | None = None):
     for i in apps_map:
         _app.include_router(i)
 
-    @_app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        """HTTPException 统一为四字段 ErrorRsp，避免落入 FastAPI 默认 {"detail": ...} 形态."""
-        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        status_code_map = {404: "02001004", 405: "02001005"}
-        code_key = status_code_map.get(exc.status_code, "02001003" if exc.status_code < 500 else "02001002")
-        response = build_error_response(
-            exc.status_code, code_key, language=language, reason=str(exc.detail)
-        )
-        # 透传 HTTPException 携带的协议头（如 405 的 Allow），与 FastAPI 默认 handler 行为一致
-        if exc.headers:
-            response.headers.update(exc.headers)
-        return response
-
     @_app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
-        """请求参数校验失败时返回统一格式的错误响应，而非FastAPI默认的detail格式."""
-        errors = exc.errors()
+        """COM-03 §7.2 第 1 点：框架校验 → descriptor → HTTP builder。
+
+        SYNC-01 P5-R3 落地（2026-09-21）：从 sync_01 ErrorContextBuilder(02001003)
+        升级为 error_factory.from_validation（openjiuwen.12100001 canonical8 五字段）。
+        """
         detail_parts = []
-        for err in errors:
+        for err in exc.errors():
             loc = ".".join(str(part) for part in err.get("loc", []))
             msg = err.get("msg", "")
             detail_parts.append(f"{loc}: {msg}" if loc else msg)
-        detail_str = "; ".join(detail_parts)
-        logger.warning(f"Request validation error: {detail_str}")
+        logger.warning(f"Request validation error: {'; '.join(detail_parts)}")
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        error_code, error_msg, error_reason, error_suggestion = (
-            ErrorContextBuilder.get_language_context(language, "02001003")
-        )
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error_code": error_code,
-                "error_msg": error_msg,
-                "error_reason": detail_str,
-                "error_suggestion": error_suggestion,
-            },
-        )
+        descriptor = error_factory.from_validation(
+            exc, getattr(request.state, "request_id", None) if request else None)
+        return error_factory.build_json_response(descriptor, language)
+
+    # 注册到 starlette 父类：路由级 404/405 抛 starlette.HTTPException（父类），
+    # fastapi.HTTPException（子类）实例同样命中本 handler；若只注册 fastapi 子类，
+    # 父类异常会落回 FastAPI 默认 {"detail":...} 出口。
+    # SYNC-01 P5-R3 落地：sync_01 原无此 handler（404/405 走 FastAPI 默认），从老分支迁入。
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @_app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        """COM-03 §7.2 第 1 点：HTTPException 统一 adapter（404/405/4xx/5xx）。"""
+        if exc.status_code >= 500:
+            logger.error(f"HTTPException {exc.status_code}", exc_info=exc)
+        else:
+            logger.warning(f"HTTPException {exc.status_code}")
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_http_exception(
+            exc, getattr(request.state, "request_id", None) if request else None)
+        return error_factory.build_json_response(descriptor, language)
 
     @_app.exception_handler(AgentBuilderError)
     async def agent_builder_error_handler(request: Request, exc: AgentBuilderError):
+        """COM-03：下游 Builder 失败统一映射为 DOWNSTREAM_BUILDER_FAILED(502)。
+
+        不解析/回显下游原始错误码与 body；精细沿用规则由 COM-04 接入。
+        SYNC-01 P5-R3 落地：从 sync_01 ErrorContextBuilder(188xxx) 升级为
+        error_factory.from_downstream_builder（openjiuwen.12100005 canonical8）。
+        """
         exec_id = getattr(request.state, "execution_id", "unknown")
         req_id = getattr(request.state, "request_id", "unknown")
+        # COM-08 §4.6/§4.7B: 不把 str(exc)（下游原文/token）写入日志 message；
+        # 固定基础事件 + exc_info（traceback 两种配置都保留）。
         logger.error(
-            f"AgentBuilderError: {exc}, execution_id={exec_id}, request_id={req_id}",
+            f"AgentBuilderError: execution_id={exec_id}, request_id={req_id}",
             exc_info=True,
         )
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        error_code, error_msg, error_reason, error_suggestion = (
-            ErrorContextBuilder.get_language_context(language, str(getattr(exc, "code", 188901)))
-        )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error_code": error_code,
-                "error_msg": error_msg,
-                "error_reason": error_reason,
-                "error_suggestion": error_suggestion,
-            },
-        )
+        descriptor = error_factory.from_downstream_builder(exc, req_id)
+        return error_factory.build_json_response(descriptor, language)
 
     # Storage 异常已迁移至共享包 storage（不再是 AgentBuilderError 子类），
     # 这里单独兜底，保持未捕获 storage 错误的结构化 500 响应不变（code 取 exc.code）。
@@ -402,51 +398,48 @@ def instance_app(config: dict | None = None):
 
     @_app.exception_handler(StorageReadError)
     async def storage_read_error_handler(request: Request, exc: StorageReadError):
-        logger.error(f"StorageReadError: {exc}", exc_info=True)
+        # COM-08 §4.6/§4.7B: 不写 str(exc)，固定基础事件 + exc_info
+        logger.error(f"StorageReadError[{getattr(exc, 'code', 188911)}]", exc_info=True)
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        error_code, error_msg, error_reason, error_suggestion = (
-            ErrorContextBuilder.get_language_context(language, str(getattr(exc, "code", 188911)))
-        )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error_code": error_code,
-                "error_msg": error_msg,
-                "error_reason": error_reason,
-                "error_suggestion": error_suggestion,
-            },
-        )
+        descriptor = error_factory.from_internal(
+            exc, getattr(request.state, "request_id", None) if request else None)
+        return error_factory.build_json_response(descriptor, language)
 
     @_app.exception_handler(StorageConfigError)
     async def storage_config_error_handler(request: Request, exc: StorageConfigError):
-        logger.error(f"StorageConfigError: {exc}", exc_info=True)
+        # COM-08 §4.6/§4.7B: 不写 str(exc)，固定基础事件 + exc_info
+        logger.error(f"StorageConfigError[{getattr(exc, 'code', 188910)}]", exc_info=True)
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        error_code, error_msg, error_reason, error_suggestion = (
-            ErrorContextBuilder.get_language_context(language, str(getattr(exc, "code", 188910)))
-        )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error_code": error_code,
-                "error_msg": error_msg,
-                "error_reason": error_reason,
-                "error_suggestion": error_suggestion,
-            },
-        )
+        descriptor = error_factory.from_internal(
+            exc, getattr(request.state, "request_id", None) if request else None)
+        return error_factory.build_json_response(descriptor, language)
 
     from jiuwen.common.exception import JiuWenBaseException
 
     @_app.exception_handler(JiuWenBaseException)
     async def jiuwen_exception_handler(request: Request, exc: JiuWenBaseException):
-        """框架业务异常 — 透传异常自身携带的 error_code，并通过 i18n 查询对应的错误消息."""
+        """框架业务异常 — 透传异常自身携带的 error_code，并通过 i18n 查询对应的错误消息.
+
+        SYNC-01 新业务（老分支无此 handler）。sync_01 保留业务 error_code 透传
+        （ErrorContextBuilder）。P5-R3 Phase 3 决策 A：error_code==105015
+        （PLUGIN_RESPONSE_FORMAT_ERROR，未发布）→ from_plugin_exception 映射到
+        canonical openjiuwen.12100006（不外露 105015）；其余业务码仍 ErrorContextBuilder 透传。
+        COM-08 §4.6：日志不写 str(exc)/exc.message（防哨兵泄漏），固定基础事件 + exc_info。
+        """
         exec_id = getattr(request.state, "execution_id", "unknown")
         req_id = getattr(request.state, "request_id", "unknown")
         logger.error(
-            f"JiuWenBaseException: [{exc.error_code}] {exc.message}, "
+            f"JiuWenBaseException: [{exc.error_code}], "
             f"execution_id={exec_id}, request_id={req_id}",
             exc_info=True,
         )
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        # 决策 A: 105015(未发布)→canonical openjiuwen.12100006，不外露 105015
+        # P5-R3a: 用公共判定(直接 + __cause__ 链)——与 from_plugin_exception/
+        # workflow_runner 三分支同一入口;JiuWenBaseException 直接场景与原判定等价。
+        if error_factory.is_plugin_response_format_error(exc):
+            descriptor = error_factory.from_plugin_exception(exc, req_id)
+            return error_factory.build_json_response(descriptor, language)
         error_code, error_msg, error_reason, error_suggestion = (
             ErrorContextBuilder.get_language_context(language, str(exc.error_code))
         )
@@ -462,19 +455,28 @@ def instance_app(config: dict | None = None):
 
     @_app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
+        """COM-03 §7.2：未处理异常统一映射 INTERNAL_ERROR(openjiuwen.12100004) 标准五字段。
+
+        正常路由未处理异常由 RequestContextMiddleware token 有效期内经
+        error_response.build_unhandled_error_response 收口；此处到达时 finally
+        已 reset，只读 request.state ID 拼入 message。
+        SYNC-01 P5-R3 落地：从 sync_01 裸 2-field 升级为 error_factory.from_internal
+        （canonical8 五字段 + request_id）。
+        P5-R3a：非流式 run_blocking re-raise 的 ExecutionError(cause=
+        JiuWenBaseException(105015)) 由本 handler 兜底——改用 from_plugin_exception
+        （safe superset：105015 直接/__cause__ 链→12100006，其余→from_internal
+        12100004 行为不变），否则包装路径 105015 达不到 12100006。
+        """
         exec_id = getattr(request.state, "execution_id", "unknown")
         req_id = getattr(request.state, "request_id", "unknown")
+        # COM-08 §4.6/§4.7B: 不写 str(exc)/类型名正文，固定基础事件 + exc_info
         logger.error(
-            f"Unhandled exception: {type(exc).__name__}: {exc}, execution_id={exec_id}, request_id={req_id}",
+            f"Unhandled exception: execution_id={exec_id}, request_id={req_id}",
             exc_info=True,
         )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error_code": "internal_error",
-                "error_msg": "Internal server error",
-            },
-        )
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_plugin_exception(exc, req_id)
+        return error_factory.build_json_response(descriptor, language)
 
     return _app
 
