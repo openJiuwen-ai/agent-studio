@@ -50,11 +50,14 @@ from common_utils.customer_header import get_capture_keys, get_config
 from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.log.base import set_x_execution_id, set_x_request_id
 from jiuwen.serve.common.context import request_ctx as _jiuwen_request_ctx
-from openjiuwen.core.common.logging import (
-    reset_session_id,
-    set_session_id,
-    workflow_logger,
-)
+from openjiuwen.core.common.logging import set_session_id, workflow_logger
+try:
+    from openjiuwen.core.common.logging import reset_session_id
+except ImportError:
+    # 兼容 agent-core 未合入 DEF-03：reset_session_id 不存在
+    # set_session_id 旧版不返回 token → trace_token=None → reset 跳过（middleware 已检查 None）
+    def reset_session_id(_token):
+        pass
 from opentelemetry import context as otel_context, trace as otel_trace
 from opentelemetry.trace import SpanContext, TraceFlags, TraceState
 from opentelemetry.trace.span import NonRecordingSpan
