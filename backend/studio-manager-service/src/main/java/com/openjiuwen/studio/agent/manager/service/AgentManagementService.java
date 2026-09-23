@@ -3871,16 +3871,29 @@ public class AgentManagementService implements IAgentManagementService {
         if (Objects.isNull(policy)) {
             return;
         }
-        // clamp：超过 max 取 max，低于 min 取 min
-        if (policy.getRecallThreshold() > knowledgeRecallThresholdMax) {
-            policy.setRecallThreshold((float) knowledgeRecallThresholdMax);
-        } else if (policy.getRecallThreshold() < knowledgeRecallThresholdMin) {
-            policy.setRecallThreshold((float) knowledgeRecallThresholdMin);
+        // 防御性校验：min > max 时自动交换，避免产出越界值
+        double min = knowledgeRecallThresholdMin;
+        double max = knowledgeRecallThresholdMax;
+        if (min > max) {
+            log.warn("knowledge.recall-threshold min({}) > max({}), 已自动交换", min, max);
+            double tmp = min;
+            min = max;
+            max = tmp;
         }
-        if (policy.getFaqThreshold() > knowledgeRecallThresholdMax) {
-            policy.setFaqThreshold((float) knowledgeRecallThresholdMax);
-        } else if (policy.getFaqThreshold() < knowledgeRecallThresholdMin) {
-            policy.setFaqThreshold((float) knowledgeRecallThresholdMin);
+        // clamp：超过 max 取 max，低于 min 取 min
+        if (policy.getRecallThreshold() > max) {
+            log.warn("recallThreshold clamp: {} -> {}", policy.getRecallThreshold(), max);
+            policy.setRecallThreshold((float) max);
+        } else if (policy.getRecallThreshold() < min) {
+            log.warn("recallThreshold clamp: {} -> {}", policy.getRecallThreshold(), min);
+            policy.setRecallThreshold((float) min);
+        }
+        if (policy.getFaqThreshold() > max) {
+            log.warn("faqThreshold clamp: {} -> {}", policy.getFaqThreshold(), max);
+            policy.setFaqThreshold((float) max);
+        } else if (policy.getFaqThreshold() < min) {
+            log.warn("faqThreshold clamp: {} -> {}", policy.getFaqThreshold(), min);
+            policy.setFaqThreshold((float) min);
         }
     }
 

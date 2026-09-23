@@ -5,7 +5,6 @@
 
 import asyncio
 import json
-import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -14,11 +13,8 @@ import aiohttp
 from agent_runtime.common.config import settings
 from openjiuwen.core.common.logging import workflow_logger
 
-from .base import KBSearchResult, KBServiceAdapter
+from .base import THRESHOLD_MIN, clamp_threshold, KBSearchResult, KBServiceAdapter
 from .customer_header_inject import inject_customer_headers_to_kb
-
-_THRESHOLD_MIN = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MIN", "0"))
-_THRESHOLD_MAX = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MAX", "1"))
 
 _EXCLUDED_METADATA_KEYS = frozenset({
     "content", "text", "score",
@@ -55,7 +51,7 @@ class LakeSearchAdapter(KBServiceAdapter):
 
         top_k = retrieval_params.get("topK", 10)
         score_threshold = float(retrieval_params.get("scoreThreshold", 0.0))
-        score_threshold = max(_THRESHOLD_MIN, min(score_threshold, _THRESHOLD_MAX))
+        score_threshold = clamp_threshold(score_threshold)
         search_mode = retrieval_params.get("searchMode", "doc")
         tags = retrieval_params.get("tags", [])
 
@@ -133,7 +129,7 @@ class LakeSearchAdapter(KBServiceAdapter):
         all_results = all_results[:top_k]
 
         # 过滤低于阈值的结果
-        if score_threshold > _THRESHOLD_MIN:
+        if score_threshold >= THRESHOLD_MIN:
             all_results = [
                 r for r in all_results if r.score >= score_threshold
             ]

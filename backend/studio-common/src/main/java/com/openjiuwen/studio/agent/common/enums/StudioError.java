@@ -4370,15 +4370,9 @@ public enum StudioError {
      */
     KNOWLEDGE_SEARCH_EXCEPTION(INTERNAL_SERVER_ERROR, KNOWLEDGE_BASE, "4082"),
 
-    /**
-     * The value of knowledge recall threshold is illegal.
-     */
-    KNOW_RECALL_THRESHOLD_ILLEGAL(BAD_REQUEST, KNOWLEDGE_BASE, "4083"),
-
-    /**
-     * The value of knowledge faq threshold is illegal.
-     */
-    FAQ_THRESHOLD_ILLEGAL(BAD_REQUEST, KNOWLEDGE_BASE, "4084"),
+    // 已废弃：阈值校验改为 clamp，不再抛异常。保留枚举以兼容外部错误码引用
+    // KNOW_RECALL_THRESHOLD_ILLEGAL(BAD_REQUEST, KNOWLEDGE_BASE, "4083"),
+    // FAQ_THRESHOLD_ILLEGAL(BAD_REQUEST, KNOWLEDGE_BASE, "4084"),
 
     /**
      * agent绑定的知识库数量超过上限

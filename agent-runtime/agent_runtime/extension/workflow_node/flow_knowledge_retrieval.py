@@ -19,6 +19,7 @@ import logging
 
 from common_utils.redis_manager import get_redis_client
 from agent_runtime.extension.workflow_node.kb_adapter.base import KBSearchResult, KBServiceAdapter
+from agent_runtime.extension.workflow_node.kb_adapter.base import THRESHOLD_MIN, clamp_threshold
 from agent_runtime.extension.workflow_node.kb_adapter.factory import KBAdapterFactory
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
@@ -36,19 +37,6 @@ KNOWLEDGE_FILE_TYPE_DOC = "doc"
 KNOWLEDGE_FILE_TYPE_FAQ = "faq"
 IMAGE_ID_PATTERN = re.compile(r"\{(img-[a-z0-9-]+)}", re.IGNORECASE)
 RETRIEVAL_IMAGE_FORMAT = "![img](https://agent_arts_knowledge_img_url/{})"
-
-# R 侧阈值范围，从环境变量读取，与 M 侧 application-manager.yml 对齐
-_THRESHOLD_MIN = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MIN", "0"))
-_THRESHOLD_MAX = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MAX", "1"))
-
-
-def _clamp_threshold(value: float) -> float:
-    """将阈值 clamp 到 [min, max] 范围内。"""
-    if value > _THRESHOLD_MAX:
-        return _THRESHOLD_MAX
-    if value < _THRESHOLD_MIN:
-        return _THRESHOLD_MIN
-    return value
 
 
 @dataclass
@@ -459,8 +447,8 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
             "recallThreshold",
             retrieval_params.get("scoreThreshold", 0.0),
         )
-        recall_threshold = _clamp_threshold(float(recall_threshold))
-        if recall_threshold > _THRESHOLD_MIN:
+        recall_threshold = clamp_threshold(float(recall_threshold))
+        if recall_threshold > THRESHOLD_MIN:
             results = [r for r in results if r.score >= recall_threshold]
 
         # 按 score 降序排列后截取 top_k
