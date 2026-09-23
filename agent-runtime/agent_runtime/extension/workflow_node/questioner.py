@@ -211,30 +211,26 @@ class QuestionerTraceStore:
             if tracer is None:
                 return True
 
-            from openjiuwen.core.session.tracer.handler import TracerHandlerName
-
             invoke_id = session._inner.executable_id()
             parent_id = session._inner.parent_id()
-            handler_class_name = (
-                TracerHandlerName.TRACER_WORKFLOW.value + "." + parent_id
-                if parent_id != ""
-                else TracerHandlerName.TRACER_WORKFLOW.value
-            )
-            handler = tracer._handlers.get(handler_class_name)
-            if handler is None:
-                handler = tracer._handlers.get(TracerHandlerName.TRACER_WORKFLOW.value)
-
-            if handler:
-                span = handler._span_manager.get_span(invoke_id)
-                if span:
-                    if not isinstance(span.on_invoke_data, list):
-                        span.on_invoke_data = []
-                    # 批量 extend 所有历史数据
+            # 用 Tracer 公开 API get_workflow_span 取 span（避免访问 protected
+            # _workflow_handlers / handler._span_manager，G.CLS.11）。该 span 与
+            # TraceWorkflowHandler._span_manager.get_span 是同一对象（register_workflow_span_manager
+            # 把同一 SpanManager 同时挂到 tracer_workflow_span_manager_dict 和 handler）。
+            span = tracer.get_workflow_span(invoke_id, parent_id)
+            if span:
+                if not isinstance(span.on_invoke_data, list):
+                    span.on_invoke_data = []
+                # 仅在 span 的 on_invoke_data 为空时 extend 历史数据。
+                # 提问器跨轮持久（USER_INTERACT 未 node_finished，pop_workflow_span 不触发），
+                # on_invoke_data 已累积前序轮 trace + 当轮 _session.trace 写入；
+                # 若每轮 resume 都 extend 全量 Redis trace，会重复 → 末轮 user 被早轮内容覆盖
+                # （如"查询电费账单"被重复到末尾，把"确认"挤掉）。
+                if not span.on_invoke_data:
                     span.on_invoke_data.extend(trace_list)
-                    # 只发送一次事件
-                    import asyncio
-
-                    asyncio.create_task(handler._send_data(span))
+                # 不在此 _send_data：下一条 _session.trace → Tracer.trigger →
+                # TraceWorkflowHandler.on_invoke 会 append 当轮数据并 _send_data 全量 span
+                # （含此处恢复的历史）自动发出；在此再发会重复。
             return True
         except Exception as e:
             workflow_logger.warning("Failed to recover trace data to session: {}", e)
@@ -830,6 +826,7 @@ class QuestionerDirectReplyHandler:
         await self._session.trace(data=trace_data)
         await self._write_trace_to_redis(trace_data)
 
+
         # 根据当前状态处理逻辑
         if self._state.status == ExecutionStatus.START:
             return await self._handle_start_state(inputs, session, context)
@@ -844,8 +841,8 @@ class QuestionerDirectReplyHandler:
         output = OutputCache()
         self._query = questioner_input.query or ""
 
-        await self._write_user_message_to_context(self._query, context)
-
+        await self._write_user_message_to_context(
+            self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
         chat_history = await self._get_latest_chat_history(context)
 
         if self._is_set_question_content():
@@ -912,8 +909,8 @@ class QuestionerDirectReplyHandler:
         output = OutputCache(question=self._state.question, user_response=self._query)
 
         # Write user feedback message to context at USER_INTERACT state
-        await self._write_user_message_to_context(self._query, context)
-
+        await self._write_user_message_to_context(
+            self._query, context, force=bool(inputs.get("__single_debug_recovery__")))
         chat_history = await self._get_latest_chat_history(context)
         user_response = chat_history[-1].content if chat_history else ""
 
@@ -1794,13 +1791,28 @@ class QuestionerDirectReplyHandler:
     def _update_questioner_states_question(self, question):
         self._state.question = question
 
-    async def _write_user_message_to_context(self, content, context):
+    async def _write_user_message_to_context(self, content, context, force=False):
         if context is None or not self._config.with_chat_history:
             return
 
         if not content:
             return
-
+        # 去重：若 context 末条已是相同 user content，不再写入。
+        # workflow_runner/astream 已把当轮 query 追加到 history 末尾，此处再写会重复。
+        # 不用 any() 全量匹配——非预置路径（非 force）若用户跨轮重复输入相同内容，
+        # any 会误判已存在而跳过当轮写入。查末条精确覆盖预置路径（末条=当轮 query）；
+        # single_debug_recovery（force=True）不走预置，直接写。
+        # "其他节点写入后末条≠当轮"场景罕见（提问器通常是当轮末节点），不在此覆盖。
+        if not force:
+            try:
+                context_window = await context.get_context_window()
+                _msgs = context_window.get_messages() if context_window else []
+                if _msgs and getattr(_msgs[-1], "role", None) == "user" \
+                        and getattr(_msgs[-1], "content", None) == content:
+                    return
+            except Exception as e:
+                # 去重检查失败不阻断写入（去重是优化项，add_messages 仍执行）
+                workflow_logger.warning(f"_write_user_message_to_context dedup check failed: {e}")
         user_message = UserMessage(role="user", content=content)
         await context.add_messages([user_message])
 

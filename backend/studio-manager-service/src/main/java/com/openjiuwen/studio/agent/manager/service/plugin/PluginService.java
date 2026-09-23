@@ -386,8 +386,7 @@ public class PluginService implements IPluginService {
         log.info("operation log {}: start to delete plugin", projectId);
         PluginEntity pluginEntity = pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, projectId, workspaceId);
         if (Objects.isNull(pluginEntity)) {
-            log.info("No plugin entity found, plugin ID: {}, project ID: {}.", pluginId, projectId);
-            return null;
+            throw new AgentStudioException(StudioError.RESOURCE_NOT_EXISTS);
         }
 
         shareInnerService.cancelPluginShared(projectId, workspaceId, pluginId);

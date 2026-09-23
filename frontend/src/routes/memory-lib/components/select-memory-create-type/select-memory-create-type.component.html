@@ -1,0 +1,23 @@
+<ng-template #selectCreateType>
+  <div class="ant-modal-body" id="select-memory-create-type">
+    <nz-radio-group [(ngModel)]="selectedType" class="card-group">
+      @for (item of typeItems; track item.key) {
+        <label nz-radio [nzValue]="item" class="card-radio">
+          <div class="card-set">
+            <div class="card-header">{{ item.title }}</div>
+            <div class="card-content">{{ item.content }}</div>
+          </div>
+        </label>
+      }
+    </nz-radio-group>
+  </div>
+</ng-template>
+
+<ng-template #selectCreateTitle>
+  <div class="ant-modal-title">{{ 'memory.selectType.title' | i18nextEager }}</div>
+</ng-template>
+
+<ng-template #selectCreateFooter>
+  <button (click)="onCancel()" type="button" nz-button>{{ 'cancel' | i18nextEager }}</button>
+  <button (click)="onOk()" type="button" nz-button nzType="primary">{{ 'ok' | i18nextEager }}</button>
+</ng-template>

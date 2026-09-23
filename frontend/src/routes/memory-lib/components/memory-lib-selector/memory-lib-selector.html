@@ -61,6 +61,9 @@
               >
                 {{ memoryLib.name }}
               </div>
+              <nz-tag [nzColor]="(memoryLib.memory_backend_type ?? 'BUILTIN') === 'EXTERNAL' ? 'purple' : 'blue'" class="!mr-0">
+                {{ ((memoryLib.memory_backend_type ?? 'BUILTIN') === 'EXTERNAL' ? 'memory.management.backend.external' : 'memory.management.backend.builtin') | i18nextEager }}
+              </nz-tag>
               @if (memoryLib.invalid) {
                 <span
                   nz-icon

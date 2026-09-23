@@ -258,6 +258,11 @@ export abstract class WorkflowChatBaseComponent {
     };
   }
 
+  /** 判断流式分片的 text 是否有效：0/false 等 falsy 值是合法分片，仅排除 null/undefined/空串 */
+  protected hasValidText(text: any): boolean {
+    return text !== undefined && text !== null && text !== '';
+  }
+
   protected onMessage(curIndex: number, token: any) {
     const chunkObj = token.data && flowCommonLogic.stringToObject(token.data);
     const chunkObjAddFrom = {...chunkObj, fromType:'onMessage'};
@@ -413,7 +418,7 @@ export abstract class WorkflowChatBaseComponent {
     if(event === 'message' && this.isStartFlowRunning) {
       const plan = this.chatLoop[curIndex].plans?.find(item => item.id === 'startFlow');
 
-      if (plan && text && node_type !== 'Input') {
+      if (plan && this.hasValidText(text) && node_type !== 'Input') {
         const step = plan.steps[0];
         step.description += text;
       }
@@ -462,7 +467,7 @@ export abstract class WorkflowChatBaseComponent {
       this.chatLoop[curIndex].thinkValue =
         this.chatLoop[curIndex].thinkValue + reasoning_content;
       this.chatLoop[curIndex].thinking = true;
-    } else if (text || message) {
+    } else if (this.hasValidText(text) || message) {
       this.chatLoop[curIndex].thinking = false;
       this.chatLoop[curIndex].collapsed = !this.isPlanMode;
     }
@@ -496,16 +501,29 @@ export abstract class WorkflowChatBaseComponent {
         const prevAns = this.chatLoop[curIndex].showAnswer?.[this.index];
         // 修复消息节点返回空输出的情况：结构化信息走 summary 字段，非 text
         // Input 节点的 summary 是表单构造元数据（inputs 定义），不是输出内容，不能写入 text
-        if (prevAns && (!prevAns?.text || !text)) {
+        if (
+          prevAns &&
+          (!this.hasValidText(prevAns?.text) || !this.hasValidText(text))
+        ) {
           if (node_type !== 'Input') {
-            prevAns.text = prevAns?.text || summary || ' ';
+            // 兜底链取最靠前的有效值：已流式的 prevAns.text > 本事件携带的
+            // text（含 0/false 合法 falsy）> summary；有效 text 不得被 summary
+            // 吞掉（断线重连等分片缺失时最终值只随 is_finished 事件到达）
+            prevAns.text = this.hasValidText(prevAns.text)
+              ? prevAns.text
+              : this.hasValidText(text)
+                ? text
+                : summary || ' ';
             prevAns.messageId = createdTime;
           }
           // Input 的 loading 由下方 is_finished 处理器置 false，此处保留无害
           prevAns.loading = false;
-        } else if (!text && node_type !== 'Input') {
+        } else if (!prevAns && node_type !== 'Input') {
+          // 走到这里 = 该节点未建过答案块（is_finished 先于任何流式分片到达）：
+          // 有效 text（含 0/false）按最终答案渲染，无效 text 退回 summary，
+          // 不得整块静默丢弃
           this.chatLoop[curIndex].showAnswer.push({
-            text: summary || ' ',
+            text: this.hasValidText(text) ? text : summary || ' ',
             loading: false,
             isShowInputParams: false,
             isConfirmed: 'init',
@@ -538,7 +556,7 @@ export abstract class WorkflowChatBaseComponent {
       this.nodeIdBlock[node_id] = ENodeStatus.NOTFINISHED; // 表示正在流式打印中
     }
 
-    if (event === 'message' && text && node_type !== 'Input' && !this.isStartFlowRunning
+    if (event === 'message' && this.hasValidText(text) && node_type !== 'Input' && !this.isStartFlowRunning
       && (node_type !== 'End' && node_type !== 'Message' || !this.isPlanMode)
     ) {
       this.chatLoop[curIndex].thinkLoading = false;

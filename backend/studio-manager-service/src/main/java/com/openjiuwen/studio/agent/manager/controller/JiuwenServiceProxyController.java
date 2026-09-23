@@ -34,6 +34,8 @@ import com.openjiuwen.studio.agent.manager.service.WorkflowManagementService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.plugin.PluginService;
 
+import io.swagger.annotations.ApiImplicitParam;
+import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
@@ -53,6 +55,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -80,6 +83,13 @@ public class JiuwenServiceProxyController {
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "OK", response = Object.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
+    })
+    @ApiImplicitParams(value = {
+        @ApiImplicitParam(name = "project_id", value = "项目ID", required = true, paramType = "path", dataType = "string"),
+        @ApiImplicitParam(name = "agent_type", value = "Agent类型，仅支持 agents（NL2智能体生成）/ workflows（NL2工作流生成）",
+            required = true, paramType = "path", dataType = "string", allowableValues = "agents,workflows"),
+        @ApiImplicitParam(name = "cid", value = "会话ID", required = true, paramType = "path", dataType = "string"),
+        @ApiImplicitParam(name = "workspace_id", value = "空间ID", required = true, paramType = "query", dataType = "string")
     })
     @PostMapping("/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat")
     public Object generatorAgentOrWorkflow(@PathVariable("project_id") String projectId,
@@ -193,6 +203,17 @@ public class JiuwenServiceProxyController {
             }
         }, error -> {
             log.error("JiuwenServiceProxyController error to receive sse event:", error);
+            try {
+                Map<String, Object> errorEvent = new HashMap<>();
+                errorEvent.put("event", "error");
+                Map<String, Object> errorData = new HashMap<>();
+                errorData.put("code", StudioError.JIU_WEN_SERVICE_EXCEPTION.getCode());
+                errorData.put("message", "");
+                errorEvent.put("data", errorData);
+                sseEmitter.send(SseEmitter.event().data(parseEventMsg(errorEvent, language)).build());
+            } catch (IOException e) {
+                log.error("JiuwenServiceProxyController error to send error sse event:", e);
+            }
             sseEmitter.completeWithError(new AgentStudioException(StudioError.JIU_WEN_SERVICE_EXCEPTION));
         }, sseEmitter::complete);
 

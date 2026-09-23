@@ -545,8 +545,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         McpServerEntity serverEntity = serverDao.selectById(serverId);
         if (serverEntity == null) {
-            log.info("Server not found. Server ID: {}", serverId);
-            return new McpServerDetailInfoDto();
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
         }
 
         if ("private".equals(serverEntity.getType())) {

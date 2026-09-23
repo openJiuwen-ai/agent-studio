@@ -364,7 +364,8 @@ export class FlowLogModalComponent implements OnChanges {
   }
 
   public copyQuestionNodeIO(data: any) {
-    const { uuid, copyIcon, ...contentToCopy } = data;
+    // 与 removeUuid() 一致地剥 uuid/copyIcon/roundIndex/removeUuid，使复制内容与 UI 显示一致
+    const { uuid, copyIcon, roundIndex, removeUuid, ...contentToCopy } = data;
     data.copyIcon = true;
 
     if (typeof contentToCopy === 'string') {
@@ -396,7 +397,9 @@ export class FlowLogModalComponent implements OnChanges {
   }
 
   public removeUuid(obj: any): any {
-    const { uuid, copyIcon, roundIndex, ...rest } = obj || {};
+    // 剥离 uuid/copyIcon/roundIndex 及已有的 removeUuid（避免多次处理同一 message 时
+    // .removeUuid 字段层层嵌套——RC3 累积 messages 后多 entry 共享 ref 会触发）。
+    const { uuid, copyIcon, roundIndex, removeUuid, ...rest } = obj || {};
     return rest;
   }
 
@@ -857,7 +860,94 @@ export class FlowLogModalComponent implements OnChanges {
 
     let additionalInfo = finish;
 
-    if (node_type === 'Questioner' || node_type === 'Agent') {
+    if (node_type === 'Questioner') {
+      // RC1: 多轮提问器配对失衡（#node_started > #node_finished，常见 3:1）。
+      // controller 每轮重调子工作流，提问器每轮重发 node_started，仅末 N 轮发 node_finished。
+      // 原逻辑用 found 顺序配对：首 start 抢走唯一 finish，2/3 回退 node_wait 卡"运行中"+NaN。
+      // 修：末 N 个 start 各配一个 finish（按 start_time 排序），早期 start 配各自时间窗内
+      // messages 最多的 node_wait，标 succeeded，耗时=下一轮 start − 本轮 node_started start。
+      const groupStarts = event_list
+        .filter(i => i.node_id === node_id && i.parent_node_id === parent_node_id && i.node_status === 'node_started')
+        .slice()
+        .sort((a, b) => (a.start_time || 0) - (b.start_time || 0));
+      const groupFinishes = event_list
+        .filter(i => i.node_id === node_id && i.parent_node_id === parent_node_id && i.node_status === 'node_finished')
+        .slice();
+        // 不按 start_time 排序：既有 finish-building loop（line 830）会对缺 start_time 的
+        // node_finished 原地写入 start_time（首轮值），sort 会据此错位。用 event_list 顺序
+        // （= 事件发射顺序 = 时序），与 groupStarts 的 start_time 顺序天然对应。
+      const finishCount = groupFinishes.length;
+      const earlyCount = groupStarts.length - finishCount;
+      if (groupStarts.length > finishCount && finishCount > 0) {
+        const curIdx = groupStarts.findIndex(s => s === start);
+        if (curIdx >= earlyCount) {
+          // 末 N 个 start 之一：配对应的 finish（按顺序）。
+          // 返回副本（{...f, start_time}）而非原地 mutate 共享 f：mutate 会改变 groupFinishes
+          // 的 sort 顺序（start_time 变），导致后续 start 的 groupFinishes[idx] 取到同一个 finish
+          // （重配对、孤立其他 finish）。副本不 mutate → sort 稳定 → 每个 late start 取唯一 finish。
+          const f = groupFinishes[curIdx - earlyCount];
+          const node = { ...f, start_time: start_time };
+          // 对齐上方 finish-building loop 的 inner_error 处理：loop 把 exceptionChildren
+          // 构建在局部 finish 变量上（Object.assign(finish, f)），f 本身不带；此处若不补，
+          // 带 inner_error 的最终 node_finished 的错误卡片/异常子链不渲染、错误详情丢失。
+          if (f.inner_error) {
+            const fItem = this.createTableItem(f);
+            fItem.node_status = 'exception';
+            if (!node.exceptionChildren) {
+              node.exceptionChildren = [];
+            }
+            node.exceptionChildren.push(fItem);
+            node.collapsed = false;
+            fItem.index = node.exceptionChildren.length - 1;
+          }
+          return { node, additionalInfo: null };
+        } else if (curIdx >= 0) {
+          // 早期 start：配时间窗 [本轮 start, 下一轮 start) 内 messages 最多的 node_wait
+          const groupWaits = event_list
+            .filter(i => i.node_id === node_id && i.parent_node_id === parent_node_id && i.node_status === 'node_wait')
+            .slice()
+            .sort((a, b) => (a.start_time || 0) - (b.start_time || 0));
+          const nextStart = groupStarts[curIdx + 1];
+          const ownWait = groupWaits
+            .filter(
+              w => (w.start_time || 0) >= (start_time || 0) && (!nextStart || (w.start_time || 0) < (nextStart.start_time || 0))
+            )
+            .reduce((max: any, w: any) => ((w?.messages?.length || 0) > (max?.messages?.length || 0) ? w : max), null);
+          if (ownWait) {
+            const node = { ...ownWait };
+            // 该轮已完整问答，视作 succeeded（绿勾），不卡"运行中"。
+            node.status = { ...(node.status || {}), desc: 'succeeded' };
+            // 用本轮 node_started 的 start_time（非 wait 时间戳），耗时=下一轮 start − 本轮 start
+            node.start_time = start_time;
+            if (nextStart && nextStart.start_time && start_time) {
+              node.end_time = nextStart.start_time;
+            }
+            return { node, additionalInfo: null };
+          }
+          // 时间窗内无 node_wait（异常）：不回退全局 getMaxMessagesNode（会拿别轮 wait 错标），
+          // 返 null 丢该行——比跨轮错标安全。
+          return { node: null, additionalInfo: null };
+        }
+      }
+      // 非 3:1 走原逻辑
+      if (finish.node_id && (!finish.messages || finish.messages.length === 0)) {
+        return {
+          node: this.getMaxMessagesNode(event_list, node_id) || finish,
+          additionalInfo,
+        };
+      }
+      if (!finish?.node_id) {
+        return {
+          node: this.getMaxMessagesNode(event_list, node_id),
+          additionalInfo: null,
+        };
+      }
+      return {
+        node: finish,
+        additionalInfo: null,
+      };
+    }
+    if (node_type === 'Agent') {
       if (finish.node_id && (!finish.messages || finish.messages.length === 0)) {
         return {
           node: this.getMaxMessagesNode(event_list, node_id) || finish,
@@ -988,6 +1078,11 @@ export class FlowLogModalComponent implements OnChanges {
     return res;
   }
 
+  /** nz-select compareWith：按 uuid 比较两个提问器轮次对象（roundSelected 与 option.value 都是 round 对象） */
+  public compareQuestionerRound(a: any, b: any): boolean {
+    return !!a && !!b && a.uuid === b.uuid;
+  }
+
   protected processQuestionerNode(callItem: any, node: any, additionalInfo?: any) {
     const { node_status } = node;
     if (node_status === 'node_finished') {
@@ -1021,7 +1116,15 @@ export class FlowLogModalComponent implements OnChanges {
 
     callItem.questionerRounds = node?.messages.filter(message => message.role === 'user');
     if (callItem?.questionerRounds.length > 0) {
-      callItem.roundSelected = callItem?.questionerRounds[0];
+      // 默认选末轮（本条目对应那轮）：多轮累积 messages 时，末轮才是该 node_started 真正完成那轮的 I/O。
+      callItem.roundSelected = callItem?.questionerRounds[callItem.questionerRounds.length - 1];
+      // ng-zorro v20 的 nz-select nzOptions 需要 {label, value} 格式（nzLabel/nzKey 是
+      // <nz-option> 子元素的属性，写在 <nz-select> 上被忽略 → 下拉空）。映射 content→label、
+      // 整个 round 对象→value（roundSelected 仍指向 round 对象，roundSelected.uuid 可用）。
+      callItem.questionerRoundOptions = callItem.questionerRounds.map((r: any) => ({
+        label: r?.content ?? '',
+        value: r,
+      }));
     }
   }
 

@@ -72,7 +72,9 @@ import com.openjiuwen.studio.agent.manager.dto.MemoryUserProfileIR;
 import com.openjiuwen.studio.agent.manager.dto.MemoryUserProfileTagInfoIR;
 import com.openjiuwen.studio.agent.manager.dto.MemoryUserProfileTopicInfoIR;
 import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
+import com.openjiuwen.studio.agent.manager.entity.MemoryServiceInstanceEntity;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
+import com.openjiuwen.studio.agent.manager.mapper.MemoryServiceInstanceMapper;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.Scene;
 import com.openjiuwen.studio.agent.manager.dto.ToolCredential;
@@ -578,6 +580,9 @@ public class IrAdapterService {
     @Autowired
     private MemoryRepoMapper memoryRepoMapper;
 
+    @Autowired
+    private MemoryServiceInstanceMapper memoryServiceInstanceMapper;
+
     private static void markEndBranchId(Map<String, WorkflowEdgeVO> edgeVoMap, WorkflowParallelEndNode parallelEndNode,
         String parallelBranchUuid) {
         for (String edgeId : parallelEndNode.getEdgeIds()) {
@@ -707,6 +712,39 @@ public class IrAdapterService {
         return nodes;
     }
 
+    /**
+     * 将记忆库实体的外部后端配置注入 MemoryConfigIR。
+     * 仅携带非敏感元数据（backend_type/scope_id/instance_id/instance_base_url），
+     * api_key 不入 IR — 已由 MemoryServiceInstanceService 写入 OBS auth 文件，runtime 按 instance_id 惰性取。
+     *
+     * @param memoryConfigIr 正在构建的 IR 对象
+     * @param repoEntity     记忆库实体
+     */
+    public void injectExternalMemoryConfig(MemoryConfigIR memoryConfigIr, MemoryRepoEntity repoEntity) {
+        String backendType = StringUtils.isNotBlank(repoEntity.getMemoryBackendType())
+            ? repoEntity.getMemoryBackendType() : "BUILTIN";
+        memoryConfigIr.setMemoryBackendType(backendType);
+        memoryConfigIr.setScopeId(repoEntity.getId());
+
+        if ("EXTERNAL".equalsIgnoreCase(backendType)
+            && StringUtils.isNotBlank(repoEntity.getMemoryServiceInstanceId())) {
+            String instanceId = repoEntity.getMemoryServiceInstanceId();
+            memoryConfigIr.setInstanceId(instanceId);
+            try {
+                MemoryServiceInstanceEntity instance = memoryServiceInstanceMapper.selectById(instanceId);
+                if (instance != null) {
+                    memoryConfigIr.setInstanceBaseUrl(instance.getBaseUrl());
+                } else {
+                    log.warn("Memory service instance {} not found for repo {}, base_url will be null in IR",
+                        instanceId, repoEntity.getId());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to lookup memory service instance {} for repo {}: {}",
+                    instanceId, repoEntity.getId(), e.getMessage());
+            }
+        }
+    }
+
     private Map<String, Object> adaptConfigs(Map<String, Object> configs) {
         Map<String, Object> irConfigs = new HashMap<>();
         if (configs == null) {
@@ -772,6 +810,7 @@ public class IrAdapterService {
                     if (repoEntity.getLongTermMemoryStrategies() != null && !repoEntity.getLongTermMemoryStrategies().isEmpty()) {
                         memoryConfigIr.setStrategies(repoEntity.getLongTermMemoryStrategies());
                     }
+                    injectExternalMemoryConfig(memoryConfigIr, repoEntity);
                     irConfigs.put(Constants.Workflow.MEMORY, memoryConfigIr);
                 }
             }
@@ -2411,6 +2450,7 @@ public class IrAdapterService {
                     if (repoEntity.getLongTermMemoryStrategies() != null && !repoEntity.getLongTermMemoryStrategies().isEmpty()) {
                         memoryConfigIr.setStrategies(repoEntity.getLongTermMemoryStrategies());
                     }
+                    injectExternalMemoryConfig(memoryConfigIr, repoEntity);
                     configs.put("memory", memoryConfigIr);
                 } else {
                     log.info("Memory repo {} not found during agent IR generation, using bare config", repoId);
@@ -2780,6 +2820,9 @@ public class IrAdapterService {
      */
     private void setArguments(List<Map<String, Object>> argumentSettings, List<Map<String, Object>> argumentsList,
         Boolean isRoot, String resourceType, Map<String, String> refMap, String nestedName) {
+        if (argumentSettings == null || argumentSettings.isEmpty()) {
+            return;
+        }
         for (Map<String, Object> argumentSetting : argumentSettings) {
             // 参数名称
             String name = String.valueOf(argumentSetting.get("name"));

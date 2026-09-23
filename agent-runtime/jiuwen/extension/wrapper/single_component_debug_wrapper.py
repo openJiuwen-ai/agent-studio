@@ -3,7 +3,9 @@
 """单组件调测包装器，用于在新框架（openjiuwen）下实现旧框架的单组件调试能力。"""
 
 import asyncio
+import json
 import logging
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
@@ -147,7 +149,13 @@ class SingleComponentDebugWrapper:
             handle_type = EXCEPTION_HANDLE_INTERRUPT
 
         default_outputs = exception_process.get(EXCEPTION_DEFAULT_OUTPUTS, {}) or {}
-        outputs_schema = self._inputs_schema if isinstance(self._inputs_schema, dict) else {}
+        # HTTP 输出扁平、与 inputs 货架无关：对齐 ir_converter._parse_exception_config
+        # 的 EI.http 规则置空 outputs_schema，让兜底键原样通过；否则恢复输出会混入
+        # 重排后的 inputs 货架键（query_parameters/headers 等）
+        if self._node_type == "EI.http":
+            outputs_schema = {}
+        else:
+            outputs_schema = self._inputs_schema if isinstance(self._inputs_schema, dict) else {}
 
         config = ExceptionConfig(
             handle_type=handle_type,
@@ -262,6 +270,8 @@ class SingleComponentDebugWrapper:
             return inputs
         elif self._node_type == "jiuwen.intentDetection":
             return inputs
+        elif self._node_type == "EI.http":
+            return self._preprocess_http_inputs(inputs)
         elif self._node_type in ("jiuwen.subWorkflow", "jiuwen.workflowComposite"):
             param_field = _SYSTEM_FIELDS
         else:
@@ -288,6 +298,139 @@ class SingleComponentDebugWrapper:
                 )
 
         return {param_field: processed_inputs}
+
+    # ------------------------------------------------------------------
+    # EI.http 输入组装 — 对齐 HTTPRequestExecutable 的货架契约
+    # ------------------------------------------------------------------
+
+    def _preprocess_http_inputs(self, inputs: dict) -> dict:
+        """组装 EI.http 的单节点调试输入。
+
+        HTTPRequestExecutable.process_inputs 从 invoke inputs 顶层读取
+        query_parameters / headers 两货架与平铺用户字段（{{key}} 占位符替换）。
+        工作流路径中这些内容由 _add_component 注册重排后 inputs_schema、
+        图状态注入；调试路径绕过 Vertex，通用 userFields 分支会把面板输入
+        收缩成 {userFields: {...}}，导致 query/headers/鉴权全部丢失。
+        此处以重排后 inputs_schema（query→query_parameters、auth 并入、
+        userFields 平铺）为底，叠加调试面板输入：
+
+        - query / headers 两个 JSON 框并入对应货架（合并语义，空框 {} 表示
+          完全按节点配置执行，框内同名键优先于节点配置）；
+        - 其余用户字段值叠加到顶层同名键（不叠加则用户在面板填写的
+          用户字段值被丢弃，调试结果与输入不一致），见
+          _overlay_http_user_fields。
+        """
+        base = (
+            deepcopy(self._inputs_schema)
+            if isinstance(self._inputs_schema, dict)
+            else {}
+        )
+        query_override = self._parse_http_debug_box(inputs.get("query"), "query")
+        if query_override:
+            shelf = base.get("query_parameters")
+            base["query_parameters"] = {
+                **(shelf if isinstance(shelf, dict) else {}),
+                **query_override,
+            }
+        headers_override = self._parse_http_debug_box(inputs.get("headers"), "headers")
+        if headers_override:
+            shelf = base.get("headers")
+            base["headers"] = {
+                **(shelf if isinstance(shelf, dict) else {}),
+                **headers_override,
+            }
+        self._overlay_http_user_fields(inputs, base)
+        return base
+
+    def _overlay_http_user_fields(self, inputs: dict, base: dict) -> None:
+        """把调试面板的用户字段值叠加到 base 顶层。
+
+        取值口径对齐通用 userFields 分支：仅接受 configs.userFields.inputs
+        声明过的键，或重排后 base 已存在的键；平铺形态（前端节点测试对话框
+        按 inputs 条目逐键发送）与嵌套 userFields 形态（直接 API 调用）都
+        接受，平铺键优先。组件保留键（method/body/authentication 等）一律
+        跳过——重排侧同样避让，调试输入不得改变节点控制配置。
+        """
+        # ir_converter 模块级导入了本模块（SingleComponentInfo），此处必须
+        # 函数级延迟导入避免循环依赖
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            _HTTP_RESERVED_INPUT_KEYS,
+        )
+
+        candidates: dict = {}
+        nested = inputs.get(_USER_FIELDS)
+        if isinstance(nested, dict):
+            candidates.update(nested)
+        for key, value in inputs.items():
+            if key in ("query", "headers", _USER_FIELDS):
+                continue  # query/headers 已由货架合并消费
+            candidates[key] = value
+
+        declared = {
+            item.get("id")
+            for item in (self._configs.get(_USER_FIELDS) or {}).get("inputs", [])
+            if isinstance(item, dict)
+        }
+        declared.discard(None)
+        for key, value in candidates.items():
+            if key in _HTTP_RESERVED_INPUT_KEYS:
+                workflow_logger.warning(
+                    f"EI.http debug input {key!r} collides with component "
+                    "reserved key; skipped in overlay"
+                )
+                continue
+            if key in declared or key in base:
+                base[key] = value
+            else:
+                workflow_logger.warning(
+                    f"EI.http debug input {key!r} is not a declared user "
+                    "field; skipped in overlay"
+                )
+
+    @staticmethod
+    def _parse_http_debug_box(value: Any, box_name: str) -> dict:
+        """解析 HTTP 调试面板 JSON 框的值。
+
+        前端 Monaco 编辑器传 JSON 字符串（如 '{}'），直接 API 调用可能传 dict，
+        两种形态都接受；非法 JSON、非对象及其他非 str/dict 形态报
+        COMPONENT_STEP_DEBUG_ERROR，避免用户输入被静默吞掉。
+        """
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return {}
+            try:
+                parsed = json.loads(text)
+            except ValueError as exc:
+                raise JiuWenBaseException(
+                    error_code=StatusCode.COMPONENT_STEP_DEBUG_ERROR.code,
+                    message=StatusCode.COMPONENT_STEP_DEBUG_ERROR.errmsg.format(
+                        reason=f"HTTP debug input '{box_name}' is not valid JSON: {exc}"
+                    ),
+                ) from exc
+            if not isinstance(parsed, dict):
+                raise JiuWenBaseException(
+                    error_code=StatusCode.COMPONENT_STEP_DEBUG_ERROR.code,
+                    message=StatusCode.COMPONENT_STEP_DEBUG_ERROR.errmsg.format(
+                        reason=f"HTTP debug input '{box_name}' must be a JSON object"
+                    ),
+                )
+            return parsed
+        # list/number/bool 等非 str/dict 形态（仅 API 直调会传入）：按约定报错，
+        # 不得静默忽略调试覆盖
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_STEP_DEBUG_ERROR.code,
+            message=StatusCode.COMPONENT_STEP_DEBUG_ERROR.errmsg.format(
+                reason=(
+                    f"HTTP debug input '{box_name}' must be a JSON object "
+                    f"or a JSON object string, got {type(value).__name__}"
+                )
+            ),
+        )
 
     # ------------------------------------------------------------------
     # 输入格式适配 — graph_invoker 组件需要 {INPUTS_KEY: ..., CONFIG_KEY: ...}
@@ -467,7 +610,12 @@ class SingleComponentDebugWrapper:
                 ),
             )
 
-        handle_type = (config.handle_type or "").lower()
+        # handle_type 不做大小写变换：_parse_exception_config 的枚举校验已保证
+        # 此处必为三个常量的精确值（非法值早被归为 interrupt）。历史 .lower()
+        # 会把驼峰常量 "defaultOutputs" 变成 "defaultoutputs" 永不命中，
+        # 默认输出恢复静默退化为 interrupt 抛错（errorbranch/interrupt 全小写
+        # 不受影响，唯独 defaultOutputs 被杀）
+        handle_type = config.handle_type or EXCEPTION_HANDLE_INTERRUPT
         if handle_type == EXCEPTION_HANDLE_ERROR_BRANCH:
             if self._node_type in _NO_ERROR_BRANCH_TYPES:
                 raise error

@@ -31,6 +31,8 @@ public class RedisClientMemory implements RedisClient {
 
     private final Map<String, CacheData<Long>> numberCache = new HashMap<>();
 
+    private final Map<String, List<String>> listCache = new HashMap<>();
+
     public RedisClientMemory() {
         Executors.newSingleThreadScheduledExecutor()
             .scheduleAtFixedRate(this::clearExpiredData, 1, 1, TimeUnit.MINUTES);
@@ -155,6 +157,73 @@ public class RedisClientMemory implements RedisClient {
     @Override
     public void deleteByPrefix(String prefix) {
         cache.entrySet().removeIf(entry -> entry.getKey().startsWith(prefix));
+    }
+
+    @Override
+    public void rPushAll(String key, List<String> values, Duration duration) {
+        synchronized (LOCK) {
+            List<String> list = listCache.computeIfAbsent(key, k -> new ArrayList<>());
+            if (values != null) {
+                list.addAll(values);
+            }
+        }
+    }
+
+    @Override
+    public List<String> lRange(String key, int start, int end) {
+        synchronized (LOCK) {
+            List<String> list = listCache.get(key);
+            if (list == null || list.isEmpty()) {
+                return new ArrayList<>();
+            }
+            int size = list.size();
+            int from = normalizeIndex(start, size);
+            int to = normalizeIndex(end, size);
+            if (from > to || from >= size) {
+                return new ArrayList<>();
+            }
+            if (to >= size) {
+                to = size - 1;
+            }
+            return new ArrayList<>(list.subList(from, to + 1));
+        }
+    }
+
+    @Override
+    public void lTrim(String key, int start, int end) {
+        synchronized (LOCK) {
+            List<String> list = listCache.get(key);
+            if (list == null || list.isEmpty()) {
+                return;
+            }
+            int size = list.size();
+            int from = normalizeIndex(start, size);
+            int to = normalizeIndex(end, size);
+            if (from > to || from >= size) {
+                listCache.put(key, new ArrayList<>());
+                return;
+            }
+            if (to >= size) {
+                to = size - 1;
+            }
+            listCache.put(key, new ArrayList<>(list.subList(from, to + 1)));
+        }
+    }
+
+    @Override
+    public long lLen(String key) {
+        synchronized (LOCK) {
+            List<String> list = listCache.get(key);
+            return list == null ? 0L : list.size();
+        }
+    }
+
+    /**
+     * 将 Redis 风格的索引（支持负数从末尾算）归一化为非负索引。
+     */
+    private int normalizeIndex(int index, int size) {
+        int normalized = index < 0 ? size + index : index;
+        return Math.max(0, normalized);
     }
 
     private static class CacheData<T> {

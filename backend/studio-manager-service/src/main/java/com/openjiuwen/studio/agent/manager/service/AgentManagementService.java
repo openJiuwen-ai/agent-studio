@@ -3030,6 +3030,12 @@ public class AgentManagementService implements IAgentManagementService {
                 newReleaseChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             }
             newReleaseChannel.setVersionId(createChannelReq.getVersionId());
+            ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId,
+                createChannelReq.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+            }
+            newReleaseChannel.setVersionName(version.getVersionName());
             newReleaseChannel.setVisibilityScope(createChannelReq.getVisibilityScope().toString());
             newReleaseChannel.setCallCount(createChannelReq.getCallCount());
             newReleaseChannel.setWorkspaceId(workspaceId);
@@ -3054,6 +3060,9 @@ public class AgentManagementService implements IAgentManagementService {
             newReleaseChannel.setStatus("released");
             ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId,
                 createChannelReq.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+            }
             newReleaseChannel.setVersionName(version.getVersionName());
             newReleaseChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             releaseChannelMapper.insert(newReleaseChannel);
@@ -3204,6 +3213,9 @@ public class AgentManagementService implements IAgentManagementService {
         newChannel.setVisibilityScope(body.getVisibilityScope().toString());
         newChannel.setCallCount(body.getCallCount());
         ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId, body.getVersionId());
+        if (version == null) {
+            throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+        }
         newChannel.setVersionName(version.getVersionName());
         // 更新subType
         if (version.getSubType() != null) {

@@ -2123,7 +2123,7 @@
   "qamodalcomponent_563": "Question content cannot be empty",
   "sqlmodalcomponent_575": "No databases available",
   "sqlmodalcomponent_585": "Please select a database",
-  "sqlmodalcomponent_586": "Two input modes:\n1. Reference the output of the previous node.\n2. Enter SQL statements.\n\nOnly one input mode can be selected.\nMultiple SQL statements are not supported.",
+  "sqlmodalcomponent_586": "Two input modes:\n1. Reference the output of the previous node.\n2. Enter SQL statements.\n\nOnly one input mode can be selected.\nMultiple SQL statements are not supported;\nUse LIMIT to restrict the number of returned rows when querying a large amount of data.",
   "sqlnodecomponent_590": "No database selected",
   "startimportjsonmodalcomponent_594": "{\n  \"name\": \"Zhang San\",\n  \"age\": 30,\n  \"regular\": true,\n  \"skills\": [\n    \"Programming\",\n    \"Design\"\n  ]\n}",
   "flowcomponent_608": "Async Tasks",

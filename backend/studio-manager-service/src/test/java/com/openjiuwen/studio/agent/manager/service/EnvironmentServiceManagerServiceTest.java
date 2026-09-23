@@ -3,6 +3,7 @@
  */
 package com.openjiuwen.studio.agent.manager.service;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.*;
@@ -25,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
@@ -135,9 +137,13 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        Environment result = environmentServiceManagerService.queryEnvironment(TEST_PROJECT_ID, "not_exist_id");
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.queryEnvironment(TEST_PROJECT_ID, "not_exist_id");
+        });
 
-        assertNotNull(result);
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
+        assertEquals("1017", exception.getErrorCode().getCode());
     }
 
     @Test
@@ -287,6 +293,12 @@ public class EnvironmentServiceManagerServiceTest {
         var result = environmentServiceManagerService.queryEnvironmentVariables(TEST_PROJECT_ID, qo);
 
         assertNotNull(result);
+        assertEquals(1, result.getTotal());
+        assertNotNull(result.getVariables());
+        assertEquals(1, result.getVariables().size());
+        // 环境变量 DB 记录为空时 count 为 0、变量列表为空
+        assertEquals(0, result.getVariables().get(0).getCount());
+        assertEquals(0, result.getVariables().get(0).getVariables().size());
     }
 
     @Test
@@ -302,11 +314,14 @@ public class EnvironmentServiceManagerServiceTest {
         var result = environmentServiceManagerService.queryEnvironmentVariables(TEST_PROJECT_ID, qo);
 
         assertNotNull(result);
+        // 单页最大 100 时回退为 10，空结果 total 为 0
+        assertEquals(0, result.getTotal());
+        assertEquals(0, result.getVariables().size());
     }
 
     @Test
     void testQueryEnvironmentVariablesById_Success() {
-        when(environmentManagerMapper.findById("test_env_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
             .thenReturn(testEnvironmentEntity);
         when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
             .thenReturn(null);
@@ -318,41 +333,60 @@ public class EnvironmentServiceManagerServiceTest {
             TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
 
         assertEquals("", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
     }
 
     @Test
     void testQueryEnvironmentVariablesById_NotFound() {
-        when(environmentManagerMapper.findById("not_exist_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
         String result = environmentServiceManagerService.queryEnvironmentVariables(
             TEST_PROJECT_ID, "not_exist_id", TEST_WORKSPACE_ID);
 
         assertEquals("", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
     }
 
     @Test
     void testShowEnvironmentVariables_Success() {
-        when(environmentManagerMapper.findById("test_env_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
             .thenReturn(testEnvironmentEntity);
         when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
-            .thenReturn("[]");
+            .thenReturn("[{\"name\":\"KEY\",\"value\":{\"type\":\"string\",\"content\":\"val\",\"secret\":false}}]");
 
         var result = environmentServiceManagerService.showEnvironmentVariables(
             TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
 
         assertNotNull(result);
+        assertNotNull(result.getVariables());
+        assertEquals(1, result.getVariables().size());
+        assertEquals("KEY", result.getVariables().get(0).getName());
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
+        // 缓存命中分支不查询 DB
+        verify(environmentVariableMapper, Mockito.never())
+            .findByProjectIdAndWorkspaceIdAndEnvId(anyString(), anyString(), anyString());
     }
 
     @Test
     void testShowEnvironmentVariables_NotFound() {
-        when(environmentManagerMapper.findById("not_exist_id"))
+        when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        var result = environmentServiceManagerService.showEnvironmentVariables(
-            TEST_PROJECT_ID, "not_exist_id", TEST_WORKSPACE_ID);
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.showEnvironmentVariables(
+                TEST_PROJECT_ID, "not_exist_id", TEST_WORKSPACE_ID);
+        });
 
-        assertNotNull(result);
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
+        assertEquals("1017", exception.getErrorCode().getCode());
     }
 
     @Test
@@ -395,10 +429,13 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        assertThrows(AgentStudioException.class, () -> {
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
             environmentServiceManagerService.deleteEnvironmentVariables(
                 TEST_PROJECT_ID, "not_exist_id", "var_id", TEST_WORKSPACE_ID);
         });
+
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
     }
 
     @Test
@@ -473,10 +510,13 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        assertThrows(AgentStudioException.class, () -> {
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
             environmentServiceManagerService.modifyEnvironmentInfo(
                 TEST_PROJECT_ID, "not_exist_id", request);
         });
+
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
     }
 
     @Test
@@ -509,10 +549,13 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        assertThrows(AgentStudioException.class, () -> {
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
             environmentServiceManagerService.isDefaultEnvironments(
                 TEST_PROJECT_ID, "not_exist_id");
         });
+
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
     }
 
     @Test
@@ -530,11 +573,17 @@ public class EnvironmentServiceManagerServiceTest {
     @Test
     void testValidateEnvironmentId_BlankEnvironment() {
         environmentServiceManagerService.validateEnvironmentId("");
+
+        // 空环境 ID 提前返回，不触发 DB 越权校验
+        verify(environmentManagerMapper, Mockito.never()).findByIdAndProjectId(anyString(), anyString());
     }
 
     @Test
     void testValidateEnvironmentId_JsonString() {
         environmentServiceManagerService.validateEnvironmentId("{\"name\":\"test\"}");
+
+        // JSON 字符串视为工作流引用，提前返回，不触发 DB 越权校验
+        verify(environmentManagerMapper, Mockito.never()).findByIdAndProjectId(anyString(), anyString());
     }
 
     @Test
@@ -550,9 +599,12 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        assertThrows(AgentStudioException.class, () -> {
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
             environmentServiceManagerService.validateEnvironmentId("not_exist_id");
         });
+
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
     }
 
     @Test
@@ -583,9 +635,12 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId("not_exist_id", TEST_PROJECT_ID))
             .thenReturn(null);
 
-        assertThrows(AgentStudioException.class, () -> {
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
             environmentServiceManagerService.deleteEnvironment(TEST_PROJECT_ID, "not_exist_id");
         });
+
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
     }
 
     @Test
@@ -735,9 +790,365 @@ public class EnvironmentServiceManagerServiceTest {
         when(environmentManagerMapper.findByIdAndProjectId(environmentId, TEST_PROJECT_ID))
             .thenReturn(null);
 
-        assertThrows(AgentStudioException.class, () -> {
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
             environmentServiceManagerService.uploadEnvironmentVarToObsFileForController(
                 TEST_PROJECT_ID, agentId, environmentId, TEST_WORKSPACE_ID, flowVersion);
         });
+
+        assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getErrorCode().getHttpStatus());
+    }
+
+    /**
+     * 用例描述：showEnvironmentVariables 缓存未命中时回源 DB 查询环境变量并返回
+     * 预制条件：环境存在（findByIdAndProjectId 返回实体），缓存为空串
+     * 输入参数：projectId、环境 ID、workspaceId
+     * 预期结果：返回 DB 中的变量列表，verify 环境查询走 findByIdAndProjectId 且缓存为空时查询 DB
+     */
+    @Test
+    void testShowEnvironmentVariablesShouldReadVariablesFromDbWhenCacheEmpty() {
+        EnvironmentVariableEntity variableEntity = new EnvironmentVariableEntity();
+        variableEntity.setEnvVariable("[{\"name\":\"KEY\",\"value\":{\"type\":\"string\",\"content\":\"val\",\"secret\":false}}]");
+
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
+            .thenReturn("");
+        when(environmentVariableMapper.findByProjectIdAndWorkspaceIdAndEnvId(
+            TEST_PROJECT_ID, TEST_WORKSPACE_ID, "test_env_id"))
+            .thenReturn(variableEntity);
+
+        var result = environmentServiceManagerService.showEnvironmentVariables(
+            TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
+
+        assertNotNull(result);
+        assertNotNull(result.getVariables());
+        assertEquals(1, result.getVariables().size());
+        assertEquals("KEY", result.getVariables().get(0).getName());
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
+        // 缓存为空回源 DB
+        verify(environmentVariableMapper)
+            .findByProjectIdAndWorkspaceIdAndEnvId(TEST_PROJECT_ID, TEST_WORKSPACE_ID, "test_env_id");
+    }
+
+    /**
+     * 用例描述：showEnvironmentVariables 缓存为空且 DB 无记录时返回空变量结果
+     * 预制条件：环境存在，缓存为空串，DB 中无环境变量记录
+     * 输入参数：projectId、环境 ID、workspaceId
+     * 预期结果：返回 EnvironmentVariables 空结果，variables 为 null 不抛异常
+     */
+    @Test
+    void testShowEnvironmentVariablesShouldReturnEmptyResultWhenDbEmpty() {
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
+            .thenReturn("");
+        when(environmentVariableMapper.findByProjectIdAndWorkspaceIdAndEnvId(
+            TEST_PROJECT_ID, TEST_WORKSPACE_ID, "test_env_id"))
+            .thenReturn(null);
+
+        var result = environmentServiceManagerService.showEnvironmentVariables(
+            TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
+
+        assertNotNull(result);
+        assertNull(result.getVariables());
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+    }
+
+    /**
+     * 用例描述：showEnvironmentVariables 返回前对密钥类型变量内容做脱敏处理
+     * 预制条件：环境存在，缓存中存在 secret=true 的变量
+     * 输入参数：projectId、环境 ID、workspaceId，缓存内容含明文密钥
+     * 预期结果：密钥变量 content 被替换为 ******，非密钥变量保持不变
+     */
+    @Test
+    void testShowEnvironmentVariablesShouldMaskSecretValue() {
+        String cacheContent = "[{\"name\":\"SECRET_KEY\",\"value\":{\"type\":\"string\",\"content\":\"plain-secret\",\"secret\":true}},"
+            + "{\"name\":\"PLAIN_KEY\",\"value\":{\"type\":\"string\",\"content\":\"plain-value\",\"secret\":false}}]";
+
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
+            .thenReturn(cacheContent);
+
+        var result = environmentServiceManagerService.showEnvironmentVariables(
+            TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
+
+        assertNotNull(result);
+        assertNotNull(result.getVariables());
+        assertEquals(2, result.getVariables().size());
+        // 密钥变量脱敏
+        assertEquals("******", result.getVariables().get(0).getValue().getContent());
+        // 非密钥变量内容保持原样
+        assertEquals("plain-value", result.getVariables().get(1).getValue().getContent());
+    }
+
+    /**
+     * 用例描述：queryEnvironment 环境 resources 为 null 时资源元数据解析为空，不抛异常正常返回
+     * 预制条件：环境存在且 resources 字段为 null
+     * 输入参数：projectId、环境 ID
+     * 预期结果：返回 Environment 对象且基本信息正确
+     */
+    @Test
+    void testQueryEnvironmentShouldNotFailWhenResourcesNull() {
+        EnvironmentManagerEntity entityWithoutResources = createTestEnvironmentEntity();
+        entityWithoutResources.setResources(null);
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(entityWithoutResources);
+        when(environmentClientService.queryEnvironmentInfo(any(), any(), any(), any()))
+            .thenReturn(null);
+
+        Environment result = environmentServiceManagerService.queryEnvironment(TEST_PROJECT_ID, "test_env_id");
+
+        assertNotNull(result);
+        assertEquals("test_env_name", result.getName());
+        assertNull(result.getVpcName());
+    }
+
+    /**
+     * 用例描述：showEnvironmentVariables 缓存内容为空数组时返回空变量列表且不抛异常
+     * 预制条件：环境存在，缓存内容为 "[]"
+     * 输入参数：projectId、环境 ID、workspaceId
+     * 预期结果：返回 variables 为空列表的 EnvironmentVariables
+     */
+    @Test
+    void testShowEnvironmentVariablesShouldReturnEmptyListWhenCacheEmptyArray() {
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
+            .thenReturn("[]");
+
+        var result = environmentServiceManagerService.showEnvironmentVariables(
+            TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
+
+        assertNotNull(result);
+        assertNotNull(result.getVariables());
+        assertEquals(0, result.getVariables().size());
+        // 缓存命中不查 DB
+        verify(environmentVariableMapper, Mockito.never())
+            .findByProjectIdAndWorkspaceIdAndEnvId(anyString(), anyString(), anyString());
+    }
+
+    /**
+     * 用例描述：deleteEnvironment 底层 Mapper 更新异常时转换为 ENVIRONMENT_DELETE_FAIL
+     * 预制条件：环境存在且状态为 ready，updateStatusAndIsDefaultById 抛异常
+     * 输入参数：projectId、环境 ID
+     * 预期结果：抛出 AgentStudioException 且错误码为 ENVIRONMENT_DELETE_FAIL
+     */
+    @Test
+    void testDeleteEnvironmentShouldThrowDeleteFailWhenMapperFails() {
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentClientService.hasDeleteEnvironment(TEST_PROJECT_ID, "test_env_id"))
+            .thenReturn(true);
+        when(environmentManagerMapper.updateStatusAndIsDefaultById(any(), any(), any(), anyBoolean()))
+            .thenThrow(new RuntimeException("db error"));
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.deleteEnvironment(TEST_PROJECT_ID, "test_env_id");
+        });
+
+        assertEquals(StudioError.ENVIRONMENT_DELETE_FAIL, exception.getErrorCode());
+    }
+
+    /**
+     * 用例描述：modifyEnvironmentInfo 底层 Mapper 更新异常时转换为 ENVIRONMENT_MODIFY_FAIL
+     * 预制条件：环境存在且状态为 ready，updateById 抛异常
+     * 输入参数：projectId、环境 ID、修改请求体
+     * 预期结果：抛出 AgentStudioException 且错误码为 ENVIRONMENT_MODIFY_FAIL
+     */
+    @Test
+    void testModifyEnvironmentInfoShouldThrowModifyFailWhenUpdateFails() {
+        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        request.setDescription("updated description");
+
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentManagerMapper.updateById(any(EnvironmentManagerEntity.class)))
+            .thenThrow(new RuntimeException("db error"));
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.modifyEnvironmentInfo(
+                TEST_PROJECT_ID, "test_env_id", request);
+        });
+
+        assertEquals(StudioError.ENVIRONMENT_MODIFY_FAIL, exception.getErrorCode());
+    }
+
+    /**
+     * 用例描述：isDefaultEnvironments 项目内无其他默认环境时直接设置目标环境为默认
+     * 预制条件：环境存在且状态 ready，项目内无现有默认环境
+     * 输入参数：projectId、环境 ID
+     * 预期结果：返回 true 并同步默认环境缓存
+     */
+    @Test
+    void testIsDefaultEnvironmentsShouldSetDefaultWhenNoExistingDefault() {
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(TEST_PROJECT_ID))
+            .thenReturn(new ArrayList<>());
+        when(environmentManagerMapper.updateIsDefaultById("test_env_id", true, TEST_CREATOR_ID))
+            .thenReturn(1);
+
+        Boolean result = environmentServiceManagerService.isDefaultEnvironments(
+            TEST_PROJECT_ID, "test_env_id");
+
+        assertTrue(result);
+        verify(environmentCacheUtil).updateDefaultEnvironmentCache(TEST_PROJECT_ID, "test_env_id");
+    }
+
+    /**
+     * 用例描述：isDefaultEnvironments 设置默认环境失败时抛出 ENVIRONMENT_DEFAULT_SET_FAIL
+     * 预制条件：环境存在且状态 ready，updateIsDefaultById 返回 0
+     * 输入参数：projectId、环境 ID
+     * 预期结果：抛出 AgentStudioException 且错误码为 ENVIRONMENT_DEFAULT_SET_FAIL
+     */
+    @Test
+    void testIsDefaultEnvironmentsShouldThrowSetFailWhenUpdateFails() {
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue(TEST_PROJECT_ID))
+            .thenReturn(new ArrayList<>());
+        when(environmentManagerMapper.updateIsDefaultById("test_env_id", true, TEST_CREATOR_ID))
+            .thenReturn(0);
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.isDefaultEnvironments(
+                TEST_PROJECT_ID, "test_env_id");
+        });
+
+        assertEquals(StudioError.ENVIRONMENT_DEFAULT_SET_FAIL, exception.getErrorCode());
+    }
+
+    /**
+     * 用例描述：modifyEnvironmentInfo 环境状态非 READY 时抛出 ENVIRONMENT_DEFAULT_NOT_SUPPORT
+     * 预制条件：环境存在但状态为 creating（非 ready）
+     * 输入参数：projectId、环境 ID、修改请求体
+     * 预期结果：抛出 AgentStudioException 且错误码为 ENVIRONMENT_DEFAULT_NOT_SUPPORT
+     */
+    @Test
+    void testModifyEnvironmentInfoShouldThrowNotSupportWhenStatusNotReady() {
+        testEnvironmentEntity.setStatus("creating");
+        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        request.setDescription("updated description");
+
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.modifyEnvironmentInfo(
+                TEST_PROJECT_ID, "test_env_id", request);
+        });
+
+        assertEquals(StudioError.ENVIRONMENT_DEFAULT_NOT_SUPPORT, exception.getErrorCode());
+    }
+
+    /**
+     * 用例描述：deleteEnvironmentVariables 底层 Mapper 删除异常时转换为 ENVIRONMENT_VARIABLE_DELETE_FAIL
+     * 预制条件：环境存在且变量记录存在，deleteById 抛异常
+     * 输入参数：projectId、环境 ID、变量 ID、workspaceId
+     * 预期结果：抛出 AgentStudioException 且错误码为 ENVIRONMENT_VARIABLE_DELETE_FAIL
+     */
+    @Test
+    void testDeleteEnvironmentVariablesShouldThrowDeleteFailWhenMapperFails() {
+        EnvironmentVariableEntity variableEntity = new EnvironmentVariableEntity();
+        variableEntity.setId("var_id");
+
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentVariableMapper.findByProjectIdAndWorkspaceIdAndEnvIdAndId(
+            TEST_PROJECT_ID, TEST_WORKSPACE_ID, "test_env_id", "var_id"))
+            .thenReturn(variableEntity);
+        when(environmentVariableMapper.deleteById("var_id"))
+            .thenThrow(new RuntimeException("db error"));
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+            environmentServiceManagerService.deleteEnvironmentVariables(
+                TEST_PROJECT_ID, "test_env_id", "var_id", TEST_WORKSPACE_ID);
+        });
+
+        assertEquals(StudioError.ENVIRONMENT_VARIABLE_DELETE_FAIL, exception.getErrorCode());
+    }
+
+    /**
+     * 用例描述：queryEnvironmentVariables(projectId, environmentId, workspaceId) 缓存命中时直接返回缓存值
+     * 预制条件：环境存在（findByIdAndProjectId 返回实体），缓存中存在非空变量串
+     * 输入参数：projectId、环境 ID、workspaceId
+     * 预期结果：返回缓存中的变量串，不查询 DB
+     */
+    @Test
+    void testQueryEnvironmentVariablesByIdShouldReturnCachedValue() {
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
+            .thenReturn("[{\"name\":\"KEY\",\"value\":{\"type\":\"string\",\"content\":\"val\",\"secret\":false}}]");
+
+        String result = environmentServiceManagerService.queryEnvironmentVariables(
+            TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
+
+        assertEquals("[{\"name\":\"KEY\",\"value\":{\"type\":\"string\",\"content\":\"val\",\"secret\":false}}]", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
+        verify(environmentVariableMapper, Mockito.never())
+            .findByProjectIdAndWorkspaceIdAndEnvId(anyString(), anyString(), anyString());
+    }
+
+    /**
+     * 用例描述：queryEnvironmentVariables(projectId, environmentId, workspaceId) 缓存未命中时回源 DB 返回变量串
+     * 预制条件：环境存在，缓存为空，DB 中存在变量记录
+     * 输入参数：projectId、环境 ID、workspaceId
+     * 预期结果：返回 DB 中的变量串
+     */
+    @Test
+    void testQueryEnvironmentVariablesByIdShouldReturnDbValue() {
+        EnvironmentVariableEntity variableEntity = new EnvironmentVariableEntity();
+        variableEntity.setEnvVariable("db-variable-json");
+
+        when(environmentManagerMapper.findByIdAndProjectId("test_env_id", TEST_PROJECT_ID))
+            .thenReturn(testEnvironmentEntity);
+        when(environmentCacheUtil.getEnvironmentCache("test_env_id", TEST_WORKSPACE_ID))
+            .thenReturn(null);
+        when(environmentVariableMapper.findByProjectIdAndWorkspaceIdAndEnvId(
+            TEST_PROJECT_ID, TEST_WORKSPACE_ID, "test_env_id"))
+            .thenReturn(variableEntity);
+
+        String result = environmentServiceManagerService.queryEnvironmentVariables(
+            TEST_PROJECT_ID, "test_env_id", TEST_WORKSPACE_ID);
+
+        assertEquals("db-variable-json", result);
+        // 越权修复：环境查询走 findByIdAndProjectId 而非 findById
+        verify(environmentManagerMapper).findByIdAndProjectId("test_env_id", TEST_PROJECT_ID);
+        verify(environmentManagerMapper, Mockito.never()).findById(anyString());
+    }
+
+    /**
+     * 用例描述：validateEnvironmentId 在 envType 为 hc 时提前返回不做越权校验
+     * 预制条件：envType 字段为 "hc"
+     * 输入参数：普通环境 ID 字符串（非 JSON、非空）
+     * 预期结果：方法正常返回不抛异常，不触发 DB 查询
+     */
+    @Test
+    void testValidateEnvironmentIdShouldReturnEarlyWhenEnvTypeIsHc() {
+        ReflectionTestUtils.setField(environmentServiceManagerService, "envType", "hc");
+
+        environmentServiceManagerService.validateEnvironmentId("plain_env_id");
+
+        verify(environmentManagerMapper, Mockito.never()).findByIdAndProjectId(anyString(), anyString());
+    }
+
+    /**
+     * 用例描述：validateEnvironmentId 环境 ID 命中工作流名称引用正则（{name= 前缀）时提前返回
+     * 预制条件：无（envType 为默认值 null）
+     * 输入参数：以 {name= 前缀开头的工作流引用字符串
+     * 预期结果：方法正常返回不抛异常，不触发 DB 查询
+     */
+    @Test
+    void testValidateEnvironmentIdShouldReturnEarlyWhenWorkflowNameRegexMatches() {
+        environmentServiceManagerService.validateEnvironmentId("{name=test_env}");
+
+        verify(environmentManagerMapper, Mockito.never()).findByIdAndProjectId(anyString(), anyString());
     }
 }

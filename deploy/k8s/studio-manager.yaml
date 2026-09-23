@@ -100,6 +100,18 @@ spec:
               value: 'true'
             - name: workflow_async_enable
               value: 'true'
+            # 调试记录实时旁路写总开关（新增特性，默认关闭）。false=运行中不写 Redis（仅终态落盘）；true=按下面两项节流实时写。默认 false
+            - name: workflow_insight_bypass_write_enabled
+              value: 'false'
+            # 调试记录分 key 存储开关：true=meta/events 分离（旁路写 O(1)，终态全量 RPUSH events）；false=单 key 全量序列化。默认 false
+            - name: workflow_insight_multi_key_enabled
+              value: 'false'
+            # insight 实时旁路写节流：距上次写入超过该间隔(ms)才真正写 Redis。默认 3000
+            - name: workflow_insight_flush_interval_ms
+              value: '3000'
+            # insight 实时旁路写节流：累计跳过超过该次数才真正写 Redis。默认 20
+            - name: workflow_insight_flush_max_skip
+              value: '20'
             # 运行时agent/workflow地址前缀（IP:Port格式），用于前端拼接API调用地址
             - name: front_page_runtime_host
               value: ''

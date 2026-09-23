@@ -508,6 +508,7 @@ class WorkflowWrapper:
             "mem_map",
             "enable_memory_retrieve",
             "memory_repo_id",
+            "memory_config",
         ]
         for key in runtime_keys:
             if key in params:

@@ -88,6 +88,14 @@ public class MemoryRepoListItem implements Serializable {
     @Schema(description = "更新时间", example = "2024-01-02T00:00:00Z")
     private Date updateTime = null;
 
+    @JsonProperty("memory_backend_type")
+    @Schema(description = "记忆后端类型：BUILTIN/EXTERNAL", example = "BUILTIN")
+    private String memoryBackendType = null;
+
+    @JsonProperty("memory_service_instance_id")
+    @Schema(description = "外部记忆服务实例ID（EXTERNAL时非空）", example = "instance-001")
+    private String memoryServiceInstanceId = null;
+
     public String getMemoryRepoId() {
         return memoryRepoId;
     }
@@ -196,6 +204,24 @@ public class MemoryRepoListItem implements Serializable {
         return this;
     }
 
+    public String getMemoryBackendType() {
+        return memoryBackendType;
+    }
+
+    public MemoryRepoListItem setMemoryBackendType(String memoryBackendType) {
+        this.memoryBackendType = memoryBackendType;
+        return this;
+    }
+
+    public String getMemoryServiceInstanceId() {
+        return memoryServiceInstanceId;
+    }
+
+    public MemoryRepoListItem setMemoryServiceInstanceId(String memoryServiceInstanceId) {
+        this.memoryServiceInstanceId = memoryServiceInstanceId;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -213,6 +239,8 @@ public class MemoryRepoListItem implements Serializable {
         sb.append("    lastUpdateUserId: ").append(toIndentedString(lastUpdateUserId)).append("\n");
         sb.append("    lastUpdateUserName: ").append(toIndentedString(lastUpdateUserName)).append("\n");
         sb.append("    updateTime: ").append(toIndentedString(updateTime)).append("\n");
+        sb.append("    memoryBackendType: ").append(toIndentedString(memoryBackendType)).append("\n");
+        sb.append("    memoryServiceInstanceId: ").append(toIndentedString(memoryServiceInstanceId)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -234,13 +262,16 @@ public class MemoryRepoListItem implements Serializable {
             this.createdUserName, memoryRepoListItem.createdUserName) && Objects.equals(this.createTime,
             memoryRepoListItem.createTime) && Objects.equals(this.lastUpdateUserId, memoryRepoListItem.lastUpdateUserId)
             && Objects.equals(this.lastUpdateUserName, memoryRepoListItem.lastUpdateUserName) && Objects.equals(
-            this.updateTime, memoryRepoListItem.updateTime);
+            this.updateTime, memoryRepoListItem.updateTime)
+            && Objects.equals(this.memoryBackendType, memoryRepoListItem.memoryBackendType)
+            && Objects.equals(this.memoryServiceInstanceId, memoryRepoListItem.memoryServiceInstanceId);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(memoryRepoId, workspaceId, name, description, icon, longTermMemoryStrategies, createdUserId,
-            createdUserName, createTime, lastUpdateUserId, lastUpdateUserName, updateTime);
+            createdUserName, createTime, lastUpdateUserId, lastUpdateUserName, updateTime,
+            memoryBackendType, memoryServiceInstanceId);
     }
 
     /**

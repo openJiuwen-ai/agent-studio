@@ -9,6 +9,8 @@ import static java.time.temporal.ChronoUnit.DAYS;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
@@ -41,6 +43,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -56,6 +62,14 @@ public class WorkflowInstanceService {
     @Autowired
     private RedisHistoryEvictionService redisHistoryEvictionService;
 
+    /**
+     * 调试记录实时持久化的旁路线程池，避免在 OkHttp SSE 回调线程上同步写 Redis 阻塞事件透传。
+     * {@link com.openjiuwen.studio.agent.manager.config.AsyncConfig#insightPersistenceExecutor}
+     */
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("insightPersistenceExecutor")
+    private Executor insightPersistenceExecutor;
+
     @Value("${workflow.insight-exec-rel:}")
     private String insightExecRel;  // 一个conversation下的execution记录
 
@@ -64,6 +78,25 @@ public class WorkflowInstanceService {
 
     @Value("${workflow.insight-exec:}")
     private String insightExec;
+
+    @Value("${workflow.insight-exec-events:}")
+    private String insightExecEvents;
+
+    /**
+     * 调试记录分 key 存储开关。开启后 meta 与 events 分离存储（避免单 key 全量序列化 O(N²) 读写阻塞）；
+     * 关闭时保持原样（单 key 全量序列化）。读取始终兼容两种格式，开关切换不影响已有数据读取。
+     */
+    @Value("${workflow.insight-multi-key-enabled:false}")
+    private boolean insightMultiKeyEnabled;
+
+    /**
+     * 调试记录实时旁路写总开关（新增特性，默认关闭）。
+     * false=运行中不对每个节点事件写 Redis，{@code saveInsightMessageAsync} 短路为 no-op，
+     *      仅终态 {@code saveTerminal} 落盘完整数据；实时调试更新走 SSE 透传，不落库。
+     * true=按 {@code insightFlushIntervalMs}/{@code insightFlushMaxSkip} 节流实时旁路写。默认 false。
+     */
+    @Value("${workflow.insight-bypass-write-enabled:false}")
+    private boolean insightBypassWriteEnabled;
 
     @Value("${workflow.instance-expire:}")
     private Long instExpire;
@@ -76,6 +109,47 @@ public class WorkflowInstanceService {
 
     @Value("${workflow.max-conversation-size:}")
     private Integer maxConversationSize;
+
+    @Value("${workflow.insight-flush-interval-ms:3000}")
+    private long insightFlushIntervalMs;
+
+    @Value("${workflow.insight-flush-max-skip:20}")
+    private int insightFlushMaxSkip;
+
+    /**
+     * 从 events List 读取事件流的单次 LRANGE 批量。
+     * 分批滚动拉取，避免单次 {@code lRange(0, -1)} 全量拉取大 List 阻塞 Redis 单线程、
+     * 触发 Redisson 响应超时重试（历史故障：9 秒空等后异常被吞、返回空 event_list）。
+     * 单批 KB 级，Redis 端耗时 <5ms，不进 slowlog、不排队、不超时。默认 200。
+     */
+    @Value("${workflow.insight-events-load-batch:200}")
+    private int insightEventsLoadBatch;
+
+    /**
+     * 按会话(executionId)维度的旁路写节流状态。
+     * 每个 WORKFLOW_NODE_MESSAGE 事件都触发 saveInsightMessageAsync，但只有
+     * 距上次写入超过 insightFlushIntervalMs 或累计跳过超过 insightFlushMaxSkip 次时才真正提交异步写。
+     * 被跳过的事件不丢失：eventList 在内存持续累积，终态 saveInstance 会兜底写入完整数据。
+     *
+     * <p>用 Caffeine {@link Cache} 而非 ConcurrentHashMap，{@code expireAfterAccess} 兜底回收：
+     * 正常流终态 {@link #saveTerminal} / {@link #deleteExecution} 会显式 invalidate 及时清理；
+     * 若终态路径未走到（进程崩溃、异常中断未保存等），10 分钟无访问后自动回收，避免内存泄漏。
+     */
+    private final Cache<String, FlushState> flushStates = Caffeine.newBuilder()
+        .expireAfterAccess(10, TimeUnit.MINUTES)
+        .build();
+
+    private static class FlushState {
+        final AtomicInteger skipCount = new AtomicInteger(0);
+        final AtomicLong lastFlushTime = new AtomicLong(0);
+        /**
+         * 已提交但尚未完成的旁路异步写。终态保存前 await 全部，避免旧快照在终态之后覆盖。
+         * 用队列而非单个 future：多线程池下更早提交的旧快照可能晚于新快照完成，
+         * 只 await 最新一个会漏掉旧的。
+         */
+        final java.util.concurrent.ConcurrentLinkedQueue<CompletableFuture<Void>> pendingWrites =
+            new java.util.concurrent.ConcurrentLinkedQueue<>();
+    }
 
     /**
      * 获取工作流运行实例
@@ -95,12 +169,22 @@ public class WorkflowInstanceService {
             if (StringUtils.isEmpty(instStr)) {
                 return null;
             }
-            return JSONObject.parseObject(instStr, WorkflowInstanceEntity.class);
+            WorkflowInstanceEntity entity = JSONObject.parseObject(instStr, WorkflowInstanceEntity.class);
+            // 新格式：meta 与 events 分离存储，eventCount 非空标记新格式 → 从 events List 合并 eventList
+            if (entity != null && entity.getEventCount() != null) {
+                entity.setEventList(loadExecutionEvents(userId, workflowInstanceId, versionId));
+            }
+            // 老格式：eventList 内联在 metaStr 中，直接使用（兼容存量数据）
+            return entity;
         } catch (RedisReadOverflowException e) {
             log.warn("Redis read overflow, triggering history eviction for key: {}", e.getRedisKey());
             String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
             if (StringUtils.isNotEmpty(cleanedJson)) {
-                return JSONObject.parseObject(cleanedJson, WorkflowInstanceEntity.class);
+                WorkflowInstanceEntity entity = JSONObject.parseObject(cleanedJson, WorkflowInstanceEntity.class);
+                if (entity != null && entity.getEventCount() != null) {
+                    entity.setEventList(loadExecutionEvents(userId, workflowInstanceId, versionId));
+                }
+                return entity;
             }
             return null;
         } catch (Exception e) {
@@ -152,6 +236,43 @@ public class WorkflowInstanceService {
         }
     }
 
+    /**
+     * 终态保存（工作流结束）：先等待已提交的旁路异步写完成（顺序屏障，避免旧快照在终态写之后覆盖），
+     * 再保存实例（分 key 模式写 meta+索引，原样模式写单 key 全量），分 key 模式开启且为 debug 时再全量落盘 events List。
+     * 仅在 WorkflowListener.saveInstance() 终态路径调用。
+     */
+    public void saveTerminal(WorkflowInstanceEntity workflowInstanceEntity, ExecuteParams executeParams) {
+        String execId = workflowInstanceEntity.getId();
+        try {
+            // 屏障：等待该 executionId 下全部已提交的旁路异步写完成，防止旧快照在终态写之后覆盖。
+            // 用 allOf 而非单个 future：多线程池下旧快照可能晚于新快照完成，只 await 最新会漏。
+            // 超时兜底（5s）：DiscardPolicy 静默丢弃时 future 靠 orTimeout 自动完成，不无限阻塞。
+            if (execId != null) {
+                FlushState state = flushStates.getIfPresent(execId);
+                if (state != null && !state.pendingWrites.isEmpty()) {
+                    CompletableFuture<?>[] futures = state.pendingWrites.toArray(new CompletableFuture[0]);
+                    try {
+                        CompletableFuture.allOf(futures).get(5, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                        log.warn("Wait for in-flight bypass writes timed out, executionId={}. Terminal save proceeds. {}",
+                            execId, e.getMessage());
+                    }
+                }
+            }
+            save(workflowInstanceEntity, executeParams);
+            if (insightMultiKeyEnabled && executeParams.isDebug()) {
+                saveExecutionEvents(workflowInstanceEntity, executeParams.getReleasedVersion(),
+                    executeParams.getUserId());
+            }
+        } finally {
+            // 终态清理节流状态：invalidate 后新的 saveInsightMessageAsync 会用新 FlushState，
+            // 不再有 pendingWrites 指向旧的 inflight future。
+            if (execId != null) {
+                flushStates.invalidate(execId);
+            }
+        }
+    }
+
     private boolean getFinishWorkflowNode(JiuwenEvent jiuwenEvent) {
         if (!Strings.CI.equals(jiuwenEvent.getEvent(),
             JiuwenEventType.WORKFLOW_NODE_MESSAGE.name().toLowerCase(Locale.ROOT))) {
@@ -174,11 +295,127 @@ public class WorkflowInstanceService {
         if (StringUtils.isNotBlank(workflowInstanceEntity.getErrorInfo())) {
             workflowInstanceEntity.setErrorInfo(workflowInstanceEntity.getErrorInfo().replaceAll("(?i)(九问|jiuwen)", "Runtime"));
         }
-        saveExecution(workflowInstanceEntity, versionId, userId);
+        if (insightMultiKeyEnabled) {
+            // 分 key：只写 meta（小对象，不含 eventList），events 由终态全量落盘
+            saveExecutionMeta(workflowInstanceEntity, versionId, userId);
+        } else {
+            // 原样：单 key 全量序列化（含 eventList）
+            saveExecution(workflowInstanceEntity, versionId, userId);
+        }
         saveExecutionInfos(workflowInstanceEntity, versionId, userId);
         if (!isAsync) {
             saveConversationInfos(workflowInstanceEntity, versionId, userId);
         }
+    }
+
+    /**
+     * 异步保存调试记录（insight），用于工作流流式执行过程中的实时旁路写。
+     *
+     * <p>调用方（OkHttp SSE 回调线程）仅负责在当前线程上构造一份快照实体，随后将真正的
+     * Redis 写入（序列化 + 分布式锁 + 读改写）丢给 {@link #insightPersistenceExecutor} 执行，
+     * 确保 runtime→前端的 {@code passThrough} 事件透传不被 Redis 持久化阻塞。
+     *
+     * <p>快照在调用线程同步构造：标量字段浅拷贝、{@code eventList} 复制成新 ArrayList。
+     * 原因是 {@code eventList} 会被 {@code JiuwenEventProcessor.recordEvent} 在后续事件上并发追加，
+     * 若异步序列化时仍读原 list 会触发 {@link java.util.ConcurrentModificationException}。
+     * 单个事件对象在记录后不再修改，故 list 元素引用浅拷贝即可。
+     *
+     * <p>异常全部在异步任务内吞掉并 warn：调试记录是尽力而为的旁路写，
+     * 实时快照丢失不影响 {@code saveInstance()} 的终态保存。
+     *
+     * @param workflowInstanceEntity 工作流运行实例
+     * @param versionId 发布版本号
+     * @param userId 用户ID
+     */
+    public void saveInsightMessageAsync(WorkflowInstanceEntity workflowInstanceEntity, String versionId,
+        String userId, boolean isAsync) {
+        String execId = workflowInstanceEntity.getId();
+        if (execId == null) {
+            return;
+        }
+        // 旁路写总开关：关闭时回退到原有同步 saveInsightMessage，保持存量行为不变（逐节点实时落库）。
+        // 开启时走节流异步旁路写，避免 Redis 写入阻塞 SSE 事件透传。
+        if (!insightBypassWriteEnabled) {
+            saveInsightMessage(workflowInstanceEntity, versionId, userId, isAsync);
+            return;
+        }
+        // 节流：按 executionId 维度，只在时间窗口或计数兜底触发时才提交异步写。
+        // 被跳过的事件不丢失——eventList 在内存持续累积，终态 saveInstance 会兜底写入完整数据。
+        FlushState state = flushStates.get(execId, k -> new FlushState());
+        long now = System.currentTimeMillis();
+        long last = state.lastFlushTime.get();
+        int skipped = state.skipCount.incrementAndGet();
+        boolean timeUp = (now - last) >= insightFlushIntervalMs;
+        boolean countUp = skipped >= insightFlushMaxSkip;
+        if (!timeUp && !countUp) {
+            return;
+        }
+        // 命中写入条件，重置计数器
+        state.skipCount.set(0);
+        state.lastFlushTime.set(now);
+
+        // 分 key：meta 快照（O(1)，不拷贝 eventList）；原样：整表快照（拷贝 eventList 副本，防并发修改）
+        WorkflowInstanceEntity snapshot = insightMultiKeyEnabled
+            ? snapshotMeta(workflowInstanceEntity) : snapshotInstance(workflowInstanceEntity);
+        String requestId = org.slf4j.MDC.get("request-id");
+        // 注册 in-flight future，终态 saveTerminal 会 await 全部，防止旧快照在终态之后覆盖
+        CompletableFuture<Void> inflight = new CompletableFuture<>();
+        // orTimeout 自完成：DiscardPolicy 静默丢弃时不走 catch、finally 不执行，
+        // future 靠 5s 超时自动 complete，避免 saveTerminal 的 allOf 无限等待。
+        inflight.orTimeout(5, TimeUnit.SECONDS);
+        state.pendingWrites.add(inflight);
+        try {
+            CompletableFuture.runAsync(
+                () -> {
+                    if (requestId != null) {
+                        org.slf4j.MDC.put("request-id", requestId);
+                    }
+                    try {
+                        saveInsightMessage(snapshot, versionId, userId, isAsync);
+                    } catch (Throwable e) {
+                        log.warn("Async save insight message failed, executionId={}. {}",
+                            snapshot.getId(), e.getMessage(), e);
+                    } finally {
+                        if (requestId != null) {
+                            org.slf4j.MDC.clear();
+                        }
+                        inflight.complete(null);
+                    }
+                },
+                insightPersistenceExecutor);
+        } catch (Throwable e) {
+            // RejectedExecutionException（AbortPolicy）走这里；DiscardPolicy 不抛异常、不走这里
+            inflight.complete(null);
+            log.warn("Submit insight async save rejected, executionId={}. {}", workflowInstanceEntity.getId(),
+                e.getMessage());
+        }
+    }
+
+    /**
+     * 构造工作流实例的整表快照（含 eventList 副本），供原样（单 key）模式异步持久化使用，
+     * 避免与 SSE 回调线程并发修改 eventList 触发 ConcurrentModificationException。
+     */
+    private WorkflowInstanceEntity snapshotInstance(WorkflowInstanceEntity source) {
+        if (source == null) {
+            return null;
+        }
+        WorkflowInstanceEntity snapshot = new WorkflowInstanceEntity();
+        snapshot.setId(source.getId());
+        snapshot.setExternalId(source.getExternalId());
+        snapshot.setUserId(source.getUserId());
+        snapshot.setConversationId(source.getConversationId());
+        snapshot.setWorkflowId(source.getWorkflowId());
+        snapshot.setProjectId(source.getProjectId());
+        snapshot.setInputs(source.getInputs());
+        snapshot.setOutputs(source.getOutputs());
+        snapshot.setStatus(source.getStatus());
+        snapshot.setRunInfo(source.getRunInfo());
+        snapshot.setStartTime(source.getStartTime());
+        snapshot.setEndTime(source.getEndTime());
+        snapshot.setErrorInfo(source.getErrorInfo());
+        List<JiuwenEvent> events = source.getEventList();
+        snapshot.setEventList(events == null ? null : new ArrayList<>(events));
+        return snapshot;
     }
 
     private void saveExecution(@NotNull WorkflowInstanceEntity workflowInstanceEntity, String versionId, String userId) {
@@ -188,7 +425,8 @@ public class WorkflowInstanceService {
     private void saveExecution(@NotNull WorkflowInstanceEntity workflowInstanceEntity, String versionId,
         String userId, Duration ttlDuration) {
         String insightExecKey = getInsightExec(userId, workflowInstanceEntity.getId(), versionId);
-        truncateEntityIfNeeded(workflowInstanceEntity);
+        // 事件在 recordEvent 时已由 JiuwenEventProcessor.messageContentClipping 就地裁剪，
+        // 快照的 new ArrayList<>(eventList) 只拷贝引用，裁剪已生效，此处无需重复遍历。
         String json;
         try {
             json = JSON.toJSONString(workflowInstanceEntity, JSONWriter.Feature.LargeObject);
@@ -211,19 +449,147 @@ public class WorkflowInstanceService {
         redisClient.set(insightExecKey, json, ttlDuration);
     }
 
-    private void truncateEntityIfNeeded(WorkflowInstanceEntity entity) {
-        if (entity.getEventList() == null) {
+    /**
+     * 保存工作流实例的元信息（meta）：只写不含 eventList 的小对象，避免每次旁路写都全量序列化 eventList。
+     * eventCount 字段作为"新格式"标记，读取时据此从 events List 合并 eventList。
+     */
+    private void saveExecutionMeta(WorkflowInstanceEntity workflowInstanceEntity, String versionId, String userId) {
+        saveExecutionMeta(workflowInstanceEntity, versionId, userId, Duration.of(instExpire, DAYS));
+    }
+
+    private void saveExecutionMeta(WorkflowInstanceEntity workflowInstanceEntity, String versionId, String userId,
+        Duration ttlDuration) {
+        String metaKey = getInsightExec(userId, workflowInstanceEntity.getId(), versionId);
+        WorkflowInstanceEntity meta = snapshotMeta(workflowInstanceEntity);
+        String json;
+        try {
+            json = JSON.toJSONString(meta, JSONWriter.Feature.LargeObject);
+        } catch (OutOfMemoryError e) {
+            log.error("serialize workflow instance meta OOM, fallback to minimal. executionId={}",
+                workflowInstanceEntity.getId(), e);
+            WorkflowInstanceEntity minimal = new WorkflowInstanceEntity();
+            minimal.setId(workflowInstanceEntity.getId());
+            minimal.setConversationId(workflowInstanceEntity.getConversationId());
+            minimal.setWorkflowId(workflowInstanceEntity.getWorkflowId());
+            minimal.setProjectId(workflowInstanceEntity.getProjectId());
+            minimal.setStatus(workflowInstanceEntity.getStatus());
+            minimal.setStartTime(workflowInstanceEntity.getStartTime());
+            minimal.setEndTime(workflowInstanceEntity.getEndTime());
+            minimal.setErrorInfo("serialize meta OOM");
+            minimal.setEventCount(meta.getEventCount());
+            json = JSON.toJSONString(minimal);
+        }
+        redisClient.set(metaKey, json, ttlDuration);
+    }
+
+    /**
+     * 终态保存：将完整 eventList 全量写入 events List（覆盖式）。
+     * 仅在工作流结束时调用，避免过程中每个事件都全量序列化。
+     * 单条事件已由 JiuwenEventProcessor.messageContentClipping 裁剪到 KB 级，逐条 RPUSH 不会触发单 value 溢出。
+     */
+    public void saveExecutionEvents(WorkflowInstanceEntity workflowInstanceEntity, String versionId, String userId) {
+        String eventsKey = getInsightEvents(userId, workflowInstanceEntity.getId(), versionId);
+        List<JiuwenEvent> events = workflowInstanceEntity.getEventList();
+        if (events == null || events.isEmpty()) {
+            // 无事件也清理可能残留的旧 events key（如同一 conversation 重跑）
+            redisClient.delete(eventsKey);
             return;
         }
-        for (JiuwenEvent event : entity.getEventList()) {
-            JiuwenEventProcessor.messageContentClipping(event);
+        List<String> jsonList = new ArrayList<>(events.size());
+        for (JiuwenEvent event : events) {
+            try {
+                jsonList.add(JSON.toJSONString(event, JSONWriter.Feature.LargeObject));
+            } catch (OutOfMemoryError e) {
+                log.error("serialize single event OOM, skip. executionId={}", workflowInstanceEntity.getId(), e);
+            }
         }
+        // 覆盖式：先删可能残留的旧数据（如重跑），再全量 RPUSH
+        redisClient.delete(eventsKey);
+        redisClient.rPushAll(eventsKey, jsonList, Duration.of(instExpire, DAYS));
+    }
+
+    /**
+     * 从 events List 读取并合并事件流（新格式）。
+     *
+     * <p>按 {@link #insightEventsLoadBatch} 批量滚动拉取，而非单次 {@code lRange(0, -1)} 全量拉取。
+     * 单批 KB 级，Redis 端耗时 <5ms，不进 slowlog、不长时间占用单线程导致排队、不触发 Redisson
+     * 响应超时重试。单批读取失败（Redisson 超时被 wrapper 吞掉返回 null）只影响末尾，保留已累积批次，
+     * 较原先一次失败返回空 event_list 更鲁棒。
+     */
+    private List<JiuwenEvent> loadExecutionEvents(String userId, String executionId, String versionId) {
+        String eventsKey = getInsightEvents(userId, executionId, versionId);
+        List<JiuwenEvent> events = new ArrayList<>();
+        int batch = Math.max(1, insightEventsLoadBatch);
+        for (int offset = 0; ; offset += batch) {
+            List<String> jsonList = redisClient.lRange(eventsKey, offset, offset + batch - 1);
+            if (jsonList == null || jsonList.isEmpty()) {
+                // null：该批读取异常（Redisson 超时被 wrapper 吞掉）。保留已累积批次，不再继续。
+                if (jsonList == null && !events.isEmpty()) {
+                    log.warn("Partial load: batch read failed at offset {}, returning {} events already loaded. key={}",
+                        offset, events.size(), eventsKey);
+                }
+                break;
+            }
+            for (String json : jsonList) {
+                try {
+                    events.add(JSON.parseObject(json, JiuwenEvent.class));
+                } catch (Exception e) {
+                    log.warn("Failed to parse event from events list, skip. {}", e.getMessage());
+                }
+            }
+            if (jsonList.size() < batch) {
+                break;  // 末页
+            }
+        }
+        return events;
+    }
+
+    /**
+     * 构造 meta 快照（标量字段浅拷贝，eventList 不拷贝，仅记录 eventCount）。
+     * 供旁路异步持久化使用：旁路写只更新 meta + 列表索引，事件流由终态全量落盘。
+     */
+    private WorkflowInstanceEntity snapshotMeta(WorkflowInstanceEntity source) {
+        if (source == null) {
+            return null;
+        }
+        WorkflowInstanceEntity snapshot = new WorkflowInstanceEntity();
+        snapshot.setId(source.getId());
+        snapshot.setExternalId(source.getExternalId());
+        snapshot.setUserId(source.getUserId());
+        snapshot.setConversationId(source.getConversationId());
+        snapshot.setWorkflowId(source.getWorkflowId());
+        snapshot.setProjectId(source.getProjectId());
+        snapshot.setInputs(source.getInputs());
+        snapshot.setOutputs(source.getOutputs());
+        snapshot.setStatus(source.getStatus());
+        snapshot.setRunInfo(source.getRunInfo());
+        snapshot.setStartTime(source.getStartTime());
+        snapshot.setEndTime(source.getEndTime());
+        snapshot.setErrorInfo(source.getErrorInfo());
+        // eventList 不写入 meta；用 eventCount 标记新格式。
+        // 优先沿用 source 已有的 eventCount（幂等：对已快照过的 meta 再快照时不会归零），
+        // 仅当 source 是未快照过的原始 entity（eventList 非空、eventCount 为空）时才从 size 计算。
+        if (source.getEventCount() != null) {
+            snapshot.setEventCount(source.getEventCount());
+        } else if (source.getEventList() != null) {
+            snapshot.setEventCount((long) source.getEventList().size());
+        } else {
+            snapshot.setEventCount(0L);
+        }
+        return snapshot;
     }
 
     public void deleteExecution(String userId, WorkflowInstanceEntity workflowInstanceEntity, String versionId) {
         String insightExecKey = getInsightExec(userId, workflowInstanceEntity.getId(), versionId);
-
         redisClient.delete(insightExecKey);
+        // 同步删除 events List key
+        String insightEventsKey = getInsightEvents(userId, workflowInstanceEntity.getId(), versionId);
+        redisClient.delete(insightEventsKey);
+        // 同步清理节流状态
+        String execId = workflowInstanceEntity.getId();
+        if (execId != null) {
+            flushStates.invalidate(execId);
+        }
     }
 
     /**
@@ -391,6 +757,14 @@ public class WorkflowInstanceService {
         return insightExecKey;
     }
 
+    private String getInsightEvents(String userId, String executionId, String versionId) {
+        String insightEventsKey = String.format(insightExecEvents, userId, executionId);
+        if (!StringUtils.isEmpty(versionId)) {
+            return insightEventsKey + "_" + versionId;
+        }
+        return insightEventsKey;
+    }
+
     private void clearExecutionRecords(String userId, String versionId, List<ExecutionInfo> needDeleteInfos) {
         if (needDeleteInfos == null || needDeleteInfos.isEmpty()) {
             return;
@@ -400,6 +774,9 @@ public class WorkflowInstanceService {
                 info.getExecutionId());
             String executionInfoKey = getInsightExec(userId, info.getExecutionId(), versionId);
             redisClient.delete(executionInfoKey);
+            // 同步删除 events List key
+            String eventsKey = getInsightEvents(userId, info.getExecutionId(), versionId);
+            redisClient.delete(eventsKey);
         }
     }
 
@@ -451,11 +828,9 @@ public class WorkflowInstanceService {
                 // 更新最新conversationInfos，根据size截断
                 conversationInfos.add(currentConversationInfo);
 
+                // 截断超出 maxConversationSize 的旧会话记录（CommonUtil.subList 跳过前 offset 条）。
+                // insight_exec_* key 的清理由 saveExecutionInfos 截断 execution 列表时负责，此处无需重复清理。
                 int offset = conversationInfos.size() - maxConversationSize;
-                if (offset > 0) {
-                    List<ConversationInfo> needDeleteInfos = conversationInfos.subList(0, offset);
-                    // 待截断
-                }
 
                 conversationInfos = CommonUtil.subList(offset, maxConversationSize, conversationInfos);
                 // 设置info最后更新时间

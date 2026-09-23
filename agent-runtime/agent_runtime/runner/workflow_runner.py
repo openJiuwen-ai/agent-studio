@@ -22,6 +22,7 @@ from agent_runtime.runner.memory_extraction_context import MemoryExtractionConte
 from agent_runtime.runner.workflow_stream_data_wrapper import WorkflowStreamDataWrapper
 from agent_runtime.schemas.orchestration_mgr import (
     ComponentDebugRequest,
+    ConversationHistoryMessage,
     ExecutionRequest,
 )
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
@@ -357,10 +358,27 @@ class WorkflowRunner:
 
         # 3. 创建对话上下文
         t_context = time.perf_counter()
+        # 追加当轮 query 到历史末尾：试运行 resume 时 conversation_history(body.messages)
+        # 末条是上轮 assistant 问话，当轮用户输入在 req.resume_input/req.query 而非 history →
+        # 提问器 _get_latest_chat_history 读 context 末条是 assistant，回退 self._query（首轮输入）
+        # → trace 三轮都写首轮内容、字段提取取错轮。与 workflow_instance_layer.astream
+        # 的 _current_query 追加对齐（controller 路径），此处覆盖试运行(workflow-self)路径。
+        # 用 req.resume_input or req.query，与 app_run.py 构建 resume 输入一致
+        # （resume 请求可能把当轮输入放 resumeInput 而 query 为空/旧值）。
+        _history = list(req.params.conversation_history or [])
+        # 用 is not None 区分"未提供"(None→回退 query) vs "空字符串"(""→不追加)，
+        # 避免 resumeInput="" 时 or 回退到旧 query。
+        _cur_query = req.resume_input if req.resume_input is not None else (req.query or "")
+        if _cur_query:
+            _last = _history[-1] if _history else None
+            _last_role = getattr(_last, "role", None)
+            _last_content = getattr(_last, "content", None)
+            if not (_last_role == "user" and _last_content == _cur_query):
+                _history.append(ConversationHistoryMessage(role="user", content=str(_cur_query)))
         context = create_conversation_context(
             context_id=req.ir_path,
             session_id=req.conversation_id,
-            history=req.params.conversation_history,
+            history=_history,
         )
         performance_logger.info(
             f"context_creation|{round((time.perf_counter() - t_context) * 1000)}"
@@ -524,14 +542,14 @@ class WorkflowRunner:
                 # Prefer memory_repo_id from inputs (multi-agent injects its own
                 # repo id so sub-workflows use the multi-agent's memory repo),
                 # fall back to IR's configs.memory.memory_repo_id.
-                memory_repo_id = inputs.get("memory_repo_id", "") or (
-                    (ir_json.get("configs") or {}).get("memory") or {}
-                ).get("memory_repo_id", "")
+                memory_config = (ir_json.get("configs") or {}).get("memory") or {}
+                memory_repo_id = inputs.get("memory_repo_id", "") or memory_config.get("memory_repo_id", "")
                 if enable_memory_retrieve and req.user_id and memory_repo_id:
                     memory_message = await self._retrieve_memory(
                         user_id=req.user_id,
                         scope_id=memory_repo_id,
                         query=req.query or "",
+                        memory_config=memory_config,
                     )
                     if memory_message is not None:
                         inputs["memory_message"] = getattr(
@@ -924,6 +942,7 @@ class WorkflowRunner:
             "mem_map",
             "enable_memory_retrieve",
             "enable_memory_extract",
+            "memory_config",
         ]
         for key in runtime_keys:
             if key in params:
@@ -975,12 +994,24 @@ class WorkflowRunner:
         user_id: str,
         scope_id: str,
         query: str,
+        *,
+        memory_config: dict | None = None,
     ):
-        """Retrieve relevant memories from LTM and return a formatted HumanMessage.
+        """Retrieve relevant memories and return a formatted HumanMessage.
+
+        Branch dispatch: EXTERNAL → ExternalMemoryClient (agent-memory HTTP API);
+        BUILTIN → existing get_ltm() path (unchanged, built-in zero-intrusion).
 
         Returns a HumanMessage containing formatted memory content, or None if
         no memories were found or retrieval failed.
         """
+        # Branch dispatch: EXTERNAL uses ExternalMemoryClient; BUILTIN uses get_ltm() unchanged
+        backend_type = (memory_config or {}).get("memory_backend_type", "BUILTIN")
+        if backend_type.upper() == "EXTERNAL":
+            return await self._retrieve_memory_external(
+                user_id, scope_id, query, memory_config or {},
+            )
+
         try:
             from agent_runtime.memory.adapter.ltm_manager import get_ltm
             from jiuwen.common.llm_service.messages import HumanMessage
@@ -1048,6 +1079,97 @@ class WorkflowRunner:
         except Exception as e:
             workflow_logger.warning(
                 "Failed to retrieve memory: %s", e, exc_info=True
+            )
+            return None
+
+    async def _retrieve_memory_external(
+        self,
+        user_id: str,
+        scope_id: str,
+        query: str,
+        memory_config: dict,
+    ):
+        """EXTERNAL branch: retrieve memory via ExternalMemoryClient.
+
+        Uses the same MEMORY_USAGE_PROMPT template as BUILTIN for consistent
+        prompt formatting. Degrades gracefully on instance unreachability.
+        """
+        try:
+            from jiuwen.common.llm_service.messages import HumanMessage
+            from jiuwen.context.memory_engine.prompt.memory_usage import MEMORY_USAGE_PROMPT
+            from agent_runtime.memory.backend.external_memory_client import (
+                get_external_client,
+            )
+
+            instance_id = memory_config.get("instance_id", "")
+            base_url = memory_config.get("instance_base_url", "")
+            if not instance_id or not base_url:
+                workflow_logger.warning(
+                    "EXTERNAL memory config missing instance_id or base_url, "
+                    "skipping retrieval for scope=%s",
+                    scope_id,
+                )
+                return None
+
+            client = await get_external_client(instance_id, base_url)
+            if client is None:
+                workflow_logger.warning(
+                    "Failed to create ExternalMemoryClient for instance %s, skipping retrieval",
+                    instance_id,
+                )
+                return None
+
+            uid = user_id.lower()
+            has_mem = False
+            memory_content = ""
+
+            search_mems = await client.search_memory(
+                query=query, num=20, user_id=uid, scope_id=scope_id,
+            )
+            for mem in search_mems or []:
+                if mem is None:
+                    continue
+                mem_content = (
+                    mem.get("content") or mem.get("mem", "")
+                    if isinstance(mem, dict)
+                    else ""
+                )
+                if mem_content:
+                    memory_content += f"<mem>{mem_content}</mem>\n"
+                    has_mem = True
+
+            search_summary_mems = await client.search_user_history_summary(
+                query=query, num=5, user_id=uid, scope_id=scope_id,
+            )
+            for mem in search_summary_mems or []:
+                if mem is None:
+                    continue
+                mem_content = (
+                    mem.get("content") or mem.get("mem", "")
+                    if isinstance(mem, dict)
+                    else ""
+                )
+                if mem_content:
+                    memory_content += f"<history_summary>{mem_content}</history_summary>\n"
+                    has_mem = True
+
+            if not has_mem:
+                workflow_logger.info(
+                    "No external memory found for user=%s, scope=%s, query=%s",
+                    user_id, scope_id, query[:50],
+                )
+                return None
+
+            msg = MEMORY_USAGE_PROMPT.replace("MEMORY_CONTENT", memory_content)
+            workflow_logger.info(
+                "External memory retrieved for user=%s, scope=%s",
+                user_id, scope_id,
+            )
+            return HumanMessage(content=msg)
+
+        except Exception as e:
+            workflow_logger.warning(
+                "Failed to retrieve external memory: %s", e, exc_info=True
             )
             return None
 

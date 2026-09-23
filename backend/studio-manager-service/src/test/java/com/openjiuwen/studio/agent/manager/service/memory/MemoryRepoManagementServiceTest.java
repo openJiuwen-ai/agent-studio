@@ -22,6 +22,7 @@ import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
+import com.openjiuwen.studio.agent.manager.service.IMemoryServiceInstanceService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +51,8 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.mockito.ArgumentCaptor;
+
 @MockitoSettings(strictness = Strictness.LENIENT)
 class MemoryRepoManagementServiceTest {
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
@@ -66,6 +69,9 @@ class MemoryRepoManagementServiceTest {
 
     @Mock
     private MgObsService mgObsService;
+
+    @Mock
+    private IMemoryServiceInstanceService memoryServiceInstanceService;
 
     @InjectMocks
     private MemoryRepoManagementService memoryRepoManagementService;
@@ -212,6 +218,62 @@ class MemoryRepoManagementServiceTest {
             // When
             ModifyMemoryRepoResponseBody result = memoryRepoManagementService.modifyMemoryRepo(null, null, null, null);
         });
+    }
+
+
+    @Test
+    void test_modifyMemoryRepo_should_not_default_backend_type_to_builtin_when_omitted() throws Exception {
+        // Given — 编辑请求仅改名称，未携带 memory_backend_type
+        when(memoryRepoMapper.updateById(any(MemoryRepoEntity.class))).thenReturn(1);
+
+        ModifyMemoryRepoRequestBody body = new ModifyMemoryRepoRequestBody();
+        List<LongTermMemoryStrategy> strategies = new ArrayList<>();
+        LongTermMemoryStrategy strategy = new LongTermMemoryStrategy();
+        strategy.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        strategy.setPrompt("prompt");
+        strategies.add(strategy);
+        body.setName("renamed-repo");
+        body.setDescription("renamed-desc");
+        body.setLongTermMemoryStrategies(strategies);
+        // memoryBackendType 与 memoryServiceInstanceId 均未设置
+
+        // When
+        memoryRepoManagementService.modifyMemoryRepo("project1", "repo-external", "ws1", body);
+
+        // Then — 写入实体的 memoryBackendType 必须保持为 null（不默认 BUILTIN），
+        // 这样 MyBatis 选择性更新会跳过该列，EXTERNAL 记忆库不会被静默改写。
+        ArgumentCaptor<MemoryRepoEntity> captor = ArgumentCaptor.forClass(MemoryRepoEntity.class);
+        verify(memoryRepoMapper).updateById(captor.capture());
+        assertNull(captor.getValue().getMemoryBackendType(),
+            "修改时缺失 memory_backend_type 不得默认为 BUILTIN");
+        assertNull(captor.getValue().getMemoryServiceInstanceId(),
+            "修改时缺失 memory_service_instance_id 不得被篡改");
+    }
+
+    @Test
+    void test_modifyMemoryRepo_should_preserve_explicit_external_backend_type() throws Exception {
+        // Given — 显式携带 EXTERNAL + 实例ID，应原样写入
+        when(memoryRepoMapper.updateById(any(MemoryRepoEntity.class))).thenReturn(1);
+
+        ModifyMemoryRepoRequestBody body = new ModifyMemoryRepoRequestBody();
+        List<LongTermMemoryStrategy> strategies = new ArrayList<>();
+        LongTermMemoryStrategy strategy = new LongTermMemoryStrategy();
+        strategy.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        strategy.setPrompt("prompt");
+        strategies.add(strategy);
+        body.setName("external-repo");
+        body.setLongTermMemoryStrategies(strategies);
+        body.setMemoryBackendType("EXTERNAL");
+        body.setMemoryServiceInstanceId("instance-001");
+
+        // When
+        memoryRepoManagementService.modifyMemoryRepo("project1", "repo-external", "ws1", body);
+
+        // Then
+        ArgumentCaptor<MemoryRepoEntity> captor = ArgumentCaptor.forClass(MemoryRepoEntity.class);
+        verify(memoryRepoMapper).updateById(captor.capture());
+        assertEquals("EXTERNAL", captor.getValue().getMemoryBackendType());
+        assertEquals("instance-001", captor.getValue().getMemoryServiceInstanceId());
     }
 
 

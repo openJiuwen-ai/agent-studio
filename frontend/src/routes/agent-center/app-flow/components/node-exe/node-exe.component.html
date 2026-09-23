@@ -601,7 +601,7 @@
                   *ngIf="isAnswerValid(runInfo)"
                   class="flex shrink-0 flex-col gap-[8px] rounded-lg bg-[#fafafa] p-[16px]"
                 >
-                  <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-[8px]">
                     <span class="font-semibold text-[#191919]">{{
                       'output_result' | i18nextEager
                     }}</span>
@@ -630,7 +630,9 @@
                       *ngIf="runInfo?.inputs"
                       class="flex items-center gap-[8px]"
                     >
-                      <div>{{ 'input' | i18nextEager }}</div>
+                      <div class="font-semibold text-[#191919]">
+                        {{ 'input' | i18nextEager }}
+                      </div>
                       <asset-copy-icon
                         *ngIf="!showInputsCopySuccess"
                         class="cursor-pointer"
@@ -652,7 +654,9 @@
 
                   <div class="flex flex-col gap-[8px]" *ngIf="runInfo?.outputs">
                     <div class="flex items-center gap-[8px]">
-                      <div>{{ 'output' | i18nextEager }}</div>
+                      <div class="font-semibold text-[#191919]">
+                        {{ 'output' | i18nextEager }}
+                      </div>
                       <asset-copy-icon
                         *ngIf="!showOutputsCopySuccess"
                         class="cursor-pointer"

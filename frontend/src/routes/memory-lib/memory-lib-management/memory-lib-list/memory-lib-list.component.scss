@@ -1,27 +1,29 @@
 :host {
-  --custom-radius: 4px;
+  .table-style {
+    border-bottom: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
 
-  ::ng-deep .ant-table-wrapper {
-    .ant-table-container {
-      border-radius: var(--custom-radius);
-      border: 1px solid #e8e8e8;
-      overflow: hidden; // 确保边框圆角可以包裹内部的 Header 和 Body
-    }
+  .table-border {
+    border-left: 1px solid rgba(240, 240, 240, 100%);
+    border-right: 1px solid rgba(240, 240, 240, 100%);
+  }
 
-    .ant-table-thead > tr > th {
-      height: 48px;
-      border-bottom: 1px solid #e8e8e8;
-      background-color: #f5f6f8; // 与原先类似的基础表头颜色
-    }
+  .icon-set {
+    height: 22px;
+    width: 22px;
+  }
 
-    .ant-table-tbody > tr > td {
-      border-bottom: 1px solid #e8e8e8;
-      padding: 12px 16px; // 保持原有表格高度感
-    }
+  .copy-id {
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
 
-    // 移除最后一行的下边框，避免与外层容器边框冲突
-    .ant-table-tbody > tr:last-child > td {
-      border-bottom: none;
-    }
+  .no-data-container {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }
