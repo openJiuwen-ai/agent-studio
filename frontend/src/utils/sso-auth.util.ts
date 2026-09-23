@@ -81,9 +81,15 @@ function readRuntimeOrigins(): string[] {
 }
 
 /**
- * 可信父平台 origin 白名单（完整 origin，含协议+主机+端口，如
- * http://122.219.72.238:8081）。**唯一放行依据，无任何隐式信任**——
- * 同源/同主机/子域/跨域一律须显式配置。
+ * 可信父平台白名单条目（完整 origin，或 origin+路径前缀以收窄信任）：
+ * 1. 完整 origin（含协议+主机+端口），如 http://122.219.72.238:8081——
+ *    该 origin 下任意页面均可嵌入；
+ * 2. origin+路径前缀，如 https://customer.example.com/embed/——仅信任
+ *    指定路径下的嵌入页面，防御可信 origin 内的 UGC/共享页面/可控内容
+ *    被攻击者用于注入 iframe（登录 CSRF）。**存在用户可控页面的平台
+ *    必须使用路径前缀条目**；前缀建议以 / 结尾（'/embed' 会同时匹配
+ *    '/embedded' 等兄弟路径）。
+ * **唯一放行依据，无任何隐式信任**——同源/同主机/子域/跨域一律须显式配置。
  *
  * 配置入口（二选一）：
  * 1. 运行期注入（免构建）：index.html 内联脚本
@@ -104,6 +110,9 @@ let writeFailureCount = 0;
 
 /** 上一次写入失败的 token：父平台换发新 token 时重置计数，给予完整重试预算 */
 let lastFailedToken: string | null = null;
+
+/** 最近一次 consume 是否在 URL 中遇到 Auth 参数（无论消费/写入/清理结果） */
+let lastConsumeSawAuth = false;
 
 /** 跨 reload 的失败计数持久化状态（仅存 token 指纹，不落明文凭证） */
 interface PersistedWriteFailure {
@@ -222,22 +231,43 @@ export function extractAuthParam(query: string): {
 }
 
 /**
- * 判断 referrer 是否为可信父页面：origin 在 TRUSTED_PARENT_ORIGINS 白名单
- * 内（精确匹配，含协议与端口）。referrer 缺失/非法按不可信处理。
- * 不做同源/同主机隐式放行：同源页面上攻击者可影响的内容同样构成注入面，
- * 且同源脚本本可直接写 Cookie，隐式放行只增加规则模糊性。
+ * 判断 referrer URL 是否匹配白名单条目：条目为完整 origin 时精确匹配；
+ * 条目含路径前缀（origin+path）时要求 referrer 路径以该前缀开头——
+ * 供存在 UGC/可控页面的平台把信任收窄到具体嵌入页面。
+ */
+function matchesTrustedEntry(refUrl: URL, entry: string): boolean {
+  if (refUrl.origin === entry) {
+    return true;
+  }
+  const schemeEnd = entry.indexOf('://');
+  const pathStart = schemeEnd >= 0 ? entry.indexOf('/', schemeEnd + 3) : -1;
+  if (pathStart < 0) {
+    return false;
+  }
+  return (
+    refUrl.origin === entry.slice(0, pathStart) &&
+    refUrl.pathname.startsWith(entry.slice(pathStart))
+  );
+}
+
+/**
+ * 判断 referrer 是否为可信父页面：匹配 TRUSTED_PARENT_ORIGINS 白名单
+ * （完整 origin 精确匹配，或 origin+路径前缀匹配）。referrer 缺失/非法
+ * 按不可信处理。不做同源/同主机隐式放行：同源页面上攻击者可影响的
+ * 内容同样构成注入面，且同源脚本本可直接写 Cookie，隐式放行只增加
+ * 规则模糊性。
  */
 function isTrustedReferrer(referrer: string): boolean {
   if (!referrer) {
     return false;
   }
-  let refOrigin = '';
+  let refUrl: URL;
   try {
-    refOrigin = new URL(referrer).origin;
+    refUrl = new URL(referrer);
   } catch (e) {
     return false;
   }
-  return TRUSTED_PARENT_ORIGINS.includes(refOrigin);
+  return TRUSTED_PARENT_ORIGINS.some((entry) => matchesTrustedEntry(refUrl, entry));
 }
 
 /**
@@ -439,6 +469,17 @@ export function hasAuthParamInUrl(): boolean {
 }
 
 /**
+ * 最近一次 consumeSsoAuthFromUrl 是否遇到 Auth 且通过安全门控（可信嵌入）。
+ * 与 hasAuthParamInUrl 的差异：写入失败达上限时 consume 会先剥除 URL 中
+ * 的 Auth 再返回 null，此时 hasAuthParamInUrl 为 false，而本函数仍为
+ * true——调用方据此仍能感知身份意图并清理旧用户态（降级为未登录）。
+ * 门控拒绝时为 false：不可信嵌入者的垃圾 Auth 不触发用户态清理。
+ */
+export function hasRecentAuthParamAttempt(): boolean {
+  return lastConsumeSawAuth;
+}
+
+/**
  * 组合入口：解析 Auth（hash 主通道 + search 防御）→ 安全门控 → 写入并校验
  * Cookie → 校验通过后剥除 URL。
  *
@@ -479,6 +520,7 @@ export function consumeSsoAuthFromUrl(): string | null {
     const hashChanged = hashRes.query !== hashQuery;
     const searchChanged = searchRes.query !== searchQuery;
     if (!hashChanged && !searchChanged) {
+      lastConsumeSawAuth = false;
       return null;
     }
     // hash 为主通道，search 兜底
@@ -528,6 +570,10 @@ export function consumeSsoAuthFromUrl(): string | null {
       }
       return null;
     }
+    // 身份意图信号在门控之后置位：不可信嵌入者的垃圾 Auth 不得触发调用方
+    // 的用户态清理（否则构成跨上下文登出 DoS——Cookie 与存储是整个浏览器
+    // 共享的，受害者在其他标签页的会话会被误清）
+    lastConsumeSawAuth = true;
 
     // ---- 父页面站点关系（供 Cookie 属性决策；按 SameSite 语义近似判定：
     // scheme 一致 + 注册域相同，见 isSameSite；http+跨站的拒绝在 writeSsoCookie）----

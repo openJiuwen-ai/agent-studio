@@ -28,7 +28,7 @@ import { LinkInterceptorService } from '@services/LinkInterceptorService';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { StorageService } from '@shared/services/cfdata.service';
 import { initHistoryInterceptor } from "../utils/utils";
-import { consumeSsoAuthFromUrl, hasAuthParamInUrl } from '../utils/sso-auth.util';
+import { consumeSsoAuthFromUrl, hasAuthParamInUrl, hasRecentAuthParamAttempt } from '../utils/sso-auth.util';
 import { PE_SESSION_KEY } from '@constants/exp-tmpl-config.const';
 
 registerLocaleData(zh);
@@ -157,13 +157,16 @@ export class AppComponent implements OnInit {
     window.onhashchange = () => {
       // 监听hashchange事件
       this.changeRouter();
-      // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费；
-      // 消费成功（可能关联不同用户）先清除旧 AGENT_SID 再整体 reload——reload
-      // 不会清除该 Cookie，而 resetUserData 仅在 AGENT_SID 为空时才调 getHealth，
-      // 不清除将沿用旧用户身份初始化，造成页面身份与新凭证不一致
-      if (consumeSsoAuthFromUrl()) {
+      // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费。
+      // 只要本次消费遇到 Auth（无论成败）都清理旧用户态（身份意图已表达）；
+      // reload 仅在消费成功、或失败已达清理上限（Auth 已不在 URL，reload 不会
+      // 再次触发消费形成循环）时执行——首次失败保留 Auth 供重试，不刷新页面
+      const consumed = consumeSsoAuthFromUrl();
+      if (consumed || hasRecentAuthParamAttempt()) {
         this.clearStaleUserState();
-        window.location.reload();
+        if (consumed || !hasAuthParamInUrl()) {
+          window.location.reload();
+        }
       }
     };
 
@@ -306,10 +309,11 @@ export class AppComponent implements OnInit {
   //如果url参数带用户信息，取出调health接口setCookie，后清除url参数
   async resetUserData() {
     // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）。
-    // 只要 URL 中存在 Auth（无论写入成败），父平台已表达身份意图——清理旧用户态
-    // （AGENT_SID 与本地存储的会话/空间信息），确保按新凭证而非旧状态初始化；
-    // 写入失败时同样清理：让应用可见地降级为未登录，而不是沿用旧用户身份
-    if (consumeSsoAuthFromUrl() || hasAuthParamInUrl()) {
+    // 最近一次消费曾遇到 Auth（无论写入成败、甚至已达清理上限被剥除），父平台
+    // 已表达身份意图——清理旧用户态，确保按新凭证而非旧状态初始化；写入失败
+    // 时同样清理：让应用可见地降级为未登录，而不是沿用旧用户身份
+    consumeSsoAuthFromUrl();
+    if (hasRecentAuthParamAttempt()) {
       this.clearStaleUserState();
     }
     const url = new URL(window.location.href);
