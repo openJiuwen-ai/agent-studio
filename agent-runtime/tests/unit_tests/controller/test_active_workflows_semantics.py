@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# pylint: disable=protected-access  # 单测需直接调用内部方法 _process_workflows/_process_user_input（白盒验证收窄落键语义）
 """activeWorkflows 权限收窄语义单测（区分"未传"与"显式空列表"）。
 
 背景：Controller 模式按用户权限收窄可调用子工作流（activeWorkflows）。
