@@ -555,7 +555,7 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         if (!Strings.CS.equals(kbConnectionId, DEFAULT_CONNECTION_ID)) {
             log.error("do not support to update config default knowledge base connection with connectionId [{}]",
                 body.getConnectorId());
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR);
+            throw new AgentBaseException(ErrorCode.DEFAULT_KNOWLEDGE_BASE_CONNECTION_UNSUPPORTED);
         }
         // 校验参数与连接器中定义的参数是否一致并加密
         List<ConnectionParamInfo> connectionParamInfos = knowledgeBaseConnectionValidateService.checkAndEncryptedParams(

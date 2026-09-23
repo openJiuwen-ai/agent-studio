@@ -454,6 +454,125 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CommonDeleteRsp"
+  /v2/{project_id}/agent-manager/memory-service-instances/{instance_id}:
+    get:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 查询外部记忆服务实例详情
+      description: 查询外部记忆服务实例详情
+      operationId: showMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowMemoryServiceInstanceResponseBody"
+    put:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 修改外部记忆服务实例
+      description: 修改外部记忆服务实例
+      operationId: modifyMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModifyMemoryServiceInstanceRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+    delete:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 删除外部记忆服务实例
+      description: 删除外部记忆服务实例
+      operationId: deleteMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
   /v2/{project_id}/agent-manager/memory-repositories/{memory_repo_id}:
     get:
       tags:
@@ -770,11 +889,41 @@ paths:
           minLength: 1
       responses:
         "200":
-          description: OK
+          description: 知识库
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShowDefaultKnowledgeBaseConnectionDetailResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
     put:
       tags:
       - knowledge-base-connection-config-management-api-controller
@@ -807,11 +956,41 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 编辑第三方知识库响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UpdateDefaultKnowledgeBaseConnectionResponse"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-builder/prompt:
     get:
       tags:
@@ -834,7 +1013,6 @@ paths:
           type: string
           description: 工作空间ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-          minLength: 1
         example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
       - name: name
         in: query
@@ -3552,7 +3730,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EnvironmentInfoRequest"
+              $ref: "#/components/schemas/ModifyEnvironmentInfoRequestBody"
         required: true
       responses:
         "200":
@@ -4609,7 +4787,7 @@ paths:
           items:
             type: string
             description: ID列表
-            example: []
+            example: "[]"
           maxItems: 2147483647
           minItems: 0
         example: []
@@ -4752,7 +4930,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
-          minLength: 1
         example: ws-001
       - name: name
         in: query
@@ -4883,6 +5060,123 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestConnectionThirdPartyKnowledgeBaseResponseBody"
+  /v2/{project_id}/agent-manager/memory-service-instances:
+    get:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 获取外部记忆服务实例列表
+      description: 获取外部记忆服务实例列表
+      operationId: listMemoryServiceInstances
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      - name: name
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMemoryServiceInstancesResponseBody"
+    post:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 创建外部记忆服务实例
+      description: 创建外部记忆服务实例
+      operationId: createMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemoryServiceInstanceRequestBody"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateMemoryServiceInstanceResponseBody"
+  /v2/{project_id}/agent-manager/memory-service-instances/{instance_id}/health:
+    post:
+      tags:
+      - memory-service-instance-management-api-controller
+      summary: 健康检查外部记忆服务实例
+      description: 调 agent-memory GET /health 检查实例可达性
+      operationId: healthCheckMemoryServiceInstance
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: instance_id
+        in: path
+        description: 实例id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowMemoryServiceInstanceResponseBody"
   /v2/{project_id}/agent-manager/memory-repositories:
     get:
       tags:
@@ -4960,9 +5254,7 @@ paths:
           items:
             type: string
             description: ID列表
-            example:
-            - mem001
-            - mem002
+            example: "[\"mem001\",\"mem002\"]"
           maxItems: 2147483647
           minItems: 0
         example:
@@ -5111,7 +5403,6 @@ paths:
           description: 工作空间ID
           example: ws001
           maxLength: 100
-          minLength: 1
         example: ws001
       - name: knowledge_base_name
         in: query
@@ -5132,7 +5423,6 @@ paths:
           description: 知识库连接ID
           example: conn001
           maxLength: 100
-          minLength: 1
         example: conn001
       - name: offset
         in: query
@@ -5227,11 +5517,41 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 创建默认知识库连接响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateDefaultKnowledgeBaseConnectionResponse"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/knowledge-bases/configurations/default-connections/{connection_id}/test-connection:
     post:
       tags:
@@ -5257,11 +5577,41 @@ paths:
           type: string
       responses:
         "200":
-          description: OK
+          description: 测试默认知识库连接响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/knowledge-bases/configurations/default-connections/test-connection:
     post:
       tags:
@@ -5287,11 +5637,41 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: 测试默认知识库连接响应体
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TestDefaultKnowledgeBaseResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/batchtools:
     post:
       tags:
@@ -5648,7 +6028,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws001
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: ws001
       - name: page_size
@@ -5757,7 +6136,6 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: example-id-123
       - name: provider_id
@@ -5905,7 +6283,6 @@ paths:
           type: string
           description: 工作空间ID
           example: workspace-001
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: workspace-001
       - name: page_size
@@ -6008,9 +6385,8 @@ paths:
           items:
             type: string
             description: 上下文长度列表
-            example:
-            - "4096"
-            - "8192"
+            example: "[\"4096\",\"8192\"]"
+            maxLength: 10
           maxItems: 10
           minItems: 0
         example:
@@ -6029,9 +6405,8 @@ paths:
           items:
             type: string
             description: 模型系列列表
-            example:
-            - GPT
-            - Claude
+            example: "[\"GPT\",\"Claude\"]"
+            maxLength: 10
           maxItems: 10
           minItems: 0
         example:
@@ -6050,9 +6425,8 @@ paths:
           items:
             type: string
             description: 模型类型列表
-            example:
-            - LLM
-            - RERANK
+            example: "[\"LLM\",\"RERANK\"]"
+            maxLength: 10
           maxItems: 10
           minItems: 0
         example:
@@ -6353,7 +6727,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: ws_001
       - name: query
@@ -6993,7 +7366,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws-001
-          minLength: 1
         example: ws-001
       - name: member_name
         in: query
@@ -8414,7 +8786,7 @@ paths:
           items:
             type: string
             description: ID列表
-            example: []
+            example: "[]"
           maxItems: 2147483647
           minItems: 0
         example: []
@@ -9113,7 +9485,6 @@ paths:
           type: string
           description: 资源类型
           example: agent
-          minLength: 1
         example: agent
       - name: offset
         in: query
@@ -9267,7 +9638,7 @@ paths:
           items:
             type: string
             description: 插件ID列表
-            example: []
+            example: "[]"
           maxItems: 2147483647
           minItems: 0
         example: []
@@ -10572,6 +10943,7 @@ paths:
           type: array
           items:
             type: string
+            maxLength: 20
           maxItems: 20
           minItems: 0
       requestBody:
@@ -11018,8 +11390,9 @@ paths:
           items:
             type: string
             description: 文件ID列表
-            example:
-            - file-001
+            example: "[\"file-001\"]"
+            maxLength: 1000
+            minLength: 1
           maxItems: 1000
           minItems: 1
         example:
@@ -14121,7 +14494,6 @@ paths:
           type: string
           description: 工作空间ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-          minLength: 1
         example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
       - name: name
         in: query
@@ -14255,7 +14627,6 @@ paths:
           type: string
           description: 工作空间ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-          minLength: 1
         example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
       - name: pageNum
         in: query
@@ -14345,7 +14716,6 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
-          minLength: 1
         example: example-id-123
       - name: offset
         in: query
@@ -14526,8 +14896,9 @@ paths:
           items:
             type: string
             description: 知识库ID列表
-            example:
-            - kb_001
+            example: "[\"kb_001\"]"
+            maxLength: 100
+            minLength: 1
           maxItems: 100
           minItems: 1
         example:
@@ -14888,11 +15259,41 @@ paths:
           minimum: 1
       responses:
         "200":
-          description: OK
+          description: 知识库
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListDefaultKnowledgeBaseConnectorsResponseBody"
+        "400":
+          description: Bad Request 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "401":
+          description: Unauthorized 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "403":
+          description: Forbidden 没有操作权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "404":
+          description: Not Found 找不到资源
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
+        "500":
+          description: Internal Server Error 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRsp"
   /v2/{project_id}/agent-manager/knowledge-bases/configs:
     get:
       tags:
@@ -14957,7 +15358,6 @@ paths:
           type: string
           description: 工作空间ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-          minLength: 1
         example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
       - name: limit
         in: query
@@ -15344,7 +15744,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: ws_001
       - name: query
@@ -15522,7 +15921,6 @@ paths:
           type: string
           description: 工作空间ID
           example: example-id-123
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: example-id-123
       - name: model_type
@@ -15584,7 +15982,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: ws_001
       - name: service_name
@@ -16430,7 +16827,7 @@ paths:
         schema:
           type: string
           description: 版本ID，不传则返回全部版本
-          example: 1787901244768
+          example: "1787901244768"
           maxLength: 64
           minLength: 1
           pattern: "^[0-9]+$"
@@ -17050,8 +17447,8 @@ paths:
           items:
             type: string
             description: 工作流ID列表
-            example:
-            - wf_001
+            example: "[\"wf_001\"]"
+            maxLength: 1000
           maxItems: 1000
           minItems: 0
         example:
@@ -17393,7 +17790,6 @@ paths:
           type: string
           description: 工作空间ID
           example: ws_001
-          minLength: 1
           pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
         example: ws_001
       - name: tag_id
@@ -17628,7 +18024,6 @@ paths:
           type: string
           description: 资源类型
           example: agent
-          minLength: 1
         example: agent
       - name: resource_name
         in: query
@@ -17717,7 +18112,6 @@ paths:
           type: string
           description: 发布版本
           example: 1.0.0
-          minLength: 1
         example: 1.0.0
       - name: resource_type
         in: query
@@ -17839,7 +18233,6 @@ paths:
           type: string
           description: findby
           example: 示例字符串
-          minLength: 1
         example: 示例字符串
       - name: channel_type
         in: query
@@ -17849,7 +18242,6 @@ paths:
           type: string
           description: 渠道类型
           example: example-type
-          minLength: 1
         example: example-type
       responses:
         "200":
@@ -17924,9 +18316,9 @@ paths:
           items:
             type: string
             description: 资源ID列表
-            example:
-            - res001
-            - res002
+            example: "[\"res001\",\"res002\"]"
+            maxLength: 64
+            minLength: 1
             pattern: "^[a-zA-Z0-9_-]+$"
           maxItems: 64
           minItems: 1
@@ -19022,7 +19414,7 @@ paths:
         schema:
           type: string
           description: 版本ID，不传则返回全部版本
-          example: 1787901244768
+          example: "1787901244768"
           maxLength: 64
           minLength: 1
           pattern: "^[0-9]+$"
@@ -19780,7 +20172,6 @@ paths:
           type: string
           description: 工作空间ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-          minLength: 1
         example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
       responses:
         "200":
@@ -20878,7 +21269,7 @@ components:
           description: 请求地址
           example: https://example.com/api
           maxLength: 256
-          minLength: 1
+          minLength: 8
           pattern: "^(http|https)://(?![^/]*@)(?!.*\\.\\.)[^ ]*$"
         method:
           type: string
@@ -20958,8 +21349,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ConnectionParamInfo"
-          maxItems: 2147483647
-          minItems: 0
     UpdateThirdPartyKnowledgeBaseConnectionResponse:
       type: object
       properties:
@@ -20969,6 +21358,26 @@ components:
           example: example-id-123
           maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
+    ModifyMemoryServiceInstanceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 实例名称
+          example: 我的记忆服务
+          maxLength: 128
+          minLength: 1
+        base_url:
+          type: string
+          description: agent-memory服务地址
+          example: http://mem-svc-a:8000
+          maxLength: 512
+        api_key:
+          type: string
+          description: MEMORY_API_KEY，加密存储，不入IR。为空表示不修改
+        deploy_meta:
+          type: string
+          description: 展示用JSON：vector_store_type/db_type等
     LongTermMemoryStrategy:
       type: object
       properties:
@@ -20984,6 +21393,8 @@ components:
           description: 提示词
           example: 请输入...
           maxLength: 1000
+      required:
+      - type
     ModifyMemoryRepoRequestBody:
       type: object
       properties:
@@ -21012,7 +21423,6 @@ components:
           items:
             $ref: "#/components/schemas/LongTermMemoryStrategy"
           maxItems: 200
-          minItems: 0
         conversation_round:
           type: integer
           format: int32
@@ -21023,6 +21433,17 @@ components:
           format: int32
           description: 时间跨度（秒）
           example: 3600
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN/EXTERNAL
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时必填）
+          example: instance-001
+        scope_model_config:
+          type: string
+          description: scope级模型配置JSON，由manager推送到实例，不进IR
       required:
       - name
     ModifyMemoryRepoResponseBody:
@@ -21038,10 +21459,8 @@ components:
       properties:
         memory_id:
           type: string
-          minLength: 1
         content:
           type: string
-          minLength: 1
       required:
       - content
       - memory_id
@@ -21052,7 +21471,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UpdateMemoryItem"
-          minItems: 1
       required:
       - memories
     PermissionsRequestBody:
@@ -21073,8 +21491,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 50
           maxItems: 50
-          minItems: 0
     UpdateKnowledgeVisibilityResponse:
       type: object
       properties:
@@ -21101,8 +21519,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ConnectionParamInfo"
-          maxItems: 2147483647
-          minItems: 0
     UpdateDefaultKnowledgeBaseConnectionResponse:
       type: object
       properties:
@@ -21112,6 +21528,42 @@ components:
           example: example-id-123
           maxLength: 64
           pattern: "^[a-zA-Z0-9_-]+$"
+    ErrorDetail:
+      type: object
+      properties:
+        error_code:
+          type: string
+          description: 错误码
+          example: 400
+        error_msg:
+          type: string
+          description: 错误消息
+          example: 参数校验失败
+    ErrorRsp:
+      type: object
+      properties:
+        error_code:
+          type: string
+          description: 错误码
+          example: 400
+        error_msg:
+          type: string
+          description: 错误消息
+          example: 参数校验失败
+        error_reason:
+          type: string
+          description: 错误原因
+          example: name不能为空
+        error_suggestion:
+          type: string
+          description: 修复建议
+          example: 请提供name参数
+        details:
+          type: array
+          description: 错误详情列表
+          example: []
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
     PePromptTemplateNewVo:
       type: object
       properties:
@@ -21124,7 +21576,6 @@ components:
           type: string
           description: 名称
           example: 示例名称
-          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-()（）]{0,32}[\\u4e00-\\\
             u9fa5a-zA-Z0-9()（）]$"
         content:
@@ -21159,7 +21610,6 @@ components:
           type: string
           description: 来源
           example: PLAYGROUND
-          minLength: 1
           pattern: PLAYGROUND|EXPERIMENT|CANDIDATE|HORIZONTAL|NO_SOURCE|PRESET
         variables:
           type: string
@@ -21409,7 +21859,6 @@ components:
           items:
             $ref: "#/components/schemas/ModelServiceRsp"
           maxItems: 3
-          minItems: 0
         strategy_timeout:
           type: integer
           format: int32
@@ -21512,6 +21961,13 @@ components:
           - "200"
           - ""
           example: 10
+      required:
+      - api_url
+      - interface_protocol
+      - model_name
+      - model_type
+      - provider_id
+      - service_name
     ModelServiceProviderReq:
       type: object
       properties:
@@ -21519,13 +21975,11 @@ components:
           type: string
           description: 模型服务商名称
           example: 华为云
-          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9_ |.\\\\:/-]{2,64}$"
         provider_name_en:
           type: string
           description: 模型服务商英文名称
           example: HuaweiCloud
-          minLength: 1
           pattern: "^[a-zA-Z0-9_.|: /\\\\-]{2,64}$"
         description:
           type: string
@@ -21550,7 +22004,6 @@ components:
           type: string
           description: 认证类型
           example: API_KEY
-          minLength: 1
           pattern: (API_KEY|NO_AUTH|APP_CODE|AK_SK|CUSTOM_APIKEY|CUSTOM_IAM|HIS_IAM|SGOV|HMAC)
         auth_info:
           type: string
@@ -21575,7 +22028,6 @@ components:
           type: string
           description: 服务名称
           example: 天气查询服务
-          minLength: 1
         name_en:
           type: string
           description: 服务英文名称
@@ -21621,12 +22073,10 @@ components:
           type: string
           description: 密钥
           example: example-token-value
-          minLength: 1
         value:
           type: string
           description: 值
           example: 示例字符串
-          minLength: 1
         secretLevel:
           type: string
           description: 密钥level
@@ -21657,8 +22107,6 @@ components:
           - key: value
           items:
             $ref: "#/components/schemas/Extension"
-          maxItems: 2147483647
-          minItems: 0
         source:
           type: string
           description: 来源
@@ -21798,8 +22246,6 @@ components:
           example: 外部映射信息列表
           items:
             $ref: "#/components/schemas/ExternalMappingInfo"
-          maxItems: 2147483647
-          minItems: 0
     MemberOwnershipBody:
       type: object
       properties:
@@ -21807,12 +22253,10 @@ components:
           type: string
           description: 工作空间ID
           example: example-id-123
-          minLength: 1
         next_owner_id:
           type: string
           description: 下一页
           example: example-id-123
-          minLength: 1
       required:
       - next_owner_id
       - workspace_id
@@ -21828,7 +22272,6 @@ components:
           type: string
           description: 消息
           example: 操作成功
-          minLength: 1
         data:
           description: 数据
           example: {}
@@ -21849,14 +22292,12 @@ components:
           description: 触发器名称
           example: 定时触发器
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z\\u4e00-\\u9fa5][a-zA-Z0-9_\\u4e00-\\u9fa5]{1,19}$"
         type:
           type: string
           description: 触发器类型
           example: cron
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         cron:
           type: string
@@ -21879,8 +22320,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/TriggerParam"
-          maxItems: 2147483647
-          minItems: 0
         hook_url:
           type: string
           description: 回调URL
@@ -21902,7 +22341,6 @@ components:
           description: 参数名称
           example: prompt
           maxLength: 500
-          minLength: 1
         description:
           type: string
           description: 参数描述
@@ -21960,7 +22398,6 @@ components:
           items:
             $ref: "#/components/schemas/TriggerConfig"
           maxItems: 100
-          minItems: 0
         workflow_details:
           type: object
           additionalProperties: {}
@@ -22036,7 +22473,6 @@ components:
           items:
             $ref: "#/components/schemas/WorkflowInfoRefWorkflows"
           maxItems: 1000
-          minItems: 0
         test_status:
           type: integer
           format: int32
@@ -22131,7 +22567,6 @@ components:
           description: 版本ID
           example: example-id-123
           maxLength: 128
-          minLength: 1
         visibility_scope:
           type: string
           description: visibilityscope
@@ -22153,7 +22588,6 @@ components:
           type: string
           description: 通道ID
           example: channel-001
-          minLength: 1
         app_id:
           type: string
           description: 应用ID
@@ -22170,7 +22604,6 @@ components:
           type: string
           description: 版本ID
           example: v1.0.0
-          minLength: 1
         version_name:
           type: string
           description: 版本名称
@@ -22293,7 +22726,6 @@ components:
           description: 工具ID
           example: example-id-123
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
       - tool_id
@@ -22311,7 +22743,7 @@ components:
           description: 结构化信息名称
           example: 问候语
           maxLength: 64
-          minLength: 1
+          minLength: 2
         category:
           type: string
           description: 分类
@@ -22424,7 +22856,6 @@ components:
           description: 工具ID
           example: example-id-123
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
       - tool_id
@@ -22467,14 +22898,12 @@ components:
           description: 对象名称
           example: 自定义对象1
           maxLength: 64
-          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         schemas:
           type: string
           description: 对象结构
           example:
             key: value
-          minLength: 1
         description:
           type: string
           description: 对象描述
@@ -22527,7 +22956,6 @@ components:
           description: 描述
           example: 知识库描述
           maxLength: 100
-          minLength: 1
         icon:
           type: string
           description: 图标
@@ -22611,6 +23039,8 @@ components:
 
           items:
             type: string
+            maxLength: 100
+            minLength: 1
           maxItems: 100
           minItems: 1
     SplitConf:
@@ -22627,6 +23057,8 @@ components:
           type: array
           items:
             type: string
+            maxLength: 100
+            minLength: 1
           maxItems: 100
           minItems: 1
         rule_regex_id:
@@ -22683,10 +23115,8 @@ components:
           example: 示例标签
           items:
             type: string
-            pattern: "^[a-zA-Z0-9\\u4e00-\\u9fa5][a-zA-Z0-9\\u4e00-\\u9fa5:\\-\\_/\\\
-              .?&=@#%+~!\\$'\\(\\),;\\*\\[\\]]{0,254}$"
+            maxLength: 20
           maxItems: 20
-          minItems: 0
     UpdateFileMetaInfoRsp:
       type: object
       properties:
@@ -22825,6 +23255,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 10
+            minLength: 1
           maxItems: 10
           minItems: 1
       required:
@@ -22847,51 +23279,22 @@ components:
           type: string
           description: 认证
           example: 示例字符串
-          minLength: 1
         auth_type:
           type: string
           description: 认证类型
           example: example-type
-          minLength: 1
       required:
       - auth_info
       - auth_type
-    EnvironmentInfoRequest:
+    ModifyEnvironmentInfoRequestBody:
       type: object
       properties:
-        name:
-          type: string
-          description: 安全组名称
-          example: my-security-group
-          pattern: "^[a-zA-Z][a-zA-Z0-9-]{3,47}$"
-        id:
-          type: string
-          description: 安全组ID
-          example: sg-001
-          maxLength: 64
-          pattern: "^[a-zA-Z0-9_-]+$"
         description:
           type: string
           description: 安全组描述
           example: 用于Agent运行的安全组
           maxLength: 128
           pattern: "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$"
-        vpcId:
-          type: string
-          description: VPC ID
-          example: vpc-001
-          maxLength: 64
-          minLength: 1
-        subnetId:
-          type: string
-          description: 子网ID
-          example: subnet-001
-          maxLength: 64
-          minLength: 1
-        isDefault:
-          type: boolean
-          description: 是否为默认安全组
-          example: false
     DatasourceConnectionInfo:
       type: object
       properties:
@@ -22945,7 +23348,6 @@ components:
           description: 分支名称
           example: 意图分支1
           maxLength: 64
-          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         description:
           type: string
@@ -22958,9 +23360,8 @@ components:
           example: 示例文本
           items:
             type: string
-            pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
+            maxLength: 100
           maxItems: 100
-          minItems: 0
         branch_id:
           type: string
           description: 分支ID
@@ -22976,7 +23377,6 @@ components:
           description: 意图包名称
           example: 用户咨询意图
           maxLength: 64
-          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z0-9\\-_]+$"
         description:
           type: string
@@ -22995,7 +23395,6 @@ components:
           items:
             $ref: "#/components/schemas/ComplexIntentBranchInfoReq"
           maxItems: 200
-          minItems: 0
       required:
       - name
     ComplexIntentBriefRsp:
@@ -23138,17 +23537,14 @@ components:
           type: string
           description: 节点唯一标识
           example: node_001
-          minLength: 1
         name:
           type: string
           description: 节点名称
           example: LLM节点
-          minLength: 1
         type:
           type: string
           description: 节点类型
           example: llm
-          minLength: 1
         inputs:
           type: array
           description: 输入字段列表
@@ -23157,8 +23553,6 @@ components:
             type: string
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         outputs:
           type: array
           description: 输出字段列表
@@ -23167,8 +23561,6 @@ components:
             type: string
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         configs:
           description: 节点配置对象
           example:
@@ -23182,8 +23574,6 @@ components:
             target: node_002
           items:
             $ref: "#/components/schemas/WorkflowBranchVO"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - id
       - name
@@ -23199,7 +23589,6 @@ components:
           type: string
           description: 控制器名称
           example: 客服控制器
-          minLength: 1
         description:
           type: string
           description: 控制器描述
@@ -23210,16 +23599,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ControllerNodeVO"
-          maxItems: 2147483647
-          minItems: 0
         edges:
           type: array
           description: 边列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowEdgeVO"
-          maxItems: 2147483647
-          minItems: 0
         layouts:
           type: object
           additionalProperties: {}
@@ -23231,8 +23616,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         memory_config:
           $ref: "#/components/schemas/AgentMemoryConfig"
           description: 记忆配置
@@ -23243,8 +23626,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         project_id:
           type: string
           description: 项目ID
@@ -23287,8 +23668,6 @@ components:
           - name: tool1
           items:
             $ref: "#/components/schemas/ToolSkills"
-          maxItems: 2147483647
-          minItems: 0
     InputVariable:
       type: object
       properties:
@@ -23361,7 +23740,6 @@ components:
           type: string
           description: 记忆变量名称
           example: user_preference
-          minLength: 1
         description:
           type: string
           description: 记忆变量描述
@@ -23374,7 +23752,6 @@ components:
           type: string
           description: 记忆变量生命周期
           example: session
-          minLength: 1
         value:
           type: string
           description: 记忆变量当前值
@@ -23531,15 +23908,11 @@ components:
           - tool-2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         tool_details:
           type: array
           description: 工具详情列表
           items:
             $ref: "#/components/schemas/AgentToolDetail"
-          maxItems: 2147483647
-          minItems: 0
         workflows:
           type: array
           description: 工作流ID列表
@@ -23548,15 +23921,11 @@ components:
           - wf-2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         workflow_details:
           type: array
           description: 工作流详情列表
           items:
             $ref: "#/components/schemas/AgentWorkflowDetail"
-          maxItems: 2147483647
-          minItems: 0
         mcp_servers:
           type: array
           description: MCP服务器名称列表
@@ -23564,8 +23933,6 @@ components:
           - mcp-server-1
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         mcp_choose_tools:
           type: object
           additionalProperties:
@@ -23578,8 +23945,6 @@ components:
           description: MCP服务器详情列表
           items:
             $ref: "#/components/schemas/AgentMcpDetail"
-          maxItems: 2147483647
-          minItems: 0
         knowledge_repos:
           type: array
           description: 知识库ID列表
@@ -23588,22 +23953,16 @@ components:
           - repo-2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         trigger_list:
           type: array
           description: 触发器配置列表
           items:
             $ref: "#/components/schemas/TriggerConfig"
-          maxItems: 2147483647
-          minItems: 0
         memory_variables:
           type: array
           description: 记忆变量列表
           items:
             $ref: "#/components/schemas/MemoryVariable"
-          maxItems: 2147483647
-          minItems: 0
         prologue:
           type: string
           description: 开场白，最大512字符
@@ -23623,8 +23982,6 @@ components:
           - 如何使用智能助手？
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         additional_questions_config:
           $ref: "#/components/schemas/AdditionalQuestionsConfig"
           description: 追加问题配置
@@ -23640,14 +23997,12 @@ components:
           items:
             $ref: "#/components/schemas/AgentVariable"
           maxItems: 30
-          minItems: 0
         input_variables:
           type: array
           description: 输入变量列表，最多30个
           items:
             $ref: "#/components/schemas/InputVariable"
           maxItems: 30
-          minItems: 0
         memory_config:
           $ref: "#/components/schemas/AgentMemoryConfig"
           description: 记忆配置
@@ -23703,8 +24058,6 @@ components:
           description: 场景列表
           items:
             $ref: "#/components/schemas/Scene"
-          maxItems: 2147483647
-          minItems: 0
         sub_type:
           type: string
           description: 智能体子类型
@@ -23714,15 +24067,11 @@ components:
           description: 技能引用列表
           items:
             $ref: "#/components/schemas/SkillReference"
-          maxItems: 2147483647
-          minItems: 0
         skill_details:
           type: array
           description: 技能详情列表
           items:
             $ref: "#/components/schemas/AgentSkillDetail"
-          maxItems: 2147483647
-          minItems: 0
         writing_template:
           type: string
           description: 写作模板
@@ -23776,16 +24125,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Guideline"
-          maxItems: 2147483647
-          minItems: 0
         relations:
           type: array
           description: 指导原则间的关系列表
           example: []
           items:
             $ref: "#/components/schemas/RelationInGuideLine"
-          maxItems: 2147483647
-          minItems: 0
     SearchEngine:
       type: object
       properties:
@@ -23887,7 +24232,6 @@ components:
           type: string
           description: 源节点ID
           example: node_001
-          minLength: 1
         exception_branch:
           type: boolean
           description: 是否为异常分支
@@ -23896,7 +24240,6 @@ components:
           type: string
           description: 目标节点ID
           example: node_002
-          minLength: 1
         branch:
           type: string
           description: 分支标识
@@ -23919,7 +24262,6 @@ components:
           type: string
           description: 字段名称
           example: input_field
-          minLength: 1
         cn_name:
           type: string
           description: 中文字段名称
@@ -23928,7 +24270,6 @@ components:
           type: string
           description: 字段类型
           example: string
-          minLength: 1
         description:
           type: string
           description: 描述
@@ -23974,16 +24315,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFieldVOValidator"
-          maxItems: 2147483647
-          minItems: 0
         memory:
           type: array
           description: 记忆列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFieldVOMemory"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - name
       - type
@@ -23994,7 +24331,6 @@ components:
           type: string
           description: 字段名称
           example: userMemory
-          minLength: 1
         aging_level:
           type: string
           description: 老化级别
@@ -24031,8 +24367,6 @@ components:
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     WorkflowFieldVOValue:
       type: object
       properties:
@@ -24075,7 +24409,6 @@ components:
           type: string
           description: 智能体唯一标识
           example: agent-001
-          minLength: 1
         project_id:
           type: string
           description: 项目 ID
@@ -24112,8 +24445,6 @@ components:
           - 标签2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         instructions:
           type: string
           description: 提示词指令内容
@@ -24156,40 +24487,30 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ToolReference"
-          maxItems: 2147483647
-          minItems: 0
         workflows:
           type: array
           description: 工作流引用列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowReference"
-          maxItems: 2147483647
-          minItems: 0
         mcp_servers:
           type: array
           description: MCP 服务器引用列表
           example: []
           items:
             $ref: "#/components/schemas/McpServerReference"
-          maxItems: 2147483647
-          minItems: 0
         skills:
           type: array
           description: 技能引用列表
           example: []
           items:
             $ref: "#/components/schemas/SkillReference"
-          maxItems: 2147483647
-          minItems: 0
         knowledge_repos:
           type: array
           description: 知识库引用列表
           example: []
           items:
             $ref: "#/components/schemas/KnowledgeRepoReference"
-          maxItems: 2147483647
-          minItems: 0
         knowledge_retrieve_policy:
           $ref: "#/components/schemas/KnowledgeRetrievePolicy"
           description: 知识检索策略
@@ -24200,16 +24521,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/TriggerConfig"
-          maxItems: 2147483647
-          minItems: 0
         memory_variables:
           type: array
           description: 记忆变量列表
           example: []
           items:
             $ref: "#/components/schemas/MemoryVariable"
-          maxItems: 2147483647
-          minItems: 0
         prologue:
           type: string
           description: 开场白
@@ -24221,8 +24538,6 @@ components:
           - 今天天气怎么样？
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         additional_questions_config:
           $ref: "#/components/schemas/AdditionalQuestionsConfig"
           description: 追加问题配置
@@ -24249,7 +24564,6 @@ components:
           items:
             $ref: "#/components/schemas/AgentVariable"
           maxItems: 30
-          minItems: 0
         input_variables:
           type: array
           description: 输入变量列表，最多 30 个
@@ -24257,7 +24571,6 @@ components:
           items:
             $ref: "#/components/schemas/InputVariable"
           maxItems: 30
-          minItems: 0
         memory_config:
           $ref: "#/components/schemas/AgentMemoryConfig"
           description: 记忆配置
@@ -24357,8 +24670,6 @@ components:
           - api
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         free_trial_quota:
           $ref: "#/components/schemas/FreeTrialQuota"
           description: 免费试用配额
@@ -24369,8 +24680,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Scene"
-          maxItems: 2147483647
-          minItems: 0
         planning:
           $ref: "#/components/schemas/Planning"
           description: 规划配置
@@ -24457,8 +24766,6 @@ components:
           - tool2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         tools_num:
           type: integer
           format: int32
@@ -24598,7 +24905,6 @@ components:
           description: 任务ID
           example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
       - task_id
@@ -24637,7 +24943,6 @@ components:
           description: 工具ID
           example: example-id-123
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
       - tool_id
@@ -24670,7 +24975,6 @@ components:
           items:
             $ref: "#/components/schemas/ConnectionParamInfo"
           maxItems: 10
-          minItems: 0
     CreateThirdPartyKnowledgeBaseConnectionResponse:
       type: object
       properties:
@@ -24688,7 +24992,6 @@ components:
           description: 连接器ID
           example: example-id-123
           maxLength: 50
-          minLength: 1
         params:
           type: array
           description: 参数
@@ -24707,6 +25010,73 @@ components:
           type: boolean
           description: 结果
           example: true
+    CreateMemoryServiceInstanceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 实例名称
+          example: 我的记忆服务
+          maxLength: 128
+          minLength: 1
+        base_url:
+          type: string
+          description: agent-memory服务地址
+          example: http://mem-svc-a:8000
+          maxLength: 512
+        api_key:
+          type: string
+          description: MEMORY_API_KEY，加密存储，不入IR
+          example: sk-xxxx
+        deploy_meta:
+          type: string
+          description: 展示用JSON：vector_store_type/db_type等
+      required:
+      - base_url
+      - name
+    CreateMemoryServiceInstanceResponseBody:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: 实例ID
+          example: instance-001
+    ShowMemoryServiceInstanceResponseBody:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: 实例ID
+        name:
+          type: string
+          description: 实例名称
+        base_url:
+          type: string
+          description: agent-memory服务地址
+        health_status:
+          type: string
+          description: 健康检查状态
+        last_check_at:
+          type: string
+          format: date-time
+          description: 最近健康检查时间
+        deploy_meta:
+          type: string
+          description: 展示用JSON
+        created_user_id:
+          type: string
+          description: 创建人ID
+        created_user_name:
+          type: string
+          description: 创建人名
+        create_time:
+          type: string
+          format: date-time
+          description: 创建时间
+        update_time:
+          type: string
+          format: date-time
+          description: 更新时间
     CreateMemoryRepoRequestBody:
       type: object
       properties:
@@ -24735,7 +25105,7 @@ components:
           items:
             $ref: "#/components/schemas/LongTermMemoryStrategy"
           maxItems: 200
-          minItems: 0
+          minItems: 1
         conversation_round:
           type: integer
           format: int32
@@ -24746,7 +25116,19 @@ components:
           format: int32
           description: 时间跨度（秒）
           example: 3600
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN（内置）/EXTERNAL（外部），默认BUILTIN
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时必填）
+          example: instance-001
+        scope_model_config:
+          type: string
+          description: scope级模型配置JSON（LLM/Embedding + enable_*），由manager推送到实例，不进IR
       required:
+      - long_term_memory_strategies
       - name
     CreateMemoryRepoResponseBody:
       type: object
@@ -24843,7 +25225,6 @@ components:
           example: []
           items:
             type: string
-          minItems: 1
       required:
       - memory_ids
     CreateExternalKnowledgeBaseRequestBody:
@@ -24854,13 +25235,14 @@ components:
           description: 知识库
           example: example-id-123
           maxLength: 100
-          minLength: 1
         knowledge_base_external_ids:
           type: array
           description: 知识库
           example: []
           items:
             type: string
+            maxLength: 100
+            minLength: 1
           maxItems: 100
           minItems: 1
       required:
@@ -24875,7 +25257,6 @@ components:
           items:
             $ref: "#/components/schemas/CreateExternalKnowledgeResult"
           maxItems: 100
-          minItems: 0
     CreateExternalKnowledgeResult:
       type: object
       properties:
@@ -24937,7 +25318,6 @@ components:
           description: 连接器ID
           example: example-id-123
           maxLength: 50
-          minLength: 1
         params:
           type: array
           description: 参数
@@ -24971,9 +25351,6 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
-          maxItems: 2147483647
-          minItems: 0
         count:
           type: integer
           format: int32
@@ -25032,7 +25409,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeResource"
           maxItems: 200
-          minItems: 0
     KnowledgeResource:
       type: object
       properties:
@@ -25091,7 +25467,6 @@ components:
           items:
             $ref: "#/components/schemas/PluginResource"
           maxItems: 200
-          minItems: 0
     PluginOutput:
       type: object
       properties:
@@ -25116,7 +25491,6 @@ components:
           items:
             $ref: "#/components/schemas/PluginToolInfo"
           maxItems: 200
-          minItems: 0
     PluginResource:
       type: object
       properties:
@@ -25139,13 +25513,11 @@ components:
           items:
             $ref: "#/components/schemas/PluginInput"
           maxItems: 200
-          minItems: 0
         output_schema:
           type: array
           items:
             $ref: "#/components/schemas/PluginOutput"
           maxItems: 200
-          minItems: 0
         last_version_id:
           type: string
           maxLength: 200
@@ -25185,7 +25557,6 @@ components:
           items:
             $ref: "#/components/schemas/WorkflowResource"
           maxItems: 200
-          minItems: 0
     WorkflowResource:
       type: object
       properties:
@@ -25256,8 +25627,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ModelServiceRsp"
-          maxItems: 2147483647
-          minItems: 0
         domain_id:
           type: string
           description: 域ID
@@ -25303,7 +25672,6 @@ components:
           type: string
           description: 元数据
           example: example-id-123
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]{1,80}$"
         auth_info:
           type: object
@@ -25383,8 +25751,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ImportRes"
-          maxItems: 2147483647
-          minItems: 0
     ImportRsp:
       type: object
       properties:
@@ -25406,8 +25772,6 @@ components:
           - id2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         failed_len:
           type: integer
           format: int32
@@ -25435,48 +25799,36 @@ components:
           - id3
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         skipped_ids:
           type: array
           description: 跳过的ID列表
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         inner_plugins_msg:
           type: array
           description: 内部插件消息列表
           example: []
           items:
             $ref: "#/components/schemas/ExtraMsg"
-          maxItems: 2147483647
-          minItems: 0
         auth_plugins_msg:
           type: array
           description: 授权插件消息列表
           example: []
           items:
             $ref: "#/components/schemas/ExtraMsg"
-          maxItems: 2147483647
-          minItems: 0
         auth_mcps_msg:
           type: array
           description: 授权MCP消息列表
           example: []
           items:
             $ref: "#/components/schemas/ExtraMsg"
-          maxItems: 2147483647
-          minItems: 0
         import_list:
           type: array
           description: 导入列表
           example: []
           items:
             $ref: "#/components/schemas/ImportRes"
-          maxItems: 2147483647
-          minItems: 0
     ModelImportPreviewItem:
       type: object
       properties:
@@ -25660,8 +26012,6 @@ components:
           - "8080"
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         env:
           type: object
           additionalProperties:
@@ -25774,8 +26124,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/McpServiceBaseInfoDto"
-          maxItems: 2147483647
-          minItems: 0
         total:
           type: integer
           format: int64
@@ -26019,8 +26367,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/McpDeployResult"
-          maxItems: 2147483647
-          minItems: 0
     DataProcessBaseInfoDto:
       type: object
       properties:
@@ -26095,8 +26441,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/TaskOperator"
-          maxItems: 2147483647
-          minItems: 0
     McpDataProcessBaseInfoListResp:
       type: array
       items:
@@ -26117,8 +26461,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/DataProcessTool"
-          maxItems: 2147483647
-          minItems: 0
     TaskOperator:
       type: object
       properties:
@@ -26217,8 +26559,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AddWorkspaceMemberReq"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - members
     GetWorkspaceListRsp:
@@ -26235,8 +26575,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkspaceInfo"
-          maxItems: 2147483647
-          minItems: 0
     BatchDeleteVersionsRequestBody:
       type: object
       properties:
@@ -26247,7 +26585,8 @@ components:
           - "1787901244768"
           items:
             type: string
-            pattern: "^[0-9]+$"
+            maxLength: 20
+            minLength: 1
           maxItems: 20
           minItems: 1
       required:
@@ -26341,8 +26680,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowMessage"
-          maxItems: 2147483647
-          minItems: 0
     FeedbackReason:
       type: object
       properties:
@@ -26350,6 +26687,8 @@ components:
           type: array
           items:
             type: string
+            maxLength: 10
+            minLength: 1
           maxItems: 10
           minItems: 1
         content:
@@ -26409,16 +26748,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowMessage"
-          maxItems: 2147483647
-          minItems: 0
         plugin_configs:
           type: array
           description: 插件配置列表
           example: []
           items:
             $ref: "#/components/schemas/PluginConfig"
-          maxItems: 2147483647
-          minItems: 0
         version:
           type: integer
           format: int64
@@ -26490,8 +26825,6 @@ components:
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         execution_id:
           type: string
           description: 执行ID
@@ -26514,8 +26847,6 @@ components:
           description: 文件列表
           example: []
           items: {}
-          maxItems: 2147483647
-          minItems: 0
         reason:
           $ref: "#/components/schemas/FeedbackReason"
           description: 反馈原因
@@ -26563,14 +26894,11 @@ components:
             content: hello
           items:
             $ref: "#/components/schemas/Message"
-          maxItems: 2147483647
-          minItems: 0
     AdditionalQuestionsWorkflowReq:
       type: object
       properties:
         name:
           type: string
-          minLength: 1
         description:
           type: string
         enable:
@@ -26610,24 +26938,18 @@ components:
           - 如何使用？
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         tools:
           type: array
           description: 工具列表
           example: []
           items:
             $ref: "#/components/schemas/ToolReference"
-          maxItems: 2147483647
-          minItems: 0
         workflows:
           type: array
           description: 工作流列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowReference"
-          maxItems: 2147483647
-          minItems: 0
         icons:
           $ref: "#/components/schemas/Icon"
           description: 图标
@@ -26638,8 +26960,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/SkillReference"
-          maxItems: 2147483647
-          minItems: 0
     Icon:
       type: object
       properties:
@@ -26660,7 +26980,6 @@ components:
         desc:
           type: string
           maxLength: 1024
-          minLength: 1
       required:
       - code
       - desc
@@ -26672,13 +26991,11 @@ components:
           description: 版本ID
           example: v1.0
           maxLength: 10000
-          minLength: 1
         channel_type:
           type: string
           description: 通道类型
           example: WEB
           maxLength: 10000
-          minLength: 1
         sub_type:
           type: string
           description: 子类型
@@ -26691,24 +27008,20 @@ components:
           - meta1
           items:
             type: string
+            maxLength: 2
           maxItems: 2
-          minItems: 0
         inputs:
           type: array
           description: 输入参数列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFrontParam"
-          maxItems: 2147483647
-          minItems: 0
         outputs:
           type: array
           description: 输出参数列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFrontParam"
-          maxItems: 2147483647
-          minItems: 0
         prologue:
           type: string
           description: 开场白
@@ -26721,8 +27034,6 @@ components:
           - 问题1
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         visibility_scope:
           type: string
           description: 可见范围
@@ -26737,7 +27048,6 @@ components:
           example: 100
       required:
       - channel_type
-      - version_id
     WorkflowFrontParam:
       type: object
       properties:
@@ -26804,8 +27114,6 @@ components:
           - tool-2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         agent_ids:
           type: array
           description: 智能体ID列表
@@ -26814,8 +27122,6 @@ components:
           - agent-2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         workflow_ids:
           type: array
           description: 工作流ID列表
@@ -26824,24 +27130,18 @@ components:
           - wf-2
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         agents:
           type: array
           description: 智能体列表
           example: []
           items:
             $ref: "#/components/schemas/ExportAgent"
-          maxItems: 2147483647
-          minItems: 0
         workflows:
           type: array
           description: 工作流列表
           example: []
           items:
             $ref: "#/components/schemas/ExportWorkflow"
-          maxItems: 2147483647
-          minItems: 0
     ExportWorkflow:
       type: object
       properties:
@@ -26948,7 +27248,6 @@ components:
           description: 工具ID
           example: example-id-123
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
       required:
       - tool_id
@@ -26965,7 +27264,6 @@ components:
       properties:
         raw_request_url:
           type: string
-          minLength: 1
         raw_request_headers:
           type: object
           additionalProperties:
@@ -26973,19 +27271,16 @@ components:
         raw_request_body:
           type: string
           maxLength: 10000000
-          minLength: 1
         raw_response_code:
           type: integer
           format: int32
         raw_response:
           type: string
           maxLength: 100000
-          minLength: 1
         success:
           type: boolean
         errorMessage:
           type: string
-          minLength: 1
       required:
       - errorMessage
       - raw_request_body
@@ -27001,7 +27296,6 @@ components:
           type: string
           description: 版本ID
           example: v1.0.0
-          minLength: 1
         version_name:
           type: string
           description: 版本名称
@@ -27053,8 +27347,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AuthKeyInfo"
-          maxItems: 2147483647
-          minItems: 0
         creator_id:
           type: string
           description: 创建者ID
@@ -27140,16 +27432,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/StructMessage"
-          maxItems: 2147483647
-          minItems: 0
         failed_list:
           type: array
           description: 失败列表
           example: []
           items:
             $ref: "#/components/schemas/FailedStructuredMessage"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - failed_count
       - success_count
@@ -27163,9 +27451,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 200
           maxItems: 200
-          minItems: 0
     ExportStudioSkillResponseBody:
       type: object
       properties:
@@ -27191,7 +27478,6 @@ components:
           type: string
           description: 技能ID
           example: 550e8400-e29b-41d4-a716-446655440000
-          minLength: 1
           pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       required:
       - obs_url
@@ -27255,7 +27541,6 @@ components:
           description: 资源ID
           example: res001
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         resource_name:
           type: string
@@ -27281,8 +27566,8 @@ components:
           - 1.1.0
           items:
             type: string
+            maxLength: 50
           maxItems: 50
-          minItems: 0
         auth_workspace_id_list:
           type: array
           description: 授权工作空间ID列表
@@ -27291,6 +27576,8 @@ components:
           - ws002
           items:
             type: string
+            maxLength: 1000
+            minLength: 1
           maxItems: 1000
           minItems: 1
       required:
@@ -27312,7 +27599,6 @@ components:
         url:
           type: string
           maxLength: 256
-          minLength: 1
         auth:
           $ref: "#/components/schemas/AuthInfo"
       required:
@@ -27363,8 +27649,6 @@ components:
             name: 依赖1
           items:
             $ref: "#/components/schemas/ImportListInfo"
-          maxItems: 2147483647
-          minItems: 0
     CreateKnowledgeRepoRequestBody:
       type: object
       properties:
@@ -27379,7 +27663,6 @@ components:
           description: 知识库描述
           example: 用于存储技术文档
           maxLength: 100
-          minLength: 1
         embedding_model:
           $ref: "#/components/schemas/ModelConf"
           description: 向量化模型配置
@@ -27433,7 +27716,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 1000
+            minLength: 1
           maxItems: 1000
           minItems: 1
       required:
@@ -27463,8 +27747,6 @@ components:
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
       required:
       - task_ids
     CommonBatchDeleteRsp:
@@ -27529,7 +27811,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 1000
+            minLength: 1
           maxItems: 1000
           minItems: 1
       required:
@@ -27618,7 +27901,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 1000
+            minLength: 1
           maxItems: 1000
           minItems: 1
       required:
@@ -27658,7 +27942,6 @@ components:
           description: 知识仓ID
           example: example-id-123
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         query:
           type: string
@@ -27737,8 +28020,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 250
           maxItems: 250
-          minItems: 0
         score:
           type: number
           format: float
@@ -27762,16 +28045,16 @@ components:
           example: []
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
         image_paths:
           type: array
           description: 图片路径列表
           example: []
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
     SearchKnowledgeRepoResponseBody:
       type: object
       properties:
@@ -27787,7 +28070,6 @@ components:
           items:
             $ref: "#/components/schemas/ChatReferenceInfo"
           maxItems: 1000
-          minItems: 0
       required:
       - total
     CreateKnowledgeSegmentRuleRequestBody:
@@ -27799,6 +28081,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 10
+            minLength: 1
           maxItems: 10
           minItems: 1
         repo_id:
@@ -27820,6 +28104,46 @@ components:
           minLength: 1
       required:
       - id
+    EnvironmentInfoRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 安全组名称
+          example: my-security-group
+          pattern: "^[a-zA-Z][a-zA-Z0-9-]{3,47}$"
+        id:
+          type: string
+          description: 安全组ID
+          example: sg-001
+          maxLength: 64
+          pattern: "^[a-zA-Z0-9_-]+$"
+        description:
+          type: string
+          description: 安全组描述
+          example: 用于Agent运行的安全组
+          maxLength: 128
+          pattern: "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$"
+        vpcId:
+          type: string
+          description: VPC ID
+          example: vpc-001
+          maxLength: 64
+          minLength: 1
+        subnetId:
+          type: string
+          description: 子网ID
+          example: subnet-001
+          maxLength: 64
+          minLength: 1
+        isDefault:
+          type: boolean
+          description: 是否为默认安全组
+          example: false
+      required:
+      - name
+      - subnetId
+      - vpcId
     EnvironmentVariable:
       type: object
       properties:
@@ -27860,8 +28184,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/EnvironmentVariable"
-          maxItems: 2147483647
-          minItems: 0
     ValidationVariableImport:
       type: object
       properties:
@@ -27902,8 +28224,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ValidationVariableImport"
-          maxItems: 2147483647
-          minItems: 0
     EnvironmentVariablesExport:
       type: object
       properties:
@@ -27913,9 +28233,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 50
           maxItems: 50
-          minItems: 0
     DatasourceBatchDeleteReq:
       type: object
       properties:
@@ -27947,8 +28266,6 @@ components:
           - intent_001
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     ComplexIntentExportParams:
       type: object
       properties:
@@ -27958,7 +28275,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 100
+            minLength: 1
           maxItems: 100
           minItems: 1
       required:
@@ -27968,10 +28286,8 @@ components:
       properties:
         audio_format:
           type: string
-          minLength: 1
         property:
           type: string
-          minLength: 1
         add_punc:
           type: string
         digit_norm:
@@ -27990,7 +28306,6 @@ components:
           $ref: "#/components/schemas/AsrConfig"
         data:
           type: string
-          minLength: 1
       required:
       - config
       - data
@@ -27999,7 +28314,6 @@ components:
       properties:
         trace_id:
           type: string
-          minLength: 1
         result:
           $ref: "#/components/schemas/Result"
       required:
@@ -28010,7 +28324,6 @@ components:
       properties:
         text:
           type: string
-          minLength: 1
         score:
           type: number
           format: float
@@ -28018,8 +28331,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WordInfo"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - score
       - text
@@ -28055,8 +28366,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
         name:
           type: string
           description: 名称
@@ -28118,8 +28429,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
         workflow_type:
           type: string
           description: 工作流类型
@@ -28183,8 +28494,6 @@ components:
           - 助手
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         app_type:
           type: string
           description: 应用类型
@@ -28224,8 +28533,8 @@ components:
           - app_001
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
         name:
           type: string
           description: 智能体名称
@@ -28239,8 +28548,6 @@ components:
           - chat
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         status:
           type: string
           description: 智能体状态
@@ -28312,8 +28619,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AgentApplicationInfo"
-          maxItems: 2147483647
-          minItems: 0
     CreateAgentReq:
       type: object
       properties:
@@ -28410,14 +28715,11 @@ components:
           - file_001
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     AdditionalQuestionsReq:
       type: object
       properties:
         name:
           type: string
-          minLength: 1
         description:
           type: string
         enable:
@@ -28435,11 +28737,9 @@ components:
         event_type:
           type: string
           maxLength: 32
-          minLength: 1
         app_type:
           type: string
           maxLength: 32
-          minLength: 1
         channel:
           type: string
           maxLength: 128
@@ -28479,8 +28779,6 @@ components:
           - res-001
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         resource_versions:
           type: array
           description: 资源版本列表
@@ -28489,8 +28787,6 @@ components:
             version: "1.0"
           items:
             $ref: "#/components/schemas/ExportResourceVersion"
-          maxItems: 2147483647
-          minItems: 0
         resource_type:
           type: string
           description: 资源类型
@@ -28508,7 +28804,6 @@ components:
           type: string
           description: 资源ID
           example: example-id-123
-          minLength: 1
         resource_version:
           type: string
           description: 资源版本
@@ -28617,24 +28912,20 @@ components:
         model:
           type: string
           maxLength: 200
-          minLength: 0
         refresh:
           type: string
         query:
           type: string
           maxLength: 4000
-          minLength: 0
         docs:
           type: array
           items:
             type: string
+            maxLength: 10
           maxItems: 10
-          minItems: 0
         top_n:
           type: integer
           format: int32
-          maximum: 512
-          minimum: 1
       required:
       - docs
       - model
@@ -28646,14 +28937,12 @@ components:
         model:
           type: string
           maxLength: 200
-          minLength: 0
         refresh:
           type: string
         input: {}
         user:
           type: string
           maxLength: 1000
-          minLength: 0
         truncate:
           type: string
           enum:
@@ -28668,7 +28957,6 @@ components:
         model:
           type: string
           maxLength: 200
-          minLength: 0
         refresh:
           type: string
         messages:
@@ -28676,7 +28964,6 @@ components:
           items:
             $ref: "#/components/schemas/ChatMessage"
           maxItems: 200
-          minItems: 0
         stream:
           type: boolean
         stop: {}
@@ -28686,12 +28973,10 @@ components:
         user:
           type: string
           maxLength: 1000
-          minLength: 0
         tools:
           type: array
           items: {}
           maxItems: 1000
-          minItems: 0
         data: {}
         userId:
           type: string
@@ -28737,7 +29022,6 @@ components:
         tool_choice:
           type: string
           maxLength: 1000
-          minLength: 0
         with_prompt:
           type: boolean
         decode_strategy: {}
@@ -28754,12 +29038,10 @@ components:
         role:
           type: string
           maxLength: 1000
-          minLength: 0
         content: {}
         name:
           type: string
           maxLength: 1000
-          minLength: 0
         reasoning_content:
           type: string
         tool_calls:
@@ -28768,7 +29050,6 @@ components:
         tool_call_id:
           type: string
           maxLength: 1000
-          minLength: 0
       required:
       - role
     Thinking:
@@ -28793,7 +29074,6 @@ components:
           type: string
           description: 名称
           example: 示例名称
-          minLength: 1
           pattern: "^[\\u4e00-\\u9fa5a-zA-Z][\\u4e00-\\u9fa5\\w-]{0,18}[\\u4e00-\\\
             u9fa5a-zA-Z0-9]$"
         content:
@@ -28801,12 +29081,10 @@ components:
           description: 内容
           example: 示例内容
           maxLength: 10000
-          minLength: 1
         source:
           type: string
           description: 来源
           example: PLAYGROUND
-          minLength: 1
           pattern: PLAYGROUND|EXPERIMENT|CANDIDATE|HORIZONTAL|NO_SOURCE|PRESET
         variables:
           type: string
@@ -28858,15 +29136,15 @@ components:
           description: 标签列表
           items:
             type: string
+            maxLength: 500
           maxItems: 500
-          minItems: 0
         industry_list:
           type: array
           description: 行业列表
           items:
             type: string
+            maxLength: 500
           maxItems: 500
-          minItems: 0
         source:
           type: string
           description: 来源
@@ -28967,7 +29245,6 @@ components:
           items:
             $ref: "#/components/schemas/TagVo"
           maxItems: 500
-          minItems: 0
         creator:
           type: string
           description: 创建者
@@ -29061,7 +29338,6 @@ components:
           items:
             $ref: "#/components/schemas/LicenseReport"
           maxItems: 1000
-          minItems: 0
     NotifyReq:
       type: object
       properties:
@@ -29134,8 +29410,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/UpdateWorkspaceMemberReq"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - members
     SimpleUser:
@@ -29187,7 +29461,6 @@ components:
           items:
             $ref: "#/components/schemas/ParamDefinitionInfo"
           maxItems: 10
-          minItems: 0
         workspace_id:
           type: string
           description: 工作空间ID
@@ -29243,7 +29516,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeBaseConnectorDetail"
           maxItems: 200
-          minItems: 0
     ParamDefinitionInfo:
       type: object
       properties:
@@ -29293,7 +29565,6 @@ components:
           items:
             $ref: "#/components/schemas/ThirdPartyKnowledgeBaseConnectionListItem"
           maxItems: 200
-          minItems: 0
     ThirdPartyKnowledgeBaseConnectionListItem:
       type: object
       properties:
@@ -29415,8 +29686,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ConnectionParamInfo"
-          maxItems: 2147483647
-          minItems: 0
         workspace_id:
           type: string
           description: 工作空间ID
@@ -29452,6 +29721,59 @@ components:
           description: 更新用户名称
           example: 李四
           maxLength: 100
+    ListMemoryServiceInstancesResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          description: 实例列表
+          items:
+            $ref: "#/components/schemas/MemoryServiceInstanceListItem"
+        total:
+          type: integer
+          format: int64
+          description: 总数
+          example: 10
+    MemoryServiceInstanceListItem:
+      type: object
+      properties:
+        instance_id:
+          type: string
+          description: 实例ID
+          example: instance-001
+        name:
+          type: string
+          description: 实例名称
+          example: 我的记忆服务
+        base_url:
+          type: string
+          description: agent-memory服务地址
+          example: http://mem-svc-a:8000
+        health_status:
+          type: string
+          description: 健康检查状态
+          example: HEALTHY
+        last_check_at:
+          type: string
+          format: date-time
+          description: 最近健康检查时间
+        deploy_meta:
+          type: string
+          description: 展示用JSON
+        created_user_id:
+          type: string
+          description: 创建人ID
+        created_user_name:
+          type: string
+          description: 创建人名
+        create_time:
+          type: string
+          format: date-time
+          description: 创建时间
+        update_time:
+          type: string
+          format: date-time
+          description: 更新时间
     ListMemoryReposResponseBody:
       type: object
       properties:
@@ -29467,7 +29789,6 @@ components:
           items:
             $ref: "#/components/schemas/MemoryRepoListItem"
           maxItems: 200
-          minItems: 0
     MemoryRepoListItem:
       type: object
       properties:
@@ -29502,7 +29823,6 @@ components:
           items:
             $ref: "#/components/schemas/LongTermMemoryStrategy"
           maxItems: 200
-          minItems: 0
         created_user_id:
           type: string
           description: 创建者用户ID
@@ -29533,6 +29853,14 @@ components:
           format: date-time
           description: 更新时间
           example: 2024-01-02T00:00:00Z
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN/EXTERNAL
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时非空）
+          example: instance-001
     ShowMemoryRepoResponseBody:
       type: object
       properties:
@@ -29563,7 +29891,6 @@ components:
           items:
             $ref: "#/components/schemas/LongTermMemoryStrategy"
           maxItems: 200
-          minItems: 0
         created_user_id:
           type: string
           description: 创建者用户ID
@@ -29604,6 +29931,17 @@ components:
           format: int32
           description: 时间跨度（天）
           example: 30
+        memory_backend_type:
+          type: string
+          description: 记忆后端类型：BUILTIN/EXTERNAL
+          example: BUILTIN
+        memory_service_instance_id:
+          type: string
+          description: 外部记忆服务实例ID（EXTERNAL时非空）
+          example: instance-001
+        scope_model_config:
+          type: string
+          description: scope级模型配置JSON
     ExternalKnowledgeBaseSource:
       type: object
       properties:
@@ -29742,7 +30080,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeBaseListItem"
           maxItems: 200
-          minItems: 0
     ListKnowledgeModelsResponseBody:
       type: object
       properties:
@@ -29758,7 +30095,6 @@ components:
           items:
             $ref: "#/components/schemas/ModelInfo"
           maxItems: 200
-          minItems: 0
     ModelInfo:
       type: object
       properties:
@@ -29823,7 +30159,6 @@ components:
           items:
             $ref: "#/components/schemas/ExternalKnowledgeItem"
           maxItems: 200
-          minItems: 0
     AbilityInfo:
       type: object
       properties:
@@ -29867,7 +30202,6 @@ components:
           items:
             $ref: "#/components/schemas/AbilityInfo"
           maxItems: 10
-          minItems: 0
     ListDefaultKnowledgeBaseConnectorsResponseBody:
       type: object
       properties:
@@ -29883,7 +30217,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeBaseConnectorDetail"
           maxItems: 200
-          minItems: 0
     DefaultKnowledgeBaseConnectionDetail:
       type: object
       properties:
@@ -29905,8 +30238,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ConnectionParamInfo"
-          maxItems: 2147483647
-          minItems: 0
         workspace_id:
           type: string
           description: 工作空间ID
@@ -29974,7 +30305,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeBaseConfig"
           maxItems: 200
-          minItems: 0
     PePromptNewListVo:
       type: object
       properties:
@@ -30011,8 +30341,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/VersionInfo"
-          maxItems: 2147483647
-          minItems: 0
     ExecutionInfo:
       type: object
       properties:
@@ -30042,8 +30370,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/NodeRunInfo"
-          maxItems: 2147483647
-          minItems: 0
     NodeRunInfo:
       type: object
       properties:
@@ -30092,8 +30418,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Message"
-          maxItems: 2147483647
-          minItems: 0
         metadata:
           type: object
           additionalProperties: {}
@@ -30166,8 +30490,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ConversationInfo"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - conversation_infos
       - count
@@ -30185,8 +30507,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ExecutionInfo"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - count
       - execution_infos
@@ -30227,8 +30547,6 @@ components:
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     RouterStrategyListResponse:
       type: object
       properties:
@@ -30243,8 +30561,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/RouterStrategyBaseInfo"
-          maxItems: 2147483647
-          minItems: 0
     ModelInvokeDataListRsp:
       type: object
       properties:
@@ -30254,8 +30570,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ModelInvokeDataRsp"
-          maxItems: 2147483647
-          minItems: 0
     ModelInvokeDataRsp:
       type: object
       properties:
@@ -30297,8 +30611,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ProviderAuthConfig"
-          maxItems: 2147483647
-          minItems: 0
     ProviderAuthConfig:
       type: object
       properties:
@@ -30365,8 +30677,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ModelServiceProviderRsp"
-          maxItems: 2147483647
-          minItems: 0
     ModelServiceProviderRsp:
       type: object
       properties:
@@ -30406,8 +30716,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ProviderAuthConfig"
-          maxItems: 2147483647
-          minItems: 0
         created_date:
           type: integer
           format: int64
@@ -30458,8 +30766,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ModelServiceRsp"
-          maxItems: 2147483647
-          minItems: 0
         all_model_type:
           type: array
           description: 所有模型类型列表
@@ -30468,8 +30774,6 @@ components:
           - embedding
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         all_model_series:
           type: array
           description: 所有模型系列列表
@@ -30478,8 +30782,6 @@ components:
           - Llama
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     ModelNameResp:
       type: object
       properties:
@@ -30496,8 +30798,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ModelInterfaceProtocolRsp"
-          maxItems: 2147483647
-          minItems: 0
     ModelInterfaceProtocolRsp:
       type: object
       properties:
@@ -30602,8 +30902,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/McpServiceToolEntity"
-          maxItems: 2147483647
-          minItems: 0
         deployType:
           type: string
           description: 部署类型
@@ -30657,8 +30955,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Datapoints"
-          maxItems: 2147483647
-          minItems: 0
     Datapoints:
       type: object
       properties:
@@ -30986,8 +31282,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/McpServerBaseInfoDto"
-          maxItems: 2147483647
-          minItems: 0
         total:
           type: integer
           format: int64
@@ -31091,8 +31385,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkspaceMemberInfo"
-          maxItems: 2147483647
-          minItems: 0
     WorkspaceMemberInfo:
       type: object
       properties:
@@ -31186,8 +31478,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/RoleInfo"
-          maxItems: 2147483647
-          minItems: 0
     RoleInfo:
       type: object
       properties:
@@ -31246,8 +31536,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WorkflowListItem"
-          maxItems: 2147483647
-          minItems: 0
     VersionReference:
       type: object
       properties:
@@ -31319,7 +31607,6 @@ components:
           items:
             $ref: "#/components/schemas/WorkFlowEnv"
           maxItems: 300
-          minItems: 0
     WorkflowValidationVO:
       type: object
       properties:
@@ -31333,8 +31620,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowValidationVOErrors"
-          maxItems: 2147483647
-          minItems: 0
     WorkflowValidationVOErrors:
       type: object
       properties:
@@ -31392,8 +31677,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TaskListItem"
-          maxItems: 2147483647
-          minItems: 0
     WorkflowFrontParamInfo:
       type: object
       properties:
@@ -31423,16 +31706,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFrontParam"
-          maxItems: 2147483647
-          minItems: 0
         outputs:
           type: array
           description: 输出参数列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFrontParam"
-          maxItems: 2147483647
-          minItems: 0
         prologue:
           type: string
           description: 开场白
@@ -31444,8 +31723,6 @@ components:
           - 如何重置密码
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     VersionChannelListRsp:
       type: object
       properties:
@@ -31464,8 +31741,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/VersionChannelInfo"
-          maxItems: 2147483647
-          minItems: 0
     WorkflowSceneRsp:
       type: object
       properties:
@@ -31474,18 +31749,15 @@ components:
           description: 名称
           example: 智能客服
           maxLength: 64
-          minLength: 1
         desc:
           type: string
           description: 描述
           example: 智能客服场景应用
           maxLength: 128
-          minLength: 1
         workflow_id:
           type: string
           description: 工作流ID
           example: wf_001
-          minLength: 1
         icon:
           type: string
           description: 图标
@@ -31496,8 +31768,6 @@ components:
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         type:
           type: string
           description: 类型
@@ -31508,16 +31778,12 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFrontParam"
-          maxItems: 2147483647
-          minItems: 0
         outputs:
           type: array
           description: 输出参数列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFrontParam"
-          maxItems: 2147483647
-          minItems: 0
         creator:
           type: string
           description: 创建者
@@ -31531,7 +31797,6 @@ components:
           type: string
           description: 版本ID
           example: v1.0.0
-          minLength: 1
         prologue:
           type: string
           description: 开场白
@@ -31542,8 +31807,6 @@ components:
           example: []
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         free_trial_quota:
           $ref: "#/components/schemas/FreeTrialQuota"
           description: 免费试用额度
@@ -31620,8 +31883,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowVersionListItem"
-          maxItems: 2147483647
-          minItems: 0
     ToolListRsp:
       type: object
       properties:
@@ -31636,8 +31897,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Tool"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - count
     TagInfo:
@@ -31669,8 +31928,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/StructMessage"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - count
     ListStudioSkillsResponseBody:
@@ -31683,7 +31940,6 @@ components:
           items:
             $ref: "#/components/schemas/StudioSkillInfo"
           maxItems: 50
-          minItems: 0
         total:
           type: integer
           format: int32
@@ -31923,8 +32179,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ShareResourceInfo"
-          maxItems: 2147483647
-          minItems: 0
     AuthWorkspaceInfo:
       type: object
       properties:
@@ -32017,24 +32271,18 @@ components:
           example: Agent输入参数列表
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         workflow_inputs:
           type: array
           description: 工作流输入参数
           example: 工作流输入参数列表
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         controller_inputs:
           type: array
           description: 控制器输入参数
           example: 控制器输入参数列表
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
     ResourceUsageDetails:
       type: object
       properties:
@@ -32063,12 +32311,10 @@ components:
           type: string
           description: 版本ID
           example: v1.0.0
-          minLength: 1
         app_id:
           type: string
           description: 应用ID
           example: app-123456
-          minLength: 1
         app_type:
           type: string
           description: 应用类型
@@ -32102,8 +32348,6 @@ components:
           - 功能介绍
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
         workflow_type:
           type: string
           description: 工作流类型
@@ -32114,8 +32358,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowNodeVO"
-          maxItems: 2147483647
-          minItems: 0
         voice_interaction:
           $ref: "#/components/schemas/VoiceInteraction"
           description: 语音交互配置
@@ -32134,33 +32376,26 @@ components:
           type: string
           description: 节点ID
           example: node_001
-          minLength: 1
         name:
           type: string
           description: 节点名称
           example: 开始节点
-          minLength: 1
         type:
           type: string
           description: 节点类型
           example: start
-          minLength: 1
         inputs:
           type: array
           description: 输入字段列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         outputs:
           type: array
           description: 输出字段列表
           example: []
           items:
             $ref: "#/components/schemas/WorkflowFieldVO"
-          maxItems: 2147483647
-          minItems: 0
         configs:
           type: object
           additionalProperties: {}
@@ -32172,8 +32407,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowBranchVO"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - id
       - name
@@ -32208,8 +32441,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ResourceMapping"
-          maxItems: 2147483647
-          minItems: 0
     Relation:
       type: object
       properties:
@@ -32306,8 +32537,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Relation"
-          maxItems: 2147483647
-          minItems: 0
     PluginListRsp:
       type: object
       properties:
@@ -32335,8 +32564,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ObjectRsp"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - count
     ObjectRsp:
@@ -32596,7 +32823,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeTaskInfo"
           maxItems: 65535
-          minItems: 0
     KnowledgeTagInfo:
       type: object
       properties:
@@ -32654,7 +32880,6 @@ components:
           description: ID
           example: example-id-123
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         query:
           type: string
@@ -32685,8 +32910,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/KnowledgeSearchRecord"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - KnowledgeSearchRecord
       - count
@@ -32698,7 +32921,6 @@ components:
           description: 文件ID
           example: file_001
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         project_id:
           type: string
@@ -32740,8 +32962,8 @@ components:
           - tag1
           items:
             type: string
+            maxLength: 20
           maxItems: 20
-          minItems: 0
         metadata:
           type: string
           description: 元数据
@@ -32774,7 +32996,6 @@ components:
           items:
             $ref: "#/components/schemas/FileInfo"
           maxItems: 1000
-          minItems: 0
     FileChunkInfo:
       type: object
       properties:
@@ -32783,7 +33004,6 @@ components:
           description: 分片ID
           example: chunk_001
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         content:
           type: string
@@ -32796,7 +33016,6 @@ components:
           description: 分片标题
           example: 第一章 概述
           maxLength: 65535
-          minLength: 1
         page_num:
           type: integer
           format: int64
@@ -32826,8 +33045,8 @@ components:
           - img_001
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
         image_paths:
           type: array
           description: 图片路径列表
@@ -32835,8 +33054,8 @@ components:
           - /images/img_001.png
           items:
             type: string
+            maxLength: 100
           maxItems: 100
-          minItems: 0
       required:
       - content
       - id
@@ -32855,8 +33074,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/FileChunkInfo"
-          maxItems: 2147483647
-          minItems: 0
     KnowledgeFaq:
       type: object
       properties:
@@ -32922,7 +33139,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeFaq"
           maxItems: 1000
-          minItems: 0
       required:
       - count
       - faq_list
@@ -32940,8 +33156,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/FileInfo"
-          maxItems: 2147483647
-          minItems: 0
     FaqFileChunkListRsp:
       type: object
       properties:
@@ -32956,8 +33170,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/FileChunkInfo"
-          maxItems: 2147483647
-          minItems: 0
     KnowledgeSegmentRule:
       type: object
       properties:
@@ -32975,8 +33187,8 @@ components:
           - .*\.docx
           items:
             type: string
+            maxLength: 65535
           maxItems: 65535
-          minItems: 0
         project_id:
           type: string
           description: 项目ID
@@ -33018,7 +33230,6 @@ components:
           items:
             $ref: "#/components/schemas/KnowledgeSegmentRule"
           maxItems: 65535
-          minItems: 0
     Environment:
       type: object
       properties:
@@ -33098,8 +33309,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Environment"
-          maxItems: 2147483647
-          minItems: 0
     EnvironmentInstance:
       type: object
       properties:
@@ -33136,8 +33345,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/EnvironmentInstance"
-          maxItems: 2147483647
-          minItems: 0
         total:
           type: integer
           format: int32
@@ -33175,8 +33382,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/SubnetInfo"
-          maxItems: 2147483647
-          minItems: 0
     SubnetInfo:
       type: object
       properties:
@@ -33221,8 +33426,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/EnvironmentVariable"
-          maxItems: 2147483647
-          minItems: 0
         count:
           type: integer
           format: int32
@@ -33237,8 +33440,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/EnvironmentVariableResp"
-          maxItems: 2147483647
-          minItems: 0
         total:
           type: integer
           format: int32
@@ -33328,8 +33529,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ControllerInvokeInfo"
-          maxItems: 2147483647
-          minItems: 0
         status:
           type: string
           description: 执行状态
@@ -33350,8 +33549,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/WorkflowBaseData"
-          maxItems: 2147483647
-          minItems: 0
     ControllerInvokeInfo:
       type: object
       properties:
@@ -33408,8 +33605,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/Message"
-          maxItems: 2147483647
-          minItems: 0
         inputs:
           description: 输入参数
           example: {}
@@ -33500,8 +33695,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ControllerExecution"
-          maxItems: 2147483647
-          minItems: 0
     ComplexIntentListRsp:
       type: object
       properties:
@@ -33516,8 +33709,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ComplexIntentRsp"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - count
     ComplexIntentRsp:
@@ -33577,8 +33768,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ComplexIntentBranchRsp"
-          maxItems: 2147483647
-          minItems: 0
       required:
       - count
     ComplexIntentBranchRsp:
@@ -33631,8 +33820,6 @@ components:
           - 今天天气怎么样
           items:
             type: string
-          maxItems: 2147483647
-          minItems: 0
     AppListRsp:
       type: object
       properties:
@@ -33647,8 +33834,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AppInfo"
-          maxItems: 2147483647
-          minItems: 0
     AgentListRsp:
       type: object
       properties:
@@ -33663,8 +33848,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AgentInfo"
-          maxItems: 2147483647
-          minItems: 0
     AgentExecutionInfo:
       type: object
       properties:
@@ -33696,8 +33879,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AgentInvokeInfo"
-          maxItems: 2147483647
-          minItems: 0
         status:
           type: string
           description: 执行状态
@@ -33775,8 +33956,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExecutionQuery"
-          maxItems: 2147483647
-          minItems: 0
     ExecutionQuery:
       type: object
       properties:
@@ -33844,8 +34023,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/AgentVersionListItem"
-          maxItems: 2147483647
-          minItems: 0
     TagListVo:
       type: object
       properties:
@@ -33924,8 +34101,6 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/DeveloperAgentInfo"
-          maxItems: 2147483647
-          minItems: 0
         page_info:
           $ref: "#/components/schemas/DeveloperSpacePage"
           description: 页码
@@ -34024,6 +34199,8 @@ components:
           example: []
           items:
             type: string
+            maxLength: 1000
+            minLength: 1
           maxItems: 1000
           minItems: 1
       required:
@@ -34060,7 +34237,6 @@ components:
           description: 结构化信息ID
           example: msg001
           maxLength: 64
-          minLength: 1
           pattern: "^[a-zA-Z0-9_-]+$"
         name:
           type: string
@@ -34104,7 +34280,8 @@ components:
           example: []
           items:
             type: string
-            pattern: "^[a-zA-Z0-9_-]+$"
+            maxLength: 100
+            minLength: 1
           maxItems: 100
           minItems: 1
       required:

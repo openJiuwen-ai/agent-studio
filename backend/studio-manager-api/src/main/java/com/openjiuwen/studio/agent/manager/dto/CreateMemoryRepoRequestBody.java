@@ -10,6 +10,7 @@ import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -50,7 +51,8 @@ public class CreateMemoryRepoRequestBody implements Serializable {
     @JsonProperty("long_term_memory_strategies")
     @Schema(description = "长期记忆策略列表", example = "[{\"type\":\"summary\"}]")
     @Valid
-    @Size(max = 200)
+    @NotNull
+    @Size(min = 1, max = 200)
     private List<LongTermMemoryStrategy> longTermMemoryStrategies = null;
 
     @JsonProperty("conversation_round")

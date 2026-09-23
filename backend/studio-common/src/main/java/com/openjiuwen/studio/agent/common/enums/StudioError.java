@@ -1741,6 +1741,11 @@ public enum StudioError {
      */
     IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_INPUT(BAD_REQUEST, CONFIG, "1027"),
 
+    /**
+     * 意图包已存在（客户端直传或导入场景指定的 id 已存在，创建前预检冲突）
+     */
+    COMPLEX_INTENT_EXIST(BAD_REQUEST, CONFIG, "1036"),
+
     /* ***********************数据源管理***********************/
     /**
      * 数据源不存在
@@ -4483,7 +4488,7 @@ public enum StudioError {
     /**
      * 创建环境，参数不合法
      */
-    ENVIRONMENT_CREATE_PARAMETER_VERIFICATION_FAIL(INTERNAL_SERVER_ERROR, Module.ENVIRONMENT_MANAGER, "1008"),
+    ENVIRONMENT_CREATE_PARAMETER_VERIFICATION_FAIL(BAD_REQUEST, Module.ENVIRONMENT_MANAGER, "1008"),
 
     /**
      * 创建环境，vpc不合法或vpc信息不存在
@@ -4717,6 +4722,17 @@ public enum StudioError {
      *
      */
     AGENT_TYPE_MEMORY_REPO_NOT_SUPPORT(BAD_REQUEST, MEMORY, "1005"),
+
+    /**
+     * 记忆策略类型重复（同一记忆库不能配置多个同类型策略）
+     * args: [0]=重复的策略类型
+     */
+    MEMORY_STRATEGY_DUPLICATE(BAD_REQUEST, MEMORY, "1009"),
+
+    /**
+     * 记忆策略参数不合法（列表为空/含空策略项，service 直调路径兜底）
+     */
+    MEMORY_STRATEGY_INVALID(BAD_REQUEST, MEMORY, "1010"),
 
 
     /**
