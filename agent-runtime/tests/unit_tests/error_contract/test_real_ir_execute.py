@@ -30,9 +30,10 @@ def _make_app(request_id="req-real-ir-001", lang="zh-cn"):
 
     @app.exception_handler(RequestValidationError)
     async def _validation_handler(request: Request, exc: RequestValidationError):
-        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
-        descriptor = error_factory.from_validation(
-            exc, getattr(request.state, "request_id", None) if request else None)
+        # 从 _request_ctx（middleware 设的）取 request_id + language，与生产行为一致
+        ctx = _request_ctx.get()
+        language = ctx.headers.get("x-language", "zh-cn") if ctx.headers else "zh-cn"
+        descriptor = error_factory.from_validation(exc, ctx.request_id)
         return error_factory.build_json_response(descriptor, language)
 
     app.include_router(execution_app)
