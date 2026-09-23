@@ -313,7 +313,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 #   字符串且等于路径值              → 用路径值
                 #   字符串但与路径值不同            → 400
                 #   键存在但值非字符串（含 null）   → 400
-                if body_json is not None and "conversationId" in body_json:
+                if body_json is not None and \
+                        "conversationId" in body_json:
                     body_value = body_json["conversationId"]
                     if not isinstance(body_value, str) or body_value != path_cid:
                         return _conflict_response(request_id, request.headers.get("x-language", "zh-cn") if request else "zh-cn")

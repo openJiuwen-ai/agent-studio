@@ -44,7 +44,7 @@ def normalize_locale(language: Optional[str]) -> str:
 
 
 def _build(defn, request_id: str, safe_details=None, cause=None,
-           downstream_service=None, downstream_error_code=None) -> ErrorDescriptor:
+           downstream_service=None, downstream_error_code=None) -> ErrorDescriptor:  # noqa: G.FNM.03 - ErrorDescriptor 构造参数，具名封装过度
     return ErrorDescriptor(
         error_code=defn.error_code,
         http_status=defn.http_status,

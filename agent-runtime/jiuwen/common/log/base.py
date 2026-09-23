@@ -555,7 +555,8 @@ class MaskingFormatter(logging.Formatter):
 class LogRouter:
     # COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy，不再在此读取环境变量。
 
-    def route_log(self, original_method: Callable) -> Callable:
+    @staticmethod
+    def route_log(original_method: Callable) -> Callable:
         """route log."""
 
         @wraps(original_method)

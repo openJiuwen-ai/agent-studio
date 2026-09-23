@@ -358,8 +358,7 @@ def instance_app(config: dict | None = None):
     # fastapi.HTTPException（子类）实例同样命中本 handler；若只注册 fastapi 子类，
     # 父类异常会落回 FastAPI 默认 {"detail":...} 出口。
     # SYNC-01 P5-R3 落地：sync_01 原无此 handler（404/405 走 FastAPI 默认），从老分支迁入。
-    from starlette.exceptions import HTTPException as StarletteHTTPException
-
+    # StarletteHTTPException 已在模块级 import（:77），不在此重复 import 避免 G.VAR.03 覆盖
     @_app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         """COM-03 §7.2 第 1 点：HTTPException 统一 adapter（404/405/4xx/5xx）。"""

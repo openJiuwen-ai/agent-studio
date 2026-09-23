@@ -208,7 +208,8 @@ class DiagnosticPolicy:
             return cls(verbose=False)
         return cls(verbose=(raw.lower() == _TRUE_LITERAL))
 
-    def sanitize_value(self, value: Any) -> str:
+    @staticmethod
+    def sanitize_value(value: Any) -> str:
         """对诊断值做脱敏 + 限长 + 安全字符串化。"""
         return _coerce_safe_str(value)
 
