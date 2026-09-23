@@ -44,10 +44,11 @@ def normalize_locale(language: Optional[str]) -> str:
 
 
 def _build(defn, request_id: str, safe_details=None, cause=None,
-           downstream_service=None, downstream_error_code=None) -> ErrorDescriptor:  # pylint: disable=huawei-too-many-arguments - ErrorDescriptor 构造参数，具名封装过度
+           downstream_service=None, downstream_error_code=None,
+           http_status=None) -> ErrorDescriptor:  # pylint: disable=huawei-too-many-arguments - ErrorDescriptor 构造参数，具名封装过度
     return ErrorDescriptor(
         error_code=defn.error_code,
-        http_status=defn.http_status,
+        http_status=http_status or defn.http_status,
         message_key=defn.message_key,
         reason_key=defn.reason_key,
         suggestion_key=defn.suggestion_key,
@@ -178,11 +179,13 @@ def from_http_exception(exc: HTTPException, request_id: Optional[str]) -> ErrorD
     if status == 405:
         return from_method_not_allowed(request_id, exc)
     if 400 <= status < 500:
-        return _build(catalog.REQUEST_VALIDATION_FAILED, _rid(request_id), cause=exc)
+        # 401/403 等认证类保留原状态码（http_status=status），不改写为 400
+        return _build(catalog.REQUEST_VALIDATION_FAILED, _rid(request_id), cause=exc, http_status=status)
     return from_internal(exc, request_id)
 
 
-def build_json_response(descriptor: ErrorDescriptor, language: Optional[str]) -> JSONResponse:
+def build_json_response(descriptor: ErrorDescriptor, language: Optional[str],
+                        extra_headers: Optional[dict] = None) -> JSONResponse:
     """descriptor + locale → FastAPI JSONResponse（COM-03 标准 HTTP 构建器输出）。
 
     COM-03 §4: fail-closed——i18n 解析失败时返回硬编码完整安全响应
@@ -191,8 +194,12 @@ def build_json_response(descriptor: ErrorDescriptor, language: Optional[str]) ->
     try:
         spec: HttpResponseSpec = build_http_response(
             descriptor, normalize_locale(language), runtime_i18n_resolver)
+        response_headers = dict(spec.headers or {})  # 意见6: 消费 spec.headers
+        response_headers["X-Request-Id"] = descriptor.request_id
+        if extra_headers:  # 意见1: 透传 exc.headers（如 405 Allow）
+            response_headers.update(extra_headers)
         return JSONResponse(status_code=spec.status, content=spec.body,
-                            headers={"X-Request-Id": descriptor.request_id})
+                            headers=response_headers)
     except ValueError:
         return JSONResponse(
             status_code=descriptor.http_status,

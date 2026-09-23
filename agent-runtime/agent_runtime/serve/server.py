@@ -369,7 +369,7 @@ def instance_app(config: dict | None = None):
         language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
         descriptor = error_factory.from_http_exception(
             exc, getattr(request.state, "request_id", None) if request else None)
-        return error_factory.build_json_response(descriptor, language)
+        return error_factory.build_json_response(descriptor, language, extra_headers=exc.headers)  # 意见1: 透传 Allow
 
     @_app.exception_handler(AgentBuilderError)
     async def agent_builder_error_handler(request: Request, exc: AgentBuilderError):
@@ -392,7 +392,7 @@ def instance_app(config: dict | None = None):
         return error_factory.build_json_response(descriptor, language)
 
     # Storage 异常已迁移至共享包 storage（不再是 AgentBuilderError 子类），
-    # 这里单独兜底，保持未捕获 storage 错误的结构化 500 响应不变（code 取 exc.code）。
+    # 这里单独兜底，保持未捕获 storage 错误的结构化 500 响应（COM-03 from_internal → openjiuwen.12100004）。
     from storage.exceptions import StorageConfigError, StorageReadError
 
     @_app.exception_handler(StorageReadError)
