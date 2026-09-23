@@ -150,6 +150,11 @@ spec:
             # LakeSearch 鉴权方式：basic（默认）/ none（无鉴权，如本地 mock）
             - name: knowledge_lakeSearch_auth_mode
               value: 'basic'
+            # 知识检索召回阈值范围，M侧和R侧共用，默认 0~1
+            - name: KNOWLEDGE_RECALL_THRESHOLD_MIN
+              value: '0'
+            - name: KNOWLEDGE_RECALL_THRESHOLD_MAX
+              value: '1'
             # Redisson codec 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制，用于反序列化调用链缓存等大字符串值。默认 100MB
             - name: redis_max_string_length
               value: '100000000'

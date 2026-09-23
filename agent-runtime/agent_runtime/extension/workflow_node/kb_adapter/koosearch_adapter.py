@@ -3,6 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 
+import os
 from typing import Any, Dict, List
 
 import aiohttp
@@ -11,6 +12,9 @@ from openjiuwen.core.common.logging import workflow_logger
 
 from .base import DatasetSearchRequest, KBSearchResult, KBServiceAdapter
 from .customer_header_inject import inject_customer_headers_to_kb
+
+_THRESHOLD_MIN = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MIN", "0"))
+_THRESHOLD_MAX = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MAX", "1"))
 
 
 # 搜索模式映射
@@ -35,7 +39,8 @@ class KooSearchAdapter(KBServiceAdapter):
         all_results: List[KBSearchResult] = []
 
         top_k = retrieval_params.get("topK", 10)
-        score_threshold = retrieval_params.get("scoreThreshold", 0.0)
+        score_threshold = float(retrieval_params.get("scoreThreshold", 0.0))
+        score_threshold = max(_THRESHOLD_MIN, min(score_threshold, _THRESHOLD_MAX))
 
         endpoint = connection_config.get("endpoint", "")
         extra_params = connection_config.get("extra_params", {})
@@ -97,7 +102,7 @@ class KooSearchAdapter(KBServiceAdapter):
         all_results = all_results[:top_k]
 
         # 过滤低于阈值的结果
-        if score_threshold > 0:
+        if score_threshold > _THRESHOLD_MIN:
             all_results = [
                 r for r in all_results if r.score >= score_threshold
             ]

@@ -198,6 +198,9 @@ services:
       knowledge_lakeSearch_endpoint: ${KNOWLEDGE_LAKESEARCH_ENDPOINT:-}
       # LakeSearch 鉴权方式（可选，默认 basic；mock 无鉴权用 none）
       knowledge_lakeSearch_auth_mode: ${KNOWLEDGE_LAKESEARCH_AUTH_MODE:-basic}
+      # 知识检索召回阈值范围，M侧和R侧共用，默认 0~1
+      KNOWLEDGE_RECALL_THRESHOLD_MIN: ${KNOWLEDGE_RECALL_THRESHOLD_MIN:-0}
+      KNOWLEDGE_RECALL_THRESHOLD_MAX: ${KNOWLEDGE_RECALL_THRESHOLD_MAX:-1}
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
       # 非图片文件上传大小上限（单位 KB，默认 131072 即 128MB）
@@ -259,6 +262,9 @@ services:
       REDIS_MODE: ${REDIS_MODE:-single}
       REDIS_DATABASE: ${REDIS_DATABASE:-0}
       REDIS_TRANSACTION_ENABLED: ${REDIS_TRANSACTION_ENABLED:-true}
+      # 知识检索召回阈值范围，M侧和R侧共用，默认 0~1
+      KNOWLEDGE_RECALL_THRESHOLD_MIN: ${KNOWLEDGE_RECALL_THRESHOLD_MIN:-0}
+      KNOWLEDGE_RECALL_THRESHOLD_MAX: ${KNOWLEDGE_RECALL_THRESHOLD_MAX:-1}
       DATASOURCE_OBS_SERVER: ${OBS_URL:-}
       DATASOURCE_OBS_BUCKET: ${OBS_BUCKET:-}
       DATASOURCE_OBS_AK: ${OBS_AK:-}

@@ -3859,14 +3859,16 @@ public class AgentManagementService implements IAgentManagementService {
         if (Objects.isNull(policy)) {
             return;
         }
-        float topK = policy.getTopK();
-        if (policy.getRecallThreshold() > knowledgeRecallThresholdMax
-            || policy.getRecallThreshold() < knowledgeRecallThresholdMin) {
-            throw new AgentStudioException(StudioError.KNOW_RECALL_THRESHOLD_ILLEGAL);
+        // clamp：超过 max 取 max，低于 min 取 min
+        if (policy.getRecallThreshold() > knowledgeRecallThresholdMax) {
+            policy.setRecallThreshold((float) knowledgeRecallThresholdMax);
+        } else if (policy.getRecallThreshold() < knowledgeRecallThresholdMin) {
+            policy.setRecallThreshold((float) knowledgeRecallThresholdMin);
         }
-        if (policy.getFaqThreshold() > knowledgeRecallThresholdMax
-            || policy.getFaqThreshold() < knowledgeRecallThresholdMin) {
-            throw new AgentStudioException(StudioError.FAQ_THRESHOLD_ILLEGAL);
+        if (policy.getFaqThreshold() > knowledgeRecallThresholdMax) {
+            policy.setFaqThreshold((float) knowledgeRecallThresholdMax);
+        } else if (policy.getFaqThreshold() < knowledgeRecallThresholdMin) {
+            policy.setFaqThreshold((float) knowledgeRecallThresholdMin);
         }
     }
 

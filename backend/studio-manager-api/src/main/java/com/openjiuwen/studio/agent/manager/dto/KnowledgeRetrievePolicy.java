@@ -39,11 +39,11 @@ public class KnowledgeRetrievePolicy implements Serializable {
     private Integer topK = 5;
 
     @JsonProperty("recall_threshold")
-    @Schema(description = "语义检索召回阈值，取值范围 0~1，低于此阈值的结果将被过滤", example = "0.5")
+    @Schema(description = "语义检索召回阈值，取值范围由环境变量 knowledge_recall_threshold_min/max 配置，低于此阈值的结果将被过滤", example = "0.5")
     private Float recallThreshold = 0.5f;
 
     @JsonProperty("faq_threshold")
-    @Schema(description = "FAQ 检索匹配阈值，取值范围 0~1", example = "0.9")
+    @Schema(description = "FAQ 检索匹配阈值，取值范围由环境变量 knowledge_recall_threshold_min/max 配置", example = "0.9")
     private Float faqThreshold = 0.9f;
 
     @JsonProperty("need_extras_faq_search")

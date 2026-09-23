@@ -4,12 +4,16 @@
 """OpenJiuwen 知识库检索适配器 — 供工作流知识检索节点调用。"""
 
 import logging
+import os
 from typing import List
 
 from openjiuwen.core.common.logging import workflow_logger
 
 from .base import KBSearchResult, KBServiceAdapter
 from .openjiuwen_kb_manager import KBSearchOptions, OpenJiuwenKBManager
+
+_THRESHOLD_MIN = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MIN", "0"))
+_THRESHOLD_MAX = float(os.environ.get("KNOWLEDGE_RECALL_THRESHOLD_MAX", "1"))
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,7 @@ class OpenJiuwenKBAdapter(KBServiceAdapter):
         """检索 openjiuwen 本地知识库。"""
         top_k = int(retrieval_params.get("topK", 5))
         score_threshold = float(retrieval_params.get("scoreThreshold", 0.0))
+        score_threshold = max(_THRESHOLD_MIN, min(score_threshold, _THRESHOLD_MAX))
         search_mode = retrieval_params.get("searchMode", "")
         index_type = _SEARCH_MODE_MAP.get(search_mode, retrieval_params.get("indexType", "vector"))
         if index_type not in _VALID_INDEX_TYPES:
