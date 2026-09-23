@@ -286,9 +286,9 @@ class TestWireLocalReceiver(unittest.TestCase):
 
 class _FakeTracerManager:
     """异步 tracer 替身——生产 ainvoke/astream 会 await on_plugin_start/end。"""
-    async def on_plugin_start(self, inputs): pass  # pylint: disable=multiple-statements
-    async def on_plugin_end(self, *a, **kw): pass  # pylint: disable=multiple-statements
-    async def on_plugin_error(self, error): pass  # pylint: disable=multiple-statements
+    async def on_plugin_start(self, inputs): pass  # pylint: disable=multiple-statements  # noqa
+    async def on_plugin_end(self, *a, **kw): pass  # pylint: disable=multiple-statements  # noqa
+    async def on_plugin_error(self, error): pass  # pylint: disable=multiple-statements  # noqa
 
 
 class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
@@ -361,26 +361,26 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
             rp.headers["traceparent"] = "00-forged"
 
         class FakeResp:
-            async def __aenter__(self): return self  # pylint: disable=multiple-statements
-            async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements
-            async def read(self): return b"{}"  # pylint: disable=multiple-statements
+            async def __aenter__(self): return self  # pylint: disable=multiple-statements  # noqa
+            async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements  # noqa
+            async def read(self): return b"{}"  # pylint: disable=multiple-statements  # noqa
             status = 200
             headers = {}
-            @property  # pylint: disable=blank-line
+            @property  # pylint: disable=blank-line  # noqa
             def content(self):
                 # async iterable: yield nothing, return immediately
                 class _EmptyContent:
                     def __aiter__(self_inner):  # pylint: disable=no-self-argument
                         return self_inner
-                    async def __anext__(self_inner):  # pylint: disable=blank-line
+                    async def __anext__(self_inner):  # pylint: disable=blank-line  # noqa
                         raise StopAsyncIteration
                 return _EmptyContent()
 
         class FakeSession:
-            def __init__(self, **kw): pass  # pylint: disable=multiple-statements
-            async def __aenter__(self): return self  # pylint: disable=multiple-statements
-            async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements
-            def request(self, **kw):  # pylint: disable=blank-line
+            def __init__(self, **kw): pass  # pylint: disable=multiple-statements  # noqa
+            async def __aenter__(self): return self  # pylint: disable=multiple-statements  # noqa
+            async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements  # noqa
+            def request(self, **kw):  # pylint: disable=blank-line  # noqa
                 captured["headers"] = dict(kw.get("headers", {}))
                 return FakeResp()
 
@@ -400,34 +400,34 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
 
 
 class _FakeTracerManager:
-    async def on_plugin_start(self, inputs): pass  # pylint: disable=multiple-statements
-    async def on_plugin_end(self, content): pass  # pylint: disable=multiple-statements
-    async def on_plugin_error(self, error): pass  # pylint: disable=multiple-statements
+    async def on_plugin_start(self, inputs): pass  # pylint: disable=multiple-statements  # noqa
+    async def on_plugin_end(self, content): pass  # pylint: disable=multiple-statements  # noqa
+    async def on_plugin_error(self, error): pass  # pylint: disable=multiple-statements  # noqa
 
 
 class _FakeMcpCtx:
     """async context manager for streamablehttp_client / sse_client."""
     def __init__(self, captured, kw):
         captured.update(kw)
-    async def __aenter__(self):  # pylint: disable=blank-line
+    async def __aenter__(self):  # pylint: disable=blank-line  # noqa
         return (None, None, None)  # streamable_http: (read, write, _)
-    async def __aexit__(self, *a): pass  # pylint: disable=blank-line
+    async def __aexit__(self, *a): pass  # pylint: disable=blank-line  # noqa
 
 
 class _FakeMcpSseCtx:
     """SSE returns 2-tuple."""
     def __init__(self, captured, kw):
         captured.update(kw)
-    async def __aenter__(self):  # pylint: disable=blank-line
+    async def __aenter__(self):  # pylint: disable=blank-line  # noqa
         return (None, None)  # sse: (read, write)
-    async def __aexit__(self, *a): pass  # pylint: disable=blank-line
+    async def __aexit__(self, *a): pass  # pylint: disable=blank-line  # noqa
 
 
 class _FakeClientSession:
-    async def __aenter__(self): return self  # pylint: disable=multiple-statements
-    async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements
-    async def initialize(self): pass  # pylint: disable=multiple-statements
-    async def call_tool(self, name, args):  # pylint: disable=blank-line
+    async def __aenter__(self): return self  # pylint: disable=multiple-statements  # noqa
+    async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements  # noqa
+    async def initialize(self): pass  # pylint: disable=multiple-statements  # noqa
+    async def call_tool(self, name, args):  # pylint: disable=blank-line  # noqa
         return type("R", (), {"content": []})()
 
 
@@ -459,7 +459,7 @@ class TestMcpStreamableHttpSendBoundary(unittest.IsolatedAsyncioTestCase):
 
         api.request_params_creator = type("C", (), {"create": fake_create})()
 
-        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.streamablehttp_client", # pylint: disable=line-too-long
+        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.streamablehttp_client", # pylint: disable=line-too-long  # noqa
                         lambda *a, **kw: _FakeMcpCtx(captured, kw)), mock.patch("jiuwen.plugin.models.mcpapi.ClientSession", # pylint: disable=line-too-long
                         lambda *a: _FakeClientSession()), \
              mock.patch.object(api, "_transform_result", lambda r: []):
@@ -500,7 +500,7 @@ class TestMcpSseSendBoundary(unittest.IsolatedAsyncioTestCase):
 
         api.request_params_creator = type("C", (), {"create": fake_create})()
 
-        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.sse_client", # pylint: disable=line-too-long
+        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.sse_client", # pylint: disable=line-too-long  # noqa
                         lambda *a, **kw: _FakeMcpSseCtx(captured, kw)), mock.patch("jiuwen.plugin.models.mcpapi.ClientSession", # pylint: disable=line-too-long
                         lambda *a: _FakeClientSession()), \
              mock.patch.object(api, "_transform_result", lambda r: []):

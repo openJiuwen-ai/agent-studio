@@ -646,7 +646,7 @@ def test_error_contract_zero_log_verbose_read():
     import subprocess
 
     root = "agent_runtime/error_contract"
-    r = subprocess.run(  # pylint: disable=G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
         ["grep", "-rn", "LOG_VERBOSE", root],
         capture_output=True, text=True,
     )
@@ -657,7 +657,7 @@ def test_no_test_error_message_in_production():
     """§6.5: 生产代码不再包含面向响应的 'test error message'。"""
     import subprocess
 
-    r = subprocess.run(  # pylint: disable=G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
         ["grep", "-rn", "test error message", "jiuwen"],
         capture_output=True, text=True,
     )
@@ -674,7 +674,7 @@ def test_no_log_verbose_mode_usage_in_production():
     """§6.5: 生产代码不再有 LOG_VERBOSE_MODE 用法（仅 diagnostics 读 env）。"""
     import subprocess
 
-    r = subprocess.run(  # pylint: disable=G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
         ["grep", "-rn", "LOG_VERBOSE_MODE", "jiuwen"],
         capture_output=True, text=True,
     )
@@ -690,7 +690,7 @@ def test_only_diagnostics_reads_log_verbose_env():
     """§6.5: 生产代码仅 diagnostics.py 调用 os.getenv('LOG_VERBOSE')。"""
     import subprocess
 
-    r = subprocess.run(  # pylint: disable=G.EDV.05
+    r = subprocess.run(  # pylint: disable=G.EDV.05  # noqa
         ["grep", "-rn", 'getenv("LOG_VERBOSE"', "jiuwen"],
         capture_output=True, text=True,
     )
