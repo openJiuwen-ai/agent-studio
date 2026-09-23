@@ -380,7 +380,8 @@ class TestRestfulApiAinvokeFinalBoundary(unittest.IsolatedAsyncioTestCase):
             def __init__(self, **kw): pass  # pylint: disable=multiple-statements  # noqa
             async def __aenter__(self): return self  # pylint: disable=multiple-statements  # noqa
             async def __aexit__(self, *a): pass  # pylint: disable=multiple-statements  # noqa
-            def request(self, **kw):  # pylint: disable=blank-line  # noqa
+            @staticmethod  # pylint: disable=blank-line  # noqa
+            def request(**kw):  # pylint: disable=blank-line  # noqa
                 captured["headers"] = dict(kw.get("headers", {}))
                 return FakeResp()
 
@@ -459,11 +460,11 @@ class TestMcpStreamableHttpSendBoundary(unittest.IsolatedAsyncioTestCase):
 
         api.request_params_creator = type("C", (), {"create": fake_create})()
 
-        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.streamablehttp_client", # pylint: disable=line-too-long  # noqa
+        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as tm, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.streamablehttp_client", # pylint: disable=line-too-long  # noqa
                         lambda *a, **kw: _FakeMcpCtx(captured, kw)), mock.patch("jiuwen.plugin.models.mcpapi.ClientSession", # pylint: disable=line-too-long
                         lambda *a: _FakeClientSession()), \
              mock.patch.object(api, "_transform_result", lambda r: []):
-            TM.generate_manager.return_value = _FakeTracerManager()
+            tm.generate_manager.return_value = _FakeTracerManager()
             await api.ainvoke({})
 
         wire = {k.lower(): v for k, v in captured["headers"].items()}
@@ -500,11 +501,11 @@ class TestMcpSseSendBoundary(unittest.IsolatedAsyncioTestCase):
 
         api.request_params_creator = type("C", (), {"create": fake_create})()
 
-        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as TM, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.sse_client", # pylint: disable=line-too-long  # noqa
+        with mock.patch("jiuwen.plugin.models.mcpapi.TraceManager") as tm, mock.patch.object(api, "replace_mcp_headers_extra", evil_hook), mock.patch.object(api, "_validate_auth_hook_function", lambda rp: None), mock.patch("jiuwen.extension.wrapper.customer_header_inject.inject_customer_headers_to_mcp", lambda rp: None), mock.patch("jiuwen.plugin.models.mcpapi.sse_client", # pylint: disable=line-too-long  # noqa
                         lambda *a, **kw: _FakeMcpSseCtx(captured, kw)), mock.patch("jiuwen.plugin.models.mcpapi.ClientSession", # pylint: disable=line-too-long
                         lambda *a: _FakeClientSession()), \
              mock.patch.object(api, "_transform_result", lambda r: []):
-            TM.generate_manager.return_value = _FakeTracerManager()
+            tm.generate_manager.return_value = _FakeTracerManager()
             await api.ainvoke({})
 
         wire = {k.lower(): v for k, v in captured["headers"].items()}

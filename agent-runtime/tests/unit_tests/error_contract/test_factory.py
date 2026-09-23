@@ -1,5 +1,7 @@
 """COM-03 §10.4: Runtime factory（异常分类 → descriptor）契约测试。"""
 
+import json
+
 import pytest
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -113,7 +115,7 @@ def test_build_json_response_five_fields_and_header():
     d = factory.from_route_not_found(_rid())
     resp = factory.build_json_response(d, "zh-cn")
     assert resp.status_code == 404
-    body = __import__("json").loads(resp.body)
+    body = json.loads(resp.body)
     for field in ("error_code", "error_msg", "error_reason", "error_suggestion", "request_id"):
         assert body[field], f"{field} non-empty"
     assert body["error_code"] == "openjiuwen.12100002"
@@ -124,9 +126,9 @@ def test_build_json_response_five_fields_and_header():
 def test_build_json_response_en_locale():
     d = factory.from_internal(RuntimeError("x"), _rid())
     resp = factory.build_json_response(d, "en-us")
-    body = __import__("json").loads(resp.body)
+    body = json.loads(resp.body)
     assert body["error_msg"]
-    zh = __import__("json").loads(factory.build_json_response(d, "zh-cn").body)
+    zh = json.loads(factory.build_json_response(d, "zh-cn").body)
     assert body["error_msg"] != zh["error_msg"]
 
 
@@ -134,7 +136,7 @@ def test_build_json_response_details_present_for_validation():
     exc = RequestValidationError([{"loc": ["query", "q"], "msg": "required"}])
     d = factory.from_validation(exc, _rid())
     resp = factory.build_json_response(d, "zh-cn")
-    body = __import__("json").loads(resp.body)
+    body = json.loads(resp.body)
     assert body["details"]
     assert body["details"][0]["error_code"] == "openjiuwen.12100001"
 

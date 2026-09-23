@@ -265,7 +265,8 @@ def test_http_registered_business_exception_via_real_entry(caplog):
         ]
 
     # 两配置响应一致；code=INTERNAL_ERROR（业务码不进公开响应，COM-03 §7.2）
-    r_false, r_true = responses[False], responses[True]
+    r_false, r_true = responses.get(False), responses.get(True)
+    assert r_false is not None and r_true is not None
     assert r_false.status_code == r_true.status_code == 500
     assert _resp_body(r_false) == _resp_body(r_true)
     body = _resp_body(r_false)
@@ -287,7 +288,10 @@ def test_http_registered_business_exception_via_real_entry(caplog):
         assert "exec-com08-1" in rec.getMessage()
         assert "req-com08-1" in rec.getMessage()
     # 两配置基础 message 一致（verbose 不改变基础事件）
-    assert snapshots[False][-1].getMessage() == snapshots[True][-1].getMessage()
+    snap_false = snapshots.get(False)
+    snap_true = snapshots.get(True)
+    assert snap_false is not None and snap_true is not None
+    assert snap_false[-1].getMessage() == snap_true[-1].getMessage()
 
 
 def test_jiuwen_handler_105015_maps_to_12100006():
