@@ -96,7 +96,7 @@ def test_from_internal_maps_500():
     (404, "openjiuwen.12100002", 404),
     (405, "openjiuwen.12100003", 405),
     (400, "openjiuwen.12100001", 400),
-    (422, "openjiuwen.12100001", 400),
+    (422, "openjiuwen.12100001", 422),  # 意见2: 422 保留原状态码
     (500, "openjiuwen.12100004", 500),
     (503, "openjiuwen.12100004", 500),
 ])
