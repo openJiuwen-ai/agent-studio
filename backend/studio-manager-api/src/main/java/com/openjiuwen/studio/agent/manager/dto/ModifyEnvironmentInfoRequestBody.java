@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import jakarta.validation.constraints.Pattern;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -18,6 +20,7 @@ import java.util.Objects;
 /**
  * 修改环境请求体：PUT 修改语义为部分更新（仅更新 description），
  * name/vpcId/subnetId 由创建接口（EnvironmentInfoRequest）强制必填。
+ * description 校验与创建路径一致（max=128 + 格式约束，DB 列为 varchar(128)）。
  */
 @ApiModel(description = "修改环境请求体")
 
@@ -28,7 +31,8 @@ public class ModifyEnvironmentInfoRequestBody implements Serializable {
 
     @JsonProperty("description")
     @Schema(description = "安全组描述", example = "用于Agent运行的安全组")
-    @Length(max = 1024)
+    @Pattern(regexp = "^(?:[\\u4e00-\\u9fa5a-zA-Z0-9][\\u4e00-\\u9fa5_a-zA-Z0-9\\-()]{0,127})?$")
+    @Length(max = 128)
     private String description = null;
 
     public String getDescription() {
