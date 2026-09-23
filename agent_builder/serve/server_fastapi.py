@@ -13,12 +13,12 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from flask import Flask
 from starlette.middleware.wsgi import WSGIMiddleware
 
-from agent_builder.adapter.exception_bridge import JiuWenException
-from agent_builder.adapter.logger_bridge import get_thread_session, set_thread_session
+from agent_builder.adapter.exception_bridge import JiuWenBaseException
 
 # Single Flask app (already has prompt.manager + mmapo.manager blueprints
 # registered via ServerApp in agent_builder/serve/server.py).
@@ -173,48 +173,78 @@ def instance_app() -> FastAPI:
     )
 
     @app.middleware("http")
-    async def set_trace_id(request: Request, call_next):
-        trace_id = request.headers.get("TraceID", "")
-        set_thread_session(trace_id)
-        return await call_next(request)
-
-    # 请求上下文中间件：把九问平台认证/工作空间头透传到 agent_builder 自有的 _request_ctx，
-    # 供未配置 MODEL_ROUTER_API 时 StudioModelClient._resolve_inputs 取 projectId/workspace_id
-    # （经 model_service.ports.set_request_headers 注入 getter，不依赖 agent_runtime）。
-    @app.middleware("http")
-    async def populate_request_context(request: Request, call_next):
+    async def establish_inbound_context(request: Request, call_next):
+        from agent_builder.adapter.logger_bridge import reset_session_id, set_session_id
         from agent_builder.adapter.request_context_bridge import (
-            RequestContext, _request_ctx,
+            ContextSource,
+            RequestContext,
+            _request_ctx,
+        )
+        from agent_builder.serve.common.error_response import (
+            build_unhandled_error_response,
+        )
+        from agent_builder.serve.common.inbound_context import (
+            apply_platform_headers,
+            select_ids,
+            write_x_request_id,
         )
         from common_utils import load_environment_variables
 
-        def _h(name: str) -> str:
-            return request.headers.get(name) or request.headers.get(name.lower(), "")
-
-        workspace_id = _h("X-Workspace-Id") or request.query_params.get("workspace_id", "")
-        environment_id = _h("X-Environment-Id")
-        # 按 environment_id 从 Redis 加载环境变量（缺省返回 {}，不查 Redis），供
-        # StudioModelClient 解析跨环境迁移模型 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符
-        env_vars = await load_environment_variables(environment_id, workspace_id)
-
-        ctx = RequestContext(
-            headers={
-                "X-Owner-Project-Id": _h("X-Owner-Project-Id"),
-                "X-Workspace-Id": workspace_id,
-                "X-Auth-Id": _h("X-Auth-Id"),
-                "X-Auth-Token": _h("X-Auth-Token"),
-                "X-Deployment-Id": _h("X-Deployment-Id"),
-            },
-            # 按 boundary.agent-builder-inbound.customer-passthrough 白名单捕获 cust-*
-            # （不含 x-auth-token，平台认证 header 独立分仓）。供 invoke_one 做 BUILDER_LLM_CHAT rename。
-            customer_headers=_capture_customer_headers(request),
-            env_variables=env_vars,
-        )
-        token = _request_ctx.set(ctx)
+        # 1. 纯读取选值（无日志、无外部依赖）；Builder 不收 X-Execution-Id
+        request_id, trace_id, illegal_req, illegal_trace = select_ids(request.headers)
+        # 2. 最小 RequestContext + 同步写 request.state（异常 handler 可在 reset 后读）
+        ctx = RequestContext(request_id=request_id, source=ContextSource.FASTAPI_MOUNT)
+        request.state.request_id = request_id
+        request.state.trace_id = trace_id
+        # 3. 原子建立两个 token；第二个失败立即恢复第一个
+        request_token = _request_ctx.set(ctx)
         try:
-            return await call_next(request)
+            trace_token = set_session_id(trace_id)
+        except Exception:
+            _request_ctx.reset(request_token)
+            raise
+        try:
+            if illegal_req:
+                logger.warning(
+                    f"header X-Request-Id is illegal; "
+                    f"regenerated request_id={request_id}"
+                )
+            if illegal_trace:
+                logger.warning(
+                    f"header TraceID is illegal; fell back to trace_id={trace_id}"
+                )
+            # token 有效期内补充分仓（平台 header + 客户 header + env_variables）
+            apply_platform_headers(ctx, request.headers)
+            ctx.customer_headers = _capture_customer_headers(request)
+            # sync_01 独有：按 X-Environment-Id 加载环境变量
+            def _h(name: str) -> str:
+                return request.headers.get(name) or request.headers.get(name.lower(), "")
+            environment_id = _h("X-Environment-Id")
+            workspace_id = _h("X-Workspace-Id") or request.query_params.get("workspace_id", "")
+            # sync_01 兼容（审视 04c1c58d §2.2）：Header 缺失时 query 参数回退写回
+            # ctx.headers——model_service 经 get_request_headers 读 X-Workspace-Id
+            # 作 workspace_id（原 populate_request_context 最终值语义，Header 优先）
+            if workspace_id and not ctx.headers.get("X-Workspace-Id"):
+                ctx.headers["X-Workspace-Id"] = workspace_id
+            ctx.env_variables = await load_environment_variables(environment_id, workspace_id)
+
+            response = await call_next(request)
+            write_x_request_id(response, request_id)
+            return response
+        except JiuWenBaseException:
+            # 框架业务异常透传至下方 JiuWenBaseException handler（保 error_code）；
+            # finally 仍逆序 reset；handler 读 request.state（非 ContextVar）不受影响。
+            raise
+        except Exception as exc:  # 请求级异常边界，token 有效期内收口
+            err_response = build_unhandled_error_response(request, exc)
+            write_x_request_id(err_response, request_id)
+            return err_response
         finally:
-            _request_ctx.reset(token)
+            # LIFO 逆序 reset，嵌套 try/finally 保证两个 reset 均被尝试
+            try:
+                reset_session_id(trace_token)
+            finally:
+                _request_ctx.reset(request_token)
 
     # Flask 路径规范化中间件：OptimizationTemplateService 调用 /v1/prompt/...
     # 而 Flask blueprint 注册了 url_prefix="/flask"，需要统一补上前缀
@@ -233,40 +263,75 @@ def instance_app() -> FastAPI:
         else:
             app.include_router(i)
 
-    @app.exception_handler(JiuWenException)
-    async def builder_exception_handler(request: Request, exc: JiuWenException):
-        trace_id = get_thread_session()
+    from agent_builder.common.error_contract import factory as error_factory
+
+    @app.exception_handler(JiuWenBaseException)
+    async def builder_exception_handler(request: Request, exc: JiuWenBaseException):
+        """框架业务异常 → COM-03 canonical8 五字段（error_code/error_msg/
+        error_reason/error_suggestion/request_id + X-Request-Id Header）。
+
+        SYNC-01 P5-R3b（2026-09-22）：旧分支 COM-03 此 handler 已改五字段 +
+        factory 分类。sync_01 原裸 3-field（``str(exc)`` 外露 + 裸 error_code）
+        升级为 from_builder_exception 分类 + build_json_response；error_code
+        透传语义保（经 factory 分类映射）。
+        COM-08 §4.6：日志不写 str(exc)（防哨兵泄漏），固定基础事件 + exc_info。
+        """
+        trace_id = getattr(request.state, "trace_id", "")
+        request_id = getattr(request.state, "request_id", "")
         logger.error(
-            f"JiuWenException: {exc}, trace_id={trace_id}", exc_info=True
+            f"JiuWenBaseException: [{getattr(exc, 'error_code', -1)}], "
+            f"trace_id={trace_id}, request_id={request_id}",
+            exc_info=True,
         )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": getattr(exc, "error_code", -1),
-                    "message": str(exc),
-                    "trace_id": trace_id,
-                }
-            },
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_builder_exception(exc, request_id or None)
+        return error_factory.build_json_response(descriptor, language)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        """COM-03 §7.2：参数校验失败 → canonical8 五字段（400）。"""
+        trace_id = getattr(request.state, "trace_id", "")
+        request_id = getattr(request.state, "request_id", "")
+        logger.warning(
+            f"ValidationError: trace_id={trace_id}, request_id={request_id}",
         )
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_validation(exc, request_id or None)
+        return error_factory.build_json_response(descriptor, language)
+
+    # 注册到 starlette 父类：路由级 404/405 抛 starlette.HTTPException（父类），
+    # fastapi.HTTPException（子类）实例同样命中本 handler（Runtime 同款教训）。
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        """COM-03 §7.2 第 1 点：HTTPException 统一 adapter（404/405/4xx/5xx）。"""
+        trace_id = getattr(request.state, "trace_id", "")
+        request_id = getattr(request.state, "request_id", "")
+        logger.warning(
+            f"HTTPException {exc.status_code}: trace_id={trace_id}, "
+            f"request_id={request_id}",
+        )
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_http_exception(exc, request_id or None)
+        return error_factory.build_json_response(descriptor, language)
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
-        trace_id = get_thread_session()
+        """COM-03 §7.2：未处理异常 → INTERNAL_ERROR（openjiuwen.13100004）五字段。
+
+        sync_01 原裸 internal_error 3-field 升级为 from_internal canonical8。
+        COM-08 §4.6：日志不写 str(exc)/类型名正文，固定基础事件 + exc_info。
+        """
+        trace_id = getattr(request.state, "trace_id", "")
+        request_id = getattr(request.state, "request_id", "")
         logger.error(
-            f"Unhandled exception: {type(exc).__name__}: {exc}, trace_id={trace_id}",
+            f"Unhandled exception: trace_id={trace_id}, request_id={request_id}",
             exc_info=True,
         )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "code": "internal_error",
-                    "message": "Internal server error",
-                    "trace_id": trace_id,
-                }
-            },
-        )
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        descriptor = error_factory.from_internal(exc, request_id or None)
+        return error_factory.build_json_response(descriptor, language)
 
     return app
 

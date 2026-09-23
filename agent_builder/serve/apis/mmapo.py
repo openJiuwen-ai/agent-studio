@@ -2,11 +2,11 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 import concurrent
-import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 
 from agent_builder.common.exception.status_code import StatusCode
+from agent_builder.serve.common.concurrency import submit_with_log_context
 from agent_builder.common.security.auth import Auth
 from agent_builder.common.status import TaskStatus
 from agent_builder.prompt.mmapo.VQA_apo import ApoOptimizer
@@ -23,7 +23,7 @@ from agent_builder.serve.apis.prompt import (
     prompt_optimize_success,
 )
 from agent_builder.serve.common.exception.exception_handler import ExceptionHandler
-from flask import request, Blueprint, copy_current_request_context, g, jsonify
+from flask import request, Blueprint, g, jsonify
 from agent_builder.adapter.exception_bridge import JiuWenBaseException
 from agent_builder.adapter.task_info import TaskInfo
 
@@ -63,7 +63,6 @@ def prompt_optimization():
     )
     task_info = TaskInfo(job_id, creation_info.name, creation_info.desc, create_time)
 
-    @copy_current_request_context
     def run_in_thread(task_info, creation_info, g_info, optimizer):
         for k, v in g_info.items():
             g.setdefault(k, v)
@@ -77,8 +76,8 @@ def prompt_optimization():
         )
 
     executor = ThreadPoolExecutor()
-    future = executor.submit(
-        run_in_thread, task_info, creation_info, g.__dict__, apo_optimizer
+    future = submit_with_log_context(
+        executor, run_in_thread, task_info, creation_info, g.__dict__, apo_optimizer
     )
     StatusChecker().add_task(job_id)
     try:
@@ -220,7 +219,6 @@ def prompt_optimize_restart(job_id: str):
     progress_info[TaskStatus.TASK_STATUS] = TaskStatus.TASK_RUNNING
     ContextManager().set_checkpoint(job_id, progress_info)
 
-    @copy_current_request_context
     def run_in_thread(job_id, g_info, optimizer):
         for k, v in g_info.items():
             g.setdefault(k, v)
@@ -228,7 +226,7 @@ def prompt_optimize_restart(job_id: str):
 
     executor = ThreadPoolExecutor()
     optimizer = ApoOptimizer()
-    future = executor.submit(run_in_thread, job_id, g.__dict__, optimizer)
+    future = submit_with_log_context(executor, run_in_thread, job_id, g.__dict__, optimizer)
     StatusChecker().add_task(job_id)
 
     try:

@@ -49,6 +49,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
 /**
  * 工作流运行实例服务
  *
@@ -69,6 +72,10 @@ public class WorkflowInstanceService {
     @Autowired
     @org.springframework.beans.factory.annotation.Qualifier("insightPersistenceExecutor")
     private Executor insightPersistenceExecutor;
+
+    @Autowired
+    @Qualifier("requestDerivedAsyncExecutor")
+    private ThreadPoolTaskExecutor requestDerivedAsyncExecutor;
 
     @Value("${workflow.insight-exec-rel:}")
     private String insightExecRel;  // 一个conversation下的execution记录
@@ -781,7 +788,8 @@ public class WorkflowInstanceService {
     }
 
     CompletableFuture<Void> clearExecutionRecordsAsync(String userId, String versionId, List<ExecutionInfo> needDeleteInfos) {
-        return CompletableFuture.runAsync(() -> clearExecutionRecords(userId, versionId, needDeleteInfos));
+        return CompletableFuture.runAsync(
+            () -> clearExecutionRecords(userId, versionId, needDeleteInfos), requestDerivedAsyncExecutor);
     }
 
     /**
