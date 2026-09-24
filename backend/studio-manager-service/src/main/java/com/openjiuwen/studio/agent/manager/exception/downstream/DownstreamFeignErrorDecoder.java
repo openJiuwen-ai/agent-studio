@@ -44,10 +44,6 @@ public final class DownstreamFeignErrorDecoder implements ErrorDecoder {
             DownstreamFailure failure = parser.parseHttp(service, Transport.FEIGN,
                 status, contentType(response), null, null);
             return new DownstreamFailureException(failure);
-        if (response == null || response.body() == null) {
-            DownstreamFailure failure = parser.parseHttp(service, Transport.FEIGN,
-                status, response == null ? null : contentType(response), null, null);
-            return new DownstreamFailureException(failure);
         }
         byte[] boundedBody = readBounded(response);
         Throwable cause = null;  // Feign error response 无底层异常；cause 留空
