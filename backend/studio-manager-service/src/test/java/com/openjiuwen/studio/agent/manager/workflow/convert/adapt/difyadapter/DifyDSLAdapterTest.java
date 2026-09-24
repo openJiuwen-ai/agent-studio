@@ -210,15 +210,57 @@ class DifyDSLAdapterTest {
     /**
      * bug④ 哨兵（补全路径）：按模型名查到注册表记录时 model_deployment_id/model_type 必须补全
      * （IR 生成读这两个 key 拼 IR 模型名，缺失产生 "null|模型名" 畸形名 + 空 extension）。
+     * mock 的 model_type 用小写，覆盖类型匹配的忽略大小写。
      */
     @Test
     void convertLlmNodeFillsModelDeploymentIdFromRegistry() {
         ModelServiceBase registered = new ModelServiceBase()
             .setId("ut-deploy-1")
             .setModelType("llm");
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(registered));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertEquals("ut-model", model.getString("model_name"));
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+        assertEquals("llm", model.getString("model_type"));
+    }
+
+    /**
+     * 检视 #2 哨兵：同名多记录混有非 LLM 类型（如 embedding）时，必须按 LLM 类型过滤后取
+     * 唯一记录，不依赖数据库返回顺序把错误类型绑成 LLM 部署。
+     */
+    @Test
+    void convertLlmNodePicksUniqueLlmAmongSameNameMixedTypes() {
+        ModelServiceBase embedding = new ModelServiceBase().setId("ut-embed-1").setModelType("Text-Embedding");
+        ModelServiceBase llm = new ModelServiceBase().setId("ut-deploy-1").setModelType("LLM");
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(embedding, llm));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+        assertEquals("LLM", model.getString("model_type"));
+    }
+
+    /**
+     * 检视 #2 哨兵：多供应商同名 LLM（类型过滤后仍多条）没有可靠 tiebreak（Dify yml 的
+     * provider 是 Dify 插件 id，映射不了平台供应商），必须留空交用户手选。
+     */
+    @Test
+    void convertLlmNodeLeavesModelEmptyWhenMultipleSameNameLlms() {
+        ModelServiceBase llmA = new ModelServiceBase().setId("ut-deploy-a").setModelType("LLM");
+        ModelServiceBase llmB = new ModelServiceBase().setId("ut-deploy-b").setModelType("LLM");
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(llmA, llmB));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertTrue(model.getString("model_deployment_id") == null
+            || model.getString("model_deployment_id").isEmpty(), "多供应商同名 LLM 应留空交用户手选");
+    }
+
+    /**
+     * 在 mock 的请求上下文与模型注册表下执行 LLM 节点导入转换（bug④/检视 #2 用例公共脚手架）。
+     */
+    private WorkflowInfo convertLlmWithMockedRegistry(String modelName, List<ModelServiceBase> registry) {
         ModelServiceMapper mapper = mock(ModelServiceMapper.class);
-        when(mapper.queryByModelName("ut-project", "ut-workspace", "ut-model", null))
-            .thenReturn(List.of(registered));
+        when(mapper.queryByModelName("ut-project", "ut-workspace", modelName, null)).thenReturn(registry);
 
         try (MockedStatic<RequestContextUtils> requestContext = mockStatic(RequestContextUtils.class);
              MockedStatic<SpringBeanUtils> springBeans = mockStatic(SpringBeanUtils.class)) {
@@ -226,18 +268,17 @@ class DifyDSLAdapterTest {
             requestContext.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("ut-workspace");
             springBeans.when(() -> SpringBeanUtils.getBean(ModelServiceMapper.class)).thenReturn(mapper);
 
-            Map<String, Object> dsl = buildLlmDsl("ut-model");
+            Map<String, Object> dsl = buildLlmDsl(modelName);
             adapter.validateFormat(dsl);
-            WorkflowInfo info = adapter.convert(dsl);
-
-            JSONObject details = new JSONObject(info.getWorkflowDetails());
-            JSONObject llmNode = findNodeById(details.getJSONArray("nodes"), "node_llm");
-            assertNotNull(llmNode);
-            JSONObject model = llmNode.getJSONObject("configs").getJSONObject("model");
-            assertEquals("ut-model", model.getString("model_name"));
-            assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
-            assertEquals("llm", model.getString("model_type"));
+            return adapter.convert(dsl);
         }
+    }
+
+    private JSONObject findLlmNodeModel(WorkflowInfo info) {
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+        JSONObject llmNode = findNodeById(details.getJSONArray("nodes"), "node_llm");
+        assertNotNull(llmNode);
+        return llmNode.getJSONObject("configs").getJSONObject("model");
     }
 
     private JSONObject findNodeById(JSONArray nodes, String id) {
