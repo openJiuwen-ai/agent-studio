@@ -393,13 +393,22 @@ public class AgentServiceProxyService {
      */
     private ResponseEntity<Object> parseDownstreamFailureError(DownstreamFailureException e) {
         DownstreamFailure failure = e.getFailure();
+        String requestId = MDC.get(MdcKeys.REQUEST_ID);
+        ErrorInfo errorInfo = i18nUtil.getMessage(
+            new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setRequestId(requestId)
+            .setErrorMsg(errorInfo.getMessage())
+            .setErrorReason(errorInfo.getReason())
+            .setErrorSuggestion(errorInfo.getSuggestion());
         if (failure.hasTrustedErrorCode()) {
-            ErrorRsp errorRsp = new ErrorRsp().setErrorCode(failure.getDownstreamErrorCode());
-            Integer dsStatus = failure.getDownstreamHttpStatus();
-            return ResponseEntity.status(dsStatus != null && dsStatus > 0 ? dsStatus : 500).body(errorRsp);
+            errorRsp.setErrorCode(failure.getDownstreamErrorCode());
+        } else {
+            errorRsp.setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode());
+            log.warn("DownstreamFailure without trusted code: {}", failure);
         }
-        log.warn("DownstreamFailure without trusted code, rethrow to MgGlobalExceptionHandler: {}", failure);
-        throw e;
+        Integer dsStatus = failure.getDownstreamHttpStatus();
+        return ResponseEntity.status(dsStatus != null && dsStatus > 0 ? dsStatus : 500).body(errorRsp);
     }
 
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,
@@ -602,8 +611,10 @@ public class AgentServiceProxyService {
                 return stream(url, httpHeaders, JsonUtils.encode(body));
             }
         }
-        return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId, environmentId,
-            body, false).getBody();
+        try (MdcScope scope = establishExecutionScope(httpHeaders)) {
+            return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId,
+                environmentId, body, false).getBody();
+        }
     }
 
     /**
@@ -697,7 +708,10 @@ public class AgentServiceProxyService {
                 return stream(url, httpHeaders, JsonUtils.encode(body));
             }
         }
-        return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId, body).getBody();
+        try (MdcScope scope = establishExecutionScope(httpHeaders)) {
+            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId,
+                body).getBody();
+        }
     }
 
     /**
