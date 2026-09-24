@@ -149,6 +149,21 @@ def test_ragflow_parse_response_empty_chunks():
     assert RagFlowAdapter.parse_response({"code": 0, "data": {"chunks": []}}) == []
 
 
+def test_ragflow_parse_response_faq_mode_marks_results_as_faq():
+    """显式 searchMode=faq 时，即使 similarity 不高于 0.9，结果类型也标记为 faq。"""
+    resp = {
+        "code": 0,
+        "data": {
+            "chunks": [
+                {"content": "faq answer", "similarity": 0.4, "dataset_id": "d-1"},
+            ]
+        },
+    }
+    results = RagFlowAdapter.parse_response(resp, search_mode="faq")
+    assert len(results) == 1
+    assert results[0].type == "faq"
+
+
 # --------------------------------------------------------------------------
 # General._parse_response
 # --------------------------------------------------------------------------
@@ -180,3 +195,19 @@ def test_general_parse_response_maps_fields():
 def test_general_parse_response_empty_list():
     assert GeneralKBAdapter.parse_response({"search_result_list": []}) == []
     assert GeneralKBAdapter.parse_response({}) == []
+
+
+def test_general_parse_response_faq_mode_without_type_field():
+    """响应缺少 type/doc_type 时，searchMode=faq 的结果类型回退为 faq。"""
+    resp = {
+        "search_result_list": [
+            {
+                "content": "faq answer",
+                "score": 0.6,
+                "knowledge_base_id": "kb-1",
+            }
+        ]
+    }
+    results = GeneralKBAdapter.parse_response(resp, search_mode="faq")
+    assert len(results) == 1
+    assert results[0].type == "faq"
