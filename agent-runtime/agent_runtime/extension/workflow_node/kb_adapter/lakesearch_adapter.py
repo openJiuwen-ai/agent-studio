@@ -13,7 +13,7 @@ import aiohttp
 from agent_runtime.common.config import settings
 from openjiuwen.core.common.logging import workflow_logger
 
-from .base import clamp_threshold, KBSearchResult, KBServiceAdapter
+from .base import KBSearchResult, KBServiceAdapter
 from .customer_header_inject import inject_customer_headers_to_kb
 
 _EXCLUDED_METADATA_KEYS = frozenset({
@@ -50,8 +50,6 @@ class LakeSearchAdapter(KBServiceAdapter):
     ) -> List[KBSearchResult]:
 
         top_k = retrieval_params.get("topK", 10)
-        raw_threshold = retrieval_params.get("scoreThreshold")
-        score_threshold = clamp_threshold(float(raw_threshold)) if raw_threshold is not None else None
         search_mode = retrieval_params.get("searchMode", "doc")
         tags = retrieval_params.get("tags", [])
 
@@ -127,12 +125,6 @@ class LakeSearchAdapter(KBServiceAdapter):
         # 按 score 降序排列，截取 top_k
         all_results.sort(key=lambda r: r.score, reverse=True)
         all_results = all_results[:top_k]
-
-        # 过滤低于阈值的结果
-        if score_threshold is not None:
-            all_results = [
-                r for r in all_results if r.score >= score_threshold
-            ]
 
         return all_results
 

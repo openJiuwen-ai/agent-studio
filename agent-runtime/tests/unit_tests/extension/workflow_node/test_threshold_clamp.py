@@ -5,7 +5,9 @@
 M 侧和 R 侧各自独立读取但共用同一组环境变量，默认 0~1。
 客户可配置为 -10~10，本测试覆盖默认范围和自定义范围两种场景。
 
-守卫语义：用 None 表示"未传入阈值"，只有显式传入了阈值才执行过滤。
+过滤职责：适配器（adapter）不做本地分数过滤，所有过滤统一在 flow 层
+search_knowledge_repo 中执行。adapter 仅透传阈值给后端 API（如
+search_threshold / similarity_threshold）。
 """
 from unittest.mock import AsyncMock
 
@@ -268,3 +270,27 @@ class TestSearchKnowledgeRepoThresholdClamp:
 
         # 未传入阈值 → 不过滤，负分结果保留
         assert len(results) == 2
+
+    async def test_score_threshold_zero_does_not_filter_negative_scores(self, monkeypatch):
+        """Java 端始终设 scoreThreshold=recallThreshold，当用户阈值为 0 且 min=0 时，
+        flow 层 clamp(0)=0，执行 score>=0 过滤。但 adapter 不做本地过滤，
+        负分结果应完整返回给 flow 层，由 flow 层决定是否过滤。"""
+        component = _make_component()
+        raw = [
+            KBSearchResult(text="a", score=0.9),
+            KBSearchResult(text="b", score=-0.5),
+        ]
+        # _FakeAdapter 不做任何过滤，原样返回
+        monkeypatch.setattr(component, "_search_with_faq_fallback", AsyncMock(return_value=raw))
+
+        results = await component.search_knowledge_repo(
+            adapter=_FakeAdapter(),
+            query="q",
+            connection_config={"connector_type": "LakeSearch"},
+            knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ext-1"}],
+            retrieval_params={"recallThreshold": 0.0, "scoreThreshold": 0.0, "topK": 10},
+        )
+
+        # flow 层 clamp(0)=0，执行 score>=0 过滤，负分结果被丢弃
+        assert len(results) == 1
+        assert results[0].score >= 0.0
