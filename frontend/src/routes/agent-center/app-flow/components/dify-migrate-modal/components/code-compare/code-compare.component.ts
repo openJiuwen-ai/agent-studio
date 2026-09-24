@@ -17,6 +17,7 @@ import {cdnAssetUrl} from "../../../../../../../single-spa/assets-url";
 import {AgentConfigService} from "@routes/agent-center/agent-config.service";
 import {DEFAULT_CODE} from "@routes/agent-center/constants/workflow-http-response-code.const";
 import {DifyMigrateService} from "@routes/agent-center/app-flow/components/dify-migrate-modal/dify-migrate.service";
+import {convertToSandboxFormat} from "@routes/agent-center/app-flow/utils/dify-code-format.util";
 
 @Component({
   selector: 'code-compare',
@@ -108,6 +109,16 @@ export class CodeCompareComponent {
     this.showFunctionGraph = this.isShowFunctionGraph();
 
     if(!this.showFunctionGraph) {
+      // 平台未配置 FunctionGraph 时强制转沙箱执行：把 Dify 原代码转换为沙箱兼容
+      // 格式（main(变量...) → main(args) + 按变量名解包），保留业务逻辑。
+      // 转换判定/分层回退规则见 convertToSandboxFormat 注释；原码为空才用默认模板
+      // （此前无条件用 DEFAULT_CODE 覆盖导致 Dify 代码丢失，见 bugfix 文档）。
+      const variableNames = (this.node.inputs ?? [])
+        .map(field => field.name)
+        .filter((name): name is string => !!name);
+      this.sandBoxCode = this.oldCode
+        ? convertToSandboxFormat(this.oldCode, variableNames)
+        : DEFAULT_CODE;
       this.node.configs.code = this.sandBoxCode;
       this.node.configs.exec_env = 'sandbox';
     }
