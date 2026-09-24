@@ -19,8 +19,8 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowInfo;
-import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
-import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
+import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.WorkflowValidationService;
 
 import java.util.ArrayList;
@@ -208,16 +208,15 @@ class DifyDSLAdapterTest {
     }
 
     /**
-     * bug④ 哨兵（补全路径）：按模型名查到注册表记录时 model_deployment_id/model_type 必须补全
+     * bug④ 哨兵（补全路径）：按模型名在可用模型列表（与 UI 下拉同源，含 SYSTEM 预置作用域，
+     * 检视 #4）中精确匹配到唯一 LLM 时，model_deployment_id/model_type 必须补全
      * （IR 生成读这两个 key 拼 IR 模型名，缺失产生 "null|模型名" 畸形名 + 空 extension）。
      * mock 的 model_type 用小写，覆盖类型匹配的忽略大小写。
      */
     @Test
     void convertLlmNodeFillsModelDeploymentIdFromRegistry() {
-        ModelServiceBase registered = new ModelServiceBase()
-            .setId("ut-deploy-1")
-            .setModelType("llm");
-        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(registered));
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model",
+            List.of(availableModel("ut-deploy-1", "ut-model", "llm")));
 
         JSONObject model = findLlmNodeModel(info);
         assertEquals("ut-model", model.getString("model_name"));
@@ -227,13 +226,13 @@ class DifyDSLAdapterTest {
 
     /**
      * 检视 #2 哨兵：同名多记录混有非 LLM 类型（如 embedding）时，必须按 LLM 类型过滤后取
-     * 唯一记录，不依赖数据库返回顺序把错误类型绑成 LLM 部署。
+     * 唯一记录，不依赖返回顺序把错误类型绑成 LLM 部署。
      */
     @Test
     void convertLlmNodePicksUniqueLlmAmongSameNameMixedTypes() {
-        ModelServiceBase embedding = new ModelServiceBase().setId("ut-embed-1").setModelType("Text-Embedding");
-        ModelServiceBase llm = new ModelServiceBase().setId("ut-deploy-1").setModelType("LLM");
-        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(embedding, llm));
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(
+            availableModel("ut-embed-1", "ut-model", "Text-Embedding"),
+            availableModel("ut-deploy-1", "ut-model", "LLM")));
 
         JSONObject model = findLlmNodeModel(info);
         assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
@@ -246,9 +245,9 @@ class DifyDSLAdapterTest {
      */
     @Test
     void convertLlmNodeLeavesModelEmptyWhenMultipleSameNameLlms() {
-        ModelServiceBase llmA = new ModelServiceBase().setId("ut-deploy-a").setModelType("LLM");
-        ModelServiceBase llmB = new ModelServiceBase().setId("ut-deploy-b").setModelType("LLM");
-        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(llmA, llmB));
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(
+            availableModel("ut-deploy-a", "ut-model", "LLM"),
+            availableModel("ut-deploy-b", "ut-model", "LLM")));
 
         JSONObject model = findLlmNodeModel(info);
         assertTrue(model.getString("model_deployment_id") == null
@@ -256,22 +255,46 @@ class DifyDSLAdapterTest {
     }
 
     /**
-     * 在 mock 的请求上下文与模型注册表下执行 LLM 节点导入转换（bug④/检视 #2 用例公共脚手架）。
+     * 检视 #4 哨兵：模型名精确匹配须忽略大小写——DB collation（utf8mb4_general_ci）下
+     * SQL '=' 本就不区分大小写，改走 queryAvailableServices + Java 过滤后语义必须保持，
+     * 否则 SYSTEM 预置模型大小写不同的注册名（如 DeepSeek-V4-Flash）会漏配。
      */
-    private WorkflowInfo convertLlmWithMockedRegistry(String modelName, List<ModelServiceBase> registry) {
-        ModelServiceMapper mapper = mock(ModelServiceMapper.class);
-        when(mapper.queryByModelName("ut-project", "ut-workspace", modelName, null)).thenReturn(registry);
+    @Test
+    void convertLlmNodeMatchesModelNameIgnoringCase() {
+        WorkflowInfo info = convertLlmWithMockedRegistry("deepseek-v4-flash",
+            List.of(availableModel("ut-deploy-1", "DeepSeek-V4-Flash", "LLM")));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+    }
+
+    /**
+     * 在 mock 的请求上下文与可用模型列表下执行 LLM 节点导入转换（bug④/检视 #2#4 用例公共脚手架）。
+     * queryAvailableServices 以严格参数打桩（"LLM" + containRouter=true）：实现若改查询路径
+     * 或参数，mock 不命中返回 null → 走降级留空 → 断言失败，锁定与 UI 下拉同源的调用契约。
+     */
+    private WorkflowInfo convertLlmWithMockedRegistry(String modelName, List<ModelServiceData> available) {
+        ModelServiceManager manager = mock(ModelServiceManager.class);
+        when(manager.queryAvailableServices("ut-project", "ut-workspace", "LLM", true)).thenReturn(available);
 
         try (MockedStatic<RequestContextUtils> requestContext = mockStatic(RequestContextUtils.class);
              MockedStatic<SpringBeanUtils> springBeans = mockStatic(SpringBeanUtils.class)) {
             requestContext.when(RequestContextUtils::getRequestProjectId).thenReturn("ut-project");
             requestContext.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("ut-workspace");
-            springBeans.when(() -> SpringBeanUtils.getBean(ModelServiceMapper.class)).thenReturn(mapper);
+            springBeans.when(() -> SpringBeanUtils.getBean(ModelServiceManager.class)).thenReturn(manager);
 
             Map<String, Object> dsl = buildLlmDsl(modelName);
             adapter.validateFormat(dsl);
             return adapter.convert(dsl);
         }
+    }
+
+    private ModelServiceData availableModel(String id, String modelName, String modelType) {
+        ModelServiceData data = new ModelServiceData();
+        data.setId(id);
+        data.setModelName(modelName);
+        data.setModelType(modelType);
+        return data;
     }
 
     private JSONObject findLlmNodeModel(WorkflowInfo info) {

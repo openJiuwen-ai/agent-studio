@@ -11,9 +11,9 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
-import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.manager.enums.ModelTypeV2;
-import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
+import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.workflow.convert.adapt.enums.OutputParamsDiffType;
 
 import lombok.extern.slf4j.Slf4j;
@@ -175,44 +175,53 @@ public abstract class AbstractSDSLNodeConverter implements NodeConverter {
 
 
     /**
-     * 按模型名查平台模型注册表，补全 modelInfo 的 model_deployment_id / model_type。
+     * 按模型名查平台可用模型，补全 modelInfo 的 model_deployment_id / model_type。
      *
      * <p>背景：Dify yml 的模型只有名字（如 qwen3.7-plus），无平台 deployment id 概念；
      * IR 生成（{@code AbstractIRNodeAdapter.adaptModel}）读 configs.model.model_deployment_id
      * 拼 IR 模型名（{@code deploymentId|modelName}）并解析 extension，为空时产生
      * {@code "null|模型名"} 畸形名 + 空 extension（"包含空元素: model_deployment_id"）。</p>
      *
-     * <p>确定性规则（检视 #2）：只认 LLM 类型且过滤后必须唯一——调用方均为 LLM/意图识别节点，
-     * 同名记录可能混有 embedding/rerank 等其他类型或多供应商同名 LLM，依赖数据库返回顺序
-     * 取第一条会把错误类型/供应商绑成 LLM 部署，静默生成错误 IR extension。Dify yml 的
-     * provider 是 Dify 插件 id，无法映射平台供应商，故多供应商同名时无可靠 tiebreak。</p>
+     * <p>查询路径（检视 #4）：{@code ModelServiceManager.queryAvailableServices}——与 LLM 节点
+     * UI 模型下拉同源（AgentManagementService/ControllerManagementService 同款调用），覆盖
+     * SYSTEM 作用域平台预置模型 + 公共/免费模型 + 路由策略，且只返回该 workspace 实际可用
+     * （平台内置或供应商已授权）的模型。不用 {@code queryByModelName}：它仅项目/空间精确
+     * 匹配，查不到 SYSTEM 预置模型（平台预置模型存于 PROJECT_ID='SYSTEM'）。</p>
      *
-     * <p>查不到 / 类型过滤后非唯一 / 解析异常，均保持留空——用户在节点编辑器手动选模型，
-     * 不阻断导入。</p>
+     * <p>确定性规则（检视 #2）：模型名精确匹配（忽略大小写，对齐 DB collation 语义）+ LLM
+     * 类型过滤后必须唯一，否则留空交用户手选——同名多条（多供应商/工作空间与 SYSTEM 并存）
+     * 无可靠 tiebreak（Dify yml 的 provider 是 Dify 插件 id，映射不了平台供应商），依赖返回
+     * 顺序取第一条会静默生成错误 IR extension。</p>
+     *
+     * <p>查不到 / 非唯一 / 解析异常，均保持留空——用户在节点编辑器手动选模型，不阻断导入。</p>
      *
      * @param modelInfo 模型信息 map（调用方已放好 model_name，此处补全另两个 key）
      * @param modelName Dify 模型名
      */
     protected void fillModelDeploymentInfo(Map<String, String> modelInfo, String modelName) {
+        if (StringUtils.isEmpty(modelName)) {
+            return;
+        }
         try {
             String projectId = RequestContextUtils.getRequestProjectId();
             String workspaceId = RequestContextUtils.getRequestWorkspaceId();
-            List<ModelServiceBase> models = SpringBeanUtils.getBean(ModelServiceMapper.class)
-                .queryByModelName(projectId, workspaceId, modelName, null);
-            if (models == null || models.isEmpty()) {
-                log.warn("Dify import: no platform model for name {}, model_deployment_id left empty", modelName);
+            List<ModelServiceData> available = SpringBeanUtils.getBean(ModelServiceManager.class)
+                .queryAvailableServices(projectId, workspaceId, ModelTypeV2.LLM.toString(), true);
+            if (available == null || available.isEmpty()) {
+                log.warn("Dify import: no available platform model in workspace, "
+                    + "model_deployment_id left empty for name {}", modelName);
                 return;
             }
-            List<ModelServiceBase> llmModels = models.stream()
+            List<ModelServiceData> matched = available.stream()
                 .filter(model -> ModelTypeV2.LLM.toString().equalsIgnoreCase(model.getModelType()))
+                .filter(model -> modelName.equalsIgnoreCase(model.getModelName()))
                 .toList();
-            if (llmModels.size() != 1) {
-                log.warn("Dify import: {} model(s) match name {} ({} LLM after type filter), "
-                    + "model_deployment_id left empty for manual selection",
-                    models.size(), modelName, llmModels.size());
+            if (matched.size() != 1) {
+                log.warn("Dify import: {} available model(s) exactly match name {}, "
+                    + "model_deployment_id left empty for manual selection", matched.size(), modelName);
                 return;
             }
-            ModelServiceBase model = llmModels.get(0);
+            ModelServiceData model = matched.get(0);
             modelInfo.put(CommonConstant.ModelParam.MODEL_DEPLOYMENT_ID, model.getId());
             modelInfo.put(CommonConstant.ModelParam.MODEL_TYPE, model.getModelType());
         } catch (Exception e) {
