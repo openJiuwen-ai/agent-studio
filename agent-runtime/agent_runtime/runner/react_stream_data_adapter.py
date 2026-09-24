@@ -64,6 +64,9 @@ class ReactStreamDataAdapter:
         # 用于累积工具调用和结果
         self._tool_calls: List[Dict] = []
         self._tool_results: List[Dict] = []
+        # 本次运行是否以「等待用户输入」的中断收尾（见 _handle_interaction），
+        # 供 runner 决定 post_run 是否可后台化（中断态落库是恢复链的前提）。
+        self._interaction_pending = False
         # plugin invoke_id -> 开始时间，用于 finish 时计算真实耗时
         self._plugin_start_times: Dict[str, datetime] = {}
         # chain 开始时间，用于 chain 结束事件计算真实耗时
@@ -84,6 +87,11 @@ class ReactStreamDataAdapter:
     @property
     def child_invoke_ids(self) -> List[str]:
         return self._child_invoke_ids
+
+    @property
+    def interaction_pending(self) -> bool:
+        """本次运行是否以等待用户输入的交互中断收尾。"""
+        return self._interaction_pending
 
     def set_chain_and_agent_ids(self, chain_id: str, agent_node_id: str) -> None:
         """设置 chain 和 agent 节点 ID"""
@@ -250,6 +258,7 @@ class ReactStreamDataAdapter:
         ``OutputSchema(type="__interaction__")``。其 payload 通常是
         ``InteractionOutput(id=<component_id>, value=<question>)``。
         """
+        self._interaction_pending = True
         payload = getattr(output, "payload", None)
         if isinstance(payload, dict):
             interaction_id = payload.get("id", "")

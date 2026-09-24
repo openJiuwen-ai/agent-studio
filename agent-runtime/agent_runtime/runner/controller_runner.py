@@ -28,6 +28,7 @@ from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
+from agent_runtime.common.background_task import run_in_background
 
 
 def _parse_controller_stream_chunk(chunk) -> dict | None:
@@ -196,6 +197,9 @@ class ControllerRunner:
         # Collect assistant response for memory extraction
         memory_response_parts: list[str] = []
         session: Session | None = None
+        # 本次运行是否以「等待用户输入」收尾（workflow_blocked/agent_interrupted），
+        # 供 finally 决定 post_run 是否可后台化（中断态落库是恢复链的前提）。
+        awaiting_user_input = False
         try:
             t_stream_start = time.perf_counter()
             workflow_logger.info(f"Starting agent_group.astream for query: {req.query}")
@@ -233,6 +237,8 @@ class ControllerRunner:
                         import json as _json
                         evt_data = _json.loads(chunk_str[6:])
                         evt_type = evt_data.get("event", "")
+                        if evt_type in ("workflow_blocked", "agent_interrupted"):
+                            awaiting_user_input = True
                         if evt_type in ("message", "done"):
                             answer = evt_data.get("data", {}).get("answer", "")
                             if answer:
@@ -272,7 +278,20 @@ class ControllerRunner:
             return
         finally:
             if session is not None:
-                await session.post_run()
+                if awaiting_user_input:
+                    # 中断等待用户输入：保持同步保存，确保下一轮恢复链能读到
+                    # 本次 agent 会话状态（pre_agent_execute recover）。中断轮
+                    # 的问题文本已随消息事件先行到达，同步落库不产生新的
+                    # 用户可感延迟。
+                    await session.post_run()
+                else:
+                    # 正常完成：agent 会话状态保存移出流收尾关键路径后台
+                    # 执行，避免阻塞终态事件（终态 end 事件在 EventHandler
+                    # 层注入，不再等待此处落库）。
+                    run_in_background(
+                        session.post_run(),
+                        name=f"controller-post-run-{req.conversation_id}",
+                    )
 
     async def _trigger_memory_extraction(
         self,
