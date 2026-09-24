@@ -53,7 +53,7 @@ public final class DownstreamFeignErrorDecoder implements ErrorDecoder {
     }
 
     private static String contentType(Response response) {
-        if (response.headers() == null) {
+        if (response == null || response.headers() == null) {
             return null;
         }
         return response.headers().get("Content-Type") != null
