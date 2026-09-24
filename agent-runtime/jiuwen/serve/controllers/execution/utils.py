@@ -79,6 +79,7 @@ from jiuwen.serve.controllers.execution.manager import (
 )
 from jiuwen.serve.controllers.execution.open_utils import (
     async_ir_load,
+    async_ir_load_batch,
     serialize_object,
 )
 from jiuwen.serve.controllers.execution.types import (
@@ -1633,8 +1634,14 @@ class AgentIrUtils:
             "intent": [],
         }
 
-        for workflow_info in ir_data.get("configs", {}).get("workflows", []):
-            workflow_ir = await async_ir_load(workflow_info.get("ir_path"))
+        workflow_infos = ir_data.get("configs", {}).get("workflows", [])
+        # 并发预取全部挂载工作流 IR（原为 for 循环逐个 await，串行 IO 往返
+        # 是多工作流 Agent 构建期的主要耗时）；结果与 workflow_infos 按位对齐，
+        # 后续分类逻辑与串行版完全一致
+        workflow_irs = await async_ir_load_batch(
+            [info.get("ir_path") for info in workflow_infos]
+        )
+        for workflow_info, workflow_ir in zip(workflow_infos, workflow_irs):
             action_after_completion = ActionAfterCompletionType.from_string(
                 workflow_info.get("action_after_completion", "Continue")
             )
@@ -1671,18 +1678,38 @@ class AgentIrUtils:
         """Process global intent workflows"""
         global_workflow_configs = []
 
-        for intent in ir_data.get("configs", {}).get("global_intents", []):
+        def _needs_workflow_ir(intent: dict) -> bool:
+            """该全局意图是否需要加载 Workflow handler IR（过滤条件与串行版一致）"""
+            handler_type = intent.get("handler_type", "Workflow")
+            return (
+                handler_type == HandlerType.WORKFLOW.value
+                and bool(intent.get("handler"))
+            )
+
+        intents = ir_data.get("configs", {}).get("global_intents", [])
+        # 并发预取 Workflow 类型 handler 的 IR；Agent/Text 类型不加载（与原
+        # 行为一致），预取结果与过滤后的 intents 顺序按位对齐。两处过滤条件
+        # 同源 _needs_workflow_ir，若失配 next() 会抛 StopIteration 显式暴露
+        loaded_irs = iter(
+            await async_ir_load_batch(
+                [
+                    intent["handler"].get("ir_path")
+                    for intent in intents
+                    if _needs_workflow_ir(intent)
+                ]
+            )
+        )
+        for intent in intents:
             action = ActionAfterCompletionType.from_string(
                 intent.get(
                     "action_after_completion",
                     ActionAfterCompletionType.WAITING_USER_INPUT.value,
                 )
             )
-            handler_type = intent.get("handler_type", "Workflow")
 
-            if handler_type == HandlerType.WORKFLOW.value and intent.get("handler"):
+            if _needs_workflow_ir(intent):
                 handler = intent["handler"]
-                workflow_ir = await async_ir_load(handler.get("ir_path"))
+                workflow_ir = next(loaded_irs)
                 if workflow_ir:
                     global_workflow_configs.append(
                         WorkflowConfig(

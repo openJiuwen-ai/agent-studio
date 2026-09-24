@@ -82,6 +82,7 @@ from jiuwen.serve.controllers.execution.enum import IRType
 from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import (
     async_ir_load,
+    async_ir_load_batch,
     deserialize_object,
     cache_agent_queue,
     cache_agent_group_queue,
@@ -1037,6 +1038,8 @@ class IRConverter:
         result: dict[str, dict[str, dict]] = {}
         current_wf_defs: dict[str, dict] = {}
         components = ir_data.get("components") or []
+        # SubWorkflow 子路径收集（保序，可含重复），循环后并发预取
+        sub_workflow_paths: list = []
         for comp in components:
             comp_id = comp.get("id")
             if not comp_id:
@@ -1061,21 +1064,34 @@ class IRConverter:
                 },
             }
             current_wf_defs[comp_id] = node_def
-            # 递归提取 SubWorkflow 子工作流内部节点
+            # 递归提取 SubWorkflow 子工作流内部节点：先收集子路径，
+            # 循环结束后并发预取，再按原顺序逐个递归提取
             ir_type = comp.get("type", "")
             if ir_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
                 reference = raw_configs.get("reference") or {}
                 child_path = reference.get("path", "")
                 if child_path:
-                    try:
-                        child_ir = await async_ir_load(child_path)
-                        child_defs = await IRConverter.extract_node_defs(child_ir)
-                        result.update(child_defs)
-                    except Exception:
-                        logger.debug(
-                            "Failed to load sub workflow IR from %s for node defs extraction",
-                            child_path,
-                        )
+                    sub_workflow_paths.append(child_path)
+        # 并发预取子工作流 IR；单失败不中断其余（对齐原 try/except 吞错
+        # 继续语义），失败项连同其递归一起跳过
+        child_irs = await async_ir_load_batch(
+            sub_workflow_paths, return_exceptions=True
+        )
+        for child_path, child_ir in zip(sub_workflow_paths, child_irs):
+            if isinstance(child_ir, Exception):
+                logger.debug(
+                    "Failed to load sub workflow IR from %s for node defs extraction",
+                    child_path,
+                )
+                continue
+            try:
+                child_defs = await IRConverter.extract_node_defs(child_ir)
+                result.update(child_defs)
+            except Exception:
+                logger.debug(
+                    "Failed to extract node defs from sub workflow IR %s",
+                    child_path,
+                )
         if current_wf_defs and workflow_id:
             result[workflow_id] = current_wf_defs
         return result
@@ -1259,31 +1275,36 @@ class IRConverter:
             )
             child_metadata_list: List[AgentMetaData] = []
             # check if current ir_data has child agents
-            if current_ir_data.get("configs", {}).get("agents"):
-                for child in current_ir_data.get("configs", {}).get("agents"):
-                    # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            "loading ir data of %s",
-                            child.get("id"),
-                            simple_log="loading ir data of child",
-                        )
-                    # 支持从父Agent修改子Agent描述
-                    parent_description = child.get("description", "")
-                    child_ir_data = await async_ir_load(child.get("ir_path"))
-                    # R-04: intent 覆盖通过参数下传到子的 current_metadata,不再原地写 child_ir_data
-                    child_intent = child.get("intent") if isinstance(child.get("intent"), dict) else None
-                    child_config = await _recursive_create(
-                        child_ir_data,
-                        current_metadata,
-                        parent_description,
-                        parent_intent=child_intent,
+            children = current_ir_data.get("configs", {}).get("agents") or []
+            # 并发预取全部子 Agent IR（原为 for 循环逐个 await，串行 IO 往返
+            # 是多智能体构建期的主要耗时）；递归转换在预取完成后仍按原顺序
+            # 串行执行，intent 覆盖（R-04）等转换语义不变
+            children_irs = await async_ir_load_batch(
+                [child.get("ir_path") for child in children]
+            )
+            for child, child_ir_data in zip(children, children_irs):
+                # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "loading ir data of %s",
+                        child.get("id"),
+                        simple_log="loading ir data of child",
                     )
-                    child_config.metadata.ir_path = child.get("ir_path")
-                    child_config.metadata.mode = child.get(
-                        "mode", child_config.metadata.mode
-                    )
-                    child_metadata_list.append(child_config.metadata)
+                # 支持从父Agent修改子Agent描述
+                parent_description = child.get("description", "")
+                # R-04: intent 覆盖通过参数下传到子的 current_metadata,不再原地写 child_ir_data
+                child_intent = child.get("intent") if isinstance(child.get("intent"), dict) else None
+                child_config = await _recursive_create(
+                    child_ir_data,
+                    current_metadata,
+                    parent_description,
+                    parent_intent=child_intent,
+                )
+                child_config.metadata.ir_path = child.get("ir_path")
+                child_config.metadata.mode = child.get(
+                    "mode", child_config.metadata.mode
+                )
+                child_metadata_list.append(child_config.metadata)
 
             task_id = str(secrets.token_hex(24))
             if logger.isEnabledFor(logging.DEBUG):
@@ -3285,6 +3306,18 @@ class IRConverter:
         all_configs: List[MemoryIrConfig] = []
         visited = set()
 
+        async def _load_keyed_irs(keyed_paths: list) -> dict:
+            """并发加载 (key, ir_path) 对中非空路径的子 IR，返回 {key: ir_data}。
+
+            空 ir_path 项不加载（与原 `if child_ir_path:` 过滤一致）；
+            递归转换由调用方按原顺序串行执行。
+            """
+            keyed_paths = [(k, p) for k, p in keyed_paths if p]
+            if not keyed_paths:
+                return {}
+            loaded = await async_ir_load_batch([p for _, p in keyed_paths])
+            return {k: ir for (k, _), ir in zip(keyed_paths, loaded)}
+
         async def _recursive_create(current_ir_data: dict[str, Any]):
             """for each agent|workflow, add its MemoryIrConfig into list"""
             if not current_ir_data or not isinstance(current_ir_data, dict):
@@ -3306,46 +3339,60 @@ class IRConverter:
 
             current_ir_type = IRConverter.identify_ir(current_ir_data)
             if current_ir_type == IRType.Agent:
-                for child_workflow_info in current_ir_data.get("configs", {}).get(
-                    "workflows", []
-                ):
-                    child_workflow_ir_path = child_workflow_info.get("ir_path", "")
-                    if child_workflow_ir_path:
-                        child_workflow_ir_data = await async_ir_load(
-                            child_workflow_ir_path
-                        )
-                        await _recursive_create(child_workflow_ir_data)
+                child_infos = (
+                    current_ir_data.get("configs", {}).get("workflows", []) or []
+                )
+                # 并发预取挂载工作流 IR；空 ir_path 不加载（与原行为一致）
+                ir_by_key = await _load_keyed_irs(
+                    [
+                        (i, info.get("ir_path", ""))
+                        for i, info in enumerate(child_infos)
+                    ]
+                )
+                for i, _child_info in enumerate(child_infos):
+                    if i in ir_by_key:
+                        await _recursive_create(ir_by_key[i])
             elif current_ir_type == IRType.Workflow:
-                for child_workflow_info in current_ir_data.get("components", {}):
+                child_infos = current_ir_data.get("components", {}) or []
+                # 仅 SubWorkflow 组件需要加载子 IR（与原 continue 过滤一致）
+                ir_by_key = await _load_keyed_irs(
+                    [
+                        (
+                            i,
+                            info.get("configs", {})
+                            .get("reference", {})
+                            .get("path", ""),
+                        )
+                        for i, info in enumerate(child_infos)
+                        if info.get("type") == NodeType.SUB_WORKFLOW.value
+                    ]
+                )
+                for i, child_workflow_info in enumerate(child_infos):
                     if child_workflow_info.get("type") != NodeType.SUB_WORKFLOW.value:
                         continue
-                    child_workflow_ir_path = (
-                        child_workflow_info.get("configs", {})
-                        .get("reference", {})
-                        .get("path", "")
-                    )
-                    if child_workflow_ir_path:
-                        child_workflow_ir_data = await async_ir_load(
-                            child_workflow_ir_path
-                        )
-                        await _recursive_create(child_workflow_ir_data)
+                    if i in ir_by_key:
+                        await _recursive_create(ir_by_key[i])
             elif current_ir_type == IRType.MultiAgents:
-                for child_agent_info in current_ir_data.get("configs", {}).get(
-                    "agents", []
-                ):
-                    child_agent_ir_path = child_agent_info.get("ir_path", "")
-                    if child_agent_ir_path:
-                        child_agent_ir_data = await async_ir_load(child_agent_ir_path)
-                        await _recursive_create(child_agent_ir_data)
-                for child_workflow_info in current_ir_data.get("configs", {}).get(
-                    "workflows", []
-                ):
-                    child_workflow_ir_path = child_workflow_info.get("ir_path", "")
-                    if child_workflow_ir_path:
-                        child_workflow_ir_data = await async_ir_load(
-                            child_workflow_ir_path
-                        )
-                        await _recursive_create(child_workflow_ir_data)
+                agent_infos = (
+                    current_ir_data.get("configs", {}).get("agents", []) or []
+                )
+                workflow_infos = (
+                    current_ir_data.get("configs", {}).get("workflows", []) or []
+                )
+                # 子 Agent 与挂载工作流合并为一次并发预取；递归顺序保持原
+                # "先 agents 后 workflows"（key 用复合元组避免两组索引冲突）
+                ir_by_key = await _load_keyed_irs(
+                    [(("agent", i), info.get("ir_path", ""))
+                     for i, info in enumerate(agent_infos)]
+                    + [(("workflow", i), info.get("ir_path", ""))
+                       for i, info in enumerate(workflow_infos)]
+                )
+                for i, _child_info in enumerate(agent_infos):
+                    if ("agent", i) in ir_by_key:
+                        await _recursive_create(ir_by_key[("agent", i)])
+                for i, _child_info in enumerate(workflow_infos):
+                    if ("workflow", i) in ir_by_key:
+                        await _recursive_create(ir_by_key[("workflow", i)])
 
         await _recursive_create(root_ir_data)
         return all_configs
