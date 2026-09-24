@@ -400,11 +400,27 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             if (workflow.getContextList() == null) {
                 continue;
             }
-            workflow.getContextList().forEach((key, value) -> contextDTOMap.merge(key, value, (existing, newValue) -> {
-                existing.setValueAfter(newValue.getValueAfter());
-                return existing;
-            }));
+            // 放入拷贝而非源对象：Map.merge 对不存在的 key 直接存入 value 引用，
+            // 若直接放入源 ContextDTO，后续轮次/同轮后续工作流 merge 时的
+            // setValueAfter 会原地修改该共享对象，污染 before-entry 工作流条目
+            // 及已加入 roundList 的前几轮上下文（多轮场景下被最后一轮覆盖）
+            workflow.getContextList().forEach((key, value) -> contextDTOMap.merge(key, copyOfContext(value),
+                (existing, newValue) -> {
+                    existing.setValueAfter(newValue.getValueAfter());
+                    return existing;
+                }));
         }
+    }
+
+    /**
+     * ContextDTO 防御性拷贝（name/value_before/value_after 三字段）。
+     */
+    private ContextDTO copyOfContext(ContextDTO source) {
+        ContextDTO copy = new ContextDTO();
+        copy.setName(source.getName());
+        copy.setValueBefor(source.getValueBefor());
+        copy.setValueAfter(source.getValueAfter());
+        return copy;
     }
 
     private WorkFlowDTO instructWorkFlow(List<NodeRunInfo> nodeRunInfos, int startIndex, String nodeIdFlag,
@@ -535,11 +551,14 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             String valueKey = output.getKey();
             Object valueAfter = output.getValue();
             valueAfter = replaceNoneWithEmpty(valueAfter);
-            if (workflow.getContextList().get(valueKey) != null) {
-                workflow.getContextList()
-                    .get(valueKey)
-                    .setValueAfter(JSON.toJSONString(valueAfter, SerializerFeature.WriteMapNullValue));
+            ContextDTO contextDTO = workflow.getContextList().get(valueKey);
+            if (contextDTO == null) {
+                // 子工作流新建的记忆变量：对话前无值，仅记录对话后值
+                contextDTO = new ContextDTO();
+                contextDTO.setName(valueKey);
+                workflow.getContextList().put(valueKey, contextDTO);
             }
+            contextDTO.setValueAfter(JSON.toJSONString(valueAfter, SerializerFeature.WriteMapNullValue));
         }
     }
 
