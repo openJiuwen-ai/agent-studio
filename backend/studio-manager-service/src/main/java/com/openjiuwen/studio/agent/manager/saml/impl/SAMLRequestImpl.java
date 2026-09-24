@@ -12,8 +12,14 @@ import com.openjiuwen.studio.agent.manager.saml.response.RequestBuilder;
 public class SAMLRequestImpl implements SAMLRequest {
     @Override
     public String generate() throws SAMLException {
+        return generate(null);
+    }
+
+    @Override
+    public String generate(String destination) throws SAMLException {
         ServiceProvider sp = ServiceProviderImpl.getInstance();
-        RequestBuilder requestBuilder = new RequestBuilder(sp.getIssuer(), sp.getServiceUrl(), sp.getPrivateKeyEntry());
+        RequestBuilder requestBuilder =
+            new RequestBuilder(sp.getIssuer(), sp.getServiceUrl(), destination, sp.getPrivateKeyEntry());
         requestBuilder.setDigestAlgorithm(sp.getDigestAlgorithm());
         requestBuilder.setSignatureAlgorithm(sp.getSignatureAlgorithm());
         return requestBuilder.build();

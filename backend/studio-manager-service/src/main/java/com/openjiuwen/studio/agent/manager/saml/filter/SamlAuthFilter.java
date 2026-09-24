@@ -105,14 +105,23 @@ public class SamlAuthFilter extends OncePerRequestFilter {
         // 存储到Redis，设置10分钟过期时间REDIS_REQUEST_PREFIX
         String redisKey = REDIS_REQUEST_PREFIX + traceId;
         redisTemplate.opsForValue().set(redisKey, originalRequest, REQUEST_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-        byte[] samlRequest = new SAMLRequestImpl().generate().getBytes(StandardCharsets.UTF_8);
-        samlRequest = new Base64().encode(samlRequest);
-        String callbackUrl = idpUrl + "/sp?SAMLRequest="
-            + URLEncoder.encode(new String(samlRequest, StandardCharsets.UTF_8),
-                String.valueOf(StandardCharsets.UTF_8));
-        // 重定向到SAML认证发起端点，传递traceId
-        String redirectUrl = callbackUrl + "&RelayState="
-            + URLEncoder.encode(traceId, String.valueOf(StandardCharsets.UTF_8));
+        // HTTP-Redirect binding: Deflate(raw) + Base64 + URLEncode；已签名请求须带 Destination=IdP SSO URL
+        byte[] xmlBytes = new SAMLRequestImpl().generate(idpUrl).getBytes(StandardCharsets.UTF_8);
+        java.io.ByteArrayOutputStream bytesOut = new java.io.ByteArrayOutputStream();
+        java.util.zip.Deflater deflater = new java.util.zip.Deflater(java.util.zip.Deflater.DEFLATED, true);
+        deflater.setInput(xmlBytes);
+        deflater.finish();
+        byte[] buffer = new byte[1024];
+        while (!deflater.finished()) {
+            int count = deflater.deflate(buffer);
+            bytesOut.write(buffer, 0, count);
+        }
+        deflater.end();
+        String encodedRequest = new String(new Base64().encode(bytesOut.toByteArray()), StandardCharsets.UTF_8);
+        String separator = idpUrl.contains("?") ? "&" : "?";
+        String redirectUrl = idpUrl + separator + "SAMLRequest="
+            + URLEncoder.encode(encodedRequest, StandardCharsets.UTF_8.name())
+            + "&RelayState=" + URLEncoder.encode(traceId, StandardCharsets.UTF_8.name());
         log.info(
             "User not authenticated, redirected to SAML login:method={}, originalUrl={}, traceId={}, redirectUrl={}",
             request.getMethod(),

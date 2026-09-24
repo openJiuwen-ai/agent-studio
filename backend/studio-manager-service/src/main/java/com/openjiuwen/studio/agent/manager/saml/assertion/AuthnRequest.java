@@ -9,6 +9,7 @@ import com.openjiuwen.studio.agent.manager.saml.response.SecureIdGenerator;
 import org.dom4j.DocumentHelper;
 import org.dom4j.Element;
 import org.dom4j.Namespace;
+import org.dom4j.QName;
 
 public class AuthnRequest {
 
@@ -24,14 +25,24 @@ public class AuthnRequest {
 
     private final String serviceUrl;
 
+    /**
+     * IdP SSO 接收地址。已签名的 Redirect/POST 请求按 Binding 要求应设置 Destination。
+     */
+    private final String destination;
+
     private String digestAlgorithm;
 
     private String signatureAlgorithm;
 
     public AuthnRequest(String issuer, String issueInstant, String serviceUrl) {
+        this(issuer, issueInstant, serviceUrl, null);
+    }
+
+    public AuthnRequest(String issuer, String issueInstant, String serviceUrl, String destination) {
         this.issuer = issuer;
         this.issueInstant = issueInstant;
         this.serviceUrl = serviceUrl;
+        this.destination = destination;
     }
 
     /**
@@ -39,11 +50,13 @@ public class AuthnRequest {
      */
     public Element toXML() {
 
-        Element request = DocumentHelper.createElement("AuthnRequest");
-        request.addAttribute("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol");
+        Element request = DocumentHelper.createElement(new QName("AuthnRequest", SAMLP));
         request.addAttribute("ID", new SecureIdGenerator().generateSecureId());
         request.addAttribute("Version", "2.0");
         request.addAttribute("IssueInstant", this.issueInstant);
+        if (destination != null && !destination.isBlank()) {
+            request.addAttribute("Destination", destination.trim());
+        }
         request.addAttribute("ProtocolBinding", "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST");
         request.addAttribute("AssertionConsumerServiceIndex", "0");
         request.addAttribute("AssertionConsumerServiceURL", this.serviceUrl);
@@ -57,16 +70,12 @@ public class AuthnRequest {
         if (signatureAlgorithm != null) {
             request.addAttribute("signatureAlgorithm", signatureAlgorithm);
         }
-        Element issuerElement = DocumentHelper.createElement("saml:Issuer");
-        issuerElement.addAttribute("xmlns:saml", "urn:oasis:names:tc:SAML:2.0:assertion");
+        Element issuerElement = DocumentHelper.createElement(new QName("Issuer", SAML));
         issuerElement.setText(this.issuer);
-        issuerElement.add(SAML);
-        Element nameIDPolicy = DocumentHelper.createElement("samlp:NameIDPolicy");
+        Element nameIDPolicy = DocumentHelper.createElement(new QName("NameIDPolicy", SAMLP));
         nameIDPolicy.addAttribute("AllowCreate", "False");
-        nameIDPolicy.add(SAMLP);
         request.add(issuerElement);
         request.add(nameIDPolicy);
-        request.add(SAMLP);
         return request;
     }
 
