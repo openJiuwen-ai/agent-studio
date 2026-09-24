@@ -144,10 +144,10 @@ async def _chat(req_json: dict) -> StreamingResponse:
 
     except ValidationError as e:
         # 专门捕获 Pydantic 校验错误
-        logger.warning(f"Request validation failed: {e}")
+        logger.warning("Request validation failed", exc_info=True)
         return StreamingResponse(
             _error_sse_generator(
-                ValueError(f"Invalid Request: {e}"), task_id or "unknown"
+                ValueError("Invalid Request"), task_id or "unknown"
             ),
             media_type="text/event-stream",
         )
@@ -203,15 +203,30 @@ async def _generate(yield_answer, task_id):
         }
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
 
-    def to_error_sse(exc) -> bytes:
-        # 默认Error，增加容错
-        code = getattr(exc, "code", "500")
-        msg = str(exc)
-        if isinstance(exc, JiuWenBaseException):
-            code = exc.error_code
-            msg = exc.message
-        return to_sse("error", {"code": code, "message": msg})
+    # SYNC-01 P5-R3b: COM-03 SSE error 契约（build_sse_error_event +
+    # SseTerminalGuard 唯一终态），替代 sync_01 裸 {code, message}（外露
+    # str(exc)）。保 sync_01 流架构（START→MESSAGE→END + 心跳）；error 经
+    # from_builder_exception 分类（未登记码 → 13100004 INTERNAL_ERROR，不外露
+    # str(exc)）。request_id/locale 从 _request_ctx 读（middleware 已 set）。
+    from agent_builder.common.error_contract.factory import build_sse_error_event
+    from agent_builder.common.error_contract.stream_state import SseTerminalGuard
+    from agent_builder.adapter.request_context_bridge import get_request_context
+    _guard = SseTerminalGuard()
+    _guard.begin_streaming()
 
+    def to_error_sse(exc):
+        ctx = get_request_context()
+        rid = getattr(ctx, "request_id", None) if ctx else None
+        locale = (
+            ctx.headers.get("x-language", "zh-cn")
+            if ctx and getattr(ctx, "headers", None) else "zh-cn"
+        )
+        event = build_sse_error_event(rid, exc, locale, _guard)
+        return event.encode() if event else None
+
+    # P5-BLD-02: 预初始化 data_task,建流前失败（await coroutine/__aiter__/首个 task
+    # 创建前）时 finally 不引用未赋值变量→避免 UnboundLocalError 二次异常覆盖主 error。
+    data_task = None
     try:
         # 1. 发送 START
         yield to_sse("START", "")
@@ -249,7 +264,10 @@ async def _generate(yield_answer, task_id):
                             "MESSAGE", {"answer": item[0], "message_type": item[1]}
                         )
                     elif isinstance(item, Exception):
-                        yield to_error_sse(item)
+                        err = to_error_sse(item)
+                        if err is not None:
+                            yield err
+                            return  # COM-03 唯一终态: error 后终止流,不发 END（adversarial P5-R3b gap 2）
                     if isinstance(item, dict):
                         content = item if isinstance(item, str) else item
                         yield to_sse("MESSAGE", content)
@@ -275,12 +293,17 @@ async def _generate(yield_answer, task_id):
         yield to_sse("END", "")
     except JiuWenBaseException as e:
         logger.error("Streaming processing failed")
-        yield to_error_sse(e)
+        err = to_error_sse(e)
+        if err is not None:
+            yield err
     except Exception as e:
         logger.error("Streaming processing failed")
-        yield to_error_sse(e)
+        err = to_error_sse(e)
+        if err is not None:
+            yield err
     finally:
-        if not data_task.done():
+        # P5-BLD-02: data_task 可能未赋值（建流前失败）,条件取消避免二次异常
+        if data_task is not None and not data_task.done():
             data_task.cancel()
 
 
@@ -298,42 +321,33 @@ def _generate_optimize_task_job_id(
 
 
 def _error_sse_generator(e: Exception, task_id: str):
+    """意图识别阶段失败的 SSE error 流（COM-03 五字段 + 唯一终态）。
+
+    P5-BLD-01（adversarial 复审修复不彻底）：接入 Builder error_factory
+    build_sse_error_event + SseTerminalGuard,不再裸两字段 {code,message} schema。
+    100029 经 from_builder_exception 映射 13100014（i18n DeepSeek suggestion 保留）;
+    未登记码 fail-closed 13100004。request_id/locale 从 _request_ctx 读。
+    原始异常正文不外露（COM-03 fail-closed 五字段 + COM-08 安全日志）。
     """
-    An error response data stream is generated when an error
-    occurs during the NL2AGENT intent recognition phase.
-    """
+    from agent_builder.common.error_contract.factory import build_sse_error_event
+    from agent_builder.common.error_contract.stream_state import SseTerminalGuard
+    from agent_builder.adapter.request_context_bridge import get_request_context
 
     start_payload = {"data": "", "event": "START", "conversationId": task_id}
-    # 将整个字典转换为 JSON 字符串，并添加 'data: ' 前缀和换行符
-    start_json = json.dumps(start_payload, ensure_ascii=False)
-    yield f"data: {start_json}\n\n"
+    yield f"data: {json.dumps(start_payload, ensure_ascii=False)}\n\n"
 
-    # 尝试安全地获取错误代码和消息
-    try:
-        error_code = getattr(e, "error_code", "500")
-        error_message = getattr(e, "message", str(e))
-    except Exception:
-        error_code = "500"
-        error_message = str(e)
-    if (
-        error_code == 100029
-        and error_message
-        and "Model response error" in error_message
-    ):
-        error_message = "The model failed to identify the user's intent. Please switch to another model and try again. It is recommended to use the DeepSeek-V3 model."
-    else:
-        error_message = f"{NL2_FALLBACK_ERROR_MESSAGE}([{error_code}], {error_message})"
-    error_payload = {
-        "data": {"code": str(error_code), "message": str(error_message)},
-        "event": "error",
-        "conversationId": task_id,
-    }
-    error_json = json.dumps(error_payload, ensure_ascii=False)
-    yield f"data: {error_json}\n\n"
-
-    end_payload = {"data": "", "event": "END", "conversationId": task_id}
-    end_json = json.dumps(end_payload, ensure_ascii=False)
-    yield f"data: {end_json}\n\n"
+    guard = SseTerminalGuard()
+    guard.begin_streaming()
+    ctx = get_request_context()
+    rid = getattr(ctx, "request_id", None) if ctx else None
+    locale = (
+        ctx.headers.get("x-language", "zh-cn")
+        if ctx and getattr(ctx, "headers", None) else "zh-cn"
+    )
+    event = build_sse_error_event(rid, e, locale, guard)
+    if event:
+        yield event.encode()
+    # COM-03 唯一终态：error 后无 END
 
 
 def _nl2_get_error(error_item):
