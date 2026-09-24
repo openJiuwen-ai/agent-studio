@@ -70,7 +70,7 @@ public class ApigApiService {
                     throw new AgentStudioException(StudioError.INVALID_URL);
                 }
             } catch (Exception e) {
-                log.error("Failed to parse apic response body");
+                log.error("Failed to parse apic response body", e);
             }
             throw new AgentStudioException(StudioError.INVALID_URL);
         }

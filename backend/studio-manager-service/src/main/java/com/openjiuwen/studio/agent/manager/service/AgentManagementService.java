@@ -280,10 +280,6 @@ public class AgentManagementService implements IAgentManagementService {
      * OBS/长期记忆清理线程池（COM-02 转受管：原自建 newFixedThreadPool(THREAD_POOL_SIZE=100)
      * 迁移为 ObservabilityAsyncConfig.agentMgmtCleanupExecutor，保现状容量与无界队列，加 MDC 传播）
      */
-    /**
-     * OBS/长期记忆清理线程池（COM-02 转受管：原自建 newFixedThreadPool(THREAD_POOL_SIZE=100)
-     * 迁移为 ObservabilityAsyncConfig.agentMgmtCleanupExecutor，保现状容量与无界队列，加 MDC 传播）
-     */
     @Autowired
     @Qualifier("agentMgmtCleanupExecutor")
     private ThreadPoolTaskExecutor fixedThreadPool;

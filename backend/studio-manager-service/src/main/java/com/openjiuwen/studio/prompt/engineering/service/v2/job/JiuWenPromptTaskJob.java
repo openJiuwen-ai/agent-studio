@@ -851,28 +851,6 @@ public class JiuWenPromptTaskJob implements Job {
             String.valueOf(code));
     }
 
-    private java.util.OptionalInt parseBuilderCode(String errorBody) {
-        if (StringUtils.isEmpty(errorBody)) {
-            return java.util.OptionalInt.empty();
-        }
-        try {
-            Map<String, Object> body = JsonUtils.json2ObjQuietly(errorBody, Map.class);
-            if (body == null) {
-                return java.util.OptionalInt.empty();
-            }
-            Object code = body.get("code");
-            if (code instanceof Number) {
-                return java.util.OptionalInt.of(((Number) code).intValue());
-            }
-            if (code instanceof String) {
-                return java.util.OptionalInt.of(Integer.parseInt((String) code));
-            }
-            return java.util.OptionalInt.empty();
-        } catch (Exception e) {
-            return java.util.OptionalInt.empty();
-        }
-    }
-
     private boolean isLlmRelatedCode(int code) {
         if (code == 100002) {
             return true;

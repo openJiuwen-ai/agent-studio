@@ -45,6 +45,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -118,7 +119,11 @@ public class ModelServiceManager {
 
     @PostConstruct
     public void postConstruct() {
-        CompletableFuture.runAsync(this::startSyncTasks, backgroundAsyncExecutor);
+        try {
+            CompletableFuture.runAsync(this::startSyncTasks, backgroundAsyncExecutor);
+        } catch (RejectedExecutionException e) {
+            log.warn("backgroundAsyncExecutor rejected startSyncTasks, skip: {}", e.getMessage());
+        }
     }
 
     void startSyncTasks() {

@@ -76,6 +76,7 @@ import com.openjiuwen.studio.agent.manager.service.ShareResourceManagerService;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.WorkflowRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
+import com.openjiuwen.studio.agent.manager.observability.MdcScope;
 import com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService;
 
 import io.swagger.annotations.ApiParam;
@@ -245,8 +246,11 @@ public class AgentServiceProxyController {
 
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
-            return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null, projectId,
-                agentId, conversationId, workspaceId, agentType, version, type, environmentId, body).getBody();
+            try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
+                return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null,
+                    projectId, agentId, conversationId, workspaceId, agentType, version, type, environmentId, body)
+                    .getBody();
+            }
         }
     }
 
@@ -387,8 +391,10 @@ public class AgentServiceProxyController {
             return agentServiceProxyService.workflowStream(url, httpHeaders, JsonUtils.encode(body), result,
                 executeParams);
         } else {
-            return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(), projectId,
-                workflowId, conversationId, workspaceId, environmentId, version, body).getBody();
+            try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
+                return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(), projectId,
+                    workflowId, conversationId, workspaceId, environmentId, version, body).getBody();
+            }
         }
     }
 

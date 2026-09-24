@@ -10,6 +10,7 @@ import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.ErrorInfo;
+import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -46,7 +47,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.BadSqlGrammarException;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -63,7 +63,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
 
 /**
  * 功能描述 异常捕获类
@@ -340,7 +339,7 @@ public class MgGlobalExceptionHandler {
         // 最终责任边界：结构化安全诊断 + 原始 cause 完整栈只记一次
         Throwable cause = failure.getCause();
         var diag = ErrorDescriptorDiagnostics.toSafeLogFields(descriptor);
-        String traceId = MDC.get("trace-id");
+        String traceId = MDC.get(MdcKeys.TRACE_ID);
         if (cause != null) {
             log.error("Downstream failure service={} transport={} phase={} trace_id={}: {}",
                 failure.getService(), failure.getTransport(), failure.getPhase(), traceId, diag, cause);
