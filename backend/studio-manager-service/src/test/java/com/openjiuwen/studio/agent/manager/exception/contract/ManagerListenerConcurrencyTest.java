@@ -164,21 +164,25 @@ class ManagerListenerConcurrencyTest {
             RID, latch, emitter, validResolver(), java.util.Locale.ENGLISH);
 
         // 捕获 listener 的 ERROR 级日志（完整原始栈恰好一次）
-        // SLF4J/logback 不走 JUL——直接给 logback 加 appender
+        // 项目日志框架为 log4j2——直接给 log4j2 logger config 加 appender
+        // （不走 logback 强转，避免 SLF4J 双 provider 下 ClassCastException，检视意见2）
         List<LogRecord> errorRecords = new CopyOnWriteArrayList<>();
-        ch.qos.logback.classic.Logger logbackLogger =
-            (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(
-                ProxyEventSourceListener.class);
-        ch.qos.logback.core.Appender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
-            new ch.qos.logback.core.AppenderBase<ch.qos.logback.classic.spi.ILoggingEvent>() {
+        org.apache.logging.log4j.core.LoggerContext log4j2Ctx =
+            (org.apache.logging.log4j.core.LoggerContext) org.apache.logging.log4j.LogManager.getContext(false);
+        org.apache.logging.log4j.core.config.LoggerConfig log4j2Cfg =
+            log4j2Ctx.getConfiguration().getLoggerConfig(ProxyEventSourceListener.class.getName());
+        org.apache.logging.log4j.core.appender.AbstractAppender appender =
+            new org.apache.logging.log4j.core.appender.AbstractAppender(
+                "test-pre-frame-capture", null, null, true,
+                org.apache.logging.log4j.core.config.Property.EMPTY_ARRAY) {
                 @Override
-                protected void append(ch.qos.logback.classic.spi.ILoggingEvent event) {
-                    if (event.getLevel() == ch.qos.logback.classic.Level.ERROR
-                        && event.getFormattedMessage() != null
-                        && event.getFormattedMessage().contains("Pre-frame HTTP failure")) {
+                public void append(org.apache.logging.log4j.core.LogEvent event) {
+                    if (event.getLevel() == org.apache.logging.log4j.Level.ERROR
+                        && event.getMessage() != null
+                        && event.getMessage().getFormattedMessage().contains("Pre-frame HTTP failure")) {
                         LogRecord rec = new LogRecord(Level.SEVERE,
-                            event.getFormattedMessage());
-                        if (event.getThrowableProxy() != null) {
+                            event.getMessage().getFormattedMessage());
+                        if (event.getThrown() != null || event.getThrownProxy() != null) {
                             rec.setThrown(new RuntimeException("proxy-present"));
                         }
                         errorRecords.add(rec);
@@ -186,7 +190,8 @@ class ManagerListenerConcurrencyTest {
                 }
             };
         appender.start();
-        logbackLogger.addAppender(appender);
+        log4j2Cfg.addAppender(appender, null, null);
+        log4j2Ctx.updateLoggers();
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
@@ -197,7 +202,8 @@ class ManagerListenerConcurrencyTest {
             pool.shutdown();
             assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS));
         } finally {
-            logbackLogger.detachAppender(appender);
+            log4j2Cfg.removeAppender("test-pre-frame-capture");
+            log4j2Ctx.updateLoggers();
             if (!pool.isTerminated()) pool.shutdownNow();
         }
 
