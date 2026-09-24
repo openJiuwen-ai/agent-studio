@@ -19,6 +19,7 @@ import logging
 
 from common_utils.redis_manager import get_redis_client
 from agent_runtime.extension.workflow_node.kb_adapter.base import KBSearchResult, KBServiceAdapter
+from agent_runtime.extension.workflow_node.kb_adapter.base import clamp_threshold
 from agent_runtime.extension.workflow_node.kb_adapter.factory import KBAdapterFactory
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
@@ -442,11 +443,12 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
             )
 
         # 应用 recallThreshold 分数过滤
-        recall_threshold = retrieval_params.get(
+        raw_threshold = retrieval_params.get(
             "recallThreshold",
-            retrieval_params.get("scoreThreshold", 0.0),
+            retrieval_params.get("scoreThreshold"),
         )
-        if recall_threshold > 0:
+        if raw_threshold is not None:
+            recall_threshold = clamp_threshold(float(raw_threshold))
             results = [r for r in results if r.score >= recall_threshold]
 
         # 按 score 降序排列后截取 top_k

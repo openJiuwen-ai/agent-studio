@@ -9,8 +9,10 @@ import aiohttp
 
 from openjiuwen.core.common.logging import workflow_logger
 
-from .base import DatasetSearchRequest, KBSearchResult, KBServiceAdapter
+from .base import clamp_threshold, DatasetSearchRequest, KBSearchResult, KBServiceAdapter
 from .customer_header_inject import inject_customer_headers_to_kb
+
+
 
 
 # 检索模式映射
@@ -36,7 +38,6 @@ class GeneralKBAdapter(KBServiceAdapter):
         all_results: List[KBSearchResult] = []
 
         top_k = retrieval_params.get("topK", 10)
-        score_threshold = retrieval_params.get("scoreThreshold", 0.0)
 
         endpoint = connection_config.get("endpoint", "")
         extra_params = connection_config.get("extra_params", {})
@@ -96,12 +97,6 @@ class GeneralKBAdapter(KBServiceAdapter):
         all_results.sort(key=lambda r: r.score, reverse=True)
         all_results = all_results[:top_k]
 
-        # 过滤低于阈值的结果
-        if score_threshold > 0:
-            all_results = [
-                r for r in all_results if r.score >= score_threshold
-            ]
-
         return all_results
 
     async def _search_datasets(
@@ -113,7 +108,11 @@ class GeneralKBAdapter(KBServiceAdapter):
         dataset_ids = request.dataset_ids
         headers = request.headers
         top_k = request.retrieval_params.get("topK", 10)
-        score_threshold = request.retrieval_params.get("scoreThreshold", 0.0)
+        raw_threshold = request.retrieval_params.get(
+            "recallThreshold",
+            request.retrieval_params.get("scoreThreshold"),
+        )
+        score_threshold = clamp_threshold(float(raw_threshold)) if raw_threshold is not None else None
         search_mode = request.retrieval_params.get("searchMode", "doc")
 
         url = f"{endpoint.rstrip('/')}/knowledge-bases/retrieve"
@@ -132,7 +131,7 @@ class GeneralKBAdapter(KBServiceAdapter):
         }
 
         # 从检索参数传入 search_threshold（Java: searchThreshold/recallThreshold）
-        if score_threshold > 0:
+        if score_threshold is not None:
             body["search_threshold"] = score_threshold
 
         try:

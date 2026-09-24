@@ -200,6 +200,11 @@ spec:
             # 意图识别工作流开关
             - name: ENABLE_INTENT_WORKFLOW
               value: 'true'
+            # 知识检索召回阈值范围，M侧和R侧共用，默认 0~1
+            - name: KNOWLEDGE_RECALL_THRESHOLD_MIN
+              value: '0'
+            - name: KNOWLEDGE_RECALL_THRESHOLD_MAX
+              value: '1'
             # ======== [选填] Nginx 负载均衡（默认关闭） ========
             # 启用后 Worker 以单进程模式运行，由 Nginx 做负载均衡
             - name: NGINX_LOAD_BALANCING

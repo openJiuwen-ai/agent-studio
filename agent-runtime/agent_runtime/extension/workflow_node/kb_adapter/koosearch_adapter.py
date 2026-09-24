@@ -13,6 +13,8 @@ from .base import DatasetSearchRequest, KBSearchResult, KBServiceAdapter
 from .customer_header_inject import inject_customer_headers_to_kb
 
 
+
+
 # 搜索模式映射
 _SEARCH_SCOPE_MAP = {
     "doc": "doc",
@@ -35,7 +37,6 @@ class KooSearchAdapter(KBServiceAdapter):
         all_results: List[KBSearchResult] = []
 
         top_k = retrieval_params.get("topK", 10)
-        score_threshold = retrieval_params.get("scoreThreshold", 0.0)
 
         endpoint = connection_config.get("endpoint", "")
         extra_params = connection_config.get("extra_params", {})
@@ -95,12 +96,6 @@ class KooSearchAdapter(KBServiceAdapter):
         # 按 score 降序排列，截取 top_k
         all_results.sort(key=lambda r: r.score, reverse=True)
         all_results = all_results[:top_k]
-
-        # 过滤低于阈值的结果
-        if score_threshold > 0:
-            all_results = [
-                r for r in all_results if r.score >= score_threshold
-            ]
 
         return all_results
 

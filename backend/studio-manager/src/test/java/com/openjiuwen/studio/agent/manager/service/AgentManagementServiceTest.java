@@ -621,34 +621,36 @@ class AgentManagementServiceTest extends BaseTest {
 
     @Test
     @Sql(scripts = {"classpath:sql/agent_setup_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-    void test_ModifyAgent_should_throw_exception_when_KnowledgeRetrievalPolicy_recall_threshold_is_illegal()
+    void test_ModifyAgent_should_clamp_when_KnowledgeRetrievalPolicy_recall_threshold_above_max()
         throws IOException {
-        assertThrows(AgentStudioException.class, () -> {
-            // set up
-            final ModifyAgentReq req =
-                TestUtil.getJsonObject(ModifyAgentReq.class, "classpath:service/modify_agent_with_lakeSearch_req.json");
-            req.getKnowledgeRetrievePolicy().setRecallThreshold(20.0f);
+        // set up
+        final ModifyAgentReq req =
+            TestUtil.getJsonObject(ModifyAgentReq.class, "classpath:service/modify_agent_with_lakeSearch_req.json");
+        req.getKnowledgeRetrievePolicy().setRecallThreshold(20.0f);
 
-            // run test
-            agentManagementService.modifyAgent(Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
-                Constants.TEST_WORKSPACE_ID, req);
-        });
+        // run test
+        AgentInfo agentInfo = agentManagementService.modifyAgent(Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
+            Constants.TEST_WORKSPACE_ID, req);
+
+        // assert: recallThreshold 被 clamp 到 max(1.0)
+        assertEquals(1.0f, agentInfo.getKnowledgeRetrievePolicy().getRecallThreshold(), 0.0001f);
     }
 
     @Test
     @Sql(scripts = {"classpath:sql/agent_setup_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-    void test_ModifyAgent_should_throw_exception_when_KnowledgeRetrievalPolicy_faq_threshold_is_illegal()
+    void test_ModifyAgent_should_clamp_when_KnowledgeRetrievalPolicy_faq_threshold_above_max()
         throws IOException {
-        assertThrows(AgentStudioException.class, () -> {
-            // set up
-            final ModifyAgentReq req =
-                TestUtil.getJsonObject(ModifyAgentReq.class, "classpath:service/modify_agent_with_lakeSearch_req.json");
-            req.getKnowledgeRetrievePolicy().setFaqThreshold(20.0f);
+        // set up
+        final ModifyAgentReq req =
+            TestUtil.getJsonObject(ModifyAgentReq.class, "classpath:service/modify_agent_with_lakeSearch_req.json");
+        req.getKnowledgeRetrievePolicy().setFaqThreshold(20.0f);
 
-            // run test
-            agentManagementService.modifyAgent(Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
-                Constants.TEST_WORKSPACE_ID, req);
-        });
+        // run test
+        AgentInfo agentInfo = agentManagementService.modifyAgent(Constants.TEST_PROJECT_ID, Constants.TEST_AGENT_ID,
+            Constants.TEST_WORKSPACE_ID, req);
+
+        // assert: faqThreshold 被 clamp 到 max(1.0)
+        assertEquals(1.0f, agentInfo.getKnowledgeRetrievePolicy().getFaqThreshold(), 0.0001f);
     }
 
     @Test

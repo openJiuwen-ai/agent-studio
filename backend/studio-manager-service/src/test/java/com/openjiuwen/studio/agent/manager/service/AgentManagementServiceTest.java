@@ -4,6 +4,7 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -24,6 +25,7 @@ import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
 import com.openjiuwen.studio.agent.manager.dto.ModifyAgentReq;
+import com.openjiuwen.studio.agent.manager.dto.KnowledgeRetrievePolicy;
 import com.openjiuwen.studio.agent.manager.dto.ModifyChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -55,6 +57,7 @@ import org.quartz.Scheduler;
 import org.springframework.context.MessageSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -837,5 +840,131 @@ class AgentManagementServiceTest {
             verify(releaseChannelMapper).updateByPrimaryKeySelective(any(ReleaseChannel.class));
             verify(agentRuntimeClient).createReleaseInfo(eq("token"), eq(projectId), any());
         }
+    }
+
+    // ======================================================================
+    // checkKnowledgeRetrievePolicy clamp 校验验证
+    // ======================================================================
+
+    /**
+     * 通过反射调用 private checkKnowledgeRetrievePolicy，验证阈值 clamp 逻辑。
+     */
+    private void invokeCheckKnowledgeRetrievePolicy(KnowledgeRetrievePolicy policy) throws Exception {
+        Method method = AgentManagementService.class.getDeclaredMethod(
+            "checkKnowledgeRetrievePolicy", KnowledgeRetrievePolicy.class);
+        method.setAccessible(true);
+        method.invoke(agentManagementService, policy);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_recallThresholdAboveMax_clampedToMax() throws Exception {
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(20.0f);
+        policy.setFaqThreshold(0.5f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(1.0f, policy.getRecallThreshold(), 0.0001f);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_recallThresholdBelowMin_clampedToMin() throws Exception {
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(-5.0f);
+        policy.setFaqThreshold(0.5f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(0.0f, policy.getRecallThreshold(), 0.0001f);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_recallThresholdWithinRange_unchanged() throws Exception {
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(0.5f);
+        policy.setFaqThreshold(0.9f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(0.5f, policy.getRecallThreshold(), 0.0001f);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_faqThresholdAboveMax_clampedToMax() throws Exception {
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(0.5f);
+        policy.setFaqThreshold(20.0f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(1.0f, policy.getFaqThreshold(), 0.0001f);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_faqThresholdBelowMin_clampedToMin() throws Exception {
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(0.5f);
+        policy.setFaqThreshold(-5.0f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(0.0f, policy.getFaqThreshold(), 0.0001f);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_faqThresholdWithinRange_unchanged() throws Exception {
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(0.5f);
+        policy.setFaqThreshold(0.9f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(0.9f, policy.getFaqThreshold(), 0.0001f);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_nullPolicy_noException() throws Exception {
+        // policy 为 null 时直接返回，不抛异常
+        invokeCheckKnowledgeRetrievePolicy(null);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_customRange_clampsCorrectly() throws Exception {
+        // 模拟客户配置 -10~10
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMin", -10.0);
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMax", 10.0);
+
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(15.0f);   // 超过 max=10，clamp 到 10
+        policy.setFaqThreshold(-15.0f);     // 低于 min=-10，clamp 到 -10
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(10.0f, policy.getRecallThreshold(), 0.0001f);
+        assertEquals(-10.0f, policy.getFaqThreshold(), 0.0001f);
+
+        // 恢复默认值
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMin", 0.0);
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMax", 1.0);
+    }
+
+    @Test
+    void testCheckKnowledgeRetrievePolicy_customRange_negativeValueWithinRange_unchanged() throws Exception {
+        // 模拟客户配置 -10~10，负值在范围内不被 clamp
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMin", -10.0);
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMax", 10.0);
+
+        KnowledgeRetrievePolicy policy = new KnowledgeRetrievePolicy();
+        policy.setRecallThreshold(-5.0f);
+        policy.setFaqThreshold(5.0f);
+
+        invokeCheckKnowledgeRetrievePolicy(policy);
+
+        assertEquals(-5.0f, policy.getRecallThreshold(), 0.0001f);
+        assertEquals(5.0f, policy.getFaqThreshold(), 0.0001f);
+
+        // 恢复默认值
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMin", 0.0);
+        ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMax", 1.0);
     }
 }

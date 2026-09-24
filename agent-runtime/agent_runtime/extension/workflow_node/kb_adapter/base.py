@@ -2,9 +2,48 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
+import logging
+import math
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_env_float(key: str, default: str) -> float:
+    """安全读取环境变量为 float，非法值回退默认值并告警。"""
+    raw = os.environ.get(key, default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "环境变量 %s 值非法(%r)，回退默认值 %s", key, raw, default,
+        )
+        return float(default)
+
+
+# 阈值范围，从环境变量读取，与 M 侧 application-manager.yml 对齐
+THRESHOLD_MIN = _safe_env_float("KNOWLEDGE_RECALL_THRESHOLD_MIN", "0")
+THRESHOLD_MAX = _safe_env_float("KNOWLEDGE_RECALL_THRESHOLD_MAX", "1")
+if THRESHOLD_MIN > THRESHOLD_MAX:
+    logger.warning(
+        "KNOWLEDGE_RECALL_THRESHOLD_MIN(%s) > MAX(%s)，已自动交换",
+        THRESHOLD_MIN, THRESHOLD_MAX,
+    )
+    THRESHOLD_MIN, THRESHOLD_MAX = THRESHOLD_MAX, THRESHOLD_MIN
+
+
+def clamp_threshold(value: float) -> float:
+    """将阈值 clamp 到 [min, max] 范围内。NaN/Inf 按边界处理。"""
+    if not math.isfinite(value):
+        return THRESHOLD_MIN if value != float("inf") else THRESHOLD_MAX
+    if value > THRESHOLD_MAX:
+        return THRESHOLD_MAX
+    if value < THRESHOLD_MIN:
+        return THRESHOLD_MIN
+    return value
 
 
 @dataclass

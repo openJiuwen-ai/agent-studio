@@ -11,6 +11,8 @@ from openjiuwen.core.common.logging import workflow_logger
 from .base import KBSearchResult, KBServiceAdapter
 from .openjiuwen_kb_manager import KBSearchOptions, OpenJiuwenKBManager
 
+
+
 logger = logging.getLogger(__name__)
 
 _VALID_INDEX_TYPES = {"vector", "bm25", "hybrid"}
@@ -35,7 +37,6 @@ class OpenJiuwenKBAdapter(KBServiceAdapter):
     ) -> List[KBSearchResult]:
         """检索 openjiuwen 本地知识库。"""
         top_k = int(retrieval_params.get("topK", 5))
-        score_threshold = float(retrieval_params.get("scoreThreshold", 0.0))
         search_mode = retrieval_params.get("searchMode", "")
         index_type = _SEARCH_MODE_MAP.get(search_mode, retrieval_params.get("indexType", "vector"))
         if index_type not in _VALID_INDEX_TYPES:
@@ -69,8 +70,6 @@ class OpenJiuwenKBAdapter(KBServiceAdapter):
 
             for item in raw_results:
                 score = float(item.get("score", 0.0))
-                if score < score_threshold:
-                    continue
                 results.append(
                     KBSearchResult(
                         text=item.get("text", ""),
