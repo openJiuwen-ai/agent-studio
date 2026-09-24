@@ -28,6 +28,13 @@ import { LinkInterceptorService } from '@services/LinkInterceptorService';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { StorageService } from '@shared/services/cfdata.service';
 import { initHistoryInterceptor } from "../utils/utils";
+import {
+  consumeSsoAuthFromUrl,
+  hasAuthParamInUrl,
+  hasRecentAuthParamAttempt,
+  SSO_COOKIE_NAME,
+} from '../utils/sso-auth.util';
+import { PE_SESSION_KEY } from '@constants/exp-tmpl-config.const';
 
 registerLocaleData(zh);
 
@@ -150,15 +157,28 @@ export class AppComponent implements OnInit {
 
     this.initPocServiceType();
 
+    // 尽早注册 hashchange：初始化期间（含 getHealth 网络往返）父平台变更
+    // hash 换 token 的事件不再丢失
+    window.onhashchange = () => {
+      // 监听hashchange事件
+      this.changeRouter();
+      // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费。
+      // 只要本次消费遇到 Auth（无论成败）都清理旧用户态（身份意图已表达）；
+      // reload 仅在消费成功、或失败已达清理上限（Auth 已不在 URL，reload 不会
+      // 再次触发消费形成循环）时执行——首次失败保留 Auth 供重试，不刷新页面
+      const consumed = consumeSsoAuthFromUrl();
+      if (consumed || hasRecentAuthParamAttempt()) {
+        this.clearStaleUserState(!consumed);
+        if (consumed || !hasAuthParamInUrl()) {
+          window.location.reload();
+        }
+      }
+    };
+
     await this.initLiteUserDate();
 
     initHistoryInterceptor();
     this.changeRouter();
-
-    window.onhashchange = () => {
-      // 监听hashchange事件
-      this.changeRouter();
-    };
   }
 
   judgeHostAndPathName(){
@@ -281,8 +301,34 @@ export class AppComponent implements OnInit {
     this.initUserDate({ userId, projectId });
   }
 
+  // SSO 换凭证时清理旧用户态：AGENT_SID Cookie 与本地存储中的会话/空间信息，
+  // 确保按新凭证重新初始化（否则首个 getHealth 前的请求会读到旧 workspace/
+  // 用户态，造成新凭证与旧状态不一致）。写入失败时（clearAccessToken=true）
+  // 连带清除旧 Access-Token Cookie——否则后续 getHealth 会携带旧凭证以旧
+  // 身份重新登录，违背"失败降级为未登录"的意图；写入成功时保留（即新 token）
+  clearStaleUserState(clearAccessToken: boolean): void {
+    StorageService.delCookie('AGENT_SID');
+    if (clearAccessToken) {
+      StorageService.delCookie(SSO_COOKIE_NAME);
+    }
+    StorageService.delLocalStorage(PE_SESSION_KEY);
+    StorageService.delLocalStorage(POC_JS_SESSION_KEY);
+    StorageService.delSessionStorage('CUR_SPACE_OPTIONS');
+  }
+
   //如果url参数带用户信息，取出调health接口setCookie，后清除url参数
   async resetUserData() {
+    // iframe SSO 场景：解析 hash 中 Auth 参数写入 Access-Token Cookie（须早于 getHealth）。
+    // 最近一次消费曾遇到 Auth（无论写入成败、甚至已达清理上限被剥除），父平台
+    // 已表达身份意图——清理旧用户态，确保按新凭证而非旧状态初始化；写入失败
+    // 时同样清理并连带清除旧 Access-Token：让应用可见地降级为未登录，而不是
+    // 沿用旧用户身份。首次加载写入失败不自动 reload 重试：失败原因均为持续性
+    // （浏览器拦截/非法字符/未确认/遮蔽），自动重试只会额外刷新且中断初始化；
+    // 重试入口 = 手动 reload 或父平台重新挂载 iframe
+    const consumed = consumeSsoAuthFromUrl();
+    if (consumed || hasRecentAuthParamAttempt()) {
+      this.clearStaleUserState(!consumed);
+    }
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
 
