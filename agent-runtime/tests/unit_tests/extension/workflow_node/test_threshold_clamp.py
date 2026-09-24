@@ -28,20 +28,26 @@ pytestmark = pytest.mark.asyncio
 def test_clamp_value_within_range_unchanged():
     assert base_module.clamp_threshold(0.5) == 0.5
 
+
 def test_clamp_value_above_max_clamped_to_max():
     assert base_module.clamp_threshold(1.5) == 1.0
+
 
 def test_clamp_value_below_min_clamped_to_min():
     assert base_module.clamp_threshold(-0.5) == 0.0
 
+
 def test_clamp_value_equal_to_max_unchanged():
     assert base_module.clamp_threshold(1.0) == 1.0
+
 
 def test_clamp_value_equal_to_min_unchanged():
     assert base_module.clamp_threshold(0.0) == 0.0
 
+
 def test_clamp_extreme_high_value_clamped():
     assert base_module.clamp_threshold(999.0) == 1.0
+
 
 def test_clamp_extreme_low_value_clamped():
     assert base_module.clamp_threshold(-999.0) == 0.0
@@ -51,20 +57,24 @@ def test_clamp_extreme_low_value_clamped():
 # clamp_threshold 自定义范围（模拟 -10~10）
 # --------------------------------------------------------------------------
 
+
 def test_clamp_custom_range_value_within_range_unchanged(monkeypatch):
     monkeypatch.setattr(base_module, "THRESHOLD_MIN", -10.0)
     monkeypatch.setattr(base_module, "THRESHOLD_MAX", 10.0)
     assert base_module.clamp_threshold(5.0) == 5.0
+
 
 def test_clamp_custom_range_value_above_max_clamped(monkeypatch):
     monkeypatch.setattr(base_module, "THRESHOLD_MIN", -10.0)
     monkeypatch.setattr(base_module, "THRESHOLD_MAX", 10.0)
     assert base_module.clamp_threshold(15.0) == 10.0
 
+
 def test_clamp_custom_range_value_below_min_clamped(monkeypatch):
     monkeypatch.setattr(base_module, "THRESHOLD_MIN", -10.0)
     monkeypatch.setattr(base_module, "THRESHOLD_MAX", 10.0)
     assert base_module.clamp_threshold(-15.0) == -10.0
+
 
 def test_clamp_custom_range_negative_value_within_range_unchanged(monkeypatch):
     monkeypatch.setattr(base_module, "THRESHOLD_MIN", -10.0)
