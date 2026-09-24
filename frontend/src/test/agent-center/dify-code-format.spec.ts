@@ -132,3 +132,54 @@ describe('convertToSandboxFormat — 函数体保真', () => {
     expect(out.match(/def pick/g)?.length).toBe(1);
   });
 });
+
+describe('convertToSandboxFormat — 缩进沿用原体（检视 #3）', () => {
+  it('2 空格缩进体：解包行沿用 2 空格，不产生 IndentationError', () => {
+    const code = 'def main(user: dict) -> dict:\n  return {"a": user.get("x")}\n';
+    expect(convertToSandboxFormat(code, ['user'])).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "  user = args.get('user')\n" +
+      '  return {"a": user.get("x")}\n');
+  });
+
+  it('tab 缩进体：解包行沿用 tab', () => {
+    const code = 'def main(user: dict) -> dict:\n\treturn {}\n';
+    expect(convertToSandboxFormat(code, ['user'])).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "\tuser = args.get('user')\n" +
+      '\treturn {}\n');
+  });
+
+  it('体首个有效行前有空行/纯注释行：跳过它们检测真实体缩进', () => {
+    const code = 'def main(user: dict) -> dict:\n\n# 注释在 0 列（合法，不决定块缩进）\n  return {}\n';
+    expect(convertToSandboxFormat(code, ['user'])).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "  user = args.get('user')\n" +
+      '\n' +
+      '# 注释在 0 列（合法，不决定块缩进）\n' +
+      '  return {}\n');
+  });
+
+  it('单行 def：体移到解包行后独立成行（原实现会拼出同行 SyntaxError）', () => {
+    const code = 'def main(user): return {"r": 1}\n';
+    expect(convertToSandboxFormat(code, ['user'])).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "    user = args.get('user')\n" +
+      '    return {"r": 1}\n');
+  });
+
+  it('单行 def 带同行尾注释：注释一并移为独立行，合法且语义不变', () => {
+    const code = 'def main(user):  # 尾注释\n    return {}\n';
+    expect(convertToSandboxFormat(code, ['user'])).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "    user = args.get('user')\n" +
+      '    # 尾注释\n' +
+      '    return {}\n');
+  });
+
+  it('无有效体行（def 后即 EOF）：回退默认 4 空格', () => {
+    expect(convertToSandboxFormat('def main(user):', ['user'])).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "    user = args.get('user')");
+  });
+});

@@ -19,6 +19,9 @@
  * 只把 `def main(参数)` 签名替换为 `def main(args: dict) -> dict:` 并在其后插入
  * 参数解包行；def 前的 import 语句与函数体（含 helper 函数）原样保留
  * （实证：客户 yml 14 个代码节点中多个 def 前有 import）。
+ * 解包行缩进沿用原函数体首个有效行的实际缩进（空行/纯注释行不参与判定），
+ * 非 4 空格风格（2 空格/tab）不会因插入产生 IndentationError；
+ * 单行 def（`def main(x): return ...`）的体移到解包行后独立成行。
  *
  * 转换判定（按签名参数与变量名的一致性，不按参数名是否为 'args'）：
  * Dify 导入路径上代码均为 Dify 风格；`def main(args)` 出现意味着变量名恰好叫 'args'
@@ -106,6 +109,23 @@ function arraysEqual<T>(a: T[], b: T[]): boolean {
 }
 
 /**
+ * 检测函数体缩进：取签名冒号后第一个"有效行"（跳过空行与纯注释行——二者不决定
+ * Python 块缩进层级）的前导空白。找不到有效行、或有效行零缩进（源码本身非法，
+ * def 后无缩进块）时返回 fallback，保证解包行至少与默认风格一致。
+ */
+function detectBodyIndent(textAfterColon: string, fallback: string): string {
+  for (const line of textAfterColon.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      continue;
+    }
+    const leading = /^[ \t]+/.exec(line);
+    return leading ? leading[0] : fallback;
+  }
+  return fallback;
+}
+
+/**
  * 将 Dify 风格代码转换为 jiuwen 沙箱兼容格式。
  *
  * @param code Dify 原代码（含 def main(变量...)）
@@ -170,17 +190,29 @@ export function convertToSandboxFormat(code: string, variableNames: string[]): s
   // 变量名含 args 时其解包行必须最后生成：`args = args.get('args')` 会遮蔽形参 args，
   // 若 args 非末位，其后的解包行读取的已是遮蔽值而非原始入参 dict（检视意见 #1）。
   // 其余解包行只读 args 不写、相互无顺序依赖，重排安全。
-  const unpackIndent = defIndent + '    ';
+  // 解包行缩进沿用原函数体首个有效行的缩进（检视意见 #3）：原体为非 4 空格风格
+  // （2 空格/tab 等）时，固定 4 空格会与保留的原体不一致 → IndentationError。
+  const fallbackIndent = defIndent + '    ';
+  const bodyStart = colonIndex + 1;
+  // 冒号后同行是否有内容（单行 def 形态：`def main(x): return ...`）
+  const lineEnd = /\r?\n/.exec(code.slice(bodyStart));
+  const sameLineBody = (lineEnd ? code.slice(bodyStart, bodyStart + lineEnd.index) : code.slice(bodyStart)).trim();
+  const unpackIndent = sameLineBody
+    ? fallbackIndent // 单行 def：体将移到独立行，无原体缩进可检测，用默认
+    : detectBodyIndent(code.slice(bodyStart), fallbackIndent);
   const orderedNames = [
     ...unpackNames.filter(name => name !== 'args'),
     ...unpackNames.filter(name => name === 'args'),
   ];
   const unpackLines = orderedNames.map(name => `${unpackIndent}${name} = args.get('${name}')`);
   const newSignature = 'def main(args: dict) -> dict:';
-  return (
-    code.slice(0, defKeywordStart) +
-    newSignature +
-    (unpackLines.length ? '\n' + unpackLines.join('\n') : '') +
-    code.slice(colonIndex + 1)
-  );
+  const prefix = code.slice(0, defKeywordStart) + newSignature;
+  const unpackBlock = unpackLines.length ? '\n' + unpackLines.join('\n') : '';
+  if (sameLineBody) {
+    // 单行 def：函数体必须移到解包行之后独立成行，否则与末条解包行同行 → SyntaxError。
+    // 同行尾注释同样被移为独立行（合法且语义不变）。冒号行后若还有代码行，需补回被消费的换行。
+    const rest = lineEnd ? '\n' + code.slice(bodyStart + lineEnd.index + lineEnd[0].length) : '';
+    return prefix + unpackBlock + '\n' + unpackIndent + sameLineBody + rest;
+  }
+  return prefix + unpackBlock + code.slice(bodyStart);
 }
