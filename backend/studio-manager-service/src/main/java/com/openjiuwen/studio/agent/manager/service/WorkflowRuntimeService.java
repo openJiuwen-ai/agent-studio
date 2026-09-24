@@ -307,6 +307,10 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
     private int processCirculationEvents(List<RoundDTO> roundList, List<NodeRunInfo> nodeRunInfos,
         int startProcessIndex, Map<String, Object> inputs, List<WorkFlowDTO> beforeWorkflowList, NodeRunInfo sumNode,
         ParamExtractionIndex paramExtractionIndex) {
+        // 轮间累积的上下文变量状态：首轮由 before-entry 工作流快照初始化，
+        // 之后每轮以上一轮结束时的状态为基线（下一轮"对话前"=上一轮"对话后"），
+        // 避免后续轮次直接沿用 before-entry 快照导致前几轮修改变量后仍显示陈旧值
+        Map<String, ContextDTO> accumulatedContext = null;
         for (int circulationIndex = startProcessIndex; circulationIndex < nodeRunInfos.size(); circulationIndex++) {
             NodeRunInfo currentNode = nodeRunInfos.get(circulationIndex);
             log.info("param extraction in cycle begin, event index is {}", circulationIndex);
@@ -324,7 +328,7 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             }
             // 一轮循环
             RoundDTO round = paramExtractionInCirculation(nodeRunInfos, circulationIndex);
-            processRoundContextList(round, beforeWorkflowList);
+            accumulatedContext = processRoundContextList(round, beforeWorkflowList, accumulatedContext);
             roundList.add(round);
 
             if (round.getErrorNode() != null) {
@@ -381,15 +385,35 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         paramExtractionIndex.setParamFinishNode(sumNode);
     }
 
-    private void processRoundContextList(RoundDTO round, List<WorkFlowDTO> beforeWorkflowList) {
+    /**
+     * 组装单轮的上下文变量对比列表，并返回本轮结束时的变量状态（供下一轮作基线）。
+     *
+     * 首轮以执行前（首次进入）工作流的快照为基线；后续轮次以上一轮返回的累积状态
+     * 为基线（本轮"对话前"=上一轮"对话后"），轮内工作流的修改值照常覆盖——否则某轮
+     * 未修改某变量时会回退到 before-entry 快照，丢失前几轮的修改、显示陈旧值。
+     *
+     * @param round 待填充上下文的轮次对象
+     * @param beforeWorkflowList 执行前（首次进入）工作流列表（仅首轮使用）
+     * @param previousRoundContext 上一轮结束时的变量状态，首轮传 null
+     * @return 本轮结束时的变量状态
+     */
+    private Map<String, ContextDTO> processRoundContextList(RoundDTO round, List<WorkFlowDTO> beforeWorkflowList,
+        Map<String, ContextDTO> previousRoundContext) {
         Map<String, ContextDTO> contextDTOMap = new HashMap<>();
-        // 执行前（首次进入）时机的扩展工作流只在节点进入时执行一次，其上下文变量快照
-        // 是所有轮次对话前值的基线，需并入每轮的上下文对比；轮内时机的修改值照常
-        // 覆盖（merge 语义），避免仅有执行前工作流时轮次上下文变量恒为空
-        mergeWorkflowContextList(beforeWorkflowList, contextDTOMap);
+        if (previousRoundContext == null) {
+            // 首轮：以执行前（首次进入）工作流的快照为基线
+            mergeWorkflowContextList(beforeWorkflowList, contextDTOMap);
+        } else {
+            // 后续轮次：以上一轮结束状态为基线，本轮"对话前"=上一轮"对话后"
+            previousRoundContext.forEach((key, previous) -> {
+                ContextDTO current = copyOfContext(previous);
+                current.setValueBefor(previous.getValueAfter());
+                contextDTOMap.put(key, current);
+            });
+        }
         mergeWorkflowContextList(round.getWorkflowList(), contextDTOMap);
-        List<ContextDTO> contextList = new ArrayList<>(contextDTOMap.values());
-        round.setContextList(contextList);
+        round.setContextList(new ArrayList<>(contextDTOMap.values()));
+        return contextDTOMap;
     }
 
     private void mergeWorkflowContextList(List<WorkFlowDTO> workflows, Map<String, ContextDTO> contextDTOMap) {
@@ -449,6 +473,9 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                 work.getEventList().add(nowNode);
                 work.setErrorMessage(nowNode.getErrorMessage());
                 work.setStatus(nowNode.getStatus());
+                // 错误帧位置作为区间终点，供 setContextList 读取报错前的最后快照；
+                // 错误路径外层由 isErrorEventWorkflow 提前终止，不消费该 index
+                work.setIndex(index);
                 return work;
             }
 
