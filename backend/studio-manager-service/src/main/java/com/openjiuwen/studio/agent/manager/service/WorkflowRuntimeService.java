@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -149,7 +148,9 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         if (ParamExtractionType.DOMAIN_OBJECTS.equals(workflowType)) {
             workflow.setDomainObjectName(getTrueObjectNames(currentNode.getNodeName()));
         }
-        setContextList(nodeRunInfos, currentIndex, workflow);
+        // 区间终点：instructWorkFlow 返回的终止帧前一帧 +1，即子工作流 finished 帧
+        // （或无内部帧时的下一帧）
+        setContextList(nodeRunInfos, currentIndex, workflow.getIndex() + 1, workflow);
 
         round.getWorkflowList().add(workflow);
 
@@ -323,7 +324,7 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             }
             // 一轮循环
             RoundDTO round = paramExtractionInCirculation(nodeRunInfos, circulationIndex);
-            processRoundContextList(round);
+            processRoundContextList(round, beforeWorkflowList);
             roundList.add(round);
 
             if (round.getErrorNode() != null) {
@@ -380,9 +381,22 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         paramExtractionIndex.setParamFinishNode(sumNode);
     }
 
-    private void processRoundContextList(RoundDTO round) {
+    private void processRoundContextList(RoundDTO round, List<WorkFlowDTO> beforeWorkflowList) {
         Map<String, ContextDTO> contextDTOMap = new HashMap<>();
-        for (WorkFlowDTO workflow : round.getWorkflowList()) {
+        // 执行前（首次进入）时机的扩展工作流只在节点进入时执行一次，其上下文变量快照
+        // 是所有轮次对话前值的基线，需并入每轮的上下文对比；轮内时机的修改值照常
+        // 覆盖（merge 语义），避免仅有执行前工作流时轮次上下文变量恒为空
+        mergeWorkflowContextList(beforeWorkflowList, contextDTOMap);
+        mergeWorkflowContextList(round.getWorkflowList(), contextDTOMap);
+        List<ContextDTO> contextList = new ArrayList<>(contextDTOMap.values());
+        round.setContextList(contextList);
+    }
+
+    private void mergeWorkflowContextList(List<WorkFlowDTO> workflows, Map<String, ContextDTO> contextDTOMap) {
+        if (workflows == null) {
+            return;
+        }
+        for (WorkFlowDTO workflow : workflows) {
             if (workflow.getContextList() == null) {
                 continue;
             }
@@ -391,8 +405,6 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                 return existing;
             }));
         }
-        List<ContextDTO> contextList = new ArrayList<>(contextDTOMap.values());
-        round.setContextList(contextList);
     }
 
     private WorkFlowDTO instructWorkFlow(List<NodeRunInfo> nodeRunInfos, int startIndex, String nodeIdFlag,
@@ -403,11 +415,13 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         work.setContextList(new HashMap<>());
         work.setIndex(-1);
         int returnIndex;
-        // 定位子工作流内部首帧：startIndex 起可能夹杂少量非内部帧（如恢复轮重放的父链帧），
-        // 按 parent 精确匹配向后扫描，不再依赖固定帧数偏移
+        // 定位子工作流内部首帧：startIndex 起可能夹杂少量非内部帧，按 parent 精确匹配
+        // 向后扫描，不再依赖固定帧数偏移。跳过的非内部帧不属于该子工作流的调用详情；
+        // 参数提取复合图拆分产物为顺序结构（无并发兄弟节点），故此区间内不会出现
+        // 需由外层单独聚合的合法交错事件——若未来复合图引入并行结构需重新审视此处
         int collectStart = findSubWorkflowFirstFrame(nodeRunInfos, startIndex, nodeIdFlag);
         if (collectStart < 0) {
-            // 窗口内无内部帧：保持原终止语义，外层 +1 后从 startIndex 继续处理后续事件
+            // 区间内无内部帧：保持原终止语义，外层 +1 后从 startIndex 继续处理后续事件
             work.setIndex(startIndex - 1);
             return work;
         }
@@ -444,11 +458,16 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
      * 定位子工作流内部首帧：从 startIndex 起向后扫描，返回首个 parent_node_id 等于
      * nodeIdFlag 的帧下标；未找到返回 -1。
      *
-     * 扫描区间以"下一个 nodeId 等于 nodeIdFlag 的帧"为边界（子工作流自身的 finished 帧，
-     * 多轮场景下也可能是下一轮同名节点的 started 帧），两者均标志本轮内部帧区间结束，
-     * 因此区间内 parent 匹配的帧必属于本轮，不会跨轮误收；该边界不依赖固定窗口与
-     * 帧数假设，边界帧序变化时仍能正确定位，避免内部帧泄漏到外层循环被误判
+     * 扫描区间以"下一个 nodeId 等于 nodeIdFlag 的帧"为边界，两者均标志本轮内部帧区间
+     * 结束，因此区间内 parent 匹配的帧必属于本轮，不会跨轮误收；该边界不依赖固定窗口
+     * 与帧数假设，边界帧序变化时仍能正确定位，避免内部帧泄漏到外层循环被误判
      * （如被 isLlmNode 识别覆盖 round 的 moduleInput/Output）。
+     *
+     * 边界前提的依据（区别于 ParamOutput 等原子节点 started/finished 相邻的帧序）：
+     * extension_before_entry/after_extraction/domain_objects 等子工作流节点均为
+     * jiuwen.workflowComposite 容器组件，引擎先执行其内部图（内部帧经同一 trace 流
+     * 持续写入）再发送自身的 finished 帧，SSE 单流有序保证 finished 必晚于内部帧；
+     * 三类实测帧序（对象提取/循环内子工作流/多轮恢复）均验证一致。
      */
     private int findSubWorkflowFirstFrame(List<NodeRunInfo> nodeRunInfos, int startIndex, String nodeIdFlag) {
         for (int index = startIndex; index < nodeRunInfos.size(); index++) {
@@ -471,18 +490,36 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         WorkFlowDTO workFlowDetail = instructWorkFlow(nodeRunInfos, instructIndex, nowNode.getNodeId(),
             ParamExtractionType.EXTENSION_BEFORE_ENTRY.name().toLowerCase(Locale.ROOT));
 
-        setContextList(nodeRunInfos, beforeBeginIndex, workFlowDetail);
+        // 区间终点：instructWorkFlow 返回的终止帧前一帧 +1，即子工作流 finished 帧
+        setContextList(nodeRunInfos, beforeBeginIndex, workFlowDetail.getIndex() + 1, workFlowDetail);
         return workFlowDetail;
     }
 
-    private void setContextList(List<NodeRunInfo> nodeRunInfos, int startIndex, WorkFlowDTO workflow) {
+    /**
+     * 组装子工作流的上下文变量对比列表。
+     *
+     * 值（对话前）：子工作流 started 帧（startIndex）之前最近一次的记忆变量快照——
+     * 全量快照由工作流开始节点等上游帧携带，子工作流自身帧仅在内部修改过记忆时才有；
+     * 值（对话后）：[startIndex, endIndex] 区间内最后一次的记忆变量快照（子工作流修改
+     * 记忆时会在区间内留下新快照）；区间内无快照说明子工作流未修改任何记忆变量，
+     * 此时与对话前一致。原实现取 startIndex 与 startIndex+1 相邻两帧的 memory，
+     * 依赖"子工作流 started/finished 相邻"的旧帧序假设，实际帧序（started→内部帧→
+     * finished）下两处均取不到快照，导致上下文变量恒为空。
+     *
+     * @param nodeRunInfos 全部事件帧（按到达顺序）
+     * @param startIndex 子工作流自身 started 帧下标
+     * @param endIndex 子工作流区间终止帧下标（其 finished 帧，或无内部帧时的下一帧）
+     * @param workflow 待填充上下文对比的子工作流对象
+     */
+    private void setContextList(List<NodeRunInfo> nodeRunInfos, int startIndex, int endIndex, WorkFlowDTO workflow) {
         workflow.setContextList(new HashMap<>());
 
-        Map<String, Object> inputMemory = Optional.ofNullable(nodeRunInfos.get(startIndex).getMemory())
-            .orElse(new HashMap<>());
-        Map<String, Object> outputMemory = Optional.ofNullable(
-                startIndex + 1 < nodeRunInfos.size() ? nodeRunInfos.get(startIndex + 1).getMemory() : null)
-            .orElse(new HashMap<>());
+        Map<String, Object> inputMemory = latestMemoryBefore(nodeRunInfos, startIndex - 1);
+        Map<String, Object> outputMemory = latestMemoryBetween(nodeRunInfos, startIndex, endIndex);
+        if (outputMemory == null) {
+            // 区间内无快照：子工作流未修改记忆变量，前后一致
+            outputMemory = inputMemory;
+        }
 
         for (Map.Entry<String, Object> input : inputMemory.entrySet()) {
             ContextDTO contextDTO = new ContextDTO();
@@ -504,6 +541,34 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                     .setValueAfter(JSON.toJSONString(valueAfter, SerializerFeature.WriteMapNullValue));
             }
         }
+    }
+
+    /**
+     * 从 fromIndex（含）向下标减小方向查找最近一个携带非空 memory 快照的帧，
+     * 返回其快照；找不到返回空 Map。用于确定子工作流执行前各上下文变量的最近已知值。
+     */
+    private Map<String, Object> latestMemoryBefore(List<NodeRunInfo> nodeRunInfos, int fromIndex) {
+        for (int i = Math.min(fromIndex, nodeRunInfos.size() - 1); i >= 0; i--) {
+            Map<String, Object> memory = nodeRunInfos.get(i).getMemory();
+            if (memory != null && !memory.isEmpty()) {
+                return memory;
+            }
+        }
+        return new HashMap<>();
+    }
+
+    /**
+     * 在 [fromIndex, toIndex] 区间内查找最后一个携带非空 memory 快照的帧，返回其快照；
+     * 区间内无快照返回 null（调用方以此区分"子工作流未修改记忆变量"）。
+     */
+    private Map<String, Object> latestMemoryBetween(List<NodeRunInfo> nodeRunInfos, int fromIndex, int toIndex) {
+        for (int i = Math.min(toIndex, nodeRunInfos.size() - 1); i >= fromIndex; i--) {
+            Map<String, Object> memory = nodeRunInfos.get(i).getMemory();
+            if (memory != null && !memory.isEmpty()) {
+                return memory;
+            }
+        }
+        return null;
     }
 
     private Object replaceNoneWithEmpty(Object input) {
