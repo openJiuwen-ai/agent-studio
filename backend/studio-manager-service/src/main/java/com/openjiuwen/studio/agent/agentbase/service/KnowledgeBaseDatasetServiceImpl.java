@@ -346,7 +346,7 @@ public class KnowledgeBaseDatasetServiceImpl implements IKnowledgeFileManagement
         DownloadFileByAccessKeyQo downloadFileByAccessKeyQo) {
         String fileStr = redisClient.get(Constants.KNOWLEDGE_FILE_CACHE_PREFIX + fileAccessKey);
         if (StringUtils.isBlank(fileStr)) {
-            log.error("file is not exist in current knowledgeBase {} or is expired.", knowledgeBaseId);
+            log.error("file access key is invalid or expired, knowledgeBaseId: {}", knowledgeBaseId);
             throw new AgentBaseException(ErrorCode.RESOURCE_NOT_EXIST);
         }
         String[] fileDetail = fileStr.split(",");

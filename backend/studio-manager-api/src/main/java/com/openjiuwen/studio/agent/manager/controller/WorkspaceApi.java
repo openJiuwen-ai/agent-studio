@@ -59,6 +59,8 @@ import org.springframework.web.bind.annotation.RequestParam;
         @ApiResponse(responseCode = "200", description = "删除成功。",
             content = @Content(schema = @Schema(implementation = String.class))),
         @ApiResponse(responseCode = "400", description = "请求参数错误。",
+            content = @Content(schema = @Schema(implementation = ErrorRsp.class))),
+        @ApiResponse(responseCode = "404", description = "Not Found 找不到资源",
             content = @Content(schema = @Schema(implementation = ErrorRsp.class)))
     })
     @RequestMapping(value = "/v1/{project_id}/agent-manager/workspace", produces = {"application/json"},
