@@ -1,4 +1,5 @@
 """COM-03 §10.4: Builder factory（异常分类 → descriptor）契约测试。"""
+# pylint: disable=no-self-use
 
 import json
 

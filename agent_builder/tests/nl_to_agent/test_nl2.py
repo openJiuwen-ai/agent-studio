@@ -3,6 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """nl2 模块单元测试"""
+# pylint: disable=no-self-use
 
 import hashlib
 import json

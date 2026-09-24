@@ -154,9 +154,8 @@ def test_decorator_registered_logs_exactly_one_error_stack(client, caplog):
     """§6.4: 已登记业务异常恰好一条 ERROR + exc_info。"""
     caplog.set_level(logging.DEBUG)
     client.get("/dec/legacy/102155", headers={"X-Request-Id": "rid-biz-stack"})
-    biz_stacks = [r for r in caplog.records
-                  if r.levelno >= logging.ERROR and r.exc_info is not None
-                  and "JiuWenBaseException" in r.getMessage()]
+    biz_error_stacks = [r for r in caplog.records if r.levelno >= logging.ERROR and r.exc_info is not None]
+    biz_stacks = [r for r in biz_error_stacks if "JiuWenBaseException" in r.getMessage()]
     assert len(biz_stacks) == 1, (
         f"registered business exception should log exactly one ERROR stack, "
         f"got {len(biz_stacks)} (global handler double-fire?)"

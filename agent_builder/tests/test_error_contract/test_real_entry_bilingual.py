@@ -8,6 +8,7 @@
   真实 _generate build_sse_error_event 路径,证明三者已在真实框架注册链中串联。
 - test_builder_middleware_* / test_builder_sse_*: 合成中间件测试,证明单组件行为。
 """
+# pylint: disable=no-self-use
 
 import json
 from contextlib import asynccontextmanager
@@ -201,7 +202,7 @@ def _real_app(monkeypatch):
     # 3. Executor mock:ainvoke 返回首个 __anext__ 抛 RuntimeError 的 async gen
     async def _raising_gen():
         raise RuntimeError("secret-gen-detail")
-        yield  # noqa — make it an async generator
+        yield  # pylint: disable=unreachable  # make it an async generator
 
     class _MockExecutor:
         def __init__(self, *a, **kw):
@@ -247,7 +248,7 @@ def test_builder_real_app_bilingual_english(monkeypatch):
         if line.startswith("data: "):
             try:
                 events.append(json.loads(line[6:]))
-            except (json.JSONDecodeError, ValueError):
+            except json.JSONDecodeError:
                 pass
 
     # START 事件存在(首帧保留)

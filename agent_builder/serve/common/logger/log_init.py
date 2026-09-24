@@ -216,5 +216,5 @@ def init_logger():
 
 def _emit_failure_to_stderr():
     """失败可见性走 stderr（由启动脚本写入 bootstrap.log）。不调用业务 Logger。"""
-    sys.stderr.write("[builder-log-init] initialization failed; see traceback below\n")
+    sys.stderr.write("[builder-log-init] initialization failed; see traceback below\n")  # pylint: disable=huawei-use-logging
     sys.stderr.flush()

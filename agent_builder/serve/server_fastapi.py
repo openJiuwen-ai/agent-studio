@@ -243,7 +243,7 @@ def instance_app() -> FastAPI:
             # 500），不经过 FastAPI JiuWenBaseException exception_handler（router 异常已被
             # 内层 ExceptionMiddleware 转响应，本分支对 router 异常不可达）。
             # finally 仍逆序 reset。如需保 error_code，应在分支内直接用 error_factory 构建响应。
-            raise
+            raise  # pylint: disable=try-except-raise
         except Exception as exc:  # 请求级异常边界，token 有效期内收口
             err_response = build_unhandled_error_response(request, exc)
             write_x_request_id(err_response, request_id)
