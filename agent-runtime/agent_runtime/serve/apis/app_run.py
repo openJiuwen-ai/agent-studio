@@ -49,7 +49,7 @@ from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
-from openjiuwen.core.common.logging import workflow_logger, set_session_id
+from openjiuwen.core.common.logging import workflow_logger
 
 # USER_MSG_FIELD
 _USER_MSG_FIELD = "query"
@@ -564,9 +564,6 @@ async def _execute_workflow_run(
     resolve_env: bool = True,
 ):
     """工作流试运行核心逻辑."""
-    # 中间件在路由匹配前执行、拿不到 path_params，trace_id 会回退成 execution_id；
-    # 此处路由已匹配、ctx.conversation_id 已从 path 取到，覆盖日志上下文使日志按会话可追踪
-    set_session_id(ctx.conversation_id or getattr(request.state, "execution_id", "") or "")
     workflow_logger.info(
         f"Workflow app run request: project={ctx.project_id}, workflow={ctx.workflow_id}, "
         f"conversation={ctx.conversation_id}, version={ctx.version}"
@@ -710,8 +707,6 @@ async def _execute_agent_run(
     resolve_env: bool = True,
 ):
     """智能体试运行核心逻辑."""
-    # 同 _execute_workflow_run：路由匹配后用 path 的 conversation_id 覆盖 trace_id
-    set_session_id(ctx.conversation_id or getattr(request.state, "execution_id", "") or "")
     workflow_logger.info(
         f"Agent app run request: project={ctx.project_id}, agent={ctx.agent_id}, "
         f"conversation={ctx.conversation_id}, version={ctx.version}"

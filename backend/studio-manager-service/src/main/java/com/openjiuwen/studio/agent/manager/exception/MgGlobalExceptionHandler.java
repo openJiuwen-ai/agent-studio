@@ -30,6 +30,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -275,6 +276,17 @@ public class MgGlobalExceptionHandler {
     public ResponseEntity<ErrorRsp> handleMissingServletRequestParameterException(MissingServletRequestParameterException exception) {
         String reason = "缺少必填参数：" + exception.getParameterName();
         log.error("MissingServletRequestParameterException: {}", exception.getMessage());
+        return badRequest(reason);
+    }
+
+    /**
+     * 必填 RequestHeader 缺失（如 X-Subject-Token 没传）
+     */
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleMissingRequestHeaderException(MissingRequestHeaderException exception) {
+        String reason = "缺少必填请求头：" + exception.getHeaderName();
+        log.error("MissingRequestHeaderException: {}", exception.getMessage());
         return badRequest(reason);
     }
 

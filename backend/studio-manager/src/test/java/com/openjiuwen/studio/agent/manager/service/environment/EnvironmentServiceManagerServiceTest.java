@@ -14,6 +14,7 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.Constants;
 import com.openjiuwen.studio.agent.manager.dto.Environment;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInfoRequest;
+import com.openjiuwen.studio.agent.manager.dto.ModifyEnvironmentInfoRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInstances;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariableValue;
@@ -145,7 +146,7 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
     @Test
     @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testModifyEnvironmentInfo() {
-        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        ModifyEnvironmentInfoRequestBody request = new ModifyEnvironmentInfoRequestBody();
         Assertions.assertThrows(AgentStudioException.class, () -> environmentServiceManagerService.modifyEnvironmentInfo(Constants.TEST_PROJECT_ID, "test_env_not_exist", request));
         Assertions.assertThrows(AgentStudioException.class, () -> environmentServiceManagerService.modifyEnvironmentInfo(Constants.TEST_PROJECT_ID, "9c7d551a-0644-4ac2-be48-6d5666928c21", request));
         request.setDescription("test");

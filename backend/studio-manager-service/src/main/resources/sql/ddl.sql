@@ -2177,3 +2177,12 @@ CREATE TABLE IF NOT EXISTS `t_agent_datasource` (
     INDEX `idx_project_workspace` (`project_id`, `workspace_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据源配置表';
 
+CREATE TABLE IF NOT EXISTS `t_polling_trigger_state` (
+    `trigger_id`         VARCHAR(64)   NOT NULL COMMENT '触发器ID，对应trigger_list中的trigger_id',
+    `last_seen_hash`     CHAR(64)      NULL     COMMENT '上次成功下载内容的SHA-256哈希',
+    `last_checked_at`    TIMESTAMP     NULL     COMMENT '最后检查时间',
+    `created_at`         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`         TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`trigger_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Polling触发器运行状态表';
+

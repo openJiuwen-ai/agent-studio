@@ -55,7 +55,6 @@ from jiuwen.prompt import TemplateManager, Prompt, Template
 DEFAULT_INTENT = "意图不明"
 WORKFLOW_HANDLER_TYPE = "WORKFLOW"
 AGENT_HANDLER_TYPE = "AGENT"
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 def _get_config_info(model_name: str):
@@ -1386,7 +1385,10 @@ class IntentionDetectModule:
         """处理工作流"""
         # 处理传入的active_workflows中的工作流
         workflows_to_process = []
-        if active_workflows:
+        # None=未提供（使用全部业务工作流）；空列表=显式权限收窄
+        # （无业务工作流候选，仅剩闲聊/全局意图/子Agent，识别失败走 DEFAULT 兜底），
+        # 不能按 falsy 判断，否则空列表会回退全量导致越权
+        if active_workflows is not None:
             for workflow_id in active_workflows:
                 workflow_context = self.context_manager.get_workflow_context_by_id(
                     workflow_id, WorkflowType.GENERAL

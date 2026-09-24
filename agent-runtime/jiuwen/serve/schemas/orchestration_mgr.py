@@ -176,11 +176,13 @@ class ExecutionParams(BaseModel):
     tool_switch_dict: Optional[dict] = Field(
         alias="toolSwitchDict", default_factory=dict
     )
+    # 默认 None=未提供（Controller 使用全部业务工作流）；
+    # 显式空列表 [] 表示明确的权限收窄（无业务工作流候选），二者必须可区分
     workflow_sequence: Optional[list[str]] = Field(
-        alias="workflowSequence", default_factory=list
+        alias="workflowSequence", default=None
     )
     active_workflows: Optional[list[str]] = Field(
-        alias="activeWorkflows", default_factory=list
+        alias="activeWorkflows", default=None
     )
     intent: Optional[str] = Field(alias="intent", default="")
     enable_history: Optional[bool] = Field(alias="enableHistory", default=True)

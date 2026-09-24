@@ -499,6 +499,7 @@
       [workflowType]="workflowDetail?.type"
       [flowId]="workflowId"
       [configs]="workflowDetail?.workflow_details?.configs"
+      (memoryRenamed)="onMemoryRenamed($event)"
       (configsChange)="onGlobalConfigsChange($event)"
       (close)="showGlobalConfigDrawer = false"
     ></global-config-modal>

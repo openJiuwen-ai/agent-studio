@@ -104,18 +104,21 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                 round.setIndex(i + 1);
                 break;
             }
+            // 子工作流节点自身的 finished 帧与 started 帧含相同关键字，
+            // 仅 started 帧触发收集，避免 finished 帧再次触发产生重复空条目
+            boolean subWorkflowStarted = NodeRunInfo.NodeStatusEnum.STARTED.equals(nowNode.getNodeStatus());
             // domain_objects子工作流
-            if (isDomainObjectsNode(nowNode)) {
+            if (subWorkflowStarted && isDomainObjectsNode(nowNode)) {
                 i = processSubWorkflow(round, nodeRunInfos, i, nowNode, ParamExtractionType.DOMAIN_OBJECTS);
                 continue;
             }
             // extension_after_extraction子工作流
-            if (isExtensionAfterExtractionNode(nowNode)) {
+            if (subWorkflowStarted && isExtensionAfterExtractionNode(nowNode)) {
                 i = processSubWorkflow(round, nodeRunInfos, i, nowNode, ParamExtractionType.EXTENSION_AFTER_EXTRACTION);
                 continue;
             }
             // extension_before_judge_quit子工作流
-            if (isExtensionBeforeJudgeQuitNode(nowNode)) {
+            if (subWorkflowStarted && isExtensionBeforeJudgeQuitNode(nowNode)) {
                 i = processSubWorkflow(round, nodeRunInfos, i, nowNode,
                     ParamExtractionType.EXTENSION_BEFORE_JUDGE_QUIT);
                 continue;
@@ -136,14 +139,17 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
 
     private int processSubWorkflow(RoundDTO round, List<NodeRunInfo> nodeRunInfos, int currentIndex,
         NodeRunInfo currentNode, ParamExtractionType workflowType) {
-        int newIndex = currentIndex + 2;// 直接跳到扩展子工作流的开始节点
+        // 从子工作流节点自身 started 帧的下一帧起，由 instructWorkFlow 扫描内部首帧
+        // （原 +2 固定偏移假设子工作流 started/finished 相邻，与实际帧序不符，会跳过首帧
+        // 甚至落在非内部帧上导致整段收集为空）
+        int newIndex = currentIndex + 1;
         WorkFlowDTO workflow = instructWorkFlow(nodeRunInfos, newIndex, currentNode.getNodeId(),
             workflowType.name().toLowerCase(Locale.ROOT));
 
         if (ParamExtractionType.DOMAIN_OBJECTS.equals(workflowType)) {
             workflow.setDomainObjectName(getTrueObjectNames(currentNode.getNodeName()));
         }
-        setContextList(nodeRunInfos, newIndex - 2, workflow);
+        setContextList(nodeRunInfos, currentIndex, workflow);
 
         round.getWorkflowList().add(workflow);
 
@@ -256,6 +262,11 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                 // before_entry事件结束，循环事件开始
                 startProcessIndex = beforeIndex;
                 break;
+            }
+            // 子工作流节点自身的 finished 帧与 started 帧含相同 extension_before_entry 关键字，
+            // 仅 started 帧触发收集，避免 finished 帧再次触发产生重复空条目
+            if (!NodeRunInfo.NodeStatusEnum.STARTED.equals(currentNode.getNodeStatus())) {
+                continue;
             }
             // before事件直接报错
             if (hasErrorInBeforeEvent(nodeRunInfos, beforeIndex)) {
@@ -392,7 +403,15 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         work.setContextList(new HashMap<>());
         work.setIndex(-1);
         int returnIndex;
-        for (int index = startIndex; index < nodeRunInfos.size(); index++) {
+        // 定位子工作流内部首帧：startIndex 起可能夹杂少量非内部帧（如恢复轮重放的父链帧），
+        // 按 parent 精确匹配向后扫描，不再依赖固定帧数偏移
+        int collectStart = findSubWorkflowFirstFrame(nodeRunInfos, startIndex, nodeIdFlag);
+        if (collectStart < 0) {
+            // 窗口内无内部帧：保持原终止语义，外层 +1 后从 startIndex 继续处理后续事件
+            work.setIndex(startIndex - 1);
+            return work;
+        }
+        for (int index = collectStart; index < nodeRunInfos.size(); index++) {
             NodeRunInfo nowNode = nodeRunInfos.get(index);
 
             // 如果遇到异常，立刻终止循环，返回异常信息
@@ -421,10 +440,34 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         return work;
     }
 
+    /**
+     * 定位子工作流内部首帧：从 startIndex 起向后扫描，返回首个 parent_node_id 等于
+     * nodeIdFlag 的帧下标；未找到返回 -1。
+     *
+     * 扫描区间以"下一个 nodeId 等于 nodeIdFlag 的帧"为边界（子工作流自身的 finished 帧，
+     * 多轮场景下也可能是下一轮同名节点的 started 帧），两者均标志本轮内部帧区间结束，
+     * 因此区间内 parent 匹配的帧必属于本轮，不会跨轮误收；该边界不依赖固定窗口与
+     * 帧数假设，边界帧序变化时仍能正确定位，避免内部帧泄漏到外层循环被误判
+     * （如被 isLlmNode 识别覆盖 round 的 moduleInput/Output）。
+     */
+    private int findSubWorkflowFirstFrame(List<NodeRunInfo> nodeRunInfos, int startIndex, String nodeIdFlag) {
+        for (int index = startIndex; index < nodeRunInfos.size(); index++) {
+            NodeRunInfo node = nodeRunInfos.get(index);
+            if (nodeIdFlag.equals(node.getParentNodeId())) {
+                return index;
+            }
+            if (nodeIdFlag.equals(node.getNodeId())) {
+                // 子工作流自身的 finished 帧或下一轮同名节点的 started 帧：本轮区间结束
+                return -1;
+            }
+        }
+        return -1;
+    }
+
     private WorkFlowDTO paramExtractionBeforeEvent(List<NodeRunInfo> nodeRunInfos, int beforeBeginIndex) {
         // 处理before事件，直到非before事件结束
         NodeRunInfo nowNode = nodeRunInfos.get(beforeBeginIndex);
-        int instructIndex = beforeBeginIndex + 2;
+        int instructIndex = beforeBeginIndex + 1;
         WorkFlowDTO workFlowDetail = instructWorkFlow(nodeRunInfos, instructIndex, nowNode.getNodeId(),
             ParamExtractionType.EXTENSION_BEFORE_ENTRY.name().toLowerCase(Locale.ROOT));
 
@@ -542,7 +585,10 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
         List<NodeRunInfo> endNodeEvents = new ArrayList<>();
         List<NodeRunInfo> otherEvents = new ArrayList<>();
         for (NodeRunInfo node : nodeRunInfos) {
-            if (NodeType.END.getEiType().equals(node.getNodeType())) {
+            // 仅顶层 End（parent_node_id 为空）参与沉底：子工作流、循环等嵌套段内部的
+            // End 事件属于对应嵌套调用段（如参数提取折叠按 parent 收集子工作流 eventList），
+            // 移到全局末尾会导致嵌套段 eventList 缺尾、调用链顺序错乱
+            if (NodeType.END.getEiType().equals(node.getNodeType()) && StringUtils.isEmpty(node.getParentNodeId())) {
                 endNodeEvents.add(node);
             } else {
                 otherEvents.add(node);

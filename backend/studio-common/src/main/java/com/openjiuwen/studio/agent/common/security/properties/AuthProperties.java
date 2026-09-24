@@ -105,6 +105,14 @@ public class AuthProperties {
             private String domainId;
 
             /**
+             * 域名称 Claim 路径
+             * 配置项: auth.user-info.claims.domain-name
+             * 支持点号分隔的多层嵌套路径。缺失时取 defaults.domain-name（默认 0），
+             * 供 IAM 换 domain token 等场景使用，避免下游空指针。
+             */
+            private String domainName;
+
+            /**
              * 项目 ID Claim 路径
              * 配置项: auth.user-info.claims.project-id
              * 支持点号分隔的多层嵌套路径
@@ -119,6 +127,12 @@ public class AuthProperties {
              * 配置项: auth.user-info.defaults.domain-id
              */
             private String domainId = "0";
+
+            /**
+             * 默认域名称
+             * 配置项: auth.user-info.defaults.domain-name
+             */
+            private String domainName = "0";
 
             /**
              * 默认项目 ID

@@ -136,6 +136,7 @@ import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
 import com.openjiuwen.studio.agent.manager.utils.ImageBase64Utils;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.MapReadUtil;
+import com.openjiuwen.studio.agent.manager.utils.PollingTriggerConfigValidator;
 import com.openjiuwen.studio.agent.common.utils.KV;
 import com.openjiuwen.studio.agent.common.utils.PromptTemplate;
 import com.openjiuwen.studio.agent.manager.utils.WorkflowUtils;
@@ -158,6 +159,7 @@ import org.quartz.JobDetail;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.SimpleScheduleBuilder;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
@@ -343,6 +345,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
     @Autowired
     WorkflowValidationService workflowValidationService;
+
+    @Autowired
+    WorkspacePermissionValidator workspacePermissionValidator;
 
     @Autowired
     IrAdapterService irAdapterService;
@@ -533,6 +538,12 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
     @Autowired
     private KnowledgeBaseServiceImpl knowledgeBaseService;
+
+    @Autowired
+    private PollingTriggerConfigValidator pollingTriggerConfigValidator;
+
+    @Autowired
+    private PollingStateService pollingStateService;
 
     private static @NotNull String getRefKey(MappingEntity entity) {
         return entity.getResourceId() + "_" + entity.getResourceVersion() + "_" + entity.getResourceType();
@@ -1211,7 +1222,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         }
 
         // 权限校验
-        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId);
+        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "DELETE");
         shareResourceManagerService.checkResourceSharedOrNot(projectId, workflowId);
         workflowEntity.setUpdatedAt(System.currentTimeMillis());
 
@@ -1234,6 +1245,17 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                         log.error("Scheduler delete job failed.", e);
                         throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
                     }
+                } else if (TriggerType.POLLING.name().equals(triggerConfig.getType())) {
+                    pollingStateService.lockState(triggerConfig.getTriggerId());
+                    try {
+                        scheduler.pauseTrigger(TriggerKey.triggerKey(triggerConfig.getTriggerId()));
+                        scheduler.unscheduleJob(TriggerKey.triggerKey(triggerConfig.getTriggerId()));
+                        scheduler.deleteJob(new JobKey(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP));
+                    } catch (SchedulerException e) {
+                        log.error("Scheduler delete polling job failed.", e);
+                        throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+                    }
+                    pollingStateService.deleteState(triggerConfig.getTriggerId());
                 }
             }
         }
@@ -1291,6 +1313,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 }
             }
         }
+
         // 删除此工作流下所有用户的长期记忆
         agentMemoryConfigService.clearUserMemoriesInApplication(RequestContextUtils.getRequestAuthToken(),
             LanguageUtils.getLanguage(), projectId, workflowId);
@@ -1560,6 +1583,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 workflowId, projectId, workspaceId, ThreadLocalUtils.getWorkspaceId());
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的版本
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "version-create", false);
         List<ReleaseVersion> releaseVersionList = releaseVersionMapper.selectByAppId(workflowId);
 
         Set<String> existedVersionNameSet =
@@ -1669,59 +1695,112 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         resourceId = "workflowId",
         resourceName = ""
     )
+    @Transactional
     public TriggerConfig addTrigger(String projectId, String workflowId, String workspaceId, TriggerConfig body) {
-        if (!TriggerType.TIMER.name().equals(body.getType()) && !TriggerType.EVENT.name().equals(body.getType())) {
-            log.error("Trigger type is wrong. The wrong type is {}. projectId = {}, workflowId = {}", body.getType(),
-                projectId, workflowId);
+        if (!TriggerType.TIMER.name().equals(body.getType()) && !TriggerType.EVENT.name().equals(body.getType())
+            && !TriggerType.POLLING.name().equals(body.getType())) {
             throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, body.getType());
         }
         WorkflowEntity workflowEntity =
             workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflowEntity == null) {
+            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+        }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的触发器
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "trigger-add", false);
         List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
-        if (!org.apache.commons.collections4.CollectionUtils.isEmpty(triggerList)
-            && triggerList.size() >= CommonConstant.MAX_TRIGGER_WORKFLOW_NUMS) {
-            log.error("The number of triggers has reached the upper limit. projectId = {}, workflowId = {}", projectId,
-                workflowId);
+        if (!CollectionUtils.isEmpty(triggerList) && triggerList.size() >= CommonConstant.MAX_TRIGGER_WORKFLOW_NUMS) {
             throw new AgentStudioException(StudioError.AGENT_TRIGGER_SIZE_LIMIT);
         }
-        if (body.getTriggerId() == null || body.getTriggerId().isEmpty()) {
+        if (TriggerType.POLLING.name().equals(body.getType()) || StringUtils.isEmpty(body.getTriggerId())) {
             body.setTriggerId(UUID.randomUUID().toString());
         }
-        TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
-        try {
-            Trigger trigger = scheduler.getTrigger(triggerKey);
-            if (trigger == null) {
-                trigger = TriggerBuilder.newTrigger()
-                    .withIdentity(triggerKey)
-                    .withSchedule(CronScheduleBuilder.cronSchedule(body.getCron()))
-                    .build();
-                JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
-                    .withIdentity(body.getName() + '_' + body.getTriggerId())
-                    .usingJobData(CommonConstant.PROJECT_ID, projectId)
-                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
-                    .usingJobData(CommonConstant.Workflow.ID, workflowId)
-                    .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
-                    .usingJobData(CommonConstant.PROMPT, body.getPrompt())
-                    .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
-                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
-                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runWorkflowStreamUrl)
-                    .build();
-                scheduler.scheduleJob(jobDetail, trigger);
-                if (!scheduler.isShutdown()) {
-                    scheduler.start();
-                }
-                if (triggerList == null) {
-                    workflowEntity.setTriggerList(new ArrayList<>());
-                } else {
-                    workflowEntity.setTriggerList(triggerList);
-                }
-                workflowEntity.getTriggerList().add(body);
-            }
-        } catch (SchedulerException e) {
-            log.error("Scheduler add job failed.", e);
-            throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+        body.setCreatedOn(new Date());
+        triggerList = triggerList == null ? new ArrayList<>() : new ArrayList<>(triggerList);
+        triggerList.add(body);
+        workflowEntity.setTriggerList(triggerList);
+
+        // Polling 触发器在落库前校验并补齐默认值，确保默认值被持久化
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            pollingTriggerConfigValidator.validateAndApplyDefaults(body);
         }
+
+        // 统一落库：triggerList 已组装进 workflowEntity，各类型共用这一次写库
         workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
+
+        // Polling 触发器初始化运行时状态
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            if (!pollingStateService.initializeState(body.getTriggerId())) {
+                log.error("Initialize polling state failed, triggerId: {}", body.getTriggerId());
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+        }
+
+        if (TriggerType.TIMER.name().equals(body.getType())) {
+            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
+            try {
+                if (scheduler.getTrigger(triggerKey) == null) {
+                    Trigger trigger = TriggerBuilder.newTrigger()
+                        .withIdentity(triggerKey)
+                        .withSchedule(CronScheduleBuilder.cronSchedule(body.getCron()))
+                        .build();
+                    JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
+                        .withIdentity(body.getName() + '_' + body.getTriggerId())
+                        .usingJobData(CommonConstant.PROJECT_ID, projectId)
+                        .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                        .usingJobData(CommonConstant.Workflow.ID, workflowId)
+                        .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
+                        .usingJobData(CommonConstant.PROMPT, body.getPrompt())
+                        .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
+                        .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                        .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runWorkflowStreamUrl)
+                        .build();
+                    scheduler.scheduleJob(jobDetail, trigger);
+                    if (!scheduler.isShutdown()) {
+                        scheduler.start();
+                    }
+                }
+            } catch (SchedulerException e) {
+                log.error("Scheduler add job failed.", e);
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+        }
+
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
+                .withIdentity(body.getTriggerId(), Scheduler.DEFAULT_GROUP)
+                .usingJobData(CommonConstant.PROJECT_ID, projectId)
+                .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                .usingJobData(CommonConstant.Workflow.ID, workflowId)
+                .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
+                .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
+                .usingJobData(CommonConstant.POLL_URL, body.getPollUrl())
+                .usingJobData(CommonConstant.PROMPT, body.getPrompt())
+                .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
+                .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runWorkflowStreamUrl)
+                .build();
+            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
+            Trigger trigger = TriggerBuilder.newTrigger()
+                .withIdentity(triggerKey)
+                .withSchedule(SimpleScheduleBuilder.simpleSchedule()
+                    .withIntervalInSeconds(body.getPollIntervalSeconds())
+                    .repeatForever()
+                    .withMisfireHandlingInstructionNextWithRemainingCount())
+                .build();
+            try {
+                if (scheduler.getTrigger(triggerKey) == null) {
+                    scheduler.scheduleJob(jobDetail, trigger);
+                    if (!scheduler.isShutdown()) {
+                        scheduler.start();
+                    }
+                }
+            } catch (SchedulerException e) {
+                log.error("Scheduler add polling job failed.", e);
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+        }
         return body;
     }
 
@@ -1733,37 +1812,66 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         resourceId = "triggerId",
         resourceName = ""
     )
+    @Transactional
     public Void deleteTrigger(String projectId, String workflowId, String triggerId, String workspaceId) {
         WorkflowEntity workflowEntity =
-            workflowMapper.getWorkflowEntityByWorkspaceId(projectId, ThreadLocalUtils.getWorkspaceId(), workflowId);
-        List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
-        if (org.apache.commons.collections4.CollectionUtils.isEmpty(triggerList)) {
-            log.error("Trigger does not exist! projectId = {}, workflowId = {}, triggerId = {}", projectId, workflowId,
-                triggerId);
-            throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, triggerId);
+            workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflowEntity == null) {
+            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
-        for (int index = 0; index < triggerList.size(); index++) {
-            if (triggerId.equals(triggerList.get(index).getTriggerId())) {
-                TriggerConfig triggerConfig = triggerList.get(index);
-                if (TriggerType.TIMER.name().equals(triggerConfig.getType())) {
-                    try {
-                        scheduler.pauseTrigger(TriggerKey.triggerKey(triggerId));
-                        scheduler.unscheduleJob(TriggerKey.triggerKey(triggerId));
-                        scheduler.deleteJob(new JobKey(triggerConfig.getName() + '_' + triggerId));
-                    } catch (SchedulerException e) {
-                        log.error("Scheduler delete job failed.", e);
-                        throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
-                    }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的触发器
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "trigger-delete", false);
+        List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
+        int triggerIndex = -1;
+        if (triggerList != null) {
+            for (int index = 0; index < triggerList.size(); index++) {
+                if (Objects.equals(triggerId, triggerList.get(index).getTriggerId())) {
+                    triggerIndex = index;
+                    break;
                 }
-                triggerList.remove(index);
-                workflowEntity.setTriggerList(triggerList);
-                workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
-                return null;
             }
         }
-        log.error("Trigger does not exist! projectId = {}, workflowId = {}, triggerId = {}", projectId, workflowId,
-            triggerId);
-        throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, triggerId);
+        if (triggerIndex < 0) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, triggerId);
+        }
+        TriggerConfig currentConfig = triggerList.get(triggerIndex);
+        if (!TriggerType.TIMER.name().equals(currentConfig.getType())
+            && !TriggerType.EVENT.name().equals(currentConfig.getType())
+            && !TriggerType.POLLING.name().equals(currentConfig.getType())) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, currentConfig.getType());
+        }
+        triggerList = new ArrayList<>(triggerList);
+        triggerList.remove(triggerIndex);
+        workflowEntity.setTriggerList(triggerList);
+
+        // 统一落库：移除后的 triggerList 写回，调度清理失败时事务回滚，保证一致
+        workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
+
+        if (TriggerType.TIMER.name().equals(currentConfig.getType())) {
+            try {
+                scheduler.pauseTrigger(TriggerKey.triggerKey(triggerId));
+                scheduler.unscheduleJob(TriggerKey.triggerKey(triggerId));
+                scheduler.deleteJob(new JobKey(currentConfig.getName() + '_' + triggerId));
+            } catch (SchedulerException e) {
+                log.error("Scheduler delete job failed.", e);
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+        }
+
+        if (TriggerType.POLLING.name().equals(currentConfig.getType())) {
+            pollingStateService.lockState(triggerId);
+            try {
+                scheduler.pauseTrigger(TriggerKey.triggerKey(triggerId));
+                scheduler.unscheduleJob(TriggerKey.triggerKey(triggerId));
+                scheduler.deleteJob(new JobKey(triggerId, Scheduler.DEFAULT_GROUP));
+            } catch (SchedulerException e) {
+                log.error("Scheduler delete polling job failed.", e);
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+            pollingStateService.deleteState(triggerId);
+        }
+        return null;
     }
 
     @Override
@@ -1774,10 +1882,124 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         resourceId = "body.triggerId",
         resourceName = ""
     )
+    @Transactional
     public TriggerConfig editTrigger(String projectId, String workflowId, String workspaceId, TriggerConfig body) {
-        // delete原任务
-        deleteTrigger(projectId, workflowId, body.getTriggerId(), workspaceId);
-        addTrigger(projectId, workflowId, workspaceId, body);
+        if (!TriggerType.TIMER.name().equals(body.getType()) && !TriggerType.EVENT.name().equals(body.getType())
+            && !TriggerType.POLLING.name().equals(body.getType())) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, body.getType());
+        }
+        WorkflowEntity workflowEntity =
+            workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflowEntity == null) {
+            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+        }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的触发器
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "trigger-edit", false);
+        List<TriggerConfig> triggerList = workflowEntity.getTriggerList();
+        int triggerIndex = -1;
+        if (triggerList != null) {
+            for (int index = 0; index < triggerList.size(); index++) {
+                if (Objects.equals(body.getTriggerId(), triggerList.get(index).getTriggerId())) {
+                    triggerIndex = index;
+                    break;
+                }
+            }
+        }
+        if (triggerIndex < 0) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, body.getTriggerId());
+        }
+        TriggerConfig currentConfig = triggerList.get(triggerIndex);
+        if (!Objects.equals(currentConfig.getType(), body.getType())) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, body.getType());
+        }
+        body.setCreatedOn(currentConfig.getCreatedOn());
+        triggerList = new ArrayList<>(triggerList);
+        triggerList.set(triggerIndex, body);
+        workflowEntity.setTriggerList(triggerList);
+
+        // Polling 触发器在落库前校验并补齐默认值，确保默认值被持久化
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            pollingTriggerConfigValidator.validateAndApplyDefaults(body);
+        }
+
+        // 统一落库：triggerList 已组装进 workflowEntity，各类型共用这一次写库
+        workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
+
+        if (TriggerType.TIMER.name().equals(body.getType())) {
+            // Build and validate the replacement before removing the current schedule.
+            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
+            Trigger trigger = TriggerBuilder.newTrigger()
+                .withIdentity(triggerKey)
+                .withSchedule(CronScheduleBuilder.cronSchedule(body.getCron()))
+                .build();
+            JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
+                .withIdentity(body.getName() + '_' + body.getTriggerId())
+                .usingJobData(CommonConstant.PROJECT_ID, projectId)
+                .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                .usingJobData(CommonConstant.Workflow.ID, workflowId)
+                .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
+                .usingJobData(CommonConstant.PROMPT, body.getPrompt())
+                .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
+                .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runWorkflowStreamUrl)
+                .build();
+            try {
+                scheduler.pauseTrigger(triggerKey);
+                scheduler.unscheduleJob(triggerKey);
+                scheduler.deleteJob(new JobKey(currentConfig.getName() + '_' + body.getTriggerId()));
+                scheduler.scheduleJob(jobDetail, trigger);
+                if (!scheduler.isShutdown()) {
+                    scheduler.start();
+                }
+            } catch (SchedulerException e) {
+                log.error("Scheduler edit job failed.", e);
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+        }
+
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            boolean urlChanged = !Objects.equals(currentConfig.getPollUrl(), body.getPollUrl());
+            pollingStateService.lockState(body.getTriggerId());
+            JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
+                .withIdentity(body.getTriggerId(), Scheduler.DEFAULT_GROUP)
+                .usingJobData(CommonConstant.PROJECT_ID, projectId)
+                .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                .usingJobData(CommonConstant.Workflow.ID, workflowId)
+                .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
+                .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
+                .usingJobData(CommonConstant.POLL_URL, body.getPollUrl())
+                .usingJobData(CommonConstant.PROMPT, body.getPrompt())
+                .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
+                .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runWorkflowStreamUrl)
+                .build();
+            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
+            Trigger trigger = TriggerBuilder.newTrigger()
+                .withIdentity(triggerKey)
+                .withSchedule(SimpleScheduleBuilder.simpleSchedule()
+                    .withIntervalInSeconds(body.getPollIntervalSeconds())
+                    .repeatForever()
+                    .withMisfireHandlingInstructionNextWithRemainingCount())
+                .build();
+            try {
+                scheduler.pauseTrigger(triggerKey);
+                scheduler.unscheduleJob(triggerKey);
+                scheduler.deleteJob(new JobKey(body.getTriggerId(), Scheduler.DEFAULT_GROUP));
+                if (pollingStateService.getState(body.getTriggerId()) == null) {
+                    pollingStateService.initializeState(body.getTriggerId());
+                } else if (urlChanged) {
+                    pollingStateService.resetState(body.getTriggerId());
+                }
+                scheduler.scheduleJob(jobDetail, trigger);
+                if (!scheduler.isShutdown()) {
+                    scheduler.start();
+                }
+            } catch (SchedulerException e) {
+                log.error("Scheduler edit polling job failed.", e);
+                throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+            }
+        }
         return body;
     }
 
@@ -1796,6 +2018,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             log.error("Workflow does not exist.");
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
+        // 创建人校验:DEVELOPER/OPERATOR 仅能修改自己创建的工作流的调试状态
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "test-status", false);
 
         // 设置试运行成功状态:1,成功; 0,失败
         workflowEntity.setTestStatus(status ? 1 : 0);
@@ -1822,15 +2047,18 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     public CommonDeleteRsp deleteWorkflowVersion(String projectId, String workflowId, String versionId,
         String workspaceId) {
         // 获取工作流并校验权限
-        checkWorkflowExist(projectId, workspaceId, workflowId);
+        WorkflowEntity workflowEntity = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的版本
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "version-delete", false);
 
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(workflowId, versionId);
         if (releaseVersion == null) {
             log.error("workflow version is not found, workflowId = {}, versionId = {}", workflowId, versionId);
             throw new AgentStudioException(StudioError.WORKFLOW_VERSION_NOT_FOUND);
         }
-        WorkflowEntity workflowEntity = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
-        if (!Strings.CS.equals(RequestContextUtils.getRequestWorkspaceId(), workflowEntity.getWorkspaceId())) {
+        WorkflowEntity workflowEntity2 = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (!Strings.CS.equals(RequestContextUtils.getRequestWorkspaceId(), workflowEntity2.getWorkspaceId())) {
             log.error("No permission to delete workflow version.");
             throw new AgentStudioException(StudioError.NO_PERMISSION_DELETE_WORKFLOW_VERSION);
         }
@@ -1964,7 +2192,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     public BatchDeleteVersionsResponseBody batchDeleteWorkflowVersions(String projectId, String workflowId,
         String workspaceId, BatchDeleteVersionsRequestBody body) {
         // 资源归属校验，防止横向越权（与deleteWorkflowVersion对齐）
-        checkWorkflowExist(projectId, workspaceId, workflowId);
+        WorkflowEntity workflowEntity = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的版本
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(),
+            "version-batch-delete", false);
 
         // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
         ShareResourceEntity shareResource = shareResourceManagerService.queryShareResourceEntityByResourceId(workflowId);
@@ -2328,6 +2559,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         CreateChannelReq body) {
         // 检查工作流是否存在
         WorkflowEntity workflow = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的渠道
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflow.getCreatorId(), "channel-create", false);
 
         ReleaseChannel releaseWorkflowChannel = new ReleaseChannel();
         releaseWorkflowChannel.setCreator(RequestContextUtils.getRequestUserName());
@@ -2482,6 +2715,13 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     )
     public CommonDeleteRsp deleteWorkflowChannel(String projectId, String workflowId, String channelId,
         String workspaceId) {
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的渠道
+        // 兜底孤儿数据:workflow 已删但渠道残留时，workflowMapper 返回 null，跳过创建人校验继续清理渠道
+        WorkflowEntity workflow = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflow != null) {
+            workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflow.getCreatorId(), "channel-delete", false);
+        }
+
         // 发布到agent-builder空间，agentId和channelId相同
         if (publishAgentBuilderEnable && workflowId.equals(channelId)) {
             agentSpaceService.unpublish(workspaceId, workflowId);
@@ -2541,7 +2781,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
     public VersionChannelInfo modifyWorkflowChannel(String projectId, String workflowId, String channelId,
         String workspaceId, ModifyChannelReq body) {
         // 校验流是否存在
-        checkWorkflowExist(projectId, workspaceId, workflowId);
+        WorkflowEntity workflow = checkWorkflowExist(projectId, workspaceId, workflowId);
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的工作流的渠道
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflow.getCreatorId(), "channel-modify", false);
 
         ReleaseChannel oldChannel =
             releaseChannelMapper.selectByIdAppIdWorkspaceId(channelId, workflowId, projectId, workspaceId);
@@ -2687,7 +2929,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         }
 
         // 权限校验
-        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId);
+        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "PUT");
     /*    if (!Objects.equals(workflowEntity.getUpdatedAt(), body.getUpdateTime())) {
             log.error("workflow version does not match, latest = {}, now = {}", workflowEntity.getUpdatedAt(),
                 body.getUpdateTime());

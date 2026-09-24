@@ -161,6 +161,71 @@ def _build_condition_targets(self) -> dict[str, dict[str, set[str]]]:
     return out
 
 
+def _always_executes(
+    co: set[tuple[str, str]],
+    branch_all_conds: dict[str, set[str]],
+    reachable_cond: dict[tuple[str, str, str], set[str]],
+) -> bool:
+    """判断前驱是否为"共行前驱"：无论涉及的分支走哪个条件，它都会执行。
+
+    ``co`` 是该前驱可达的 ``(branch_node, cond_id)`` 集合。当 ``co`` 覆盖了
+    每个涉及分支节点的**全部**条件时（典型场景：分支的多条路径在 fork 之前
+    就已合流，所有并行车道对每个条件都可达），该前驱不是互斥备选，而是
+    必然执行的共行前驱。
+
+    环拓扑保护：含 Loop 的工作流中，分支节点可能在环上，从某条件目标出发
+    会绕环重新进入分支节点、再沿其他条件边到达本不可达的节点，造成"覆盖
+    全部条件"的假象。检测到任一涉及分支节点 bn 出现在**其他条件**目标的
+    可达集中时（同 bn 不同条件不算——那是正常的分支多出口），判 False
+    （回退原 OR-group 语义，避免误加闩锁导致单边路径死锁）。
+    """
+    involved_branches: dict[str, set[str]] = defaultdict(set)
+    for bn, cond_id in co:
+        involved_branches[bn].add(cond_id)
+    for bn, conds in involved_branches.items():
+        all_conds = branch_all_conds.get(bn)
+        if not all_conds or not all_conds <= conds:
+            return False
+
+    # 环拓扑保护：bn 出现在任何条件目标的可达集中（含自身其他条件——
+    # 单 bn 在环上绕回也算污染）=> 环让可达性绕回分支节点再沿其他条件边
+    # 到达本不可达的节点，造成"覆盖全部条件"的假象。判 False 回退原
+    # OR-group 语义，避免误加闩锁导致单边路径死锁。
+    for bn in involved_branches:
+        for (_bn, _cond_id, _t), nodes in reachable_cond.items():
+            if bn in nodes:
+                return False
+    return bool(involved_branches)
+
+
+def _classify_coexec(
+    p: str,
+    root_cond: dict[str, dict[str, set[str]]],
+) -> str:
+    """对共行前驱 p 分类：从所在 OR-group 中概念性移除后判断剩余形态。
+
+    返回:
+    - "latch": 移除后同 root 某条件仅剩 1 个成员（互斥备选退化为单元素
+      AND-group）→ 必须追加单例闩锁并保留 OR 成员身份（case C）。
+    - "standalone": 移除后所有条件仍剩 ≥2 成员 → 共行前驱独立成 AND-group
+      并从 OR-group 中移除（意见1：避免冗余覆盖导致 join 提前触发）。
+    - "noop": p 不在任何 OR-group 中（纯共行，如客户6车道的每个 done
+      都是同条件多目标的共行兄弟）→ 独立成 AND-group（已被 single-condition
+      分支处理，此处无需操作）。
+    """
+    needs_latch = False
+    in_or_group = False
+    for _root, cond_map in root_cond.items():
+        for _cond_id, preds in cond_map.items():
+            if p in preds:
+                in_or_group = True
+                if len(preds) == 2:
+                    needs_latch = True
+    if not in_or_group:
+        return "noop"
+    return "latch" if needs_latch else "standalone"
+
+
 def _resolve_barrier_groups_nested_patched(
     self, target_id: str, source_list: list[set[str]]
 ) -> list[set[str]]:
@@ -170,6 +235,19 @@ def _resolve_barrier_groups_nested_patched(
     - Uses patched ``_forward_reachable`` (traverses conditional edges).
     - Allows ``len(co) >= 1`` instead of ``== 1`` for ownership classification.
     - Uses patched ``_build_branch_parent`` (detects indirect nesting).
+    - Co-executing predecessors (reachable from ALL conditions of every
+      involved branch) are identified; a singleton AND-group latch is appended
+      ONLY when removing the predecessor would degenerate its OR-group's
+      exclusive siblings into a single-member AND-group (case C). When
+      exclusive siblings remain ≥2 after removal, no latch is added—the
+      OR-group already guarantees exclusive alternatives can trigger the join
+      alone, and a latch would redundantly cover the OR-group in CNF, firing
+      the join on the co-executing predecessor's arrival before exclusive
+      siblings finish (truncating their stream output).
+    - Cycle topology guard: a branch node that appears in another condition's
+      reachable set indicates reachability was polluted by a loop; the
+      predecessor is classified as exclusive (OR-group only), avoiding
+      spurious latches that deadlock single-path executions.
     """
     if not self.branch_targets or not source_list:
         return source_list
@@ -203,14 +281,21 @@ def _resolve_barrier_groups_nested_patched(
             if p in nodes:
                 legacy_owned[p].add(bn)
 
+    branch_all_conds: dict[str, set[str]] = {
+        bn: set(cond_map.keys()) for bn, cond_map in cond_targets.items()
+    }
+
     # Level 2 fix: len(co) >= 1 (not just == 1)
     cond_bucket: dict[tuple[str, str], set[str]] = defaultdict(set)
     legacy_bucket: dict[str, set[str]] = defaultdict(set)
     standalone: list[set[str]] = []
+    coexec_candidates: set[str] = set()  # 共行前驱候选，待 root_cond 合并后分类
     for p in all_predecessors:
         co = cond_owned.get(p, set())
         lo = legacy_owned.get(p, set())
         if co and not lo:
+            if _always_executes(co, branch_all_conds, reachable_cond):
+                coexec_candidates.add(p)
             for (bn, cond_id) in co:
                 cond_bucket[(bn, cond_id)].add(p)
         elif lo and not co:
@@ -230,6 +315,16 @@ def _resolve_barrier_groups_nested_patched(
         root = self._branch_root(bn, branch_parent)
         root_legacy[root] |= preds
 
+    # 分类共行前驱：决定从 OR-group 移除 / 追加闩锁 / 不操作
+    latch_preds: set[str] = set()      # 保留 OR 成员 + 追加单例闩锁
+    remove_preds: set[str] = set()    # 从 OR-group 移除，独立成 AND-group
+    for p in coexec_candidates:
+        kind = _classify_coexec(p, root_cond)
+        if kind == "latch":
+            latch_preds.add(p)
+        elif kind == "standalone":
+            remove_preds.add(p)
+
     result: list[set[str]] = []
     for _root, cond_map in root_cond.items():
         if len(cond_map) == 1:
@@ -237,10 +332,13 @@ def _resolve_barrier_groups_nested_patched(
             for p in next(iter(cond_map.values())):
                 result.append({p})
         else:
-            # Multiple conditions of same branch: merge into one OR-group
+            # Multiple conditions of same branch: merge into one OR-group,
+            # excluding standalone-classified co-executing predecessors.
             merged: set[str] = set()
             for preds in cond_map.values():
-                merged |= preds
+                for p in preds:
+                    if p not in remove_preds:
+                        merged.add(p)
             if merged:
                 result.append(merged)
     for _root, preds in root_legacy.items():
@@ -248,6 +346,14 @@ def _resolve_barrier_groups_nested_patched(
             result.append(preds)
     for s in standalone:
         result.append(s)
+    # 共行前驱独立 AND-group（意见1：移出 OR-group 避免冗余覆盖提前触发）
+    for p in remove_preds:
+        result.append({p})
+    # 共行前驱单例闩锁（case C：保留 OR 成员 + 追加闩锁防迟到重武装）
+    for p in latch_preds:
+        singleton = {p}
+        if singleton not in result:
+            result.append(singleton)
     return result if result else source_list
 
 

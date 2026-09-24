@@ -184,6 +184,56 @@
               />
             </svg>
           }
+          @if (triggerItem.type === 'POLLING') {
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 28 28"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                <radialGradient
+                  gradientTransform="translate(14 0) rotate(0) scale(28 28)"
+                  cx="0.000000"
+                  cy="0.000000"
+                  r="1.000000"
+                  id="paint_radial_polling_0"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop stop-color="#72B5FD" />
+                  <stop offset="1.000000" stop-color="#2D90FB" />
+                </radialGradient>
+              </defs>
+              <rect rx="6.125" width="28" height="28" fill="url(#paint_radial_polling_0)" />
+              <path
+                d="M9 14C9 11.2386 11.2386 9 14 9C16.0295 9 17.7955 10.2022 18.5841 12"
+                stroke="#FFFFFF"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+              <path
+                d="M19 14C19 16.7614 16.7614 19 14 19C11.9705 19 10.2045 17.7978 9.4159 16"
+                stroke="#FFFFFF"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+              <path
+                d="M18.5 10L18.5 12.2L20.7 12.2"
+                stroke="#FFFFFF"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M9.5 18L9.5 15.8L7.3 15.8"
+                stroke="#FFFFFF"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          }
           <div class="right">
             <div class="w-full overflow-hidden text-ellipsis whitespace-nowrap">
               {{ triggerItem.name }}
@@ -230,7 +280,7 @@
 
 <ng-template #triggerDetailTip let-context>
   <ng-container *ngIf="getTipText(context,agentType) as tip">
-    <ng-container *ngIf="context?.type === 'TIMER'; else eventTmpl">
+    <ng-container *ngIf="context?.type === 'TIMER'; else pollingTmpl">
       <div class="flex flex-col gap-[8px]">
         <span>{{'trigger_time_t'|i18nextEager}}{{ tip.cron }}</span>
         <span>{{'prompt_content_t'|i18nextEager}}{{ tip.prompt }}</span>
@@ -239,6 +289,18 @@
         }
       </div>
     </ng-container>
+    <ng-template #pollingTmpl>
+      <ng-container *ngIf="context?.type === 'POLLING'; else eventTmpl">
+        <div class="flex flex-col gap-[8px]">
+          <span>{{'trigger_poll_url'|i18nextEager}}{{ tip.poll_url }}</span>
+          <span>{{'trigger_poll_interval'|i18nextEager}}{{ tip.poll_interval_seconds }}s</span>
+          <span>{{'prompt_content_t'|i18nextEager}}{{ tip.prompt }}</span>
+          @if (tip?.invocation === 'async' || tip?.invocation === 'sync') {
+            <span>{{'invocation_method_t'|i18nextEager}}{{ (tip.invocation === 'async' ? 'toollistcomponent_56' : 'toollistcomponent_57')|i18nextEager }}</span>
+          }
+        </div>
+      </ng-container>
+    </ng-template>
     <ng-template #eventTmpl>
       <div class="flex flex-col gap-[8px]">
         <span>URL：{{ tip.hook_url }}</span>

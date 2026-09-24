@@ -14,14 +14,11 @@ from jiuwen.common.configs.env_constants import (
     PLUGIN_SSL_API_CERT_KEY,
 )
 from jiuwen.common.exception.status_code import StatusCode
-from jiuwen.common.log.base import logger, get_x_request_id, get_x_execution_id
-from openjiuwen.core.common.logging import workflow_logger
+from jiuwen.common.log.base import logger
 from jiuwen.controller.common.constants import WorkflowConstants
 from jiuwen.insight.manager import TraceManager
 from jiuwen.insight.utils import get_instance_info
 from jiuwen.orchestration import Invokable
-from jiuwen.orchestration.flow.constant import X_EXECUTION_ID, X_REQUEST_ID
-from agent_runtime.context.request_context import inject_traceparent
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.orchestration.utils import Input, Output
 from jiuwen.plugin.common import constant
@@ -31,6 +28,7 @@ from jiuwen.plugin.models.request_params import RequestParamsCreator, RequestPar
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
+from agent_runtime.context.request_context import strip_correlation_headers
 
 DATA_PREFIX = "data:"
 IS_CERT_LOADED = False
@@ -122,10 +120,9 @@ class McpAPI(Invokable, ABC):
 
         try:
             request_params = await self.request_params_creator.create(inputs, **kwargs)
-            request_params.headers[X_REQUEST_ID] = get_x_request_id()
-            request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
-            inject_traceparent(request_params.headers)
-            workflow_logger.debug(f"MCP API request headers: {request_params.headers}")
+            # D-02（SYNC-01 P3.4）：不向第三方（MCP）传播平台关联 Header
+            # （X-Request-Id / X-Execution-Id / traceparent）——鉴权钩子保留。
+            # B07：钩子/配置重引入的伪造值在最终边界剥离（大小写不敏感）。
 
             # 处理自定义鉴权的请求头
             self.replace_mcp_headers_extra(request_params, **kwargs)
@@ -136,6 +133,10 @@ class McpAPI(Invokable, ABC):
             #  同构：MCP 出站剥 auth_keys 的 cust- 前缀 + captured 覆盖（auth_hook 后、出站前）
             from jiuwen.extension.wrapper.customer_header_inject import inject_customer_headers_to_mcp
             inject_customer_headers_to_mcp(request_params)
+
+            # B07（SYNC-01 P3.4）：最终第三方发送边界——全部钩子后剥离平台保留
+            # 关联 Header（含预置/钩子重引入的伪造值，大小写不敏感）。
+            strip_correlation_headers(request_params.headers)
 
             tmp_url = copy.copy(request_params.ip_address_url)
             if request_params.query_params_in_inputs.items():
@@ -336,10 +337,9 @@ class McpServer(McpAPI, ABC):
         await trace_manager.on_plugin_start(inputs)
         try:
             request_params = await self.request_params_creator.create(inputs, **kwargs)
-            request_params.headers[X_REQUEST_ID] = get_x_request_id()
-            request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
-            inject_traceparent(request_params.headers)
-            workflow_logger.debug(f"MCP API request headers: {request_params.headers}")
+            # D-02（SYNC-01 P3.4）：不向第三方（MCP）传播平台关联 Header
+            # （X-Request-Id / X-Execution-Id / traceparent）——鉴权钩子保留。
+            # B07：钩子/配置重引入的伪造值在最终边界剥离（大小写不敏感）。
 
             # 处理自定义鉴权的请求头
             self.replace_mcp_headers_extra(request_params, **kwargs)
@@ -350,6 +350,10 @@ class McpServer(McpAPI, ABC):
             #  同构：MCP 出站剥 auth_keys 的 cust- 前缀 + captured 覆盖（auth_hook 后、出站前）
             from jiuwen.extension.wrapper.customer_header_inject import inject_customer_headers_to_mcp
             inject_customer_headers_to_mcp(request_params)
+
+            # B07（SYNC-01 P3.4）：最终第三方发送边界——全部钩子后剥离平台保留
+            # 关联 Header（含预置/钩子重引入的伪造值，大小写不敏感）。
+            strip_correlation_headers(request_params.headers)
 
             tmp_url = copy.copy(request_params.ip_address_url)
             if request_params.query_params_in_inputs.items():

@@ -1,8 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
 import { Subject, catchError, forkJoin, from, of, switchMap } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { ModelManagementService } from '@services/repositories/model-management-new';
@@ -17,6 +18,7 @@ import { AddModelComponent } from '@routes/model-management/components/add-model
 import { CommonService } from '@services/common.service';
 import { HttpService } from '@services/http.service';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import { PermissionService } from '@services/permission.service';
 import { ModelSquareService } from '@routes/model-square/model-square.service';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDrawerService } from 'ng-zorro-antd/drawer';
@@ -38,7 +40,8 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
     },
   ],
 })
-export class ModelDetailComponent {
+export class ModelDetailComponent implements OnDestroy {
+  private permissionSubscription?: Subscription;
   public activeName: string = '';
   // 是否来自于开发者空间
   public isFromDevelopSpace: boolean = false;
@@ -126,8 +129,35 @@ export class ModelDetailComponent {
     private sidebarVisibilityServ: SetSidebarVisibilityService,
     private readonly commonService: CommonService,
     private readonly http: HttpService,
-    private configServ: AgentConfigService
-  ) {}
+    private configServ: AgentConfigService,
+    private permissionService: PermissionService
+  ) {
+    // 订阅权限异步加载:权限返回后重算 options2 的 stopGray/edit/delete disabled
+    this.permissionSubscription = this.permissionService.permissions$.subscribe(() => {
+      this.updateModelServiceActions();
+    });
+  }
+
+  // 重算 options2 中受创建人权限约束的 action(stopGray/edit/delete)的 disabled
+  // 权限异步加载完成或 getDetail 返回后调用，保证前端显隐与后端权限一致
+  private updateModelServiceActions(): void {
+    if (!this.infoDetail || !Array.isArray(this.options2) || this.options2.length === 0) {
+      return;
+    }
+    const canModify = this.canModifyModelService(this.infoDetail);
+    this.options2.forEach(item => {
+      if (item.key === 'stopGray') {
+        item.disabled = this.infoDetail.provider_id?.startsWith('cdi-') || !canModify;
+      } else if (item.key === 'edit' || item.key === 'delete') {
+        item.disabled = this.infoDetail.publish_status === 'online' || !canModify;
+      }
+    });
+  }
+
+  // 判断当前用户能否编辑/删除该模型服务(createdByUser=userName)
+  public canModifyModelService(data: any): boolean {
+    return this.permissionService.canModifyModelService(data?.created_by_user, 'edit', !data?.created_by_user);
+  }
 
   ngOnInit() {
     this.sidebarVisibilityServ.setSidebarsVisibilityByState('init');
@@ -144,6 +174,7 @@ export class ModelDetailComponent {
   }
 
   ngOnDestroy(): void {
+    this.permissionSubscription?.unsubscribe();
     this.sidebarVisibilityServ.setSidebarsVisibilityByState('destroy');
     this.destroy$.next();
     this.destroy$.complete();
@@ -214,7 +245,6 @@ export class ModelDetailComponent {
         this.infoDetail = res ?? {};
         const selectModel = modelList?.data?.find(item => item.id === this.modelId);
 
-        this.infoDetail.created_by_user = this.route.queryParams[this._value].activeName;
         if (res.domain_id === 'SYSTEM') {
           this.activeName = 'PLATFORM';
           this.options2 = ModelSquareService.NOT_ALLOW_TEST_TYPE.includes(this.infoDetail.model_type)
@@ -241,7 +271,7 @@ export class ModelDetailComponent {
             {
               label: statusNewMap[this.infoDetail?.publish_status]?.operateText ?? statusNewMap.offline.operateText,
               key: 'stopGray',
-              disabled: res.provider_id.startsWith('cdi-'),
+              disabled: res.provider_id.startsWith('cdi-') || !this.canModifyModelService(this.infoDetail),
               icon: cdnAssetUrl('assets/images/model/publish_b.svg'),
               disIcon: cdnAssetUrl('assets/images/model/dis_publish.svg'),
             },
@@ -250,14 +280,14 @@ export class ModelDetailComponent {
               key: 'edit',
               icon: cdnAssetUrl('assets/images/model/edit_b.svg'),
               disIcon: cdnAssetUrl('assets/images/model/editGray.svg'),
-              disabled: this.infoDetail?.publish_status === 'online',
+              disabled: this.infoDetail?.publish_status === 'online' || !this.canModifyModelService(this.infoDetail),
             },
             {
               label: this.i18n.transform('delete'),
               key: 'delete',
               icon: cdnAssetUrl('assets/images/model/delete_b.svg'),
               disIcon: cdnAssetUrl('assets/images/model/deleteGray.svg'),
-              disabled: this.infoDetail?.publish_status === 'online',
+              disabled: this.infoDetail?.publish_status === 'online' || !this.canModifyModelService(this.infoDetail),
             },
           ];
         }

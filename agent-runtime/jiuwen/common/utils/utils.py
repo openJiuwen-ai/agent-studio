@@ -23,7 +23,34 @@ MAX_UPLOAD_FILE_SIZE = 20 * 1024 * 1024
 MAX_ENCODED_LENGTH = (
     MAX_UPLOAD_FILE_SIZE * 4 // 3
 )  # base64编码后的内容长度是原始内容的4/3倍
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
+# COM-08 §4.4: 删除模块级 LOG_VERBOSE_MODE——env 解析集中到
+# DiagnosticPolicy.from_env()（jiuwen/common/log/diagnostics.py）。
+
+# COM-08 §4.4: 无登记稳定 reason 时的通用安全阶段描述。
+_GENERIC_SAFE_REASON = "internal error"
+
+
+def safe_exception_reason(exception: Exception, reason: str | None = None) -> str:
+    """COM-08 §4.4: 确定性安全异常原因。
+
+    不读取 ``LOG_VERBOSE``，两种配置返回值完全相同；不返回 ``str(exception)``。
+
+    - 有登记稳定 ``reason`` 时返回 ``reason``；
+    - 无 ``reason`` 时返回通用安全阶段描述 ``_GENERIC_SAFE_REASON``；
+    - 原始异常正文通过 cause chain / ``exc_info`` 保留，不进本返回值。
+    """
+    if reason is not None:
+        return str(reason)
+    return _GENERIC_SAFE_REASON
+
+
+def format_exception_reason(exception: Exception, reason: str | None = None) -> str:
+    """[Deprecated] COM-08 §4.4: 改用 :func:`safe_exception_reason`。
+
+    保留为不读取环境变量的弃用兼容壳，行为等价于 ``safe_exception_reason``；
+    不再随 ``LOG_VERBOSE`` 返回 ``str(exception)``。
+    """
+    return safe_exception_reason(exception, reason)
 
 
 def safe_json_loads(json_string, default=None):
@@ -247,26 +274,3 @@ async def timed_cache_op(op_name: str, coro, ir_path: str):
         f"{op_name} completed: {ir_path}, Execution time: {execution_time:.2f} ms"
     )
     return result
-
-
-def format_exception_reason(exception: Exception, reason: str | None = None) -> str:
-    """根据 LOG_VERBOSE_MODE 格式化异常原因字符串
-
-    Args:
-        exception (Exception): 异常对象
-        reason (str | None): 可选的详细错误原因描述，仅在 LOG_VERBOSE_MODE 为 False 时生效
-
-    Returns:
-        str: 格式化后的异常原因字符串
-            当 LOG_VERBOSE_MODE 为 False 时：
-                - 如果提供了 reason 参数，则返回 reason
-                - 否则仅返回异常类型名称 type(exception).__name__
-            当 LOG_VERBOSE_MODE 为 True 时，返回完整的异常信息 str(exception)。
-    """
-    if LOG_VERBOSE_MODE:
-        return str(exception)
-
-    if reason is not None:
-        return str(reason)
-
-    return type(exception).__name__

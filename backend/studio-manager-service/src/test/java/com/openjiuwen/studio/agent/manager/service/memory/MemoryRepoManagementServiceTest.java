@@ -3,6 +3,8 @@
  */
 package com.openjiuwen.studio.agent.manager.service.memory;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.AgentMemoryConfig;
 import com.openjiuwen.studio.agent.manager.dto.CreateMemoryRepoRequestBody;
@@ -127,6 +129,69 @@ class MemoryRepoManagementServiceTest {
             // When
             CreateMemoryRepoResponseBody result = memoryRepoManagementService.createMemoryRepo(null, null, null);
         });
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_empty_should_throw() {
+        // Given
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(new ArrayList<>());
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_contains_null_should_throw() {
+        // Given
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        List<LongTermMemoryStrategy> strategies = new ArrayList<>();
+        strategies.add(null);
+        body.setLongTermMemoryStrategies(strategies);
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_type_null_should_throw() {
+        // Given
+        LongTermMemoryStrategy s1 = new LongTermMemoryStrategy();
+        s1.setType(null);
+        s1.setPrompt("p1");
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(List.of(s1));
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_duplicate_type_should_throw() {
+        // Given
+        LongTermMemoryStrategy s1 = new LongTermMemoryStrategy();
+        s1.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        s1.setPrompt("p1");
+        LongTermMemoryStrategy s2 = new LongTermMemoryStrategy();
+        s2.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        s2.setPrompt("p2");
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(List.of(s1, s2));
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_DUPLICATE, ex.getErrorCode());
     }
 
 
