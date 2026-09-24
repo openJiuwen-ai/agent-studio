@@ -44,7 +44,7 @@ def extract_host_and_port(config):
     return host, port
 
 
-def _extract_rid_lang(request):
+def _extract_rid_lang(req):
     """提取 request_id + language（尽力取值，失败用默认，G.ERR.07 不 pass）。"""
     from agent_builder.adapter.request_context_bridge import get_request_id
 
@@ -53,7 +53,7 @@ def _extract_rid_lang(request):
     except Exception:
         rid = None
     try:
-        lang = request.headers.get("x-language", "zh-cn")
+        lang = req.headers.get("x-language", "zh-cn")
     except Exception:
         lang = "zh-cn"
     return rid, lang

@@ -229,7 +229,8 @@ def _n2l_body(cid="conv-real-001"):
 
 def test_builder_real_app_bilingual_english(monkeypatch):
     """§6.2: 真实 app + x-language=en-us → SSE error 输出英文,含完整五字段,
-    request_id 来自真实中间件 ContextVar,不回显异常 str。"""
+    request_id 来自真实中间件 ContextVar,不回显异常 str。
+    """
     app = _real_app(monkeypatch)
     client = TestClient(app, raise_server_exceptions=False)
 
