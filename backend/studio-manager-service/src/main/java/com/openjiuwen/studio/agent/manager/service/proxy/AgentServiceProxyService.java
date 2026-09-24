@@ -27,6 +27,8 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.ErrorInfo;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailure;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailureException;
 import feign.FeignException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.*;
@@ -311,6 +313,8 @@ public class AgentServiceProxyService {
                 return errorResponse;
             }
             throw e;
+        } catch (DownstreamFailureException e) {
+            return parseDownstreamFailureError(e);
         }
     }
 
@@ -328,6 +332,8 @@ public class AgentServiceProxyService {
                 return errorResponse;
             }
             throw e;
+        } catch (DownstreamFailureException e) {
+            return parseDownstreamFailureError(e);
         }
     }
 
@@ -380,6 +386,31 @@ public class AgentServiceProxyService {
         return ResponseEntity.status(status).body(errorRsp);
     }
 
+    /**
+     * COM-04 DownstreamFailureException 透传：BuilderFeignConfig 的 DownstreamFeignErrorDecoder
+     * 把非 2xx 转 DownstreamFailureException（非 FeignException 子类），catch(FeignException) 不命中。
+     * 此方法用 DownstreamFailure.trustedCode 透传 error_code，保留原映射语义（不丢失上游码）。
+     */
+    private ResponseEntity<Object> parseDownstreamFailureError(DownstreamFailureException e) {
+        DownstreamFailure failure = e.getFailure();
+        String requestId = MDC.get(MdcKeys.REQUEST_ID);
+        ErrorInfo errorInfo = i18nUtil.getMessage(
+            new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setRequestId(requestId)
+            .setErrorMsg(errorInfo.getMessage())
+            .setErrorReason(errorInfo.getReason())
+            .setErrorSuggestion(errorInfo.getSuggestion());
+        if (failure.hasTrustedErrorCode()) {
+            errorRsp.setErrorCode(failure.getDownstreamErrorCode());
+        } else {
+            errorRsp.setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode());
+            log.warn("DownstreamFailure without trusted code: {}", failure);
+        }
+        Integer dsStatus = failure.getDownstreamHttpStatus();
+        return ResponseEntity.status(dsStatus != null && dsStatus > 0 ? dsStatus : 500).body(errorRsp);
+    }
+
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,
         Boolean refresh, String projectId, String apiUrlEnvVars) {
 
@@ -399,6 +430,8 @@ public class AgentServiceProxyService {
             return builderClient.chatCompletions(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             return parseModelServiceFeignError(e);
+        } catch (DownstreamFailureException e) {
+            return parseDownstreamFailureError(e);
         }
     }
 
@@ -578,8 +611,10 @@ public class AgentServiceProxyService {
                 return stream(url, httpHeaders, JsonUtils.encode(body));
             }
         }
-        return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId, environmentId,
-            body, false).getBody();
+        try (MdcScope scope = establishExecutionScope(httpHeaders)) {
+            return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId,
+                environmentId, body, false).getBody();
+        }
     }
 
     /**
@@ -673,7 +708,10 @@ public class AgentServiceProxyService {
                 return stream(url, httpHeaders, JsonUtils.encode(body));
             }
         }
-        return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId, body).getBody();
+        try (MdcScope scope = establishExecutionScope(httpHeaders)) {
+            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId,
+                body).getBody();
+        }
     }
 
     /**

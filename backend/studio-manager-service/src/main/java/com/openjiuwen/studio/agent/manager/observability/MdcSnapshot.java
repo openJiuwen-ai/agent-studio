@@ -75,14 +75,6 @@ public final class MdcSnapshot {
         return present.get(key);
     }
 
-    java.util.Set<String> presentKeys() {
-        return present.keySet();
-    }
-
-    java.util.Set<String> absentKeys() {
-        return absent;
-    }
-
     /**
      * Open a scope that full-replaces the four whitelist keys with this snapshot's state.
      *

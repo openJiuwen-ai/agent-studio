@@ -69,6 +69,8 @@ public class WorkflowListener extends BaseEventListener {
 
     private final ConcurrentHashMap<String, AtomicLong> nodeWaitLastPassThrough = new ConcurrentHashMap<>();
 
+    private String lastSavedResumeExecutionId;
+
     protected final ExecuteParams executeParams;
 
     protected final WorkflowRunResult result;
@@ -378,9 +380,10 @@ public class WorkflowListener extends BaseEventListener {
     private void saveResumeExecutionIdOnInterrupt() {
         try {
             String executionId = executeParams.getExecutionId();
-            if (StringUtils.isNotEmpty(executionId)) {
+            if (StringUtils.isNotEmpty(executionId) && !executionId.equals(lastSavedResumeExecutionId)) {
                 agentRuntimeService.saveResumeExecutionId(
                     executeParams.getWorkflowId(), executeParams.getConversationId(), executionId);
+                lastSavedResumeExecutionId = executionId;
                 log.info("Saved resume executionId on node_wait: workflowId={}, conversationId={}",
                     executeParams.getWorkflowId(), executeParams.getConversationId());
             }

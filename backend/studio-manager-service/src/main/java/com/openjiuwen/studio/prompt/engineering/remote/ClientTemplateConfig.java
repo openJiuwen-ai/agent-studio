@@ -61,7 +61,7 @@ public class ClientTemplateConfig {
      */
     @Bean(name = "builderClientTemplate")
     public ClientTemplate getBuilderClient(ClientHttpRequestFactory factory,
-            @Value("${agent_builder_endpoint:}") String agentBuilderEndpoint) {
+            @Value("${agent_builder_endpoint:http://127.0.0.1:31015}") String agentBuilderEndpoint) {
         DownstreamErrorParser builderParser = new DownstreamErrorParser(
             new DownstreamErrorMappingCatalog(new ManagerErrorCatalog()));
         return new ClientTemplate(factory,

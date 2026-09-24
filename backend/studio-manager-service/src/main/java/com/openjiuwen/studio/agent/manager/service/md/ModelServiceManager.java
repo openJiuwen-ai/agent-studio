@@ -118,7 +118,11 @@ public class ModelServiceManager {
 
     @PostConstruct
     public void postConstruct() {
-        CompletableFuture.runAsync(this::startSyncTasks, backgroundAsyncExecutor);
+        try {
+            CompletableFuture.runAsync(this::startSyncTasks, backgroundAsyncExecutor);
+        } catch (org.springframework.core.task.TaskRejectedException e) {
+            log.warn("backgroundAsyncExecutor rejected startSyncTasks, skip: {}", e.getMessage());
+        }
     }
 
     void startSyncTasks() {
