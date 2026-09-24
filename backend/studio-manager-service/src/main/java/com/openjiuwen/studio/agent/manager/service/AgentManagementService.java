@@ -178,6 +178,8 @@ import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Lazy;
@@ -212,8 +214,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -276,7 +276,17 @@ public class AgentManagementService implements IAgentManagementService {
 
     private static final int MAX_SKILL_NUM = 50;
 
-    private final ExecutorService fixedThreadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    /**
+     * OBS/长期记忆清理线程池（COM-02 转受管：原自建 newFixedThreadPool(THREAD_POOL_SIZE=100)
+     * 迁移为 ObservabilityAsyncConfig.agentMgmtCleanupExecutor，保现状容量与无界队列，加 MDC 传播）
+     */
+    /**
+     * OBS/长期记忆清理线程池（COM-02 转受管：原自建 newFixedThreadPool(THREAD_POOL_SIZE=100)
+     * 迁移为 ObservabilityAsyncConfig.agentMgmtCleanupExecutor，保现状容量与无界队列，加 MDC 传播）
+     */
+    @Autowired
+    @Qualifier("agentMgmtCleanupExecutor")
+    private ThreadPoolTaskExecutor fixedThreadPool;
 
     private final ObjectMapper jacksonObjectMapper;
 
@@ -3633,8 +3643,7 @@ public class AgentManagementService implements IAgentManagementService {
 
         // 处理响应
         if (response.getStatusCode() != HttpStatus.OK || StringUtils.isBlank(response.getBody())) {
-            log.error("Failed to generate icon using the model. StatusCode: {}, ResponseBody: {}", response.getStatusCode(),
-                response.getBody());
+            log.error("Failed to generate icon using the model. StatusCode: {}", response.getStatusCode());
             throw new AgentStudioException(StudioError.GENERATE_ICON_FAILED);
         }
 
@@ -3656,7 +3665,7 @@ public class AgentManagementService implements IAgentManagementService {
             mgObsService.uploadObsFile(objectKey, new ByteArrayInputStream(imageBytes), 0);
             return new AutoAddResultJsonObject().setIcons(new Icon().setIcon(iconName).setIconDetail(b64JsonCompressed));
         } catch (Exception e) {
-            log.error("Error parsing response body: {}", response.getBody(), e);
+            log.error("Error parsing response body", e);
             throw new AgentStudioException(StudioError.GENERATE_ICON_FAILED);
         }
     }

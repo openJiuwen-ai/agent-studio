@@ -515,7 +515,7 @@ public class PluginAdapterImpl implements IPlugin {
         body.setParameter(processNestedStructure(body.getParameter()));
         log.info("[runTool] start to run, pluginId {}, toolId {} ", pluginId, toolId);
         JSONObject requestBody = JSON.parseObject(body.getParameter());
-        log.info("[runTool] get requestBody {}", requestBody);
+        log.info("[runTool] get requestBody, size={}", requestBody.size());
 
         // 下载OBS文件
         String objectKey = String.format("%s/%s.json", TOOL_TEST_OBS_PATH, toolId);

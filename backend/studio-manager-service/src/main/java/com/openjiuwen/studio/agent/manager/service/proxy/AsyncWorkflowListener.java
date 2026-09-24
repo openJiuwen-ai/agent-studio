@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowInstanceEntity;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.enums.WorkflowRunStatus;
@@ -13,10 +14,8 @@ import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
-import okhttp3.sse.EventSource;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 
 /**
@@ -74,72 +73,65 @@ public class AsyncWorkflowListener extends WorkflowListener {
      * 异步任务需要在此提取以便后续保存到会话历史。
      */
     @Override
-    public void onEvent(@NotNull EventSource eventSource, @Nullable String id, @Nullable String type,
-        @NotNull String data) {
-        super.onEvent(eventSource, id, type, data);
+    protected void onEventBusinessHook(@Nullable String id, @Nullable String type, @NotNull String data) {
+        super.onEventBusinessHook(id, type, data);
         captureMessageContent(data);
     }
 
     /**
-     * 从message/message_end类型的SSE事件中提取文本内容。
-     * 九问引擎的事件结构：
-     * - {"event":"message","data":{"text":"...","answer":"...",...}}
-     * - {"event":"message_end","data":{"answer":"...",...}}
+     * COM-04 响应 §5.5: 异步路径无 HTTP/SSE 对外输出——不调用 builder。
+     * descriptor 已由 {@link #handleSseErrorEvent} / {@link #handleTerminalFailure}
+     * 存入 {@code lastErrorDescriptor}，供任务终态使用稳定码。
+     */
+    @Override
+    protected void sendErrorToConsumer(ErrorDescriptor descriptor) {
+        // no-op: 异步无前端 SSE 消费者
+    }
+
+    /**
+     * COM-04 响应 §5.5: 异步路径不构造 ResponseEntity——无 HTTP 消费者。
+     */
+    @Override
+    protected void setErrorResponse(ErrorDescriptor descriptor) {
+        // no-op: 异步无 HTTP 消费者
+    }
+
+    /**
+     * 从message类型的SSE事件中提取文本内容。
+     * 九问引擎的message事件结构：{"event":"message","data":{"text":"...","answer":"...",...},...}
      *
-     * 字段语义（message 事件）：
+     * 字段语义：
      * - text: 增量文本片段（流式LLM节点每帧推送一小段）
      * - answer: 完整累积文本（流式LLM节点包含截至当前帧的全部文本）
      *
      * 策略：
-     * - message 事件：优先用 answer 字段（完整文本，直接替换），无 answer 时累积 text 增量，
-     *   两者皆空时回退 summary（结构化信息场景：event_handler 把 message_end 转成 message 时 answer 落在 summary）
-     * - message_end 事件：answer 兜底（仅当 message 累积为空时用，覆盖 LLM 不发 message 事件 / END invoke 路径只产 message_end 的场景）
+     * - 优先使用answer字段（完整文本，直接替换）
+     * - 无answer时累积text字段（增量chunk，逐帧追加）
      */
     private void captureMessageContent(String eventStr) {
         try {
             JSONObject eventObj = JSONObject.parseObject(eventStr);
-            String event = eventObj.getString("event");
+            if (!"message".equals(eventObj.getString("event"))) {
+                return;
+            }
             JSONObject dataObj = eventObj.getJSONObject("data");
             if (dataObj == null) {
                 return;
             }
-            // message 事件：累积 answer/text
-            if ("message".equals(event)) {
-                Object answer = dataObj.get("answer");
-                if (answer != null) {
-                    String answerStr = answer.toString();
-                    if (!answerStr.isEmpty()) {
-                        messageContent.setLength(0);
-                        messageContent.append(answerStr);
-                    }
-                    return;
-                }
-                String text = dataObj.getString("text");
-                if (text != null && !text.isEmpty()) {
-                    messageContent.append(text);
-                } else {
-                    // 结构化信息：event_handler 把 message_end 转成 message 时 answer 落在 summary
-                    Object summary = dataObj.get("summary");
-                    if (summary != null && !summary.toString().isEmpty()) {
-                        messageContent.setLength(0);
-                        messageContent.append(summary.toString());
-                    }
+            // answer字段存在时，包含完整累积文本，直接替换
+            Object answer = dataObj.get("answer");
+            if (answer != null) {
+                String answerStr = answer.toString();
+                if (!answerStr.isEmpty()) {
+                    messageContent.setLength(0);
+                    messageContent.append(answerStr);
                 }
                 return;
             }
-            // message_end 事件：answer 兜底（仅当 message 累积为空时用）
-            if ("message_end".equals(event) && messageContent.length() == 0) {
-                Object answer = dataObj.get("answer");
-                if (answer != null) {
-                    messageContent.append(answer.toString());
-                }
-            }
-            // workflow_finished 事件：answer 兜底（结构化 END 路径，answer 落在 summary 或 workflow_finished.data.answer）
-            if ("workflow_finished".equals(event) && messageContent.length() == 0) {
-                Object answer = dataObj.get("answer");
-                if (answer != null && !answer.toString().isEmpty()) {
-                    messageContent.append(answer.toString());
-                }
+            // 无answer字段时，text为增量内容，累积追加
+            String text = dataObj.getString("text");
+            if (text != null && !text.isEmpty()) {
+                messageContent.append(text);
             }
         } catch (Exception e) {
             log.warn("Failed to capture message content from event", e);
@@ -147,38 +139,33 @@ public class AsyncWorkflowListener extends WorkflowListener {
     }
 
     @Override
-    public void onFailure(@NotNull EventSource eventSource, @Nullable Throwable t, @Nullable Response response) {
-        MDC.put(REQUEST_ID, requestId);
+    protected void onFailureInternal(@Nullable Throwable t, @Nullable Response response) {
+        // COM-04 响应 §5.5: 异步路径无 HTTP/SSE 对外输出——不构造 ResponseEntity，
+        // 不调用 HTTP/SSE builder；仍满足一次解析、一次映射、内部 downstream_* 可诊断、
+        // 原文零泄漏。guard 竞争由 handleTerminalFailure 统一——非赢家只做幂等清理。
         try {
-            executeParams.setSuccess(-1);
-            log.error("Async workflow process failed. Throwable: {}, Response: {}", t, response);
+            ErrorDescriptor descriptor = handleTerminalFailure(t, response);
+            if (descriptor != null) {
+                // COM-04 响应 §5.5.1: 赢家——一次映射的既成 descriptor 驱动安全任务终态
+                executeParams.setSuccess(-1);
+                result.setTaskEnd(true);
 
-            // 标记任务结束，解除TaskRuntimeService.waitForWorkflowCompletion()的轮询阻塞
-            result.setTaskEnd(true);
-
-            // 设置instance为FAILED状态（saveInstance内部会判断：
-            // 如果status是RUNNING且workflowEnd=false，会错误地覆盖为SUCCEEDED，
-            // 所以必须在saveInstance之前显式设为FAILED）
-            WorkflowInstanceEntity instance = result.getInstance();
-            if (instance != null) {
-                instance.setStatus(WorkflowRunStatus.FAILED.getStatus().getDesc());
-                instance.setEndTime(System.currentTimeMillis());
-                if (t != null) {
-                    instance.setErrorInfo(t.getMessage());
-                } else if (response != null) {
-                    instance.setErrorInfo("Runtime request failed, HTTP " + response.code());
+                WorkflowInstanceEntity instance = result.getInstance();
+                if (instance != null) {
+                    instance.setStatus(WorkflowRunStatus.FAILED.getStatus().getDesc());
+                    instance.setEndTime(System.currentTimeMillis());
+                    // COM-04 响应 §5.5.3: 实例诊断只用 Manager 稳定错误码/安全文案，
+                    // 不保存 throwable message、下游 body 或 Response 字符串
+                    instance.setErrorInfo(descriptor.getErrorCode());
                 }
+
+                // onFailure与onClosed互斥，必须在此保存调试记录，否则丢失
+                saveInstance();
             }
-
-            // onFailure与onClosed互斥，必须在此保存调试记录，否则丢失
-            saveInstance();
-
-            this.errorRsp = createErrorRsp(t, response).orElse(null);
-            this.openConnect = true;
         } catch (Exception e) {
             log.error("Fail handler response. {}", e.getMessage());
-            this.openConnect = true;
         } finally {
+            latch.countDown();
             try {
                 sseEmitter.complete();
             } catch (Throwable e) {

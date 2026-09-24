@@ -154,7 +154,7 @@ public class JiuWenService {
             .retrieve()
             .onStatus(status -> !status.is2xxSuccessful(),
                 response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                    log.error("generatorAgentOrWorkflow error: {}", errorBody);
+                    log.error("generatorAgentOrWorkflow error");
                     return Mono.error(new AgentStudioException(StudioError.JIU_WEN_SERVICE_EXCEPTION));
                 }))
             .bodyToFlux(String.class)

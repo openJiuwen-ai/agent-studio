@@ -63,14 +63,14 @@ public class ApigApiService {
 
     private void errorResponseThrow(ResponseEntity<String> response) {
         if (response.getStatusCode().value() >= 300) {
-            log.error("Get apic response error! Response is '{}'", response.getBody());
+            log.error("Get apic response error!");
             try {
                 JSONObject responseJsonObject = JSONObject.parseObject(response.getBody());
                 if (responseJsonObject.get("error_code").equals("APIG.2015")) { // IP地址异常
                     throw new AgentStudioException(StudioError.INVALID_URL);
                 }
             } catch (Exception e) {
-                log.error(response.getBody());
+                log.error("Failed to parse apic response body");
             }
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
