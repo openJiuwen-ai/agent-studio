@@ -650,7 +650,7 @@ public class PluginBaseImpl implements IPluginBase {
             try {
                 result = fillHeaders(inputSchema, headers);
             } catch (IOException e) {
-                log.error("parse header failed! {}", headers);
+                log.error("parse header failed", e);
             }
         }
         ToolInputSchema toolInputSchema = ToolInputSchema.builder().toolId("0").inputSchema(result).build();
@@ -664,7 +664,7 @@ public class PluginBaseImpl implements IPluginBase {
             try {
                 result = fillHeaders(inputSchema, headers);
             } catch (IOException e) {
-                log.error("parse header failed! {}", headers);
+                log.error("parse header failed", e);
             }
         }
         ToolInputSchema toolInputSchema = ToolInputSchema.builder().toolId("0").inputSchema(result).build();

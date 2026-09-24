@@ -4,6 +4,8 @@
 
 package com.openjiuwen.studio.agent.manager.controller;
 
+import com.openjiuwen.studio.agent.manager.utils.ConversationIdPatterns;
+
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
@@ -48,13 +50,13 @@ public interface ConversationHistoryApi {
     @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/history",
         produces = {"application/json"}, method = RequestMethod.DELETE)
     ResponseEntity<ConversationDeleteResp> deleteConversationHistory(
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Pattern(regexp = ConversationIdPatterns.STANDARD_CONVERSATION_REGEXP) @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Pattern(regexp = ConversationIdPatterns.STANDARD_CONVERSATION_REGEXP) @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "workflow/agent id", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Pattern(regexp = ConversationIdPatterns.STANDARD_CONVERSATION_REGEXP) @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "conversation_id", required = true, schema = @Schema())
         @PathVariable("conversation_id") String conversationId,
         @Size(max = 32)
@@ -80,13 +82,13 @@ public interface ConversationHistoryApi {
     @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/history",
         produces = {"application/json"}, method = RequestMethod.GET)
     ResponseEntity<List<Message>> retrieveConversationHistory(
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Pattern(regexp = ConversationIdPatterns.STANDARD_CONVERSATION_REGEXP) @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Pattern(regexp = ConversationIdPatterns.STANDARD_CONVERSATION_REGEXP) @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "workflow/agent id", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Pattern(regexp = ConversationIdPatterns.STANDARD_CONVERSATION_REGEXP) @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "conversation_id", required = true, schema = @Schema())
         @PathVariable("conversation_id") String conversationId,
         @ApiParam(value = "RetrieveConversationQo: converted from multi query params") @Valid

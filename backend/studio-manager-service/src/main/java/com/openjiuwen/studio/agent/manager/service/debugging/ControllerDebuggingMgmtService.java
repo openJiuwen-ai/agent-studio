@@ -4,8 +4,6 @@
 
 package com.openjiuwen.studio.agent.manager.service.debugging;
 
-import static com.openjiuwen.studio.agent.manager.constant.Constant.TASK_ID;
-
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversationInfo;
@@ -28,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
-import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -209,9 +206,12 @@ public class ControllerDebuggingMgmtService {
         String userId = executeParams.getUserId();
         String controllerId = executeParams.getAgentId();
         String conversationId = executeParams.getConversationId();
-        String executionId = executeParams.getExecutionId() == null
-            ? MDC.get(TASK_ID)
-            : executeParams.getExecutionId();
+        // DEF-02 §4.5: 只接受 executeParams.executionId，不从旧 MDC 兜底；为空时跳过无效记录，不造假
+        String executionId = executeParams.getExecutionId();
+        if (StringUtils.isBlank(executionId)) {
+            log.warn("saveControllerDebuggingInfo: executionId is empty; skip invalid debugging record");
+            return;
+        }
         log.info("saveControllerDebuggingInfo: userId={}, controllerId={}, conversationId={}, executionId={}",
             userId, controllerId, conversationId, executionId);
         traceData.setConversationId(conversationId);

@@ -19,16 +19,13 @@ import com.openjiuwen.studio.agent.manager.service.JiuwenEventProcessor;
 import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.sse.EventSource;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Optional;
-
-import static com.openjiuwen.studio.agent.manager.constant.Constant.TASK_ID;
 
 /**
  * 多智能体（Controller）SSE事件监听器
@@ -52,14 +49,12 @@ public class ControllerAgentListener extends BaseEventListener {
     }
 
     @Override
-    public void onEvent(@NotNull EventSource eventSource, @Nullable String id, @Nullable String type,
-        @NotNull String data) {
-        Optional<JiuwenAgentEvent> eventOpt = parseJiuWenEventFromSseData(data, JiuwenAgentEvent.class);
-        if (eventOpt.isEmpty()) {
+    protected void onEventBusinessHook(@Nullable String id, @Nullable String type, @NotNull String data) {
+        JiuwenAgentEvent eventObj = parseJiuWenEventFromSseData(data, JiuwenAgentEvent.class);
+        if (Objects.isNull(eventObj)) {
             passThrough(data);
             return;
         }
-        JiuwenAgentEvent eventObj = eventOpt.get();
         try {
             String event = eventObj.getEvent();
             JiuwenEventType eventType;
@@ -84,7 +79,7 @@ public class ControllerAgentListener extends BaseEventListener {
     }
 
     @Override
-    public void onClosed(@NotNull EventSource eventSource) {
+    protected void onClosedBusinessHook() {
         log.info("ControllerAgentListener close.");
         try {
             saveInsightData(executeParams, traceData);
@@ -142,8 +137,13 @@ public class ControllerAgentListener extends BaseEventListener {
             log.info("Agent task is block. receive task block message.");
         }
         traceData.setBlock(true);
-        agentRuntimeService.saveTaskId(executeParams.getAgentId(), executeParams.getConversationId(),
-            MDC.get(TASK_ID));
+        // DEF-01: 保存值取自 executeParams.executionId（不再依赖回调线程 MDC）；无会话跳过保存
+        if (StringUtils.isNotEmpty(executeParams.getConversationId())
+            && StringUtils.isNotEmpty(executeParams.getExecutionId())) {
+            agentRuntimeService.saveResumeExecutionId(
+                executeParams.getAgentId(), executeParams.getConversationId(),
+                executeParams.getExecutionId());
+        }
     }
 
     private void passResumeThrough(String sseData) {

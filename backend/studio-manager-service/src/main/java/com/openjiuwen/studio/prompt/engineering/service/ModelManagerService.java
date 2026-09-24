@@ -30,6 +30,8 @@ import org.apache.commons.lang3.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -104,6 +106,13 @@ public class ModelManagerService {
     @Autowired
     private I18nUtil i18nUtil;
 
+    /**
+     * COM-02：prompt-engineering 限时模型调用专用执行器（Abort 拒绝由调用点 catch 转业务错误）
+     */
+    @Autowired
+    @Qualifier("promptModelCallExecutor")
+    private ThreadPoolTaskExecutor promptModelCallExecutor;
+
     private boolean isFreeModel(String model) {
         if (model == null || model.isEmpty()) {
             return false;
@@ -142,8 +151,19 @@ public class ModelManagerService {
         // 异步任务中，设置了一个1分钟的超时时间
         String xAuthToken = RequestContextUtils.getRequestAuthToken();
         String creator = RequestContextUtils.getRequestUserName();
-        CompletableFuture<InvokeResp> future = CompletableFuture.supplyAsync(
-            () -> promptModelService.queryModelCenter(workspaceId, body, xAuthToken, projectId));
+        // COM-02: 迁移自 commonPool 至 prompt-engineering 专用限时模型调用执行器（超时语义保留在调用点）。
+        // AbortPolicy 拒绝发生在提交时（supplyAsync 在 try 外会绕过下方异常分支），故提交纳入 catch，
+        // 映射为已登记的稳定业务错误（429 语义，不新增错误码）。
+        CompletableFuture<InvokeResp> future;
+        try {
+            future = CompletableFuture.supplyAsync(
+                () -> promptModelService.queryModelCenter(workspaceId, body, xAuthToken, projectId),
+                promptModelCallExecutor);
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            // 专用池饱和（core=2/max=4/queue=50 全满）：模型调用未被受理
+            log.error("Prompt model call executor rejected (pool saturated). workspaceId:{}", workspaceId, e);
+            throw new AgentStudioException(StudioError.MD_INVOKE_TOO_MANY_REQUEST);
+        }
 
         // 执行调用LLM逻辑
         try {
