@@ -85,9 +85,14 @@ public class DynamicPermissionRefreshTask {
             String controllerJson = mgObsService.downloadObsFile(obsUrl);
             // 解析JSON到对象列表
             Map<String, List<String>> roleAndPermission = new HashMap<>();
+            // 动态需创建人校验权限(与 permissions 配套，OBS 文件可下发 creatorCheckPermissions 覆盖预置)
+            Map<String, List<String>> dynamicCreatorCheck = new HashMap<>();
             RolePermission[] rolePermissions = objectMapper.readValue(controllerJson, RolePermission[].class);
             for (RolePermission rp : rolePermissions) {
                 roleAndPermission.put(rp.getRoleName(), rp.getPermissions());
+                if (rp.getCreatorCheckPermissions() != null && !rp.getCreatorCheckPermissions().isEmpty()) {
+                    dynamicCreatorCheck.put(rp.getRoleName(), rp.getCreatorCheckPermissions());
+                }
             }
             if (roleAndPermission.isEmpty()) {
                 logger.warn("Failed to download permissions from OBS or file is empty, keeping current permissions");
@@ -95,6 +100,8 @@ public class DynamicPermissionRefreshTask {
             }
             boolean success = permissionService.updateDynamicPermissions(roleAndPermission);
             if (success) {
+                // permissions 更新成功才同步更新 creatorCheckPermissions,避免版本不一致
+                permissionService.updateDynamicCreatorCheckPermissions(dynamicCreatorCheck);
                 lastSuccessfulVersion = "updated_" + System.currentTimeMillis();
                 logger.info("Permissions refreshed successfully from OBS, new roles: {}",
                     roleAndPermission.keySet());

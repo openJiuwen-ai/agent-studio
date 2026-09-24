@@ -260,6 +260,21 @@ class ControllerMode(BaseMode):
                 self.task_id, message.message_type, task_execution_id,
             )
             self.terminate = True
+            # 发送 workflow_blocked 事件：与 questioner 中断链路（workflow_handler 的
+            # WORKFLOW_BLOCKED_MESSAGE）同构。manager 端收到后缓存本轮 executionId，
+            # 下一轮恢复时（workflow_resume）合并调试记录到同一条 execution，
+            # 否则 WaitUserInput 场景每轮都会新建一条调试记录
+            blocked_data = WorkflowHandler.create_workflow_jump_debug_data(
+                query,
+                workflow_context.workflow_name,
+                workflow_context.current_node_info,
+            )
+            yield StreamData(
+                code=StreamCode.WORKFLOW_BLOCKED_MESSAGE.value,
+                msg="workflow_blocked_message",
+                data=blocked_data,
+                execution_id=self.task_id,
+            )
         elif (
             workflow_context.action_after_completion
             == ActionAfterCompletionType.TERMINATE

@@ -105,18 +105,22 @@ public class MemoryRepoManagementService implements IMemoryRepoManagementService
     }
 
     private void checkLongMemoryStrategies(List<LongTermMemoryStrategy> longTermMemoryStrategies) {
+        // DTO 层（@NotNull/@Size(min=1) 级联）已拦截 Controller 路径的空值；此处兜底 service 直调路径
         if (longTermMemoryStrategies == null || longTermMemoryStrategies.isEmpty()) {
-            throw new InvalidParameterException("至少需要一个长期记忆策略");
+            throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
         }
-        // 检查策略类型是否唯一
         Set<LongTermMemoryStrategy.TypeEnum> strategyTypes = new HashSet<>();
         for (LongTermMemoryStrategy strategy : longTermMemoryStrategies) {
-            if (strategy == null || strategy.getType() == null) {
-                throw new InvalidParameterException("记忆策略类型不能为空");
+            // @Valid 不校验 List 中的 null 元素，此处显式拦截避免静默持久化
+            if (strategy == null) {
+                throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
             }
-
+            // DTO 级联仅覆盖 Controller 路径，service 直调路径下 type 为空需显式拦截
+            if (strategy.getType() == null) {
+                throw new AgentStudioException(StudioError.MEMORY_STRATEGY_INVALID);
+            }
             if (!strategyTypes.add(strategy.getType())) {
-                throw new InvalidParameterException("记忆策略类型重复: " + strategy.getType());
+                throw new AgentStudioException(StudioError.MEMORY_STRATEGY_DUPLICATE, strategy.getType());
             }
         }
     }

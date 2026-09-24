@@ -185,7 +185,6 @@ NOT_SUPPORT_EXCEPTION_COMPONENT_TYPES = [NodeType.LOOP.value, NodeType.ERROR_END
 # 自定义节点多分支判断标志
 CUSTOM_MULTI_BRANCH_SIGN = "@@"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 CLASSIFICATION_ID = "classificationId"
 INVALID_CLASSIFICATION_ID = -1
 
@@ -2283,7 +2282,7 @@ class BpmnWorkflow(BaseWorkflow):
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.code,
                 message=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.errmsg.format(
-                    reason=str(e) if LOG_VERBOSE_MODE else str(type(e).__name__)
+                    reason=str(type(e).__name__)
                 ),
             ) from e
 

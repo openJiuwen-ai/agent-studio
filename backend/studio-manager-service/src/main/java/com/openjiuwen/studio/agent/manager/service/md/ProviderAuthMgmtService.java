@@ -19,7 +19,10 @@ import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthData;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthMetadata;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthMetadataMapper;
+import com.openjiuwen.studio.agent.manager.mapper.md.UserModelServiceProviderMapper;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProvider;
 import com.openjiuwen.studio.agent.manager.service.IProviderAuthMgmtService;
+import com.openjiuwen.studio.agent.manager.service.WorkspacePermissionValidator;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,8 +53,27 @@ public class ProviderAuthMgmtService implements IProviderAuthMgmtService {
     @Autowired
     private ModelServiceManager serviceManager;
 
+    @Autowired
+    private UserModelServiceProviderMapper userProviderMapper;
+
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
+
     @Value("${model.soft.delete.enable:false}")
     private boolean modelSoftDelete;
+
+    // 鉴权操作创建人校验:鉴权挂在供应商下，创建人限供应商创建人(createdByUser=userName)。
+    // 平台/系统供应商不在用户供应商表(userProviderMapper.selectById 返回 null)，
+    // 不属创建人校验范围，跳过(避免对 SYSTEM 供应商误抛 NO_CREATOR_PERMISSION)。
+    private void validateProviderAuth(String projectId, String workspaceId, String providerId, String action) {
+        ModelServiceProvider provider = userProviderMapper.selectById(providerId);
+        if (provider == null) {
+            // 平台/系统供应商(不在用户表)，不属创建人校验范围，跳过
+            return;
+        }
+        workspacePermissionValidator.validateProvider(projectId, workspaceId, provider.getCreatedByUser(), action,
+            "SYSTEM".equals(provider.getWorkspaceId()));
+    }
 
     @Override
     public ProviderAuthCfgList authConfigList(String projectId, AuthConfigListQo param) {
@@ -99,6 +121,8 @@ public class ProviderAuthMgmtService implements IProviderAuthMgmtService {
                 workspaceId, metadata.getWorkspaceId(), metadata.getId());
             throw new AgentStudioException(StudioError.MD_AUTH_METADATA_PERMISSION_NOT_EXIST);
         }
+        // 创建人校验:鉴权操作限供应商创建人(createdByUser=userName)
+        validateProviderAuth(projectId, workspaceId, metadata.getProviderId(), "auth-create");
 
         ProviderAuth authCfg = authService.getProviderAuth(metadata.getAuthType(),
             JsonUtils.encode(body.getAuthInfo()));
@@ -151,6 +175,8 @@ public class ProviderAuthMgmtService implements IProviderAuthMgmtService {
             log.error("auth data is not exist. id:{}", id);
             throw new AgentStudioException(StudioError.MD_AUTH_DATA_NOT_EXIST);
         }
+        // 创建人校验:鉴权操作限供应商创建人(createdByUser=userName)
+        validateProviderAuth(projectId, workspaceId, auth.getProviderId(), "auth-delete-id");
         if (!projectId.equals(auth.getProjectId())) {
             log.error("user no permission delete auth data. id:{} userProject:{} dataProject:{}", id, projectId,
                 auth.getProjectId());
@@ -192,6 +218,8 @@ public class ProviderAuthMgmtService implements IProviderAuthMgmtService {
         if (StringUtils.isEmpty(providerId)) {
             removeAuthConfig(projectId, workspaceId, authId);
         } else {
+            // 创建人校验:鉴权操作限供应商创建人(createdByUser=userName)
+            validateProviderAuth(projectId, workspaceId, providerId, "auth-delete");
             ProviderAuthMetadata metadata = authService.selectProviderMetadataAndPermissionCheck(projectId, workspaceId,
                 providerId, true).get(0);
             if ("IAM".equals(metadata.getAuthType()) || "NO_AUTH".equals(metadata.getAuthType())) {

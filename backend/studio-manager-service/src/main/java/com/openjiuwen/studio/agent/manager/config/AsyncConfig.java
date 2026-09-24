@@ -35,6 +35,24 @@ public class AsyncConfig {
     @Value("${spring.pools.asyncExecutor.queueCapacity}")
     private int queueCapacity;
 
+    @Value("${spring.pools.pollingCheckExecutor.maxPoolSize}")
+    private int pollingCheckMaxPoolSize;
+
+    @Value("${spring.pools.pollingCheckExecutor.corePoolSize}")
+    private int pollingCheckCorePoolSize;
+
+    @Value("${spring.pools.pollingCheckExecutor.keepAliveSeconds}")
+    private int pollingCheckKeepAliveSeconds;
+
+    @Value("${spring.pools.pollingCheckExecutor.threadNamePrefix}")
+    private String pollingCheckThreadNamePrefix;
+
+    @Value("${spring.pools.pollingCheckExecutor.queueCapacity}")
+    private int pollingCheckQueueCapacity;
+
+    @Value("${spring.pools.pollingCheckExecutor.awaitTerminationSeconds}")
+    private int pollingCheckAwaitTerminationSeconds;
+
     @Bean
     public ThreadPoolTaskExecutor mcpTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -88,6 +106,26 @@ public class AsyncConfig {
         taskExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         taskExecutor.initialize();
         return taskExecutor;
+    }
+
+    /**
+     * Creates the executor used to fetch polling URLs and compare content hashes.
+     *
+     * @return polling check executor
+     */
+    @Bean
+    public ThreadPoolTaskExecutor pollingCheckExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(pollingCheckCorePoolSize);
+        executor.setMaxPoolSize(pollingCheckMaxPoolSize);
+        executor.setQueueCapacity(pollingCheckQueueCapacity);
+        executor.setKeepAliveSeconds(pollingCheckKeepAliveSeconds);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setThreadNamePrefix(pollingCheckThreadNamePrefix);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(pollingCheckAwaitTerminationSeconds);
+        return executor;
     }
 
     @Bean

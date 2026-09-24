@@ -59,8 +59,6 @@ _TYPE = "type"
 _INSTRUCTION_NAME = "instruction_name"
 _TEMPLATE_NAME = "template_name"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class LLMChainModelConfig(BaseModel):
     model_name: StrictStr = Field(alias="modelName")
@@ -949,9 +947,7 @@ class LLMChain(Invokable):
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_LLM_INIT_ERROR.code,
                 message=StatusCode.WORKFLOW_LLM_INIT_ERROR.errmsg.format(
-                    msg=format_pydantic_validation_error_message(e)
-                    if LOG_VERBOSE_MODE
-                    else str(type(e).__name__)
+                    msg=str(type(e).__name__)
                 ),
             ) from e
 

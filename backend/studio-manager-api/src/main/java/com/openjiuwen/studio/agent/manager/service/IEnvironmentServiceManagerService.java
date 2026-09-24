@@ -5,6 +5,7 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.manager.dto.Environment;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInfoRequest;
+import com.openjiuwen.studio.agent.manager.dto.ModifyEnvironmentInfoRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInstances;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariables;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariablesExport;
@@ -112,7 +113,7 @@ public interface IEnvironmentServiceManagerService {
      * @param environmentId environmentId
      * @param body body
      */
-    Boolean modifyEnvironmentInfo(String projectId, String environmentId, EnvironmentInfoRequest body);
+    Boolean modifyEnvironmentInfo(String projectId, String environmentId, ModifyEnvironmentInfoRequestBody body);
 
     /**
      * queryEnvironment

@@ -95,6 +95,7 @@ class WorkflowManagementServiceTest {
     @Mock private AiGenService aiGenerateService;
     @Mock private YamlSerializer yamlSerializer;
     @Mock private KnowledgeBaseServiceImpl knowledgeBaseService;
+    @Mock private WorkspacePermissionValidator workspacePermissionValidator;
 
     @InjectMocks private WorkflowManagementService workflowManagementService;
 
@@ -235,7 +236,7 @@ class WorkflowManagementServiceTest {
         entity.setProjectId("other-project");
         when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
         doThrow(new AgentStudioException(StudioError.PRIVILEGE_ERROR))
-            .when(workflowValidationService).validateModifyPrivilege(any(), anyString(), anyString());
+            .when(workflowValidationService).validateModifyPrivilege(any(), anyString(), anyString(), anyString());
 
         assertThrows(AgentStudioException.class, () ->
             workflowManagementService.deleteWorkflow("p1", "wf-1", "w1"));
@@ -468,20 +469,19 @@ class WorkflowManagementServiceTest {
             entity.setId("wf-1");
             entity.setTriggerList(new ArrayList<>());
             when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
-            when(scheduler.getTrigger(any(TriggerKey.class))).thenReturn(null);
-            when(scheduler.isShutdown()).thenReturn(false);
 
             TriggerConfig body = new TriggerConfig();
             body.setType("EVENT");
             body.setName("event-trigger");
             body.setTriggerId("evt-1");
-            body.setCron("0 0 * * * ?");
             body.setPrompt("test prompt");
 
             var result = workflowManagementService.addTrigger("p1", "wf-1", "w1", body);
 
             assertNotNull(result);
             assertEquals("evt-1", result.getTriggerId());
+            assertEquals(List.of(body), entity.getTriggerList());
+            verifyNoInteractions(scheduler);
         }
     }
 
@@ -1249,6 +1249,10 @@ class WorkflowManagementServiceTest {
     @Test
     void testDeleteWorkflowChannel_AgentBuilderChannel() {
         ReflectionTestUtils.setField(workflowManagementService, "publishAgentBuilderEnable", true);
+        // validator 移到 publishAgentBuilderEnable 分支之前，需 mock workflow 存在
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
 
         var result = workflowManagementService.deleteWorkflowChannel("p1", "wf-1", "wf-1", "w1");
 
@@ -1258,6 +1262,10 @@ class WorkflowManagementServiceTest {
 
     @Test
     void testDeleteWorkflowChannel_ChannelNotExist() {
+        // validator 需 workflow 存在(mock)，validateWorkflow 默认 doNothing 放行
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
         when(releaseChannelMapper.selectByIdAppIdWorkspaceId(anyString(), anyString(), anyString(), anyString()))
             .thenReturn(null);
 
@@ -1267,6 +1275,10 @@ class WorkflowManagementServiceTest {
 
     @Test
     void testDeleteWorkflowChannel_UnsupportedChannelType() {
+        // validator 需 workflow 存在(mock)
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
         ReleaseChannel channel = new ReleaseChannel();
         channel.setId("ch-1");
         channel.setWorkspaceId("w1");
@@ -1280,6 +1292,10 @@ class WorkflowManagementServiceTest {
 
     @Test
     void testDeleteWorkflowChannel_AppStoreChannel() {
+        // validator 需 workflow 存在(mock)
+        WorkflowEntity entity = new WorkflowEntity();
+        entity.setId("wf-1");
+        when(workflowMapper.getWorkflowEntityByWorkspaceId(anyString(), anyString(), anyString())).thenReturn(entity);
         try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
             ctx.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
 
