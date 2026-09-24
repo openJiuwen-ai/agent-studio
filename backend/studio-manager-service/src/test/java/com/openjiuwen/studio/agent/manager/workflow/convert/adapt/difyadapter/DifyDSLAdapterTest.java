@@ -10,12 +10,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowInfo;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
+import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.WorkflowValidationService;
 
 import java.util.ArrayList;
@@ -26,6 +31,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -37,6 +43,9 @@ import org.springframework.test.util.ReflectionTestUtils;
  * 后者在序列化含 Object 类型字段(schema/content)的 bean 图时会因访问器错配导致 JVM 级崩溃
  * (hs_err_pid*.log, EXCEPTION_ACCESS_VIOLATION)，Start 节点先于其他节点序列化时 100% 触发。
  * 若有人将实现改回 {@code JSONObject.from}，本用例会在测试期崩溃 surefire JVM 使构建失败。</p>
+ *
+ * <p>另含 Dify 导入 bug②④⑥ 的行为哨兵（分支编号 / 模型补全 / 输入类型回填），
+ * 详细背景见 bugfix 文档《Dify导入代码节点代码丢失.md》。</p>
  */
 class DifyDSLAdapterTest {
 
@@ -115,6 +124,353 @@ class DifyDSLAdapterTest {
     void validateFormatRejectsMissingAppOrWorkflow() {
         assertThrows(AgentStudioException.class, () -> adapter.validateFormat(Map.of("app", Map.of())));
         assertThrows(AgentStudioException.class, () -> adapter.validateFormat(Map.of("workflow", Map.of())));
+    }
+
+    /**
+     * bug⑥ 哨兵：Dify yml 的 code variables 不带 value_type 时，CodeNodeConverter 必须从被引用
+     * 节点的输出回填 type。否则 DSL type=null 在 IR 生成时被 formatWorkflowType 兜底为 string，
+     * runtime _coerce_inputs 据此把 object 输入 str() 化，代码节点 .get() 报
+     * 'str' object has no attribute 'get'。value_type 有值原样保留；上游不存在兜底 string。
+     */
+    @Test
+    void convertCodeNodeBackfillsInputTypeFromRefTargetWhenValueTypeAbsent() {
+        Map<String, Object> dsl = buildCodeChainDsl();
+        adapter.validateFormat(dsl);
+
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+        JSONObject nodeB = findNodeById(details.getJSONArray("nodes"), "node_code_b");
+        assertNotNull(nodeB, "下游代码节点应完成转换");
+        JSONArray inputs = nodeB.getJSONArray("inputs");
+
+        // value_type 缺失：type 从被引用输出的声明回填
+        assertEquals("object", findFieldByName(inputs, "user").getString("type"));
+        assertEquals("string", findFieldByName(inputs, "thought").getString("type"));
+        // value_type 有值：原样保留，不走回填
+        assertEquals("number", findFieldByName(inputs, "note").getString("type"));
+        // 上游节点不存在：helper 兜底 string，与回填前 IR 生成的兜底行为一致
+        assertEquals("string", findFieldByName(inputs, "ghost").getString("type"));
+    }
+
+    /**
+     * bug② 哨兵：question-classifier 的出边 branch 必须映射为数字序号（branch_1..N，按 classes
+     * 数组顺序），与 QuestionClassifierNodeConverter.adaptBranches 的节点侧编号一致——
+     * runtime 意图路由链强依赖 branch_(\d+) 格式，Dify 语义 class id（如 dj/zx）会导致分类列表
+     * 为空 + 条件全部兜底"分类0"→101021。
+     */
+    @Test
+    void convertMapsIntentClassifierEdgesToNumberedBranches() {
+        Map<String, Object> dsl = buildIntentDsl();
+        adapter.validateFormat(dsl);
+
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+
+        // 节点侧：branches 按 classes 顺序编号 branch_1..3
+        JSONObject classifier = findNodeById(details.getJSONArray("nodes"), "node_classifier");
+        assertNotNull(classifier);
+        JSONArray branches = classifier.getJSONArray("branches");
+        assertEquals(3, branches.size());
+        assertEquals("branch_1", branches.getJSONObject(0).getString("id"));
+        assertEquals("branch_2", branches.getJSONObject(1).getString("id"));
+        assertEquals("branch_3", branches.getJSONObject(2).getString("id"));
+
+        // 边侧：sourceHandle 的语义 class id 映射为同序号（dj 是 classes 第 2 个 → branch_2）
+        assertEquals("branch_1", findEdge(details.getJSONArray("edges"), "node_classifier", "node_answer_zx")
+            .getString("branch"));
+        assertEquals("branch_2", findEdge(details.getJSONArray("edges"), "node_classifier", "node_answer_dj")
+            .getString("branch"));
+        assertEquals("branch_3", findEdge(details.getJSONArray("edges"), "node_classifier", "node_answer_kc")
+            .getString("branch"));
+    }
+
+    /**
+     * bug④ 哨兵（降级路径）：模型注册表查不到/解析失败时导入不得中断——model_name 保留，
+     * model_deployment_id 留空交用户在编辑器手选。裸 UT 无 Spring 上下文，getBean 返回 null，
+     * fillModelDeploymentInfo 走 catch 分支，正好覆盖该降级契约。
+     */
+    @Test
+    void convertLlmNodeLeavesModelDeploymentIdEmptyWhenResolutionFails() {
+        Map<String, Object> dsl = buildLlmDsl("ut-model-unregistered");
+        adapter.validateFormat(dsl);
+
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+        JSONObject llmNode = findNodeById(details.getJSONArray("nodes"), "node_llm");
+        assertNotNull(llmNode);
+        JSONObject model = llmNode.getJSONObject("configs").getJSONObject("model");
+        assertEquals("ut-model-unregistered", model.getString("model_name"));
+        assertTrue(model.getString("model_deployment_id") == null
+            || model.getString("model_deployment_id").isEmpty(), "解析失败时 model_deployment_id 应留空");
+    }
+
+    /**
+     * bug④ 哨兵（补全路径）：按模型名在可用模型列表（与 UI 下拉同源，含 SYSTEM 预置作用域，
+     * 检视 #4）中精确匹配到唯一 LLM 时，model_deployment_id/model_type 必须补全
+     * （IR 生成读这两个 key 拼 IR 模型名，缺失产生 "null|模型名" 畸形名 + 空 extension）。
+     * mock 的 model_type 用小写，覆盖类型匹配的忽略大小写。
+     */
+    @Test
+    void convertLlmNodeFillsModelDeploymentIdFromRegistry() {
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model",
+            List.of(availableModel("ut-deploy-1", "ut-model", "llm")));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertEquals("ut-model", model.getString("model_name"));
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+        assertEquals("llm", model.getString("model_type"));
+    }
+
+    /**
+     * 检视 #2 哨兵：同名多记录混有非 LLM 类型（如 embedding）时，必须按 LLM 类型过滤后取
+     * 唯一记录，不依赖返回顺序把错误类型绑成 LLM 部署。
+     */
+    @Test
+    void convertLlmNodePicksUniqueLlmAmongSameNameMixedTypes() {
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(
+            availableModel("ut-embed-1", "ut-model", "Text-Embedding"),
+            availableModel("ut-deploy-1", "ut-model", "LLM")));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+        assertEquals("LLM", model.getString("model_type"));
+    }
+
+    /**
+     * 检视 #2 哨兵：多供应商同名 LLM（类型过滤后仍多条）没有可靠 tiebreak（Dify yml 的
+     * provider 是 Dify 插件 id，映射不了平台供应商），必须留空交用户手选。
+     */
+    @Test
+    void convertLlmNodeLeavesModelEmptyWhenMultipleSameNameLlms() {
+        WorkflowInfo info = convertLlmWithMockedRegistry("ut-model", List.of(
+            availableModel("ut-deploy-a", "ut-model", "LLM"),
+            availableModel("ut-deploy-b", "ut-model", "LLM")));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertTrue(model.getString("model_deployment_id") == null
+            || model.getString("model_deployment_id").isEmpty(), "多供应商同名 LLM 应留空交用户手选");
+    }
+
+    /**
+     * 检视 #4 哨兵：模型名精确匹配须忽略大小写——DB collation（utf8mb4_general_ci）下
+     * SQL '=' 本就不区分大小写，改走 queryAvailableServices + Java 过滤后语义必须保持，
+     * 否则 SYSTEM 预置模型大小写不同的注册名（如 DeepSeek-V4-Flash）会漏配。
+     */
+    @Test
+    void convertLlmNodeMatchesModelNameIgnoringCase() {
+        WorkflowInfo info = convertLlmWithMockedRegistry("deepseek-v4-flash",
+            List.of(availableModel("ut-deploy-1", "DeepSeek-V4-Flash", "LLM")));
+
+        JSONObject model = findLlmNodeModel(info);
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+    }
+
+    /**
+     * 在 mock 的请求上下文与可用模型列表下执行 LLM 节点导入转换（bug④/检视 #2#4 用例公共脚手架）。
+     * queryAvailableServices 以严格参数打桩（"LLM" + containRouter=true）：实现若改查询路径
+     * 或参数，mock 不命中返回 null → 走降级留空 → 断言失败，锁定与 UI 下拉同源的调用契约。
+     */
+    private WorkflowInfo convertLlmWithMockedRegistry(String modelName, List<ModelServiceData> available) {
+        ModelServiceManager manager = mock(ModelServiceManager.class);
+        when(manager.queryAvailableServices("ut-project", "ut-workspace", "LLM", true)).thenReturn(available);
+
+        try (MockedStatic<RequestContextUtils> requestContext = mockStatic(RequestContextUtils.class);
+             MockedStatic<SpringBeanUtils> springBeans = mockStatic(SpringBeanUtils.class)) {
+            requestContext.when(RequestContextUtils::getRequestProjectId).thenReturn("ut-project");
+            requestContext.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("ut-workspace");
+            springBeans.when(() -> SpringBeanUtils.getBean(ModelServiceManager.class)).thenReturn(manager);
+
+            Map<String, Object> dsl = buildLlmDsl(modelName);
+            adapter.validateFormat(dsl);
+            return adapter.convert(dsl);
+        }
+    }
+
+    private ModelServiceData availableModel(String id, String modelName, String modelType) {
+        ModelServiceData data = new ModelServiceData();
+        data.setId(id);
+        data.setModelName(modelName);
+        data.setModelType(modelType);
+        return data;
+    }
+
+    private JSONObject findLlmNodeModel(WorkflowInfo info) {
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+        JSONObject llmNode = findNodeById(details.getJSONArray("nodes"), "node_llm");
+        assertNotNull(llmNode);
+        return llmNode.getJSONObject("configs").getJSONObject("model");
+    }
+
+    private JSONObject findNodeById(JSONArray nodes, String id) {
+        for (int i = 0; i < nodes.size(); i++) {
+            JSONObject node = nodes.getJSONObject(i);
+            if (id.equals(node.getString("id"))) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private JSONObject findEdge(JSONArray edges, String source, String target) {
+        for (int i = 0; i < edges.size(); i++) {
+            JSONObject edge = edges.getJSONObject(i);
+            if (source.equals(edge.getString("source")) && target.equals(edge.getString("target"))) {
+                return edge;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> difyVariable(String name, List<String> selector, String valueType) {
+        Map<String, Object> variable = new HashMap<>();
+        variable.put("variable", name);
+        variable.put("value_selector", selector);
+        if (valueType != null) {
+            variable.put("value_type", valueType);
+        }
+        return variable;
+    }
+
+    private Map<String, Object> edgeOf(String id, String source, String sourceHandle, String target,
+        String sourceType, String targetType) {
+        Map<String, Object> edge = new HashMap<>();
+        edge.put("id", id);
+        edge.put("source", source);
+        edge.put("sourceHandle", sourceHandle);
+        edge.put("target", target);
+        edge.put("targetHandle", "target");
+        edge.put("type", "custom");
+        edge.put("data", Map.of("sourceType", sourceType, "targetType", targetType,
+            "isInIteration", false, "isInLoop", false));
+        return edge;
+    }
+
+    private Map<String, Object> startNodeOf() {
+        Map<String, Object> startData = new HashMap<>();
+        startData.put("type", "start");
+        startData.put("title", "开始");
+        startData.put("desc", "");
+        Map<String, Object> variable = new HashMap<>();
+        variable.put("variable", "user_meta");
+        variable.put("label", "用户元数据");
+        variable.put("type", "paragraph");
+        variable.put("required", false);
+        variable.put("max_length", 50000);
+        startData.put("variables", new ArrayList<>(List.of(variable)));
+        return nodeOf("start", startData, 50, 100);
+    }
+
+    private Map<String, Object> answerNodeOf(String id, int x) {
+        Map<String, Object> answerData = new HashMap<>();
+        answerData.put("type", "answer");
+        answerData.put("title", "回复" + id);
+        answerData.put("desc", "");
+        answerData.put("answer", "你好");
+        return nodeOf(id, answerData, x, 100);
+    }
+
+    /**
+     * start → code_a(声明 user=object/thought=string 输出) → code_b(variables 混合：
+     * 无 value_type 的 user/thought/ghost、带 value_type 的 note)。
+     */
+    private Map<String, Object> buildCodeChainDsl() {
+        Map<String, Object> codeAData = new HashMap<>();
+        codeAData.put("type", "code");
+        codeAData.put("title", "上游代码");
+        codeAData.put("desc", "");
+        codeAData.put("variables", new ArrayList<>(List.of(
+            difyVariable("user_meta", List.of("start", "user_meta"), null))));
+        Map<String, Object> codeAOutputs = new HashMap<>();
+        codeAOutputs.put("user", Map.of("type", "object"));
+        codeAOutputs.put("thought", Map.of("type", "string"));
+        codeAData.put("outputs", codeAOutputs);
+        codeAData.put("code", "def main(user_meta: str) -> dict:\n    return {}\n");
+        Map<String, Object> codeANode = nodeOf("code_a", codeAData, 250, 100);
+
+        Map<String, Object> codeBData = new HashMap<>();
+        codeBData.put("type", "code");
+        codeBData.put("title", "下游代码");
+        codeBData.put("desc", "");
+        codeBData.put("variables", new ArrayList<>(List.of(
+            difyVariable("user", List.of("code_a", "user"), null),
+            difyVariable("thought", List.of("code_a", "thought"), null),
+            difyVariable("note", List.of("code_a", "user"), "number"),
+            difyVariable("ghost", List.of("code_missing", "user"), null))));
+        codeBData.put("outputs", Map.of("result", Map.of("type", "object")));
+        codeBData.put("code", "def main(user: dict) -> dict:\n    return {}\n");
+        Map<String, Object> codeBNode = nodeOf("code_b", codeBData, 450, 100);
+
+        Map<String, Object> graph = new HashMap<>();
+        graph.put("nodes", List.of(startNodeOf(), codeANode, codeBNode));
+        graph.put("edges", List.of(
+            edgeOf("e_start_code_a", "start", "source", "code_a", "start", "code"),
+            edgeOf("e_code_a_code_b", "code_a", "source", "code_b", "code", "code")));
+        graph.put("viewport", Map.of("x", 0, "y", 0, "zoom", 1));
+        return wrapGraph(graph, "ut-dify-code-chain");
+    }
+
+    /**
+     * start → classifier(classes: zx/dj/kc) → 三个 answer 节点，出边 sourceHandle 用语义 class id。
+     */
+    private Map<String, Object> buildIntentDsl() {
+        Map<String, Object> classifierData = new HashMap<>();
+        classifierData.put("type", "question-classifier");
+        classifierData.put("title", "场景识别");
+        classifierData.put("desc", "");
+        classifierData.put("query_variable_selector", List.of("start", "user_meta"));
+        classifierData.put("classes", List.of(
+            Map.of("id", "zx", "name", "综合咨询"),
+            Map.of("id", "dj", "name", "电价方案"),
+            Map.of("id", "kc", "name", "勘查方案")));
+        Map<String, Object> classifierNode = nodeOf("classifier", classifierData, 250, 100);
+
+        Map<String, Object> graph = new HashMap<>();
+        graph.put("nodes", List.of(startNodeOf(), classifierNode,
+            answerNodeOf("answer_zx", 450), answerNodeOf("answer_dj", 450), answerNodeOf("answer_kc", 450)));
+        graph.put("edges", List.of(
+            edgeOf("e_start_classifier", "start", "source", "classifier", "start", "question-classifier"),
+            edgeOf("e_zx", "classifier", "zx", "answer_zx", "question-classifier", "answer"),
+            edgeOf("e_dj", "classifier", "dj", "answer_dj", "question-classifier", "answer"),
+            edgeOf("e_kc", "classifier", "kc", "answer_kc", "question-classifier", "answer")));
+        graph.put("viewport", Map.of("x", 0, "y", 0, "zoom", 1));
+        return wrapGraph(graph, "ut-dify-intent");
+    }
+
+    /**
+     * start → llm(模型名可注入) → answer。
+     */
+    private Map<String, Object> buildLlmDsl(String modelName) {
+        Map<String, Object> llmData = new HashMap<>();
+        llmData.put("type", "llm");
+        llmData.put("title", "LLM");
+        llmData.put("desc", "");
+        llmData.put("model", Map.of("name", modelName, "completion_params", Map.of("temperature", 0.5)));
+        Map<String, Object> llmNode = nodeOf("llm", llmData, 250, 100);
+
+        Map<String, Object> graph = new HashMap<>();
+        graph.put("nodes", List.of(startNodeOf(), llmNode, answerNodeOf("answer", 450)));
+        graph.put("edges", List.of(
+            edgeOf("e_start_llm", "start", "source", "llm", "start", "llm"),
+            edgeOf("e_llm_answer", "llm", "source", "answer", "llm", "answer")));
+        graph.put("viewport", Map.of("x", 0, "y", 0, "zoom", 1));
+        return wrapGraph(graph, "ut-dify-llm");
+    }
+
+    private Map<String, Object> wrapGraph(Map<String, Object> graph, String appName) {
+        Map<String, Object> workflow = new HashMap<>();
+        workflow.put("graph", graph);
+        workflow.put("environment_variables", new ArrayList<>());
+        workflow.put("conversation_variables", new ArrayList<>());
+
+        Map<String, Object> dsl = new HashMap<>();
+        dsl.put("app", Map.of("mode", "advanced-chat", "name", appName, "description", "UT夹具"));
+        dsl.put("kind", "app");
+        dsl.put("version", "0.1.0");
+        dsl.put("workflow", workflow);
+        return dsl;
     }
 
     private JSONObject findNodeByType(JSONArray nodes, String type) {

@@ -5,12 +5,18 @@ package com.openjiuwen.studio.agent.manager.workflow.convert.adapt.difyadapter;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.enums.NodeType;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
+import com.openjiuwen.studio.agent.manager.enums.ModelTypeV2;
+import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.workflow.convert.adapt.enums.OutputParamsDiffType;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -29,6 +35,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @SuppressWarnings("unchecked")
+@Slf4j
 public abstract class AbstractSDSLNodeConverter implements NodeConverter {
 
     private static final String DIFY_REF_REGEX = "\\{\\{#([^#}]+?)#\\}\\}";
@@ -140,8 +147,17 @@ public abstract class AbstractSDSLNodeConverter implements NodeConverter {
                                 workflowNodeVO.getConfigs().get("loop_body")).contains(currentNodeVO.getId())) {
                             difyRefVarName = String.format("intermediate_loop_var.%s", difyRefVarName);
                         }
-                        contentRef.put("ref_var_name",
-                                OutputParamsDiffType.getVariableName("Dify_" + workflowNodeVO.getType() + "_" + difyRefVarName));
+                        String refVarName = OutputParamsDiffType.getVariableName(
+                                "Dify_" + workflowNodeVO.getType() + "_" + difyRefVarName);
+                        // 3+ 段引用（如 code 节点 result.<嵌套key>）保留嵌套路径，与 LLM 分支的
+                        // buildVariablePath 对齐：此前只用第 2 段（顶层输出名），嵌套 key 被丢弃，
+                        // 导致不同字段的引用全部指向同一个输出对象（如 4 个电价字段全 ref 到 result 整对象）。
+                        // ref 路径用原始 key——运行时数据 key 即代码返回 dict 的 key（可为中文），
+                        // 拼音仅发生在用户手动改输入参数名时，不影响 ref。
+                        if (variables.size() > 2) {
+                            refVarName = refVarName + "." + String.join(".", variables.subList(2, variables.size()));
+                        }
+                        contentRef.put("ref_var_name", refVarName);
                         if (("query".equalsIgnoreCase(difyRefVarName) || "sys.query".equalsIgnoreCase(difyRefVarName)) && "node_start".equalsIgnoreCase(workflowNodeVO.getId())) {
                             contentRef.put("source", WorkflowFieldVO.SourceEnum.SYSTEM.toString());
                             contentRef.put("ref_var_name", "query");
@@ -157,6 +173,61 @@ public abstract class AbstractSDSLNodeConverter implements NodeConverter {
                 .setContent(contentRef);
     }
 
+
+    /**
+     * 按模型名查平台可用模型，补全 modelInfo 的 model_deployment_id / model_type。
+     *
+     * <p>背景：Dify yml 的模型只有名字（如 qwen3.7-plus），无平台 deployment id 概念；
+     * IR 生成（{@code AbstractIRNodeAdapter.adaptModel}）读 configs.model.model_deployment_id
+     * 拼 IR 模型名（{@code deploymentId|modelName}）并解析 extension，为空时产生
+     * {@code "null|模型名"} 畸形名 + 空 extension（"包含空元素: model_deployment_id"）。</p>
+     *
+     * <p>查询路径（检视 #4）：{@code ModelServiceManager.queryAvailableServices}——与 LLM 节点
+     * UI 模型下拉同源（AgentManagementService/ControllerManagementService 同款调用），覆盖
+     * SYSTEM 作用域平台预置模型 + 公共/免费模型 + 路由策略，且只返回该 workspace 实际可用
+     * （平台内置或供应商已授权）的模型。不用 {@code queryByModelName}：它仅项目/空间精确
+     * 匹配，查不到 SYSTEM 预置模型（平台预置模型存于 PROJECT_ID='SYSTEM'）。</p>
+     *
+     * <p>确定性规则（检视 #2）：模型名精确匹配（忽略大小写，对齐 DB collation 语义）+ LLM
+     * 类型过滤后必须唯一，否则留空交用户手选——同名多条（多供应商/工作空间与 SYSTEM 并存）
+     * 无可靠 tiebreak（Dify yml 的 provider 是 Dify 插件 id，映射不了平台供应商），依赖返回
+     * 顺序取第一条会静默生成错误 IR extension。</p>
+     *
+     * <p>查不到 / 非唯一 / 解析异常，均保持留空——用户在节点编辑器手动选模型，不阻断导入。</p>
+     *
+     * @param modelInfo 模型信息 map（调用方已放好 model_name，此处补全另两个 key）
+     * @param modelName Dify 模型名
+     */
+    protected void fillModelDeploymentInfo(Map<String, String> modelInfo, String modelName) {
+        if (StringUtils.isEmpty(modelName)) {
+            return;
+        }
+        try {
+            String projectId = RequestContextUtils.getRequestProjectId();
+            String workspaceId = RequestContextUtils.getRequestWorkspaceId();
+            List<ModelServiceData> available = SpringBeanUtils.getBean(ModelServiceManager.class)
+                .queryAvailableServices(projectId, workspaceId, ModelTypeV2.LLM.toString(), true);
+            if (available == null || available.isEmpty()) {
+                log.warn("Dify import: no available platform model in workspace, "
+                    + "model_deployment_id left empty for name {}", modelName);
+                return;
+            }
+            List<ModelServiceData> matched = available.stream()
+                .filter(model -> ModelTypeV2.LLM.toString().equalsIgnoreCase(model.getModelType()))
+                .filter(model -> modelName.equalsIgnoreCase(model.getModelName()))
+                .toList();
+            if (matched.size() != 1) {
+                log.warn("Dify import: {} available model(s) exactly match name {}, "
+                    + "model_deployment_id left empty for manual selection", matched.size(), modelName);
+                return;
+            }
+            ModelServiceData model = matched.get(0);
+            modelInfo.put(CommonConstant.ModelParam.MODEL_DEPLOYMENT_ID, model.getId());
+            modelInfo.put(CommonConstant.ModelParam.MODEL_TYPE, model.getModelType());
+        } catch (Exception e) {
+            log.warn("Dify import: model resolution failed for name {}", modelName, e);
+        }
+    }
 
     /**
      * 把环境变量引用转换成固定的值 （如果没有固定的值，则用 {{env.project_id}} 这种形式代替
