@@ -243,6 +243,31 @@ class TestProcessUserInputActiveWorkflows:
             == ["wfA"]
         )
 
+    def test_sequence_valid_plus_explicit_empty_active_lands_empty(self):
+        """sequence 有效 + activeWorkflows=[]：active 仍按声明落 []（不因序列回退全量）。
+
+        :284-287 的 None 写只是清旧值；本轮显式传入的 active_workflows 随后
+        仍会落键——序列优先仅体现在读取端（_get_next_workflow 先查序列键），
+        序列执行完毕后的路由按 []（零 GENERAL 候选，走 DEFAULT 兜底）。
+        若按"序列有效则跳过 active 落键"处理，[] 会退化为 None（全量），
+        在序列执行完毕阶段重新引入 #216 越权。
+        """
+        ctx_a = _make_workflow_context("wfA", "A")
+        planner = self._make_planner({"wfA": ctx_a}, [ctx_a])
+        planner._process_user_input(
+            self._make_message(
+                {"workflow_sequence": ["wfA"], "active_workflows": []}
+            )
+        )
+
+        assert planner.context_manager.globals[
+            WorkflowConstants.VALID_WORKFLOW_SEQUENCE_KEY
+        ] == ["wfA"]
+        assert (
+            planner.context_manager.globals[WorkflowConstants.ACTIVE_WORKFLOWS_KEY]
+            == []
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
