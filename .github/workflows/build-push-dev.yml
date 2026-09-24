@@ -282,8 +282,108 @@ jobs:
           cache-from: type=gha,scope=grafana-victorialogs
           cache-to: type=gha,scope=grafana-victorialogs,mode=max
 
-  summary:
+  export-images:
     needs: [prepare, build-and-push, build-grafana]
+    # 允许 build-grafana 失败（可选日志栈镜像）；应用镜像构建失败则不导出
+    if: ${{ !cancelled() && needs.build-and-push.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Resolve image repository config
+        id: image_config
+        env:
+          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
+          echo "ghcr_registry=${GHCR_IMAGE_REPOSITORY%%/*}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ steps.image_config.outputs.ghcr_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Export images to zip archive
+        env:
+          REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
+          ARCH: ${{ matrix.arch }}
+          BUILD_TS: ${{ needs.prepare.outputs.build_ts }}
+        run: |
+          set -euo pipefail
+          # ARCH 用于 docker --platform（Docker 架构名），SUFFIX 用于镜像 tag 与文件/artifact 命名
+          if [ "${ARCH}" = amd64 ]; then SUFFIX=x86_64; else SUFFIX=arm64; fi
+          APP_TAG="dev-core-${BUILD_TS}.${SUFFIX}"
+          GRAFANA_TAG="11.3.0-0.29.0"
+          ARCHIVE="agent-studio-images-dev-core-${BUILD_TS}-${SUFFIX}.zip"
+          mkdir -p images
+
+          {
+            echo "openJiuwen AgentStudio Docker 镜像离线包"
+            echo "架构: linux/${ARCH} (${SUFFIX})"
+            echo "应用镜像标签: ${APP_TAG}"
+            echo "Grafana 镜像标签: ${GRAFANA_TAG}"
+            echo
+            echo "使用方法:"
+            echo "  1. 解压: unzip ${ARCHIVE}"
+            echo '  2. 加载镜像: for f in images/*.tar; do docker load -i "$f"; done'
+            echo "  3. 离线部署: 将 images/ 目录放到 deploy/ 下, 在 deploy/.env 设置 IMAGE_SOURCE=offline,"
+            echo "     并将 STUDIO_*_IMAGE 填为已加载镜像的完整名称 (docker images 可查)"
+            echo "  4. 执行 ./deploy.sh all"
+            echo
+            echo "注意: 基础设施镜像 (mysql/redis/minio/minio-mc) 不在本包内, 完全离线部署需自行准备到 deploy/dep-images/"
+          } > README.txt
+
+          EXPORTED=0
+          for SERVICE in studio-manager studio-console studio-runtime studio-builder grafana-victorialogs; do
+            if [ "${SERVICE}" = grafana-victorialogs ]; then
+              IMAGE="${REPOSITORY}/${SERVICE}:${GRAFANA_TAG}"
+            else
+              IMAGE="${REPOSITORY}/${SERVICE}:${APP_TAG}"
+            fi
+            echo "Exporting ${IMAGE}"
+            if ! docker pull --platform "linux/${ARCH}" "${IMAGE}"; then
+              # grafana 仅用于可选日志栈，拉取失败跳过；应用镜像缺失则终止
+              if [ "${SERVICE}" = grafana-victorialogs ]; then
+                echo "WARN: ${IMAGE} unavailable, skipping optional logging-stack image"
+                continue
+              fi
+              echo "ERROR: required image ${IMAGE} unavailable"
+              exit 1
+            fi
+            docker save -o "images/${SERVICE}-${SUFFIX}.tar" "${IMAGE}"
+            docker image rm "${IMAGE}" >/dev/null 2>&1 || true
+            zip -q "${ARCHIVE}" "images/${SERVICE}-${SUFFIX}.tar"
+            rm -f "images/${SERVICE}-${SUFFIX}.tar"
+            EXPORTED=$((EXPORTED + 1))
+          done
+
+          zip -q "${ARCHIVE}" README.txt
+          echo "Created ${ARCHIVE} with ${EXPORTED} image(s):"
+          unzip -l "${ARCHIVE}"
+
+      - name: Upload image archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: agent-studio-images-dev-core-${{ needs.prepare.outputs.build_ts }}-${{ matrix.arch == 'amd64' && 'x86_64' || matrix.arch }}
+          path: agent-studio-images-dev-core-${{ needs.prepare.outputs.build_ts }}-${{ matrix.arch == 'amd64' && 'x86_64' || matrix.arch }}.zip
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
+
+  summary:
+    needs: [prepare, build-and-push, build-grafana, export-images]
+    # 只要导出成功就打印汇总，不受可选的 grafana 构建失败影响
+    if: ${{ !cancelled() && needs.export-images.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Print image summary
@@ -291,3 +391,6 @@ jobs:
           echo "Dev images published with tags:"
           echo "  dev-core-${{ needs.prepare.outputs.build_ts }}.x86_64"
           echo "  dev-core-${{ needs.prepare.outputs.build_ts }}.arm64"
+          echo
+          echo "Downloadable image archives (docker save tar, zipped):"
+          echo "  https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
