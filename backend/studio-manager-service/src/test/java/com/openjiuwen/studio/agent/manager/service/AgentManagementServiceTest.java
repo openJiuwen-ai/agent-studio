@@ -102,6 +102,9 @@ class AgentManagementServiceTest {
     private Scheduler scheduler;
 
     @Mock
+    private org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor fixedThreadPool;
+
+    @Mock
     private AgentImportExportService agentImportExportService;
 
     @Mock
@@ -164,6 +167,8 @@ class AgentManagementServiceTest {
         ReflectionTestUtils.setField(agentManagementService, "agentRuntimeClient", agentRuntimeClient);
         ReflectionTestUtils.setField(agentManagementService, "agentSpaceService", agentSpaceService);
         ReflectionTestUtils.setField(agentManagementService, "workflowValidationService", workflowValidationService);
+        // COM-02: fixedThreadPool 迁移为 @Autowired agentMgmtCleanupExecutor bean，手工 new 不注入→setField
+        ReflectionTestUtils.setField(agentManagementService, "fixedThreadPool", fixedThreadPool);
         ReflectionTestUtils.setField(agentManagementService, "opSvcProjectId", "op-project-id");
         ReflectionTestUtils.setField(agentManagementService, "agentRuntimeEndpoint", "http://runtime");
         ReflectionTestUtils.setField(agentManagementService, "runAgentStreamUrl", "http://stream");
@@ -208,6 +213,8 @@ class AgentManagementServiceTest {
 
             assertNotNull(result);
             assertEquals(agentId, result.getId());
+            // COM-02 回归断言：异步清理任务提交到受管 executor（防误删 fixedThreadPool.execute 调度）
+            verify(fixedThreadPool).execute(any(Runnable.class));
         }
     }
 
@@ -267,6 +274,8 @@ class AgentManagementServiceTest {
             verify(mappingMapper).deleteBatchByAppId(agentId, null, true);
             verify(releaseVersionMapper).deleteByAppId(agentId);
             verify(agentMapper).deleteByPrimaryKey(agentId, projectId);
+            // COM-02 回归断言：异步清理任务提交到受管 executor（防误删 fixedThreadPool.execute 调度）
+            verify(fixedThreadPool).execute(any(Runnable.class));
         }
     }
 

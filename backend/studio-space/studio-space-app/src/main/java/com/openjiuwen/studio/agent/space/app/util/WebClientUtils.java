@@ -66,7 +66,7 @@ public class WebClientUtils {
                     // 1. 可以记录详细的错误日志
                     // 2. 可以解析response body，获取更多错误信息
                     return response.bodyToMono(String.class).flatMap(errorBody -> {
-                        log.error("post sse error. {}", errorBody);
+                        log.error("post sse error");
                         return Mono.error(new AgentSpaceException(AgentSpaceErrorCodes.POST_SSE_EXCEPTION,
                             "server responded with " + response.statusCode()));
                     });
@@ -74,7 +74,7 @@ public class WebClientUtils {
             .onStatus(HttpStatusCode::is4xxClientError,
                 // 4xx错误
                 response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                    log.error("post error. {}", errorBody);
+                    log.error("post error");
                     return Mono.error(new AgentSpaceException(AgentSpaceErrorCodes.POST_SSE_EXCEPTION,
                         "client responded with " + response.statusCode()));
                 }))

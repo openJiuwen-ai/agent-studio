@@ -139,7 +139,7 @@ public class AgentManagerService {
     private void postStream(String url, JSONObject requestBody, SseEmitter emitter, AgentType agentType,
         StringBuilder aiResponse, AgentBuilderMessageEntity responseMessage) {
         // agentRuntime接口通过slb直接调用
-        log.info("start postStream, body = {}", requestBody);
+        log.info("start postStream");
         Map<String, String> headers = Map.of(HeaderConstant.HEADER_X_AUTH_TOKEN, AuthorizationContextHolder.iamToken(),
             "stream", "true");
 

@@ -34,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +51,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -109,9 +112,13 @@ public class ModelServiceManager {
     @Autowired
     private ProviderAuthDataMapper authDataMapper;
 
+    @Autowired
+    @Qualifier("backgroundAsyncExecutor")
+    private ThreadPoolTaskExecutor backgroundAsyncExecutor;
+
     @PostConstruct
     public void postConstruct() {
-        CompletableFuture.runAsync(this::startSyncTasks);
+        CompletableFuture.runAsync(this::startSyncTasks, backgroundAsyncExecutor);
     }
 
     void startSyncTasks() {

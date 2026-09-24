@@ -116,6 +116,11 @@ spring:
             url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
             connectTimeout: ${feign.agentRuntime.connectTimeout:10000}
             readTimeout: ${feign.agentRuntime.readTimeout:120000}
+            # COM-04 §5.1/§10.2：禁用自动重定向，3xx 显式失败，防止关联 Header 被携带到非白名单 origin
+            followRedirects: false
+          agentBuilder:
+            # COM-04 §5.1/§10.2：Builder Feign 同样禁用重定向（url 仍由 feign.client.config 业务占位提供）
+            followRedirects: false
 
 trigger:
   polling:

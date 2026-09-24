@@ -23,6 +23,9 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunRsp;
 import com.openjiuwen.studio.agent.manager.entity.TaskEntity;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowInstanceEntity;
+import com.openjiuwen.studio.agent.manager.observability.ExecutionIdSelector;
+import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
+import com.openjiuwen.studio.agent.manager.observability.MdcScope;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.enums.MessageRole;
 import com.openjiuwen.studio.agent.manager.enums.WorkflowRunStatus;
@@ -40,6 +43,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -47,7 +52,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
@@ -57,8 +61,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -107,6 +109,8 @@ public class TaskRuntimeService {
      */
     private final ConcurrentMap<String, AsyncTaskParamHolder> taskEventSource = new ConcurrentHashMap<>();
 
+    private final ExecutionIdSelector executionIdSelector = new ExecutionIdSelector();
+
     @Value("${task.async.pool-size:100}")
     private int taskAsyncPoolSize;
 
@@ -147,14 +151,13 @@ public class TaskRuntimeService {
     private String runtimeEndpoint;
 
     /**
-     * 线程池
+     * 线程池（COM-02 转受管：原自建 newFixedThreadPool(taskAsyncPoolSize) 迁移为
+     * ObservabilityAsyncConfig.workflowAsyncTaskExecutor，保现状容量与无界队列，加 MDC 传播
+     * 与 Spring 受管生命周期；taskAsyncPoolSize 仍用于 idle 池位估算）
      */
-    private ExecutorService executor;
-
-    @PostConstruct
-    private void init() {
-        executor = Executors.newFixedThreadPool(taskAsyncPoolSize);
-    }
+    @Autowired
+    @Qualifier("workflowAsyncTaskExecutor")
+    private ThreadPoolTaskExecutor executor;
 
     /**
      * 定期拉起初始状态的任务
@@ -472,7 +475,7 @@ public class TaskRuntimeService {
     private AsyncWorkflowListener createAsyncListener(ExecuteParams executeParams) {
         WorkflowRunResult result = initWorkflowRunResult(executeParams);
         // requestId在异步线程中可能为null，WorkflowListener.processStart()会fallback到executionId
-        String requestId = org.slf4j.MDC.get("request-id");
+        String requestId = org.slf4j.MDC.get(MdcKeys.REQUEST_ID);
         return new AsyncWorkflowListener(requestId, executeParams, result, executeParams.getHttpHeaders());
     }
 
@@ -492,18 +495,25 @@ public class TaskRuntimeService {
         // 2. 构建WorkflowRunReq请求体
         WorkflowRunReq reqBody = buildWorkflowRunReq(executeParams);
 
-        // 3. 设置executionId
+        // 3. 设置executionId（异步任务生成 UUID）
         String taskId = executeParams.getAsyncTaskParamHolder() != null
                 ? java.util.UUID.randomUUID().toString() : null;
         if (taskId != null) {
             executeParams.setExecutionId(taskId);
         }
-        org.slf4j.MDC.put(Constant.TASK_ID, executeParams.getExecutionId());
-        executeParams.getHttpHeaders().set("X-Execution-Id", executeParams.getExecutionId());
+        // DEF-02 §4.1: 统一选值确保非空 + MdcScope，COM-04 §6.2 applier 从 MDC 注入 X-Execution-Id
+        ExecutionIdSelector.Result selection = executionIdSelector.select(
+            null, executeParams.getExecutionId(), executeParams.getHttpHeaders().getFirst("X-Execution-Id"));
+        if (selection.isRestoreIllegal()) {
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        executeParams.setExecutionId(selection.getValue());
 
         // 4. 调用stream()发起SSE请求，AsyncWorkflowListener自动处理事件并保存调试记录
-        agentServiceProxyService.stream(url, executeParams.getHttpHeaders(),
-                JsonUtils.toJson(reqBody), 900000L, listener);
+        try (MdcScope scope = MdcScope.open(Map.of(MdcKeys.EXECUTION_ID, executeParams.getExecutionId()))) {
+            agentServiceProxyService.stream(url, executeParams.getHttpHeaders(),
+                    JsonUtils.toJson(reqBody), 900000L, listener);
+        }
 
         return listener.getResult();
     }
