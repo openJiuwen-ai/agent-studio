@@ -141,8 +141,9 @@ class WorkspaceServiceTest {
             req.setId("ws-1");
             req.setName("New Name");
 
-            assertThrows(AgentStudioException.class, () ->
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
                 workspaceService.updateWorkspace("p1", req));
+            assertEquals(StudioError.WORKSPACE_NOT_EXISTED, ex.getErrorCode());
         }
     }
 
@@ -196,14 +197,34 @@ class WorkspaceServiceTest {
         try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
             ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
 
+            WorkspaceInfo wsInfo = new WorkspaceInfo();
+            wsInfo.setType("team");
+            when(workspaceMapper.selectById("p1", "ws-1")).thenReturn(wsInfo);
             when(workspaceMemberService.queryWorkspaceMemberDetail(eq("p1"), eq("uid-1"), eq("ws-1")))
                 .thenReturn(null);
 
             DeleteWorkspaceReq req = new DeleteWorkspaceReq();
             req.setId("ws-1");
 
-            assertThrows(AgentStudioException.class, () ->
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
                 workspaceService.deleteWorkspace("p1", req));
+            assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+        }
+    }
+
+    @Test
+    void testDeleteWorkspace_NotFound() {
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+
+            when(workspaceMapper.selectById("p1", "ws-1")).thenReturn(null);
+
+            DeleteWorkspaceReq req = new DeleteWorkspaceReq();
+            req.setId("ws-1");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                workspaceService.deleteWorkspace("p1", req));
+            assertEquals(StudioError.WORKSPACE_NOT_EXISTED, ex.getErrorCode());
         }
     }
 
