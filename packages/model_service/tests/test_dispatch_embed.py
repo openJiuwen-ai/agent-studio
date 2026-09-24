@@ -14,7 +14,7 @@ class _FakeEmbeddings:
         self.model = model
         self.input = input_
 
-    async def create(self, model, input):
+    async def create(self, model, input):  # pylint: disable=redefined-builtin  # OpenAI SDK 关键字参数名
         self.model = model
         self.input = input
         return {"data": "fake-embeddings"}
@@ -59,12 +59,14 @@ def _mk_conn():
 
 
 class _FakeHttpxClient:
-    async def aclose(self):
+    @staticmethod
+    async def aclose():
         return None
 
 
 class TestEmbed:
-    def test_embed_calls_create(self, monkeypatch):
+    @staticmethod
+    def test_embed_calls_create(monkeypatch):
         import model_service.dispatch as dispatch
         from openai import AsyncOpenAI
 

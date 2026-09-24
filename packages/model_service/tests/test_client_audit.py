@@ -2,6 +2,8 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Unit tests for StudioModelClient audit helpers (_new_audit / _apply_audit_detail)."""
 
+# pylint: disable=protected-access  # 白盒单测：需直接调用 _new_audit / _apply_audit_detail
+
 import pytest
 
 from model_service.client import StudioModelClient, _ResolveInputs
@@ -43,7 +45,8 @@ def _inputs():
 
 
 class TestNewAudit:
-    def test_new_audit_non_stream(self):
+    @staticmethod
+    def test_new_audit_non_stream():
         client = StudioModelClient.__new__(StudioModelClient)
         audit = client._new_audit(_strategy([_detail()]), _inputs(), stream=False)
         assert isinstance(audit, AuditLog)
@@ -56,12 +59,14 @@ class TestNewAudit:
         assert audit.auth_id == "a1"
         assert audit.provider_id == "prov"
 
-    def test_new_audit_stream(self):
+    @staticmethod
+    def test_new_audit_stream():
         client = StudioModelClient.__new__(StudioModelClient)
         audit = client._new_audit(_strategy([_detail()]), _inputs(), stream=True)
         assert audit.stream is True
 
-    def test_new_audit_auth_none(self):
+    @staticmethod
+    def test_new_audit_auth_none():
         auth = None
         detail = ModelServiceDetail(
             model=_model(), auth=auth, available=False, is_free_model=False,
@@ -72,7 +77,8 @@ class TestNewAudit:
 
 
 class TestApplyAuditDetail:
-    def test_apply_updates_fields(self):
+    @staticmethod
+    def test_apply_updates_fields():
         client = StudioModelClient.__new__(StudioModelClient)
         audit = AuditLog(
             model_id="old", model_name="old", api_url="http://old", stream=False,
@@ -86,7 +92,8 @@ class TestApplyAuditDetail:
         assert audit.provider_id == "prov"
         assert audit.auth_id == "a2"
 
-    def test_apply_auth_none_keeps_id(self):
+    @staticmethod
+    def test_apply_auth_none_keeps_id():
         client = StudioModelClient.__new__(StudioModelClient)
         audit = AuditLog(
             model_id="old", model_name="old", api_url="http://old", stream=False,

@@ -34,25 +34,29 @@ def _detail(model_id="m1", available=True, is_free=False):
 
 
 class TestAuditLog:
-    def test_dataclass_fields(self):
+    @staticmethod
+    def test_dataclass_fields():
         log = AuditLog(model_id="m", model_name="n", api_url="u", stream=False,
                        status="success", duration_ms=1, project_id="p",
                        workspace_id="w", auth_id="a", provider_id="prov")
         assert log.model_id == "m"
         assert log.prompt_tokens is None
 
-    def test_record_audit_does_not_raise(self):
+    @staticmethod
+    def test_record_audit_does_not_raise():
         log = AuditLog(model_id="m", model_name="n", api_url="u", stream=False,
                        status="success", duration_ms=1, project_id="p",
                        workspace_id="w", auth_id="a", provider_id="prov")
         record_audit(log)
 
-    def test_alarm_does_not_raise(self):
+    @staticmethod
+    def test_alarm_does_not_raise():
         alarm("LLM", "res", "cause")
 
 
 class TestInvokeModelStrategy:
-    def test_model_strategy_single_invoke(self):
+    @staticmethod
+    def test_model_strategy_single_invoke():
         async def invoke_one(detail, stream):
             return f"result-{detail.model.id}"
 
@@ -63,7 +67,8 @@ class TestInvokeModelStrategy:
 
         assert asyncio.run(_run()) == "result-m1"
 
-    def test_model_strategy_passes_stream(self):
+    @staticmethod
+    def test_model_strategy_passes_stream():
         captured = {}
 
         async def invoke_one(detail, stream):
@@ -78,7 +83,8 @@ class TestInvokeModelStrategy:
         assert asyncio.run(_run()) == "ok"
         assert captured["stream"] is True
 
-    def test_model_strategy_on_attempt_called(self):
+    @staticmethod
+    def test_model_strategy_on_attempt_called():
         attempts = []
 
         def on_attempt(detail):
@@ -97,7 +103,8 @@ class TestInvokeModelStrategy:
 
 
 class TestRouterStrategy:
-    def test_router_first_model_success(self):
+    @staticmethod
+    def test_router_first_model_success():
         order = []
 
         async def invoke_one(detail, stream):
@@ -115,7 +122,8 @@ class TestRouterStrategy:
         assert asyncio.run(_run()) == "ok"
         assert order == ["m1"]
 
-    def test_router_failover_to_second(self):
+    @staticmethod
+    def test_router_failover_to_second():
         order = []
 
         async def invoke_one(detail, stream):
@@ -135,7 +143,8 @@ class TestRouterStrategy:
         assert asyncio.run(_run()) == "ok-m2"
         assert order == ["m1", "m2"]
 
-    def test_router_retry_count(self):
+    @staticmethod
+    def test_router_retry_count():
         order = []
 
         async def invoke_one(detail, stream):
@@ -156,7 +165,8 @@ class TestRouterStrategy:
         # retry_count=2 → 3 次尝试。
         assert order == ["m1", "m1", "m1"]
 
-    def test_router_skips_unavailable_nonfree(self):
+    @staticmethod
+    def test_router_skips_unavailable_nonfree():
         order = []
 
         async def invoke_one(detail, stream):
@@ -174,7 +184,8 @@ class TestRouterStrategy:
         assert asyncio.run(_run()) == "ok"
         assert order == ["m2"]
 
-    def test_router_free_model_always_tried(self):
+    @staticmethod
+    def test_router_free_model_always_tried():
         order = []
 
         async def invoke_one(detail, stream):
@@ -193,7 +204,8 @@ class TestRouterStrategy:
         assert asyncio.run(_run()) == "ok"
         assert order == ["m1"]
 
-    def test_router_no_available_model(self):
+    @staticmethod
+    def test_router_no_available_model():
         async def invoke_one(detail, stream):
             return "ok"
 
@@ -209,7 +221,8 @@ class TestRouterStrategy:
             asyncio.run(_run())
         assert exc_info.value.code == "MD_MODEL_SERVICE_NOT_AVAILABLE"
 
-    def test_router_timeout(self, monkeypatch):
+    @staticmethod
+    def test_router_timeout(monkeypatch):
         import model_service.policy as policy_mod
 
         async def invoke_one(detail, stream):
@@ -236,7 +249,8 @@ class TestRouterStrategy:
             asyncio.run(_run())
         assert exc_info.value.code == "MD_STRATEGY_TIMEOUT"
 
-    def test_router_on_attempt_tracks_actual_detail(self):
+    @staticmethod
+    def test_router_on_attempt_tracks_actual_detail():
         attempts = []
 
         def on_attempt(detail):
@@ -258,7 +272,8 @@ class TestRouterStrategy:
         asyncio.run(_run())
         assert attempts == ["m1", "m2"]
 
-    def test_negative_retry_count_treated_as_zero(self):
+    @staticmethod
+    def test_negative_retry_count_treated_as_zero():
         order = []
 
         async def invoke_one(detail, stream):

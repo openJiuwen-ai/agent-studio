@@ -16,7 +16,7 @@ _SOURCE_DIRS = (
 
 for _dir in reversed(_SOURCE_DIRS):
     if os.path.isdir(_dir) and _dir not in sys.path:
-        sys.path.insert(0, _dir)
+        sys.path.insert(0, _dir)  # pylint: disable=no-use-sys-path-insert  # 优先解析本仓库源码，避免命中 site-packages 同名包
 
 import pytest  # noqa: E402
 

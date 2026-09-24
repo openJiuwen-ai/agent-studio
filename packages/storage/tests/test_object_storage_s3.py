@@ -22,7 +22,8 @@ class _FakeBody:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, *args):
+    @staticmethod
+    async def __aexit__(*args):
         return None
 
     async def read(self):
@@ -30,6 +31,9 @@ class _FakeBody:
 
 
 class _FakeS3Client:
+    # boto3 SDK 按关键字传参（Bucket=/Key=/Body=...），参数名须与其 CamelCase 约定一致。
+    # pylint: disable=invalid-name
+
     def __init__(self, objects=None):
         self.objects = objects or {}
         self.put_calls = []
@@ -49,7 +53,8 @@ class _FakeS3Client:
     async def put_object(self, Bucket, Key, Body):
         self.put_calls.append((Bucket, Key, Body))
 
-    def generate_presigned_url(self, op, Params, ExpiresIn):
+    @staticmethod
+    def generate_presigned_url(op, Params, ExpiresIn):
         return f"http://presigned/{Params['Bucket']}/{Params['Key']}?expires={ExpiresIn}"
 
     def get_paginator(self, name):
@@ -59,6 +64,7 @@ class _FakeS3Client:
 
             def paginate(self, Bucket, Prefix, MaxKeys):
                 keys = sorted(k for k in self._client.objects if k.startswith(Prefix))
+
                 async def _gen():
                     yield {"Contents": [{"Key": k} for k in keys]}
                 return _gen()
@@ -73,7 +79,8 @@ class _FakeContext:
     async def __aenter__(self):
         return self._client
 
-    async def __aexit__(self, *args):
+    @staticmethod
+    async def __aexit__(*args):
         return None
 
 
@@ -100,7 +107,8 @@ def _install_fake_client(monkeypatch, objects):
     client = _FakeS3Client(objects)
 
     class _Session:
-        def client(self, *args, **kwargs):
+        @staticmethod
+        def client(*args, **kwargs):
             return _FakeContext(client)
 
     monkeypatch.setattr(aioboto3, "Session", lambda: _Session())
@@ -108,7 +116,8 @@ def _install_fake_client(monkeypatch, objects):
 
 
 class TestS3Initialize:
-    def test_initialize_creates_client(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_initialize_creates_client(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         client = _install_fake_client(monkeypatch, {})
 
@@ -119,7 +128,8 @@ class TestS3Initialize:
 
         assert asyncio.run(_run()) is True
 
-    def test_initialize_missing_server_raises(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_initialize_missing_server_raises(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch, server="")
 
         async def _run():
@@ -129,7 +139,8 @@ class TestS3Initialize:
 
         asyncio.run(_run())
 
-    def test_initialize_missing_ak_raises(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_initialize_missing_ak_raises(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch, access_key="")
 
         async def _run():
@@ -138,7 +149,8 @@ class TestS3Initialize:
 
         asyncio.run(_run())
 
-    def test_initialize_missing_sk_raises(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_initialize_missing_sk_raises(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch, secret_key="")
 
         async def _run():
@@ -147,7 +159,8 @@ class TestS3Initialize:
 
         asyncio.run(_run())
 
-    def test_initialize_missing_bucket_raises(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_initialize_missing_bucket_raises(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch, bucket="")
 
         async def _run():
@@ -156,7 +169,8 @@ class TestS3Initialize:
 
         asyncio.run(_run())
 
-    def test_initialize_twice_is_noop(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_initialize_twice_is_noop(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {})
 
@@ -170,7 +184,8 @@ class TestS3Initialize:
 
 
 class TestS3GetObjectBytes:
-    def test_get_existing_object(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_get_existing_object(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {"k": b"data"})
 
@@ -181,7 +196,8 @@ class TestS3GetObjectBytes:
 
         assert asyncio.run(_run()) == b"data"
 
-    def test_get_missing_object_raises_not_found(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_get_missing_object_raises_not_found(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {})
 
@@ -193,7 +209,8 @@ class TestS3GetObjectBytes:
 
         asyncio.run(_run())
 
-    def test_get_uninitialized_raises(self, reset_storage_state):
+    @staticmethod
+    def test_get_uninitialized_raises(reset_storage_state):
         async def _run():
             with pytest.raises(StorageConfigError):
                 await S3StorageProvider.instance().get_object_bytes("k")
@@ -202,7 +219,8 @@ class TestS3GetObjectBytes:
 
 
 class TestS3GetContent:
-    def test_decodes_utf8(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_decodes_utf8(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {"k": "héllo".encode("utf-8")})
 
@@ -215,7 +233,8 @@ class TestS3GetContent:
 
 
 class TestS3PutObject:
-    def test_put_object(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_put_object(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         client = _install_fake_client(monkeypatch, {})
 
@@ -229,7 +248,8 @@ class TestS3PutObject:
         assert client.put_calls[0][1] == "k"
         assert client.put_calls[0][2] == b"payload"
 
-    def test_put_object_custom_bucket(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_put_object_custom_bucket(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         client = _install_fake_client(monkeypatch, {})
 
@@ -243,7 +263,8 @@ class TestS3PutObject:
 
 
 class TestS3ListKeys:
-    def test_list_keys(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_list_keys(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {"ir/a.json": b"{}", "ir/b.json": b"{}", "x.txt": b""})
 
@@ -256,7 +277,8 @@ class TestS3ListKeys:
 
 
 class TestS3PresignedUrl:
-    def test_presigned_url(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_presigned_url(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {})
 
@@ -268,7 +290,8 @@ class TestS3PresignedUrl:
         url = asyncio.run(_run())
         assert url.startswith("http://presigned/bkt/k")
 
-    def test_presigned_url_custom_bucket(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_presigned_url_custom_bucket(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {})
 
@@ -282,7 +305,8 @@ class TestS3PresignedUrl:
 
 
 class TestS3Close:
-    def test_close_resets_state(self, reset_storage_state, monkeypatch):
+    @staticmethod
+    def test_close_resets_state(reset_storage_state, monkeypatch):
         _install_settings(reset_storage_state, monkeypatch)
         _install_fake_client(monkeypatch, {})
 

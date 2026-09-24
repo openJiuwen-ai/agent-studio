@@ -38,25 +38,29 @@ def _install(monkeypatch):
 
 
 class TestBuildHttpxClient:
-    def test_verify_ssl_true_builds_context(self, monkeypatch):
+    @staticmethod
+    def test_verify_ssl_true_builds_context(monkeypatch):
         _install(monkeypatch)
         client = build_httpx_client("http://api", True, ssl_cert="/ca.pem")
         assert isinstance(client, _FakeAsyncClient)
         assert isinstance(client.kwargs["verify"], _FakeSslContext)
         assert client.kwargs["proxy"] == "proxy://for/http://api"
 
-    def test_verify_ssl_false_passes_false(self, monkeypatch):
+    @staticmethod
+    def test_verify_ssl_false_passes_false(monkeypatch):
         _install(monkeypatch)
         client = build_httpx_client("http://api", False)
         assert client.kwargs["verify"] is False
         assert client.kwargs["proxy"] == "proxy://for/http://api"
 
-    def test_ssl_cert_default_none(self, monkeypatch):
+    @staticmethod
+    def test_ssl_cert_default_none(monkeypatch):
         _install(monkeypatch)
         client = build_httpx_client("http://api", True)
         assert isinstance(client.kwargs["verify"], _FakeSslContext)
 
-    def test_api_base_used_for_proxy(self, monkeypatch):
+    @staticmethod
+    def test_api_base_used_for_proxy(monkeypatch):
         _install(monkeypatch)
         client = build_httpx_client("https://other", False)
         assert client.kwargs["proxy"] == "proxy://for/https://other"

@@ -2,6 +2,8 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Unit tests for model_service.resolver async flows (resolve_strategy / metadata / auth)."""
 
+# pylint: disable=protected-access  # 白盒单测：需直接调用 _query_model_metadata / _query_auth* 内部函数
+
 import asyncio
 import json
 
@@ -56,7 +58,8 @@ def _api_key_auth(aid="a1"):
 
 
 class TestResolveStrategyModelPath:
-    def test_model_path_resolves(self, reset_model_service_ports):
+    @staticmethod
+    def test_model_path_resolves(reset_model_service_ports):
         storage = _FakeStorage({
             "model-service/ir/m1.json": json.dumps(_model_metadata()),
             "model-auth/auth/proj/prov/a1.json": json.dumps(_api_key_auth()),
@@ -75,7 +78,8 @@ class TestResolveStrategyModelPath:
         assert strategy.models[0].auth is not None
         assert strategy.models[0].auth.auth_info["api_key"] == "sk-1"
 
-    def test_missing_model_returns_none(self, reset_model_service_ports):
+    @staticmethod
+    def test_missing_model_returns_none(reset_model_service_ports):
         storage = _FakeStorage({})
         import model_service.ports as ports
         ports.set_storage_provider(lambda: storage)
@@ -86,7 +90,8 @@ class TestResolveStrategyModelPath:
 
         assert asyncio.run(_run()) is None
 
-    def test_env_placeholder_resolved(self, reset_model_service_ports):
+    @staticmethod
+    def test_env_placeholder_resolved(reset_model_service_ports):
         metadata = _model_metadata(api_url="http://${_env.plugin_url_params.HOST}/v1")
         storage = _FakeStorage({
             "model-service/ir/m1.json": json.dumps(metadata),
@@ -106,7 +111,8 @@ class TestResolveStrategyModelPath:
         assert strategy.models[0].model.api_url == "http://api.example.com/v1"
         assert strategy.models[0].model.api_url_env_placeholders == "HOST"
 
-    def test_env_placeholder_unresolved_raises(self, reset_model_service_ports):
+    @staticmethod
+    def test_env_placeholder_unresolved_raises(reset_model_service_ports):
         metadata = _model_metadata(api_url="http://${_env.plugin_url_params.HOST}/v1")
         storage = _FakeStorage({
             "model-service/ir/m1.json": json.dumps(metadata),
@@ -122,7 +128,8 @@ class TestResolveStrategyModelPath:
             asyncio.run(_run())
         assert exc_info.value.code == "MD_ENV_VAR_UNRESOLVED"
 
-    def test_no_env_vars_placeholder_raises(self, reset_model_service_ports):
+    @staticmethod
+    def test_no_env_vars_placeholder_raises(reset_model_service_ports):
         metadata = _model_metadata(api_url="http://${_env.plugin_url_params.HOST}/v1")
         storage = _FakeStorage({"model-service/ir/m1.json": json.dumps(metadata)})
         import model_service.ports as ports
@@ -141,7 +148,8 @@ class TestResolveStrategyModelPath:
 
 
 class TestResolveStrategyRouterPath:
-    def test_router_resolves_children(self, reset_model_service_ports):
+    @staticmethod
+    def test_router_resolves_children(reset_model_service_ports):
         storage = _FakeStorage({
             "model-service/ir/router1.json": json.dumps({
                 "type": "router",
@@ -167,7 +175,8 @@ class TestResolveStrategyRouterPath:
         assert strategy.type is StrategyType.ROUTER
         assert [m.model.id for m in strategy.models] == ["m1", "m2"]
 
-    def test_router_invalid_raises(self, reset_model_service_ports):
+    @staticmethod
+    def test_router_invalid_raises(reset_model_service_ports):
         storage = _FakeStorage({
             "model-service/ir/router1.json": json.dumps({
                 "type": "router", "data": {"service_id_list": ""},
@@ -185,14 +194,17 @@ class TestResolveStrategyRouterPath:
 
 
 class TestQueryModelMetadata:
-    def test_cache_hit(self, reset_model_service_ports, monkeypatch):
+    @staticmethod
+    def test_cache_hit(reset_model_service_ports, monkeypatch):
         import model_service.ports as ports
 
         class _Cache:
-            async def aget_with_source(self, key):
+            @staticmethod
+            async def aget_with_source(key):
                 return ({"type": "model", "data": {"id": "cached"}}, "l1")
 
-            async def aput(self, key, value, ttl=None):
+            @staticmethod
+            async def aput(key, value, ttl=None):
                 return None
 
         ports.set_cache_queues(_Cache(), None)
@@ -215,7 +227,8 @@ class TestQueryModelMetadata:
                 self.hit = True
                 return ({"data": {"id": "stale"}}, "l1")
 
-            async def aput(self, key, value, ttl=None):
+            @staticmethod
+            async def aput(key, value, ttl=None):
                 return None
 
         cache = _Cache()
@@ -230,14 +243,17 @@ class TestQueryModelMetadata:
         assert cache.hit is False
         assert metadata["data"]["id"] == "m1"
 
-    def test_obs_read_error_wrapped(self, reset_model_service_ports):
+    @staticmethod
+    def test_obs_read_error_wrapped(reset_model_service_ports):
         import model_service.ports as ports
 
         class _BoomStorage:
-            async def get_content(self, key):
+            @staticmethod
+            async def get_content(key):
                 raise RuntimeError("obs down")
 
-            async def list_keys(self, prefix):
+            @staticmethod
+            async def list_keys(prefix):
                 return []
 
         ports.set_cache_queues(None, None)
@@ -250,7 +266,8 @@ class TestQueryModelMetadata:
             asyncio.run(_run())
         assert exc_info.value.code == "MD_OBS_READ_ERROR"
 
-    def test_parse_error_wrapped(self, reset_model_service_ports):
+    @staticmethod
+    def test_parse_error_wrapped(reset_model_service_ports):
         import model_service.ports as ports
 
         storage = _FakeStorage({"model-service/ir/m1.json": "not-json"})
@@ -266,7 +283,8 @@ class TestQueryModelMetadata:
 
 
 class TestQueryAuth:
-    def test_auth_v2_missing_returns_none(self, reset_model_service_ports):
+    @staticmethod
+    def test_auth_v2_missing_returns_none(reset_model_service_ports):
         import model_service.ports as ports
         ports.set_cache_queues(None, None)
         ports.set_storage_provider(lambda: _FakeStorage({}))
@@ -276,7 +294,8 @@ class TestQueryAuth:
 
         assert asyncio.run(_run()) is None
 
-    def test_auth_v2_hit(self, reset_model_service_ports):
+    @staticmethod
+    def test_auth_v2_hit(reset_model_service_ports):
         import model_service.ports as ports
         storage = _FakeStorage({
             "model-auth/auth/proj/prov/a1.json": json.dumps(_api_key_auth()),
@@ -293,7 +312,8 @@ class TestQueryAuth:
 
 
 class TestQueryAuthV1:
-    def test_v1_empty_list_returns_none(self, reset_model_service_ports):
+    @staticmethod
+    def test_v1_empty_list_returns_none(reset_model_service_ports):
         import model_service.ports as ports
         ports.set_cache_queues(None, None)
         ports.set_storage_provider(lambda: _FakeStorage({}))
@@ -303,7 +323,8 @@ class TestQueryAuthV1:
 
         assert asyncio.run(_run()) is None
 
-    def test_v1_no_workspace_takes_first(self, reset_model_service_ports):
+    @staticmethod
+    def test_v1_no_workspace_takes_first(reset_model_service_ports):
         import model_service.ports as ports
         storage = _FakeStorage({
             "model-auth/auth/proj/prov/a1.json": json.dumps(_api_key_auth("a1")),
@@ -317,7 +338,8 @@ class TestQueryAuthV1:
         auth = asyncio.run(_run())
         assert auth.auth_id == "a1"
 
-    def test_v1_workspace_match(self, reset_model_service_ports):
+    @staticmethod
+    def test_v1_workspace_match(reset_model_service_ports):
         import model_service.ports as ports
         auth_data = _api_key_auth("a1")
         auth_data["workspace_id"] = "ws2"
@@ -333,7 +355,8 @@ class TestQueryAuthV1:
         auth = asyncio.run(_run())
         assert auth.auth_id == "a1"
 
-    def test_v1_workspace_mismatch_returns_none(self, reset_model_service_ports):
+    @staticmethod
+    def test_v1_workspace_mismatch_returns_none(reset_model_service_ports):
         import model_service.ports as ports
         auth_data = _api_key_auth("a1")
         auth_data["workspace_id"] = "ws-other"
@@ -350,7 +373,8 @@ class TestQueryAuthV1:
 
 
 class TestAuthProjectIdIntegration:
-    def test_platform_model_uses_caller_project(self, reset_model_service_ports):
+    @staticmethod
+    def test_platform_model_uses_caller_project(reset_model_service_ports):
         # 平台模型（project_id=SYSTEM）的 auth 应查调用方 projectId。
         metadata = _model_metadata(project_id="SYSTEM")
         storage = _FakeStorage({

@@ -12,7 +12,8 @@ class _Conn:
 
 
 class TestVerbatimHeadersRename:
-    def test_custom_headers_renamed_when_enabled(self, reset_common_utils_state):
+    @staticmethod
+    def test_custom_headers_renamed_when_enabled(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(customer_header.CustomerHeaderConfig(
             enabled=True, mappings={"cust-userid": "userId"},
@@ -22,7 +23,8 @@ class TestVerbatimHeadersRename:
         assert headers["userId"] == "42"
         assert headers["X-Other"] == "v"
 
-    def test_custom_headers_renamed_missing_value(self, reset_common_utils_state):
+    @staticmethod
+    def test_custom_headers_renamed_missing_value(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(customer_header.CustomerHeaderConfig(
             enabled=True, mappings={"cust-userid": "userId"},
@@ -33,7 +35,8 @@ class TestVerbatimHeadersRename:
         assert "userId" not in headers
         assert headers["X-Other"] == "v"
 
-    def test_rename_fallback_to_original_when_resolve_empty(self, reset_common_utils_state):
+    @staticmethod
+    def test_rename_fallback_to_original_when_resolve_empty(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(customer_header.CustomerHeaderConfig(
             enabled=True, mappings={"cust-userid": "userId"},
@@ -42,7 +45,8 @@ class TestVerbatimHeadersRename:
         headers = _build_verbatim_headers(conn, {})
         assert headers["userId"] == "42"
 
-    def test_disabled_config_no_rename(self, reset_common_utils_state):
+    @staticmethod
+    def test_disabled_config_no_rename(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(customer_header.CustomerHeaderConfig(enabled=False))
         conn = _Conn(custom_headers={"cust-userid": "42"})
@@ -50,7 +54,8 @@ class TestVerbatimHeadersRename:
         # disabled 时 capture_keys 为空，不 rename，直接透传。
         assert headers["cust-userid"] == "42"
 
-    def test_extra_headers_still_merged_with_rename(self, reset_common_utils_state):
+    @staticmethod
+    def test_extra_headers_still_merged_with_rename(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(customer_header.CustomerHeaderConfig(
             enabled=True, mappings={"cust-token": "token"},

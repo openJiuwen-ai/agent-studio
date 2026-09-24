@@ -14,29 +14,36 @@ from model_service.client import (
 
 
 class TestIsVerbatimEndpoint:
-    def test_chat_completions_suffix_false(self):
+    @staticmethod
+    def test_chat_completions_suffix_false():
         assert _is_verbatim_endpoint("http://x/v1/chat/completions") is False
 
-    def test_empty_path_false(self):
+    @staticmethod
+    def test_empty_path_false():
         assert _is_verbatim_endpoint("http://x") is False
         assert _is_verbatim_endpoint("http://x/") is False
 
-    def test_version_base_false(self):
+    @staticmethod
+    def test_version_base_false():
         assert _is_verbatim_endpoint("http://x/v1") is False
         assert _is_verbatim_endpoint("http://x/v2") is False
 
-    def test_other_path_true(self):
+    @staticmethod
+    def test_other_path_true():
         assert _is_verbatim_endpoint("http://x/xxx/yyy") is True
 
-    def test_empty_url_false(self):
+    @staticmethod
+    def test_empty_url_false():
         assert _is_verbatim_endpoint("") is False
 
-    def test_none_false(self):
+    @staticmethod
+    def test_none_false():
         assert _is_verbatim_endpoint(None) is False
 
 
 class TestBuildVerbatimBody:
-    def test_removes_transport_keys(self):
+    @staticmethod
+    def test_removes_transport_keys():
         params = {
             "model": "m",
             "messages": [],
@@ -47,17 +54,20 @@ class TestBuildVerbatimBody:
         body = _build_verbatim_body(params)
         assert body == {"model": "m", "messages": []}
 
-    def test_merges_extra_body(self):
+    @staticmethod
+    def test_merges_extra_body():
         params = {"model": "m", "extra_body": {"temperature": 0.7}}
         body = _build_verbatim_body(params)
         assert body == {"model": "m", "temperature": 0.7}
 
-    def test_non_dict_extra_body_ignored(self):
+    @staticmethod
+    def test_non_dict_extra_body_ignored():
         params = {"model": "m", "extra_body": "not-a-dict"}
         body = _build_verbatim_body(params)
         assert body == {"model": "m"}
 
-    def test_empty_params(self):
+    @staticmethod
+    def test_empty_params():
         assert _build_verbatim_body({}) == {}
 
 
@@ -68,7 +78,8 @@ class _FakeConn:
 
 
 class TestBuildVerbatimHeaders:
-    def test_api_key_uses_bearer(self, reset_common_utils_state):
+    @staticmethod
+    def test_api_key_uses_bearer(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(None)
         conn = _FakeConn(api_key="sk-1")
@@ -76,7 +87,8 @@ class TestBuildVerbatimHeaders:
         assert headers["Authorization"] == "Bearer sk-1"
         assert headers["Content-Type"] == "application/json"
 
-    def test_custom_headers_no_rename(self, reset_common_utils_state):
+    @staticmethod
+    def test_custom_headers_no_rename(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(None)
         conn = _FakeConn(custom_headers={"X-A": "v"})
@@ -84,14 +96,16 @@ class TestBuildVerbatimHeaders:
         assert headers["X-A"] == "v"
         assert "Authorization" not in headers
 
-    def test_extra_headers_merged(self, reset_common_utils_state):
+    @staticmethod
+    def test_extra_headers_merged(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(None)
         conn = _FakeConn(api_key="k")
         headers = _build_verbatim_headers(conn, {"extra_headers": {"Z": "1"}})
         assert headers["Z"] == "1"
 
-    def test_custom_headers_param_merged(self, reset_common_utils_state):
+    @staticmethod
+    def test_custom_headers_param_merged(reset_common_utils_state):
         from common_utils import customer_header
         customer_header.set_config(None)
         conn = _FakeConn(api_key="k")
@@ -100,46 +114,56 @@ class TestBuildVerbatimHeaders:
 
 
 class TestAttrDict:
-    def test_attribute_access(self):
+    @staticmethod
+    def test_attribute_access():
         d = _AttrDict({"a": 1, "b": {"c": 2}})
         assert d.a == 1
         assert d.b.c == 2
 
-    def test_missing_attribute_returns_none(self):
+    @staticmethod
+    def test_missing_attribute_returns_none():
         d = _AttrDict({})
         assert d.nonexistent is None
 
-    def test_bool(self):
+    @staticmethod
+    def test_bool():
         assert bool(_AttrDict({})) is False
         assert bool(_AttrDict({"a": 1})) is True
 
-    def test_getitem(self):
+    @staticmethod
+    def test_getitem():
         d = _AttrDict({"a": 1})
         assert d["a"] == 1
 
-    def test_iter(self):
+    @staticmethod
+    def test_iter():
         d = _AttrDict({"a": 1, "b": 2})
         assert sorted(list(d)) == ["a", "b"]
 
-    def test_len(self):
+    @staticmethod
+    def test_len():
         assert len(_AttrDict({"a": 1, "b": 2})) == 2
 
-    def test_model_dump(self):
+    @staticmethod
+    def test_model_dump():
         d = _AttrDict({"a": 1})
         assert d.model_dump() == {"a": 1}
 
 
 class TestWrap:
-    def test_scalar_unchanged(self):
+    @staticmethod
+    def test_scalar_unchanged():
         assert _wrap(1) == 1
         assert _wrap("x") == "x"
         assert _wrap(None) is None
 
-    def test_dict_wrapped(self):
+    @staticmethod
+    def test_dict_wrapped():
         w = _wrap({"a": 1})
         assert isinstance(w, _AttrDict)
 
-    def test_list_elements_wrapped(self):
+    @staticmethod
+    def test_list_elements_wrapped():
         w = _wrap([{"a": 1}, 2])
         assert isinstance(w[0], _AttrDict)
         assert w[1] == 2

@@ -13,42 +13,53 @@ from model_service.authz import (
 
 
 class TestExtractProjectId:
-    def test_none_headers_returns_fallback(self):
+    @staticmethod
+    def test_none_headers_returns_fallback():
         assert extract_project_id(None) == "0"
 
-    def test_empty_headers_returns_fallback(self):
+    @staticmethod
+    def test_empty_headers_returns_fallback():
         assert extract_project_id({}) == "0"
 
-    def test_custom_fallback(self):
+    @staticmethod
+    def test_custom_fallback():
         assert extract_project_id(None, fallback="my-fallback") == "my-fallback"
 
-    def test_extracts_from_header(self):
+    @staticmethod
+    def test_extracts_from_header():
         assert extract_project_id({PROJECT_ID_HEADER: "proj-1"}) == "proj-1"
 
-    def test_extracts_lowercase_header(self):
+    @staticmethod
+    def test_extracts_lowercase_header():
         assert extract_project_id({"x-owner-project-id": "proj-2"}) == "proj-2"
 
-    def test_prefers_canonical_header(self):
+    @staticmethod
+    def test_prefers_canonical_header():
         headers = {PROJECT_ID_HEADER: "canonical", "x-owner-project-id": "lower"}
         assert extract_project_id(headers) == "canonical"
 
-    def test_empty_header_value_falls_back(self):
+    @staticmethod
+    def test_empty_header_value_falls_back():
         assert extract_project_id({PROJECT_ID_HEADER: ""}) == "0"
 
-    def test_non_string_value_returned(self):
+    @staticmethod
+    def test_non_string_value_returned():
         assert extract_project_id({PROJECT_ID_HEADER: 123}) == 123
 
 
 class TestAssertProjectIdTrusted:
-    def test_returns_none(self):
+    @staticmethod
+    def test_returns_none():
         assert assert_project_id_trusted("p", source="test") is None
 
-    def test_empty_project_id(self):
+    @staticmethod
+    def test_empty_project_id():
         assert assert_project_id_trusted("", source="test") is None
 
 
 class TestCheckAuthz:
-    def test_returns_none(self):
+    @staticmethod
+    def test_returns_none():
         import asyncio
 
         async def _run():

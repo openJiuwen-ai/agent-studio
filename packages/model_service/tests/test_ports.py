@@ -23,12 +23,14 @@ class _FakeStorage:
 
 
 class TestStorageProvider:
-    def test_set_then_get(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_then_get(reset_model_service_ports):
         fake = _FakeStorage()
         ports.set_storage_provider(lambda: fake)
         assert ports.get_storage_provider() is fake
 
-    def test_set_none_clears(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_none_clears(reset_model_service_ports):
         fake = _FakeStorage()
         ports.set_storage_provider(lambda: fake)
         ports.set_storage_provider(None)
@@ -42,7 +44,8 @@ class TestStorageProvider:
 
 
 class TestLlmSettings:
-    def test_set_then_get(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_then_get(reset_model_service_ports):
         class _S:
             timeout = 30.0
             ssl_verify = True
@@ -52,7 +55,8 @@ class TestLlmSettings:
         assert settings.timeout == 30.0
         assert settings.ssl_verify is True
 
-    def test_set_none_clears(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_none_clears(reset_model_service_ports):
         class _S:
             timeout = 1.0
             ssl_verify = False
@@ -68,48 +72,58 @@ class TestLlmSettings:
 
 
 class TestRequestHeaders:
-    def test_unregistered_returns_empty(self, reset_model_service_ports):
+    @staticmethod
+    def test_unregistered_returns_empty(reset_model_service_ports):
         # 未注入且 agent_runtime 不可用时返回空 dict。
         assert isinstance(ports.get_request_headers(), dict)
 
-    def test_set_then_get(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_then_get(reset_model_service_ports):
         ports.set_request_headers(lambda: {"X": "1"})
         assert ports.get_request_headers() == {"X": "1"}
 
-    def test_factory_exception_swallowed(self, reset_model_service_ports):
+    @staticmethod
+    def test_factory_exception_swallowed(reset_model_service_ports):
         def _boom():
             raise RuntimeError("boom")
 
         ports.set_request_headers(_boom)
         assert ports.get_request_headers() == {}
 
-    def test_factory_returns_none(self, reset_model_service_ports):
+    @staticmethod
+    def test_factory_returns_none(reset_model_service_ports):
         ports.set_request_headers(lambda: None)
         assert ports.get_request_headers() == {}
 
 
 class TestEnvVariables:
-    def test_unregistered_returns_empty(self, reset_model_service_ports):
+    @staticmethod
+    def test_unregistered_returns_empty(reset_model_service_ports):
         assert isinstance(ports.get_env_variables(), dict)
 
-    def test_set_then_get(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_then_get(reset_model_service_ports):
         ports.set_env_variables(lambda: {"plugin_url_params": {"A": "1"}})
         assert ports.get_env_variables() == {"plugin_url_params": {"A": "1"}}
 
-    def test_factory_exception_swallowed(self, reset_model_service_ports):
+    @staticmethod
+    def test_factory_exception_swallowed(reset_model_service_ports):
         ports.set_env_variables(lambda: (_ for _ in ()).throw(RuntimeError()))
         assert ports.get_env_variables() == {}
 
 
 class TestCustomerHeaders:
-    def test_unregistered_returns_empty(self, reset_model_service_ports):
+    @staticmethod
+    def test_unregistered_returns_empty(reset_model_service_ports):
         assert ports.get_request_customer_headers() == {}
 
-    def test_set_then_get(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_then_get(reset_model_service_ports):
         ports.set_request_customer_headers(lambda: {"cust-a": "1"})
         assert ports.get_request_customer_headers() == {"cust-a": "1"}
 
-    def test_factory_exception_swallowed(self, reset_model_service_ports):
+    @staticmethod
+    def test_factory_exception_swallowed(reset_model_service_ports):
         def _boom():
             raise RuntimeError("boom")
 
@@ -118,21 +132,26 @@ class TestCustomerHeaders:
 
 
 class TestCacheQueues:
-    def test_default_returns_none_or_fallback(self, reset_model_service_ports):
+    @staticmethod
+    def test_default_returns_none_or_fallback(reset_model_service_ports):
         # 未注册时可能回退 jiuwen 或 None，两者皆可接受。
         assert ports.get_model_cache() is None or ports.get_model_cache() is not None
 
-    def test_set_none_disables(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_none_disables(reset_model_service_ports):
         ports.set_cache_queues(None, None)
         assert ports.get_model_cache() is None
         assert ports.get_auth_cache() is None
 
-    def test_set_cache_object(self, reset_model_service_ports):
+    @staticmethod
+    def test_set_cache_object(reset_model_service_ports):
         class _Cache:
-            async def aget_with_source(self, key):
+            @staticmethod
+            async def aget_with_source(key):
                 return (None, "")
 
-            async def aput(self, key, value, ttl=None):
+            @staticmethod
+            async def aput(key, value, ttl=None):
                 return None
 
         cache = _Cache()
@@ -142,15 +161,18 @@ class TestCacheQueues:
 
 
 class TestWrapStorage:
-    def test_translates_not_found(self, reset_model_service_ports):
+    @staticmethod
+    def test_translates_not_found(reset_model_service_ports):
         class _NotFound(Exception):
             pass
 
         class _Provider:
-            async def get_content(self, key):
+            @staticmethod
+            async def get_content(key):
                 raise _NotFound("missing")
 
-            async def list_keys(self, prefix):
+            @staticmethod
+            async def list_keys(prefix):
                 return ["a", "b"]
 
         wrapped = ports.wrap_storage(_Provider(), _NotFound)
@@ -163,12 +185,15 @@ class TestWrapStorage:
 
         asyncio.run(_run())
 
-    def test_passes_through_success(self, reset_model_service_ports):
+    @staticmethod
+    def test_passes_through_success(reset_model_service_ports):
         class _Provider:
-            async def get_content(self, key):
+            @staticmethod
+            async def get_content(key):
                 return "ok"
 
-            async def list_keys(self, prefix):
+            @staticmethod
+            async def list_keys(prefix):
                 return ["a"]
 
         wrapped = ports.wrap_storage(_Provider(), RuntimeError)

@@ -14,48 +14,58 @@ from common_utils.password_provider import (
 
 
 class TestDefaultDataSourcePasswordProvider:
-    def test_returns_plaintext(self):
+    @staticmethod
+    def test_returns_plaintext():
         provider = DefaultDataSourcePasswordProvider()
         assert provider.get_password("my-pass") == "my-pass"
 
-    def test_empty_password_returns_empty(self):
+    @staticmethod
+    def test_empty_password_returns_empty():
         provider = DefaultDataSourcePasswordProvider()
         assert provider.get_password("") == ""
 
-    def test_none_password_returns_none(self):
+    @staticmethod
+    def test_none_password_returns_none():
         provider = DefaultDataSourcePasswordProvider()
         assert provider.get_password(None) is None
 
 
 class TestGetPasswordProvider:
-    def test_no_config_returns_default(self):
+    @staticmethod
+    def test_no_config_returns_default():
         provider = get_password_provider()
         assert isinstance(provider, DefaultDataSourcePasswordProvider)
 
-    def test_module_without_class_raises(self):
+    @staticmethod
+    def test_module_without_class_raises():
         with pytest.raises(ValueError):
             get_password_provider(custom_module="some.module")
 
-    def test_class_without_module_raises(self):
+    @staticmethod
+    def test_class_without_module_raises():
         with pytest.raises(ValueError):
             get_password_provider(custom_class="SomeClass")
 
-    def test_nonexistent_module_raises_import_error(self):
+    @staticmethod
+    def test_nonexistent_module_raises_import_error():
         with pytest.raises(ImportError):
             get_password_provider(custom_module="nonexistent.module.xyz", custom_class="C")
 
-    def test_missing_class_in_module_raises_attribute_error(self):
+    @staticmethod
+    def test_missing_class_in_module_raises_attribute_error():
         # 使用真实可导入的模块，但类名不存在。
         with pytest.raises(AttributeError):
             get_password_provider(custom_module="common_utils.password_provider", custom_class="NoSuchClass")
 
-    def test_non_provider_class_raises_type_error(self):
+    @staticmethod
+    def test_non_provider_class_raises_type_error():
         with pytest.raises(TypeError):
             get_password_provider(custom_module="common_utils.common_config", custom_class="RedisSettings")
 
 
 class TestCustomProviderFileLoading:
-    def test_load_from_py_file(self, tmp_path):
+    @staticmethod
+    def test_load_from_py_file(tmp_path):
         py_file = tmp_path / "my_provider.py"
         py_file.write_text(
             textwrap.dedent(
@@ -74,7 +84,8 @@ class TestCustomProviderFileLoading:
         )
         assert provider.get_password("x") == "decoded:x"
 
-    def test_load_from_file_without_suffix(self, tmp_path):
+    @staticmethod
+    def test_load_from_file_without_suffix(tmp_path):
         # 传入不带 .py 后缀的路径时，实现会按 with_suffix(".py") 查找实际文件。
         py_file = tmp_path / "my_provider"
         (tmp_path / "my_provider.py").write_text(
@@ -94,6 +105,7 @@ class TestCustomProviderFileLoading:
         )
         assert provider.get_password("abc") == "ABC"
 
-    def test_abstract_provider_cannot_instantiate(self):
+    @staticmethod
+    def test_abstract_provider_cannot_instantiate():
         with pytest.raises(TypeError):
             DataSourcePasswordProvider()

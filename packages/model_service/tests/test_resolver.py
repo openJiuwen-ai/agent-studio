@@ -29,81 +29,99 @@ from model_service.resolver import (
 
 
 class TestModelServiceError:
-    def test_str_format(self):
+    @staticmethod
+    def test_str_format():
         exc = ModelServiceError("CODE_X", "message")
         assert str(exc) == "[CODE_X] message"
 
-    def test_default_msg(self):
+    @staticmethod
+    def test_default_msg():
         exc = ModelServiceError("CODE_X")
         assert exc.msg == ""
         assert str(exc) == "[CODE_X] "
 
-    def test_upstream_fields(self):
+    @staticmethod
+    def test_upstream_fields():
         exc = ModelServiceError("CODE", "m", upstream_status=404, upstream_body="b")
         assert exc.upstream_status == 404
         assert exc.upstream_body == "b"
 
-    def test_upstream_fields_default_none(self):
+    @staticmethod
+    def test_upstream_fields_default_none():
         exc = ModelServiceError("CODE", "m")
         assert exc.upstream_status is None
         assert exc.upstream_body is None
 
 
 class TestInterfaceProtocol:
-    def test_values(self):
+    @staticmethod
+    def test_values():
         assert InterfaceProtocol.OPENAI.value == "openai"
         assert InterfaceProtocol.ANTHROPIC.value == "anthropic"
 
 
 class TestPathTemplates:
-    def test_model_path(self):
+    @staticmethod
+    def test_model_path():
         assert MODEL_PATH % "m1" == "model-service/ir/m1.json"
 
-    def test_auth_path(self):
+    @staticmethod
+    def test_auth_path():
         assert AUTH_PATH % ("p", "prov", "a") == "model-auth/auth/p/prov/a.json"
 
-    def test_auth_list_path(self):
+    @staticmethod
+    def test_auth_list_path():
         assert AUTH_LIST_PATH % ("p", "prov") == "model-auth/auth/p/prov/"
 
 
 class TestIsPlatform:
-    def test_system_is_platform(self):
+    @staticmethod
+    def test_system_is_platform():
         assert _is_platform("SYSTEM") is True
 
-    def test_other_not_platform(self):
+    @staticmethod
+    def test_other_not_platform():
         assert _is_platform("proj-1") is False
 
-    def test_platform_project_ids(self):
+    @staticmethod
+    def test_platform_project_ids():
         assert "SYSTEM" in PLATFORM_PROJECT_IDS
 
 
 class TestAuthProjectId:
-    def test_platform_model_uses_caller(self):
+    @staticmethod
+    def test_platform_model_uses_caller():
         assert _auth_project_id("SYSTEM", "caller") == "caller"
 
-    def test_normal_model_uses_own(self):
+    @staticmethod
+    def test_normal_model_uses_own():
         assert _auth_project_id("model-proj", "caller") == "model-proj"
 
 
 class TestCacheTtlForModel:
-    def test_router_returns_none(self):
+    @staticmethod
+    def test_router_returns_none():
         assert _cache_ttl_for_model({"type": "router"}) is None
 
-    def test_platform_model_no_ttl(self):
+    @staticmethod
+    def test_platform_model_no_ttl():
         metadata = {"type": "model", "data": {"project_id": "SYSTEM"}}
         assert _cache_ttl_for_model(metadata) == -1
 
-    def test_normal_model_uses_default(self):
+    @staticmethod
+    def test_normal_model_uses_default():
         metadata = {"type": "model", "data": {"project_id": "proj"}}
         assert _cache_ttl_for_model(metadata) is None
 
-    def test_missing_data_no_ttl_key(self):
+    @staticmethod
+    def test_missing_data_no_ttl_key():
         metadata = {"type": "model", "data": {}}
         assert _cache_ttl_for_model(metadata) is None
 
 
 class TestModelFromData:
-    def test_full_data(self):
+    @staticmethod
+    def test_full_data():
         data = {
             "id": "m1", "model_name": "gpt", "api_url": " http://x/v1 ",
             "provider_id": "p", "interface_protocol": "openai",
@@ -119,20 +137,23 @@ class TestModelFromData:
         assert model.workspace_id == "ws"
         assert model.auth_id == "a"
 
-    def test_empty_data_defaults(self):
+    @staticmethod
+    def test_empty_data_defaults():
         model = _model_from_data({})
         assert model.id == ""
         assert model.model_name == ""
         assert model.api_url == ""
         assert model.provider_id == ""
 
-    def test_int_id_stringified(self):
+    @staticmethod
+    def test_int_id_stringified():
         model = _model_from_data({"id": 42})
         assert model.id == "42"
 
 
 class TestAuthFromData:
-    def test_api_key_snake_case(self):
+    @staticmethod
+    def test_api_key_snake_case():
         data = {
             "id": "a1", "auth_type": "API_KEY",
             "auth_info": json.dumps({"API Key": "sk-1"}),
@@ -142,7 +163,8 @@ class TestAuthFromData:
         assert auth.auth_type == "API_KEY"
         assert auth.auth_info == {"api_key": "sk-1"}
 
-    def test_api_key_camel_case(self):
+    @staticmethod
+    def test_api_key_camel_case():
         data = {
             "id": "a1", "authType": "API_KEY",
             "authInfo": json.dumps({"API Key": "sk-2"}),
@@ -151,12 +173,14 @@ class TestAuthFromData:
         assert auth.auth_id == "a1"
         assert auth.auth_info == {"api_key": "sk-2"}
 
-    def test_api_key_empty_info(self):
+    @staticmethod
+    def test_api_key_empty_info():
         data = {"auth_type": "API_KEY", "auth_info": ""}
         auth = _auth_from_data(data)
         assert auth.auth_info == {"api_key": ""}
 
-    def test_custom_apikey(self):
+    @staticmethod
+    def test_custom_apikey():
         data = {
             "auth_type": "CUSTOM_APIKEY",
             "auth_info": json.dumps({"cust-userid": "1", "X-Key": "v"}),
@@ -165,37 +189,43 @@ class TestAuthFromData:
         assert auth.auth_type == "CUSTOM_APIKEY"
         assert auth.auth_info == {"cust-userid": "1", "X-Key": "v"}
 
-    def test_unknown_auth_type_empty_info(self):
+    @staticmethod
+    def test_unknown_auth_type_empty_info():
         data = {"auth_type": "OTHER", "auth_info": json.dumps({"a": "b"})}
         auth = _auth_from_data(data)
         assert auth.auth_type == "OTHER"
         assert auth.auth_info == {}
 
-    def test_missing_auth_type_empty(self):
+    @staticmethod
+    def test_missing_auth_type_empty():
         auth = _auth_from_data({})
         assert auth.auth_type == ""
         assert auth.auth_info == {}
 
 
 class TestResolveCtx:
-    def test_defaults(self):
+    @staticmethod
+    def test_defaults():
         ctx = ResolveCtx(project_id="p", workspace_id="w")
         assert ctx.refresh is False
         assert ctx.env_vars is None
 
-    def test_full(self):
+    @staticmethod
+    def test_full():
         ctx = ResolveCtx(project_id="p", workspace_id="w", refresh=True, env_vars={"a": 1})
         assert ctx.refresh is True
         assert ctx.env_vars == {"a": 1}
 
-    def test_frozen(self):
+    @staticmethod
+    def test_frozen():
         ctx = ResolveCtx(project_id="p", workspace_id="w")
         with pytest.raises(Exception):
             ctx.project_id = "x"
 
 
 class TestBuildRouterStrategy:
-    def _mk_detail(self, mid):
+    @staticmethod
+    def _mk_detail(mid):
         model = ModelServiceBase(
             id=mid, model_name=f"m-{mid}", api_url="http://x", provider_id="p",
             interface_protocol=InterfaceProtocol.OPENAI, project_id="proj",
@@ -245,7 +275,8 @@ class TestBuildRouterStrategy:
         # 只有一个 authId，第二个模型回退使用最后一个 authId。
         assert details["m2"] == "a1"
 
-    def test_router_empty_service_ids_raises(self):
+    @staticmethod
+    def test_router_empty_service_ids_raises():
         ctx = ResolveCtx(project_id="p", workspace_id="w")
 
         async def _run():
@@ -255,7 +286,8 @@ class TestBuildRouterStrategy:
             asyncio_run(_run())
         assert exc_info.value.code == "UNEXPECTED_ERROR"
 
-    def test_router_missing_child_raises(self, monkeypatch):
+    @staticmethod
+    def test_router_missing_child_raises(monkeypatch):
         import model_service.resolver as mod
 
         async def _query(metadata_id, refresh):

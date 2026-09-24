@@ -32,7 +32,8 @@ class _FakeClient:
         self.posted = (url, json, headers, timeout)
         return self._resp
 
-    async def aclose(self):
+    @staticmethod
+    async def aclose():
         return None
 
 
@@ -67,7 +68,8 @@ def _mk_conn():
 
 
 class TestRerank:
-    def test_sorts_results_by_index(self, monkeypatch):
+    @staticmethod
+    def test_sorts_results_by_index(monkeypatch):
         import model_service.dispatch as dispatch
 
         fake_client = _FakeClient(_FakeResponse(json_data={
@@ -86,7 +88,8 @@ class TestRerank:
         data = asyncio.run(_run())
         assert [r["index"] for r in data["results"]] == [0, 1, 2]
 
-    def test_none_index_sorted_last(self, monkeypatch):
+    @staticmethod
+    def test_none_index_sorted_last(monkeypatch):
         import model_service.dispatch as dispatch
 
         fake_client = _FakeClient(_FakeResponse(json_data={
@@ -104,7 +107,8 @@ class TestRerank:
         data = asyncio.run(_run())
         assert data["results"][-1]["index"] is None
 
-    def test_top_n_truncates(self, monkeypatch):
+    @staticmethod
+    def test_top_n_truncates(monkeypatch):
         import model_service.dispatch as dispatch
 
         fake_client = _FakeClient(_FakeResponse(json_data={
@@ -121,7 +125,8 @@ class TestRerank:
         data = asyncio.run(_run())
         assert len(data["results"]) == 2
 
-    def test_upstream_error_raises(self, monkeypatch):
+    @staticmethod
+    def test_upstream_error_raises(monkeypatch):
         import model_service.dispatch as dispatch
         from model_service.resolver import ModelServiceError
 
@@ -137,7 +142,8 @@ class TestRerank:
         assert exc_info.value.code == "MD_INVOKE_MODEL_SERVICE_FAIL"
         assert exc_info.value.upstream_status == 500
 
-    def test_request_body_built(self, monkeypatch):
+    @staticmethod
+    def test_request_body_built(monkeypatch):
         import model_service.dispatch as dispatch
 
         fake_client = _FakeClient(_FakeResponse(json_data={"results": []}))
@@ -154,7 +160,8 @@ class TestRerank:
         assert body["documents"] == ["a", "b"]
         assert body["return_documents"] is True
 
-    def test_empty_results_ok(self, monkeypatch):
+    @staticmethod
+    def test_empty_results_ok(monkeypatch):
         import model_service.dispatch as dispatch
 
         fake_client = _FakeClient(_FakeResponse(json_data={"results": []}))

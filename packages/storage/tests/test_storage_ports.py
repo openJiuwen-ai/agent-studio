@@ -21,23 +21,27 @@ class _Settings:
 
 
 class TestSetGetSettings:
-    def test_unregistered_raises(self, reset_storage_state):
+    @staticmethod
+    def test_unregistered_raises(reset_storage_state):
         with pytest.raises(RuntimeError):
             ports.get_settings()
 
-    def test_set_then_get(self, reset_storage_state):
+    @staticmethod
+    def test_set_then_get(reset_storage_state):
         s = _Settings()
         ports.set_settings(lambda: s)
         assert ports.get_settings() is s
 
-    def test_set_none_clears(self, reset_storage_state):
+    @staticmethod
+    def test_set_none_clears(reset_storage_state):
         s = _Settings()
         ports.set_settings(lambda: s)
         ports.set_settings(None)
         with pytest.raises(RuntimeError):
             ports.get_settings()
 
-    def test_factory_called_each_time(self, reset_storage_state):
+    @staticmethod
+    def test_factory_called_each_time(reset_storage_state):
         calls = {"n": 0}
 
         def _factory():
@@ -51,7 +55,8 @@ class TestSetGetSettings:
 
 
 class TestSettingsProtocol:
-    def test_settings_satisfies_protocol(self, reset_storage_state):
+    @staticmethod
+    def test_settings_satisfies_protocol(reset_storage_state):
         from storage.ports import ObjectStorageSettingsLike
         s = _Settings()
         assert isinstance(s, ObjectStorageSettingsLike)

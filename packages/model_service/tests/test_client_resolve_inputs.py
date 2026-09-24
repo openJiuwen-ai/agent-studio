@@ -2,6 +2,8 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Unit tests for StudioModelClient._resolve_inputs (config / headers / env_vars 归一)."""
 
+# pylint: disable=protected-access  # 白盒单测：需直接调用 _resolve_inputs
+
 import pytest
 
 from model_service.client import StudioModelClient
@@ -18,7 +20,8 @@ class _FakeConfig:
 
 
 class TestResolveInputs:
-    def test_defaults(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_defaults(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig()
         set_request_headers(lambda: {})
@@ -32,7 +35,8 @@ class TestResolveInputs:
         assert inputs.workspace_id == ""
         assert inputs.env_vars == {}
 
-    def test_extracts_from_config(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_extracts_from_config(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig(
             model_service_id="ms-1", auth_id="a-1", refresh=True,
@@ -45,7 +49,8 @@ class TestResolveInputs:
         assert inputs.auth_id == "a-1"
         assert inputs.refresh is True
 
-    def test_extracts_project_and_workspace(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_extracts_project_and_workspace(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig()
         set_request_headers(lambda: {
@@ -58,7 +63,8 @@ class TestResolveInputs:
         assert inputs.project_id == "proj-9"
         assert inputs.workspace_id == "ws-9"
 
-    def test_workspace_lowercase_header(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_workspace_lowercase_header(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig()
         set_request_headers(lambda: {"x-workspace-id": "ws-low"})
@@ -67,7 +73,8 @@ class TestResolveInputs:
         inputs = client._resolve_inputs()
         assert inputs.workspace_id == "ws-low"
 
-    def test_headers_none(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_headers_none(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig()
         set_request_headers(lambda: None)
@@ -77,7 +84,8 @@ class TestResolveInputs:
         assert inputs.project_id == "0"
         assert inputs.workspace_id == ""
 
-    def test_env_variables_passthrough(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_env_variables_passthrough(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig()
         set_request_headers(lambda: {})
@@ -86,7 +94,8 @@ class TestResolveInputs:
         inputs = client._resolve_inputs()
         assert inputs.env_vars == {"plugin_url_params": {"A": "1"}}
 
-    def test_refresh_false_string(self, reset_model_service_ports, reset_common_utils_state):
+    @staticmethod
+    def test_refresh_false_string(reset_model_service_ports, reset_common_utils_state):
         client = StudioModelClient.__new__(StudioModelClient)
         client.model_client_config = _FakeConfig(refresh=False)
         set_request_headers(lambda: {})

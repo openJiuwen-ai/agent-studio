@@ -28,72 +28,91 @@ def _model(**kwargs):
 
 
 class TestNormalizeProtocol:
-    def test_openai(self):
+    @staticmethod
+    def test_openai():
         assert normalize_protocol("openai") is InterfaceProtocol.OPENAI
 
-    def test_multi_openai(self):
+    @staticmethod
+    def test_multi_openai():
         assert normalize_protocol("multi_openai") is InterfaceProtocol.OPENAI
 
-    def test_maasv2(self):
+    @staticmethod
+    def test_maasv2():
         assert normalize_protocol("maasv2") is InterfaceProtocol.OPENAI
 
-    def test_qwen(self):
+    @staticmethod
+    def test_qwen():
         assert normalize_protocol("qwen") is InterfaceProtocol.OPENAI
 
-    def test_zhipu(self):
+    @staticmethod
+    def test_zhipu():
         assert normalize_protocol("zhipu") is InterfaceProtocol.OPENAI
 
-    def test_standard(self):
+    @staticmethod
+    def test_standard():
         assert normalize_protocol("standard") is InterfaceProtocol.OPENAI
 
-    def test_anthropic(self):
+    @staticmethod
+    def test_anthropic():
         assert normalize_protocol("anthropic") is InterfaceProtocol.ANTHROPIC
 
-    def test_unknown_defaults_openai(self):
+    @staticmethod
+    def test_unknown_defaults_openai():
         assert normalize_protocol("unknown") is InterfaceProtocol.OPENAI
 
-    def test_none_defaults_openai(self):
+    @staticmethod
+    def test_none_defaults_openai():
         assert normalize_protocol(None) is InterfaceProtocol.OPENAI
 
-    def test_case_insensitive(self):
+    @staticmethod
+    def test_case_insensitive():
         assert normalize_protocol("OPENAI") is InterfaceProtocol.OPENAI
 
-    def test_whitespace_trimmed(self):
+    @staticmethod
+    def test_whitespace_trimmed():
         assert normalize_protocol("  openai  ") is InterfaceProtocol.OPENAI
 
 
 class TestNormalizeApiBase:
-    def test_strips_chat_completions(self):
+    @staticmethod
+    def test_strips_chat_completions():
         assert _normalize_api_base("http://x/v1/chat/completions") == "http://x/v1"
 
-    def test_no_suffix_unchanged(self):
+    @staticmethod
+    def test_no_suffix_unchanged():
         assert _normalize_api_base("http://x/v1") == "http://x/v1"
 
-    def test_strips_trailing_slash(self):
+    @staticmethod
+    def test_strips_trailing_slash():
         assert _normalize_api_base("http://x/v1/") == "http://x/v1"
 
-    def test_empty_returns_empty(self):
+    @staticmethod
+    def test_empty_returns_empty():
         assert _normalize_api_base("") == ""
 
-    def test_none_returns_empty(self):
+    @staticmethod
+    def test_none_returns_empty():
         assert _normalize_api_base(None) == ""
 
 
 class TestGetChatConnection:
-    def test_anthropic_raises(self, reset_model_service_ports):
+    @staticmethod
+    def test_anthropic_raises(reset_model_service_ports):
         model = _model(interface_protocol=InterfaceProtocol.ANTHROPIC)
         auth = ProviderAuth(auth_id="a", auth_type="API_KEY", auth_info={"api_key": "k"})
         with pytest.raises(ModelServiceError) as exc_info:
             get_chat_connection(model, auth)
         assert exc_info.value.code == "PROTOCOL_NOT_SUPPORTED"
 
-    def test_auth_none_raises(self, reset_model_service_ports):
+    @staticmethod
+    def test_auth_none_raises(reset_model_service_ports):
         model = _model()
         with pytest.raises(ModelServiceError) as exc_info:
             get_chat_connection(model, None)
         assert exc_info.value.code == "MD_PROVIDER_AUTH_DATA_NOT_EXIST"
 
-    def test_api_key_auth(self, reset_model_service_ports):
+    @staticmethod
+    def test_api_key_auth(reset_model_service_ports):
         from model_service import ports
 
         class _Settings:
@@ -112,7 +131,8 @@ class TestGetChatConnection:
         assert conn.timeout == 30.0
         assert conn.verify_ssl is False
 
-    def test_api_key_missing_uses_placeholder(self, reset_model_service_ports):
+    @staticmethod
+    def test_api_key_missing_uses_placeholder(reset_model_service_ports):
         from model_service import ports
 
         class _Settings:
@@ -126,7 +146,8 @@ class TestGetChatConnection:
         conn = get_chat_connection(model, auth)
         assert conn.api_key == "sk-placeholder"
 
-    def test_custom_apikey_auth(self, reset_model_service_ports):
+    @staticmethod
+    def test_custom_apikey_auth(reset_model_service_ports):
         from model_service import ports
 
         class _Settings:

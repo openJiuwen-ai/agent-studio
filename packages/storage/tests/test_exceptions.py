@@ -13,45 +13,56 @@ from storage.exceptions import (
 
 
 class TestExceptionCodes:
-    def test_storage_config_error_code(self):
+    @staticmethod
+    def test_storage_config_error_code():
         assert StorageConfigError.code == 188910
 
-    def test_storage_read_error_code(self):
+    @staticmethod
+    def test_storage_read_error_code():
         assert StorageReadError.code == 188911
 
-    def test_storage_write_error_code(self):
+    @staticmethod
+    def test_storage_write_error_code():
         assert StorageWriteError.code == 188912
 
-    def test_storage_not_found_inherits_read_error(self):
+    @staticmethod
+    def test_storage_not_found_inherits_read_error():
         assert StorageNotFoundError.code == 188911
 
 
 class TestExceptionHierarchy:
-    def test_not_found_is_read_error(self):
+    @staticmethod
+    def test_not_found_is_read_error():
         assert issubclass(StorageNotFoundError, StorageReadError)
 
-    def test_read_error_is_exception(self):
+    @staticmethod
+    def test_read_error_is_exception():
         assert issubclass(StorageReadError, Exception)
 
-    def test_config_error_is_exception(self):
+    @staticmethod
+    def test_config_error_is_exception():
         assert issubclass(StorageConfigError, Exception)
 
 
 class TestExceptionMessages:
-    def test_config_error_message(self):
+    @staticmethod
+    def test_config_error_message():
         exc = StorageConfigError("missing config")
         assert str(exc) == "missing config"
 
-    def test_default_message(self):
+    @staticmethod
+    def test_default_message():
         exc = StorageReadError()
         assert str(exc) == ""
 
-    def test_not_found_caught_as_read_error(self):
+    @staticmethod
+    def test_not_found_caught_as_read_error():
         try:
             raise StorageNotFoundError("no such key")
         except StorageReadError as e:
             assert str(e) == "no such key"
 
-    def test_kwargs_accepted(self):
+    @staticmethod
+    def test_kwargs_accepted():
         exc = StorageWriteError("write failed", foo="bar")
         assert str(exc) == "write failed"
