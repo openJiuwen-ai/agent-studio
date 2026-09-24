@@ -42,6 +42,27 @@ describe('convertToSandboxFormat — 转换分支（参数==变量名）', () =>
     expect(out).toContain("    args = args.get('args')");
   });
 
+  it('变量名含 args 且非末位：args 解包行最后生成，避免遮蔽后续读取（检视 #1）', () => {
+    const code = 'def main(args: dict, other: str) -> dict:\n    return {}\n';
+    const out = convertToSandboxFormat(code, ['args', 'other']);
+    const lines = out.split('\n');
+    const argsIdx = lines.findIndex(l => l === "    args = args.get('args')");
+    const otherIdx = lines.findIndex(l => l === "    other = args.get('other')");
+    expect(argsIdx).toBeGreaterThan(-1);
+    expect(otherIdx).toBeGreaterThan(-1);
+    expect(argsIdx).toBeGreaterThan(otherIdx, 'args 解包行必须在 other 之后（最后）');
+  });
+
+  it('变量名含 args 且为末位：顺序不变（other 在前，args 收尾）', () => {
+    const code = 'def main(other: str, args: dict) -> dict:\n    return {}\n';
+    const out = convertToSandboxFormat(code, ['other', 'args']);
+    expect(out).toBe(
+      'def main(args: dict) -> dict:\n' +
+      "    other = args.get('other')\n" +
+      "    args = args.get('args')\n" +
+      '    return {}\n');
+  });
+
   it('跨行签名（括号换行）也能定位', () => {
     const code = 'def main(\n    user: dict,\n    thought: str\n) -> dict:\n    return {}\n';
     const out = convertToSandboxFormat(code, ['user', 'thought']);

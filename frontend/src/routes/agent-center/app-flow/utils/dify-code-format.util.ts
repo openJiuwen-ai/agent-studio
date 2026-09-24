@@ -22,8 +22,8 @@
  *
  * 转换判定（按签名参数与变量名的一致性，不按参数名是否为 'args'）：
  * Dify 导入路径上代码均为 Dify 风格；`def main(args)` 出现意味着变量名恰好叫 'args'
- * （Dify 按名传参），仍属 Dify 风格需转换（解包行 `args = args.get('args')` 为
- * Python 合法的名字遮蔽，语义正确）。
+ * （Dify 按名传参），仍属 Dify 风格需转换。解包行 `args = args.get('args')` 为
+ * Python 合法的名字遮蔽；变量名含 args 时该行最后生成，避免遮蔽后续解包行的读取。
  *
  * 分层回退：
  * 1. def main 定位 + 参数解析成功 且 参数列表==变量名列表 → 转换；
@@ -167,8 +167,15 @@ export function convertToSandboxFormat(code: string, variableNames: string[]): s
 
   // 行级替换：签名整体换成 def main(args: dict) -> dict:，其后插入解包行。
   // 解包行不带默认值（缺失=None），与 Dify 侧缺失输入即 None 的语义一致。
+  // 变量名含 args 时其解包行必须最后生成：`args = args.get('args')` 会遮蔽形参 args，
+  // 若 args 非末位，其后的解包行读取的已是遮蔽值而非原始入参 dict（检视意见 #1）。
+  // 其余解包行只读 args 不写、相互无顺序依赖，重排安全。
   const unpackIndent = defIndent + '    ';
-  const unpackLines = unpackNames.map(name => `${unpackIndent}${name} = args.get('${name}')`);
+  const orderedNames = [
+    ...unpackNames.filter(name => name !== 'args'),
+    ...unpackNames.filter(name => name === 'args'),
+  ];
+  const unpackLines = orderedNames.map(name => `${unpackIndent}${name} = args.get('${name}')`);
   const newSignature = 'def main(args: dict) -> dict:';
   return (
     code.slice(0, defKeywordStart) +
