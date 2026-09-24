@@ -6,6 +6,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse, JSONResponse
 
 from agent_builder.adapter.config_bridge import settings
+from agent_builder.common.error_contract import factory as error_factory
+from agent_builder.common.error_contract.descriptor import ErrorDetail
 from agent_builder.nl_to_agent.nl2 import N2LRequestBody, _n2l_json_wapper, _chat
 
 builder_router = APIRouter(tags=["builder"])
@@ -22,11 +24,15 @@ def _valid_cid(value: str) -> bool:
 
 
 def _safe_reject(message: str) -> JSONResponse:
-    """{cid} 校验失败的安全 400（不回显原值）。"""
-    return JSONResponse(
-        status_code=400,
-        content={"error": {"code": "invalid_conversation", "message": message}},
-    )
+    """{cid} 校验失败的安全 400 canonical 响应（不回显原值，COM-03 五字段）。"""
+    from dataclasses import replace
+
+    from agent_builder.adapter.request_context_bridge import get_request_id
+
+    rid = get_request_id() or None
+    descriptor = error_factory.from_http_status(400, rid)
+    descriptor = replace(descriptor, safe_details=[ErrorDetail("openjiuwen.13100001", message)])
+    return error_factory.build_json_response(descriptor, "zh-cn")
 
 
 @builder_router.get("/v1/health", response_class=PlainTextResponse)

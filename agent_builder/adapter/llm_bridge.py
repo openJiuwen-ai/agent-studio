@@ -16,7 +16,7 @@ _run_async 把协程调度到主 FastAPI loop（run_coroutine_threadsafe）而�
 
 import asyncio
 import concurrent.futures
-from agent_builder.serve.common.concurrency import submit_with_contextvars
+from agent_builder.serve.common.concurrency import submit_with_log_vars
 
 
 # 主 FastAPI event loop，由 server_fastapi lifespan 注入（set_main_loop）。
@@ -48,7 +48,7 @@ def _run_async(coro):
 
     if loop and loop.is_running():
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return submit_with_contextvars(pool, asyncio.run, coro).result()
+            return submit_with_log_vars(pool, asyncio.run, coro).result()
     else:
         return asyncio.run(coro)
 

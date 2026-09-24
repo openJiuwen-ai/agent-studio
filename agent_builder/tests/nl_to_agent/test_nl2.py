@@ -309,7 +309,10 @@ class TestErrorSseGenerator:
 
     @staticmethod
     def _set_ctx(rid="rid-test", lang="zh-cn"):
-        from agent_builder.adapter.request_context_bridge import _request_ctx, RequestContext
+        from agent_builder.adapter.request_context_bridge import (
+            RequestContext,
+            _request_ctx,
+        )
         return _request_ctx.set(RequestContext(headers={"x-language": lang}, request_id=rid))
 
     @staticmethod
@@ -387,11 +390,15 @@ class TestErrorSseGenerator:
 
 class TestGeneratePreStreamFailure:
     """P5-BLD-02: 建流前失败（await coroutine/__aiter__）→ START + canonical error,
-    无 UnboundLocalError 二次异常（data_task 预初始化 None + finally 条件取消）。"""
+    无 UnboundLocalError 二次异常（data_task 预初始化 None + finally 条件取消）。
+    """
 
     @staticmethod
     def _set_ctx():
-        from agent_builder.adapter.request_context_bridge import _request_ctx, RequestContext
+        from agent_builder.adapter.request_context_bridge import (
+            RequestContext,
+            _request_ctx,
+        )
         return _request_ctx.set(RequestContext(headers={"x-language": "zh-cn"}, request_id="rid-bld02"))
 
     @staticmethod

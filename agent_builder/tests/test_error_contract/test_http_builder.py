@@ -2,10 +2,12 @@
 
 import os
 
-from agent_builder.common.error_contract.descriptor import ErrorDescriptor
-from agent_builder.common.error_contract.http_builder import I18nResolver, build_http_response
 from agent_builder.common.error_contract import catalog
-
+from agent_builder.common.error_contract.descriptor import ErrorDescriptor
+from agent_builder.common.error_contract.http_builder import (
+    I18nResolver,
+    build_http_response,
+)
 
 _I18N_DIR = os.path.join(
     os.path.dirname(__file__), "..", "..", "common", "error_contract", "i18n",

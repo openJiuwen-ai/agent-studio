@@ -192,7 +192,7 @@ def resolve(error_code: str) -> ErrorDefinition:
     try:
         return _CATALOG[error_code]
     except KeyError:
-        raise KeyError(f"error_code not in catalog: {error_code}")
+        raise KeyError(f"error_code not in catalog: {error_code}") from None
 
 
 def all_definitions() -> list[ErrorDefinition]:

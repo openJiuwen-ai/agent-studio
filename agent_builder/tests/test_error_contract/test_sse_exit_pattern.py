@@ -3,7 +3,10 @@
 import json
 
 from agent_builder.common.error_contract import factory
-from agent_builder.common.error_contract.stream_state import SseTerminalGuard, StreamState
+from agent_builder.common.error_contract.stream_state import (
+    SseTerminalGuard,
+    StreamState,
+)
 
 
 def test_first_error_produces_sse_frame():

@@ -23,8 +23,8 @@ from agent_builder.adapter.exception_bridge import JiuWenBaseException
 # Single Flask app (already has prompt.manager + mmapo.manager blueprints
 # registered via ServerApp in agent_builder/serve/server.py).
 from agent_builder.app import app as prompt_manage_app
-from agent_builder.serve.apis.n2l_api import builder_router
 from agent_builder.serve.apis.model_service_api import model_service_router
+from agent_builder.serve.apis.n2l_api import builder_router
 
 logger = logging.getLogger("agent_builder.server_fastapi")
 
@@ -74,6 +74,7 @@ async def _init_s3_storage() -> None:
     """
     try:
         import storage
+
         from agent_builder.adapter.config_bridge import settings
 
         storage.set_settings(lambda: settings.object_storage)
@@ -88,9 +89,12 @@ def _register_model_service_ports() -> None:
     （跳过 L2，resolver 每次直读 OBS；如需缓存可后续接 common_utils.redis_manager 实现的 CacheQueue）。"""
     import storage
     from model_service import ports
+
     from agent_builder.adapter.config_bridge import settings
     from agent_builder.adapter.request_context_bridge import (
-        get_env_variables, get_request_headers, get_request_customer_headers,
+        get_env_variables,
+        get_request_customer_headers,
+        get_request_headers,
     )
 
     ports.set_storage_provider(storage.get_storage_provider)
@@ -174,6 +178,8 @@ def instance_app() -> FastAPI:
 
     @app.middleware("http")
     async def establish_inbound_context(request: Request, call_next):
+        from common_utils import load_environment_variables
+
         from agent_builder.adapter.logger_bridge import reset_session_id, set_session_id
         from agent_builder.adapter.request_context_bridge import (
             ContextSource,
@@ -188,7 +194,6 @@ def instance_app() -> FastAPI:
             select_ids,
             write_x_request_id,
         )
-        from common_utils import load_environment_variables
 
         # 1. 纯读取选值（无日志、无外部依赖）；Builder 不收 X-Execution-Id
         request_id, trace_id, illegal_req, illegal_trace = select_ids(request.headers)
@@ -217,6 +222,7 @@ def instance_app() -> FastAPI:
             apply_platform_headers(ctx, request.headers)
             ctx.customer_headers = _capture_customer_headers(request)
             # sync_01 独有：按 X-Environment-Id 加载环境变量
+
             def _h(name: str) -> str:
                 return request.headers.get(name) or request.headers.get(name.lower(), "")
             environment_id = _h("X-Environment-Id")
@@ -232,8 +238,11 @@ def instance_app() -> FastAPI:
             write_x_request_id(response, request_id)
             return response
         except JiuWenBaseException:
-            # 框架业务异常透传至下方 JiuWenBaseException handler（保 error_code）；
-            # finally 仍逆序 reset；handler 读 request.state（非 ContextVar）不受影响。
+            # 实际可达路径：call_next 前（load_environment_variables）抛出，或 SSE 流
+            # 已开始发送后 generator 抛出。raise 后到达外层 ServerErrorMiddleware（generic
+            # 500），不经过 FastAPI JiuWenBaseException exception_handler（router 异常已被
+            # 内层 ExceptionMiddleware 转响应，本分支对 router 异常不可达）。
+            # finally 仍逆序 reset。如需保 error_code，应在分支内直接用 error_factory 构建响应。
             raise
         except Exception as exc:  # 请求级异常边界，token 有效期内收口
             err_response = build_unhandled_error_response(request, exc)

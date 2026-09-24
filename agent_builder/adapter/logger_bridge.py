@@ -23,9 +23,10 @@ try:
     from openjiuwen.core.common.logging import reset_session_id
 except ImportError:
     # 兼容 agent-core 未合入 DEF-03：reset_session_id 不存在
-    # set_session_id 旧版不返回 token → trace_token=None → reset 跳过
+    # set_session_id 旧版不返回 token → trace_token=None → 无法按 token 恢复；
+    # 改为恢复默认 trace_id，避免线程池 worker 复用残留上个请求 trace_id（日志串号）。
     def reset_session_id(_token):
-        pass
+        set_session_id("default_trace_id")
 
 # 显式 re-export 清单（避免 ruff F401 误报 unused；COM-05 DEF-05 对齐旧分支）
 common = logger  # DEF-05 §5.4 alias

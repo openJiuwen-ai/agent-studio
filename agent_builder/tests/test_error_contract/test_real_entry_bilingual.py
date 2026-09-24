@@ -14,15 +14,19 @@ from contextlib import asynccontextmanager
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from fastapi.testclient import TestClient
 
-from agent_builder.adapter.request_context_bridge import _request_ctx
+from agent_builder.adapter.request_context_bridge import (
+    ContextSource,
+    RequestContext,
+    _request_ctx,
+)
 from agent_builder.serve.common.inbound_context import (
-    select_ids,
     apply_platform_headers,
+    select_ids,
     write_x_request_id,
 )
-from agent_builder.adapter.request_context_bridge import RequestContext, ContextSource
 
 
 def _make_app_with_middleware():
@@ -111,8 +115,8 @@ def test_builder_sse_error_english_locale():
             guard,
         )
         if event:
-            return __import__("fastapi").responses.PlainTextResponse(event)
-        return __import__("fastapi").responses.PlainTextResponse("no event")
+            return PlainTextResponse(event)
+        return PlainTextResponse("no event")
 
     client = TestClient(app, raise_server_exceptions=False)
 
@@ -157,8 +161,8 @@ def test_builder_sse_error_default_locale_when_missing():
             guard,
         )
         if event:
-            return __import__("fastapi").responses.PlainTextResponse(event)
-        return __import__("fastapi").responses.PlainTextResponse("none")
+            return PlainTextResponse(event)
+        return PlainTextResponse("none")
 
     client = TestClient(app, raise_server_exceptions=False)
     resp = client.get("/sse-default", headers={"X-Request-Id": "r-default"})
@@ -180,9 +184,9 @@ def _real_app(monkeypatch):
     这保证测试走的是真实 establish_inbound_context 中间件 → 真实 builder_router
     → 真实 _chat → 真实 _generate build_sse_error_event 路径。
     """
-    from agent_builder.serve.server_fastapi import instance_app
     import agent_builder.serve.server_fastapi as sf
     from agent_builder.serve.apis.n2l_api import builder_router
+    from agent_builder.serve.server_fastapi import instance_app
 
     # 1. no-op lifespan(跳过 Redis/S3/prompt-store 初始化)
     @asynccontextmanager

@@ -1,10 +1,12 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# pylint: disable=protected-access
 """SYNC-01 P3.3 Builder 入口/线程测试。
 
 覆盖 COM-05/DEF-05/DEF-07 关键机制（adapt sync_01）：
 - request_context_bridge: get_request_id 空槽/取值 + ContextSource
-- inbound_context: select_ids(valid/missing/invalid) + valid_inbound_id + apply_platform_headers(不含 X-Execution-Id) + write_x_request_id
+- inbound_context: select_ids(valid/missing/invalid) + valid_inbound_id
+  + apply_platform_headers(不含 X-Execution-Id) + write_x_request_id
 - concurrency: submit_with_log_vars 传播 trace_id + 恢复 worker + submit_with_contextvars
 - log_init(DEF-05 adapt): request_id factory 幂等 + 注入空槽/上下文值
 - server_fastapi(COM-05): X-Request-Id 回写(success/missing header) + select_ids + 异常收口 500
@@ -42,7 +44,6 @@ from agent_builder.serve.common.inbound_context import (
     write_x_request_id,
 )
 from agent_builder.serve.common.logger.log_init import init_logger
-
 
 # ─── request_context_bridge ───
 
@@ -332,7 +333,8 @@ class TestLogInitFailFast(unittest.TestCase):
         只 mock 故障注入点（LogManager.initialize）；_restore_factory/configure_log_config 真实运行。
         mock log_path 使 cfg 与 prior_snapshot 有差异，配置恢复断言有区分力（非 trivially true）。
         _loggers 断言此处置于 test_post_initialize_failure_clears_populated_loggers（此处 initialize
-        被 mock 不 populate，_loggers 断言无意义，故不声称）。"""
+        被 mock 不 populate，_loggers 断言无意义，故不声称）。
+        """
         import shutil
         import tempfile
         li = self._fresh_log_init()
@@ -361,11 +363,12 @@ class TestLogInitFailFast(unittest.TestCase):
         + 真实恢复后 factory/配置回到失败前 + _initialized False + re-raise。
 
         mock 只限 try 块前置步骤（initialize/get_all_loggers）以达 _verify_target_files；
-        _verify_target_files 与恢复函数真实运行。root 用户跳过（os.access 对 root 永真）。"""
+        _verify_target_files 与恢复函数真实运行。root 用户跳过（os.access 对 root 永真）。
+        """
         import os
         import shutil
         import tempfile
-        if os.geteuid() == 0:
+        if getattr(os, "geteuid", lambda: -1)() == 0:
             self.skipTest("root bypasses file write permission; os.access(W_OK) always True for root")
         li = self._fresh_log_init()
         tmp = tempfile.mkdtemp()
@@ -402,7 +405,8 @@ class TestLogInitFailFast(unittest.TestCase):
         只 mock 故障注入点（_alias_non_builtin_loggers_to_common，在 initialize 之后）；
         initialize/_verify_target_files/_restore_factory/configure_log_config/LogManager.reset 真实运行。
         _loggers 断言非 trivially true——initialize 先 populate 使其非空，reset 必须清空，
-        若 reset 实现失效（忘记清）则 _loggers 仍非空，断言失败。"""
+        若 reset 实现失效（忘记清）则 _loggers 仍非空，断言失败。
+        """
         import os
         import shutil
         import tempfile
@@ -418,6 +422,7 @@ class TestLogInitFailFast(unittest.TestCase):
         close_called = {}
         handlers_at_fault = []
         handler_close_called = {}
+
         def alias_side_effect():
             snap = dict(li.LogManager._loggers)  # initialize populate 后、reset 前
             loggers_at_fault["snap"] = snap
@@ -426,6 +431,7 @@ class TestLogInitFailFast(unittest.TestCase):
                 orig_close = getattr(logger, "close", None)
                 if callable(orig_close):
                     close_called[log_type] = False
+
                     def make_spy(lt, oc):
                         def spy():
                             close_called[lt] = True
@@ -437,6 +443,7 @@ class TestLogInitFailFast(unittest.TestCase):
                     handlers_at_fault.append(h)
                     handler_close_called[id(h)] = False
                     orig_h_close = h.close
+
                     def make_h_spy(hid, oc):
                         def h_spy():
                             handler_close_called[hid] = True
@@ -480,7 +487,8 @@ class TestLogInitFailFast(unittest.TestCase):
         LogManager.reset() 兜底清空非空 _loggers + 原异常（_alias 非 snapshot-restore）re-raise + factory 恢复。
 
         故障注入：_alias raise（try 末）+ configure_log_config 条件 side_effect（第1次真实、第2次 raise）；
-        被验证的兜底（LogManager.reset）+ _restore_factory 真实运行。config 不声称恢复（snapshot 恢复失败）。"""
+        被验证的兜底（LogManager.reset）+ _restore_factory 真实运行。config 不声称恢复（snapshot 恢复失败）。
+        """
         import os
         import shutil
         import tempfile
@@ -494,6 +502,7 @@ class TestLogInitFailFast(unittest.TestCase):
         logging.setLogRecordFactory(logging.LogRecord)
         real_configure = li.configure_log_config
         call_count = [0]
+
         def cfg_side_effect(cfg):
             call_count[0] += 1
             if call_count[0] == 2:
@@ -503,6 +512,7 @@ class TestLogInitFailFast(unittest.TestCase):
         close_called = {}
         handlers_at_fault = []
         handler_close_called = {}
+
         def alias_side_effect():
             snap = dict(li.LogManager._loggers)  # populate 后、兜底 reset 前
             loggers_at_fault["snap"] = snap
@@ -510,6 +520,7 @@ class TestLogInitFailFast(unittest.TestCase):
                 orig_close = getattr(logger, "close", None)
                 if callable(orig_close):
                     close_called[log_type] = False
+
                     def make_spy(lt, oc):
                         def spy():
                             close_called[lt] = True
@@ -520,6 +531,7 @@ class TestLogInitFailFast(unittest.TestCase):
                     handlers_at_fault.append(h)
                     handler_close_called[id(h)] = False
                     orig_h_close = h.close
+
                     def make_h_spy(hid, oc):
                         def h_spy():
                             handler_close_called[hid] = True
@@ -569,14 +581,7 @@ def _make_app_with_middleware():
     **非生产入口**——为隔离复刻选值/双 token/回写/异常收口核心片段；
     生产 server_fastapi.instance_app() 路径的测试见 TestRealInstanceApp。
     """
-    from agent_builder.adapter.logger_bridge import reset_session_id, set_session_id
-    from agent_builder.adapter.request_context_bridge import (
-        ContextSource,
-        RequestContext,
-        _request_ctx,
-    )
     from agent_builder.serve.common.error_response import build_unhandled_error_response
-    from agent_builder.serve.common.inbound_context import select_ids, write_x_request_id
 
     app = FastAPI()
 
@@ -642,7 +647,6 @@ class TestEstablishInboundContext(unittest.TestCase):
 
             @app.get("/cap")
             async def cap():
-                from agent_builder.adapter.logger_bridge import get_session_id
                 captured["trace"] = get_session_id()
                 return {"ok": True}
 
@@ -698,7 +702,6 @@ class TestRealInstanceApp(unittest.TestCase):
     @staticmethod
     def _probe_app(endpoint, path):
         """真实 instance_app() + 探针路由插到 Flask "/" mount 之前（否则被 mount 遮蔽 404）。"""
-        from starlette.responses import JSONResponse
         from starlette.routing import Route
 
         from agent_builder.serve.server_fastapi import instance_app

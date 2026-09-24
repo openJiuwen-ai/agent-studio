@@ -16,13 +16,14 @@ import os
 import sys
 import threading
 
-from agent_builder.adapter.config_bridge import settings
-from agent_builder.adapter.request_context_bridge import get_request_id
 from openjiuwen.core.common.logging import LogManager
 from openjiuwen.core.common.logging.log_config import (
     configure_log_config,
     get_log_config_snapshot,
 )
+
+from agent_builder.adapter.config_bridge import settings
+from agent_builder.adapter.request_context_bridge import get_request_id
 
 _LOCK = threading.Lock()
 _initialized = False
@@ -191,6 +192,12 @@ def init_logger():
                     raise RuntimeError(f"内建 Logger {log_type} 未注册")
             _verify_target_files()
             _alias_non_builtin_loggers_to_common()
+            # COM-05 DEF-05：agent-core build_default_logger_config 不透传 propagate 键
+            # （DefaultLogger.config.get("propagate", True) 拿不到根级配置 → 恒 True →
+            # WARNING+ 写冻结文件后继续向 root 传播，lastResort 双写 stderr）。
+            # 本进程内显式切断，不依赖 agent-core 透传该键。
+            for _log_type in _BUILTIN_LOG_TYPES:
+                logging.getLogger(_log_type).propagate = False
         except Exception:
             # 失败：恢复安装前配置快照（configure_log_config 内部 reset 会关闭
             # 本次已创建的部分 Logger/Handler）；仅当当前 factory 仍是本次

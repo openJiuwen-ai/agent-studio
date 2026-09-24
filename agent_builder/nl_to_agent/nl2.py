@@ -144,7 +144,7 @@ async def _chat(req_json: dict) -> StreamingResponse:
 
     except ValidationError as e:
         # 专门捕获 Pydantic 校验错误
-        logger.warning(f"Request validation failed", exc_info=True)
+        logger.warning("Request validation failed", exc_info=True)
         return StreamingResponse(
             _error_sse_generator(
                 ValueError("Invalid Request"), task_id or "unknown"
@@ -210,12 +210,12 @@ async def _generate(yield_answer, task_id):
     # str(exc)）。request_id/locale 从 _request_ctx 读（middleware 已 set）。
     from agent_builder.common.error_contract.factory import build_sse_error_event
     from agent_builder.common.error_contract.stream_state import SseTerminalGuard
-    from agent_builder.adapter.request_context_bridge import _request_ctx
+    from agent_builder.adapter.request_context_bridge import get_request_context
     _guard = SseTerminalGuard()
     _guard.begin_streaming()
 
     def to_error_sse(exc):
-        ctx = _request_ctx.get()
+        ctx = get_request_context()
         rid = getattr(ctx, "request_id", None) if ctx else None
         locale = (
             ctx.headers.get("x-language", "zh-cn")
@@ -331,14 +331,14 @@ def _error_sse_generator(e: Exception, task_id: str):
     """
     from agent_builder.common.error_contract.factory import build_sse_error_event
     from agent_builder.common.error_contract.stream_state import SseTerminalGuard
-    from agent_builder.adapter.request_context_bridge import _request_ctx
+    from agent_builder.adapter.request_context_bridge import get_request_context
 
     start_payload = {"data": "", "event": "START", "conversationId": task_id}
     yield f"data: {json.dumps(start_payload, ensure_ascii=False)}\n\n"
 
     guard = SseTerminalGuard()
     guard.begin_streaming()
-    ctx = _request_ctx.get()
+    ctx = get_request_context()
     rid = getattr(ctx, "request_id", None) if ctx else None
     locale = (
         ctx.headers.get("x-language", "zh-cn")

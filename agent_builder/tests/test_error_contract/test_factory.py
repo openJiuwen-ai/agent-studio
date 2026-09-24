@@ -5,8 +5,7 @@ import json
 import pytest
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from agent_builder.adapter.exception_bridge import (
     JiuWenBaseException,
@@ -114,6 +113,8 @@ def test_build_flask_error_triple():
     assert headers["X-Request-Id"] == _rid()
 
   # pylint: disable=avoid-import-method  # noqa
+
+
 def test_build_json_response_en_locale():
     d = factory.from_internal(RuntimeError("x"), _rid())
     en = json.loads(factory.build_json_response(d, "en-us").body)
@@ -135,6 +136,8 @@ _LEGACY_MATRIX = [
 ]
 
   # pylint: disable=avoid-import-method  # noqa
+
+
 @pytest.mark.parametrize("int_code,str_code,http_status", _LEGACY_MATRIX)
 def test_from_builder_exception_legacy_mapped_to_canonical(int_code, str_code, http_status):
     exc = JiuWenBaseException(error_code=int_code, message="internal detail with secret")
@@ -166,7 +169,8 @@ def test_from_builder_exception_unregistered_maps_internal(bad_code):
 
 def _exc_with_code(code):
     """Build a JiuWenBaseException bypassing __init__ to set arbitrary error_code
-    types (None/bool/object) that the constructor would reject or coerce."""
+    types (None/bool/object) that the constructor would reject or coerce.
+    """
     exc = JiuWenBaseException.__new__(JiuWenBaseException)
     exc.error_code = code
     return exc
@@ -182,7 +186,8 @@ def test_from_builder_exception_non_int_str_maps_internal(bad_code):
 
 def test_from_builder_exception_spoof_object_rejected():
     """§4.1.4 spoof guard: an object whose __str__ returns a registered code
-    must NOT pass the type gate."""
+    must NOT pass the type gate.
+    """
     class _Spoof:
         def __str__(self):
             return "102154"

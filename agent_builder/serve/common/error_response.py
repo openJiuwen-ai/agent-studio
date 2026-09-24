@@ -18,13 +18,10 @@ server_fastapi 的 generic Exception handler 保留为 Middleware 自身建立�
 reset 编程错误的最后兜底，不再承担正常路由未处理异常的关联日志。
 """
 
-import logging
-
 from starlette.requests import Request
 
 from agent_builder.common.error_contract import factory as error_factory
-
-logger = logging.getLogger(__name__)
+from agent_builder.common.logging.base import logger
 
 
 def build_unhandled_error_response(request: Request, exc: Exception):

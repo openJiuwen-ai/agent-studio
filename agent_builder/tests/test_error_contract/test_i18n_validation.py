@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 """COM-03 §3.5: i18n fail-fast 验证——Builder 所有 definition 的中英文三段文案完整。"""
 
 import pytest

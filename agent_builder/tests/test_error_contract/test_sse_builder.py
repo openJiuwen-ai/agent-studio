@@ -2,12 +2,17 @@
 
 import os
 
+from agent_builder.common.error_contract import catalog
 from agent_builder.common.error_contract.descriptor import ErrorDescriptor
 from agent_builder.common.error_contract.http_builder import I18nResolver
-from agent_builder.common.error_contract.sse_builder import build_sse_error_envelope, format_sse_event
-from agent_builder.common.error_contract.stream_state import StreamState, SseTerminalGuard
-from agent_builder.common.error_contract import catalog
-
+from agent_builder.common.error_contract.sse_builder import (
+    build_sse_error_envelope,
+    format_sse_event,
+)
+from agent_builder.common.error_contract.stream_state import (
+    SseTerminalGuard,
+    StreamState,
+)
 
 _I18N_DIR = os.path.join(
     os.path.dirname(__file__), "..", "..", "common", "error_contract", "i18n",

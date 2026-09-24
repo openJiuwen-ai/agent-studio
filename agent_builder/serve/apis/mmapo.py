@@ -3,16 +3,22 @@
 
 import concurrent
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
+from flask import Blueprint, g, jsonify, request
+
+from agent_builder.adapter.exception_bridge import JiuWenBaseException
+from agent_builder.adapter.task_info import TaskInfo
 from agent_builder.common.exception.status_code import StatusCode
-from agent_builder.serve.common.concurrency import submit_with_log_context
 from agent_builder.common.security.auth import Auth
 from agent_builder.common.status import TaskStatus
-from agent_builder.prompt.mmapo.VQA_apo import ApoOptimizer
 from agent_builder.prompt.mmapo.validator import ApoTaskParamsValidator
-from agent_builder.prompt.tune.base.context_manager import ContextManager
-from agent_builder.prompt.tune.base.context_manager import MMAPO_MODE, StatusChecker
+from agent_builder.prompt.mmapo.VQA_apo import ApoOptimizer
+from agent_builder.prompt.tune.base.context_manager import (
+    MMAPO_MODE,
+    ContextManager,
+    StatusChecker,
+)
 from agent_builder.prompt.tune.base.utils import calc_run_time
 from agent_builder.prompt.tune.service.interface import (
     OptimizeTaskCreationRequest,
@@ -22,10 +28,8 @@ from agent_builder.serve.apis.prompt import (
     generate_optimize_task_job_id,
     prompt_optimize_success,
 )
+from agent_builder.serve.common.concurrency import submit_with_log_context
 from agent_builder.serve.common.exception.exception_handler import ExceptionHandler
-from flask import request, Blueprint, g, jsonify
-from agent_builder.adapter.exception_bridge import JiuWenBaseException
-from agent_builder.adapter.task_info import TaskInfo
 
 mmapo_app = Blueprint("mmapo_api", __name__)
 

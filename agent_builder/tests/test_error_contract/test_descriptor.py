@@ -2,9 +2,8 @@
 
 import pytest
 
-from agent_builder.common.error_contract.descriptor import ErrorDescriptor, ErrorDetail
 from agent_builder.common.error_contract import catalog
-
+from agent_builder.common.error_contract.descriptor import ErrorDescriptor, ErrorDetail
 
 CODE = "openjiuwen.13100001"
 MSG_KEY = "openjiuwen.13100001"

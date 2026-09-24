@@ -22,7 +22,9 @@ try:
     from openjiuwen.core.common.logging import reset_session_id
 except ImportError:
     def reset_session_id(_token):
-        pass  # 兼容 agent-core 未合入 DEF-03
+        # 兼容 agent-core 未合入 DEF-03：恢复默认 trace_id，非 no-op，
+        # 避免线程池 worker 复用残留上个请求 trace_id（日志串号）。
+        set_session_id("default_trace_id")
 
 from agent_builder.adapter.logger_bridge import get_session_id, set_session_id
 from agent_builder.adapter.request_context_bridge import (

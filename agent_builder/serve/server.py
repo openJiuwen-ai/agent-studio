@@ -14,7 +14,7 @@ from common_utils.redis_manager import RedisClientManager
 from flask import Flask, request
 
 from agent_builder.adapter.exception_bridge import JiuWenBaseException, JiuWenException
-from agent_builder.adapter.init_server import load_yaml_config, env_to_config
+from agent_builder.adapter.init_server import env_to_config, load_yaml_config
 from agent_builder.common.logging.base import logger
 from agent_builder.common.security.sts_service import sts_init
 from agent_builder.serve.apis.mmapo import mmapo_app
@@ -42,6 +42,21 @@ def extract_host_and_port(config):
         raise JiuWenException("port should be an integer")
 
     return host, port
+
+
+def _extract_rid_lang(request):
+    """提取 request_id + language（尽力取值，失败用默认，G.ERR.07 不 pass）。"""
+    from agent_builder.adapter.request_context_bridge import get_request_id
+
+    try:
+        rid = get_request_id() or None
+    except Exception:
+        rid = None
+    try:
+        lang = request.headers.get("x-language", "zh-cn")
+    except Exception:
+        lang = "zh-cn"
+    return rid, lang
 
 
 def instance_app(config):
@@ -76,20 +91,9 @@ def instance_app(config):
             logger.error(f"Flask HTTPException: code={exc.code}")
         else:
             logger.warning(f"Flask HTTPException: code={exc.code}")
-        request_id = None
-        try:
-            from agent_builder.adapter.request_context_bridge import get_request_id
-
-            request_id = get_request_id() or None
-        except Exception:
-            request_id = None
+        request_id, language = _extract_rid_lang(request)
         descriptor = error_factory.from_http_status(
             exc.code or 500, request_id, exc)
-        language = "zh-cn"
-        try:
-            language = request.headers.get("x-language", "zh-cn")
-        except Exception:
-            pass
         return error_factory.build_flask_error(descriptor, language)
 
     # DEF-06 §6.3：全局 Flask JiuWenBaseException Handler——未使用 @catch_exception
@@ -102,19 +106,8 @@ def instance_app(config):
             f"JiuWenBaseException: error_code={getattr(exc, 'error_code', -1)}",
             exc_info=True,
         )
-        request_id = None
-        try:
-            from agent_builder.adapter.request_context_bridge import get_request_id
-
-            request_id = get_request_id() or None
-        except Exception:
-            pass
+        request_id, language = _extract_rid_lang(request)
         descriptor = error_factory.from_builder_exception(exc, request_id)
-        language = "zh-cn"
-        try:
-            language = request.headers.get("x-language", "zh-cn")
-        except Exception:
-            pass
         return error_factory.build_flask_error(descriptor, language)
 
     # COM-03 §3.6：Flask unknown-exception handler——未被业务装饰器捕获的
@@ -127,19 +120,8 @@ def instance_app(config):
             f"Flask unhandled exception: type={type(exc).__name__}",
             exc_info=True,
         )
-        request_id = None
-        try:
-            from agent_builder.adapter.request_context_bridge import get_request_id
-
-            request_id = get_request_id() or None
-        except Exception:
-            pass
+        request_id, language = _extract_rid_lang(request)
         descriptor = error_factory.from_internal(exc, request_id)
-        language = "zh-cn"
-        try:
-            language = request.headers.get("x-language", "zh-cn")
-        except Exception:
-            pass
         return error_factory.build_flask_error(descriptor, language)
     return app
 
@@ -152,7 +134,8 @@ def _establish_inbound_context():
     direct（source=NONE，Flask 独立运行）：select_ids 选值 + source=FLASK_DIRECT
     + 原子双 token 存 g（Flask 请求作用域），teardown 逆序恢复。
     """
-    from flask import g, request
+    from flask import g
+
     from agent_builder.adapter.logger_bridge import set_session_id
     from agent_builder.adapter.request_context_bridge import (
         ContextSource,
@@ -179,8 +162,8 @@ def _establish_inbound_context():
         _request_ctx.reset(request_token)
         raise
     # token 存 g（Flask 请求作用域），teardown 逆序恢复
-    g._com05_request_token = request_token
-    g._com05_trace_token = trace_token
+    g._com05_request_token = request_token  # pylint: disable=protected-access
+    g._com05_trace_token = trace_token  # pylint: disable=protected-access
 
     if illegal_req:
         logger.warning(f"header X-Request-Id is illegal; regenerated request_id={request_id}")
@@ -195,6 +178,7 @@ def _establish_inbound_context():
 def _teardown_inbound_context(exc=None):
     """COM-05 Flask teardown：LIFO 逆序恢复 g 中存的 token（mounted 不存→跳过）。"""
     from flask import g
+
     from agent_builder.adapter.logger_bridge import reset_session_id
     from agent_builder.adapter.request_context_bridge import _request_ctx
 

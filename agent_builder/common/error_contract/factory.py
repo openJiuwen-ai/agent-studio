@@ -8,6 +8,7 @@ request.state.request_id / _request_ctx），不在异常处理器生成。
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from typing import Optional, Tuple
 
 from fastapi.exceptions import RequestValidationError
@@ -18,8 +19,8 @@ from agent_builder.adapter.exception_bridge import JiuWenBaseException
 from agent_builder.common.error_contract import catalog
 from agent_builder.common.error_contract.descriptor import ErrorDescriptor, ErrorDetail
 from agent_builder.common.error_contract.http_builder import (
-    I18nResolver,
     HttpResponseSpec,
+    I18nResolver,
     build_http_response,
 )
 
@@ -44,6 +45,8 @@ def normalize_locale(language: Optional[str]) -> str:
     return "zh_cn"
 
   # pylint: disable=huawei-too-many-arguments  # noqa
+
+
 def _build(defn, request_id: str, safe_details=None, cause=None,
            downstream_service=None, downstream_error_code=None) -> ErrorDescriptor:
     return ErrorDescriptor(
@@ -163,7 +166,8 @@ def from_http_status(status: int, request_id: Optional[str],
     if status == 405:
         return from_method_not_allowed(request_id, exc)
     if 400 <= status < 500:
-        return _build(catalog.REQUEST_VALIDATION_FAILED, _rid(request_id), cause=exc)
+        d = _build(catalog.REQUEST_VALIDATION_FAILED, _rid(request_id), cause=exc)
+        return replace(d, http_status=status)  # 保留原状态码（422/401/403/429 等，不压平为 400）
     return from_internal(exc or _StatusOnlyError(status), request_id)
 
 
