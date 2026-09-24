@@ -48,7 +48,10 @@ public class QuestionClassifierNodeConverter extends AbstractSDSLNodeConverter {
         Map<String, Object> modelConfig = MapReadUtil.safeCastToMapWithStringKey(data.get("model"));
         if (modelConfig != null) {
             Map<String, String> modelInfo = new HashMap<>();
-            modelInfo.put(CommonConstant.ModelParam.MODEL_NAME, modelConfig.get("name").toString());
+            String modelName = modelConfig.get("name").toString();
+            modelInfo.put(CommonConstant.ModelParam.MODEL_NAME, modelName);
+            // Dify 只有模型名，补全平台 deployment id/type（IR 生成必需），查不到留空用户手选
+            fillModelDeploymentInfo(modelInfo, modelName);
             Map<String, Object> llmConfig = new HashMap<>();
             llmConfig.put(CommonConstant.ModelParam.MODEL, modelInfo);
             Map<String, Object> modelParams = MapReadUtil.safeCastToMapWithStringKey(modelConfig.get("completion_params"));
@@ -88,14 +91,19 @@ public class QuestionClassifierNodeConverter extends AbstractSDSLNodeConverter {
             return null;
         }
         List<WorkflowBranchVO> branches = new ArrayList<>();
-        classesMaps.forEach(classesMap -> {
+        // branch id 必须用数字序号（branch_1..N）：runtime 意图路由链强依赖该格式——
+        // intent_detection._inner_get_config_info 用 re.search(r"branch_(\d+)") 提数字构建
+        // category_list（提不出的分支被静默跳过→分类列表为空），ir_converter._intent_branch_class
+        // 同正则生成路由条件（提不出→兜底"分类0"→全部条件失效→101021）。Dify 的语义 class id
+        // （如 zx/dj）必须映射为序号；category（分类描述）原样保留，LLM 分类语义不变。
+        for (int i = 0; i < classesMaps.size(); i++) {
             WorkflowBranchVO workflowBranchVO = new WorkflowBranchVO();
-            workflowBranchVO.setId("branch_" + classesMap.get("id"));
+            workflowBranchVO.setId("branch_" + (i + 1));
             Map<String, Object> configs = new HashMap<>();
-            configs.put("category", extractAndReplace(classesMap.get("name").toString(), null));
+            configs.put("category", extractAndReplace(classesMaps.get(i).get("name").toString(), null));
             workflowBranchVO.setConfigs(configs);
             branches.add(workflowBranchVO);
-        });
+        }
         return branches;
     }
 
