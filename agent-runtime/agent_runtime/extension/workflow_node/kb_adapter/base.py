@@ -3,6 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 import logging
+import math
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -35,7 +36,9 @@ if THRESHOLD_MIN > THRESHOLD_MAX:
 
 
 def clamp_threshold(value: float) -> float:
-    """将阈值 clamp 到 [min, max] 范围内。"""
+    """将阈值 clamp 到 [min, max] 范围内。NaN/Inf 按边界处理。"""
+    if not math.isfinite(value):
+        return THRESHOLD_MIN if value != float("inf") else THRESHOLD_MAX
     if value > THRESHOLD_MAX:
         return THRESHOLD_MAX
     if value < THRESHOLD_MIN:

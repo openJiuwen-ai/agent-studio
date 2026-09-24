@@ -108,7 +108,10 @@ class GeneralKBAdapter(KBServiceAdapter):
         dataset_ids = request.dataset_ids
         headers = request.headers
         top_k = request.retrieval_params.get("topK", 10)
-        raw_threshold = request.retrieval_params.get("scoreThreshold")
+        raw_threshold = request.retrieval_params.get(
+            "recallThreshold",
+            request.retrieval_params.get("scoreThreshold"),
+        )
         score_threshold = clamp_threshold(float(raw_threshold)) if raw_threshold is not None else None
         search_mode = request.retrieval_params.get("searchMode", "doc")
 

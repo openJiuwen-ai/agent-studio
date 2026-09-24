@@ -100,7 +100,10 @@ class RagFlowAdapter(KBServiceAdapter):
         headers = request.headers
         retrieval_params = request.retrieval_params
         top_k = retrieval_params.get("topK", 10)
-        raw_threshold = retrieval_params.get("scoreThreshold")
+        raw_threshold = retrieval_params.get(
+            "recallThreshold",
+            retrieval_params.get("scoreThreshold"),
+        )
         score_threshold = clamp_threshold(float(raw_threshold)) if raw_threshold is not None else None
 
         url = f"{endpoint.rstrip('/')}/api/v1/retrieval"
