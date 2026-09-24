@@ -113,7 +113,7 @@ class PromptAssembler:
 
     def __init__(self, template: Template, return_format: str = "message", **variables):
         template_content = template.content
-        if isinstance(template_content, List):
+        if isinstance(template_content, list):
             try:
                 template_content = messages_to_template(template_content)
             except Exception as error:
