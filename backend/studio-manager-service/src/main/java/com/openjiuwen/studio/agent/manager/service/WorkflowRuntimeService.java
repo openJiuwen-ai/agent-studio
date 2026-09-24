@@ -405,9 +405,11 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             mergeWorkflowContextList(beforeWorkflowList, contextDTOMap);
         } else {
             // 后续轮次：以上一轮结束状态为基线，本轮"对话前"=上一轮"对话后"
+            // （after 为 null 时回退 before，防御部分快照遗留的空值）
             previousRoundContext.forEach((key, previous) -> {
                 ContextDTO current = copyOfContext(previous);
-                current.setValueBefor(previous.getValueAfter());
+                current.setValueBefor(previous.getValueAfter() != null
+                    ? previous.getValueAfter() : previous.getValueBefor());
                 contextDTOMap.put(key, current);
             });
         }
@@ -435,6 +437,11 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                     // 无条件覆盖会把上一轮累积/before-entry 的对话后值清空
                     if (newValue.getValueAfter() != null) {
                         existing.setValueAfter(newValue.getValueAfter());
+                    }
+                    // 对话前值同理补齐：existing 的 valueBefore 缺失（如新建变量首轮补建）
+                    // 而来源带有正确值时，取来源值，避免上下文对比中对话前值长期为空
+                    if (existing.getValueBefor() == null && newValue.getValueBefor() != null) {
+                        existing.setValueBefor(newValue.getValueBefor());
                     }
                     return existing;
                 }));
@@ -594,34 +601,48 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             }
             contextDTO.setValueAfter(JSON.toJSONString(valueAfter, SerializerFeature.WriteMapNullValue));
         }
+
+        // 引擎侧记忆快照为部分快照（仅含本工作流修改过的变量），未修改变量在上面的
+        // 循环中不会被设置 valueAfter（保持 null）。此处统一回退为对话前的值
+        // （未修改即前后一致），避免 null 进入轮次合并/轮间累积后清空后续轮次的对话前值
+        for (ContextDTO contextDTO : workflow.getContextList().values()) {
+            if (contextDTO.getValueAfter() == null) {
+                contextDTO.setValueAfter(contextDTO.getValueBefor());
+            }
+        }
     }
 
     /**
-     * 从 fromIndex（含）向下标减小方向查找最近一个携带非空 memory 快照的帧，
-     * 返回其快照；找不到返回空 Map。用于确定子工作流执行前各上下文变量的最近已知值。
+     * 从 fromIndex（含）向下标减小方向收集各变量的最近已知值，返回合并后的快照。
+     * 引擎侧记忆快照为部分快照（仅含产生该快照的工作流修改过的变量），不能只取最近
+     * 一个非空快照（会遗漏未被其修改变量的取值），需由近及远遍历：较近快照的变量值
+     * 优先，缺失变量由更早快照补齐。
      */
     private Map<String, Object> latestMemoryBefore(List<NodeRunInfo> nodeRunInfos, int fromIndex) {
+        Map<String, Object> merged = new HashMap<>();
         for (int i = Math.min(fromIndex, nodeRunInfos.size() - 1); i >= 0; i--) {
             Map<String, Object> memory = nodeRunInfos.get(i).getMemory();
             if (memory != null && !memory.isEmpty()) {
-                return memory;
+                memory.forEach(merged::putIfAbsent);
             }
         }
-        return new HashMap<>();
+        return merged;
     }
 
     /**
-     * 在 [fromIndex, toIndex] 区间内查找最后一个携带非空 memory 快照的帧，返回其快照；
-     * 区间内无快照返回 null（调用方以此区分"子工作流未修改记忆变量"）。
+     * 在 [fromIndex, toIndex] 区间内由近及远收集各变量的最近已知值，返回合并后的快照；
+     * 区间内无任何快照返回 null（调用方以此区分"子工作流未修改记忆变量"）。
+     * 同 {@link #latestMemoryBefore}，按部分快照语义逐变量合并而非只取最近一个快照。
      */
     private Map<String, Object> latestMemoryBetween(List<NodeRunInfo> nodeRunInfos, int fromIndex, int toIndex) {
+        Map<String, Object> merged = new HashMap<>();
         for (int i = Math.min(toIndex, nodeRunInfos.size() - 1); i >= fromIndex; i--) {
             Map<String, Object> memory = nodeRunInfos.get(i).getMemory();
             if (memory != null && !memory.isEmpty()) {
-                return memory;
+                memory.forEach(merged::putIfAbsent);
             }
         }
-        return null;
+        return merged.isEmpty() ? null : merged;
     }
 
     private Object replaceNoneWithEmpty(Object input) {
