@@ -9,7 +9,7 @@ import aiohttp
 
 from openjiuwen.core.common.logging import workflow_logger
 
-from .base import THRESHOLD_MIN, clamp_threshold, DatasetSearchRequest, KBSearchResult, KBServiceAdapter
+from .base import clamp_threshold, DatasetSearchRequest, KBSearchResult, KBServiceAdapter
 from .customer_header_inject import inject_customer_headers_to_kb
 
 
@@ -37,8 +37,8 @@ class KooSearchAdapter(KBServiceAdapter):
         all_results: List[KBSearchResult] = []
 
         top_k = retrieval_params.get("topK", 10)
-        score_threshold = float(retrieval_params.get("scoreThreshold", 0.0))
-        score_threshold = clamp_threshold(score_threshold)
+        raw_threshold = retrieval_params.get("scoreThreshold")
+        score_threshold = clamp_threshold(float(raw_threshold)) if raw_threshold is not None else None
 
         endpoint = connection_config.get("endpoint", "")
         extra_params = connection_config.get("extra_params", {})
@@ -100,7 +100,7 @@ class KooSearchAdapter(KBServiceAdapter):
         all_results = all_results[:top_k]
 
         # 过滤低于阈值的结果
-        if score_threshold > THRESHOLD_MIN:
+        if score_threshold is not None:
             all_results = [
                 r for r in all_results if r.score >= score_threshold
             ]

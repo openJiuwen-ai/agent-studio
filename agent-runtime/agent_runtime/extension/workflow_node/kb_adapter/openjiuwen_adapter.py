@@ -8,7 +8,7 @@ from typing import List
 
 from openjiuwen.core.common.logging import workflow_logger
 
-from .base import THRESHOLD_MIN, clamp_threshold, KBSearchResult, KBServiceAdapter
+from .base import clamp_threshold, KBSearchResult, KBServiceAdapter
 from .openjiuwen_kb_manager import KBSearchOptions, OpenJiuwenKBManager
 
 
@@ -37,8 +37,8 @@ class OpenJiuwenKBAdapter(KBServiceAdapter):
     ) -> List[KBSearchResult]:
         """检索 openjiuwen 本地知识库。"""
         top_k = int(retrieval_params.get("topK", 5))
-        score_threshold = float(retrieval_params.get("scoreThreshold", 0.0))
-        score_threshold = clamp_threshold(score_threshold)
+        raw_threshold = retrieval_params.get("scoreThreshold")
+        score_threshold = clamp_threshold(float(raw_threshold)) if raw_threshold is not None else None
         search_mode = retrieval_params.get("searchMode", "")
         index_type = _SEARCH_MODE_MAP.get(search_mode, retrieval_params.get("indexType", "vector"))
         if index_type not in _VALID_INDEX_TYPES:
@@ -72,7 +72,7 @@ class OpenJiuwenKBAdapter(KBServiceAdapter):
 
             for item in raw_results:
                 score = float(item.get("score", 0.0))
-                if score_threshold > THRESHOLD_MIN and score < score_threshold:
+                if score_threshold is not None and score < score_threshold:
                     continue
                 results.append(
                     KBSearchResult(
