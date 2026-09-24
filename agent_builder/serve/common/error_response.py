@@ -20,6 +20,7 @@ reset 编程错误的最后兜底，不再承担正常路由未处理异常的�
 
 from starlette.requests import Request
 
+from agent_builder.adapter.exception_bridge import JiuWenBaseException
 from agent_builder.common.error_contract import factory as error_factory
 from agent_builder.common.logging.base import logger
 
@@ -48,4 +49,33 @@ def build_unhandled_error_response(request: Request, exc: Exception):
     )
     language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
     descriptor = error_factory.from_internal(exc, req_id or None)
+    return error_factory.build_json_response(descriptor, language)
+
+
+def build_inbound_error_response(request: Request, exc: Exception):
+    """在入站上下文仍有效时按异常类型构建 canonical response（JiuWenBaseException 分派）。
+
+    JiuWenBaseException → from_builder_exception（保留 canonical code）；
+    其他 → from_internal（openjiuwen.13100004）。
+    替代 except JiuWenBaseException:raise（G.ERR.13），避免重抛退化为 generic 500。
+    """
+    trace_id = getattr(request.state, "trace_id", "")
+    req_id = getattr(request.state, "request_id", "")
+    language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+
+    if isinstance(exc, JiuWenBaseException):
+        logger.error(
+            f"JiuWenBaseException: error_code={getattr(exc, 'error_code', -1)}, "
+            f"trace_id={trace_id}, request_id={req_id}",
+            exc_info=True,
+        )
+        descriptor = error_factory.from_builder_exception(exc, req_id or None)
+    else:
+        logger.error(
+            f"Unhandled exception: type={type(exc).__name__}, "
+            f"trace_id={trace_id}, request_id={req_id}",
+            exc_info=True,
+        )
+        descriptor = error_factory.from_internal(exc, req_id or None)
+
     return error_factory.build_json_response(descriptor, language)

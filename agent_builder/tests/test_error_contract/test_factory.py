@@ -1,5 +1,4 @@
 """COM-03 §10.4: Builder factory（异常分类 → descriptor）契约测试。"""
-# pylint: disable=no-self-use
 
 import json
 
@@ -190,8 +189,11 @@ def test_from_builder_exception_spoof_object_rejected():
     must NOT pass the type gate.
     """
     class _Spoof:
+        def __init__(self):
+            self.value = "102154"
+
         def __str__(self):
-            return "102154"
+            return self.value
 
     d = factory.from_builder_exception(_exc_with_code(_Spoof()), _rid())
     assert d.error_code == "openjiuwen.13100004"

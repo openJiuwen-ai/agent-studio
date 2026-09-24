@@ -8,7 +8,6 @@
   真实 _generate build_sse_error_event 路径,证明三者已在真实框架注册链中串联。
 - test_builder_middleware_* / test_builder_sse_*: 合成中间件测试,证明单组件行为。
 """
-# pylint: disable=no-self-use
 
 import json
 from contextlib import asynccontextmanager
@@ -200,16 +199,22 @@ def _real_app(monkeypatch):
     monkeypatch.setattr(sf, "apps_map", [builder_router])
 
     # 3. Executor mock:ainvoke 返回首个 __anext__ 抛 RuntimeError 的 async gen
-    async def _raising_gen():
-        raise RuntimeError("secret-gen-detail")
-        yield  # pylint: disable=unreachable  # make it an async generator
+    class _RaisingAsyncIterator:
+        def __init__(self, message):
+            self.message = message
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise RuntimeError(self.message)
 
     class _MockExecutor:
-        def __init__(self, *a, **kw):
-            pass
+        def __init__(self, *args, **kwargs):
+            self.error_message = "secret-gen-detail"
 
         def ainvoke(self, query):
-            return _raising_gen()
+            return _RaisingAsyncIterator(self.error_message)
 
     monkeypatch.setattr(
         "agent_builder.nl_to_agent.nl2.Executor", _MockExecutor)

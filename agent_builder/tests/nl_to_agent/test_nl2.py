@@ -3,7 +3,6 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """nl2 模块单元测试"""
-# pylint: disable=no-self-use
 
 import hashlib
 import json
@@ -429,8 +428,11 @@ class TestGeneratePreStreamFailure:
     async def test_aiter_failure_no_second_exception(self):
         """__aiter__ 失败 → START + canonical error,无 UnboundLocalError"""
         class _FailingAiter:
+            def __init__(self):
+                self.error = RuntimeError("SECRET-aiter-fail")
+
             def __aiter__(self):
-                raise RuntimeError("SECRET-aiter-fail")
+                raise self.error
         token = self._set_ctx()
         raised, events = None, []
         try:

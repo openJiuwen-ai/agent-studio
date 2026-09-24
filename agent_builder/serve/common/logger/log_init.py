@@ -215,6 +215,15 @@ def init_logger():
 
 
 def _emit_failure_to_stderr():
-    """失败可见性走 stderr（由启动脚本写入 bootstrap.log）。不调用业务 Logger。"""
-    sys.stderr.write("[builder-log-init] initialization failed; see traceback below\n")  # pylint: disable=huawei-use-logging
-    sys.stderr.flush()
+    """通过隔离的标准库 Logger 输出 bootstrap 失败，不依赖业务 LogManager。"""
+    bootstrap_logger = logging.Logger("agent_builder.bootstrap", level=logging.ERROR)
+    bootstrap_logger.propagate = False
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.ERROR)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    bootstrap_logger.addHandler(handler)
+    try:
+        bootstrap_logger.error("[builder-log-init] initialization failed; see traceback below")
+    finally:
+        bootstrap_logger.removeHandler(handler)
+        handler.close()
