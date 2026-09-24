@@ -31,39 +31,45 @@ class _FakeBody:
 
 
 class _FakeS3Client:
-    # boto3 SDK 按关键字传参（Bucket=/Key=/Body=...），参数名须与其 CamelCase 约定一致。
-    # pylint: disable=invalid-name
+    """boto3 client 假实现。
+
+    生产代码按 boto3 约定以 CamelCase 关键字调用（Bucket=/Key=/Body=...），
+    这里统一经 **kwargs 接收后在函数体内取值，避免非 snake_case 形参命名。
+    """
 
     def __init__(self, objects=None):
         self.objects = objects or {}
         self.put_calls = []
         self.get_calls = []
 
-    async def get_object(self, Bucket, Key):
-        self.get_calls.append((Bucket, Key))
-        if Key not in self.objects:
+    async def get_object(self, **kwargs):
+        bucket, key = kwargs["Bucket"], kwargs["Key"]
+        self.get_calls.append((bucket, key))
+        if key not in self.objects:
             from botocore.exceptions import ClientError
             error_response = {
                 "Error": {"Code": "NoSuchKey"},
                 "ResponseMetadata": {"HTTPStatusCode": 404},
             }
             raise ClientError(error_response, "GetObject")
-        return {"Body": _FakeBody(self.objects[Key])}
+        return {"Body": _FakeBody(self.objects[key])}
 
-    async def put_object(self, Bucket, Key, Body):
-        self.put_calls.append((Bucket, Key, Body))
+    async def put_object(self, **kwargs):
+        self.put_calls.append((kwargs["Bucket"], kwargs["Key"], kwargs["Body"]))
 
     @staticmethod
-    def generate_presigned_url(op, Params, ExpiresIn):
-        return f"http://presigned/{Params['Bucket']}/{Params['Key']}?expires={ExpiresIn}"
+    def generate_presigned_url(op, **kwargs):
+        params = kwargs["Params"]
+        return f"http://presigned/{params['Bucket']}/{params['Key']}?expires={kwargs['ExpiresIn']}"
 
     def get_paginator(self, name):
         class _Paginator:
             def __init__(self, client):
                 self._client = client
 
-            def paginate(self, Bucket, Prefix, MaxKeys):
-                keys = sorted(k for k in self._client.objects if k.startswith(Prefix))
+            def paginate(self, **kwargs):
+                prefix = kwargs["Prefix"]
+                keys = sorted(k for k in self._client.objects if k.startswith(prefix))
 
                 async def _gen():
                     yield {"Contents": [{"Key": k} for k in keys]}
