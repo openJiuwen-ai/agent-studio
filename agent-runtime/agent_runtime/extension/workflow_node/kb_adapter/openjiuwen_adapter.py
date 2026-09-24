@@ -72,7 +72,7 @@ class OpenJiuwenKBAdapter(KBServiceAdapter):
 
             for item in raw_results:
                 score = float(item.get("score", 0.0))
-                if score_threshold >= THRESHOLD_MIN and score < score_threshold:
+                if score_threshold > THRESHOLD_MIN and score < score_threshold:
                     continue
                 results.append(
                     KBSearchResult(

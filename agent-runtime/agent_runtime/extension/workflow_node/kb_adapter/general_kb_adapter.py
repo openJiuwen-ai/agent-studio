@@ -100,7 +100,7 @@ class GeneralKBAdapter(KBServiceAdapter):
         all_results = all_results[:top_k]
 
         # 过滤低于阈值的结果
-        if score_threshold >= THRESHOLD_MIN:
+        if score_threshold > THRESHOLD_MIN:
             all_results = [
                 r for r in all_results if r.score >= score_threshold
             ]
@@ -136,7 +136,7 @@ class GeneralKBAdapter(KBServiceAdapter):
         }
 
         # 从检索参数传入 search_threshold（Java: searchThreshold/recallThreshold）
-        if score_threshold >= THRESHOLD_MIN:
+        if score_threshold > THRESHOLD_MIN:
             body["search_threshold"] = score_threshold
 
         try:

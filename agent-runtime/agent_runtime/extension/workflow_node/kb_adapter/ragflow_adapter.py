@@ -91,7 +91,7 @@ class RagFlowAdapter(KBServiceAdapter):
         all_results = all_results[:top_k]
 
         # 过滤低于阈值的结果
-        if score_threshold >= THRESHOLD_MIN:
+        if score_threshold > THRESHOLD_MIN:
             all_results = [
                 r for r in all_results if r.score >= score_threshold
             ]
@@ -122,7 +122,7 @@ class RagFlowAdapter(KBServiceAdapter):
         }
 
         # 透传可选检索参数（RAGFlow API 使用 snake_case）
-        if score_threshold >= THRESHOLD_MIN:
+        if score_threshold > THRESHOLD_MIN:
             body["similarity_threshold"] = score_threshold
 
         if "vectorSimilarityWeight" in retrieval_params:
