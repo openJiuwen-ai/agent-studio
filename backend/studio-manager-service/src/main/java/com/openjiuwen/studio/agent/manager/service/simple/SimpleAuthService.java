@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @Slf4j
@@ -47,16 +46,5 @@ public class SimpleAuthService implements IAuthService {
     private ResponseEntity<SimpleUser> buildResp(SimpleUser simpleUser,
         String tokenStr) {
         return ResponseEntity.ok().header(X_SUBJECT_TOKEN, tokenStr).body(simpleUser);
-    }
-
-    /**
-     * 登出
-     *
-     * @param agentSid 会话对象
-     * @return
-     */
-    @Transactional
-    public String loginOut(String agentSid) {
-        throw new AgentStudioException(POC_AUTH_FAILED, "not support method.");
     }
 }

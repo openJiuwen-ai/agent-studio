@@ -385,6 +385,8 @@ export class AppFlowService {
     cron?: string;
     hook_url?: string;
     invocation?: string;
+    poll_url?: string;
+    poll_interval_seconds?: number;
   }) {
     let updatedTrigger: any = {
       trigger_id: trigger.trigger_id,
@@ -398,6 +400,10 @@ export class AppFlowService {
     }
     if (trigger.type === 'EVENT') {
       updatedTrigger.hook_url = trigger.hook_url ?? '';
+    }
+    if (trigger.type === 'POLLING') {
+      updatedTrigger.poll_url = trigger.poll_url ?? '';
+      updatedTrigger.poll_interval_seconds = trigger.poll_interval_seconds ?? 0;
     }
     this.triggerAdded$.next(updatedTrigger);
   }

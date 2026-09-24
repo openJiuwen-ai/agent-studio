@@ -385,7 +385,7 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         resourceName = "body.description"
     )
     public Boolean modifyEnvironmentInfo(String projectId, String environmentId,
-        EnvironmentInfoRequest body) {
+        ModifyEnvironmentInfoRequestBody body) {
         log.info("projectId={},userId={}",RequestContextUtils.getRequestProjectId(),RequestContextUtils.getRequestUserId());
         EnvironmentManagerEntity envInfo = environmentManagerMapper
             .findByIdAndProjectId(environmentId, projectId);

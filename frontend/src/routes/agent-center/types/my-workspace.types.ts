@@ -307,6 +307,8 @@ export interface ITriggerList {
   prompt: string;
   params: ITriggerParam[];
   hook_url: string;
+  poll_url?: string;
+  poll_interval_seconds?: number;
   created_on: string;
 }
 

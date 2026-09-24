@@ -135,7 +135,12 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
         List<String> allRegisteredURI = permissionService.getMergedPermissions().get(REGISTERED_URIS);
         if (checkPermission(allRegisteredURI, requestUri, requestMethod)) {
             List<String> actions = permissionService.getMergedPermissions().get(workSpaceMemberEntity.getRole());
-            boolean hasPermission = checkPermission(actions, requestUri, requestMethod);
+            // creatorCheckPermissions 的 URI 也算作通过角色权限校验(放行进入 Service 层)，
+            // 由 Service 层做资源创建人校验(DEVELOPER/OPERATOR 只能改自己创建的)。
+            List<String> creatorCheckActions = permissionService.getMergedCreatorCheckPermissions()
+                .get(workSpaceMemberEntity.getRole());
+            boolean hasPermission = checkPermission(actions, requestUri, requestMethod)
+                || checkPermission(creatorCheckActions, requestUri, requestMethod);
             if (!hasPermission) {
                 log.error("User with workspace role {} has no permission", workSpaceMemberEntity.getRole());
                 throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
@@ -153,6 +158,9 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
      * @return boolean 当前请求是否在权限列表中
      */
     private boolean checkPermission(List<String> actions, String requestUri, String requestMethod) {
+        if (actions == null || actions.isEmpty()) {
+            return false;
+        }
         return actions.stream().map(action -> action.split("#")).filter(parts -> parts.length == 2).anyMatch(parts -> {
             String method = parts[0];
             String uri = parts[1];

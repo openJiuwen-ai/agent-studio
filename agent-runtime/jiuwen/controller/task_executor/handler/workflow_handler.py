@@ -69,8 +69,6 @@ from jiuwen.serve.common.context import request, g, request_json
 from jiuwen.serve.controllers.execution.utils import get_current_time_ms
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class WorkflowHandler(BaseHandler):
     """工作流处理器"""
@@ -1762,9 +1760,7 @@ class WorkflowHandler(BaseHandler):
                 simple_log=f"Panel execute workflow error: {type(e)}",
             )
             err_func_res["errMessage"][WORKFLOW_ANSWER] = (
-                str(e)
-                if LOG_VERBOSE_MODE
-                else f"Panel execute workflow error: {type(e)}"
+                f"Panel execute workflow error: {type(e)}"
             )
             yield err_func_res
 

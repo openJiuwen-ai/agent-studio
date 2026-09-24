@@ -490,7 +490,10 @@ import java.util.Map;
         GetAgentVersionQo getAgentVersionQo);
 
     @ApiOperation(value = "获取指定角色的权限列表", nickname = "getPermissionsByRole",
-        notes = "根据角色名称返回该角色对应的权限列表。", response = List.class, responseContainer = "Map",
+        notes = "根据角色名称返回该角色对应的权限列表。响应 Map 的 key 为角色名(如 DEVELOPER)，"
+            + "另有特殊 key: creatorCheckPermissions(需创建人校验的 METHOD#URI 列表)、"
+            + "currentUserId(当前用户 userId)、currentUserName(当前用户 userName)。",
+        response = List.class, responseContainer = "Map",
         tags = {"AgentManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "成功获取权限列表。", response = List.class, responseContainer = "Map"),

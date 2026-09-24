@@ -214,12 +214,19 @@ byte[] genIV(String cipherName)
    | 用户唯一标识 | `user_id` | 响应 Body | 是 | `user_info_claims_user_id` |
    | 用户名称 | `user_name` | 响应 Body | 是 | `user_info_claims_user_name` |
    | 域标识 | `domain_id` | 响应 Body | 否（缺失取 `0`） | `user_info_claims_domain_id` |
+   | 域名称 | `domain_name` | 响应 Body | 否（缺失取 `0`） | `user_info_claims_domain_name` |
    | 项目标识 | `project_id` | 响应 Body | 否（缺失取 `0`） | `user_info_claims_project_id` |
+
+   > **域名称（`domain_name`）——部署时务必确认**：平台部分功能（如团队空间「添加成员」时通过 IAM 查询用户列表）需要用域名称换取 IAM domain token，而该域名称必须是 IAM 中真实存在的域。
+   > - SSO 响应中包含域名称时：把 `user_info_claims_domain_name` 配成对应字段名（默认 `domain_name`）；
+   > - SSO 响应中不含该字段时：**必须**把 `user_info_defaults_domain_name` 配置为真实的 IAM 域名。
+   >
+   > 未配置时平台会回退到 `0`（不会抛空指针，manager 日志会打印一条 warn 提示），但 `0` 通常不是真实域名，上述依赖 IAM 的功能会调用失败、成员列表仍为空。请勿依赖该回退值。
 
    示例：平台默认从 SSO 响应的 `user_id` 字段提取用户唯一标识。若 SSO 响应中该字段名为 `account_id`，则需配置 `user_info_claims_user_id=account_id`。其他字段同理，与默认不一致时修改对应环境变量即可。
 
    > 以下配置默认无需修改，可根据实际使用调整：
-   > - 域标识 / 项目标识缺失时的取值可通过 `user_info_defaults_domain_id`、`user_info_defaults_project_id` 修改（默认 `0`）
+   > - 域标识 / 域名称 / 项目标识缺失时的取值可通过 `user_info_defaults_domain_id`、`user_info_defaults_domain_name`、`user_info_defaults_project_id` 修改（默认 `0`）
    > - 免鉴权路径通过 `auth_path_excluded` 配置（默认 `/v1/health, /health`），多路径逗号分隔，支持 Ant 通配符（如 `/v3/**`）
 
 2. **配置 `auth_sso_validate_url` 启用 SSO 鉴权**：将 `auth_sso_validate_url` 设置为 SSO Server 的鉴权接口 URL，步骤 1 中不一致项的环境变量同步修改，重启 studio-manager / studio-runtime 服务生效。

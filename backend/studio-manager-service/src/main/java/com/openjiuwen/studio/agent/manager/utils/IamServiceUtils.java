@@ -160,7 +160,8 @@ public class IamServiceUtils {
     }
 
     private Response sendRequest(OkHttpClient client, String token, String domainName, String url) throws IOException {
-        String safeDomainName = domainName.replace("\"", "\\\"");
+        // domainName 可能为空（例如 SSO 响应未返回域名称），兜底为 "0" 避免空指针
+        String safeDomainName = StringUtils.defaultIfBlank(domainName, "0").replace("\"", "\\\"");
         String bodyJson = "{" + "\"auth\": {" + "\"identity\": {" + "\"methods\": [\"token\"],"
             + "\"token\": {\"id\": \"" + token + "\"}" + "}," + "\"scope\": {" + "\"domain\": {\"name\": \""
             + safeDomainName + "\"}" + "}" + "}" + "}";

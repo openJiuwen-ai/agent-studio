@@ -363,6 +363,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public conversationId = uuidV4();
 
   public showGlobalConfigDrawer = false;
+  private pendingMemoryRenames: { oldRef: string; newRef: string }[] = [];
   public showLogDrawer = false;
   public showPluginDrawer = false;
   public showChildFlowDrawer = false;
@@ -856,6 +857,25 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             ...this.triggerAdded.list,
             {name, type, trigger_id, prompt, hook_url},
           ];
+        }
+        if (type === 'POLLING') {
+          const is_has = this.triggerAdded.list.some(
+            (item) => item.trigger_id === trigger_id,
+          );
+          if (is_has) {
+            for (let i = 0; i < this.triggerAdded.list.length; i++) {
+              const cur = this.triggerAdded.list[i];
+              if (cur?.trigger_id === trigger_id) {
+                this.triggerAdded.list[i] = triggerAdded;
+                break;
+              }
+            }
+          } else {
+            this.triggerAdded.list = [
+              ...this.triggerAdded.list,
+              {name, type, trigger_id, poll_url: triggerAdded.poll_url, poll_interval_seconds: triggerAdded.poll_interval_seconds, prompt, invocation},
+            ];
+          }
         }
       });
 
@@ -2236,6 +2256,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.appFlowServ.setNodeClicked(EHalfmodalType.GLOBAL);
   }
 
+  public onMemoryRenamed(renames: { oldRef: string; newRef: string }[]): void {
+    this.pendingMemoryRenames = renames;
+  }
+
   public onGlobalConfigsChange(configs: IFlowConfigs): void {
     FlowUtils.updateRefsAfterConfigsChange(
       configs,
@@ -2243,7 +2267,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.graph,
       this.updateRefType,
       this,
+      this.pendingMemoryRenames,
     );
+    this.pendingMemoryRenames = [];
     if (configs.default_model && configs.default_model_switch) {
       const {model_deployment_id, model_name, model_type, model} =
         configs.default_model;

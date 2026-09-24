@@ -12,6 +12,8 @@ import io.swagger.annotations.ApiModel;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import jakarta.validation.constraints.NotNull;
+
 import org.hibernate.validator.constraints.Length;
 import org.springframework.validation.annotation.Validated;
 
@@ -30,6 +32,7 @@ public class LongTermMemoryStrategy implements Serializable {
 
     @JsonProperty("type")
     @Schema(description = "类型", example = "STRING")
+    @NotNull
     private TypeEnum type = null;
 
     @JsonProperty("prompt")

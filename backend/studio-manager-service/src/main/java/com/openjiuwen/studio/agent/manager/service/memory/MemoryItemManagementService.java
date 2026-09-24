@@ -185,9 +185,14 @@ public class MemoryItemManagementService implements IMemoryItemManagementService
             throw new AgentStudioException(StudioError.AUTHENTICATION_ERROR, "User ID not found in request context");
         }
 
-        // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
+        // 记忆库存在性预检（置于鉴权之后避免未认证探测；selectById 结果复用做分支分发）
         MemoryRepoEntity repo = memoryRepoMapper.selectById(memoryRepoId);
-        if (repo != null && "EXTERNAL".equalsIgnoreCase(repo.getMemoryBackendType())) {
+        if (repo == null) {
+            throw new AgentStudioException(StudioError.MEMORY_REPO_NOT_EXIST, memoryRepoId);
+        }
+
+        // Branch dispatch: EXTERNAL → agent-memory 2.0 direct; BUILTIN → runtime internal API
+        if ("EXTERNAL".equalsIgnoreCase(repo.getMemoryBackendType())) {
             return searchMemoryItemsExternal(repo, userId.toLowerCase(Locale.ROOT), body);
         }
 

@@ -37,7 +37,6 @@ _MODE_DEFAULT_IN_ENV = "true"
 invokable_local = local()
 GLOBAL_SHARED_CACHE_KEY = "global_shared"
 AGENT_INVO_CACHE_KEY = f"{GLOBAL_SHARED_CACHE_KEY}.agent_info"
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 def _get_runtime_state() -> bool:
@@ -441,7 +440,7 @@ else:
                 self.post_invoke(node_output, runtime_context)
             except JiuWenBaseException as e:
                 raise JiuWenBaseException(
-                    120001, f"错误信息：{e if LOG_VERBOSE_MODE else type(e).__name__}"
+                    120001, f"错误信息：{type(e).__name__}"
                 ) from e
 
         @final

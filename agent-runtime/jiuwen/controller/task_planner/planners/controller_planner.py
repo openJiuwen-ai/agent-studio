@@ -281,7 +281,10 @@ class ControllerPlanner(TaskPlanner):
                         "task_id: %s| Saved valid workflow sequence: %s",
                         self.task_id, valid_sequence,
                     )
-                # 当有valid_sequence时，确保active_workflows不生效
+                # 序列优先级由读取端保证（_get_next_workflow 先查序列键）。
+                # 此处落 None 清掉旧值；若本轮同时显式传入 active_workflows，
+                # 下方仍会按其声明值落键（含显式 []，见 #216 语义），
+                # 仅在序列尚有待执行项期间 active 不参与路由
                 self.context_manager.set_global_variables(
                     WorkflowConstants.ACTIVE_WORKFLOWS_KEY, None
                 )
@@ -291,8 +294,12 @@ class ControllerPlanner(TaskPlanner):
                     self.task_id,
                 )
 
-        # 仅当workflow_sequence为空或无效时，才处理active_workflows
-        if active_workflows:
+        # active_workflows 与 workflow_sequence 独立处理：无论序列是否存在/有效，
+        # 本轮传入的 active_workflows 都按其声明值落键
+        # None=未提供（不处理，后续使用全部业务工作流）；
+        # 显式列表（含空列表）=权限收窄：校验后落键，绝不回退全量，
+        # 否则收窄场景（activeWorkflows=[] 或校验全失败）会放大为全量越权
+        if active_workflows is not None:
             # 验证活动工作流
             valid_active_workflows = []
             for workflow_id in active_workflows:
@@ -318,7 +325,24 @@ class ControllerPlanner(TaskPlanner):
                         valid_active_workflows,
                     )
             else:
-                logger.warning("No valid workflows found in the active workflows list")
+                if active_workflows:
+                    # 显式传入但全部校验失败（如传入 DEFAULT 类型工作流 id）：
+                    # 按空列表处理而非回退全量，防止越权
+                    logger.error(
+                        "task_id: %s| All %d active workflow ids failed validation, "
+                        "treated as empty list (no general workflows available)",
+                        self.task_id, len(active_workflows),
+                    )
+                else:
+                    logger.debug(
+                        "task_id: %s| Explicit empty active workflows list, "
+                        "no general workflows available",
+                        self.task_id,
+                    )
+                # 落空列表：意图识别仅剩闲聊/全局意图/子Agent，识别失败走 DEFAULT 兜底
+                self.context_manager.set_global_variables(
+                    WorkflowConstants.ACTIVE_WORKFLOWS_KEY, []
+                )
 
     async def _get_next_workflow(self, message):
         """Process the next workflow to be executed based on sequence or intent detection"""

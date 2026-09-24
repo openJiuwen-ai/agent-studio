@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
@@ -40,6 +41,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.MessageSource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -156,6 +158,47 @@ class ComplexIntentManagementServiceTest {
 
             assertThrows(AgentStudioException.class,
                 () -> complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body));
+        }
+    }
+
+    @Test
+    void testCreateComplexIntent_DuplicateId() {
+        try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
+            reqCtx.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+            reqCtx.when(RequestContextUtils::getRequestUserName).thenReturn("userName");
+            reqCtx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            ComplexIntentInfoReq body = new ComplexIntentInfoReq();
+            body.setName("NewIntent");
+            body.setId("existing-id");
+
+            when(complexIntentMapper.getEntitiesAccurate(any())).thenReturn(new ArrayList<>());
+            doThrow(new DuplicateKeyException("Duplicate entry 'existing-id'"))
+                .when(complexIntentMapper).createEntity(any());
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body));
+            assertEquals(StudioError.COMPLEX_INTENT_EXIST, ex.getErrorCode());
+        }
+    }
+
+    @Test
+    void testCreateComplexIntent_SpecifiedId_NotExists() {
+        try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
+            reqCtx.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+            reqCtx.when(RequestContextUtils::getRequestUserName).thenReturn("userName");
+            reqCtx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            ComplexIntentInfoReq body = new ComplexIntentInfoReq();
+            body.setName("NewIntent");
+            body.setId("brand-new-id");
+
+            when(complexIntentMapper.getEntitiesAccurate(any())).thenReturn(new ArrayList<>());
+
+            ComplexIntentBriefRsp result = complexIntentManagementService.createComplexIntent("proj-1", "ws-1", body);
+            assertNotNull(result);
+            assertEquals("brand-new-id", result.getIntentId());
+            verify(complexIntentMapper).createEntity(any());
         }
     }
 

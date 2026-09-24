@@ -89,6 +89,7 @@
             <div class="model-card-hover-actions" *ngIf="dataItem.isHovering">
               <div class="hover-buttons-flex-container" (click)="$event.stopPropagation()">
                 <button
+                  *appCanModify="['provider', 'auth', dataItem.created_by_user]"
                   nz-button
                   nzType="link"
                   class="card-footer-action-btn"
@@ -99,6 +100,7 @@
                   <span class="hover-btn-label-text">{{ 'auth_configuration' | i18nextEager }}</span>
                 </button>
                 <button
+                  *appCanModify="['provider', 'edit', dataItem.created_by_user]"
                   nz-button
                   nzType="link"
                   class="card-footer-action-btn"
@@ -109,6 +111,7 @@
                   <span class="hover-btn-label-text">{{ 'edit' | i18nextEager }}</span>
                 </button>
                 <button
+                  *appCanModify="['provider', 'delete', dataItem.created_by_user]"
                   nz-button
                   nzType="link"
                   class="card-footer-action-btn"
