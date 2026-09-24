@@ -363,6 +363,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public conversationId = uuidV4();
 
   public showGlobalConfigDrawer = false;
+  private pendingMemoryRenames: { oldRef: string; newRef: string }[] = [];
   public showLogDrawer = false;
   public showPluginDrawer = false;
   public showChildFlowDrawer = false;
@@ -2255,6 +2256,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.appFlowServ.setNodeClicked(EHalfmodalType.GLOBAL);
   }
 
+  public onMemoryRenamed(renames: { oldRef: string; newRef: string }[]): void {
+    this.pendingMemoryRenames = renames;
+  }
+
   public onGlobalConfigsChange(configs: IFlowConfigs): void {
     FlowUtils.updateRefsAfterConfigsChange(
       configs,
@@ -2262,7 +2267,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.graph,
       this.updateRefType,
       this,
+      this.pendingMemoryRenames,
     );
+    this.pendingMemoryRenames = [];
     if (configs.default_model && configs.default_model_switch) {
       const {model_deployment_id, model_name, model_type, model} =
         configs.default_model;
