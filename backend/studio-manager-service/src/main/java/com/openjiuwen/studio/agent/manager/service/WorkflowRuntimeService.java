@@ -430,7 +430,12 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             // 及已加入 roundList 的前几轮上下文（多轮场景下被最后一轮覆盖）
             workflow.getContextList().forEach((key, value) -> contextDTOMap.merge(key, copyOfContext(value),
                 (existing, newValue) -> {
-                    existing.setValueAfter(newValue.getValueAfter());
+                    // 仅当来源工作流确实记录了对话后值时才覆盖：引擎侧记忆快照为部分快照
+                    // （仅含本工作流修改过的变量），未修改变量的 valueAfter 为 null，
+                    // 无条件覆盖会把上一轮累积/before-entry 的对话后值清空
+                    if (newValue.getValueAfter() != null) {
+                        existing.setValueAfter(newValue.getValueAfter());
+                    }
                     return existing;
                 }));
         }
@@ -473,9 +478,11 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
                 work.getEventList().add(nowNode);
                 work.setErrorMessage(nowNode.getErrorMessage());
                 work.setStatus(nowNode.getStatus());
-                // 错误帧位置作为区间终点，供 setContextList 读取报错前的最后快照；
+                // 以错误帧前一帧为收集终点（沿用"终止帧-1"惯例）：调用方 getIndex()+1
+                // 即错误帧自身，latestMemoryBetween 区间不含错误帧之后的内容，
+                // 避免取到错误后的快照；错误帧自身 memory 为空、纳入无害；
                 // 错误路径外层由 isErrorEventWorkflow 提前终止，不消费该 index
-                work.setIndex(index);
+                work.setIndex(index - 1);
                 return work;
             }
 
