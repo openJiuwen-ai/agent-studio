@@ -148,7 +148,7 @@ public class KnowledgeBaseConnectionValidateService {
         final KnowledgeBaseConnectionEntity entity = connectionMapper.find(knowledgeBaseConnectionId, workspaceId,
             projectId);
         if (entity == null) {
-            log.error("You have no permission to operate knowledge base connection{}", knowledgeBaseConnectionId);
+            log.error("Knowledge base connection not exist, id: {}", knowledgeBaseConnectionId);
             throw new AgentBaseException(ErrorCode.RESOURCE_NOT_EXIST);
         }
         return entity;
