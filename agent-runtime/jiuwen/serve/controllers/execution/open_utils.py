@@ -68,7 +68,6 @@ class CacheUtils:
         cache_name: str,
         memory_ttl: int = -1,
         redis_ttl: int = -1,
-        rewrite_on_expire_false: bool = True,
     ):
         self.memory_cache = LRUCache(capacity)
         self._redis_cache = None
@@ -87,10 +86,6 @@ class CacheUtils:
         # 事件循环线程会并发读写 memory_cache（cachetools.LRUCache 非线程安全）；
         # 锁内只做纯内存操作（无 await），无竞争时开销纳秒级
         self._mem_lock = threading.Lock()
-        # 条目被外部删除/淘汰（expire 返回 False）时是否用内存值重写重建。
-        # 存在对取出对象原地修改的调用方（如 agent 实例的 load_state）的队列
-        # 应设为 False：重写会把会话态污染持久化到 Redis
-        self.rewrite_on_expire_false = rewrite_on_expire_false
 
     @property
     def redis_cache(self):
@@ -388,34 +383,15 @@ class CacheUtils:
         """后台执行 EXPIRE 续期；失败/超时回滚冷却时间戳，冷却期后自动重试"""
         try:
             # 超时保护：防 Redis 半开连接（TCP 建立但不应答）导致后台任务
-            # 长期挂起、_BACKGROUND_TTL_TASKS 缓慢累积
-            refreshed = await asyncio.wait_for(
+            # 长期挂起、_BACKGROUND_TTL_TASKS 缓慢累积。
+            # expire 返回 False（key 已被外部删除/淘汰）时不做内存值重写：
+            # 无法区分"Redis 淘汰的无意丢失"与"apop 的有意显式失效"，
+            # 多实例部署下重写会覆盖显式失效、使旧数据复活（TTL=24h）；
+            # 条目丢失统一留给读取 miss 后由上层从 OBS 权威源重建
+            await asyncio.wait_for(
                 self.async_redis_cache.expire(unique_key, self.redis_ttl),
                 timeout=5,
             )
-            if not refreshed and self.rewrite_on_expire_false:
-                # expire 返回 False = key 已不存在（被外部删除/淘汰），expire 本身
-                # 无法恢复；用内存中的值整体重写以重建 Redis 条目。
-                # 直接 set 而非 aput：aput 会吞异常，重写失败需落入下方冷却回滚。
-                # 注意：重写会序列化内存对象的当前状态——若调用方违反共享引用
-                # 约定原地修改了缓存对象（如 agent 实例的 load_state），污染将被
-                # 持久化，故存在此类调用方的队列应关闭 rewrite_on_expire_false
-                with self._mem_lock:
-                    entry = self.memory_cache.get(unique_key)
-                    data = entry["data"] if entry is not None else None
-                if data is not None:
-                    payload = (
-                        serialize_object(data)
-                        if self.should_serialize
-                        else data
-                    )
-                    await asyncio.wait_for(
-                        self.async_redis_cache.set(
-                            unique_key, payload, ex=self.redis_ttl
-                        ),
-                        timeout=10,
-                    )
-                    self._mark_redis_refreshed(unique_key)
         except asyncio.CancelledError:
             # 外部取消（如事件循环收尾）：回滚乐观标记，避免节流窗口内漏续期
             # 导致 Redis 条目提前过期；re-raise 保持任务的取消语义
@@ -575,9 +551,6 @@ cache_agent_queue = CacheUtils(
     # 同上：内存层滑动窗口，控制冷 key 内存占用
     memory_ttl=settings.cache.mem_cache_ttl_seconds,
     redis_ttl=settings.cache.agent_cache_ttl_seconds,
-    # agent 实例的调用方（create_or_restore_agent）会对取出的共享实例执行
-    # load_state 原地修改，重写重建会把会话态污染持久化到 Redis，故关闭
-    rewrite_on_expire_false=False,
 )
 cache_agent_group_queue = CacheUtils(
     capacity=settings.cache.max_agent_group_cache_num,

@@ -556,32 +556,6 @@ class TestBackgroundTTLRefresh:
         mock_async_redis.expire.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_rewrite_queue_skips_rebuild(
-        self, mock_redis, mock_async_redis
-    ):
-        """rewrite_on_expire_false=False 的队列（如 agent 实例缓存）在 expire
-        返回 False 时不用内存值重写——其调用方会原地修改共享实例（load_state），
-        重写会把会话态污染持久化到 Redis。"""
-        from jiuwen.serve.controllers.execution.open_utils import CacheUtils
-
-        cu = CacheUtils(
-            capacity=3, should_serialize=True, cache_name="t_norewr",
-            memory_ttl=3600, redis_ttl=60, rewrite_on_expire_false=False,
-        )
-        cu._redis_cache = mock_redis  # pylint: disable=protected-access
-        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
-        await cu.aput("k", {"v": 1})
-        cu.memory_cache["agent_runtime:t_norewr:k"]["last_refresh"] = (
-            time.time() - 400
-        )
-        mock_async_redis.expire.return_value = False
-        mock_async_redis.set.reset_mock()
-        await cu.aget("k", should_refresh_ttl=True)
-        await asyncio.sleep(0.05)
-        # 不重写：set 不被调用（条目丢失留给上层重建新对象的无污染路径）
-        mock_async_redis.set.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_cancelled_task_rolls_back_marker(
         self, cache_utils, mock_async_redis
     ):
@@ -650,28 +624,6 @@ class TestCorruptedEntrySelfHealing:
         mock_async_redis.expire.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_rewrite_failure_enters_cooldown(
-        self, cache_utils, mock_async_redis
-    ):
-        """重写失败（set 抛错）时进入冷却回滚而非保持乐观标记。
-
-        修复回归点：此前经 aput 重写，aput 吞异常导致失败进不了冷却分支，
-        重试要等完整 300s 节流窗口；直接 set 后失败落入冷却（≤30s）重试。
-        """
-        await cache_utils.aput("key1", {"data": "v1"})
-        cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] = (
-            time.time() - 400
-        )
-        mock_async_redis.expire.return_value = False
-        mock_async_redis.set.side_effect = Exception("redis down")
-        await cache_utils.aget("key1", should_refresh_ttl=True)
-        await asyncio.sleep(0.05)
-        marker = cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"]
-        # 冷却时间戳 ≈ now-15（redis_ttl=60→interval=30, cooldown=15）；
-        # 乐观标记则 ≈ now（与测量时刻差 <1s），用 >5 区分两者
-        assert 5 < time.time() - marker < 30
-
-    @pytest.mark.asyncio
     async def test_no_ttl_queue_direct_renewal_skipped(
         self, mock_redis, mock_async_redis
     ):
@@ -699,31 +651,6 @@ class TestCorruptedEntrySelfHealing:
         assert value == {"data": "v1"}
         assert source == "redis"
         mock_async_redis.expire.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_expire_false_triggers_rewrite(
-        self, cache_utils, mock_async_redis
-    ):
-        """后台 EXPIRE 返回 False（key 被外部删除）时，用内存值重写重建条目。
-
-        修复回归点：expire 对不存在的 key 返回 False 而非抛异常，若不检查
-        返回值，Redis 条目丢失后在内存存活期间永远无法重建。
-        """
-        await cache_utils.aput("key1", {"data": "v1"})
-        cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] = (
-            time.time() - 400
-        )
-        # expire 返回 False：模拟 key 已被外部删除/淘汰
-        mock_async_redis.expire.return_value = False
-        mock_async_redis.set.reset_mock()
-        await cache_utils.aget("key1", should_refresh_ttl=True)
-        await asyncio.sleep(0.05)
-        # 验证用内存值整体重写（set 被再次调用，携带新 TTL）
-        mock_async_redis.set.assert_called_once()
-        call_args = mock_async_redis.set.call_args
-        ex_val = call_args[1].get("ex") if call_args[1] else None
-        assert ex_val == 60
-        assert call_args[0][0] == "agent_runtime:test:key1"
 
 
 class TestDirectExpireReturnValue:
