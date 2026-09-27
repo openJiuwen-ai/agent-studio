@@ -76,6 +76,9 @@ class CacheUtils:
         self.cache_name = cache_name
         self.memory_ttl = memory_ttl
         self.redis_ttl = redis_ttl
+        # Redis 命中直接续期的节流记录：L1 容量不足导致同 key 反复回源时，
+        # 避免每次命中都发 EXPIRE；LRU 化防止无限增长
+        self._renew_ts = LRUCache(max(capacity * 2, 16))
 
     @property
     def redis_cache(self):
@@ -99,6 +102,9 @@ class CacheUtils:
             value: 缓存值
             ttl: Redis TTL 覆盖值。None 表示使用 self.redis_ttl；
                  正整数表示自定义秒数；-1 表示永不过期(ex=None)。
+                 注意：自定义 ttl 的条目不适用滑动续期——后续 should_refresh_ttl
+                 续期将统一使用队列级 redis_ttl 重置 TTL（ttl=-1 的永不过期
+                 语义会被覆盖），如需保持自定义 TTL 请勿对该队列启用续期。
         """
         try:
             effective_ttl = self.redis_ttl
@@ -179,7 +185,11 @@ class CacheUtils:
                         )
                     raise
                 refreshed = False
-                if should_refresh_ttl and self.redis_ttl > 0:
+                if (
+                    should_refresh_ttl
+                    and self.redis_ttl > 0
+                    and not self._renew_throttled(unique_key)
+                ):
                     # 独立防御：续期失败不能影响已取到的数据返回
                     # （外层 except 会把整个 aget 变成 None，导致上层误判 MISS 回源）；
                     # redis_ttl>0 防护：expire 负 TTL 在 Redis 中会直接删除条目
@@ -191,6 +201,8 @@ class CacheUtils:
                                 unique_key, self.redis_ttl
                             )
                         )
+                        if refreshed:
+                            self._renew_ts[unique_key] = time.time()
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
@@ -229,11 +241,16 @@ class CacheUtils:
                             f"failed to drop corrupted cache entry {key}: {del_err}"
                         )
                     raise
-                if should_refresh_ttl and self.redis_ttl > 0:
+                if (
+                    should_refresh_ttl
+                    and self.redis_ttl > 0
+                    and not self._renew_throttled(unique_key)
+                ):
                     # 与 aget 同款防护：redis_ttl>0 防 expire 负 TTL 删 key；
                     # 独立 try 防续期失败拖垮整个 get（外层 except 会误返回 None）
                     try:
                         self.redis_cache.expire(unique_key, self.redis_ttl)
+                        self._renew_ts[unique_key] = time.time()
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
@@ -301,6 +318,15 @@ class CacheUtils:
         """节流窗口：不超过 redis_ttl 的一半（小 TTL 配置下自动收紧，
         保证续期在条目尚存活时仍可触发，而非静默失效）"""
         return min(_TTL_REFRESH_INTERVAL_SECONDS, self.redis_ttl / 2)
+
+    def _renew_throttled(self, unique_key: str) -> bool:
+        """Redis 命中直接续期的节流判断（与内存命中的节流窗口一致）。
+
+        L1 容量不足时同 key 会被反复淘汰回源，若不节流则每次 Redis 命中
+        都多发一条 EXPIRE，热路径 Redis 命令量随访问频率成倍增长。
+        """
+        last = self._renew_ts.get(unique_key, -1.0)
+        return last > 0 and (time.time() - last) < self._refresh_throttle_interval()
 
     def _try_background_ttl_refresh(self, unique_key: str, key: str):
         """内存命中时节流续期 Redis TTL：后台任务执行，不阻塞读取路径。
@@ -429,7 +455,11 @@ class CacheUtils:
                     )
                 raise
             refreshed = False
-            if should_refresh_ttl and self.redis_ttl > 0:
+            if (
+                should_refresh_ttl
+                and self.redis_ttl > 0
+                and not self._renew_throttled(unique_key)
+            ):
                 # 独立防御：续期失败不影响已取到的数据（与 aget 同款）；
                 # redis_ttl>0 防护：expire 负 TTL 在 Redis 中会直接删除条目
                 try:
@@ -440,6 +470,8 @@ class CacheUtils:
                             unique_key, self.redis_ttl
                         )
                     )
+                    if refreshed:
+                        self._renew_ts[unique_key] = time.time()
                 except Exception as e:
                     logger.warning(f"cache ttl refresh failed for {key}: {e}")
             self._update_memory_cache(unique_key, value)
@@ -489,8 +521,8 @@ cache_workflow_queue = CacheUtils(
     capacity=settings.cache.max_workflow_cache_num,
     should_serialize=True,
     cache_name="workflow",
-    # memory_ttl 必须设置：否则内存层永不过期，aget 永远内存命中，
-    # Redis 续期分支（should_refresh_ttl）永远不会触发
+    # memory_ttl 为内存层 1h 滑动窗口：控制冷 key 的进程内存占用；
+    # 后台续期不依赖它（内存命中即可触发，见 _try_background_ttl_refresh）
     memory_ttl=settings.cache.mem_cache_ttl_seconds,
     redis_ttl=settings.cache.workflow_cache_ttl_seconds,
 )
@@ -498,6 +530,7 @@ cache_agent_queue = CacheUtils(
     capacity=settings.cache.max_agent_cache_num,
     should_serialize=True,
     cache_name="agent",
+    # 同上：内存层滑动窗口，控制冷 key 内存占用
     memory_ttl=settings.cache.mem_cache_ttl_seconds,
     redis_ttl=settings.cache.agent_cache_ttl_seconds,
 )
@@ -666,6 +699,8 @@ def ir_load(path: str) -> dict:
     """
     logger.info("Loading IR content from %s", path)
 
+    # 同步路径不接续期：本函数无调用方，且真实部署的 Redis 客户端为异步实现，
+    # 同步 get/put 在其上无法工作（存量限制）；缓存续期仅由异步路径承担
     ir_value = cache_ir_queue.get(path)
     if ir_value:
         logger.info("Cache HIT! Process %d got cached data: %s", os.getpid(), path)

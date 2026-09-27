@@ -730,6 +730,39 @@ class TestDirectExpireReturnValue:
         mock_redis.delete.assert_called_once_with("agent_runtime:test:key3")
 
 
+    @pytest.mark.asyncio
+    async def test_redis_hit_renewal_throttled_on_l1_eviction(
+        self, mock_redis, mock_async_redis
+    ):
+        """L1 容量不足反复回源时，同 key 的 Redis 命中直接续期被节流。
+
+        修复回归点：此前 Redis 命中路径每次都发 EXPIRE，L1 淘汰导致的
+        反复回源会使热 key 的 EXPIRE 量随访问频率成倍增长。
+        """
+        from jiuwen.serve.controllers.execution.open_utils import CacheUtils
+
+        cu = CacheUtils(
+            capacity=1, should_serialize=True, cache_name="t_l1",
+            memory_ttl=3600, redis_ttl=86400,
+        )
+        cu._redis_cache = mock_redis  # pylint: disable=protected-access
+        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
+        mock_async_redis.get.return_value = pickle.dumps(
+            {"data": "v1"}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        # 第1轮: k1 Redis 命中 → EXPIRE 一次并记录节流
+        v = await cu.aget("k1", should_refresh_ttl=True)
+        assert v == {"data": "v1"}
+        mock_async_redis.expire.assert_called_once_with("agent_runtime:t_l1:k1", 86400)
+        # k2 访问将 k1 从容量1的 L1 中淘汰
+        await cu.aget("k2", should_refresh_ttl=True)
+        # 第2轮: k1 被淘汰后再次 Redis 命中 → 节流窗口内不再发 EXPIRE
+        mock_async_redis.expire.reset_mock()
+        v = await cu.aget("k1", should_refresh_ttl=True)
+        assert v == {"data": "v1"}
+        mock_async_redis.expire.assert_not_called()
+
+
 class TestSyncBuildWorkflowDrainsBackgroundTasks:
     """sync_build_workflow 临时事件循环的后台任务回收测试。"""
 
