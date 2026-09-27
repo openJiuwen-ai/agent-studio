@@ -1423,7 +1423,7 @@ class IRConverter:
         if cache_enabled:
             agent = await timed_cache_op(
                 "Agent instance retrieval",
-                cache_agent_queue.aget(agent_config.ir_path),
+                cache_agent_queue.aget(agent_config.ir_path, should_refresh_ttl=True),
                 agent_config.ir_path,
             )
 
