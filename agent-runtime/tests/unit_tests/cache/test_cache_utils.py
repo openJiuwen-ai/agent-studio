@@ -704,6 +704,31 @@ class TestDirectExpireReturnValue:
             cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] == -1.0
         )
 
+    @staticmethod
+    def test_sync_get_renewal_guarded(cache_utils, mock_redis):
+        """同步 get 的续期分支有独立防护：续期失败不影响已读取的值。
+
+        修复回归点：此前 expire 异常会被外层 except 吞掉，导致 get 在值已
+        成功读取的情况下误返回 None；redis_ttl<=0 时 expire(-1) 还会删 key。
+        """
+        mock_redis.get.return_value = pickle.dumps(
+            {"data": "v1"}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        result = cache_utils.get("key1", should_refresh_ttl=True)
+        assert result == {"data": "v1"}
+        mock_redis.expire.assert_called_once_with("agent_runtime:test:key1", 60)
+        # expire 抛异常：换新 key 走 Redis 路径，值已读到不得误返回 None
+        mock_redis.expire.side_effect = Exception("redis expire failed")
+        result = cache_utils.get("key2", should_refresh_ttl=True)
+        assert result == {"data": "v1"}
+        mock_redis.expire.assert_called_with("agent_runtime:test:key2", 60)
+        # 损坏数据：删 key 且返回 None（与 aget/aget_with_source 自愈一致）
+        mock_redis.get.return_value = b"corrupted-pickle"
+        mock_redis.delete.reset_mock()
+        result = cache_utils.get("key3", should_refresh_ttl=True)
+        assert result is None
+        mock_redis.delete.assert_called_once_with("agent_runtime:test:key3")
+
 
 class TestSyncBuildWorkflowDrainsBackgroundTasks:
     """sync_build_workflow 临时事件循环的后台任务回收测试。"""

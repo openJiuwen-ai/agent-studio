@@ -217,11 +217,25 @@ class CacheUtils:
 
             value = self.redis_cache.get(unique_key)
             if value is not None:
-                if should_refresh_ttl:
-                    # 当前无同步调用方传 True；若未来有，需仿照 aget 加独立 try，
-                    # 防 expire 失败拖垮整个 get（外层 except 返回 None）
-                    self.redis_cache.expire(unique_key, self.redis_ttl)
-                value = deserialize_object(value) if self.should_serialize else value
+                # deserialize 先于续期且失败删 key（与 aget/aget_with_source 一致）：
+                # 损坏条目删除后 raise 落入外层 except 返回 None（get 契约不变）
+                try:
+                    value = deserialize_object(value) if self.should_serialize else value
+                except Exception:
+                    try:
+                        self.redis_cache.delete(unique_key)
+                    except Exception as del_err:
+                        logger.warning(
+                            f"failed to drop corrupted cache entry {key}: {del_err}"
+                        )
+                    raise
+                if should_refresh_ttl and self.redis_ttl > 0:
+                    # 与 aget 同款防护：redis_ttl>0 防 expire 负 TTL 删 key；
+                    # 独立 try 防续期失败拖垮整个 get（外层 except 会误返回 None）
+                    try:
+                        self.redis_cache.expire(unique_key, self.redis_ttl)
+                    except Exception as e:
+                        logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
                 logger.info(
                     f"redis hit, put {key} in {self.cache_name} memory, "
