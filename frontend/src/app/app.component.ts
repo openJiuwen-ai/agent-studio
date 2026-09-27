@@ -29,10 +29,9 @@ import { ModelManagementService } from '@services/repositories/model-management-
 import { StorageService } from '@shared/services/cfdata.service';
 import { initHistoryInterceptor } from "../utils/utils";
 import {
+  clearSsoCookie,
   consumeSsoAuthFromUrl,
-  hasAuthParamInUrl,
   hasRecentAuthParamAttempt,
-  SSO_COOKIE_NAME,
 } from '../utils/sso-auth.util';
 import { PE_SESSION_KEY } from '@constants/exp-tmpl-config.const';
 
@@ -163,15 +162,18 @@ export class AppComponent implements OnInit {
       // 监听hashchange事件
       this.changeRouter();
       // iframe SSO：父平台在页面已加载后变更 hash 刷新/更换 Auth token 时即时消费。
-      // 只要本次消费遇到 Auth（无论成败）都清理旧用户态（身份意图已表达）；
-      // reload 仅在消费成功、或失败已达清理上限（Auth 已不在 URL，reload 不会
-      // 再次触发消费形成循环）时执行——首次失败保留 Auth 供重试，不刷新页面
+      // 只要本次消费遇到 Auth（无论成败）都清理旧用户态（身份意图已表达）。
+      // 清理只作用于持久层（Cookie/存储），运行中 SPA 的内存态（ContextService
+      // 用户、路由、组件状态）无法就地重置——清后一律 reload 重新初始化，否则
+      // 页面停留在"存储已登出、内存仍是旧用户"的不一致状态（workspace_id 取
+      // 不到、请求被鉴权拒绝），直到下一次 hashchange 或手动刷新才恢复。
+      // 失败重试预算由写入失败计数的 sessionStorage 持久化保护：reload 后
+      // resetUserData 再次消费，再次失败即达上限剥除 Auth，此后不再触发消费
+      // ——最多自动重试一次，不构成 reload 循环。
       const consumed = consumeSsoAuthFromUrl();
       if (consumed || hasRecentAuthParamAttempt()) {
         this.clearStaleUserState(!consumed);
-        if (consumed || !hasAuthParamInUrl()) {
-          window.location.reload();
-        }
+        window.location.reload();
       }
     };
 
@@ -301,18 +303,28 @@ export class AppComponent implements OnInit {
     this.initUserDate({ userId, projectId });
   }
 
-  // SSO 换凭证时清理旧用户态：AGENT_SID Cookie 与本地存储中的会话/空间信息，
-  // 确保按新凭证重新初始化（否则首个 getHealth 前的请求会读到旧 workspace/
-  // 用户态，造成新凭证与旧状态不一致）。写入失败时（clearAccessToken=true）
-  // 连带清除旧 Access-Token Cookie——否则后续 getHealth 会携带旧凭证以旧
-  // 身份重新登录，违背"失败降级为未登录"的意图；写入成功时保留（即新 token）
+  // SSO 换凭证时清理旧用户态：AGENT_SID Cookie 与本地/会话存储中的用户、
+  // 会话与空间信息，确保按新凭证重新初始化（否则首个 getHealth 前的请求会读到
+  // 旧 workspace/用户态，造成新凭证与旧状态不一致）。写入失败时
+  // （clearAccessToken=true）连带清除旧 Access-Token Cookie——否则后续
+  // getHealth 会携带旧凭证以旧身份重新登录，违背"失败降级为未登录"的意图；
+  // 写入成功时保留（即新 token）。
+  // Cookie 须显式 path=/ 删除：AGENT_SID 由后端（ServletUtils.buildAgentSidCookie）
+  // 以 path=/ 下发、Access-Token 由本应用以 path=/ 写入；通用 delCookie 的
+  // 删除串不带 path 属性（默认为当前文档路径），文根部署（/console、
+  // /openjiuwen 等）下无法命中 path=/ 的同名 Cookie，删除会静默失败。
+  // PE_SESSION_KEY 由 ContextService.refreshUserData 双写 localStorage 与
+  // sessionStorage，两处都要清；SPACE_OPTIONS（init_space 写入的完整空间
+  // 列表）与 CUR_SPACE_OPTIONS（当前空间）同为 sessionStorage 的旧空间态。
   clearStaleUserState(clearAccessToken: boolean): void {
-    StorageService.delCookie('AGENT_SID');
+    document.cookie = 'AGENT_SID=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
     if (clearAccessToken) {
-      StorageService.delCookie(SSO_COOKIE_NAME);
+      clearSsoCookie();
     }
     StorageService.delLocalStorage(PE_SESSION_KEY);
+    StorageService.delSessionStorage(PE_SESSION_KEY);
     StorageService.delLocalStorage(POC_JS_SESSION_KEY);
+    StorageService.delSessionStorage('SPACE_OPTIONS');
     StorageService.delSessionStorage('CUR_SPACE_OPTIONS');
   }
 

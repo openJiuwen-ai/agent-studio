@@ -471,6 +471,23 @@ export function writeSsoCookie(token: string, crossSite: boolean): boolean {
 }
 
 /**
+ * 按 writeSsoCookie 的写入属性对称删除 Access-Token Cookie（显式 path=/）。
+ *
+ * 删除 Cookie 要求 name+path（+domain）与写入时一致，SameSite/Secure/
+ * Partitioned 不参与匹配；本工具写入恒为 path=/，故删除必须显式携带。
+ * 通用删除辅助（如 StorageService.delCookie）构造的删除串不带 path 属性，
+ * 默认 path 为当前文档路径，在文根部署（/console、/openjiuwen 等）下无法
+ * 命中 path=/ 的同名 Cookie，删除会静默失败——旧凭证残留并随后续请求携带，
+ * 违背"写入失败降级为未登录"的意图。
+ * 已知限制：同名 HttpOnly Cookie（后端/网关下发）JS 无法删除；该场景在写入
+ * 时已被回读校验检出并告警（同名 HttpOnly Cookie 会拒绝 JS 写入，verifySso
+ * CookieValue 返回 missing），此处不再重复校验。
+ */
+export function clearSsoCookie(): void {
+  document.cookie = `${SSO_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+}
+
+/**
  * 判断 URL 的 hash/search 中是否存在 Auth 参数（无论能否消费成功）。
  * 写入失败时 Auth 会保留在 URL 供重试，此时本函数返回 true——供调用方
  * 感知"父平台已表达身份意图"，在消费失败时同样触发旧用户态清理，
