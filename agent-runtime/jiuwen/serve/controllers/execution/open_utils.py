@@ -165,13 +165,24 @@ class CacheUtils:
 
             value = await self.async_redis_cache.get(unique_key)
             if value is not None:
-                # deserialize 先于续期：其失败落入外层 except 返回 None（上层回源
-                # 重建并覆盖），且损坏条目不被续命
-                value = deserialize_object(value) if self.should_serialize else value
+                # deserialize 先于续期：损坏数据不得续命，且删除以使下次读取回源
+                # 重建（与 aget_with_source 一致）；删除后 raise 落入外层 except
+                # 返回 None（aget 契约不变）
+                try:
+                    value = deserialize_object(value) if self.should_serialize else value
+                except Exception:
+                    try:
+                        await self.async_redis_cache.delete(unique_key)
+                    except Exception as del_err:
+                        logger.warning(
+                            f"failed to drop corrupted cache entry {key}: {del_err}"
+                        )
+                    raise
                 refreshed = False
-                if should_refresh_ttl:
+                if should_refresh_ttl and self.redis_ttl > 0:
                     # 独立防御：续期失败不能影响已取到的数据返回
-                    # （外层 except 会把整个 aget 变成 None，导致上层误判 MISS 回源）
+                    # （外层 except 会把整个 aget 变成 None，导致上层误判 MISS 回源）；
+                    # redis_ttl>0 防护：expire 负 TTL 在 Redis 中会直接删除条目
                     try:
                         # expire 对不存在的 key 返回 False（非异常）：仅在真正续期
                         # 成功时才标记，False 留给后台重写路径自愈
@@ -317,12 +328,22 @@ class CacheUtils:
             )
             if not refreshed:
                 # expire 返回 False = key 已不存在（被外部删除/淘汰），expire 本身
-                # 无法恢复；用内存中的值整体重写以重建 Redis 条目
+                # 无法恢复；用内存中的值整体重写以重建 Redis 条目。
+                # 直接 set 而非 aput：aput 会吞异常，重写失败需落入下方冷却回滚
                 entry = self.memory_cache.get(unique_key)
                 if entry is not None:
-                    await asyncio.wait_for(
-                        self.aput(key, entry["data"]), timeout=10
+                    payload = (
+                        serialize_object(entry["data"])
+                        if self.should_serialize
+                        else entry["data"]
                     )
+                    await asyncio.wait_for(
+                        self.async_redis_cache.set(
+                            unique_key, payload, ex=self.redis_ttl
+                        ),
+                        timeout=10,
+                    )
+                    self._mark_redis_refreshed(unique_key)
         except Exception as e:
             logger.warning(f"cache ttl refresh failed for {key}: {e}")
             entry = self.memory_cache.get(unique_key)
@@ -394,8 +415,9 @@ class CacheUtils:
                     )
                 raise
             refreshed = False
-            if should_refresh_ttl:
-                # 独立防御：续期失败不影响已取到的数据（与 aget 同款）
+            if should_refresh_ttl and self.redis_ttl > 0:
+                # 独立防御：续期失败不影响已取到的数据（与 aget 同款）；
+                # redis_ttl>0 防护：expire 负 TTL 在 Redis 中会直接删除条目
                 try:
                     # expire 对不存在的 key 返回 False（非异常）：仅在真正续期
                     # 成功时才标记，False 留给后台重写路径自愈

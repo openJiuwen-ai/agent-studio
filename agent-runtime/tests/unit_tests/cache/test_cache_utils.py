@@ -581,10 +581,66 @@ class TestCorruptedEntrySelfHealing:
     async def test_corrupted_pickle_aget_returns_none(
         self, cache_utils, mock_async_redis
     ):
-        """aget 命中损坏 pickle 时返回 None（上层回源重建），且不续期。"""
+        """aget 命中损坏 pickle 时：删 key、返回 None（上层回源重建），且不续期。
+
+        与 aget_with_source 的自愈行为保持一致：删除损坏条目，避免上层重建
+        失败时后续读取反复拉取大对象并触发反序列化失败。
+        """
         mock_async_redis.get.return_value = b"corrupted-pickle"
         result = await cache_utils.aget("key1", should_refresh_ttl=True)
         assert result is None
+        mock_async_redis.delete.assert_called_once_with("agent_runtime:test:key1")
+        mock_async_redis.expire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rewrite_failure_enters_cooldown(
+        self, cache_utils, mock_async_redis
+    ):
+        """重写失败（set 抛错）时进入冷却回滚而非保持乐观标记。
+
+        修复回归点：此前经 aput 重写，aput 吞异常导致失败进不了冷却分支，
+        重试要等完整 300s 节流窗口；直接 set 后失败落入冷却（≤30s）重试。
+        """
+        await cache_utils.aput("key1", {"data": "v1"})
+        cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] = (
+            time.time() - 400
+        )
+        mock_async_redis.expire.return_value = False
+        mock_async_redis.set.side_effect = Exception("redis down")
+        await cache_utils.aget("key1", should_refresh_ttl=True)
+        await asyncio.sleep(0.05)
+        marker = cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"]
+        # 冷却时间戳 ≈ now-15（redis_ttl=60→interval=30, cooldown=15）；
+        # 乐观标记则 ≈ now（与测量时刻差 <1s），用 >5 区分两者
+        assert 5 < time.time() - marker < 30
+
+    @pytest.mark.asyncio
+    async def test_no_ttl_queue_direct_renewal_skipped(
+        self, mock_redis, mock_async_redis
+    ):
+        """redis_ttl=-1 队列的 Redis 命中直接续期路径（aget 与 aget_with_source）
+        同样不发 expire。
+
+        修复回归点：expire(key, -1) 在 Redis 中会直接删除条目。
+        """
+        from jiuwen.serve.controllers.execution.open_utils import CacheUtils
+
+        cu = CacheUtils(
+            capacity=3, should_serialize=True, cache_name="t_nottl2",
+            memory_ttl=3600, redis_ttl=-1,
+        )
+        cu._redis_cache = mock_redis  # pylint: disable=protected-access
+        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
+        mock_async_redis.get.return_value = pickle.dumps(
+            {"data": "v1"}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        mock_async_redis.expire.reset_mock()
+        result = await cu.aget("k", should_refresh_ttl=True)
+        assert result == {"data": "v1"}
+        cu.memory_cache.clear()  # 清内存，使第二次调用重新走 Redis 命中路径
+        value, source = await cu.aget_with_source("k", should_refresh_ttl=True)
+        assert value == {"data": "v1"}
+        assert source == "redis"
         mock_async_redis.expire.assert_not_called()
 
     @pytest.mark.asyncio
