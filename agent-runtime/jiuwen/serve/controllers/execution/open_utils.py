@@ -554,7 +554,24 @@ def drain_background_ttl_tasks(loop) -> bool:
     return True
 
 
+def _warn_legacy_cache_ttl(value: int) -> None:
+    """启动告警：CACHE_TTL_SECONDS 已不再控制 ir/workflow/agent 三队列。
+
+    显式调优过该变量的部署升级后会静默落到新默认 24h，此告警使变更可感知
+    （值等于默认 3600 时不告警——行为无差异）。
+    """
+    if value != 3600:
+        logger.warning(
+            "CACHE_TTL_SECONDS=%s no longer controls the ir/workflow/agent "
+            "definition caches; they now default to 24h via IR/WORKFLOW/"
+            "AGENT_CACHE_TTL_SECONDS. Migrate your tuning to the new "
+            "variables to keep the previous behavior",
+            value,
+        )
+
+
 # 缓存队列实例
+_warn_legacy_cache_ttl(settings.cache.cache_ttl_seconds)
 cache_ir_queue = CacheUtils(
     capacity=settings.cache.max_ir_cache_num,
     should_serialize=True,

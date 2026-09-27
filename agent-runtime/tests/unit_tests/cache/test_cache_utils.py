@@ -1,5 +1,6 @@
 """Unit tests for CacheUtils (LRU + Redis two-level cache)."""
 import asyncio
+import logging
 import pickle
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -417,6 +418,37 @@ class TestCacheTTLConfigDefaults:
         monkeypatch.setenv("WORKFLOW_CACHE_TTL_SECONDS", "0")
         with pytest.raises(ValidationError):
             CacheSettings()
+
+
+class TestLegacyTTLWarning:
+    """CACHE_TTL_SECONDS 显式调优的启动告警测试。"""
+
+    @staticmethod
+    def test_warns_when_legacy_ttl_customized(caplog):
+        """显式设置过非默认值时输出迁移告警（破坏性变更可感知）。"""
+        from jiuwen.serve.controllers.execution.open_utils import (
+            _warn_legacy_cache_ttl,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            _warn_legacy_cache_ttl(7200)
+        assert any(
+            "CACHE_TTL_SECONDS" in r.message and "Migrate" in r.message
+            for r in caplog.records
+        )
+
+    @staticmethod
+    def test_no_warn_on_default(caplog):
+        """值为默认 3600 时（含未设置）不告警——行为无差异。"""
+        from jiuwen.serve.controllers.execution.open_utils import (
+            _warn_legacy_cache_ttl,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            _warn_legacy_cache_ttl(3600)
+        assert not any(
+            "CACHE_TTL_SECONDS" in r.message for r in caplog.records
+        )
 
 
 class TestBackgroundTTLRefresh:
