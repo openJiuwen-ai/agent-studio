@@ -555,6 +555,63 @@ class TestBackgroundTTLRefresh:
         await asyncio.sleep(0.05)
         mock_async_redis.expire.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_no_rewrite_queue_skips_rebuild(
+        self, mock_redis, mock_async_redis
+    ):
+        """rewrite_on_expire_false=False 的队列（如 agent 实例缓存）在 expire
+        返回 False 时不用内存值重写——其调用方会原地修改共享实例（load_state），
+        重写会把会话态污染持久化到 Redis。"""
+        from jiuwen.serve.controllers.execution.open_utils import CacheUtils
+
+        cu = CacheUtils(
+            capacity=3, should_serialize=True, cache_name="t_norewr",
+            memory_ttl=3600, redis_ttl=60, rewrite_on_expire_false=False,
+        )
+        cu._redis_cache = mock_redis  # pylint: disable=protected-access
+        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
+        await cu.aput("k", {"v": 1})
+        cu.memory_cache["agent_runtime:t_norewr:k"]["last_refresh"] = (
+            time.time() - 400
+        )
+        mock_async_redis.expire.return_value = False
+        mock_async_redis.set.reset_mock()
+        await cu.aget("k", should_refresh_ttl=True)
+        await asyncio.sleep(0.05)
+        # 不重写：set 不被调用（条目丢失留给上层重建新对象的无污染路径）
+        mock_async_redis.set.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cancelled_task_rolls_back_marker(
+        self, cache_utils, mock_async_redis
+    ):
+        """后台续期任务被外部取消时回滚乐观标记（防节流窗口内漏续期）。"""
+        from jiuwen.serve.controllers.execution.open_utils import _BACKGROUND_TTL_TASKS
+
+        await cache_utils.aput("key1", {"data": "v1"})
+        key = "agent_runtime:test:key1"
+        cache_utils.memory_cache[key]["last_refresh"] = time.time() - 400
+        # 用可挂起的 expire 替身：让任务真正进入 await 后再取消，
+        # 才能命中协程体内的 CancelledError 分支（未启动的任务被取消不会进入）
+        started = asyncio.Event()
+        gate = asyncio.Event()
+
+        async def hanging_expire(k, s):
+            started.set()
+            await gate.wait()
+            return True
+
+        mock_async_redis.expire = hanging_expire
+        await cache_utils.aget("key1", should_refresh_ttl=True)  # 创建后台任务
+        await started.wait()
+        pending = [t for t in _BACKGROUND_TTL_TASKS if not t.done()]
+        assert pending
+        for t in pending:
+            t.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        gate.set()
+        assert cache_utils.memory_cache[key]["last_refresh"] == -1.0
+
 
 class TestCorruptedEntrySelfHealing:
     """损坏缓存条目与 Redis 条目丢失的自愈行为测试。"""

@@ -68,6 +68,7 @@ class CacheUtils:
         cache_name: str,
         memory_ttl: int = -1,
         redis_ttl: int = -1,
+        rewrite_on_expire_false: bool = True,
     ):
         self.memory_cache = LRUCache(capacity)
         self._redis_cache = None
@@ -77,8 +78,19 @@ class CacheUtils:
         self.memory_ttl = memory_ttl
         self.redis_ttl = redis_ttl
         # Redis 命中直接续期的节流记录：L1 容量不足导致同 key 反复回源时，
-        # 避免每次命中都发 EXPIRE；LRU 化防止无限增长
+        # 避免每次命中都发 EXPIRE；LRU 化防止无限增长。
+        # 加锁：APS worker 线程（sync_build_workflow 的临时 loop）与服务事件
+        # 循环线程会并发访问，cachetools.LRUCache 非线程安全
         self._renew_ts = LRUCache(max(capacity * 2, 16))
+        self._renew_lock = threading.Lock()
+        # 内存层锁：APS worker 线程（sync_build_workflow 的临时 loop）与服务
+        # 事件循环线程会并发读写 memory_cache（cachetools.LRUCache 非线程安全）；
+        # 锁内只做纯内存操作（无 await），无竞争时开销纳秒级
+        self._mem_lock = threading.Lock()
+        # 条目被外部删除/淘汰（expire 返回 False）时是否用内存值重写重建。
+        # 存在对取出对象原地修改的调用方（如 agent 实例的 load_state）的队列
+        # 应设为 False：重写会把会话态污染持久化到 Redis
+        self.rewrite_on_expire_false = rewrite_on_expire_false
 
     @property
     def redis_cache(self):
@@ -202,7 +214,7 @@ class CacheUtils:
                             )
                         )
                         if refreshed:
-                            self._renew_ts[unique_key] = time.time()
+                            self._record_direct_renew(unique_key)
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
@@ -250,7 +262,7 @@ class CacheUtils:
                     # 独立 try 防续期失败拖垮整个 get（外层 except 会误返回 None）
                     try:
                         self.redis_cache.expire(unique_key, self.redis_ttl)
-                        self._renew_ts[unique_key] = time.time()
+                        self._record_direct_renew(unique_key)
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
@@ -267,8 +279,9 @@ class CacheUtils:
         """删除元素"""
         try:
             unique_key = self._generate_unique_key(key)
-            if self.memory_cache.get(unique_key) is not None:
-                self.memory_cache.pop(unique_key)
+            with self._mem_lock:
+                if self.memory_cache.get(unique_key) is not None:
+                    self.memory_cache.pop(unique_key)
             value = await self.async_redis_cache.get(unique_key)
             if value is not None:
                 await self.async_redis_cache.delete(unique_key)
@@ -280,8 +293,9 @@ class CacheUtils:
         """删除元素"""
         try:
             unique_key = self._generate_unique_key(key)
-            if self.memory_cache.get(unique_key) is not None:
-                self.memory_cache.pop(unique_key)
+            with self._mem_lock:
+                if self.memory_cache.get(unique_key) is not None:
+                    self.memory_cache.pop(unique_key)
             if self.redis_cache.get(unique_key) is not None:
                 self.redis_cache.delete(unique_key)
             logger.info(f"pop {key} from {self.cache_name}")
@@ -291,7 +305,8 @@ class CacheUtils:
     def update_capacity(self, cache_num=None):
         """更新LRU容量"""
         if cache_num and cache_num != self.memory_cache.maxsize:
-            self.memory_cache = LRUCache(cache_num)
+            with self._mem_lock:
+                self.memory_cache = LRUCache(cache_num)
 
     def _update_memory_cache(self, key: str, value: Any):
         """刷新内存缓存（保留 Redis 续期时间标记）"""
@@ -300,19 +315,21 @@ class CacheUtils:
             if self.memory_ttl > 0
             else -1
         )
-        entry = self.memory_cache.get(key) or {}
-        self.memory_cache[key] = {
-            "expire_time": expire_time,
-            "data": value,
-            # 上次 Redis TTL 被实际重置的时刻（epoch 秒）；-1 表示从未刷新
-            "last_refresh": entry.get("last_refresh", -1.0),
-        }
+        with self._mem_lock:
+            entry = self.memory_cache.get(key) or {}
+            self.memory_cache[key] = {
+                "expire_time": expire_time,
+                "data": value,
+                # 上次 Redis TTL 被实际重置的时刻（epoch 秒）；-1 表示从未刷新
+                "last_refresh": entry.get("last_refresh", -1.0),
+            }
 
     def _mark_redis_refreshed(self, unique_key: str):
         """记录 Redis TTL 已于此刻重置（aput set / 命中续期成功后调用）"""
-        entry = self.memory_cache.get(unique_key)
-        if entry is not None:
-            entry["last_refresh"] = time.time()
+        with self._mem_lock:
+            entry = self.memory_cache.get(unique_key)
+            if entry is not None:
+                entry["last_refresh"] = time.time()
 
     def _refresh_throttle_interval(self) -> float:
         """节流窗口：不超过 redis_ttl 的一半（小 TTL 配置下自动收紧，
@@ -325,8 +342,14 @@ class CacheUtils:
         L1 容量不足时同 key 会被反复淘汰回源，若不节流则每次 Redis 命中
         都多发一条 EXPIRE，热路径 Redis 命令量随访问频率成倍增长。
         """
-        last = self._renew_ts.get(unique_key, -1.0)
+        with self._renew_lock:
+            last = self._renew_ts.get(unique_key, -1.0)
         return last > 0 and (time.time() - last) < self._refresh_throttle_interval()
+
+    def _record_direct_renew(self, unique_key: str) -> None:
+        """记录一次直接续期（加锁防 worker 线程并发写）"""
+        with self._renew_lock:
+            self._renew_ts[unique_key] = time.time()
 
     def _try_background_ttl_refresh(self, unique_key: str, key: str):
         """内存命中时节流续期 Redis TTL：后台任务执行，不阻塞读取路径。
@@ -337,17 +360,18 @@ class CacheUtils:
         if self.redis_ttl <= 0:
             # 永不过期/未配置 TTL 的队列无续期语义（且 expire 负 TTL 会删 key）
             return
-        entry = self.memory_cache.get(unique_key)
-        if entry is None:
-            return
-        last_refresh = entry.get("last_refresh", -1.0)
-        if (
-            last_refresh > 0
-            and (time.time() - last_refresh) < self._refresh_throttle_interval()
-        ):
-            return
-        # 乐观标记防止并发协程重复发起；失败由后台任务回滚为冷却时间戳
-        entry["last_refresh"] = time.time()
+        with self._mem_lock:
+            entry = self.memory_cache.get(unique_key)
+            if entry is None:
+                return
+            last_refresh = entry.get("last_refresh", -1.0)
+            if (
+                last_refresh > 0
+                and (time.time() - last_refresh) < self._refresh_throttle_interval()
+            ):
+                return
+            # 乐观标记防止并发协程重复发起；失败由后台任务回滚为冷却时间戳
+            entry["last_refresh"] = time.time()
         try:
             task = asyncio.create_task(self._background_expire(unique_key, key))
             with _BACKGROUND_TTL_TASKS_LOCK:
@@ -355,7 +379,10 @@ class CacheUtils:
             task.add_done_callback(_discard_background_task)
         except RuntimeError:
             # 无运行中的事件循环（防御）：回滚标记，读取不受影响
-            entry["last_refresh"] = last_refresh
+            with self._mem_lock:
+                cur = self.memory_cache.get(unique_key)
+                if cur is not None:
+                    cur["last_refresh"] = last_refresh
 
     async def _background_expire(self, unique_key: str, key: str):
         """后台执行 EXPIRE 续期；失败/超时回滚冷却时间戳，冷却期后自动重试"""
@@ -366,16 +393,21 @@ class CacheUtils:
                 self.async_redis_cache.expire(unique_key, self.redis_ttl),
                 timeout=5,
             )
-            if not refreshed:
+            if not refreshed and self.rewrite_on_expire_false:
                 # expire 返回 False = key 已不存在（被外部删除/淘汰），expire 本身
                 # 无法恢复；用内存中的值整体重写以重建 Redis 条目。
-                # 直接 set 而非 aput：aput 会吞异常，重写失败需落入下方冷却回滚
-                entry = self.memory_cache.get(unique_key)
-                if entry is not None:
+                # 直接 set 而非 aput：aput 会吞异常，重写失败需落入下方冷却回滚。
+                # 注意：重写会序列化内存对象的当前状态——若调用方违反共享引用
+                # 约定原地修改了缓存对象（如 agent 实例的 load_state），污染将被
+                # 持久化，故存在此类调用方的队列应关闭 rewrite_on_expire_false
+                with self._mem_lock:
+                    entry = self.memory_cache.get(unique_key)
+                    data = entry["data"] if entry is not None else None
+                if data is not None:
                     payload = (
-                        serialize_object(entry["data"])
+                        serialize_object(data)
                         if self.should_serialize
-                        else entry["data"]
+                        else data
                     )
                     await asyncio.wait_for(
                         self.async_redis_cache.set(
@@ -384,28 +416,38 @@ class CacheUtils:
                         timeout=10,
                     )
                     self._mark_redis_refreshed(unique_key)
+        except asyncio.CancelledError:
+            # 外部取消（如事件循环收尾）：回滚乐观标记，避免节流窗口内漏续期
+            # 导致 Redis 条目提前过期；re-raise 保持任务的取消语义
+            with self._mem_lock:
+                entry = self.memory_cache.get(unique_key)
+                if entry is not None:
+                    entry["last_refresh"] = -1.0
+            raise
         except Exception as e:
             logger.warning(f"cache ttl refresh failed for {key}: {e}")
-            entry = self.memory_cache.get(unique_key)
-            if entry is not None:
-                # 回滚为冷却时间戳而非 -1：Redis 故障期间保留节流，避免每次
-                # 内存命中都新建任务并放大日志；冷却期过后自动重试
-                interval = self._refresh_throttle_interval()
-                cooldown = min(_TTL_RETRY_COOLDOWN_SECONDS, interval / 2)
-                entry["last_refresh"] = time.time() - interval + cooldown
+            with self._mem_lock:
+                entry = self.memory_cache.get(unique_key)
+                if entry is not None:
+                    # 回滚为冷却时间戳而非 -1：Redis 故障期间保留节流，避免每次
+                    # 内存命中都新建任务并放大日志；冷却期过后自动重试
+                    interval = self._refresh_throttle_interval()
+                    cooldown = min(_TTL_RETRY_COOLDOWN_SECONDS, interval / 2)
+                    entry["last_refresh"] = time.time() - interval + cooldown
 
     def _get_from_memory_cache(self, key: str) -> Any:
         """从内存读取缓存"""
-        cached_value = self.memory_cache.get(key)
-        if cached_value is not None:
-            current_time = int(time.time() * 1000)
-            if cached_value["expire_time"] <= 0:
-                return cached_value["data"]
-            if current_time > cached_value.get("expire_time"):
-                self.memory_cache.pop(key)
-                return None
-            else:
-                return cached_value["data"]
+        with self._mem_lock:
+            cached_value = self.memory_cache.get(key)
+            if cached_value is not None:
+                current_time = int(time.time() * 1000)
+                if cached_value["expire_time"] <= 0:
+                    return cached_value["data"]
+                if current_time > cached_value.get("expire_time"):
+                    self.memory_cache.pop(key)
+                    return None
+                else:
+                    return cached_value["data"]
         return None
 
     def _generate_unique_key(self, key: str) -> str:
@@ -471,7 +513,7 @@ class CacheUtils:
                         )
                     )
                     if refreshed:
-                        self._renew_ts[unique_key] = time.time()
+                        self._record_direct_renew(unique_key)
                 except Exception as e:
                     logger.warning(f"cache ttl refresh failed for {key}: {e}")
             self._update_memory_cache(unique_key, value)
@@ -533,6 +575,9 @@ cache_agent_queue = CacheUtils(
     # 同上：内存层滑动窗口，控制冷 key 内存占用
     memory_ttl=settings.cache.mem_cache_ttl_seconds,
     redis_ttl=settings.cache.agent_cache_ttl_seconds,
+    # agent 实例的调用方（create_or_restore_agent）会对取出的共享实例执行
+    # load_state 原地修改，重写重建会把会话态污染持久化到 Redis，故关闭
+    rewrite_on_expire_false=False,
 )
 cache_agent_group_queue = CacheUtils(
     capacity=settings.cache.max_agent_group_cache_num,
