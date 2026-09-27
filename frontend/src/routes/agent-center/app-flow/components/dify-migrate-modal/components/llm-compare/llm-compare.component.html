@@ -15,7 +15,8 @@
     <div right>
       <llm-select
         [selectedModel]="selected"
-        [modelValidation]="modelValidation" (update)="updateModel($event)">
+        [modelValidation]="modelValidation" (update)="updateModel($event)"
+        (showOptions)="onModelOptionsLoaded($event)">
       </llm-select>
     </div>
   </migrate-compare-row>

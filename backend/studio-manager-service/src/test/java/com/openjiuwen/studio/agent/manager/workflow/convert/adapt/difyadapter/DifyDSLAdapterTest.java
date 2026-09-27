@@ -21,8 +21,10 @@ import com.openjiuwen.studio.agent.manager.service.WorkflowValidationService;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -115,6 +117,169 @@ class DifyDSLAdapterTest {
     void validateFormatRejectsMissingAppOrWorkflow() {
         assertThrows(AgentStudioException.class, () -> adapter.validateFormat(Map.of("app", Map.of())));
         assertThrows(AgentStudioException.class, () -> adapter.validateFormat(Map.of("workflow", Map.of())));
+    }
+
+    /**
+     * Dify 分类 id 为 UUID 时，意图识别节点分支与出边 branch 必须按 classes 顺序统一重排为
+     * branch_N 数字后缀（运行时按 branch_N 约定匹配分类结果，UUID 分支会导致 101021）。
+     */
+    @Test
+    void convertRenumbersClassifierBranchesAndKeepsEdgesInSync() {
+        Map<String, Object> dsl = buildClassifierDsl();
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+
+        JSONObject classifier = findNodeByType(details.getJSONArray("nodes"), "IntentDetection");
+        assertNotNull(classifier);
+        JSONArray branches = classifier.getJSONArray("branches");
+        assertEquals(2, branches.size());
+        assertEquals("branch_1", branches.getJSONObject(0).getString("id"));
+        assertEquals("branch_2", branches.getJSONObject(1).getString("id"));
+        assertEquals("Class A", branches.getJSONObject(0).getJSONObject("configs").getString("category"));
+        assertEquals("Class B", branches.getJSONObject(1).getJSONObject("configs").getString("category"));
+        assertEquals("gpt-4", classifier.getJSONObject("configs").getJSONObject("llm")
+            .getJSONObject("model").getString("model_name"));
+
+        Set<String> classifierEdgeBranches = new HashSet<>();
+        for (int i = 0; i < details.getJSONArray("edges").size(); i++) {
+            JSONObject edge = details.getJSONArray("edges").getJSONObject(i);
+            if ("node_qc_1".equals(edge.getString("source"))) {
+                classifierEdgeBranches.add(edge.getString("branch"));
+            }
+        }
+        assertEquals(new HashSet<>(Arrays.asList("branch_1", "branch_2")), classifierEdgeBranches);
+    }
+
+    /**
+     * 代码节点输入 type 丢失修复：Dify 代码节点 variables 不携带 value_type，
+     * 缺失时按引用目标节点输出推断类型；exec_env 统一为 sandbox（不再硬编码 fg）。
+     */
+    @Test
+    void convertCodeNodeInfersInputTypeAndUsesSandboxEnv() {
+        Map<String, Object> dsl = buildClassifierDsl();
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+
+        JSONObject codeNode = findNodeByType(details.getJSONArray("nodes"), "Code");
+        assertNotNull(codeNode);
+
+        assertEquals("sandbox", codeNode.getJSONObject("configs").getString("exec_env"));
+        assertEquals("def main(arg1, arg2):", codeNode.getJSONObject("configs").getString("code"));
+
+        JSONArray inputs = codeNode.getJSONArray("inputs");
+        JSONObject arg1 = findFieldByName(inputs, "arg1");
+        JSONObject arg2 = findFieldByName(inputs, "arg2");
+        assertNotNull(arg1);
+        assertNotNull(arg2);
+        // arg1 无 value_type，按开始节点 query 输出推断为 string
+        assertEquals("string", arg1.getString("type"));
+        assertEquals("ref", arg1.getJSONObject("value").getString("type"));
+        // arg2 携带 value_type 时保持原值
+        assertEquals("number", arg2.getString("type"));
+
+        JSONArray outputs = codeNode.getJSONArray("outputs");
+        assertEquals("string", findFieldByName(outputs, "result").getString("type"));
+
+        // 意图识别节点输入引用代码节点输出，类型推断不应缺失
+        JSONObject classifier = findNodeByType(details.getJSONArray("nodes"), "IntentDetection");
+        assertEquals("string", findFieldByName(classifier.getJSONArray("inputs"), "input").getString("type"));
+    }
+
+    private Map<String, Object> buildClassifierDsl() {
+        Map<String, Object> startData = new HashMap<>();
+        startData.put("type", "start");
+        startData.put("title", "开始");
+        startData.put("desc", "");
+        startData.put("variables", new ArrayList<>());
+        Map<String, Object> startNode = nodeOf("start", startData, 50, 100);
+
+        Map<String, Object> codeData = new HashMap<>();
+        codeData.put("type", "code");
+        codeData.put("title", "代码");
+        codeData.put("desc", "");
+        codeData.put("code", "def main(arg1, arg2):");
+        codeData.put("code_language", "python3");
+        Map<String, Object> arg1 = new HashMap<>();
+        arg1.put("variable", "arg1");
+        arg1.put("value_selector", new ArrayList<>(List.of("start", "query")));
+        Map<String, Object> arg2 = new HashMap<>();
+        arg2.put("variable", "arg2");
+        arg2.put("value_selector", new ArrayList<>(List.of("start", "query")));
+        arg2.put("value_type", "number");
+        codeData.put("variables", new ArrayList<>(Arrays.asList(arg1, arg2)));
+        Map<String, Object> codeOutput = new HashMap<>();
+        codeOutput.put("type", "string");
+        codeOutput.put("children", null);
+        codeData.put("outputs", Map.of("result", codeOutput));
+        Map<String, Object> codeNode = nodeOf("code_1", codeData, 300, 100);
+
+        String classIdA = "3f9a2c1e-1111-4b8b-9f2e-aaaaaaaaaaa1";
+        String classIdB = "9b8c7d6e-2222-4c8b-8f3e-bbbbbbbbbbb2";
+        Map<String, Object> classifierData = new HashMap<>();
+        classifierData.put("type", "question-classifier");
+        classifierData.put("title", "问题分类器");
+        classifierData.put("desc", "");
+        classifierData.put("classes", new ArrayList<>(Arrays.asList(
+            Map.of("id", classIdA, "name", "Class A"),
+            Map.of("id", classIdB, "name", "Class B"))));
+        Map<String, Object> classifierModel = new HashMap<>();
+        classifierModel.put("name", "gpt-4");
+        classifierModel.put("provider", "langgenius/openai/openai");
+        classifierModel.put("completion_params", Map.of("temperature", 0.7));
+        classifierData.put("model", classifierModel);
+        classifierData.put("query_variable_selector", new ArrayList<>(List.of("code_1", "result")));
+        classifierData.put("instruction", "classify the question");
+        Map<String, Object> classifierNode = nodeOf("qc_1", classifierData, 550, 100);
+
+        Map<String, Object> graph = new HashMap<>();
+        graph.put("nodes", List.of(startNode, codeNode, classifierNode, llmNode("llm_1", 800, 50), llmNode("llm_2", 800, 200)));
+        graph.put("edges", Arrays.asList(
+            edgeOf("start", "source", "code_1", "start", "code"),
+            edgeOf("code_1", "source", "qc_1", "code", "question-classifier"),
+            edgeOf("qc_1", classIdA, "llm_1", "question-classifier", "llm"),
+            edgeOf("qc_1", classIdB, "llm_2", "question-classifier", "llm")));
+        graph.put("viewport", Map.of("x", 0, "y", 0, "zoom", 1));
+
+        Map<String, Object> workflow = new HashMap<>();
+        workflow.put("graph", graph);
+        workflow.put("environment_variables", new ArrayList<>());
+        workflow.put("conversation_variables", new ArrayList<>());
+
+        Map<String, Object> dsl = new HashMap<>();
+        dsl.put("app", Map.of("mode", "advanced-chat", "name", "ut-dify-classifier", "description", "UT夹具"));
+        dsl.put("kind", "app");
+        dsl.put("version", "0.1.0");
+        dsl.put("workflow", workflow);
+        return dsl;
+    }
+
+    private Map<String, Object> llmNode(String id, int x, int y) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("type", "llm");
+        data.put("title", id);
+        data.put("desc", "");
+        Map<String, Object> model = new HashMap<>();
+        model.put("name", "gpt-4");
+        model.put("provider", "langgenius/openai/openai");
+        model.put("completion_params", new HashMap<>());
+        data.put("model", model);
+        data.put("prompt_template", new ArrayList<>(List.of(Map.of("role", "user", "text", "hello"))));
+        return nodeOf(id, data, x, y);
+    }
+
+    private Map<String, Object> edgeOf(String source, String sourceHandle, String target, String sourceType, String targetType) {
+        Map<String, Object> edge = new HashMap<>();
+        edge.put("id", source + "-" + sourceHandle + "-" + target);
+        edge.put("source", source);
+        edge.put("sourceHandle", sourceHandle);
+        edge.put("target", target);
+        edge.put("targetHandle", "target");
+        edge.put("type", "custom");
+        edge.put("data", Map.of("sourceType", sourceType, "targetType", targetType,
+            "isInIteration", false, "isInLoop", false));
+        return edge;
     }
 
     private JSONObject findNodeByType(JSONArray nodes, String type) {
