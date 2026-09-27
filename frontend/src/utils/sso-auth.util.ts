@@ -473,18 +473,26 @@ export function writeSsoCookie(token: string, crossSite: boolean): boolean {
 /**
  * 按 writeSsoCookie 的写入属性对称删除 Access-Token Cookie（显式 path=/）。
  *
- * 删除 Cookie 要求 name+path（+domain）与写入时一致，SameSite/Secure/
- * Partitioned 不参与匹配；本工具写入恒为 path=/，故删除必须显式携带。
- * 通用删除辅助（如 StorageService.delCookie）构造的删除串不带 path 属性，
- * 默认 path 为当前文档路径，在文根部署（/console、/openjiuwen 等）下无法
- * 命中 path=/ 的同名 Cookie，删除会静默失败——旧凭证残留并随后续请求携带，
- * 违背"写入失败降级为未登录"的意图。
+ * 删除 Cookie 要求 name+path（+domain）与写入时一致，SameSite 不参与匹配；
+ * 本工具写入恒为 path=/，故删除必须显式携带。通用删除辅助（如
+ * StorageService.delCookie）构造的删除串不带 path 属性，默认 path 为当前
+ * 文档路径，在文根部署（/console、/openjiuwen 等）下无法命中 path=/ 的
+ * 同名 Cookie，删除会静默失败——旧凭证残留并随后续请求携带，违背
+ * "写入失败降级为未登录"的意图。
+ * 分区维度：跨站 https 拓扑写入的是 SameSite=None; Secure; Partitioned
+ * 的分区 Cookie（CHIPS），其额外以分区键标识——删除串不带 Partitioned
+ * 时作用于非分区 jar，无法命中分区中的旧 Cookie，须对两个 jar 各发一条
+ * 删除串（Partitioned 属性要求伴随 Secure；http 非安全上下文会拒绝该
+ * 属性，但该拓扑本不存在分区 Cookie，首条删除已覆盖，无副作用）。
  * 已知限制：同名 HttpOnly Cookie（后端/网关下发）JS 无法删除；该场景在写入
- * 时已被回读校验检出并告警（同名 HttpOnly Cookie 会拒绝 JS 写入，verifySso
- * CookieValue 返回 missing），此处不再重复校验。
+ * 时已被回读校验检出并告警（同名 HttpOnly Cookie 会拒绝 JS 写入，
+ * verifySsoCookieValue 返回 missing），此处不再重复校验。
  */
 export function clearSsoCookie(): void {
+  // 非分区 jar：同站点（http/https）与 http 部署写入的 Cookie
   document.cookie = `${SSO_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  // 分区 jar：跨站 https 写入的 SameSite=None; Secure; Partitioned Cookie
+  document.cookie = `${SSO_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; Secure; Partitioned`;
 }
 
 /**
@@ -511,11 +519,13 @@ export function hasAuthParamInUrl(): boolean {
 }
 
 /**
- * 最近一次 consumeSsoAuthFromUrl 是否遇到 Auth 且通过安全门控（可信嵌入）。
+ * 最近一次 consumeSsoAuthFromUrl 是否遇到非空 Auth 且通过安全门控（可信嵌入）。
  * 与 hasAuthParamInUrl 的差异：写入失败达上限时 consume 会先剥除 URL 中
  * 的 Auth 再返回 null，此时 hasAuthParamInUrl 为 false，而本函数仍为
  * true——调用方据此仍能感知身份意图并清理旧用户态（降级为未登录）。
- * 门控拒绝时为 false：不可信嵌入者的垃圾 Auth 不触发用户态清理。
+ * 以下情形恒为 false：门控拒绝（不可信嵌入者的垃圾 Auth 不触发用户态
+ * 清理，防跨上下文登出 DoS）、空值 Auth=（垃圾参数不代表身份意图，
+ * 已登录用户不因此被意外登出）、消费过程异常（状态未知时保守不清理）。
  */
 export function hasRecentAuthParamAttempt(): boolean {
   return lastConsumeSawAuth;
@@ -610,12 +620,13 @@ export function consumeSsoAuthFromUrl(): string | null {
       } catch (e) {
         console.warn('[SSO] failed to strip Auth param from url', e);
       }
+      // 门控拒绝须复位身份意图标志：不可信嵌入者的垃圾 Auth 不得触发调用方
+      // 的用户态清理（否则构成跨上下文登出 DoS——Cookie 与存储是整个浏览器
+      // 共享的，受害者在其他标签页的会话会被误清）；不复位时上一轮真实
+      // 消费遗留的 true 会在本轮不可信请求下继续生效
+      lastConsumeSawAuth = false;
       return null;
     }
-    // 身份意图信号在门控之后置位：不可信嵌入者的垃圾 Auth 不得触发调用方
-    // 的用户态清理（否则构成跨上下文登出 DoS——Cookie 与存储是整个浏览器
-    // 共享的，受害者在其他标签页的会话会被误清）
-    lastConsumeSawAuth = true;
 
     // ---- 父页面站点关系（供 Cookie 属性决策；按 SameSite 语义近似判定：
     // scheme 一致 + 注册域相同，见 isSameSite；http+跨站的拒绝在 writeSsoCookie）----
@@ -633,8 +644,14 @@ export function consumeSsoAuthFromUrl(): string | null {
       } catch (e) {
         console.warn('[SSO] failed to strip Auth param from url', e);
       }
+      // 空 Auth=（如父平台模板固定拼接但无 token）不代表身份意图——显式
+      // 复位标志，已登录用户不因垃圾参数被意外登出；也不残留上一轮的 true
+      lastConsumeSawAuth = false;
       return null;
     }
+    // 身份意图信号在"门控通过且 token 非空"时置位（无论后续写入成败）：
+    // 父平台确实交付了新凭证，调用方据此清理旧用户态并重新初始化
+    lastConsumeSawAuth = true;
 
     // 编码契约检查：疑似 percent-encoding 的 token 与后端原始值不一致会导致
     // 认证失败，此处仅告警不自动解码（无法区分编码值与本身含 % 的原始 token）
@@ -700,6 +717,9 @@ export function consumeSsoAuthFromUrl(): string | null {
     return token;
   } catch (e) {
     console.warn('[SSO] failed to consume Auth param from url', e);
+    // 消费过程异常时身份意图未确立（状态未知）——复位标志，保守不触发
+    // 调用方的登出清理
+    lastConsumeSawAuth = false;
     return null;
   }
 }
