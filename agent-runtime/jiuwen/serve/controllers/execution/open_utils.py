@@ -201,8 +201,7 @@ class CacheUtils:
                     # （外层 except 会把整个 aget 变成 None，导致上层误判 MISS 回源）；
                     # redis_ttl>0 防护：expire 负 TTL 在 Redis 中会直接删除条目
                     try:
-                        # expire 对不存在的 key 返回 False（非异常）：仅在真正续期
-                        # 成功时才标记，False 留给后台重写路径自愈
+                        # expire 对不存在的 key 返回 False（非异常），仅在续期成功时才标记
                         refreshed = bool(
                             await self.async_redis_cache.expire(
                                 unique_key, self.redis_ttl
@@ -213,9 +212,12 @@ class CacheUtils:
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
                 self._update_memory_cache(unique_key, value)
-                # 回填之后再标记（此刻条目必存在）；expire 失败不标记，下次命中重试
+                # 回填之后再标记（此刻条目必存在）；expire 失败不标记，下次命中重试；
+                # 被节流跳过时从直接续期记录恢复标记（双轨节流互通）
                 if refreshed:
                     self._mark_redis_refreshed(unique_key)
+                else:
+                    self._restore_marker_from_renew_ts(unique_key)
                 logger.info(
                     f"redis hit, put {key} in {self.cache_name} memory, "
                     f"size {self.memory_cache.currsize}/{self.memory_cache.maxsize}"
@@ -346,6 +348,22 @@ class CacheUtils:
         with self._renew_lock:
             self._renew_ts[unique_key] = time.time()
 
+    def _restore_marker_from_renew_ts(self, unique_key: str) -> None:
+        """L1 淘汰回填后，从直接续期节流记录恢复 last_refresh。
+
+        Redis 命中被节流跳过续期时回填的内存条目 last_refresh 为 -1，
+        下一次内存命中会立即再发一条后台 EXPIRE，弱化节流目标——
+        此处将直接续期的时间戳同步过来，使双轨节流互通。
+        """
+        with self._renew_lock:
+            ts = self._renew_ts.get(unique_key, -1.0)
+        if ts <= 0:
+            return
+        with self._mem_lock:
+            entry = self.memory_cache.get(unique_key)
+            if entry is not None:
+                entry["last_refresh"] = ts
+
     def _try_background_ttl_refresh(self, unique_key: str, key: str):
         """内存命中时节流续期 Redis TTL：后台任务执行，不阻塞读取路径。
 
@@ -383,15 +401,22 @@ class CacheUtils:
         """后台执行 EXPIRE 续期；失败/超时回滚冷却时间戳，冷却期后自动重试"""
         try:
             # 超时保护：防 Redis 半开连接（TCP 建立但不应答）导致后台任务
-            # 长期挂起、_BACKGROUND_TTL_TASKS 缓慢累积。
-            # expire 返回 False（key 已被外部删除/淘汰）时不做内存值重写：
-            # 无法区分"Redis 淘汰的无意丢失"与"apop 的有意显式失效"，
-            # 多实例部署下重写会覆盖显式失效、使旧数据复活（TTL=24h）；
-            # 条目丢失统一留给读取 miss 后由上层从 OBS 权威源重建
-            await asyncio.wait_for(
+            # 长期挂起、_BACKGROUND_TTL_TASKS 缓慢累积
+            refreshed = await asyncio.wait_for(
                 self.async_redis_cache.expire(unique_key, self.redis_ttl),
                 timeout=5,
             )
+            if not refreshed:
+                # key 已丢失（TTL 过期/淘汰/显式删除）：使内存条目立即过期，
+                # 下次读取 miss 后从 OBS 权威源重建（不用内存值直接回写——
+                # 内存对象可能已被调用方原地修改；key 为版本化不可变数据，
+                # 重建写回同版本相同数据，不影响 apop 显式失效；
+                # 且保证 MEM_CACHE_TTL_SECONDS=0 配置下仍能自愈）
+                with self._mem_lock:
+                    entry = self.memory_cache.get(unique_key)
+                    if entry is not None:
+                        # 置为过去时间戳使其立即过期（勿用 0/-1：那是永不过期语义）
+                        entry["expire_time"] = 1
         except asyncio.CancelledError:
             # 外部取消（如事件循环收尾）：回滚乐观标记，避免节流窗口内漏续期
             # 导致 Redis 条目提前过期；re-raise 保持任务的取消语义
@@ -481,8 +506,7 @@ class CacheUtils:
                 # 独立防御：续期失败不影响已取到的数据（与 aget 同款）；
                 # redis_ttl>0 防护：expire 负 TTL 在 Redis 中会直接删除条目
                 try:
-                    # expire 对不存在的 key 返回 False（非异常）：仅在真正续期
-                    # 成功时才标记，False 留给后台重写路径自愈
+                    # expire 对不存在的 key 返回 False（非异常），仅在续期成功时才标记
                     refreshed = bool(
                         await self.async_redis_cache.expire(
                             unique_key, self.redis_ttl
@@ -493,9 +517,12 @@ class CacheUtils:
                 except Exception as e:
                     logger.warning(f"cache ttl refresh failed for {key}: {e}")
             self._update_memory_cache(unique_key, value)
-            # 回填之后再标记（此刻条目必存在）；expire 失败不标记，下次命中重试
+            # 回填之后再标记（此刻条目必存在）；expire 失败不标记，下次命中重试；
+            # 被节流跳过时从直接续期记录恢复标记（双轨节流互通）
             if refreshed:
                 self._mark_redis_refreshed(unique_key)
+            else:
+                self._restore_marker_from_renew_ts(unique_key)
             return value, "redis"
 
         return None, ""

@@ -1296,14 +1296,21 @@ def sync_build_workflow(
     """sync build workflow"""
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(build_workflow(data, **kwargs))
-    finally:
-        # 运行本临时循环上挂起的后台续期任务，避免其随循环停止而悬挂
-        # （悬挂任务会持引用阻止循环对象被 GC，长期累积导致泄漏）。
-        # 注意不得 close 该循环：返回的 Workflow 的 ChatManager 绑定此循环，
-        # 后续 wf.stream / clean_up 会经 chat_manager.get_loop 继续使用它。
+        result = loop.run_until_complete(build_workflow(data, **kwargs))
+    except BaseException:
+        # 构建失败：无返回对象（ChatManager）持有该循环，drain 后显式关闭
+        # 防止事件循环及其 fd 依赖 GC 兜底回收
         try:
             drain_background_ttl_tasks(loop)
         except Exception as e:
-            # 仅记录不抛出：drain 是收尾清理，其失败不得掩盖构建结果或原始异常
             logger.warning(f"drain background ttl tasks failed: {e}")
+        loop.close()
+        raise
+    # 成功路径：返回的 Workflow 的 ChatManager 绑定此循环，后续 wf.stream /
+    # clean_up 会经 chat_manager.get_loop 继续使用，不得 close
+    try:
+        drain_background_ttl_tasks(loop)
+    except Exception as e:
+        # 仅记录不抛出：drain 是收尾清理，其失败不得掩盖构建结果
+        logger.warning(f"drain background ttl tasks failed: {e}")
+    return result

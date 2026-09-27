@@ -586,6 +586,93 @@ class TestBackgroundTTLRefresh:
         gate.set()
         assert cache_utils.memory_cache[key]["last_refresh"] == -1.0
 
+    @pytest.mark.asyncio
+    async def test_expire_false_expires_memory_entry(
+        self, mock_redis, mock_async_redis
+    ):
+        """expire 返回 False（key 丢失）时内存条目立即过期，下次读取 miss 回源。
+
+        保证 MEM_CACHE_TTL_SECONDS=0（内存永不过期）配置下，丢失的条目
+        仍能经 miss → OBS 权威源重建自愈。
+        """
+        from jiuwen.serve.controllers.execution.open_utils import CacheUtils
+
+        cu = CacheUtils(
+            capacity=3, should_serialize=True, cache_name="t_exp",
+            memory_ttl=3600, redis_ttl=60,
+        )
+        cu._redis_cache = mock_redis  # pylint: disable=protected-access
+        cu._async_redis_cache = mock_async_redis  # pylint: disable=protected-access
+        await cu.aput("k", {"v": 1})
+        cu.memory_cache["agent_runtime:t_exp:k"]["last_refresh"] = (
+            time.time() - 400
+        )
+        mock_async_redis.expire.return_value = False
+        v = await cu.aget("k", should_refresh_ttl=True)  # 内存命中→后台expire(False)
+        await asyncio.sleep(0.05)
+        assert v == {"v": 1}
+        # 内存条目已被置过期：下次读取 miss（不再返回旧内存值）
+        mock_async_redis.get.return_value = None
+        v2 = await cu.aget("k", should_refresh_ttl=True)
+        assert v2 is None
+
+    @pytest.mark.asyncio
+    async def test_throttled_backfill_restores_marker(
+        self, cache_utils, mock_async_redis
+    ):
+        """节流跳过续期时回填条目从 _renew_ts 恢复标记。
+
+        修复回归点：L1 淘汰→Redis 命中（节流跳过）→ 回填条目 last_refresh=-1
+        → 下一次内存命中立即再发一条后台 EXPIRE，弱化节流目标。
+        """
+        # 第一次 Redis 命中：直接续期成功（记录 _renew_ts + entry 标记）
+        mock_async_redis.get.return_value = pickle.dumps(
+            {"data": "v1"}, protocol=pickle.HIGHEST_PROTOCOL
+        )
+        v = await cache_utils.aget("key1", should_refresh_ttl=True)
+        assert v == {"data": "v1"}
+        # 模拟 L1 淘汰：清内存后再次 Redis 命中，节流窗口内跳过直接续期
+        cache_utils.memory_cache.clear()
+        mock_async_redis.expire.reset_mock()
+        v = await cache_utils.aget("key1", should_refresh_ttl=True)
+        assert v == {"data": "v1"}
+        mock_async_redis.expire.assert_not_called()  # 直接续期被节流
+        # 回填条目的标记已从 _renew_ts 恢复：下一次内存命中不再发后台 EXPIRE
+        v = await cache_utils.aget("key1", should_refresh_ttl=True)  # 内存命中
+        assert v == {"data": "v1"}
+        await asyncio.sleep(0.05)
+        mock_async_redis.expire.assert_not_called()
+
+    @staticmethod
+    def test_sync_build_failure_closes_loop(mock_async_redis):
+        """构建失败时临时循环被显式关闭（防事件循环 fd 依赖 GC 兜底回收）。"""
+        from unittest.mock import patch as mock_patch
+
+        from jiuwen.orchestration.flow import workflow as wf_mod
+
+        created = {}
+        real_new_loop = asyncio.new_event_loop
+
+        def tracking_new_event_loop():
+            loop = real_new_loop()
+            created["loop"] = loop
+            return loop
+
+        async def failing_build(data, **kwargs):
+            raise RuntimeError("build failed")
+
+        with mock_patch.object(
+            wf_mod.asyncio, "new_event_loop", tracking_new_event_loop
+        ), mock_patch.object(wf_mod, "build_workflow", failing_build):
+            raised = False
+            try:
+                wf_mod.sync_build_workflow({"ir_path": "x"})
+            except RuntimeError:
+                raised = True
+        assert raised
+        # 异常路径：无返回对象持有该循环，drain 后应显式关闭
+        assert created["loop"].is_closed()
+
 
 class TestCorruptedEntrySelfHealing:
     """损坏缓存条目与 Redis 条目丢失的自愈行为测试。"""
@@ -665,7 +752,7 @@ class TestDirectExpireReturnValue:
         mock_async_redis.expire.return_value = False
         result = await cache_utils.aget("key1", should_refresh_ttl=True)
         assert result == {"data": "v1"}  # 数据仍正确返回
-        # 未标记 → 下次内存命中立即走后台续期（发现 False 后 aput 重写自愈）
+        # 未标记 → 下次内存命中立即走后台续期（发现 False 后置内存过期自愈）
         assert (
             cache_utils.memory_cache["agent_runtime:test:key1"]["last_refresh"] == -1.0
         )
