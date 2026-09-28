@@ -269,11 +269,29 @@ class DifyDSLAdapterTest {
     }
 
     /**
-     * 在 mock 的请求上下文与可用模型列表下执行 LLM 节点导入转换（bug④/检视 #2#4 用例公共脚手架）。
+     * 检视 #5 哨兵：parameter-extractor 节点同样构造 configs.model（且仅填 model_name），
+     * 必须同走 fillModelDeploymentInfo 补全 deployment_id/model_type——否则含参数提取节点的
+     * 工作流导入后 IR 仍生成 "null|模型名" 畸形名与空 extension，bug④ 修复未覆盖该节点类型。
+     */
+    @Test
+    void convertParamExtractorNodeFillsModelDeploymentId() {
+        WorkflowInfo info = convertWithMockedRegistry(
+            List.of(availableModel("ut-deploy-1", "ut-model", "LLM")),
+            () -> buildParamExtractorDsl("ut-model"));
+
+        JSONObject model = findNodeModel(info, "node_param_ext");
+        assertEquals("ut-model", model.getString("model_name"));
+        assertEquals("ut-deploy-1", model.getString("model_deployment_id"));
+        assertEquals("LLM", model.getString("model_type"));
+    }
+
+    /**
+     * 在 mock 的请求上下文与可用模型列表下执行导入转换（bug④/检视 #2#4#5 用例公共脚手架）。
      * queryAvailableServices 以严格参数打桩（"LLM" + containRouter=true）：实现若改查询路径
      * 或参数，mock 不命中返回 null → 走降级留空 → 断言失败，锁定与 UI 下拉同源的调用契约。
      */
-    private WorkflowInfo convertLlmWithMockedRegistry(String modelName, List<ModelServiceData> available) {
+    private WorkflowInfo convertWithMockedRegistry(List<ModelServiceData> available,
+        java.util.function.Supplier<Map<String, Object>> dslBuilder) {
         ModelServiceManager manager = mock(ModelServiceManager.class);
         when(manager.queryAvailableServices("ut-project", "ut-workspace", "LLM", true)).thenReturn(available);
 
@@ -283,10 +301,14 @@ class DifyDSLAdapterTest {
             requestContext.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("ut-workspace");
             springBeans.when(() -> SpringBeanUtils.getBean(ModelServiceManager.class)).thenReturn(manager);
 
-            Map<String, Object> dsl = buildLlmDsl(modelName);
+            Map<String, Object> dsl = dslBuilder.get();
             adapter.validateFormat(dsl);
             return adapter.convert(dsl);
         }
+    }
+
+    private WorkflowInfo convertLlmWithMockedRegistry(String modelName, List<ModelServiceData> available) {
+        return convertWithMockedRegistry(available, () -> buildLlmDsl(modelName));
     }
 
     private ModelServiceData availableModel(String id, String modelName, String modelType) {
@@ -297,11 +319,15 @@ class DifyDSLAdapterTest {
         return data;
     }
 
-    private JSONObject findLlmNodeModel(WorkflowInfo info) {
+    private JSONObject findNodeModel(WorkflowInfo info, String nodeId) {
         JSONObject details = new JSONObject(info.getWorkflowDetails());
-        JSONObject llmNode = findNodeById(details.getJSONArray("nodes"), "node_llm");
-        assertNotNull(llmNode);
-        return llmNode.getJSONObject("configs").getJSONObject("model");
+        JSONObject node = findNodeById(details.getJSONArray("nodes"), nodeId);
+        assertNotNull(node, "节点应完成转换: " + nodeId);
+        return node.getJSONObject("configs").getJSONObject("model");
+    }
+
+    private JSONObject findLlmNodeModel(WorkflowInfo info) {
+        return findNodeModel(info, "node_llm");
     }
 
     private JSONObject findNodeById(JSONArray nodes, String id) {
@@ -457,6 +483,28 @@ class DifyDSLAdapterTest {
             edgeOf("e_llm_answer", "llm", "source", "answer", "llm", "answer")));
         graph.put("viewport", Map.of("x", 0, "y", 0, "zoom", 1));
         return wrapGraph(graph, "ut-dify-llm");
+    }
+
+    /**
+     * start → parameter-extractor(模型名可注入, 带一个提取参数) → answer。
+     */
+    private Map<String, Object> buildParamExtractorDsl(String modelName) {
+        Map<String, Object> extData = new HashMap<>();
+        extData.put("type", "parameter-extractor");
+        extData.put("title", "参数提取");
+        extData.put("desc", "");
+        extData.put("model", Map.of("name", modelName, "completion_params", Map.of("temperature", 0.5)));
+        extData.put("parameters", List.of(
+            Map.of("name", "city", "description", "城市", "required", true, "type", "string")));
+        Map<String, Object> extNode = nodeOf("param_ext", extData, 250, 100);
+
+        Map<String, Object> graph = new HashMap<>();
+        graph.put("nodes", List.of(startNodeOf(), extNode, answerNodeOf("answer", 450)));
+        graph.put("edges", List.of(
+            edgeOf("e_start_ext", "start", "source", "param_ext", "start", "parameter-extractor"),
+            edgeOf("e_ext_answer", "param_ext", "source", "answer", "parameter-extractor", "answer")));
+        graph.put("viewport", Map.of("x", 0, "y", 0, "zoom", 1));
+        return wrapGraph(graph, "ut-dify-param-ext");
     }
 
     private Map<String, Object> wrapGraph(Map<String, Object> graph, String appName) {
