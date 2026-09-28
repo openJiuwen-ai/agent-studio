@@ -48,7 +48,7 @@ async def test_batch_order_alignment():
     irs = {"p1": {"id": 1}, "p2": {"id": 2}, "p3": {"id": 3}}
 
     async def fake_load(path):
-        return irs[path]
+        return irs.get(path)
 
     with patch(f"{_OPEN}.async_ir_load", new=fake_load):
         results = await async_ir_load_batch(["p1", "p2", "p3"])
@@ -189,8 +189,10 @@ async def test_batch_respects_max_concurrency():
 
 @pytest.mark.asyncio
 async def test_batch_default_concurrency_from_settings():
-    """不显式传 max_concurrency 时,上限取 settings.cache.ir_load_max_concurrency
-    (env IR_LOAD_MAX_CONCURRENCY,默认 5)。"""
+    """不显式传 max_concurrency 时,上限取 settings.cache.ir_load_max_concurrency。
+
+    env IR_LOAD_MAX_CONCURRENCY,默认 5。
+    """
     state = {"active": 0, "max_active": 0}
 
     async def fake_load(path):
@@ -315,7 +317,7 @@ async def test_extract_node_defs_swallow_load_failure():
     }
 
     async def fake_batch(paths, **kwargs):
-        return [children_by_path[p] for p in paths]
+        return [children_by_path.get(p) for p in paths]
 
     batch = AsyncMock(side_effect=fake_batch)
     ir_parent = {
@@ -361,7 +363,7 @@ async def test_extract_node_defs_children_order():
     children_by_path = {"wf/c1": ir_child1, "wf/c2": ir_child2}
 
     async def fake_batch(paths, **kwargs):
-        return [children_by_path[p] for p in paths]
+        return [children_by_path.get(p) for p in paths]
 
     batch = AsyncMock(side_effect=fake_batch)
     ir_parent = {
@@ -419,7 +421,7 @@ async def test_create_all_agents_children_order():
     irs_by_path = {"ir/c1": ir_c1, "ir/c2": ir_c2}
 
     async def fake_batch(paths, **kwargs):
-        return [irs_by_path[p] for p in paths]
+        return [irs_by_path.get(p) for p in paths]
 
     batch = AsyncMock(side_effect=fake_batch)
     agent_ir_utils_mock = MagicMock()
@@ -446,8 +448,10 @@ async def test_create_all_agents_children_order():
 
 @pytest.mark.asyncio
 async def test_memory_config_multiagents_merged_batch():
-    """记忆配置收集:MultiAgents 的 agents+workflows 合并为一次预取,
-    递归顺序保持"根 → agents → workflows"。"""
+    """记忆配置收集:MultiAgents 的 agents+workflows 合并为一次预取。
+
+    递归顺序保持"根 → agents → workflows"。
+    """
     ir_a1 = {
         "agentId": "a1",
         "agentVersion": "0.6.0",
@@ -479,10 +483,13 @@ async def test_memory_config_multiagents_merged_batch():
     batch = AsyncMock(return_value=[ir_a1, ir_a2, ir_w1])
     # 记录 from_config_dict 的调用顺序(每个节点带 memory 时调用一次)
     visit_order = []
+
+    def fake_from_config_dict(cfg):
+        visit_order.append(cfg["marker"])
+        return MagicMock()
+
     memory_ir_config = MagicMock()
-    memory_ir_config.from_config_dict.side_effect = (
-        lambda cfg: (visit_order.append(cfg["marker"]), MagicMock())[1]
-    )
+    memory_ir_config.from_config_dict.side_effect = fake_from_config_dict
 
     with patch(f"{_CONV}.async_ir_load_batch", new=batch), patch(
         f"{_CONV}.MemoryIrConfig", new=memory_ir_config
