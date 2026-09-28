@@ -13,6 +13,10 @@
   window.pocVersion = 'version_placeholder';
   window.user = 'user_placeholder';
   window.largeDslBytesThreshold = 'large_dsl_placeholder';
+  // SSO iframe 嵌入：可信父平台白名单（完整 origin，含协议与端口）。
+  // 构建期烧入镜像，免现场手工注入；更换嵌入方时改此处后重新构建。
+  // 注意：值 = 客户平台（父页面）的 origin，不是 console 自身地址
+  window.__SSO_TRUSTED_PARENT_ORIGINS__ = ['http://122.219.72.238:8081'];
 </script>
 
 <div id="J_container">

@@ -329,4 +329,96 @@ public class SsoAuthenticationFilterTest {
         verify(ssoAuthenticationService).authenticate("valid-token");
         verify(filterChain).doFilter(request, response);
     }
+
+    private void setAllowedOrigins(List<String> origins) {
+        ReflectionTestUtils.setField(filter, "allowedOrigins", origins);
+    }
+
+    private SimpleUser mockUser() {
+        return SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
+    }
+
+    // 场景：跨站 Origin 不在白名单，403 拒绝且不进入认证逻辑
+    @Test
+    void doFilter_crossSiteOriginNotInWhitelist_shouldReturn403() throws Exception {
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader("Origin")).thenReturn("http://evil.example.com");
+        when(request.getHeader("Host")).thenReturn("console.example.com");
+        when(request.getMethod()).thenReturn("GET");
+        when(response.getWriter()).thenReturn(writer);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(response).setStatus(HttpServletResponse.SC_FORBIDDEN);
+        verify(response).setContentType("application/json");
+        verify(writer).write("{\"code\":\"40301\",\"message\":\"Origin not allowed\"}");
+        verify(filterChain, never()).doFilter(any(), any());
+        verify(ssoAuthenticationService, never()).authenticate(anyString());
+    }
+
+    // 场景：同源 Origin（host:port 与 Host 头一致）正常进入认证
+    @Test
+    void doFilter_sameOriginAsHost_shouldProceed() throws Exception {
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader("Origin")).thenReturn("http://console.example.com:8080");
+        when(request.getHeader("Host")).thenReturn("console.example.com:8080");
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(mockUser()));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(ssoAuthenticationService).authenticate("valid-token");
+        verify(filterChain).doFilter(request, response);
+    }
+
+    // 场景：白名单内的父平台 Origin 正常进入认证
+    @Test
+    void doFilter_whitelistedParentOrigin_shouldProceed() throws Exception {
+        setAllowedOrigins(List.of("http://parent.example.com:8081"));
+
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader("Origin")).thenReturn("http://parent.example.com:8081");
+        when(request.getHeader("Host")).thenReturn("console.example.com");
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(mockUser()));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(ssoAuthenticationService).authenticate("valid-token");
+        verify(filterChain).doFilter(request, response);
+    }
+
+    // 场景：OPTIONS 预检（不携带凭证）跳过 Origin 校验，未被 403 拦截
+    @Test
+    void doFilter_optionsPreflight_shouldSkipOriginCheck() throws Exception {
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader("Origin")).thenReturn("http://evil.example.com");
+        when(request.getHeader("Host")).thenReturn("console.example.com");
+        when(request.getMethod()).thenReturn("OPTIONS");
+        when(request.getHeader(HEADER_NAME)).thenReturn(null);
+        when(request.getCookies()).thenReturn(null);
+        when(response.getWriter()).thenReturn(writer);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        // 未被 Origin 校验 403 拦截，进入后续认证逻辑（缺 token 返回 401）
+        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        verify(response, never()).setStatus(HttpServletResponse.SC_FORBIDDEN);
+    }
+
+    // 场景：无 Origin 头（服务间调用/同源 GET）不受 Origin 校验影响
+    @Test
+    void doFilter_noOriginHeader_shouldProceed() throws Exception {
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader("Origin")).thenReturn(null);
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(mockUser()));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(ssoAuthenticationService).authenticate("valid-token");
+        verify(filterChain).doFilter(request, response);
+    }
 }

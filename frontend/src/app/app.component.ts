@@ -317,7 +317,13 @@ export class AppComponent implements OnInit {
   // sessionStorage，两处都要清；SPACE_OPTIONS（init_space 写入的完整空间
   // 列表）与 CUR_SPACE_OPTIONS（当前空间）同为 sessionStorage 的旧空间态。
   clearStaleUserState(clearAccessToken: boolean): void {
+    // AGENT_SID 当前由后端 ServletUtils.buildAgentSidCookie 以 path=/ 且不带
+    // Domain 属性（host-only）下发，首条 host-only 删除串即可命中；追加
+    // domain 变体防御后端/网关未来改以 Domain 属性下发（或历史上存在
+    // domain 版 Cookie）时删除静默失败——写入已过期的 domain Cookie 无
+    // 残留副作用，IP 部署下 domain 属性非法被浏览器忽略、同样无害
     document.cookie = 'AGENT_SID=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    document.cookie = `AGENT_SID=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${location.hostname}`;
     if (clearAccessToken) {
       clearSsoCookie();
     }

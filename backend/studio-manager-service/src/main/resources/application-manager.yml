@@ -913,6 +913,10 @@ auth:
     validate-url: ${auth_sso_validate_url:}
     # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
     header: ${auth_sso_header:Access-Token}
+    # 允许携带认证凭证跨站访问的父平台 origin 白名单（逗号分隔，完整 origin 含协议与端口）。
+    # 跨站 iframe SSO 部署必配（与前端 CSRF 部署确认 __SSO_CSRF_PROTECTION_CONFIRMED__ 配套）；
+    # 留空则 Origin 校验仅放行同源请求。环境变量：auth_sso_allowed_origins
+    allowed-origins: ${auth_sso_allowed_origins:}
   # SSO 响应字段与用户属性映射（支持点号分隔的多层嵌套路径，如 result.user_id）
   user-info:
     claims:

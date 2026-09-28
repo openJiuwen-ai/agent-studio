@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -46,6 +47,26 @@ public class AuthProperties {
          * 配置项: auth.sso.header
          */
         private String header;
+
+        /**
+         * 允许携带认证凭证跨站访问的父平台 origin 白名单（完整 origin，含协议与端口）。
+         * 跨站 iframe SSO 部署必配（与前端 CSRF 部署确认配套）；留空则 Origin 校验
+         * 仅放行同源请求。
+         * 配置项: auth.sso.allowed-origins
+         */
+        private List<String> allowedOrigins = new ArrayList<>();
+
+        /**
+         * 逗号分隔的 origin 白名单字符串，设置后覆盖 allowedOrigins 列表
+         */
+        public void setAllowedOrigins(String allowedOrigins) {
+            if (StringUtils.hasText(allowedOrigins)) {
+                this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toList());
+            }
+        }
     }
 
     /**

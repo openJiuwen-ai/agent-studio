@@ -313,11 +313,51 @@ const TWO_PART_PUBLIC_SUFFIXES = new Set([
   'com.au', 'net.au', 'org.au',
   'co.jp', 'or.jp', 'ne.jp',
   'co.kr', 'co.nz', 'com.br', 'com.mx', 'com.tr',
+  // 亚太/中东/非洲高频 ccTLD 二段后缀
+  'com.hk', 'com.tw', 'com.sg', 'com.my', 'com.id', 'com.vn', 'com.ph',
+  'co.th', 'com.pk', 'com.bd', 'com.sa', 'com.ae', 'com.qa', 'com.kw',
+  'com.om', 'com.bh', 'com.jo', 'com.eg', 'com.ng', 'co.ke', 'co.za',
+  'co.il', 'org.il', 'com.ua',
+  // 美洲高频 ccTLD 二段后缀
+  'com.ar', 'com.pe', 'com.co', 'com.ve', 'com.ec', 'com.uy', 'com.py',
+  'com.bo', 'com.do', 'com.gt', 'com.sv', 'com.pa', 'com.ni',
   // 常见私有后缀（PSL 私有域）：命中时各子域互为独立注册域（站点），
   // 防止 a.github.io 与 b.github.io 被误判为同站导致 Cookie 静默失效
   'github.io', 'gitlab.io', 'pages.dev', 'vercel.app',
   'netlify.app', 'web.app', 'firebaseapp.com', 'herokuapp.com',
 ]);
+
+/** 通用 TLD：其下注册域恒为"次级标签+TLD"两段（如 example.com），末两段截断可靠 */
+const GENERIC_TLDS = new Set([
+  'com', 'net', 'org', 'edu', 'gov', 'mil', 'int', 'info', 'biz', 'io', 'dev',
+  'app', 'me', 'tv', 'cc', 'xyz', 'online', 'site', 'tech', 'ai', 'co',
+]);
+
+/**
+ * 注册域是否按"末两段"近似截断且该截断不可靠：主机三段以上、末段为非
+ * 通用 TLD（ccTLD）且末两段未收录进 TWO_PART_PUBLIC_SUFFIXES——此时末
+ * 两段可能实为未收录的二段公共后缀（如某个未收录的 com.xx），其注册域
+ * 被错判为该后缀本身，不同注册域的主机会被误判为同站。
+ * 已知残余盲区：gTLD 下的未收录私有后缀（PSL 私有域远多于上表收录），
+ * 该场景末段在 GENERIC_TLDS 中、本函数判为可靠——误差方向仍是同站误判，
+ * 由 isSameSite 的告警语义兜底。
+ */
+function isApproximateRegistrableDomain(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host.includes(':')) {
+    return false; // IPv6 整串为站点单位（无后缀概念）
+  }
+  const labels = host.split('.');
+  if (labels.every((label) => /^\d+$/.test(label))) {
+    return false; // IPv4 整串为站点单位，registrableDomainOf 的截断不适用
+  }
+  if (labels.length <= 2) {
+    return false;
+  }
+  const tld = labels[labels.length - 1];
+  const lastTwo = labels.slice(-2).join('.');
+  return !GENERIC_TLDS.has(tld) && !TWO_PART_PUBLIC_SUFFIXES.has(lastTwo);
+}
 
 /**
  * 近似计算注册域（eTLD+1）：IP 地址整串为站点单位；末两段命中二级公共
@@ -347,12 +387,31 @@ function registrableDomainOf(hostname: string): string {
  * SameSite 语义的近似同站判定：scheme 一致（schemeful same-site，http 与
  * https 互为跨站）且注册域相同。修复此前 hostname 前后缀比较对兄弟子域
  * （a.example.com vs b.example.com，共享注册域属同站）与协议差异的误判。
+ * 判定为同站但注册域属不可靠截断（未收录二段公共后缀，见
+ * isApproximateRegistrableDomain）时输出告警——误判同站会使写入走默认
+ * Lax 分支，真实跨站 iframe 中该 Cookie 不被请求携带，SSO 静默失效且
+ * 无其他信号；此告警是该场景的唯一排障入口。
  */
 function isSameSite(refUrl: URL): boolean {
   if (refUrl.protocol !== location.protocol) {
     return false;
   }
-  return registrableDomainOf(refUrl.hostname) === registrableDomainOf(location.hostname);
+  const sameDomain =
+    registrableDomainOf(refUrl.hostname) === registrableDomainOf(location.hostname);
+  if (
+    sameDomain &&
+    (isApproximateRegistrableDomain(refUrl.hostname) ||
+      isApproximateRegistrableDomain(location.hostname))
+  ) {
+    console.warn(
+      '[SSO] same-site judgment relies on the approximated public suffix table ' +
+        '(unlisted ccTLD second-level suffix); if the parent is actually on a different ' +
+        'registrable domain, the default-Lax cookie will not be sent on cross-site ' +
+        'requests and SSO will fail silently — verify the topology, extend ' +
+        'TWO_PART_PUBLIC_SUFFIXES, or use the cross-site https deployment (CSRF ack)'
+    );
+  }
+  return sameDomain;
 }
 
 /**

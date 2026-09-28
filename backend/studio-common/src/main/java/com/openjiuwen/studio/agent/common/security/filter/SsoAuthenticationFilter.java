@@ -39,7 +39,11 @@ import jakarta.servlet.http.HttpServletResponse;
  * SSO 认证过滤器
  *
  * <p>拦截请求并从请求头或 Cookie 中提取 Access-Token，调用 SSO 鉴权服务验证身份。
- * 支持通过 Ant 模式配置排除路径（不需要鉴权的请求直接放行）。</p>
+ * 支持通过 Ant 模式配置排除路径（不需要鉴权的请求直接放行）。
+ * 认证前先做 Origin 兜底校验（跨站 CSRF 防护，见 {@link OriginVerifier}）：
+ * 携带 Origin 头的请求须为同源或命中 auth.sso.allowed-origins 白名单，
+ * 否则 403——该白名单与前端 iframe SSO 的跨站 Cookie 部署确认
+ * （__SSO_CSRF_PROTECTION_CONFIRMED__）配套，为其技术兜底。</p>
  */
 @Slf4j
 public class SsoAuthenticationFilter extends OncePerRequestFilter {
@@ -50,6 +54,8 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
 
     private final List<String> excludePaths;
 
+    private final List<String> allowedOrigins;
+
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     private AuthenticationEntryPoint authenticationEntryPoint;
@@ -57,13 +63,14 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
     /**
      * @param headerName              携带 Access-Token 的请求头名称
      * @param ssoAuthenticationService SSO 鉴权服务
-     * @param authProperties           认证配置（含排除路径等）
+     * @param authProperties           认证配置（含排除路径与 Origin 白名单等）
      */
     public SsoAuthenticationFilter(String headerName, SsoAuthenticationService ssoAuthenticationService,
         AuthProperties authProperties) {
         this.headerName = headerName;
         this.ssoAuthenticationService = ssoAuthenticationService;
         this.excludePaths = authProperties.getPath().getExcluded();
+        this.allowedOrigins = authProperties.getSso().getAllowedOrigins();
     }
 
     /**
@@ -74,7 +81,7 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * 核心过滤逻辑：排除路径放行 → 提取 Token → 调用 SSO 鉴权 → 设置安全上下文
+     * 核心过滤逻辑：排除路径放行 → Origin 兜底校验 → 提取 Token → 调用 SSO 鉴权 → 设置安全上下文
      */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -82,6 +89,17 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
         String requestUri = request.getRequestURI();
         if (isExcluded(requestUri)) {
             filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Origin 兜底校验（跨站 CSRF 防护，放行语义见 OriginVerifier）：无 Origin
+        // 头与 OPTIONS 预检不受影响，存量同源部署零改动
+        if (!OriginVerifier.isAllowed(request, allowedOrigins)) {
+            log.warn("SSO authentication failed: Origin {} is not allowed for uri {}",
+                request.getHeader("Origin"), requestUri);
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"code\":\"40301\",\"message\":\"Origin not allowed\"}");
             return;
         }
 

@@ -152,6 +152,10 @@ spec:
             # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
             - name: auth_sso_validate_url
               value: ''
+            # 允许携带认证凭证跨站访问的父平台 origin 白名单（逗号分隔，完整 origin 含协议与端口）。
+            # 跨站 iframe SSO 部署必配（与前端 CSRF 部署确认配套）；留空则 Origin 校验仅放行同源请求
+            - name: auth_sso_allowed_origins
+              value: ''
             # ======== [选填] 知识库模式（CUSTOM 模式对接外部 LakeSearch）========
             # 知识库来源模式：LakeSearch（默认，内置 LakeSearch 服务）/ CUSTOM（对接外部 LakeSearch）
             - name: knowledge_source
