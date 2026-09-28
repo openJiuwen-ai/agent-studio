@@ -11,7 +11,9 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
 
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,8 +51,14 @@ public class CodeNodeConverter extends AbstractSDSLNodeConverter {
                 WorkflowFieldVO workflowFieldVO = new WorkflowFieldVO();
                 workflowFieldVO.setSource(WorkflowFieldVO.SourceEnum.USER);
                 workflowFieldVO.setName((String) variable.get("variable"));
-                workflowFieldVO.setType((String) variable.get("value_type"));
                 workflowFieldVO.setValue(adaptWorkflowFieldVoValue(selector, workflowNodeMap, workflowNodeVO));
+                String valueType = (String) variable.get("value_type");
+                if (StringUtils.isNotEmpty(valueType)) {
+                    workflowFieldVO.setType(valueType);
+                } else if (!CollectionUtils.isEmpty(selector)) {
+                    // Dify 代码节点 variables 不携带 value_type，按引用目标节点的输出推断类型
+                    setTypeAndSchemaByName(workflowFieldVO, workflowNodeMap.get(selector.get(0)), selector);
+                }
                 return workflowFieldVO;
             }).toList();
         }
@@ -85,7 +93,9 @@ public class CodeNodeConverter extends AbstractSDSLNodeConverter {
     public Map<String, Object> adaptConfigs(Map<String, Object> data) {
         Map<String, Object> configs = new HashMap<>();
         configs.put(CommonConstant.DIFY.CODE, data.get("code"));
-        configs.put(CommonConstant.DIFY.EXEC_ENV, "fg");
+        // Dify 代码无法生成有效的 FunctionGraph 绑定（无 fg_id），且运行时仅支持 local/sandbox，
+        // 统一转换为 sandbox 执行环境，避免导入后代码节点因未绑定函数而显示为空
+        configs.put(CommonConstant.DIFY.EXEC_ENV, "sandbox");
         if ("fail-branch".equals(data.get("error_strategy"))) {
             Map<String, Object> failBranchMap = new HashMap<>();
             failBranchMap.put("handle_type", "errorbranch");

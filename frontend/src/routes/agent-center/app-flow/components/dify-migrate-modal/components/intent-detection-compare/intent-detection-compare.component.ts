@@ -30,6 +30,7 @@ export class IntentDetectionCompareComponent {
 
   public oldModelName: string;
   public selected;
+  private modelAutoMatched = false;
 
   public modelValidation = {
     errorMessage: {
@@ -53,6 +54,29 @@ export class IntentDetectionCompareComponent {
       model_name: modelInfo.modelInfo.model_name,
       model_type: modelInfo.modelInfo.model_type
     }
+  }
+
+  /**
+   * 模型列表加载后，按 Dify 模型名自动匹配同名已部署模型并回填 model_deployment_id，
+   * 避免跳过迁移比对时模型部署标识为空；用户手动改选后不再覆盖
+   */
+  public onModelOptionsLoaded(options: any[]): void {
+    if (this.modelAutoMatched || this.node.configs.llm?.model?.model_deployment_id || !this.oldModelName) {
+      return;
+    }
+    const matched = this.findModelByName(options);
+    if (matched) {
+      this.modelAutoMatched = true;
+      this.selected = matched.id;
+      this.updateModel({ id: matched.id, modelInfo: matched });
+    }
+  }
+
+  private findModelByName(options: any[]): any | undefined {
+    const targetName = String(this.oldModelName).trim().toLowerCase();
+    return (options || [])
+      .flatMap(group => group?.children || [])
+      .find(model => model?.model_name?.trim().toLowerCase() === targetName);
   }
 
 }
