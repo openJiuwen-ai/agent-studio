@@ -189,7 +189,8 @@ export const copyToClipboard = async (
     // 创建一个临时的可编辑区域
     const tempDiv = document.createElement('div')
     tempDiv.contentEditable = 'true'
-    tempDiv.innerHTML = text.replace(/\n/g, '<br>') // 将换行符转换为HTML换行
+    tempDiv.style.whiteSpace = 'pre-wrap'
+    tempDiv.textContent = text
     tempDiv.style.position = 'fixed'
     tempDiv.style.left = '-9999px'
     tempDiv.style.top = '0'

@@ -54,7 +54,7 @@ def send_sms(config: TwilioConfig, to_number: str, body: str) -> None:
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Authorization", f"Basic {creds}")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    with urllib.request.urlopen(req):
+    with urllib.request.urlopen(req, timeout=10):
         pass
 
 

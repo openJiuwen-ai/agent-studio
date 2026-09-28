@@ -31,7 +31,7 @@ def auth(auth_credentials: dict) -> dict:
             response = requests.post(
                 url,
                 data=json.dumps(payload),
-                verify=False,
+                verify=True,
                 headers={'Content-Type': 'application/json'},
                 timeout=100
             )

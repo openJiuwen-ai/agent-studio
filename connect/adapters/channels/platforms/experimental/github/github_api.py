@@ -73,5 +73,5 @@ def post_comment(config: GitHubConfig, repo_full_name: str, issue_number: int, b
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2022-11-28")
     req.add_header("User-Agent", "OpenJiuwen-Bot/1.0")
-    with urllib.request.urlopen(req):
+    with urllib.request.urlopen(req, timeout=10):
         pass
