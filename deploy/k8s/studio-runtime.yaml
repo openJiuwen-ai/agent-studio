@@ -50,6 +50,13 @@ spec:
             # Redis pipeline 事务开关，true 使用标准事务，false 不使用事务
             - name: REDIS_TRANSACTION_ENABLED
               value: 'true'
+            # Redis 连接池上限（common_utils RedisClientManager，IR/模型缓存等共用），代码默认 50。
+            # IR 并发预取冷缓存下瞬时连接需求 ≈ 并发构建请求数 × IR_LOAD_MAX_CONCURRENCY，核算见 .env.template
+            - name: REDIS_MAX_CONNECTIONS
+              value: '50'
+            # 构建期子 IR 并发预取的单批并发上限（async_ir_load_batch，仅 Runtime 消费），默认 5
+            - name: IR_LOAD_MAX_CONCURRENCY
+              value: '5'
             # ======== [必填] 对象存储 ========
             - name: DATASOURCE_OBS_SERVER
               value: ''

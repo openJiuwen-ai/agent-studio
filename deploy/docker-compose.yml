@@ -270,6 +270,11 @@ services:
       REDIS_MODE: ${REDIS_MODE:-single}
       REDIS_DATABASE: ${REDIS_DATABASE:-0}
       REDIS_TRANSACTION_ENABLED: ${REDIS_TRANSACTION_ENABLED:-true}
+      # Redis 连接池上限（common_utils RedisClientManager，IR/模型缓存等共用）。
+      # IR 并发预取冷缓存下瞬时需求 ≈ 并发构建请求数 × IR_LOAD_MAX_CONCURRENCY，核算见 .env.template
+      REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
+      # 构建期子 IR 并发预取单批上限（仅 Runtime 消费）
+      IR_LOAD_MAX_CONCURRENCY: ${IR_LOAD_MAX_CONCURRENCY:-5}
       # 知识检索召回阈值范围，M侧和R侧共用，默认 0~1
       KNOWLEDGE_RECALL_THRESHOLD_MIN: ${KNOWLEDGE_RECALL_THRESHOLD_MIN:-0}
       KNOWLEDGE_RECALL_THRESHOLD_MAX: ${KNOWLEDGE_RECALL_THRESHOLD_MAX:-1}
@@ -389,6 +394,8 @@ services:
       REDIS_MODE: ${REDIS_MODE:-single}
       REDIS_DATABASE: ${REDIS_DATABASE:-0}
       REDIS_TRANSACTION_ENABLED: ${REDIS_TRANSACTION_ENABLED:-true}
+      # Redis 连接池上限（与 studio-runtime 同名变量，各进程独立生效）
+      REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
       STORE_DB_TYPE: ${STORE_DB_TYPE:-mysql}
       STORE_DB_HOST: ${STORE_DB_HOST:-mysql}
       STORE_DB_PORT: ${STORE_DB_PORT:-3306}
