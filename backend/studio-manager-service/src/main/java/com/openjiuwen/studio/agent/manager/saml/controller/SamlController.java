@@ -21,7 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,7 +43,6 @@ public class SamlController {
     private static final String REDIS_REQUEST_PREFIX = "original_request:";
     private final UserService userService;
     private final SessionService sessionService;
-    private final RedisTemplate<String, Object> redisTemplate;
     @Value("${saml.domainId:0}")
     private String domainId;
     @Value("${saml.projectId:0}")

@@ -14,6 +14,7 @@ import com.openjiuwen.studio.agent.common.crypt.Ciphers;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.redis.config.RedisClientAutoConfig;
 import com.openjiuwen.studio.agent.common.redis.config.RedisClientConfig;
+import com.openjiuwen.studio.agent.common.redis.provider.RedisClientProviderConfig;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,8 +50,16 @@ class RedisClientAutoConfigTest {
         mockitoCloseable.close();
     }
 
+    private RedisClientProviderConfig providerConfig(String type, String className, String legacyType) {
+        RedisClientProviderConfig config = new RedisClientProviderConfig();
+        config.setProviderType(type);
+        config.setProviderClass(className);
+        config.setLegacyClientType(legacyType);
+        return config;
+    }
+
     @Test
-    void test_redissionClient_should_return_not_null() throws Exception {
+    void test_redisClient_providerTypeRedisson_should_return_not_null() throws Exception {
         try (MockedStatic<Redisson> mockedStaticRedisson = mockStatic(Redisson.class, RETURNS_DEEP_STUBS)) {
             // Given
             RedissonClient redissonClient = mock(RedissonClient.class, Answers.RETURNS_DEEP_STUBS);
@@ -58,8 +67,9 @@ class RedisClientAutoConfigTest {
 
             RedisClientConfig redisClientConfig = new RedisClientConfig(new Ciphers(null, null));
 
-            // When
-            RedisClient result = redisClientAutoConfig.redissionClient(redisClientConfig);
+            // When：新式配置 redis.provider.type=redisson
+            RedisClient result = redisClientAutoConfig.redisClient(
+                providerConfig("redisson", null, null), redisClientConfig);
 
             // Then
             assertNotNull(result);
@@ -67,26 +77,36 @@ class RedisClientAutoConfigTest {
     }
 
     @Test
-    void test_redissionClient_should_not_throw_exception() throws Exception {
-        assertThrows(NullPointerException.class, () -> {
-            try (MockedStatic<Redisson> mockedStaticRedisson = mockStatic(Redisson.class, RETURNS_DEEP_STUBS)) {
-                // Given
-                mockedStaticRedisson.when(() -> Redisson.create(any(Config.class))).thenReturn(null);
+    void test_redisClient_providerTypeMemory_should_return_not_null() throws Exception {
+        RedisClientConfig redisClientConfig = new RedisClientConfig(new Ciphers(null, null));
 
-                // When
-                RedisClient result = redisClientAutoConfig.redissionClient(null);
-            }
-        });
-    }
-
-    @Test
-    void test_memoryClient_should_return_not_null() throws Exception {
-
-        // When
-        RedisClient result = redisClientAutoConfig.memoryClient();
+        // When：新式配置 redis.provider.type=memory
+        RedisClient result = redisClientAutoConfig.redisClient(
+            providerConfig("memory", null, null), redisClientConfig);
 
         // Then
         assertNotNull(result);
+    }
+
+    @Test
+    void test_redisClient_legacyClientTypeMemory_should_return_not_null() throws Exception {
+        RedisClientConfig redisClientConfig = new RedisClientConfig(new Ciphers(null, null));
+
+        // When：存量配置 redis.client-type=memory（未配置 provider.type/class）
+        RedisClient result = redisClientAutoConfig.redisClient(
+            providerConfig(null, null, "memory"), redisClientConfig);
+
+        // Then
+        assertNotNull(result);
+    }
+
+    @Test
+    void test_redisClient_unknownProviderType_should_throw_clear_error() throws Exception {
+        RedisClientConfig redisClientConfig = new RedisClientConfig(new Ciphers(null, null));
+
+        // When / Then：未注册的 provider 标识应报清晰错误
+        assertThrows(IllegalStateException.class,
+            () -> redisClientAutoConfig.redisClient(providerConfig("not-exists", null, null), redisClientConfig));
     }
 
     @Test

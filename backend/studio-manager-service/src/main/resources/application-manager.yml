@@ -214,6 +214,12 @@ redis:
   target_ports: ${redis_target_ports:16800,16801}
   cluster_node_list: ${cluster_node_list:}
   client-type: ${redis_client_type:redisson}
+  # Redis 适配层 Provider 插件化配置（详见 docs/zh/how-to/redis-provider-guide.md）：
+  # provider.type: Provider 标识（内置 redisson/memory 或 ServiceLoader 注册的企业自定义标识），优先于 client-type
+  # provider.class: Provider 实现类全限定名（企业插件包直接指定，优先级最高）
+  provider:
+    type: ${redis_provider_type:}
+    class: ${redis_provider_class:}
   enable-log: ${redis_enable_log:false}
   max-debug-msg-size: ${redis_max_debug_msg_size:10000}
   # Redisson codec 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制，

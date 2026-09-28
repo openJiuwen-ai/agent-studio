@@ -32,7 +32,6 @@ import org.redisson.api.RLock;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.options.CommonOptions;
-import org.redisson.client.codec.Codec;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.ClusterServersConfig;
@@ -216,8 +215,9 @@ public class RedisClientRedisson implements RedisClient {
     }
 
     @Override
-    public String get(String key, Codec codec) {
-        RBucket<String> bucket = redissonClient.getBucket(key, codec);
+    public String getRaw(String key) {
+        // 绕过 JsonJacksonCodec 对象解码，直接以字符串原样读取（供溢出清理读取超长原始数据）
+        RBucket<String> bucket = redissonClient.getBucket(key, StringCodec.INSTANCE);
         return bucket.get();
     }
 

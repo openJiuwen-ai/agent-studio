@@ -50,9 +50,9 @@ class RedisClientMemoryTest {
     }
 
     @Test
-    void testGetWithCodec() {
+    void testGetRaw() {
         redisClient.set("key1", "value1");
-        assertEquals("value1", redisClient.get("key1", null));
+        assertEquals("value1", redisClient.getRaw("key1"));
     }
 
     @Test
@@ -76,8 +76,14 @@ class RedisClientMemoryTest {
     }
 
     @Test
-    void testExpire() {
+    void testExpire_ExistingKey() {
+        redisClient.set("key1", "value1");
         assertTrue(redisClient.expire("key1", Duration.ofMinutes(5)));
+    }
+
+    @Test
+    void testExpire_MissingKey() {
+        assertFalse(redisClient.expire("key1", Duration.ofMinutes(5)));
     }
 
     @Test
@@ -89,13 +95,14 @@ class RedisClientMemoryTest {
 
     @Test
     void testDelete_NonExistingKey() {
-        assertTrue(redisClient.delete("nonexistent"));
+        assertFalse(redisClient.delete("nonexistent"));
     }
 
     @Test
     void testScoredSortedSet() {
         redisClient.scoredSortedSet("key1", 1000L, "value1");
-        assertNotNull(redisClient.get("1000"));
+        List<String> result = redisClient.scoredSortedGet("key1", 0L, 2000L);
+        assertEquals(List.of("value1"), result);
     }
 
     @Test
@@ -107,19 +114,25 @@ class RedisClientMemoryTest {
 
     @Test
     void testScoredSortedRemoveList() {
+        redisClient.scoredSortedSet("key1", 1000L, "value1");
         redisClient.scoredSortedRemoveList("key1", 0L, 1000L);
+        assertTrue(redisClient.scoredSortedGet("key1", 0L, 1000L).isEmpty());
     }
 
     @Test
     void testScoredSortedRemove() {
+        redisClient.scoredSortedSet("key1", 1000L, "value1");
         redisClient.scoredSortedRemove("key1", "value1");
+        assertTrue(redisClient.scoredSortedGet("key1", 0L, 1000L).isEmpty());
     }
 
     @Test
     void testGetAll() {
+        redisClient.set("key1", "value1");
         Map<String, Object> result = redisClient.getAll(Arrays.asList("key1", "key2"));
         assertNotNull(result);
-        assertTrue(result.isEmpty());
+        assertEquals(1, result.size());
+        assertEquals("value1", result.get("key1"));
     }
 
     @Test

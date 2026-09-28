@@ -85,9 +85,15 @@ class RedisClientWrapperTest {
     }
 
     @Test
-    void testGetWithCodec() {
-        when(redisClient.get(eq("key1"), any())).thenReturn("value1");
-        assertEquals("value1", wrapperWithLog.get("key1", null));
+    void testGetRaw() {
+        when(redisClient.getRaw("key1")).thenReturn("value1");
+        assertEquals("value1", wrapperWithLog.getRaw("key1"));
+    }
+
+    @Test
+    void testGetRaw_Exception() {
+        when(redisClient.getRaw("key1")).thenThrow(new RuntimeException("Redis error"));
+        assertNull(wrapperWithLog.getRaw("key1"));
     }
 
     @Test
