@@ -9,7 +9,7 @@
 覆盖:
 1. helper 语义:按位对齐、去重共享引用、空列表、快速失败、
    return_exceptions 占位、并发上限(真并发 + 限流生效 + 默认值来自
-   settings)、失败占位共享引用。
+   settings + <1 非法值双层拒绝)、失败占位共享引用。
 2. 站点行为:process_workflows / process_global_intents 的对齐与过滤、
    extract_node_defs 的吞错语义、create_all_agents_config_list 的
    子 Agent 顺序、create_all_memory_config_list 的合并预取与递归顺序。
@@ -25,7 +25,9 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
-from agent_runtime.common.config import settings
+from pydantic import ValidationError
+
+from agent_runtime.common.config import CacheSettings, settings
 from agent_runtime.context.request_context import RequestContext, _request_ctx
 from jiuwen.controller.common.config import AgentConfig
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
@@ -209,6 +211,21 @@ async def test_batch_default_concurrency_from_settings():
 
     assert len(results) == 6
     assert state["max_active"] == 2
+
+
+@pytest.mark.asyncio
+async def test_batch_rejects_non_positive_concurrency():
+    """函数层 fail-fast:0 会使信号量 acquire 永久阻塞(挂起无报错),必须显式拒绝。"""
+    for bad in (0, -1):
+        with pytest.raises(ValueError, match="max_concurrency"):
+            await async_ir_load_batch(["p1"], max_concurrency=bad)
+
+
+def test_settings_reject_non_positive_ir_load_concurrency():
+    """配置层 ge=1:env 误配 0/负数在启动期即 ValidationError,不带病上线。"""
+    for bad in ("0", "-1"):
+        with pytest.raises(ValidationError):
+            CacheSettings(IR_LOAD_MAX_CONCURRENCY=bad)
 
 
 @pytest.mark.asyncio
