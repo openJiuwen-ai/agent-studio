@@ -1,0 +1,228 @@
+# -*- coding: UTF-8 -*-
+# Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+"""Tests for Qwen._chat() tool_calls 非流式解析防御。
+
+Bug 背景：_chat() 原来硬编码字典形态链式 .get：
+    res_json.get("choices")[0].get("message").get("tool_calls").get("function").get("name")
+当模型服务返回标准 OpenAI list 形态 tool_calls（最常见格式）时，
+'list' object has no attribute 'get' 直接 AttributeError；
+当 finish_reason == "tool_calls" 但 message 缺失 tool_calls 时，
+'NoneType' object has no attribute 'get' 崩溃；
+当 arguments 为 None 时，ModelUtil.check_and_trans2json 内
+json.loads(None) 抛 TypeError，不被 except json.JSONDecodeError 捕获；
+当工具调用消息 content 为 null（标准协议）时，AIMessage.content
+校验不接受 None，pydantic ValidationError。
+修复后与 _stream()（af58a024）的 list/dict 双形态兼容逻辑对齐。
+"""
+# pylint: disable=protected-access
+import json
+import sys
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+_REPO_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
+)
+for _pkg in ("common_utils", "storage", "model_service"):
+    _pkg_path = os.path.join(_REPO_ROOT, "packages", _pkg)
+    if os.path.isdir(_pkg_path) and _pkg_path not in sys.path:
+        sys.path.insert(0, _pkg_path)  # pylint: disable=no-use-sys-path-insert
+
+from jiuwen.common.llm_service.messages import ToolCall
+
+
+def _no_valid_toolcall(value) -> bool:
+    """判断 tool_calls 是否无有效调用。
+
+    AIMessage.tool_calls 类型为 Union[ToolCall, List[ToolCall]]，
+    传入 {} 会被 pydantic 强制转换为 ToolCall(name="", args={}, id="")，
+    因此"无有效调用"必须按 name 是否为空判断。
+    """
+    return (not isinstance(value, ToolCall)) or value.name == ""
+
+
+def _make_chat_response(message: dict, finish_reason: str = "tool_calls") -> MagicMock:
+    """构造 mock requests.post 的非流式响应。"""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "id": "chatcmpl-1",
+        "model": "qwen-test",
+        "choices": [{"message": message, "finish_reason": finish_reason}],
+    }
+    return mock_resp
+
+
+class TestQwenChatToolCalls:
+    """Qwen._chat() — 非流式 tool_calls 解析（list/dict 双形态 + 畸形防御）。"""
+
+    @staticmethod
+    def _make_qwen():
+        """通过正常构造器创建 Qwen 实例。"""
+        from jiuwen.common.llm_service.language_model.qwen import Qwen
+        return Qwen(api_key="test-key", api_base="http://localhost:9999/v1/chat",
+                    model="qwen-test", temperature=0.5, top_p=0.5, stream=False)
+
+    def _run_chat(self, message: dict, finish_reason: str = "tool_calls"):
+        """统一执行 _chat 并返回 AIMessage。"""
+        qwen = self._make_qwen()
+        with patch(
+            "jiuwen.common.llm_service.language_model.qwen.requests.post",
+            return_value=_make_chat_response(message, finish_reason),
+        ), patch(
+            "jiuwen.common.llm_service.language_model.qwen.TemplateManager"
+        ) as tm, patch(
+            "jiuwen.common.llm_service.language_model.qwen.ModelUtil.truncate_params",
+            side_effect=lambda p: (p.get("top_p", 0.5), p.get("temperature", 0.5)),
+        ):
+            tm.return_value.get.return_value = MagicMock(content=[])
+            return qwen._chat([])
+
+    def test_tool_calls_list_format(self):
+        """标准 OpenAI list 形态 tool_calls → 正确解析出 ToolCall（原代码 AttributeError）。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_001",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": '{"title": "周会"}',
+                    },
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert isinstance(result, ToolCall)
+        assert result.name == "create_meeting"
+        assert result.args == {"title": "周会"}
+
+    def test_tool_calls_dict_format(self):
+        """dict 形态 tool_calls（原代码唯一支持的形态）→ 行为保持不变。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": {
+                "function": {
+                    "name": "query_meetings",
+                    "arguments": '{"date": "2026-09-28"}',
+                }
+            },
+        }
+        result = self._run_chat(message).tool_calls
+        assert isinstance(result, ToolCall)
+        assert result.name == "query_meetings"
+        assert result.args == {"date": "2026-09-28"}
+
+    def test_tool_calls_missing(self):
+        """finish_reason=tool_calls 但 message 缺失 tool_calls → 不再崩溃（原 NoneType AttributeError）。"""
+        message = {
+            "role": "assistant",
+            "content": "未完成工具调用的兜底回复",
+        }
+        result = self._run_chat(message).tool_calls
+        assert _no_valid_toolcall(result)
+
+    def test_tool_calls_arguments_none(self):
+        """function.arguments 为 None → 不再触发 TypeError（json.loads(None)），走兜底。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_002",
+                    "type": "function",
+                    "function": {"name": "create_meeting", "arguments": None},
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert _no_valid_toolcall(result)
+
+    def test_tool_calls_arguments_already_dict(self):
+        """arguments 已是 dict（部分模型服务直接返回解析结果）→ 直接使用。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_003",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": {"title": "周会"},
+                    },
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert isinstance(result, ToolCall)
+        assert result.name == "create_meeting"
+        assert result.args == {"title": "周会"}
+
+    def test_tool_calls_arguments_invalid_json(self):
+        """arguments 为非法 JSON 字符串 → 走兜底，content 为序列化的 function 内容。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_004",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": "not-a-json",
+                    },
+                }
+            ],
+        }
+        aim = self._run_chat(message)
+        assert _no_valid_toolcall(aim.tool_calls)
+        assert "create_meeting" in aim.content
+
+    def test_no_tool_calls_normal_reply(self):
+        """finish_reason=stop 普通文本回复 → 无有效 ToolCall。"""
+        message = {"role": "assistant", "content": "你好，请问有什么可以帮您？"}
+        result = self._run_chat(message, finish_reason="stop").tool_calls
+        assert _no_valid_toolcall(result)
+
+    def test_tool_calls_list_item_missing_function_key(self):
+        """list 中某项缺 function 键 → 跳过该项取下一个，不崩溃。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_005", "type": "function"},
+                {
+                    "id": "call_006",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": '{"title": "周会"}',
+                    },
+                },
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert isinstance(result, ToolCall)
+        assert result.name == "create_meeting"
+
+    def test_tool_calls_message_content_none_fallback(self):
+        """工具调用消息 content=None（标准协议）→ 兜底为空串，不再 pydantic ValidationError。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": {
+                "function": {
+                    "name": "create_meeting",
+                    "arguments": '{"title": "周会"}',
+                }
+            },
+        }
+        aim = self._run_chat(message)
+        assert aim.content == ""
+        assert isinstance(aim.tool_calls, ToolCall)
