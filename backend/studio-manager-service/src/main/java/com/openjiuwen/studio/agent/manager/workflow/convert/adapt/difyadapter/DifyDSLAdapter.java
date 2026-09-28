@@ -903,28 +903,32 @@ public class DifyDSLAdapter implements AdapterService {
      * @param sourceHandle 边上的 sourceHandle（= Dify class id）
      * @return class 序号字符串（"1"、"2"...）或原 class id
      */
-    @SuppressWarnings("unchecked")
     private String intentClassIndex(Map<String, Object> data, String sourceIdRaw, String sourceHandle) {
-        List<Map<String, Object>> graphNodes = (List<Map<String, Object>>) data.get("nodes");
+        // 全程安全转换（与 QuestionClassifierNodeConverter.adaptBranches 同源，检视意见 #6）：
+        // constructEdgesAndSort 没有 convertNode 那样的 per-node try/catch 兜底，
+        // 此处任何 CCE/NPE 都会中断整个导入。非 List/Map 结构一律降级返回原 class id。
+        List<Map<String, Object>> graphNodes = MapReadUtil.safeCastToListWithMap(data.get("nodes"));
         if (graphNodes == null) {
             return sourceHandle;
         }
         for (Map<String, Object> graphNode : graphNodes) {
-            if (!sourceIdRaw.equals(String.valueOf(graphNode.get("id")))) {
+            if (graphNode == null || !sourceIdRaw.equals(String.valueOf(graphNode.get("id")))) {
                 continue;
             }
-            Map<String, Object> nodeData = (Map<String, Object>) graphNode.get("data");
+            Map<String, Object> nodeData = MapReadUtil.safeCastToMapWithStringKey(graphNode.get("data"));
             if (nodeData == null
                 || !NodeType.INTENT_DETECTION.getDifyType().equalsIgnoreCase(String.valueOf(nodeData.get("type")))) {
                 break;
             }
-            List<Map<String, Object>> classes =
-                (List<Map<String, Object>>) nodeData.get("classes");
+            List<Map<String, Object>> classes = MapReadUtil.safeCastToListWithMap(nodeData.get("classes"));
             if (classes == null) {
                 break;
             }
+            // safeCastToListWithMap 会把非 Map 元素转为 null 占位——逐元素判空跳过；
+            // null 占位保留原索引，与节点侧 adaptBranches 对同一 classes 列表的计数语义一致
             for (int i = 0; i < classes.size(); i++) {
-                if (sourceHandle.equals(String.valueOf(classes.get(i).get("id")))) {
+                Map<String, Object> classMap = classes.get(i);
+                if (classMap != null && sourceHandle.equals(String.valueOf(classMap.get("id")))) {
                     return String.valueOf(i + 1);
                 }
             }

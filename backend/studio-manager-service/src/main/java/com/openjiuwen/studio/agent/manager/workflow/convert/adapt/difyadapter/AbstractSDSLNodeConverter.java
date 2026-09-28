@@ -184,9 +184,14 @@ public abstract class AbstractSDSLNodeConverter implements NodeConverter {
      *
      * <p>查询路径（检视 #4）：{@code ModelServiceManager.queryAvailableServices}——与 LLM 节点
      * UI 模型下拉同源（AgentManagementService/ControllerManagementService 同款调用），覆盖
-     * SYSTEM 作用域平台预置模型 + 公共/免费模型 + 路由策略，且只返回该 workspace 实际可用
-     * （平台内置或供应商已授权）的模型。不用 {@code queryByModelName}：它仅项目/空间精确
-     * 匹配，查不到 SYSTEM 预置模型（平台预置模型存于 PROJECT_ID='SYSTEM'）。</p>
+     * SYSTEM 作用域平台预置模型 + 公共/免费模型，且只返回该 workspace 实际可用（平台内置
+     * 或供应商已授权）的模型。不用 {@code queryByModelName}：它仅项目/空间精确匹配，
+     * 查不到 SYSTEM 预置模型（平台预置模型存于 PROJECT_ID='SYSTEM'）。</p>
+     *
+     * <p>containRouter=false（检视 #7）：路由策略伪条目（id=strategyId、modelName=策略名、
+     * modelType 恒为 LLM）不得进入补全候选——Dify 模型名指真实模型，与策略重名且无同名
+     * 真实部署时会静默把 deployment_id 绑到策略 id，生成无法按模型解析的 IR；是否使用
+     * 路由策略应由用户在 UI 里有意识选择。</p>
      *
      * <p>确定性规则（检视 #2）：模型名精确匹配（忽略大小写，对齐 DB collation 语义）+ LLM
      * 类型过滤后必须唯一，否则留空交用户手选——同名多条（多供应商/工作空间与 SYSTEM 并存）
@@ -206,7 +211,8 @@ public abstract class AbstractSDSLNodeConverter implements NodeConverter {
             String projectId = RequestContextUtils.getRequestProjectId();
             String workspaceId = RequestContextUtils.getRequestWorkspaceId();
             List<ModelServiceData> available = SpringBeanUtils.getBean(ModelServiceManager.class)
-                .queryAvailableServices(projectId, workspaceId, ModelTypeV2.LLM.toString(), true);
+                // containRouter=false：排除路由策略伪条目（id=strategyId），防重名静默错绑（检视 #7）
+                .queryAvailableServices(projectId, workspaceId, ModelTypeV2.LLM.toString(), false);
             if (available == null || available.isEmpty()) {
                 log.warn("Dify import: no available platform model in workspace, "
                     + "model_deployment_id left empty for name {}", modelName);

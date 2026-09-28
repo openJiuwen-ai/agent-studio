@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.alibaba.fastjson2.JSONArray;
@@ -286,14 +287,97 @@ class DifyDSLAdapterTest {
     }
 
     /**
-     * 在 mock 的请求上下文与可用模型列表下执行导入转换（bug④/检视 #2#4#5 用例公共脚手架）。
-     * queryAvailableServices 以严格参数打桩（"LLM" + containRouter=true）：实现若改查询路径
-     * 或参数，mock 不命中返回 null → 走降级留空 → 断言失败，锁定与 UI 下拉同源的调用契约。
+     * 检视 #7 哨兵：queryAvailableServices 必须以 containRouter=false 调用——路由策略伪条目
+     * （id=strategyId、modelName=策略名、modelType 恒为 LLM）与真实部署在补全的过滤条件下
+     * 不可区分，Dify 模型名与策略重名且无同名真实部署时会静默把 deployment_id 绑到策略 id，
+     * 生成无法按模型解析的 IR。显式 verify 调用参数，锁定该契约。
+     */
+    @Test
+    void convertLlmNodeQueriesAvailableServicesExcludingRouterStrategies() {
+        ModelServiceManager manager = mock(ModelServiceManager.class);
+        when(manager.queryAvailableServices("ut-project", "ut-workspace", "LLM", false))
+            .thenReturn(List.of(availableModel("ut-deploy-1", "ut-model", "LLM")));
+
+        try (MockedStatic<RequestContextUtils> requestContext = mockStatic(RequestContextUtils.class);
+             MockedStatic<SpringBeanUtils> springBeans = mockStatic(SpringBeanUtils.class)) {
+            requestContext.when(RequestContextUtils::getRequestProjectId).thenReturn("ut-project");
+            requestContext.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("ut-workspace");
+            springBeans.when(() -> SpringBeanUtils.getBean(ModelServiceManager.class)).thenReturn(manager);
+
+            Map<String, Object> dsl = buildLlmDsl("ut-model");
+            adapter.validateFormat(dsl);
+            WorkflowInfo info = adapter.convert(dsl);
+            assertEquals("ut-deploy-1", findLlmNodeModel(info).getString("model_deployment_id"));
+
+            verify(manager).queryAvailableServices("ut-project", "ut-workspace", "LLM", false);
+        }
+    }
+
+    /**
+     * 检视 #6 哨兵：classes 为非法结构（Map 而非 List）时整个导入不得失败——
+     * intentClassIndex 安全降级返回原 class id（边 branch 退回 branch_原id 旧行为）。
+     * constructEdgesAndSort 没有 convertNode 那样的 per-node try/catch 兜底，
+     * 裸转抛 CCE 会中断整个导入。
+     */
+    @Test
+    void convertIntentClassifierWithNonListClassesDoesNotFailImport() {
+        Map<String, Object> dsl = buildIntentDslWithClasses(
+            Map.of("0", Map.of("id", "zx", "name", "综合咨询")));
+        adapter.validateFormat(dsl);
+
+        WorkflowInfo info = adapter.convert(dsl); // 不得抛异常
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+        assertEquals("branch_zx", findEdge(details.getJSONArray("edges"), "node_classifier", "node_answer_zx")
+            .getString("branch"));
+    }
+
+    /**
+     * 检视 #6 哨兵：classes 含非 Map 元素（安全转换后为 null 占位）不得抛 NPE；
+     * 占位保留原索引，编号语义与节点侧对同一 classes 列表的计数一致
+     * （zx 是第 2 个元素 → branch_2）。
+     */
+    @Test
+    void convertIntentClassifierWithNonMapClassEntryDoesNotFailImport() {
+        Map<String, Object> dsl = buildIntentDslWithClasses(new ArrayList<>(List.of(
+            "junk",
+            Map.of("id", "zx", "name", "综合咨询"),
+            Map.of("id", "dj", "name", "电价方案"),
+            Map.of("id", "kc", "name", "勘查方案"))));
+        adapter.validateFormat(dsl);
+
+        WorkflowInfo info = adapter.convert(dsl); // 不得抛异常
+
+        JSONObject details = new JSONObject(info.getWorkflowDetails());
+        assertEquals("branch_2", findEdge(details.getJSONArray("edges"), "node_classifier", "node_answer_zx")
+            .getString("branch"));
+    }
+
+    /** 构造意图 DSL 并把 classifier 节点的 classes 字段替换为指定值（畸形结构哨兵用例）。 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildIntentDslWithClasses(Object classes) {
+        Map<String, Object> dsl = buildIntentDsl();
+        Map<String, Object> workflow = (Map<String, Object>) dsl.get("workflow");
+        Map<String, Object> graph = (Map<String, Object>) workflow.get("graph");
+        for (Map<String, Object> node : (List<Map<String, Object>>) graph.get("nodes")) {
+            Map<String, Object> data = (Map<String, Object>) node.get("data");
+            if ("question-classifier".equals(data.get("type"))) {
+                data.put("classes", classes);
+            }
+        }
+        return dsl;
+    }
+
+    /**
+     * 在 mock 的请求上下文与可用模型列表下执行导入转换（bug④/检视 #2#4#5#7 用例公共脚手架）。
+     * queryAvailableServices 以严格参数打桩（"LLM" + containRouter=false）：实现若改查询路径
+     * 或参数（含把 containRouter 改回 true 引入路由策略伪条目），mock 不命中返回 null →
+     * 走降级留空 → 断言失败，锁定与 UI 下拉同源且排除路由策略的调用契约。
      */
     private WorkflowInfo convertWithMockedRegistry(List<ModelServiceData> available,
         java.util.function.Supplier<Map<String, Object>> dslBuilder) {
         ModelServiceManager manager = mock(ModelServiceManager.class);
-        when(manager.queryAvailableServices("ut-project", "ut-workspace", "LLM", true)).thenReturn(available);
+        when(manager.queryAvailableServices("ut-project", "ut-workspace", "LLM", false)).thenReturn(available);
 
         try (MockedStatic<RequestContextUtils> requestContext = mockStatic(RequestContextUtils.class);
              MockedStatic<SpringBeanUtils> springBeans = mockStatic(SpringBeanUtils.class)) {
