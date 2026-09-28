@@ -88,14 +88,16 @@ public class QuestionClassifierNodeConverter extends AbstractSDSLNodeConverter {
             return null;
         }
         List<WorkflowBranchVO> branches = new ArrayList<>();
-        classesMaps.forEach(classesMap -> {
+        for (int i = 0; i < classesMaps.size(); i++) {
+            Map<String, Object> classesMap = classesMaps.get(i);
             WorkflowBranchVO workflowBranchVO = new WorkflowBranchVO();
-            workflowBranchVO.setId("branch_" + classesMap.get("id"));
+            // Dify 分类 id 可能为 UUID，而运行时按 branch_N 数字后缀约定匹配分类结果，统一按 classes 顺序重排编号
+            workflowBranchVO.setId("branch_" + (i + 1));
             Map<String, Object> configs = new HashMap<>();
             configs.put("category", extractAndReplace(classesMap.get("name").toString(), null));
             workflowBranchVO.setConfigs(configs);
             branches.add(workflowBranchVO);
-        });
+        }
         return branches;
     }
 

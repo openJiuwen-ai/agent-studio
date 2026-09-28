@@ -522,6 +522,7 @@ public class DifyDSLAdapter implements AdapterService {
         Map<String, List<String>> graph = new HashMap<>();
         Map<String, Integer> inDegree = new HashMap<>();
         Set<String> startTypeNodes = new HashSet<>();
+        Map<String, List<String>> classifierClassIds = extractClassifierClassIds(data);
         if (data.containsKey("edges")) {
             List<Map<String, Object>> edgeMaps = (List<Map<String, Object>>) data.get("edges");
             for (Map<String, Object> edgeMap : edgeMaps) {
@@ -548,7 +549,10 @@ public class DifyDSLAdapter implements AdapterService {
                     startTypeNodes.add(sourceIdRaw);
                 } else if (edgeConfig != null && NodeType.INTENT_DETECTION.getDifyType()
                     .equalsIgnoreCase(edgeConfig.get("sourceType"))) {
-                    workflowEdgeVO.setBranch("branch_" + edgeMap.get("sourceHandle").toString());
+                    // 与 QuestionClassifierNodeConverter 一致，按 classes 顺序将 sourceHandle 映射为 branch_N，
+                    // 保证节点分支与出边分支标识一致且满足运行时的数字后缀约定
+                    workflowEdgeVO.setBranch(adaptClassifierBranch(classifierClassIds.get(sourceIdRaw),
+                        edgeMap.get("sourceHandle")));
                 } else if (edgeConfig != null && (
                     CommonConstant.DIFY.LOOP_START.equalsIgnoreCase(edgeConfig.get("sourceType"))
                         || CommonConstant.DIFY.ITERATION_START.equalsIgnoreCase(edgeConfig.get("sourceType")))) {
@@ -609,6 +613,49 @@ public class DifyDSLAdapter implements AdapterService {
             }
         }
         return edges;
+    }
+
+    /**
+     * 提取问题分类器节点的分类 id 顺序表（key: 节点原始 id, value: classes 中按序排列的分类 id）
+     *
+     * @param data 原始 graph 数据
+     * @return 节点 id -> 分类 id 列表
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, List<String>> extractClassifierClassIds(Map<String, Object> data) {
+        Map<String, List<String>> result = new HashMap<>();
+        List<Map<String, Object>> nodeMaps = (List<Map<String, Object>>) data.get("nodes");
+        if (nodeMaps == null) {
+            return result;
+        }
+        for (Map<String, Object> nodeMap : nodeMaps) {
+            Map<String, Object> nodeConfig = (Map<String, Object>) nodeMap.get("data");
+            if (nodeConfig == null || !NodeType.INTENT_DETECTION.getDifyType()
+                .equalsIgnoreCase(String.valueOf(nodeConfig.get("type")))) {
+                continue;
+            }
+            List<Map<String, Object>> classes = MapReadUtil.safeCastToListWithMap(
+                MapReadUtil.getMapDeepValue(nodeConfig, List.class, "classes"));
+            if (classes == null) {
+                continue;
+            }
+            result.put(nodeMap.get("id").toString(),
+                classes.stream().map(classMap -> String.valueOf(classMap.get("id"))).collect(Collectors.toList()));
+        }
+        return result;
+    }
+
+    /**
+     * 将问题分类器出边的 sourceHandle（Dify 分类 id，可能为 UUID）映射为按 classes 顺序编号的 branch_N，
+     * 与 {@link QuestionClassifierNodeConverter} 生成的分支 id 保持一致；无法定位时回退为原始拼装
+     *
+     * @param classIds 分类的 id 顺序表
+     * @param sourceHandle 边的 sourceHandle（分类 id）
+     * @return 分支标识 branch_N
+     */
+    private String adaptClassifierBranch(List<String> classIds, Object sourceHandle) {
+        int classIndex = classIds == null ? -1 : classIds.indexOf(String.valueOf(sourceHandle));
+        return classIndex >= 0 ? "branch_" + (classIndex + 1) : "branch_" + sourceHandle;
     }
 
     @SuppressWarnings("unchecked")
