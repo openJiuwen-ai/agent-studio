@@ -310,3 +310,69 @@ class TestQwenChatToolCalls:
         aim = self._run_chat(message)
         assert aim.content == ""
         assert isinstance(aim.tool_calls, ToolCall)
+
+    def test_message_null(self):
+        """message 为 null → 不崩溃，content 兜底空串。
+
+        review（chenfeng）L165：原链式 .get("message").get("content") 在 message=null
+        时 AttributeError，先于后续 or {} 兜底。
+        """
+        message = None
+        aim = self._run_chat(message)
+        assert aim.content == ""
+        assert _no_valid_toolcall(aim.tool_calls)
+
+    def test_tool_calls_scalar_value(self):
+        """tool_calls 为标量（true/数字）→ 兜底空列表，不抛 TypeError。
+
+        review（chenfeng）L183：标量不可迭代，for 循环直接 TypeError。
+        """
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": True,
+        }
+        aim = self._run_chat(message)
+        assert _no_valid_toolcall(aim.tool_calls)
+
+    def test_tool_calls_arguments_json_non_dict(self):
+        """arguments 为合法 JSON 但非 dict（如 "null"/"[]"）→ 走兜底，不 pydantic 崩溃。
+
+        review（chenfeng）L202：check_and_trans2json 返回 (True, None/列表)，
+        ToolCall(args=非 dict) 触发 pydantic ValidationError。
+        """
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_009",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": "null",
+                    },
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert _no_valid_toolcall(result)
+
+    def test_tool_calls_arguments_json_array(self):
+        """arguments 为合法 JSON 数组 → 走兜底，不 pydantic 崩溃。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_010",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": "[1, 2]",
+                    },
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert _no_valid_toolcall(result)

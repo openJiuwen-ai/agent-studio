@@ -162,22 +162,23 @@ class Qwen(BaseModel, BaseChatModel):
                 usage_metadata.output_tokens,
                 usage_metadata.total_tokens,
             ) = self._extract_tokens_from_response(res_json)
-            res_content = res_json.get("choices")[0].get("message").get("content")
+            # 统一提取 message_info，防御 message 为 null 或缺失
+            message_info = res_json.get("choices", [{}])[0].get("message") or {}
+            res_content = message_info.get("content")
             # 工具调用消息标准协议 content 为 null，而 AIMessage.content 不接受 None，统一兜底为空串
             if res_content is None:
                 res_content = ""
-            reasoning_content = (
-                res_json.get("choices")[0].get("message").get("reasoning_content", "")
-                or ""
-            )
+            reasoning_content = message_info.get("reasoning_content", "") or ""
             if tools_flag == "tool_calls":
                 # tool_calls 可能缺失/为 None，也可能为标准 OpenAI list 形态（并行调用），
                 # 链式 .get 会直接 AttributeError。统一提取所有含 function 的调用，
                 # 与 _stream() 的 list/dict 双形态兼容逻辑对齐
-                message_info = res_json.get("choices")[0].get("message") or {}
-                raw_tool_calls = message_info.get("tool_calls") or []
+                raw_tool_calls = message_info.get("tool_calls")
                 if isinstance(raw_tool_calls, dict):
                     raw_tool_calls = [raw_tool_calls]
+                elif not isinstance(raw_tool_calls, list):
+                    # None / 标量（true/数字等）不可迭代，兜底空列表
+                    raw_tool_calls = []
                 # 单次遍历构造 ToolCall 列表（收集 id + function 信息）
                 tools_call_list = []
                 for tool_call in raw_tool_calls:
@@ -192,6 +193,10 @@ class Qwen(BaseModel, BaseChatModel):
                         check_and_trans_result = ModelUtil.check_and_trans2json(
                             arguments
                         )
+                        # JSON 字符串解析结果可能非 dict（如 "null"/"[]"/"123"），
+                        # args 字段类型为 Dict[str, Any]，非 dict 会 pydantic ValidationError
+                        if not isinstance(check_and_trans_result[1], dict):
+                            check_and_trans_result = (False, None)
                     elif isinstance(arguments, dict):
                         # 部分模型服务直接返回已解析的 dict，无需再次解析
                         check_and_trans_result = (True, arguments)
