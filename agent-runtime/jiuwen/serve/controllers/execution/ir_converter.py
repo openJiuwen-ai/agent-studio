@@ -1673,6 +1673,33 @@ class IRConverter:
         connections = _normalize_list(ir_data.get("connections") or [])
         parallel_join_nodes = collect_parallel_join_nodes(connections, node_by_id)
         parallel_join_plan = build_parallel_join_plan(connections, node_by_id)
+        # lane 机制接管的汇聚点不再叠加 wait_for_all：join 由 [done 列表] ->
+        # join_target 的列表边 barrier 完成 AND 等待。若叠加 wait_for_all，
+        # 入边会再经过 _resolve_barrier_groups 的 CNF 分组，在「判断节点分支
+        # 扇出到相同子图」场景下，各 lane-done 从分叉判断的两个条件都可达，
+        # 会被误并成一个 OR 组，barrier 退化为「任一到达即触发」→ 汇聚节点
+        # 按到达 token 数重复执行。仅当该汇聚点的全部入边都被 lane 覆盖时才
+        # 移除，避免未覆盖的直达边从 barrier 组退化为独立触发边。
+        # （build_parallel_join_plan 保证同一汇聚点至多注册一个 spec：多 spec
+        # 会产生多条列表边 barrier，无 wait_for_all 时按组重复触发，已在 plan
+        # 构建时整体回退。）
+        _lane_join_targets = {
+            spec.join_target for spec in parallel_join_plan.joins.values()
+        }
+        if _lane_join_targets:
+            _rewritten_keys = set(parallel_join_plan.terminal_to_done)
+            for _conn in connections:
+                _src = ((_conn.get("source") or {}).get("componentId") or "").strip()
+                _dst = ((_conn.get("target") or {}).get("componentId") or "").strip()
+                if not _src or not _dst or _dst not in _lane_join_targets:
+                    continue
+                if _src.endswith("_input") or _dst.endswith("_output"):
+                    continue
+                _bid = ((_conn.get("source") or {}).get("branchId") or "").strip() or None
+                if (_src, _dst, _bid) not in _rewritten_keys:
+                    _lane_join_targets.discard(_dst)
+            if _lane_join_targets:
+                parallel_join_nodes = parallel_join_nodes - _lane_join_targets
 
         component_by_id: dict[str, Any] = {}
 
@@ -1978,14 +2005,78 @@ class IRConverter:
                         for terminal_source, _ in lane.terminals:
                             _parallel_stream_source_to_done[terminal_source] = lane.done_node
 
+        # lane 接管汇聚点的 schema 折叠判定提前到 End 注册之前：被折叠的流式
+        # 引用源不会再有流式边投递，End 的 schema 切分必须把这些源视作批量源
+        # （INVOKE 路径从 io_state 解析），否则字段会滞留在无人消费的
+        # streamInputs_schema 中被静默丢弃（引擎只为 add_stream_connection 的
+        # 目标建 StreamActor）。此处的 existing_connections 与 phase 2 后等价
+        # （deferred 循环仅重复添加已有对），判定结果与下方自动补边循环一致；
+        # 折叠对在此记入 existing_connections，补边循环经检查自然跳过。
+        # 注意：折叠源只作数据引用折叠（不加直达边、schema 按批量源切分），
+        # 绝不并入 [done 列表] barrier 的 AND 等待——引用源常位于条件分支内
+        # （如仅 if 分支执行的 LLM），互斥分支触发时该源永不执行，barrier 的
+        # 单元素 AND 组永不满足，汇聚点将静默死锁。lane 内引用源的完成由该
+        # lane 的 done 蕴含（源在 terminal 上游顺序完成）；互斥分支不执行时
+        # 其输出引用由 End/Message 的未执行引用兜底（sanitize / io_state 缺省）。
+        all_target_ids: set[str] = set()
+        for connection in connections:
+            s = ((connection.get("source") or {}).get("componentId") or "").strip()
+            t = ((connection.get("target") or {}).get("componentId") or "").strip()
+            bid = ((connection.get("source") or {}).get("branchId") or "").strip()
+            if s and t and not bid:
+                all_target_ids.add(t)
+
+        _stream_lane_end_join_ids = {
+            join_target
+            for join_target, has_stream_lane in _parallel_join_has_stream_lane.items()
+            if has_stream_lane and join_target in end_node_ids
+        }
+        _lane_folded_stream_sources: dict[str, set[str]] = {}
+        for target_id in all_target_ids:
+            target_node = node_by_id.get(target_id)
+            if not target_node:
+                continue
+            schema = _convert_schema(target_node.get("inputs") or {})
+            schema_source_ids = _extract_source_component_ids(schema, component_by_id)
+            has_stream_ref = any(
+                sid in ir_stream_source_ids for sid in schema_source_ids
+            )
+            target_type = target_node.get("type", "")
+            lane_fold_eligible = (
+                target_id in _lane_join_targets
+                and target_id not in _stream_lane_end_join_ids
+                and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
+                and target_type not in IRConverter._AGGREGATE_TYPES
+            )
+            if not lane_fold_eligible:
+                continue
+            for source_id in schema_source_ids:
+                if source_id == target_id:
+                    continue
+                if (source_id, target_id) in existing_connections:
+                    continue
+                if source_id in ir_stream_source_ids or has_stream_ref:
+                    # 仅折叠为数据引用：不加直达边（避免独立触发边导致提前/
+                    # 重复执行）、流式源按批量源切分 schema；不并入 barrier
+                    #（互斥分支下源永不执行会导致 AND 死锁，见上方注释）。
+                    if source_id in ir_stream_source_ids:
+                        _lane_folded_stream_sources.setdefault(
+                            target_id, set()
+                        ).add(source_id)
+                    existing_connections.add((source_id, target_id))
+
         for pending in pending_end_nodes:
             node_id = pending["node_id"]
             end = pending["end"]
             inputs_schema = pending["inputs_schema"]
             is_stream_out = pending["is_stream_out"]
             _deferred_node_name = pending.get("node_name")
+            # 被折叠进 lane barrier 列表边的流式引用源按批量源切分：这些源没有
+            # 流式边投递，字段须留在 inputs_schema 走 io_state 解析，避免滞留在
+            # 无人消费的 stream_inputs_schema 中被静默丢弃。
             batch_schema, stream_schema = _split_inputs_schema_by_source(
-                inputs_schema, ir_stream_source_ids
+                inputs_schema,
+                ir_stream_source_ids - _lane_folded_stream_sources.get(node_id, set()),
             )
             # Parallel join stream producer is _parallel_done, not the original source;
             # rewrite refs so StreamProcessor can resolve values by producer_id.
@@ -2036,6 +2127,50 @@ class IRConverter:
                 workflow.add_stream_connection(source, target)
             else:
                 workflow.add_connection(source, target)
+
+        # Add missing connections based on schema references.
+        # Strategy:
+        # - Auto-complete stream edges only when target supports stream input.
+        # - Auto-complete batch edges for mix-mode targets (Message/End/Card/...)
+        #   when schema references a stream source. Aggregate reads all $ref fields
+        #   from io_state (incl. stream LLM via get_stream_output) and must not get
+        #   extra batch triggers here. Do NOT auto-add batch edges to pure-batch
+        #   nodes like Code — that bypasses intermediate nodes and can schedule them
+        #   before the stream producer finishes.
+        # 例外：lane 接管（wait_for_all 已移除）的汇聚点不能补直达边——直达边会
+        # 绕过 [done 列表] barrier 成为独立触发边，导致汇聚点提前/重复执行。这类
+        # 引用源已在上方预计算中折叠（记入 existing_connections：不加直达边、
+        # 不进 barrier，仅作数据引用从 io_state 解析），此处经 existing_connections
+        # 检查自然跳过。流式 End 汇聚点的分流接线（逐条 stream 边 + set_end_comp
+        # 自带 wait_for_all）不受影响。
+        for target_id in all_target_ids:
+            target_node = node_by_id.get(target_id)
+            if not target_node:
+                continue
+            schema = _convert_schema(target_node.get("inputs") or {})
+            schema_source_ids = _extract_source_component_ids(schema, component_by_id)
+            # Target participates in mix mode if its schema references any stream source
+            has_stream_ref = any(
+                sid in ir_stream_source_ids for sid in schema_source_ids
+            )
+            target_type = target_node.get("type", "")
+            stream_capable_target = (
+                target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
+                and target_type not in IRConverter._AGGREGATE_TYPES
+            )
+            for source_id in schema_source_ids:
+                if source_id == target_id:
+                    continue
+                if (source_id, target_id) in existing_connections:
+                    continue
+                is_stream = source_id in ir_stream_source_ids
+                if is_stream and stream_capable_target:
+                    workflow.add_stream_connection(source_id, target_id)
+                    existing_connections.add((source_id, target_id))
+                elif has_stream_ref and stream_capable_target:
+                    workflow.add_connection(source_id, target_id)
+                    existing_connections.add((source_id, target_id))
+
         for join_spec in parallel_join_plan.joins.values():
             lane_done_nodes = [lane.done_node for lane in join_spec.lanes]
             if len(lane_done_nodes) >= 2:
@@ -2056,56 +2191,13 @@ class IRConverter:
                     if invoke_done_nodes:
                         workflow.add_connection(invoke_done_nodes, join_spec.join_target)
                 else:
-                    workflow.add_connection(lane_done_nodes, join_spec.join_target)
-
-        # Add missing connections based on schema references.
-        # Strategy:
-        # - Auto-complete stream edges only when target supports stream input.
-        # - Auto-complete batch edges for mix-mode targets (Message/End/Card/...)
-        #   when schema references a stream source. Aggregate reads all $ref fields
-        #   from io_state (incl. stream LLM via get_stream_output) and must not get
-        #   extra batch triggers here. Do NOT auto-add batch edges to pure-batch
-        #   nodes like Code — that bypasses intermediate nodes and can schedule them
-        #   before the stream producer finishes.
-        all_target_ids: set[str] = set()
-        for connection in connections:
-            s = ((connection.get("source") or {}).get("componentId") or "").strip()
-            t = ((connection.get("target") or {}).get("componentId") or "").strip()
-            bid = ((connection.get("source") or {}).get("branchId") or "").strip()
-            if s and t and not bid:
-                all_target_ids.add(t)
-
-        for target_id in all_target_ids:
-            target_node = node_by_id.get(target_id)
-            if not target_node:
-                continue
-            schema = _convert_schema(target_node.get("inputs") or {})
-            schema_source_ids = _extract_source_component_ids(schema, component_by_id)
-            # Target participates in mix mode if its schema references any stream source
-            has_stream_ref = any(
-                sid in ir_stream_source_ids for sid in schema_source_ids
-            )
-            target_type = target_node.get("type", "")
-            for source_id in schema_source_ids:
-                if source_id == target_id:
-                    continue
-                if (source_id, target_id) in existing_connections:
-                    continue
-                is_stream = source_id in ir_stream_source_ids
-                if (
-                    is_stream
-                    and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
-                    and target_type not in IRConverter._AGGREGATE_TYPES
-                ):
-                    workflow.add_stream_connection(source_id, target_id)
-                    existing_connections.add((source_id, target_id))
-                elif (
-                    has_stream_ref
-                    and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
-                    and target_type not in IRConverter._AGGREGATE_TYPES
-                ):
-                    workflow.add_connection(source_id, target_id)
-                    existing_connections.add((source_id, target_id))
+                    # barrier 仅由 lane-done 组成：汇聚点触发语义不受 schema
+                    # 引用源影响（折叠源见上方预计算注释），避免互斥分支下
+                    # 永不执行的引用源把 AND barrier 拖死。
+                    workflow.add_connection(
+                        lane_done_nodes,
+                        join_spec.join_target,
+                    )
 
         performance_logger.info(
             f"ir_build_total|{round((_time.perf_counter() - t_total) * 1000)}"
