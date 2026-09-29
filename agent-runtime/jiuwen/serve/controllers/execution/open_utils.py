@@ -440,6 +440,60 @@ async def _async_ir_load_uncached(path: str) -> dict:
     return ir_data
 
 
+async def async_ir_load_batch(
+    paths: list,
+    *,
+    return_exceptions: bool = False,
+    max_concurrency: int = 10,
+) -> list:
+    """并发批量加载多个 IR，返回与 paths 按位对齐的结果列表。
+
+    用于构建期一次性拉取多个子 IR（多智能体成员、挂载工作流、子工作流
+    定义等），替代 for 循环内逐个 await 的串行 IO 往返；每次加载仍走
+    async_ir_load（层级查找 内存 → Redis → OBS 与 TTL 续期行为不变），
+    转换/递归逻辑由调用方在预取完成后按原顺序串行执行。
+
+    Args:
+        paths: IR 路径列表，可含重复与 None（语义与逐个调用 async_ir_load
+            一致，None 会走加载并按各自异常策略处理）。
+        return_exceptions: True 时加载失败项以异常对象占位、其余正常返回
+            （调用方自行跳过）；False 时首个异常直接抛出（对齐串行版
+            逐个 await "首错即断"语义）。
+        max_concurrency: 并发上限，防几十个子 IR 同时打满 Redis 连接池
+            或 OBS 客户端。
+
+    Returns:
+        与 paths 等长、按位对齐的结果列表；重复路径返回同一共享对象
+        （与缓存返回共享引用一致，调用方不可原地修改）。
+    """
+    # 去重保序：相同 path 只发一次实际加载。缓存语义下重复路径本就返回
+    # 同一共享对象，去重不改变可见行为，只省重复 IO；不可哈希的畸形
+    # path 退化为不去重逐个加载，保持与串行版一致的失败语义
+    try:
+        unique_paths = list(dict.fromkeys(paths))
+        dedup = True
+    except TypeError:
+        unique_paths = list(paths)
+        dedup = False
+    if not unique_paths:
+        return []
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _load_one(path):
+        async with semaphore:
+            return await async_ir_load(path)
+
+    unique_results = await asyncio.gather(
+        *(_load_one(p) for p in unique_paths),
+        return_exceptions=return_exceptions,
+    )
+    if not dedup:
+        # 退化模式未去重，结果已与输入按位对齐，直接返回
+        return unique_results
+    result_map = dict(zip(unique_paths, unique_results))
+    return [result_map[p] for p in paths]
+
+
 @log_function_timing
 def ir_load(path: str) -> dict:
     """同步加载IR内容，支持任意Python对象缓存。
