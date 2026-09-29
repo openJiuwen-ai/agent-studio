@@ -317,6 +317,62 @@ class TestRunInBackgroundTracked:
         assert int(fake.store[key]) == 0
 
 
+class TestInflightPairing:
+    """INCR/DECR 配对（检视意见 1：INCR 降级后不得 DECR，防负计数污染）。"""
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_incr_degraded_skips_decr():
+        """INCR 时 Redis 不可用，任务完成后不得 DECR——负计数不得出现。"""
+        fake = _FakeRedis()
+        redis_calls = []
+
+        def flaky_redis():
+            redis_calls.append(1)
+            return None if len(redis_calls) == 1 else fake
+
+        done = asyncio.Event()
+
+        async def work():
+            done.set()
+
+        with patch.object(background_task, "_get_redis", side_effect=flaky_redis):
+            task = await background_task.run_in_background_tracked(
+                work(), name="t-degraded", track_key="conv-degraded")
+            assert task is not None
+            # await 必须在 patch 内：DECR 阶段 _get_redis 返回 fake（模拟
+            # 「任务执行期间 Redis 恢复」）——若代码回归为无条件 DECR，
+            # store 会出现 -1，断言即失败
+            await task
+        assert done.is_set()
+        # INCR 降级（首次 _get_redis 返回 None）→ finally 跳过 DECR：fake 未被写
+        assert fake.store == {}, "INCR 降级后不得执行 DECR（负计数污染）"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_expire_failure_after_incr_still_decrements():
+        """INCR 成功但 EXPIRE 失败不得破坏配对：DECR 照常，计数归零不泄漏。"""
+        fake = _FakeRedis()
+
+        async def broken_expire(key, ttl):
+            raise ConnectionError("expire failed")
+
+        fake.expire = broken_expire
+        done = asyncio.Event()
+
+        async def work():
+            done.set()
+
+        with patch.object(background_task, "_get_redis", return_value=fake):
+            task = await background_task.run_in_background_tracked(
+                work(), name="t-expire", track_key="conv-expire")
+            # await 在 patch 内：finally 的 DECR 必须能拿到 fake 客户端
+            await task
+        assert done.is_set()
+        key = f"{background_task.INFLIGHT_KEY_PREFIX}conv-expire"
+        assert int(fake.store[key]) == 0, "EXPIRE 失败不得跳过 DECR（否则 +1 泄漏）"
+
+
 class TestCrossProcessJoin:
     """await_pending 跨进程（Redis 在飞计数）轮询行为。"""
 

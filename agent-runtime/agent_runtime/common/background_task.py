@@ -127,19 +127,32 @@ def run_in_background(
     return task
 
 
-async def _incr_inflight(track_key: str) -> None:
-    """跨进程在飞计数 +1 并刷新 TTL；Redis 不可用时静默降级（仅进程内保护）。"""
+async def _incr_inflight(track_key: str) -> bool:
+    """跨进程在飞计数 +1 并刷新 TTL。
+
+    Returns:
+        INCR 是否真正执行成功。仅 True 才允许配对 DECR——Redis 不可用/出错
+        时若仍执行 DECR，会把从未 INCR 的 key 减到 -1，下一次 INCR 后读侧
+        见 0 误判「无在飞」，跨进程 join 被静默绕过（检视意见 1）。
+    """
     redis = _get_redis()
     if redis is None:
-        return
+        return False
     key = f"{INFLIGHT_KEY_PREFIX}{track_key}"
     try:
         await redis.incr(key)
-        await redis.expire(key, INFLIGHT_TTL_SECONDS)
     except Exception as e:
         workflow_logger.warning(
             f"inflight INCR failed, key={key}, cross-process join degraded: {e}"
         )
+        return False
+    try:
+        await redis.expire(key, INFLIGHT_TTL_SECONDS)
+    except Exception as e:
+        # INCR 已成功：必须返回 True 保证配对 DECR；TTL 缺失仅弱化崩溃回收
+        # （下轮 INCR/DECR 会重设 EXPIRE），不影响计数正确性。
+        workflow_logger.warning(f"inflight EXPIRE failed, key={key}: {e}")
+    return True
 
 
 async def _decr_inflight(track_key: str) -> None:
@@ -167,15 +180,18 @@ async def run_in_background_tracked(
     """
     if not track_key:
         return run_in_background(coro, name=name)
-    await _incr_inflight(track_key)
+    incremented = await _incr_inflight(track_key)
 
     async def _tracked() -> Any:
         try:
             return await coro
         finally:
-            # 任务被取消时（如事件循环收尾）finally 中的 await 可能立即抛
-            # CancelledError 导致 DECR 丢失，由 key TTL 兜底回收。
-            await _decr_inflight(track_key)
+            # 仅在 INCR 真正执行过时才 DECR——否则对从未 INCR 的 key 减到
+            # -1，下一次 INCR 后读侧见 0 误判无在飞，跨进程 join 被绕过。
+            # 任务被取消时 finally 中的 await 可能立即抛 CancelledError
+            # 导致 DECR 丢失，由 key TTL 兜底回收。
+            if incremented:
+                await _decr_inflight(track_key)
 
     task = run_in_background(_tracked(), name=name, track_key=track_key)
     if task is None:

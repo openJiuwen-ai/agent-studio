@@ -29,6 +29,7 @@ from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
 from agent_runtime.common.background_task import (
+    await_pending,
     backgrounding_enabled,
     run_in_background_tracked,
 )
@@ -214,6 +215,11 @@ class ControllerRunner:
                 "user_id": req.user_id,
             }
             setup_otel_tracer()
+            # 跨轮顺序性（检视意见 2）：与 react 侧同理——ir_execute
+            # 流式/非流式（run_blocking）等直连入口不经过
+            # _load_conversation_data 的 join 点，session 创建（recover）
+            # 前统一做有界等待（conversation_id 为空时 no-op）。
+            await await_pending(req.conversation_id)
             session = create_agent_session_with_trace(session_id=session_id, card=agent_group.card)
             await session.pre_run(inputs=session_inputs)
 

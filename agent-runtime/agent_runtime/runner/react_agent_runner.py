@@ -22,6 +22,7 @@ from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
 from agent_runtime.common.background_task import (
+    await_pending,
     backgrounding_enabled,
     run_in_background_tracked,
 )
@@ -822,6 +823,11 @@ class ReActAgentRunner:
 
         try:
             session_id = req.conversation_id or "default_session"
+            # 跨轮顺序性（检视意见 2）：session recover 读的是上一轮 post_run
+            # 的落库结果；ir_execute 流式/非流式（run_blocking）等直连入口
+            # 不经过 _load_conversation_data 的 join 点，统一在 session
+            # 创建前做有界等待（conversation_id 为空时 no-op）。
+            await await_pending(req.conversation_id)
             session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:
