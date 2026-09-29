@@ -13,6 +13,10 @@ json.loads(None) 抛 TypeError，不被 except json.JSONDecodeError 捕获；
 当工具调用消息 content 为 null（标准协议）时，AIMessage.content
 校验不接受 None，pydantic ValidationError。
 修复后与 _stream()（af58a024）的 list/dict 双形态兼容逻辑对齐。
+review（chenfeng）补充修复：
+- 并行调用不再只取首个，收集全部有效 function 返回 List[ToolCall]；
+- 兜底分支仅 function_info 非空时覆盖 content，避免原始文本丢失；
+- arguments else 改为 isinstance(arguments, dict)，list/int 等走兜底。
 """
 # pylint: disable=protected-access
 import json
@@ -118,14 +122,19 @@ class TestQwenChatToolCalls:
         assert result.name == "query_meetings"
         assert result.args == {"date": "2026-09-28"}
 
-    def test_tool_calls_missing(self):
-        """finish_reason=tool_calls 但 message 缺失 tool_calls → 不再崩溃（原 NoneType AttributeError）。"""
+    def test_tool_calls_missing_preserves_content(self):
+        """finish_reason=tool_calls 但 message 缺失 tool_calls → 不崩溃，保留原始 content。
+
+        review（chenfeng）L203：兜底分支无条件覆盖 content 为 json.dumps({}) = "{}"，
+        原始 assistant 文本被静默丢弃。修复后仅 function_info 非空时覆盖。
+        """
         message = {
             "role": "assistant",
             "content": "未完成工具调用的兜底回复",
         }
-        result = self._run_chat(message).tool_calls
-        assert _no_valid_toolcall(result)
+        aim = self._run_chat(message)
+        assert _no_valid_toolcall(aim.tool_calls)
+        assert aim.content == "未完成工具调用的兜底回复"
 
     def test_tool_calls_arguments_none(self):
         """function.arguments 为 None → 不再触发 TypeError（json.loads(None)），走兜底。"""
@@ -163,6 +172,42 @@ class TestQwenChatToolCalls:
         assert isinstance(result, ToolCall)
         assert result.name == "create_meeting"
         assert result.args == {"title": "周会"}
+
+    def test_tool_calls_arguments_list_type(self):
+        """arguments 为 list（畸形值）→ 走兜底，不触发 pydantic ValidationError。
+
+        review（chenfeng）L196：原 else 未校验类型，list 传入 ToolCall.args 会
+        pydantic ValidationError。修复后 else 改为 isinstance(arguments, dict)。
+        """
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_007",
+                    "type": "function",
+                    "function": {"name": "create_meeting", "arguments": [1, 2]},
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert _no_valid_toolcall(result)
+
+    def test_tool_calls_arguments_int_type(self):
+        """arguments 为 int（畸形值）→ 走兜底，不崩溃。"""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_008",
+                    "type": "function",
+                    "function": {"name": "create_meeting", "arguments": 42},
+                }
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert _no_valid_toolcall(result)
 
     def test_tool_calls_arguments_invalid_json(self):
         """arguments 为非法 JSON 字符串 → 走兜底，content 为序列化的 function 内容。"""
@@ -210,6 +255,41 @@ class TestQwenChatToolCalls:
         result = self._run_chat(message).tool_calls
         assert isinstance(result, ToolCall)
         assert result.name == "create_meeting"
+
+    def test_parallel_tool_calls(self):
+        """并行调用：多个有效 tool_calls → 返回 List[ToolCall]，与 _stream() 一致。
+
+        review（chenfeng）L187：原代码 break 后只取首个，后续并行调用被丢弃。
+        """
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_a",
+                    "type": "function",
+                    "function": {
+                        "name": "create_meeting",
+                        "arguments": '{"title": "周会"}',
+                    },
+                },
+                {
+                    "id": "call_b",
+                    "type": "function",
+                    "function": {
+                        "name": "query_meetings",
+                        "arguments": '{"date": "2026-09-28"}',
+                    },
+                },
+            ],
+        }
+        result = self._run_chat(message).tool_calls
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0].name == "create_meeting"
+        assert result[0].args == {"title": "周会"}
+        assert result[1].name == "query_meetings"
+        assert result[1].args == {"date": "2026-09-28"}
 
     def test_tool_calls_message_content_none_fallback(self):
         """工具调用消息 content=None（标准协议）→ 兜底为空串，不再 pydantic ValidationError。"""

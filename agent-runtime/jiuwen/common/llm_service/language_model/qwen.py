@@ -172,35 +172,54 @@ class Qwen(BaseModel, BaseChatModel):
             )
             if tools_flag == "tool_calls":
                 # tool_calls 可能缺失/为 None，也可能为标准 OpenAI list 形态（并行调用），
-                # 链式 .get 会直接 AttributeError。统一提取首个含 function 的调用再取值，
+                # 链式 .get 会直接 AttributeError。统一提取所有含 function 的调用，
                 # 与 _stream() 的 list/dict 双形态兼容逻辑对齐
                 message_info = res_json.get("choices")[0].get("message") or {}
                 raw_tool_calls = message_info.get("tool_calls") or []
                 if isinstance(raw_tool_calls, dict):
                     raw_tool_calls = [raw_tool_calls]
-                function_info = {}
+                # 收集所有有效的 function 信息（支持并行调用，与 _stream() 一致）
+                function_infos = []
                 for tool_call in raw_tool_calls:
                     if isinstance(tool_call, dict) and isinstance(
                         tool_call.get("function"), dict
                     ):
-                        function_info = tool_call["function"]
-                        break
-                name = function_info.get("name")
-                arguments = function_info.get("arguments")
-                if isinstance(arguments, str):
-                    check_and_trans_result = ModelUtil.check_and_trans2json(arguments)
-                elif arguments is None:
-                    check_and_trans_result = (False, None)
-                else:
-                    # 部分模型服务直接返回已解析的 dict，无需再次解析
-                    check_and_trans_result = (True, arguments)
-                if name and check_and_trans_result[0]:
-                    tools_call = ToolCall(name=name, args=check_and_trans_result[1])
+                        function_infos.append(tool_call["function"])
+                # 构造 ToolCall 列表
+                tools_call_list = []
+                for function_info in function_infos:
+                    name = function_info.get("name")
+                    arguments = function_info.get("arguments")
+                    if isinstance(arguments, str):
+                        check_and_trans_result = ModelUtil.check_and_trans2json(
+                            arguments
+                        )
+                    elif isinstance(arguments, dict):
+                        # 部分模型服务直接返回已解析的 dict，无需再次解析
+                        check_and_trans_result = (True, arguments)
+                    else:
+                        # None / list / int 等畸形值，统一走兜底
+                        check_and_trans_result = (False, None)
+                    if name and check_and_trans_result[0]:
+                        tc = ToolCall(name=name, args=check_and_trans_result[1])
+                        if tool_call.get("id"):
+                            tc.id = tool_call["id"]
+                        tools_call_list.append(tc)
+                if tools_call_list:
+                    # 单个 tool_call 返回对象，多个返回列表（下游已支持，与 _stream() 一致）
+                    tools_call = (
+                        tools_call_list[0]
+                        if len(tools_call_list) == 1
+                        else tools_call_list
+                    )
                     usage_metadata.finish_reason = "function_call"
                 else:
-                    # 保留原兜底语义：解析失败时将 function 原始内容序列化为字符串作为 content，
-                    # AIMessage.content 不接受 dict
-                    res_content = json.dumps(function_info, ensure_ascii=False)
+                    # 解析失败兜底：仅当 function_infos 非空时将原始内容序列化为 content，
+                    # 否则保留原始 res_content（如 assistant 文本回复），避免数据丢失
+                    if function_infos:
+                        res_content = json.dumps(
+                            function_infos[0], ensure_ascii=False
+                        )
                     tools_call = {}
 
                 return AIMessage(
