@@ -1683,41 +1683,34 @@ class AgentIrUtils:
         intents = ir_data.get("configs", {}).get("global_intents", [])
 
         def _needs_workflow_ir(intent) -> bool:
-            """与循环体内消费条件同源，保证 batch 预取数量与消费次数一致"""
+            """过滤需要预取 workflow IR 的意图；预取与消费经 zip(strict=True)
+            一一配对，数量对齐由构造保证，不再依赖消费侧同源谓词"""
             return intent.get("handler_type", "Workflow") == (
                 HandlerType.WORKFLOW.value
             ) and bool(intent.get("handler"))
 
-        # 并发预取需要加载 IR 的意图；消费侧按同一谓词过滤后依序 next 取用
-        loaded_irs = iter(
-            await async_ir_load_batch(
-                [
-                    intent["handler"].get("ir_path")
-                    for intent in intents
-                    if _needs_workflow_ir(intent)
-                ]
-            )
+        # 并发预取需要加载 IR 的意图；zip(strict=True) 把"预取数量==消费数量"
+        # 锁定在构造上，两侧失配抛带上下文的 ValueError 而非裸 StopIteration
+        workflow_intents = [intent for intent in intents if _needs_workflow_ir(intent)]
+        loaded_irs = await async_ir_load_batch(
+            [intent["handler"].get("ir_path") for intent in workflow_intents]
         )
 
-        for intent in intents:
+        for intent, workflow_ir in zip(workflow_intents, loaded_irs, strict=True):
             action = ActionAfterCompletionType.from_string(
                 intent.get(
                     "action_after_completion",
                     ActionAfterCompletionType.WAITING_USER_INPUT.value,
                 )
             )
-
-            if _needs_workflow_ir(intent):
-                handler = intent["handler"]
-                workflow_ir = next(loaded_irs)
-                if workflow_ir:
-                    global_workflow_configs.append(
-                        WorkflowConfig(
-                            workflow_ir=workflow_ir,
-                            action_after_completion=action,
-                            config_name=handler.get("name"),
-                        )
+            if workflow_ir:
+                global_workflow_configs.append(
+                    WorkflowConfig(
+                        workflow_ir=workflow_ir,
+                        action_after_completion=action,
+                        config_name=intent["handler"].get("name"),
                     )
+                )
 
         return global_workflow_configs
 

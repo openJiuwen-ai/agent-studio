@@ -3339,10 +3339,10 @@ class IRConverter:
                 )
 
             current_ir_type = IRConverter.identify_ir(current_ir_data)
+            # 显式 null 子节点字段维持串行版 TypeError fail-fast（不加 or []
+            # 兜底：静默缺 Memory 配置比构建失败更难发现，三个分支同此约定）
             if current_ir_type == IRType.Agent:
-                child_infos = (
-                    current_ir_data.get("configs", {}).get("workflows", []) or []
-                )
+                child_infos = current_ir_data.get("configs", {}).get("workflows", [])
                 # 并发预取挂载工作流 IR；空 ir_path 不加载（与原行为一致）
                 ir_by_key = await _load_keyed_irs(
                     [
@@ -3354,7 +3354,7 @@ class IRConverter:
                     if i in ir_by_key:
                         await _recursive_create(ir_by_key[i])
             elif current_ir_type == IRType.Workflow:
-                child_infos = current_ir_data.get("components", {}) or []
+                child_infos = current_ir_data.get("components", {})
                 # 仅 SubWorkflow 组件需要加载子 IR（与原 continue 过滤一致）
                 ir_by_key = await _load_keyed_irs(
                     [
@@ -3374,12 +3374,8 @@ class IRConverter:
                     if i in ir_by_key:
                         await _recursive_create(ir_by_key[i])
             elif current_ir_type == IRType.MultiAgents:
-                agent_infos = (
-                    current_ir_data.get("configs", {}).get("agents", []) or []
-                )
-                workflow_infos = (
-                    current_ir_data.get("configs", {}).get("workflows", []) or []
-                )
+                agent_infos = current_ir_data.get("configs", {}).get("agents", [])
+                workflow_infos = current_ir_data.get("configs", {}).get("workflows", [])
                 # 子 Agent 与挂载工作流合并为一次并发预取；递归顺序保持原
                 # "先 agents 后 workflows"（key 用复合元组避免两组索引冲突）
                 ir_by_key = await _load_keyed_irs(

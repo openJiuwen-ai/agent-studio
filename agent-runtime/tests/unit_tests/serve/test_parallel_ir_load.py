@@ -12,7 +12,8 @@
    settings + <1 非法值双层拒绝)、失败占位共享引用。
 2. 站点行为:process_workflows / process_global_intents 的对齐与过滤、
    extract_node_defs 的吞错语义、create_all_agents_config_list 的
-   子 Agent 顺序、create_all_memory_config_list 的合并预取与递归顺序。
+   子 Agent 顺序、create_all_memory_config_list 的合并预取与递归顺序、
+   显式 null 子节点字段的 TypeError fail-fast 对齐。
 3. 语义不变量:子项顺序与串行版一致;失败语义(快速失败 vs 吞错继续)
    与串行版一致;批量返回共享引用(调用方不可原地修改纪律的前提);
    请求级缓存跨 batch 去重(async_ir_load 的 at-most-once 语义)。
@@ -518,6 +519,27 @@ async def test_memory_config_multiagents_merged_batch():
     # 递归顺序:根 → a1 → a2 → w1(与串行版一致)
     assert visit_order == ["root", "a1", "a2", "w1"]
     assert len(all_configs) == 4
+
+
+@pytest.mark.asyncio
+async def test_memory_config_explicit_null_children_keeps_typeerror():
+    """显式 null 子节点字段维持串行版 TypeError fail-fast。
+
+    检视意见处置:or [] 兜底会把"构建失败"变成"静默缺 Memory 配置"
+    (比崩溃更难发现),已回退——null 与串行版 for...in None 一样抛
+    TypeError,且发生在批量预取发起之前(不浪费加载)。
+    """
+    root = {
+        "workflowId": "wf-null",
+        "workflowVersion": "0.6.0",
+        "components": None,
+        "configs": {},
+    }
+    batch = AsyncMock(return_value=[])
+    with patch(f"{_CONV}.async_ir_load_batch", new=batch):
+        with pytest.raises(TypeError):
+            await IRConverter.create_all_memory_config_list(root)
+    batch.assert_not_awaited()
 
 
 @pytest.mark.asyncio
