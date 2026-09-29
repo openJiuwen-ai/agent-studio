@@ -21,7 +21,10 @@ from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
-from agent_runtime.common.background_task import run_in_background
+from agent_runtime.common.background_task import (
+    backgrounding_enabled,
+    run_in_background_tracked,
+)
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.single_agent.agents.react_agent import ReActAgent, ReActAgentConfig
 from openjiuwen.core.single_agent.schema.agent_card import AgentCard
@@ -894,20 +897,26 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Agent execution failed: {e}")
         finally:
             if session:
-                if adapter.interaction_pending:
+                if adapter.interaction_pending or not backgrounding_enabled():
                     # 中断等待用户输入：InterruptionState 只写入内存 session
                     # （react_agent._commit_interrupt），落 Redis 的唯一途径是
                     # post_run；下一轮 pre_agent_execute 会 recover 它来恢复
                     # 中断现场，且恢复轮不重新播种历史。此处必须同步保存。
                     # 问题文本已随 message_end 先行到达客户端，同步落库不
                     # 产生新的用户可感延迟。
+                    # PERSIST_BACKGROUND_ENABLE=false 时正常完成轮同样同步
+                    # 保存（平台级回滚开关，行为与后台化之前一致）。
                     await session.post_run()
                 else:
                     # 正常完成：post_run 全量序列化并保存 agent 会话状态，
                     # 移出流收尾关键路径后台执行，避免阻塞终态事件。
-                    run_in_background(
+                    # track_key 登记在飞任务（进程内注册表 + 跨进程 Redis
+                    # 计数）：下一轮入口 await_pending 会等它完成，避免
+                    # recover 读到旧会话状态。
+                    await run_in_background_tracked(
                         session.post_run(),
                         name=f"react-post-run-{req.conversation_id}",
+                        track_key=req.conversation_id,
                     )
 
     async def run_blocking(self, req: ExecutionRequest) -> str:

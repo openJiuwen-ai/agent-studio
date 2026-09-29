@@ -28,7 +28,10 @@ from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
-from agent_runtime.common.background_task import run_in_background
+from agent_runtime.common.background_task import (
+    backgrounding_enabled,
+    run_in_background_tracked,
+)
 
 
 def _parse_controller_stream_chunk(chunk) -> dict | None:
@@ -278,19 +281,24 @@ class ControllerRunner:
             return
         finally:
             if session is not None:
-                if awaiting_user_input:
+                if awaiting_user_input or not backgrounding_enabled():
                     # 中断等待用户输入：保持同步保存，确保下一轮恢复链能读到
                     # 本次 agent 会话状态（pre_agent_execute recover）。中断轮
                     # 的问题文本已随消息事件先行到达，同步落库不产生新的
                     # 用户可感延迟。
+                    # PERSIST_BACKGROUND_ENABLE=false 时正常完成轮同样同步
+                    # 保存（平台级回滚开关，行为与后台化之前一致）。
                     await session.post_run()
                 else:
                     # 正常完成：agent 会话状态保存移出流收尾关键路径后台
                     # 执行，避免阻塞终态事件（终态 end 事件在 EventHandler
-                    # 层注入，不再等待此处落库）。
-                    run_in_background(
+                    # 层注入，不再等待此处落库）。track_key 登记在飞任务
+                    # （进程内注册表 + 跨进程 Redis 计数）：下一轮入口
+                    # await_pending 会等它完成，避免 recover 读旧状态。
+                    await run_in_background_tracked(
                         session.post_run(),
                         name=f"controller-post-run-{req.conversation_id}",
+                        track_key=req.conversation_id,
                     )
 
     async def _trigger_memory_extraction(

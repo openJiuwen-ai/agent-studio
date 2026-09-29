@@ -18,7 +18,10 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType, ConversationEvent
 from openjiuwen.core.common.logging import workflow_logger
 
-from agent_runtime.common.background_task import run_in_background
+from agent_runtime.common.background_task import (
+    backgrounding_enabled,
+    run_in_background_tracked,
+)
 from agent_runtime.event_handler.events.base_events import BaseEventsProcessor
 from agent_runtime.event_handler.events.agent_events import AgentEventsProcessor
 from agent_runtime.event_handler.events.workflow_events import WorkflowEventsProcessor
@@ -169,14 +172,22 @@ class EventHandler:
             # 移出终态事件关键路径后台执行，done/end 不再等待它完成；
             # 协程内部自带 try/except，失败仅记日志不影响响应。
             # conv_manager 为空（未 init_trace）时与旧行为一致：直接跳过。
+            # track_key 登记在飞任务（进程内注册表 + 跨进程 Redis 计数）：
+            # 下一轮请求入口 await_pending 有界等待，恢复「上一轮落库先于
+            # 下一轮读取」的单会话顺序性。PERSIST_BACKGROUND_ENABLE=false
+            # 时回退同步落库（平台级回滚开关，行为与后台化之前一致）。
             if self.conv_manager:
-                run_in_background(
-                    self._persist_conversation(),
-                    name=(
-                        f"persist-conversation-"
-                        f"{getattr(self.trace, 'conversation_id', '')}"
-                    ),
-                )
+                if backgrounding_enabled():
+                    await run_in_background_tracked(
+                        self._persist_conversation(),
+                        name=(
+                            f"persist-conversation-"
+                            f"{getattr(self.trace, 'conversation_id', '')}"
+                        ),
+                        track_key=getattr(self.trace, "conversation_id", ""),
+                    )
+                else:
+                    await self._persist_conversation()
 
             # Agent mode: inject done event
             if handler_type in (PlanModeType.ReAct.value, PlanModeType.PlanExecute.value):

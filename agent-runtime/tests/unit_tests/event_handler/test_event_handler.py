@@ -495,3 +495,41 @@ class TestPersistConversationInBackground:
 
         assert len(events) == 1
         assert events[0].get("event") == "message"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_kill_switch_persists_synchronously_before_done():
+        """PERSIST_BACKGROUND_ENABLE=false 回退同步落库：done 发出前 persist 已完成。"""
+        handler = TestPersistConversationInBackground._make_react_handler()
+        persist_done = False
+
+        async def slow_persist():
+            nonlocal persist_done
+            await asyncio.sleep(0.05)
+            persist_done = True
+
+        async def body():
+            summary = json.dumps({
+                "event": "summary_response",
+                "createdTime": 1784279772000,
+                "data": {"answer": {"role": "assistant", "content": "ok"}},
+            })
+            yield f"data: {summary}\n\n".encode()
+
+        with patch.object(
+            handler, "_persist_conversation", side_effect=slow_persist
+        ):
+            with patch(
+                "agent_runtime.event_handler.event_handler."
+                "backgrounding_enabled",
+                return_value=False,
+            ):
+                events = []
+                async for chunk in handler.get_handler_body_iterator(
+                    "ReAct", body()
+                ):
+                    evt = json.loads(chunk.decode("utf-8")[6:])
+                    events.append(evt)
+                    if evt.get("event") == "done":
+                        assert persist_done, "同步模式下 done 前 persist 应已完成"
+        assert events[-1].get("event") == "done"
