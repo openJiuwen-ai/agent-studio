@@ -125,8 +125,8 @@ class TestQwenChatToolCalls:
     def test_tool_calls_missing_preserves_content(self):
         """finish_reason=tool_calls 但 message 缺失 tool_calls → 不崩溃，保留原始 content。
 
-        review（chenfeng）L203：兜底分支无条件覆盖 content 为 json.dumps({}) = "{}"，
-        原始 assistant 文本被静默丢弃。修复后仅 function_info 非空时覆盖。
+        review（chenfeng）L203/L219：兜底分支不应覆盖原始 assistant 文本。
+        修复后兜底直接保留 res_content，不再 json.dumps 覆盖。
         """
         message = {
             "role": "assistant",
@@ -210,7 +210,7 @@ class TestQwenChatToolCalls:
         assert _no_valid_toolcall(result)
 
     def test_tool_calls_arguments_invalid_json(self):
-        """arguments 为非法 JSON 字符串 → 走兜底，content 为序列化的 function 内容。"""
+        """arguments 为非法 JSON 字符串 → 走兜底，保留原始 content。"""
         message = {
             "role": "assistant",
             "content": None,
@@ -227,7 +227,7 @@ class TestQwenChatToolCalls:
         }
         aim = self._run_chat(message)
         assert _no_valid_toolcall(aim.tool_calls)
-        assert "create_meeting" in aim.content
+        assert aim.content == ""
 
     def test_no_tool_calls_normal_reply(self):
         """finish_reason=stop 普通文本回复 → 无有效 ToolCall。"""
@@ -257,9 +257,11 @@ class TestQwenChatToolCalls:
         assert result.name == "create_meeting"
 
     def test_parallel_tool_calls(self):
-        """并行调用：多个有效 tool_calls → 返回 List[ToolCall]，与 _stream() 一致。
+        """并行调用：多个有效 tool_calls → 返回 List[ToolCall]，id 各自正确。
 
-        review（chenfeng）L187：原代码 break 后只取首个，后续并行调用被丢弃。
+        review（chenfeng）L187/L205：原代码 break 只取首个；
+        第二次 review L205：双循环残留 tool_call 变量导致 id 错配。
+        修复后合并为单循环，id 在当前迭代中正确绑定。
         """
         message = {
             "role": "assistant",
@@ -288,8 +290,10 @@ class TestQwenChatToolCalls:
         assert len(result) == 2
         assert result[0].name == "create_meeting"
         assert result[0].args == {"title": "周会"}
+        assert result[0].id == "call_a"
         assert result[1].name == "query_meetings"
         assert result[1].args == {"date": "2026-09-28"}
+        assert result[1].id == "call_b"
 
     def test_tool_calls_message_content_none_fallback(self):
         """工具调用消息 content=None（标准协议）→ 兜底为空串，不再 pydantic ValidationError。"""

@@ -178,16 +178,14 @@ class Qwen(BaseModel, BaseChatModel):
                 raw_tool_calls = message_info.get("tool_calls") or []
                 if isinstance(raw_tool_calls, dict):
                     raw_tool_calls = [raw_tool_calls]
-                # 收集所有有效的 function 信息（支持并行调用，与 _stream() 一致）
-                function_infos = []
-                for tool_call in raw_tool_calls:
-                    if isinstance(tool_call, dict) and isinstance(
-                        tool_call.get("function"), dict
-                    ):
-                        function_infos.append(tool_call["function"])
-                # 构造 ToolCall 列表
+                # 单次遍历构造 ToolCall 列表（收集 id + function 信息）
                 tools_call_list = []
-                for function_info in function_infos:
+                for tool_call in raw_tool_calls:
+                    if not isinstance(tool_call, dict):
+                        continue
+                    function_info = tool_call.get("function")
+                    if not isinstance(function_info, dict):
+                        continue
                     name = function_info.get("name")
                     arguments = function_info.get("arguments")
                     if isinstance(arguments, str):
@@ -214,12 +212,8 @@ class Qwen(BaseModel, BaseChatModel):
                     )
                     usage_metadata.finish_reason = "function_call"
                 else:
-                    # 解析失败兜底：仅当 function_infos 非空时将原始内容序列化为 content，
-                    # 否则保留原始 res_content（如 assistant 文本回复），避免数据丢失
-                    if function_infos:
-                        res_content = json.dumps(
-                            function_infos[0], ensure_ascii=False
-                        )
+                    # 解析失败兜底：保留原始 res_content（如 assistant 文本回复），
+                    # 避免数据丢失；无原始 content 时兜底空串（content 已做 None 防护）
                     tools_call = {}
 
                 return AIMessage(
