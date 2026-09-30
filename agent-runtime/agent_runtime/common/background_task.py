@@ -21,21 +21,28 @@ checkpoint 等全量 Redis 读写，导致「内容输出完毕 → finish」出
 
 - 进程内：per-key 在飞任务注册表（``_TRACKED_TASKS``），下一轮请求入口
   经 ``await_pending()`` 有界等待；
-- 跨进程（平台显式支持多 worker / nginx 多实例 / k8s 多副本拓扑）：
-  Redis 在飞计数器。INCR 在调度时同步完成——严格先于 finish 事件发出，
-  下一轮不可能先于标记出现；DECR 在任务 finally 中执行。读侧在进程内
-  join 后有界轮询计数器。进程崩溃时计数由 TTL 回收；读侧以自身超时
-  封顶，永不无限阻塞。
+- 跨进程（平台显式支持的多 worker / nginx 多实例 / k8s 多副本拓扑）：
+  Redis per-task 租约标记（hash：field=task_id，value=标记时间戳）。
+  HSET 在调度时同步完成——严格先于 finish 事件发出，任何实例的下一轮
+  不可能先于标记出现；任务 finally 中 HDEL。进程崩溃/取消导致 HDEL
+  丢失时 field 残留，由读侧按龄期识别为残留并 HDEL 自愈——活跃会话
+  也不会被残留标记拖成「每轮白等 5s 超时」（旧共享计数方案的缺陷，
+  per-task 租约将其结构性消除：残留只属于崩溃任务自己的 field，随
+  龄期过期被清理，且不存在计数加减不配对的负值/正值污染）；整 key
+  另有 TTL 做最终兜底。跨实例龄期比较依赖 NTP 时钟同步（平台部署
+  前提，偏差远小于租约窗口）。
 
-``backgrounding_enabled()`` 为平台级回退开关（环境变量
+``backgrounding_enabled()`` 为平台级回滚开关（环境变量
 ``PERSIST_BACKGROUND_ENABLE``，默认开启）：关闭时调用方回到同步落库，
 行为与后台化之前完全一致。
 """
 
 import asyncio
 import os
+import time
 from collections.abc import Coroutine
 from typing import Any, Optional
+from uuid import uuid4
 
 from openjiuwen.core.common.logging import workflow_logger
 
@@ -45,16 +52,23 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 # 按 key（如 conversation_id）的在飞任务注册表：供同进程下一轮请求入口 join。
 _TRACKED_TASKS: dict[str, set[asyncio.Task]] = {}
 
-# 跨进程在飞计数 key 前缀与 TTL。TTL 仅用于进程崩溃后的计数回收，
-# 远大于正常落库耗时；DECR 越过 0 为负无害（读侧判 <= 0 即视为无在飞）。
-INFLIGHT_KEY_PREFIX = "agentBuilder:conv-inflight:"
+# 跨进程在飞标记 key 前缀（hash：field=task_id，value=标记时间戳）。
+# 独立前缀与旧共享计数 key（conv-inflight:）隔离：滚动升级期间新旧格式
+# 互不写读（跨版本窗口内跨进程保护退化为无，等同该特性上线前），旧
+# string key 由自身 TTL 过期清理，避免 WRONGTYPE 干扰。
+INFLIGHT_KEY_PREFIX = "agentBuilder:conv-inflight-tasks:"
+# 整 key 兜底 TTL：长期无读侧清理也无新标记时最终回收。
 INFLIGHT_TTL_SECONDS = 60
+# 单任务 field 租约窗口：标记超过此时长仍未 HDEL，视为崩溃/取消残留，
+# 读侧识别并 HDEL 自愈。远大于正常落库耗时（百毫秒级），远小于「残留
+# 持续误导后续每轮」的时间尺度；跨实例龄期比较依赖 NTP（平台部署前提）。
+INFLIGHT_STALE_SECONDS = 30.0
 
 # join 兜底超时：后台落库正常为百毫秒级，5s 覆盖极端慢 Redis；
 # 超时后记 error 放行（退化为偶发脏读）而非无限阻塞下一轮。
 JOIN_TIMEOUT_SECONDS = 5.0
 
-# 跨进程在飞计数的轮询间隔。
+# 跨进程在飞标记的轮询间隔。
 POLL_INTERVAL_SECONDS = 0.05
 
 
@@ -75,7 +89,7 @@ def _get_redis():
 
 
 def backgrounding_enabled() -> bool:
-    """平台级回退开关：PERSIST_BACKGROUND_ENABLE=false 时回到同步落库."""
+    """平台级回滚开关：PERSIST_BACKGROUND_ENABLE=false 时回到同步落库."""
     return os.getenv("PERSIST_BACKGROUND_ENABLE", "true").strip().lower() not in (
         "false",
         "0",
@@ -127,45 +141,49 @@ def run_in_background(
     return task
 
 
-async def _incr_inflight(track_key: str) -> bool:
-    """跨进程在飞计数 +1 并刷新 TTL。
+async def _mark_inflight(track_key: str, task_id: str) -> bool:
+    """写入跨进程在飞租约标记（HSET field=task_id value=时间戳）并刷新整 key TTL。
 
     Returns:
-        INCR 是否真正执行成功。仅 True 才允许配对 DECR——Redis 不可用/出错
-        时若仍执行 DECR，会把从未 INCR 的 key 减到 -1，下一次 INCR 后读侧
-        见 0 误判「无在飞」，跨进程 join 被静默绕过（检视意见 1）。
+        HSET 是否真正成功。仅 True 才执行配对 HDEL——标记未成功时残留
+        清理无从谈起（没有 field），跳过 HDEL 同时避免 Redis 恢复后对
+        不存在的 field 做无意义写。EXPIRE 失败不影响返回值：HSET 已成功，
+        TTL 缺失仅弱化整 key 兜底（读侧 stale 清理仍然有效），下次标记
+        会重设 EXPIRE。
     """
     redis = _get_redis()
     if redis is None:
         return False
     key = f"{INFLIGHT_KEY_PREFIX}{track_key}"
     try:
-        await redis.incr(key)
+        await redis.hset(key, task_id, str(time.time()))
     except Exception as e:
         workflow_logger.warning(
-            f"inflight INCR failed, key={key}, cross-process join degraded: {e}"
+            f"inflight HSET failed, key={key}, cross-process join degraded: {e}"
         )
         return False
     try:
         await redis.expire(key, INFLIGHT_TTL_SECONDS)
     except Exception as e:
-        # INCR 已成功：必须返回 True 保证配对 DECR；TTL 缺失仅弱化崩溃回收
-        # （下轮 INCR/DECR 会重设 EXPIRE），不影响计数正确性。
         workflow_logger.warning(f"inflight EXPIRE failed, key={key}: {e}")
     return True
 
 
-async def _decr_inflight(track_key: str) -> None:
-    """跨进程在飞计数 -1 并补 TTL（防 DECR 越过 0 后残留无 TTL 的负值 key）。"""
+async def _unmark_inflight(track_key: str, task_id: str) -> None:
+    """删除本任务的在飞租约标记。
+
+    失败仅记日志：field 残留后由读侧按 INFLIGHT_STALE_SECONDS 龄期识别
+    并 HDEL 自愈，不会永久误导 join（旧共享计数方案中「DECR 丢失 →
+    活跃会话残留永不清除、每轮白等 5s」的缺陷即由此消除）。
+    """
     redis = _get_redis()
     if redis is None:
         return
     key = f"{INFLIGHT_KEY_PREFIX}{track_key}"
     try:
-        await redis.decr(key)
-        await redis.expire(key, INFLIGHT_TTL_SECONDS)
+        await redis.hdel(key, task_id)
     except Exception as e:
-        workflow_logger.warning(f"inflight DECR failed, key={key}: {e}")
+        workflow_logger.warning(f"inflight HDEL failed, key={key}: {e}")
 
 
 async def run_in_background_tracked(
@@ -173,30 +191,31 @@ async def run_in_background_tracked(
     name: Optional[str] = None,
     track_key: Optional[str] = None,
 ) -> Optional[asyncio.Task]:
-    """带跨进程在飞计数的后台执行：先 INCR（返回前完成，严格先于 finish
-    事件发出），再 fire-and-forget；任务 finally 中 DECR。
+    """带跨进程在飞标记的后台执行：先 HSET 租约（返回前完成，严格先于
+    finish 事件发出），再 fire-and-forget；任务 finally 中 HDEL 本任务 field。
 
     track_key 为空或 Redis 不可用时退化为 run_in_background（仅进程内保护）。
     """
     if not track_key:
         return run_in_background(coro, name=name)
-    incremented = await _incr_inflight(track_key)
+    task_id = uuid4().hex
+    marked = await _mark_inflight(track_key, task_id)
 
     async def _tracked() -> Any:
         try:
             return await coro
         finally:
-            # 仅在 INCR 真正执行过时才 DECR——否则对从未 INCR 的 key 减到
-            # -1，下一次 INCR 后读侧见 0 误判无在飞，跨进程 join 被绕过。
-            # 任务被取消时 finally 中的 await 可能立即抛 CancelledError
-            # 导致 DECR 丢失，由 key TTL 兜底回收。
-            if incremented:
-                await _decr_inflight(track_key)
+            # 任务被取消时（如事件循环收尾）finally 中的 await 可能立即抛
+            # CancelledError 导致 HDEL 丢失——field 由读侧 stale 清理或整
+            # key TTL 自愈，不会永久残留。
+            if marked:
+                await _unmark_inflight(track_key, task_id)
 
     task = run_in_background(_tracked(), name=name, track_key=track_key)
     if task is None:
-        # 理论上不可达（能 await INCR 即有运行中事件循环）：包装协程已被
-        # 关闭，内层协程也需显式关闭避免 never-awaited 告警；计数由 TTL 回收。
+        # 理论上不可达（能 await HSET 即有运行中事件循环）：包装协程已被
+        # 关闭，内层协程也需显式关闭避免 never-awaited 告警；租约标记由
+        # stale 清理/TTL 回收。
         coro.close()
     return task
 
@@ -206,8 +225,8 @@ async def await_pending(
 ) -> None:
     """有界等待 track_key 名下在飞后台落库完成（下一轮请求入口调用）。
 
-    两层等待：先进程内注册表 join（快路径，零 Redis 开销），再轮询跨进程
-    在飞计数（多 worker / 多实例拓扑下其他进程的后台任务）。
+    两层等待：先进程内注册表 join（快路径，零 Redis 开销），再轮询跨
+    进程租约标记（多 worker / 多实例拓扑下其他进程的后台任务）。
 
     快照语义：join 调用时刻的在飞集合；等待期间新加入的任务由下一轮 join。
     必须用 ``asyncio.wait`` 而非 ``wait_for(gather(...))``：后者的超时与
@@ -215,6 +234,10 @@ async def await_pending(
     （超时触发）或下一轮客户端断连（调用方取消）时丢消息。``asyncio.wait``
     超时或自身被取消都不动子任务；子任务异常也不会从 wait 抛出（已由
     done_callback 记录）。
+
+    跨进程读侧自愈：field 龄期超过 INFLIGHT_STALE_SECONDS（或值损坏无法
+    判龄）视为崩溃/取消任务的残留，HDEL 清理且不计入在飞——残留不会让
+    活跃会话的后续每轮都白等 5s 超时。
     """
     if not track_key:
         return
@@ -238,24 +261,35 @@ async def await_pending(
     if redis is None:
         return
     key = f"{INFLIGHT_KEY_PREFIX}{track_key}"
+    live = 0
     while True:
         try:
-            raw = await redis.get(key)
+            entries = await redis.hgetall(key)
         except Exception as e:
             workflow_logger.warning(
-                f"inflight GET failed, key={key}, "
+                f"inflight HGETALL failed, key={key}, "
                 f"cross-process join degraded to in-process only: {e}"
             )
             return
-        try:
-            inflight = int(raw) if raw is not None else 0
-        except (TypeError, ValueError):
-            workflow_logger.warning(
-                f"inflight counter corrupted, key={key}, value={raw!r}, "
-                f"treated as no in-flight task"
-            )
-            return
-        if inflight <= 0:
+        now = time.time()
+        stale = []
+        live = 0
+        for task_id, marked_at in entries.items():
+            try:
+                age = now - float(marked_at)
+            except (TypeError, ValueError):
+                # 损坏 field 无法判龄：按残留清理（宁可放行不可阻塞）
+                age = INFLIGHT_STALE_SECONDS + 1.0
+            if age > INFLIGHT_STALE_SECONDS:
+                stale.append(task_id)
+            else:
+                live += 1
+        if stale:
+            try:
+                await redis.hdel(key, *stale)
+            except Exception as e:
+                workflow_logger.warning(f"inflight stale HDEL failed, key={key}: {e}")
+        if live == 0:
             return
         # do-while：至少完成一次轮询再判超时，避免进程内 join 恰好用尽
         # 预算时未查远端就误报 cross-process timeout
@@ -264,5 +298,5 @@ async def await_pending(
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
     workflow_logger.error(
         f"await_pending cross-process timeout after {timeout}s, key={track_key}, "
-        f"proceed with remote in-flight background tasks"
+        f"proceed with {live} in-flight background tasks"
     )

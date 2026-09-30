@@ -246,7 +246,17 @@ class ControllerRunner:
                         import json as _json
                         evt_data = _json.loads(chunk_str[6:])
                         evt_type = evt_data.get("event", "")
-                        if evt_type in ("workflow_blocked", "agent_interrupted"):
+                        # waiting_user_input：当前真实映射（utils.py 的
+                        # item_code_to_conversation_event_type）不产出该名，
+                        # StreamCode 8000 亦无发出点（ControllerStreamDataAdapter
+                        # 的同名映射是死代码）；防御性纳入——未来 8000 被接入
+                        # 或枚举漂移时，误判为中断仅使该轮回退同步落库（恒
+                        # 安全），漏判才会后台化中断轮 post_run（检视意见1）。
+                        if evt_type in (
+                            "workflow_blocked",
+                            "agent_interrupted",
+                            "waiting_user_input",
+                        ):
                             awaiting_user_input = True
                         if evt_type in ("message", "done"):
                             answer = evt_data.get("data", {}).get("answer", "")
