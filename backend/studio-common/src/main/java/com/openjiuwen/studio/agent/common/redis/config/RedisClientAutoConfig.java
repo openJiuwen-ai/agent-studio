@@ -12,16 +12,14 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.redis.RedisClientWrapper;
-import com.openjiuwen.studio.agent.common.redis.impl.RedisClientMemory;
-import com.openjiuwen.studio.agent.common.redis.impl.RedisClientRedisson;
+import com.openjiuwen.studio.agent.common.redis.provider.RedisClientProviderCondition;
+import com.openjiuwen.studio.agent.common.redis.provider.RedisClientProviderConfig;
+import com.openjiuwen.studio.agent.common.redis.provider.RedisClientProviderFactory;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -30,14 +28,17 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-import java.lang.reflect.Constructor;
-
+/**
+ * Redis 客户端自动装配。
+ *
+ * <p>通过 {@link RedisClientProviderFactory} 按 Provider 插件机制解析实现：
+ * 内置 redisson/memory、ServiceLoader 插件包、显式类名（{@code redis.provider.class}），
+ * 并兼容存量 redis.client-type 与 RedisClient3rd 扩展点（见 provider 包契约文档）。
+ */
 @Configuration
 @Lazy
 @Slf4j
 public class RedisClientAutoConfig {
-    public static final String REDIS_CLIENT_3RD_CLASS =
-        "com.openjiuwen.studio.agent.common.redis.RedisClient3rd";
 
     @Value("${redis.enable-log}")
     private boolean enableLog;
@@ -46,49 +47,18 @@ public class RedisClientAutoConfig {
     private ObjectMapper objectMapper;
 
     /**
-     * 加载Redission实现
+     * 按配置解析并加载 RedisClient（统一套 Wrapper：耗时日志 + 错误分类降级）。
      *
-     * @param redisClientConfig redis客户端配置
+     * @param providerConfig provider 配置（type / class / 存量 client-type）
+     * @param redisClientConfig redis 连接配置
      * @return RedisClient
      */
     @Bean
-    @ConditionalOnMissingClass(REDIS_CLIENT_3RD_CLASS)
-    @ConditionalOnProperty(name = "redis.client-type", havingValue = "redisson")
-    public RedisClient redissionClient(RedisClientConfig redisClientConfig) {
-        RedisClientRedisson redisClientRedisson = new RedisClientRedisson(redisClientConfig);
-        log.info("load redisson redis client");
-
-        return new RedisClientWrapper(redisClientRedisson, enableLog);
-    }
-
-    /**
-     * 加载外部SDK实现
-     *
-     * @param redisClientConfig redis客户端配置
-     * @return RedisClient
-     */
-    @Bean
-    @ConditionalOnClass(name = {REDIS_CLIENT_3RD_CLASS})
-    public RedisClient thirdPartyClient(RedisClientConfig redisClientConfig) throws Exception {
-        Class<?> clazz = Class.forName(REDIS_CLIENT_3RD_CLASS);
-        Constructor<?> constructor = clazz.getConstructor(String.class, String.class, int.class);
-
-        RedisClient redisClient = (RedisClient) constructor.newInstance(redisClientConfig.getRedisHost(),
-            redisClientConfig.getRedisPassword(), redisClientConfig.getRedisPort());
-        log.info("load external redis client {}", clazz.getName());
-
-        return new RedisClientWrapper(redisClient, enableLog);
-    }
-
-    /**
-     * 加载Redis内存实现（仅用于测试）
-     *
-     * @return RedisClient
-     */
-    @Bean
-    @ConditionalOnProperty(name = "redis.client-type", havingValue = "memory")
-    public RedisClient memoryClient() {
-        return new RedisClientMemory();
+    @org.springframework.context.annotation.Conditional(RedisClientProviderCondition.class)
+    public RedisClient redisClient(RedisClientProviderConfig providerConfig,
+        RedisClientConfig redisClientConfig) {
+        RedisClient client = new RedisClientProviderFactory().createClient(providerConfig, redisClientConfig);
+        return new RedisClientWrapper(client, enableLog);
     }
 
     @Bean

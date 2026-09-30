@@ -63,8 +63,35 @@ public class RedisClientWrapper implements RedisClient {
     }
 
     @Override
-    public String get(String key, Codec codec) {
-        return run(() -> redisClient.get(key, codec), "get");
+    public String getRaw(String key) {
+        long startTime = getStartTime();
+        try {
+            String result = redisClient.getRaw(key);
+            redisCost(startTime, "getRaw");
+            return result;
+        } catch (Exception e) {
+            redisCost(startTime, "getRaw");
+            if (isStreamConstraintsException(e)) {
+                log.warn("Redis read overflow for key: {}", key, e);
+                throw new RedisReadOverflowException(key, e);
+            }
+            // getRaw 绕过对象解码，不存在解码失败回退场景；其余（连接/超时等故障）降级返回 null
+            log.error("redis operation failed, method: getRaw", e);
+            return null;
+        }
+    }
+
+    /**
+     * 已废弃：编解码器入参不再属于抽象层契约，统一走 {@link #getRaw(String)} 的原始字符串语义。
+     *
+     * @param key 键
+     * @param codec 已忽略（兼容存量调用保留）
+     * @return 原始字符串值
+     */
+    @Deprecated
+    public String get(String key, org.redisson.client.codec.Codec codec) {
+        // 兼容存量调用：等价 getRaw（原编解码器入参已废弃，统一走原始字符串语义）
+        return getRaw(key);
     }
 
     @Override

@@ -9,8 +9,6 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 
-import org.redisson.client.codec.StringCodec;
-
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,13 +72,13 @@ public class RedisHistoryEvictionService {
     }
 
     /**
-     * 读取 Redis 中的原始 JSON 字符串（显式 StringCodec 绕过解码，供溢出清理读取超长数据；双编码数据还原为 JSON 原文）
+     * 读取 Redis 中的原始 JSON 字符串（getRaw 绕过对象解码，供溢出清理读取超长数据；双编码数据还原为 JSON 原文）
      *
      * @param key Redis key
      * @return 原始 JSON 字符串，key 不存在或读失败时为 null
      */
     private String readRawJson(String key) {
-        String rawValue = redisClient.get(key, StringCodec.INSTANCE);
+        String rawValue = redisClient.getRaw(key);
         if (rawValue != null && rawValue.startsWith("\"")) {
             return JSON.parseObject(rawValue, String.class);
         }

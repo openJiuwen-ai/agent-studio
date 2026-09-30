@@ -187,9 +187,9 @@ class RedisClientRedissonTest {
         when(mockBucket.expire(any(Duration.class))).thenReturn(true);
         client.expire("k", Duration.ofSeconds(1));
 
-        // --- get(key, codec) 显式编解码器路径 ---
+        // --- getRaw 原始字符串读取路径（StringCodec 绕过对象解码） ---
         when(mockBucket.get()).thenReturn("codec-v");
-        assertEquals("codec-v", client.get("k", StringCodec.INSTANCE));
+        assertEquals("codec-v", client.getRaw("k"));
 
         // --- deleteByPrefix ---
         org.redisson.api.RKeys mockKeys = mock(org.redisson.api.RKeys.class);

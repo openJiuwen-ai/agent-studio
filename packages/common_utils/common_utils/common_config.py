@@ -77,6 +77,12 @@ class RedisSettings(BaseSettings):
         default=3 * 24 * 60 * 60, validation_alias="REDIS_TTL"
     )
 
+    # Provider 插件化配置（Redis 适配层）：默认原生 redis-py 实现（"redis"），
+    # 企业自研实现通过 REDIS_PROVIDER_TYPE=CUSTOM + MODULE/CLASS 以插件方式接入
+    provider_type: str = Field(default="redis", validation_alias="REDIS_PROVIDER_TYPE")
+    provider_module: str = Field(default="", validation_alias="REDIS_PROVIDER_MODULE")
+    provider_class: str = Field(default="", validation_alias="REDIS_PROVIDER_CLASS")
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

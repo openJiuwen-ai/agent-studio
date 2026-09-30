@@ -19,8 +19,6 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 
-import org.redisson.client.codec.StringCodec;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,8 +54,8 @@ class RedisHistoryEvictionServiceTest {
     }
 
     private void stubRaw(String key, String rawJson) {
-        // 对齐生产实现：readRawJson 通过 StringCodec.INSTANCE 双参读取原始 JSON
-        when(redisClient.get(eq(key), eq(StringCodec.INSTANCE))).thenReturn(rawJson);
+        // 对齐生产实现：readRawJson 通过 getRaw 原始字符串读取
+        when(redisClient.getRaw(eq(key))).thenReturn(rawJson);
     }
 
     private String writeBackValue(String key) {
@@ -94,7 +92,7 @@ class RedisHistoryEvictionServiceTest {
     @Test
     void handleReadOverflow_nullKey_returnsNull_noRedisAccess() {
         assertNull(service.handleReadOverflow(null));
-        verify(redisClient, never()).get(anyString(), any());
+        verify(redisClient, never()).getRaw(anyString());
     }
 
     @Test
@@ -260,17 +258,17 @@ class RedisHistoryEvictionServiceTest {
         assertNull(service.handleReadOverflow(key));
     }
 
-    // ---------- 修改点1：readRawJson 对齐生产实现，走双参 redisClient.get(key, StringCodec.INSTANCE) ----------
+    // ---------- 修改点1：readRawJson 对齐生产实现，走 redisClient.getRaw(key) 原始读取 ----------
 
     /**
-     * 用例描述：readRawJson 对齐生产实现后，通过双参 redisClient.get(key, StringCodec.INSTANCE)
-     *          读取原始 JSON（StringCodec 绕过解码，供溢出清理读取超长数据）
-     * 预制条件：mock RedisClient 的双参 get(String, Codec) 返回原始 JSON 字符串
+     * 用例描述：readRawJson 对齐生产实现后，通过 redisClient.getRaw(key)
+     *          读取原始 JSON（getRaw 绕过对象解码，供溢出清理读取超长数据）
+     * 预制条件：mock RedisClient 的 getRaw 返回原始 JSON 字符串
      * 输入参数：key = wf_inst_001，底层原始值为未加引号的 JSON 对象（单编码）
-     * 预期结果：handleReadOverflow 正常清理并写回；通过 verify 锁定双参 get(key, StringCodec.INSTANCE) 被调用
+     * 预期结果：handleReadOverflow 正常清理并写回；通过 verify 锁定 getRaw(key) 被调用
      */
     @Test
-    void handleReadOverflow_readsViaStringCodecGetFromRedisClient() {
+    void handleReadOverflow_readsViaGetRawFromRedisClient() {
         String key = "wf_inst_001";
         stubRaw(key, "{\"eventList\":" + eventsJson("startTime", 10, true) + "}");
 
@@ -278,34 +276,33 @@ class RedisHistoryEvictionServiceTest {
 
         assertNotNull(result);
         assertEquals(7, JSON.parseObject(result).getJSONArray("eventList").size());
-        // 修改点1：readRawJson 必须走 redisClient.get(key, StringCodec.INSTANCE) 双参路径
-        // 对齐生产：readRawJson 通过 StringCodec.INSTANCE 双参读取
-        verify(redisClient).get(eq(key), eq(StringCodec.INSTANCE));
+        // 修改点1：readRawJson 必须走 redisClient.getRaw(key) 原始读取路径
+        verify(redisClient).getRaw(eq(key));
     }
 
     /**
      * 用例描述：readRawJson 返回的原始 JSON 为单编码（不以引号开头）时不做双编码还原，原样交给 JSON 解析，
      *          保证溢出清理链路对常规（未双编码）数据行为不变
-     * 预制条件：mock 双参 get(String, Codec) 返回未加引号的原始 JSON（单编码）
+     * 预制条件：mock getRaw 返回未加引号的原始 JSON（单编码）
      * 输入参数：key = trace_root_span_42，原始 JSON 含 6 条 jiuwenEventList 事件
      * 预期结果：按阈值 0.75 保留 4 条并写回 10 分钟 TTL
      */
     @Test
-    void handleReadOverflow_usesRawStringFromStringCodecGetDirectly() {
+    void handleReadOverflow_usesRawStringFromGetRawDirectly() {
         String key = "trace_root_span_42";
         stubRaw(key, "{\"jiuwenEventList\":" + eventsJson("startTime", 6, true) + "}");
 
         String result = service.handleReadOverflow(key);
 
         assertEquals(4, JSON.parseObject(result).getJSONArray("jiuwenEventList").size());
-        // 对齐生产：readRawJson 通过 StringCodec.INSTANCE 双参读取
-        verify(redisClient).get(eq(key), eq(StringCodec.INSTANCE));
+        // 对齐生产：readRawJson 通过 getRaw 原始读取
+        verify(redisClient).getRaw(eq(key));
     }
 
     /**
      * 用例描述：路由分支中 key 仅含 "_rel_"（不含 "_exec_rel_"）时，
      *          走 || 短路条件的第二分支 evictListData(key, "exec_rel")
-     * 预制条件：mock 双参 get(String, Codec) 返回 4 条带 startTime 的列表 JSON
+     * 预制条件：mock getRaw 返回 4 条带 startTime 的列表 JSON
      * 输入参数：key = agent_001_rel_only
      * 预期结果：按阈值 0.75 保留 3 条并返回清理后的 JSON
      */
@@ -317,8 +314,8 @@ class RedisHistoryEvictionServiceTest {
         String result = service.handleReadOverflow(key);
 
         assertEquals(3, JSON.parseArray(result).size());
-        // 对齐生产：readRawJson 通过 StringCodec.INSTANCE 双参读取
-        verify(redisClient).get(eq(key), eq(StringCodec.INSTANCE));
+        // 对齐生产：readRawJson 通过 getRaw 原始读取
+        verify(redisClient).getRaw(eq(key));
     }
 
     // ---------- 修改点2：readRawJson 双编码还原行为（修复后） ----------
@@ -327,7 +324,7 @@ class RedisHistoryEvictionServiceTest {
      * 用例描述：readRawJson 遇到以引号开头的双编码原始值（历史写入时被整体 JSON 字符串化）
      *          时，通过 JSON.parseObject(rawValue, String.class) 还原为 JSON 原文，
      *          保证后续 evict 解析不再因外层引号而失败（溢出清理修复的核心路径）
-     * 预制条件：mock 双参 get(String, Codec) 返回双编码字符串（外层带引号的 JSON 字符串字面量）
+     * 预制条件：mock getRaw 返回双编码字符串（外层带引号的 JSON 字符串字面量）
      * 输入参数：key = wf_inst_enc，底层原始值为 JSON.toJSONString(plainJson) 产生的双编码串
      * 预期结果：readRawJson 返回还原后的 JSON 原文（不带外层引号），且可被 JSON.parseObject 正常解析
      */
@@ -349,7 +346,7 @@ class RedisHistoryEvictionServiceTest {
     /**
      * 用例描述：readRawJson 对不以引号开头的单编码原始 JSON 不做任何还原，原样返回，
      *          保证常规（未双编码）数据的读取行为不变
-     * 预制条件：mock 双参 get(String, Codec) 返回单编码 JSON 字符串（不以引号开头）
+     * 预制条件：mock getRaw 返回单编码 JSON 字符串（不以引号开头）
      * 输入参数：key = wf_inst_plain，底层原始值为普通 JSON 对象字符串
      * 预期结果：readRawJson 返回与输入完全一致的字符串
      */
@@ -370,7 +367,7 @@ class RedisHistoryEvictionServiceTest {
     /**
      * 用例描述：readRawJson 在底层 key 不存在（get 返回 null）时返回 null，
      *          由上层 evict 方法转换为「不做清理、直接返回 null」语义
-     * 预制条件：mock 双参 get(String, Codec) 返回 null（key 缺失）
+     * 预制条件：mock getRaw 返回 null（key 缺失）
      * 输入参数：key = wf_inst_missing，底层无数据
      * 预期结果：readRawJson 返回 null
      */
@@ -472,7 +469,7 @@ class RedisHistoryEvictionServiceTest {
 
     /**
      * 用例描述：trace 类型 key 底层数据缺失（get 返回 null）时，evictTraceInfo 不做清理直接返回 null
-     * 预制条件：mock 双参 get(String, Codec) 返回 null
+     * 预制条件：mock getRaw 返回 null
      * 输入参数：key = trace_root_span_missing
      * 预期结果：handleReadOverflow 返回 null，且不写回
      */
@@ -487,7 +484,7 @@ class RedisHistoryEvictionServiceTest {
 
     /**
      * 用例描述：列表类型 key 底层数据缺失（get 返回 null）时，evictListData 不做清理直接返回 null
-     * 预制条件：mock 双参 get(String, Codec) 返回 null
+     * 预制条件：mock getRaw 返回 null
      * 输入参数：key = agent_001_conv_missing
      * 预期结果：handleReadOverflow 返回 null，且不写回
      */
@@ -502,7 +499,7 @@ class RedisHistoryEvictionServiceTest {
 
     /**
      * 用例描述：列表类型 key 底层为空数组时，evictListData 原样返回且不写回
-     * 预制条件：mock 双参 get(String, Codec) 返回空数组 "[]"
+     * 预制条件：mock getRaw 返回空数组 "[]"
      * 输入参数：key = agent_001_conv_empty
      * 预期结果：handleReadOverflow 返回 "[]"，未调用 setAndKeepTtl
      */

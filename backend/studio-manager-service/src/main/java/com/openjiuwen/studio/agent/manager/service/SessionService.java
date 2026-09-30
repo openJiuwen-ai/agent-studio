@@ -4,25 +4,29 @@
 
 package com.openjiuwen.studio.agent.manager.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.manager.entity.Session;
 import com.openjiuwen.studio.agent.manager.entity.User;
 import com.openjiuwen.studio.agent.manager.repository.SessionRepository;
+import com.openjiuwen.studio.agent.common.redis.RedisClient;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 会话服务层 - 支持自定义超时机制
+ *
+ * <p>Redis 访问统一走 {@link RedisClient} 适配层（序列化为 JSON 字符串存储），
+ * 支持通过 Provider 插件机制替换底层实现，不再直连 RedisTemplate。
  */
 @Service
 @Slf4j
@@ -33,7 +37,9 @@ public class SessionService {
 
     private final SessionRepository sessionRepository;
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisClient redisClient;
+
+    private final ObjectMapper objectMapper;
 
     // 从配置文件中注入超时时间
     @Value("${app.auth.session.absolute-timeout:86400}")
@@ -66,9 +72,9 @@ public class SessionService {
 
         Session savedSession = sessionRepository.save(session);
 
-        // 存储到Redis（使用绝对超时时间）
+        // 存储到Redis（使用绝对超时时间，JSON 字符串形式）
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        redisTemplate.opsForValue().set(redisKey, user, absoluteTimeoutSeconds, TimeUnit.SECONDS);
+        redisClient.set(redisKey, writeUserJson(user), Duration.ofSeconds(absoluteTimeoutSeconds));
 
 
         return savedSession;
@@ -86,13 +92,10 @@ public class SessionService {
 
         // 更新Redis中的用户对象（如果需要）
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(redisKey))) {
-            // 获取当前用户信息
-            User user = (User) redisTemplate.opsForValue().get(redisKey);
-            if (user != null) {
-                // 重新设置Redis，使用绝对超时时间
-                redisTemplate.opsForValue().set(redisKey, user, absoluteTimeoutSeconds, TimeUnit.SECONDS);
-            }
+        String userJson = redisClient.get(redisKey);
+        if (userJson != null) {
+            // 重新设置Redis，使用绝对超时时间
+            redisClient.set(redisKey, userJson, Duration.ofSeconds(absoluteTimeoutSeconds));
         }
 
     }
@@ -107,7 +110,7 @@ public class SessionService {
 
         // 检查Redis中是否存在
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        if (Boolean.FALSE.equals(redisTemplate.hasKey(redisKey))) {
+        if (!redisClient.exists(redisKey)) {
             return false;
         }
 
@@ -146,8 +149,7 @@ public class SessionService {
         }
 
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        User user = (User) redisTemplate.opsForValue().get(redisKey);
-        return Optional.ofNullable(user);
+        return readUserJson(redisKey);
     }
 
     /**
@@ -174,4 +176,31 @@ public class SessionService {
         return java.util.UUID.randomUUID().toString();
     }
 
+    /**
+     * 序列化用户对象为 JSON（失败时返回空串，会话校验将退化为无效）。
+     */
+    private String writeUserJson(User user) {
+        try {
+            return objectMapper.writeValueAsString(user);
+        } catch (Exception e) {
+            log.error("Serialize user to json failed, username: {}", user.getUsername(), e);
+            return "";
+        }
+    }
+
+    /**
+     * 反序列化 Redis 中的用户 JSON（损坏数据降级为空）。
+     */
+    private Optional<User> readUserJson(String redisKey) {
+        String userJson = redisClient.get(redisKey);
+        if (userJson == null || userJson.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(objectMapper.readValue(userJson, User.class));
+        } catch (Exception e) {
+            log.warn("Deserialize user from redis failed, degrade to empty, key: {}", redisKey, e);
+            return Optional.empty();
+        }
+    }
 }

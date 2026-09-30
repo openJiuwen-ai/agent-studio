@@ -4,7 +4,9 @@
 
 package com.openjiuwen.studio.agent.manager.saml.filter;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.manager.saml.ConfigurationException;
 import com.openjiuwen.studio.agent.manager.saml.SAMLException;
 import com.openjiuwen.studio.agent.manager.saml.impl.SAMLRequestImpl;
@@ -21,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -29,10 +30,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * SAML认证过滤器 - 专门处理SAML认证流程
@@ -49,9 +50,12 @@ public class SamlAuthFilter extends OncePerRequestFilter {
     private static final int REQUEST_TIMEOUT_MINUTES = 10;
     private final SessionService sessionService;
 
+    private final RedisClient redisClient;
+
+    private final ObjectMapper objectMapper;
+
     @Value("${saml.idp-metadata-url:0}")
     private String idpUrl;
-    private final RedisTemplate<String, Object> redisTemplate;
 
 
 
@@ -102,9 +106,14 @@ public class SamlAuthFilter extends OncePerRequestFilter {
         }
 
         log.info("User not authenticated, redirecting to SAML login:originalUrl={}, redirectUrl={}", originalUrl);
-        // 存储到Redis，设置10分钟过期时间REDIS_REQUEST_PREFIX
+        // 存储到Redis，设置10分钟过期时间REDIS_REQUEST_PREFIX（JSON 字符串形式，统一走 RedisClient 适配层）
         String redisKey = REDIS_REQUEST_PREFIX + traceId;
-        redisTemplate.opsForValue().set(redisKey, originalRequest, REQUEST_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+        try {
+            redisClient.set(redisKey, objectMapper.writeValueAsString(originalRequest),
+                Duration.ofMinutes(REQUEST_TIMEOUT_MINUTES));
+        } catch (JsonProcessingException e) {
+            log.warn("Serialize original request failed, traceId: {}", traceId, e);
+        }
         byte[] samlRequest = new SAMLRequestImpl().generate().getBytes(StandardCharsets.UTF_8);
         samlRequest = new Base64().encode(samlRequest);
         String callbackUrl = idpUrl + "/sp?SAMLRequest="
