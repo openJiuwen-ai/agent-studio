@@ -408,4 +408,9 @@ class ControllerRunner:
                 workflow_logger.error(
                     f"Agent group blocking failed with exception: {e}", exc_info=True
                 )
+        # 出口 join（检视意见）：run_streaming 的 finally 把 post_run 后台化，
+        # blocking 调用方拿到响应时 checkpoint 可能仍在飞——「响应返回即已
+        # 持久化」契约在非流式路径回归。有界等待（超时放行记 error），恢复
+        # 后台化前的 blocking 语义；流式路径不受影响（终态不等 post_run）。
+        await await_pending(req.conversation_id)
         return workflow_end_answer or message_end_answer or "".join(message_parts)
