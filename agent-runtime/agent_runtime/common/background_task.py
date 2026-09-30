@@ -23,7 +23,9 @@ checkpoint 等全量 Redis 读写，导致「内容输出完毕 → finish」出
   经 ``await_pending()`` 有界等待；
 - 跨进程（平台显式支持的多 worker / nginx 多实例 / k8s 多副本拓扑）：
   Redis per-task 租约标记（hash：field=task_id，value=标记时间戳）。
-  HSET 在调度时同步完成——严格先于 finish 事件发出，任何实例的下一轮
+  HSET 在调度时同步完成——严格先于终态事件对客户端可见（agent/controller
+  模式终态由 event_handler 登记后注入；workflow 流式模式终态帧来自上游、
+  在 loop 内转发，由 event_handler 在转发前前置登记），任何实例的下一轮
   不可能先于标记出现；任务 finally 中 HDEL。进程崩溃/取消导致 HDEL
   丢失时 field 残留，由读侧按龄期识别为残留并 HDEL 自愈——活跃会话
   也不会被残留标记拖成「每轮白等 5s 超时」（旧共享计数方案的缺陷，
@@ -191,15 +193,23 @@ async def run_in_background_tracked(
     name: Optional[str] = None,
     track_key: Optional[str] = None,
 ) -> Optional[asyncio.Task]:
-    """带跨进程在飞标记的后台执行：先 HSET 租约（返回前完成，严格先于
-    finish 事件发出），再 fire-and-forget；任务 finally 中 HDEL 本任务 field。
+    """带跨进程在飞标记的后台执行：先 HSET 租约（返回前完成；调用方保证在
+    终态帧对客户端可见之前调用），再 fire-and-forget；任务 finally 中 HDEL 本任务 field。
 
     track_key 为空或 Redis 不可用时退化为 run_in_background（仅进程内保护）。
     """
     if not track_key:
         return run_in_background(coro, name=name)
     task_id = uuid4().hex
-    marked = await _mark_inflight(track_key, task_id)
+    try:
+        marked = await _mark_inflight(track_key, task_id)
+    except BaseException:
+        # HSET 被取消打断（如客户端断连取消响应流，workflow 模式下登记前移到
+        # 终态帧转发前、落在流活跃期内）：协程尚未移交任务，显式关闭避免
+        # "coroutine was never awaited" 告警；HSET 若已实际写入，field 残留
+        # 由读侧 stale 清理/整 key TTL 自愈（与下方 task=None 分支同口径）。
+        coro.close()
+        raise
 
     async def _tracked() -> Any:
         try:
