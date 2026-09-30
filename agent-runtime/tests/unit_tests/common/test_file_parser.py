@@ -272,6 +272,20 @@ class TestParse:
             assert "not a valid doc file" in str(exc_info.value)
 
     @staticmethod
+    def test_doc_antiword_timeout_raises():
+        """Test that a hanging antiword subprocess is bounded by a timeout."""
+        import subprocess as _subprocess
+
+        with patch(
+            "subprocess.run",
+            side_effect=_subprocess.TimeoutExpired(cmd="antiword", timeout=30),
+        ) as mock_run:
+            with pytest.raises(ValueError) as exc_info:
+                FileParser.parse(b"hang doc data", "doc")
+            assert "超时" in str(exc_info.value)
+            assert mock_run.call_args[1].get("timeout") == 30
+
+    @staticmethod
     def test_unsupported_xls_returns_message():
         result = FileParser.parse(b"dummy", "xls")
         assert "不支持" in result

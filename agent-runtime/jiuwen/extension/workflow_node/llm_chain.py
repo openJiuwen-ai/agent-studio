@@ -888,7 +888,7 @@ class LLMChain(WorkflowComponent):
             return url
         try:
             import httpx
-            async with httpx.AsyncClient(verify=False, timeout=30) as client:
+            async with httpx.AsyncClient(verify=True, timeout=30) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 content_type = resp.headers.get("content-type", "image/jpeg")

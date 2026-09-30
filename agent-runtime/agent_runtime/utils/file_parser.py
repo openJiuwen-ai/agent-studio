@@ -114,11 +114,14 @@ class FileParser:
             result = subprocess.run(
                 [antiword_path, "-m", "UTF-8.txt", tmp_path],
                 capture_output=True,
+                timeout=30,
             )
             if result.returncode != 0:
                 stderr = result.stderr.decode("utf-8", errors="ignore")
                 raise ValueError(f"antiword 解析失败: {stderr}")
             return result.stdout.decode("utf-8", errors="ignore")
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("antiword 解析超时（30s）") from exc
         finally:
             os.unlink(tmp_path)
 
