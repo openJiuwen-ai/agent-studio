@@ -276,6 +276,9 @@ async def await_pending(
         live = 0
         for task_id, marked_at in entries.items():
             try:
+                # decode_responses=False 下 marked_at 为 bytes——float() 原生
+                # 接受 bytes/str（真 Redis 已验证 bytes 租约正确解析为 live），
+                # 异常分支仅防御真正损坏的值。
                 age = now - float(marked_at)
             except (TypeError, ValueError):
                 # 损坏 field 无法判龄：按残留清理（宁可放行不可阻塞）

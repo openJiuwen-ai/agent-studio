@@ -14,13 +14,22 @@ from agent_runtime.common.background_task import run_in_background, await_pendin
 
 
 class _FakeRedis:
-    """内存 Redis：仅实现租约标记原语 hset/hdel/hgetall/expire。"""
+    """内存 Redis：仅实现租约标记原语 hset/hdel/hgetall/expire。
+
+    模拟生产客户端 decode_responses=False 语义（execution_registry.py 注记）：
+    field 与 value 一律以 bytes 存取，保证测试走生产同款 bytes 解析路径
+    （float(bytes) 原生可解析；曾有检视意见误判此处抛 TypeError）。
+    """
 
     def __init__(self):
         self.store = {}
 
+    @staticmethod
+    def _b(value):
+        return value if isinstance(value, bytes) else str(value).encode()
+
     async def hset(self, key, field, value):
-        self.store.setdefault(key, {})[field] = value
+        self.store.setdefault(key, {})[self._b(field)] = self._b(value)
         return 1
 
     async def hdel(self, key, *fields):
@@ -29,7 +38,7 @@ class _FakeRedis:
             return 0
         removed = 0
         for field in fields:
-            if entry.pop(field, None) is not None:
+            if entry.pop(self._b(field), None) is not None:
                 removed += 1
         if not entry:
             self.store.pop(key, None)
@@ -333,7 +342,7 @@ class TestCrossProcessJoin:
         """他进程在飞标记存在时轮询等待，标记删除后返回。"""
         fake = _FakeRedis()
         key = f"{background_task.INFLIGHT_KEY_PREFIX}conv-remote"
-        fake.store[key] = {"remote-task": str(time.time())}
+        fake.store[key] = {b"remote-task": str(time.time()).encode()}
 
         async def remote_finish():
             await asyncio.sleep(0.15)
@@ -355,9 +364,9 @@ class TestCrossProcessJoin:
         fake = _FakeRedis()
         key = f"{background_task.INFLIGHT_KEY_PREFIX}conv-stale"
         fake.store[key] = {
-            "dead-task": str(
+            b"dead-task": str(
                 time.time() - background_task.INFLIGHT_STALE_SECONDS - 5
-            ),
+            ).encode(),
         }
 
         with patch.object(background_task, "_get_redis", return_value=fake):
@@ -375,15 +384,15 @@ class TestCrossProcessJoin:
         fake = _FakeRedis()
         key = f"{background_task.INFLIGHT_KEY_PREFIX}conv-mixed"
         fake.store[key] = {
-            "dead-task": str(
+            b"dead-task": str(
                 time.time() - background_task.INFLIGHT_STALE_SECONDS - 5
-            ),
-            "live-task": str(time.time()),
+            ).encode(),
+            b"live-task": str(time.time()).encode(),
         }
 
         async def remote_finish():
             await asyncio.sleep(0.1)
-            fake.store[key].pop("live-task", None)
+            fake.store[key].pop(b"live-task", None)
 
         with patch.object(background_task, "_get_redis", return_value=fake):
             remote = asyncio.create_task(remote_finish())
@@ -401,7 +410,7 @@ class TestCrossProcessJoin:
         """远端租约未超龄（任务确实仍在执行）时超时放行记 error，且不得误删 live 标记。"""
         fake = _FakeRedis()
         key = f"{background_task.INFLIGHT_KEY_PREFIX}conv-stuck"
-        fake.store[key] = {"busy-task": str(time.time())}
+        fake.store[key] = {b"busy-task": str(time.time()).encode()}
 
         with patch.object(background_task, "_get_redis", return_value=fake):
             with patch.object(
@@ -413,7 +422,7 @@ class TestCrossProcessJoin:
                 elapsed = loop.time() - start
         assert 0.15 < elapsed < 1.0
         assert mock_error.called
-        assert "busy-task" in fake.store.get(key, {}), "超时不得误删未超龄标记"
+        assert b"busy-task" in fake.store.get(key, {}), "超时不得误删未超龄标记"
 
     @staticmethod
     @pytest.mark.asyncio
@@ -439,7 +448,7 @@ class TestCrossProcessJoin:
         """标记值损坏（非数值）时按残留清理并立即放行，不阻塞。"""
         fake = _FakeRedis()
         key = f"{background_task.INFLIGHT_KEY_PREFIX}conv-bad"
-        fake.store[key] = {"bad-task": "garbage"}
+        fake.store[key] = {b"bad-task": b"garbage"}
 
         with patch.object(background_task, "_get_redis", return_value=fake):
             loop = asyncio.get_running_loop()
