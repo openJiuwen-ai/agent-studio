@@ -54,6 +54,8 @@
   "skill.list.button.delete.list.title": "引用列表",
   "skill.list.button.delete.tip": "该Skill已被引用，删除Skill后引用将自动取消，可能会导致单智能体无法运行，且该操作不可撤回。",
   "skill.list.button.delete.confirm": "如您确定要删除，请输入 <strong>DELETE</strong>",
+  "skill.list.button.delete.quickInput": "一键输入",
+  "skill.list.button.delete.completeInput": "请完整输入“DELETE”",
   "skill.list.button.delete.name": "名称",
   "skill.list.button.delete.type": "类型",
   "skill.list.button.delete.version": "版本",
