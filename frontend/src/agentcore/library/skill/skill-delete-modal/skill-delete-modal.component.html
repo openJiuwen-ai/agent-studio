@@ -1,10 +1,10 @@
-<div *nzModalTitle>删除Skill</div>
+<div *nzModalTitle>{{ 'skill.list.button.delete.title' | i18n }}</div>
 <div>
   <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-2">
       @if (srcData.data.length) {
         <nz-alert class="alert-text" nzType="warning" [nzShowIcon]="false" [nzDescription]="descriptionTemplate1">
-          <ng-template #descriptionTemplate1> 该Skill已被引用，删除Skill后引用将自动取消，可能会导致单智能体无法运行，且该操作不可撤回。 </ng-template>
+          <ng-template #descriptionTemplate1> {{ 'skill.list.button.delete.tip' | i18n }} </ng-template>
         </nz-alert>
         <div class="flex flex-col gap-2">
           <span class="font-semibold">{{ 'reference_ist' | i18nextEager }}</span>
@@ -34,23 +34,23 @@
                   </a>
                 </td>
                 <td>{{ row.app_version || ('unpublished' | i18nextEager) }}</td>
-                <td>单智能体</td>
+                <td>{{ 'skill.list.button.delete.type.single.agent' | i18n }}</td>
               </tr>
             </tbody>
           </nz-table>
         </div>
         <div>
-          <span>如您确定要删除，请输入<b style="margin: 0px 6px">DELETE</b></span>
-          <a (click)="deleteVal = 'DELETE'">一键输入</a>
+          <span [innerHTML]="'skill.list.button.delete.confirm' | i18n"></span>
+          <a (click)="deleteVal = 'DELETE'">{{ 'skill.list.button.delete.quickInput' | i18n }}</a>
         </div>
         <div>
           <input [style]="{ 'border-color': errorClass ? '#ff4d4f !important' : '' }" nz-input [(ngModel)]="deleteVal" />
         </div>
         @if (errorClass) {
-          <div style="color: #ff4d4f; font-size: 12px">请完整输入“DELETE”</div>
+          <div style="color: #ff4d4f; font-size: 12px">{{ 'skill.list.button.delete.completeInput' | i18n }}</div>
         }
       } @else {
-        <div style="font-size: 12px; color: #191919">即将删除以下Skill</div>
+        <div style="font-size: 12px; color: #191919">{{ 'skill.list.button.delete.tip1' | i18n }}</div>
         <ul>
           <li>{{ name }}</li>
         </ul>
