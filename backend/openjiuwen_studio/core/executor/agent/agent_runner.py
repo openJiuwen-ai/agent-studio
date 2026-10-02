@@ -342,7 +342,8 @@ class AgentRunner:
         if conversation_id in self._agent_instances:
             if agent_key in self._agent_instances[conversation_id]:
                 (_, catch_instance) = self._agent_instances[conversation_id][agent_key]
-                await catch_instance.clear_session(conversation_id)
+                if catch_instance is not None:
+                    await catch_instance.clear_session(conversation_id)
                 del self._agent_instances[conversation_id][agent_key]
                 return True
         return False

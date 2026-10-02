@@ -180,9 +180,10 @@ const MindMapFlow: React.FC<MindMapFlowComponentProps> = ({
 
   // 当messageItemsId变化时（切换思维链），强制调用 fitView
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       triggerFitView();
     }, 100);
+    return () => clearTimeout(timer);
   }, [messageItemsId]);
 
   // 当内部graphType变化时，通知父组件
@@ -500,6 +501,7 @@ const MindMapFlow: React.FC<MindMapFlowComponentProps> = ({
   // 当思维图类型变化时，强制触发布局和适应视图
   useEffect(() => {
     // 延迟调用，确保新的思维图数据已加载
+    let innerTimer: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       if (graph) {
         // 强制设置需要布局
@@ -507,13 +509,16 @@ const MindMapFlow: React.FC<MindMapFlowComponentProps> = ({
         setNeedLayout(true);
 
         // 延迟调用 fitView，确保节点已更新
-        setTimeout(() => {
+        innerTimer = setTimeout(() => {
           triggerFitView();
         }, 500);
       }
     }, 100);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (innerTimer) clearTimeout(innerTimer);
+    };
   }, [graphType]);
 
 

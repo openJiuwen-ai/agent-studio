@@ -34,10 +34,15 @@ const useScrollToHighlight = (isActive: boolean, _scrollRef: React.RefObject<HTM
   useEffect(() => {
     if (!isActive) return
 
+    const rafIds: number[] = []
+    const safeRaf = (cb: () => void): void => {
+      rafIds.push(requestAnimationFrame(cb))
+    }
+
     const scheduleScroll = () => {
       const executeScroll = (rafCount = 0) => {
         if (rafCount < 3) {
-          requestAnimationFrame(() => executeScroll(rafCount + 1))
+          safeRaf(() => executeScroll(rafCount + 1))
           return
         }
 
@@ -76,7 +81,7 @@ const useScrollToHighlight = (isActive: boolean, _scrollRef: React.RefObject<HTM
         // 执行滚动
         try {
           scrollContainer.scrollTop = targetScrollTop
-          requestAnimationFrame(() => {
+          safeRaf(() => {
             if (scrollContainer) {
               scrollContainer.scrollTop = targetScrollTop
             }
@@ -89,7 +94,12 @@ const useScrollToHighlight = (isActive: boolean, _scrollRef: React.RefObject<HTM
       executeScroll()
     }
 
-    setTimeout(scheduleScroll, 200)
+    const timeoutId = setTimeout(scheduleScroll, 200)
+
+    return () => {
+      clearTimeout(timeoutId)
+      rafIds.forEach(id => cancelAnimationFrame(id))
+    }
   }, [isActive])
 }
 

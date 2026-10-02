@@ -17,6 +17,7 @@ from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.core.manager.model_manager.managers.vlm_model_config_manager import VLMModelConfigManager
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 from openjiuwen_studio.core.common.exceptions import DeepSearchClientError
+from openjiuwen_studio.core.exceptions import ModelConfigNotFoundError
 from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.deepsearch import (
@@ -84,7 +85,13 @@ def build_single_model_config(model_id, space_id):
 
 def build_single_vlm_model_config(model_id: int, space_id: str, db: Session):
     """Build the VLM model config DeepSearch expects for chart generation."""
-    model_config = VLMModelConfigManager(db).get_config_by_id(model_id, space_id)
+    try:
+        model_config = VLMModelConfigManager(db).get_config_by_id(model_id, space_id)
+    except ModelConfigNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"VLM model config not found: {model_id}",
+        )
     if not model_config.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

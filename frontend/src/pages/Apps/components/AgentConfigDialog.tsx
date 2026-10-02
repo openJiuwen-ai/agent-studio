@@ -177,6 +177,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
   const { t } = useTranslation()
   const { snackbar, closeSnackbar, showError } = useUnifiedSnackbar()
   const [showSaved, setShowSaved] = useState(false)
+  const savedTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -421,11 +422,23 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     onSave(agent.id, config)
 
     setShowSaved(true)
-    setTimeout(() => {
+    if (savedTimerRef.current) {
+      clearTimeout(savedTimerRef.current)
+    }
+    savedTimerRef.current = setTimeout(() => {
       setShowSaved(false)
       onClose()
     }, 800)
   }
+
+  // 卸载时清理保存反馈定时器，避免对已卸载组件 setState
+  React.useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current)
+      }
+    }
+  }, [])
 
   // 更新配置（带联动逻辑）
   const updateConfig = useCallback(<K extends keyof DeepSearchConfig>(
