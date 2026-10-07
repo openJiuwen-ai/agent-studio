@@ -97,7 +97,8 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
 
     字段映射（与 McpIRConverter.ir_to_mcp 保持一致）：
     - url -> server_path
-    - name -> server_name / server_id
+    - id -> server_id / server_name（实例唯一 ID；见下方 server_id 说明）
+    - name -> params["display_name"]（仅展示/日志用）
     - type -> client_type (映射后)
     - headers -> auth_headers
     - pluginDependency -> params["plugin_dependency"]
@@ -129,12 +130,20 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
     # OpenAI-compatible APIs require function.name to match ^[a-zA-Z0-9_-]+$.
     # AbilityManager.list_tool_info generates tool names as f"mcp_{server_name}_{tool_name}",
     # so server_name must only contain ASCII alphanumeric, underscore, or hyphen.
-    # Use the IR id (UUID) as server_name to guarantee compliance; keep the
-    # original name as server_id for internal indexing and logging.
-    server_id = server_name
+    # Use the IR id (UUID) as server_name to guarantee compliance.
     mcp_ir_id = ir_config.get("id", "")
     if mcp_ir_id:
         server_name = mcp_ir_id
+
+    # server_id is the unique key of the process-global ResourceMgr registry
+    # (add_tool_server dedups / get_mcp_tool_id indexes by it). Runner is shared
+    # by all users in one runtime process, and the display name is editable and
+    # only unique per user, so same-named MCP servers of different users would
+    # shadow each other (the later one silently reuses the former's connection
+    # and tools). The IR id is the platform-side instance primary key, globally
+    # unique, so use it as server_id; keep the name only as a display fallback
+    # for legacy IR configs without id.
+    server_id = mcp_ir_id or server_name
 
     params = {
         "auth": ir_config.get(AUTH, {}),
@@ -144,6 +153,7 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
         ),
         "mcp_choose_tools": ir_config.get("mcp_choose_tools"),
         "input_parameters": ir_config.get("input_parameters", {}),
+        "display_name": ir_config.get("name", ""),
     }
 
     transport_type = ir_config.get("type", "sse")
