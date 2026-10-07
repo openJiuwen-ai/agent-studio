@@ -311,6 +311,20 @@ cache_model_auth_queue = CacheUtils(
     memory_ttl=settings.cache.model_cache_mem_ttl,
     redis_ttl=settings.cache.model_cache_redis_ttl,
 )
+cache_ir_converted_queue = CacheUtils(
+    capacity=settings.cache.max_ir_converted_cache_num,
+    should_serialize=True,
+    cache_name="ir_converted",
+    memory_ttl=settings.cache.mem_cache_ttl_seconds,
+    redis_ttl=settings.cache.cache_ttl_seconds,
+)
+cache_node_defs_queue = CacheUtils(
+    capacity=settings.cache.max_node_defs_cache_num,
+    should_serialize=True,
+    cache_name="node_defs",
+    memory_ttl=settings.cache.mem_cache_ttl_seconds,
+    redis_ttl=settings.cache.cache_ttl_seconds,
+)
 
 
 def _log_ir_content(source: str, path: str, ir_data: dict):

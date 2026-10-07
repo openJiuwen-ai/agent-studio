@@ -293,6 +293,18 @@ class CacheSettings(BaseSettings):
     kb_config_cache_ttl: int = Field(
         default=300, validation_alias="KB_CONFIG_CACHE_TTL"
     )
+    ir_converted_cache_enable: bool = Field(
+        default=True, validation_alias="IR_CONVERTED_CACHE_ENABLE"
+    )
+    max_ir_converted_cache_num: int = Field(
+        default=100, validation_alias="MAX_IR_CONVERTED_CACHE_NUM"
+    )
+    node_defs_cache_enable: bool = Field(
+        default=True, validation_alias="NODE_DEFS_CACHE_ENABLE"
+    )
+    max_node_defs_cache_num: int = Field(
+        default=100, validation_alias="MAX_NODE_DEFS_CACHE_NUM"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
