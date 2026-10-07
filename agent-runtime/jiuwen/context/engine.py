@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import asyncio
 from typing import Union, Dict, List, Optional, Any
 
 from jiuwen.common.llm_service.language_model.base import BaseChatModel
@@ -8,10 +9,11 @@ from jiuwen.common.llm_service.messages import BaseMessage
 from jiuwen.common.log.base import logger
 from jiuwen.context.accessor.handler import ContextHandler
 from jiuwen.context.accessor.memory_accessor import MemoryAccessor
-from jiuwen.context.base import ContextConfig
+from jiuwen.context.base import ContextConfig, ContextHandleType, ContextWindow
 from jiuwen.context.executor.executor import ContextExecutor
 from jiuwen.context.history import ConversationHistory, ConversationMessage
 from jiuwen.context.memory import MemoryContext
+from jiuwen.context.processor.compressor import CompressProcessor, CompressProcessorConfig
 from jiuwen.serve.common.context import request_json
 from jiuwen.serve.controllers.execution.enum import MessageRole
 
@@ -26,18 +28,35 @@ class ContextEngine:
         self.history = history if history else ConversationHistory()
         self.memory_context = MemoryContext()
         self.model = model
+        self._handler: ContextHandler = ContextHandler(
+            self.history, self.memory_context
+        )
         self._executor: ContextExecutor = ContextExecutor(
-            handler=ContextHandler(self.history, self.memory_context), model=model
+            handler=self._handler, model=model
         )
         self.conf = (
             context_config if context_config else ContextConfig.from_config_dict({})
         )
         if self.conf.enable_memory and self.conf.mem_variables:
             self.__init_memory_accessor()
+        self._compressor: Optional[CompressProcessor] = None
+        self._compress_lock = asyncio.Lock()
+        if self.conf.enable_compression:
+            if self.model is not None:
+                self._compressor = CompressProcessor(
+                    CompressProcessorConfig(**(self.conf.compress_config or {})),
+                    self.model,
+                )
+            else:
+                logger.warning(
+                    "context compression is enabled but no model provided, "
+                    "compression disabled"
+                )
 
     def add_messages(self, messages: Union[List[Dict], List[ConversationMessage]]):
         """add list messages to history"""
         self.history.add_messages(messages)
+        self._schedule_compress()
 
     def get_messages(self, filters: Optional[Dict] = None) -> List[ConversationMessage]:
         """
@@ -76,6 +95,8 @@ class ContextEngine:
         # 添加长期记忆
         if self.conf.enable_memory and self.conf.mem_variables:
             self.add_message_to_memory(message)
+
+        self._schedule_compress()
 
     def add_user_message(
         self,
@@ -163,3 +184,70 @@ class ContextEngine:
         """init memory accessor and set mem engine config"""
         self.memory_accessor = MemoryAccessor(self.model)
         self.memory_accessor.set_variable_config(self.conf.mem_variables)
+
+    def _schedule_compress(self):
+        """在事件循环内调度一次后台压缩（fire-and-forget）。
+
+        压缩仅在存在运行中的事件循环时调度；同步上下文（无循环）下跳过，
+        待下次异步上下文写入消息时重试。压缩失败只记录日志，不影响对话。
+        """
+        if self._compressor is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(self.acompress_history())
+
+    async def acompress_history(self):
+        """按配置压缩超长历史（幂等，可显式调用）。
+
+        流程：快照历史 -> condition 判定 -> 分层压缩（摘要/截断）-> 带竞态
+        保护地写回。写回前校验快照仍是当前历史的前缀（逐条对象同一性），
+        压缩期间新增的消息会被保留，绝不丢失；前缀已变化则放弃本次结果，
+        等待下次触发重试。
+        """
+        if self._compressor is None:
+            return
+        async with self._compress_lock:
+            try:
+                snapshot = list(self.history.msgs)
+                window = ContextWindow(chat_history=snapshot)
+                if not await self._compressor.condition(window):
+                    return
+                new_window = await self._compressor.arun(window)
+                if new_window is window:
+                    return
+                current = self.history.msgs
+                if len(current) < len(snapshot) or any(
+                    old is not cur for old, cur in zip(snapshot, current)
+                ):
+                    logger.info(
+                        "history changed during compression, skip applying result",
+                        simple_log="history changed during compression, skip applying",
+                    )
+                    return
+                merged = (
+                    list(new_window.chat_history or [])
+                    + list(current[len(snapshot):])
+                )
+                update = self._handler.get_handler(
+                    ContextHandleType.UPDATE_COMPRESSED_HISTORY
+                )
+                if update is None:
+                    logger.error(
+                        "update_compressed_history handler not registered, "
+                        "cannot apply compression"
+                    )
+                    return
+                update(ContextWindow(chat_history=merged))
+                logger.info(
+                    f"history compressed: {len(snapshot)} -> {len(merged)} messages",
+                    simple_log=f"history compressed: {len(snapshot)} -> "
+                    f"{len(merged)} messages",
+                )
+            except Exception as e:
+                logger.error(
+                    f"history compression failed: {str(e)}",
+                    simple_log="history compression failed",
+                )
