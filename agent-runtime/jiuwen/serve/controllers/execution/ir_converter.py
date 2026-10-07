@@ -13,6 +13,7 @@ import copy
 from collections import defaultdict
 from typing import Any, AsyncIterator, Dict, Iterable, List, NamedTuple, Optional
 
+from agent_runtime.common.config import settings
 from agent_runtime.extension.workflow_node.flow_code import FlowCode
 from agent_runtime.extension.workflow_node.flow_knowledge_retrieval import FlowKnowledgeRetrieval
 from agent_runtime.extension.workflow_node.ParamOutput import ParamOutput
@@ -85,6 +86,8 @@ from jiuwen.serve.controllers.execution.open_utils import (
     deserialize_object,
     cache_agent_queue,
     cache_agent_group_queue,
+    cache_ir_converted_queue,
+    cache_node_defs_queue,
 )
 from jiuwen.serve.controllers.execution.types import AgentIrValidator
 from jiuwen.serve.controllers.execution.utils import AgentIrUtils, PluginIRConverter
@@ -217,6 +220,48 @@ _GLOBAL_REF_PATTERN_OLD = "${node_start.memory."
 _GLOBAL_REF_PATTERN_NEW = "${MEMORY_VARIABLE."
 _START_MEMORY_REF_TOKEN = re.compile(r"\$\{node_start\.memory\.([^{}]+)}")
 _MEMORY_VARIABLE_REF_TOKEN = re.compile(r"\$\{MEMORY_VARIABLE\.([^{}]+)}")
+
+
+def _converted_ir_cache_enabled(ir_data: dict) -> bool:
+    """判断转换后 IR 是否可缓存。
+
+    仅已发布应用缓存：发布会生成带时间戳后缀的新 ir_path，key 天然
+    版本安全；草稿应用每次保存内容可能变化且 path 不变，不缓存。
+    """
+    return (
+        settings.cache.ir_converted_cache_enable
+        and bool(ir_data.get("ir_path"))
+        and bool(ir_data.get("is_published"))
+    )
+
+
+async def _aget_converted_ir_cached(ir_data: dict) -> dict:
+    """带缓存的 global variable 引用转换。
+
+    缓存命中直接返回共享的转换结果（与 cache_ir_queue 相同的只读共享
+    约定，调用方不可修改返回对象）；未命中执行 COW 转换并写缓存。
+    仅已发布应用缓存：发布会生成带时间戳后缀的新 ir_path，key 天然
+    版本安全；草稿应用每次保存内容可能变化且 path 不变，不缓存。
+    """
+    cache_key = ir_data.get("ir_path", "")
+    if _converted_ir_cache_enabled(ir_data):
+        cached = await timed_cache_op(
+            "converted IR retrieval",
+            cache_ir_converted_queue.aget(cache_key),
+            cache_key,
+        )
+        if cached is not None:
+            logger.debug("converted IR cache hit: %s", cache_key)
+            return cached
+    converted = _convert_global_variable_refs_in_ir(ir_data)
+    if _converted_ir_cache_enabled(ir_data):
+        await timed_cache_op(
+            "Caching converted IR",
+            cache_ir_converted_queue.aput(cache_key, converted),
+            cache_key,
+        )
+        logger.debug("converted IR cached: %s", cache_key)
+    return converted
 
 
 def _convert_global_variable_refs_in_ir(ir_data: dict) -> dict:
@@ -1027,12 +1072,31 @@ class IRConverter:
         遇到 SubWorkflow 组件时，会递归加载子工作流 IR 并提取其内部节点定义，
         子工作流的定义以子工作流自身 workflowId 为 key 存储。
 
+        已发布应用的结果按 ir_path 缓存（memory LRU → Redis，与
+        cache_ir_queue 相同的只读共享约定），发布生成的新 ir_path 天然
+        版本安全；子工作流递归提取同样走本缓存。
+
         Args:
-            ir_data: Workflow IR 数据字典，包含 components 数组。
+            ir_data (dict): Workflow IR 数据字典，包含 components 数组。
 
         Returns:
             dict: {workflow_id: {node_id: {node_name, node_type, configs}}} 两层映射字典。
         """
+        cache_key = ir_data.get("ir_path", "")
+        cache_enabled = bool(
+            settings.cache.node_defs_cache_enable
+            and cache_key
+            and ir_data.get("is_published", False)
+        )
+        if cache_enabled:
+            cached = await timed_cache_op(
+                "node defs retrieval",
+                cache_node_defs_queue.aget(cache_key),
+                cache_key,
+            )
+            if cached is not None:
+                logger.debug("node defs cache hit: %s", cache_key)
+                return cached
         workflow_id = ir_data.get("workflowId", "")
         result: dict[str, dict[str, dict]] = {}
         current_wf_defs: dict[str, dict] = {}
@@ -1078,6 +1142,13 @@ class IRConverter:
                         )
         if current_wf_defs and workflow_id:
             result[workflow_id] = current_wf_defs
+        if cache_enabled and result:
+            await timed_cache_op(
+                "Caching node defs",
+                cache_node_defs_queue.aput(cache_key, result),
+                cache_key,
+            )
+            logger.debug("node defs cached: %s", cache_key)
         return result
 
     @staticmethod
@@ -1604,7 +1675,7 @@ class IRConverter:
         :return: LazyWorkflow (subclass of Workflow).
         """
         # Convert old global variable references to new format
-        converted_ir_data = _convert_global_variable_refs_in_ir(ir_data)
+        converted_ir_data = await _aget_converted_ir_cached(ir_data)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("param extra: parent converted_ir_data: %s", converted_ir_data)
         return LazyWorkflow(ir_data=converted_ir_data, build_kwargs=kwargs)
@@ -1626,7 +1697,7 @@ class IRConverter:
             LazyWorkflow (subclass of Workflow).
         """
         # Convert old global variable references to new format
-        converted_ir_data = _convert_global_variable_refs_in_ir(ir_data)
+        converted_ir_data = await _aget_converted_ir_cached(ir_data)
         return LazyWorkflow(ir_data=converted_ir_data, build_kwargs=kwargs)
 
     @staticmethod
