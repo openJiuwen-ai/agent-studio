@@ -36,6 +36,7 @@ import { ApplicationType } from '@enums/agent-center.enum';
 import {
   CONTROLLER_SUB_CONTROLLER_LIMIT,
   CONTROLLER_SUB_FLOW_LIMIT,
+  CONTROLLER_SUB_SINGLE_AGENT_LIMIT,
   SubAgentModel,
   SubApplication,
   SubWorkFlow,
@@ -219,37 +220,15 @@ export class AddMultipleAgentModalComponent implements OnInit {
     if (agent.disable) {
       return;
     }
-    if (this.isSingleAgent) {
-      if (!agent.checked) {
-        agent.checked = true;
-        this.onCardSingleSelected(agent);
-      }
-    } else {
-      agent.checked = !agent.checked;
-      this.onCardMultiSelected(agent);
-    }
+    agent.checked = !agent.checked;
+    this.onCardMultiSelected(agent);
   }
 
   public onCardSelected(agent: SubAgentModel | SubWorkFlow) {
     if (agent.disable) {
       return;
     }
-    if (this.isSingleAgent) {
-      if (agent.checked) {
-        // 选中：单选语义，先清掉已选的单智能体再选当前
-        this.onCardSingleSelected(agent);
-      } else {
-        // 取消选中：从已选列表移除，计数归零
-        const index = this.agentSelected.findIndex(
-          (item) => item.id === agent.id,
-        );
-        if (index > -1) {
-          this.agentSelected.splice(index, 1);
-        }
-      }
-    } else {
-      this.onCardMultiSelected(agent);
-    }
+    this.onCardMultiSelected(agent);
   }
 
   public onCardMultiSelected(agent: SubAgentModel | SubWorkFlow) {
@@ -267,22 +246,6 @@ export class AddMultipleAgentModalComponent implements OnInit {
     this.agents.forEach(item => {
       item.disable = this.getCardDisable(item);
     });
-  }
-
-  public onCardSingleSelected(agent: SubAgentModel | SubWorkFlow) {
-    this.agents.forEach((item) => {
-      item.checked = false;
-    });
-
-    const index = this.agentSelected.findIndex(
-      (item) => item.subAgentType ===  ApplicationType.SINGLE_AGENT,
-    );
-    if (index > -1) {
-      this.agentSelected.splice(index, 1);
-    }
-
-    agent.checked = true;
-    this.agentSelected.push(agent);
   }
 
   public refreshList(isSearch = false): void {
@@ -311,7 +274,6 @@ export class AddMultipleAgentModalComponent implements OnInit {
     const params = {
       ...this.getListPageParams(),
       type: 'agent',
-      sub_type: 'planexecute',
       name: this.shareSearchKey || '',
     };
     this.appFlowRepoServe
@@ -323,13 +285,16 @@ export class AddMultipleAgentModalComponent implements OnInit {
             const id = item.id;
             const checked =
               this.agentSelected.findIndex((agent) => agent.id === id) > -1;
+            // 单智能体成员不再限定 PlanExecute 类型：通用模式（ReAct）与
+            // 可控自主规划模式（PlanExecute）均可挂载，mode 按发布版本子类型推导
+            const isPlanExecute = item.sub_type === 'planexecute';
 
             const agent = {
               id: id,
               name: item.name,
               type: ApplicationType.SINGLE_AGENT,
               subAgentType: ApplicationType.SINGLE_AGENT,
-              mode: 'PlanExecute',
+              mode: isPlanExecute ? 'PlanExecute' : 'ReAct',
               description: item.description,
               avatar: item.icon || WORKFLOW_SVGS.Agent,
               creator: item.creator,
@@ -337,7 +302,11 @@ export class AddMultipleAgentModalComponent implements OnInit {
               version_name: item.version_name,
               checked,
               disable: false,
-              tags: [this.i18n.transform('agent_planning_mode')],
+              tags: [
+                this.i18n.transform(
+                  isPlanExecute ? 'agent_planning_mode' : 'agent_mode_gen',
+                ),
+              ],
             };
             agent.disable = this.getCardDisable(agent);
             return agent;
@@ -509,7 +478,7 @@ export class AddMultipleAgentModalComponent implements OnInit {
   }
 
   private getCardDisable(agent: SubApplication): boolean {
-    if (agent.checked || agent.subAgentType === ApplicationType.SINGLE_AGENT) {
+    if (agent.checked) {
       return false;
     }
 
@@ -518,7 +487,10 @@ export class AddMultipleAgentModalComponent implements OnInit {
     }
 
     const limit = agent.subAgentType === ApplicationType.MULTI_AGENT
-      ? CONTROLLER_SUB_CONTROLLER_LIMIT : CONTROLLER_SUB_FLOW_LIMIT;
+      ? CONTROLLER_SUB_CONTROLLER_LIMIT
+      : agent.subAgentType === ApplicationType.SINGLE_AGENT
+        ? CONTROLLER_SUB_SINGLE_AGENT_LIMIT
+        : CONTROLLER_SUB_FLOW_LIMIT;
     const currentNum = this.agentSelected.filter(item => item.subAgentType === agent.subAgentType).length;
 
     return currentNum >= limit;

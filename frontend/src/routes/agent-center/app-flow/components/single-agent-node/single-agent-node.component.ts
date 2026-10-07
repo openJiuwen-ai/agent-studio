@@ -181,6 +181,9 @@ export class SingleAgentNodeComponent
           const agentInfo = this.lastAgentsInfo;
           agentInfo.version_id = this.last_version_id;
           agentInfo.version_name = this.last_version_name;
+          // mode 按最新发布版本子类型推导（planexecute→PlanExecute，否则 ReAct），
+          // 与编排弹窗 getSubSingleAgent 语义一致，避免升级后成员 mode 与实际版本类型不符
+          const agentMode = agentInfo.sub_type === 'planexecute' ? 'PlanExecute' : 'ReAct';
 
           // configs 与编排弹窗 getSubSingleAgent 生成的单智能体成员 DSL 同构；
           // 保留画布节点已有 intent（与 SubController 画布升级先例一致），
@@ -194,7 +197,7 @@ export class SingleAgentNodeComponent
               node_id: '',
               id: agentInfo.agent_id,
               name: agentInfo.name,
-              mode: 'PlanExecute',
+              mode: agentMode,
               type: ApplicationType.SINGLE_AGENT,
               description: agentInfo.description,
               version: this.last_version_id,

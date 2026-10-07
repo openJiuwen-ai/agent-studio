@@ -1592,7 +1592,8 @@ public enum StudioError {
     MULTI_AGENT_MODEL_OR_INTENT_IS_NULL(INTERNAL_SERVER_ERROR, MULTI_AGENT, "1028"),
 
     /**
-     * 控制器只能挂载一个Plan&Execute模式的子Agent
+     * 控制器挂载的单智能体数量超过上限（历史错误码 1029"仅允许一个 Plan&Execute 子 Agent"
+     * 已被 #1523 放开多单智能体取代，保留枚举以兼容历史日志/错误码契约）
      */
     MULTI_AGENT_ONLY_ONE_PLAN_EXECUTE_AGENT(INTERNAL_SERVER_ERROR, MULTI_AGENT, "1029"),
 
@@ -1605,6 +1606,11 @@ public enum StudioError {
      * 多智能体不能关联自身
      */
     MULTI_AGENT_CANNOT_ASSOCIATE_SELF(INTERNAL_SERVER_ERROR, MULTI_AGENT, "1031"),
+
+    /**
+     * 控制器挂载的单智能体数量超过上限
+     */
+    MULTI_AGENT_SINGLE_AGENT_NUMBER_EXCEED_LIMIT(INTERNAL_SERVER_ERROR, MULTI_AGENT, "1032"),
 
 
     /*

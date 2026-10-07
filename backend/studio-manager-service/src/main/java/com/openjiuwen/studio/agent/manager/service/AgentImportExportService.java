@@ -709,13 +709,13 @@ public class AgentImportExportService {
             });
         }
 
-        // 获取主控制器绑定的单智能体
+        // 获取主控制器绑定的单智能体（PlanExecute/ReAct 等非 Controller 模式成员）
         List<ControllerNodeConfigVOAgents> singleAgentNodeConfigs = null;
         if (controllerNodeConfigVo != null) {
             singleAgentNodeConfigs = Optional.ofNullable(controllerNodeConfigVo.getAgents())
                     .orElseGet(Collections::emptyList)
                     .stream()
-                    .filter(agent -> AgentMode.PLANEXECUTE.getMode().equals(agent.getMode()))
+                    .filter(agent -> AgentMode.isSingleAgentMode(agent.getMode()))
                     .collect(Collectors.toList());
         }
         if (!CollectionUtils.isEmpty(singleAgentNodeConfigs)) {

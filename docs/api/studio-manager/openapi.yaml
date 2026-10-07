@@ -34038,6 +34038,10 @@ components:
           type: string
           description: 创建者
           example: user001
+        sub_type:
+          type: string
+          description: Agent子类型（单智能体：planexecute/agent）
+          example: planexecute
         version_id:
           type: string
           description: 版本ID

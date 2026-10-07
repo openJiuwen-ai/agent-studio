@@ -44,6 +44,10 @@ public class AgentVersionListItem implements Serializable {
     @Schema(description = "创建者", example = "user001")
     private String creator = null;
 
+    @JsonProperty("sub_type")
+    @Schema(description = "Agent子类型（单智能体：planexecute/agent）", example = "planexecute")
+    private String subType = null;
+
     @JsonProperty("version_id")
     @Schema(description = "版本ID", example = "v1.0.0")
     private String versionId = null;
@@ -105,6 +109,15 @@ public class AgentVersionListItem implements Serializable {
         return this;
     }
 
+    public String getSubType() {
+        return subType;
+    }
+
+    public AgentVersionListItem setSubType(String subType) {
+        this.subType = subType;
+        return this;
+    }
+
     public String getVersionId() {
         return versionId;
     }
@@ -151,6 +164,7 @@ public class AgentVersionListItem implements Serializable {
         sb.append("    icon: ").append(toIndentedString(icon)).append("\n");
         sb.append("    description: ").append(toIndentedString(description)).append("\n");
         sb.append("    creator: ").append(toIndentedString(creator)).append("\n");
+        sb.append("    subType: ").append(toIndentedString(subType)).append("\n");
         sb.append("    versionId: ").append(toIndentedString(versionId)).append("\n");
         sb.append("    versionName: ").append(toIndentedString(versionName)).append("\n");
         sb.append("    referenceWorkflows: ").append(toIndentedString(referenceWorkflows)).append("\n");
@@ -171,6 +185,7 @@ public class AgentVersionListItem implements Serializable {
         return Objects.equals(this.id, agentVersionListItem.id) && Objects.equals(this.name, agentVersionListItem.name)
             && Objects.equals(this.icon, agentVersionListItem.icon) && Objects.equals(this.description,
             agentVersionListItem.description) && Objects.equals(this.creator, agentVersionListItem.creator)
+            && Objects.equals(this.subType, agentVersionListItem.subType)
             && Objects.equals(this.versionId, agentVersionListItem.versionId) && Objects.equals(this.versionName,
             agentVersionListItem.versionName) && Objects.equals(this.referenceWorkflows,
             agentVersionListItem.referenceWorkflows) && Objects.equals(this.referenceAgents,
@@ -179,7 +194,7 @@ public class AgentVersionListItem implements Serializable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, name, icon, description, creator, versionId, versionName, referenceWorkflows,
+        return Objects.hash(id, name, icon, description, creator, subType, versionId, versionName, referenceWorkflows,
             referenceAgents);
     }
 

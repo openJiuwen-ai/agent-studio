@@ -391,6 +391,8 @@ export interface PublishedMultiAgent {
   icon: string;
   description: string;
   creator: string;
+  /** 单智能体子类型：planexecute（可控自主规划）/ agent·null（通用 ReAct） */
+  sub_type?: string;
   version_id: string;
   version_name: string;
 }

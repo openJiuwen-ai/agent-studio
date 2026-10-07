@@ -1429,7 +1429,7 @@
   "use_scenario": "适用场景",
   "association_agent": "关联智能体",
   "sub_agent": "子智能体",
-  "sub_agent_only_tip": "仅支持添加1个可控自主模式的单智能体，不支持其他模式。",
+  "sub_agent_only_tip": "支持添加多个已发布单智能体（通用模式与可控自主规划模式），最多可添加10个。",
   "sub_single_agent": "子单智能体",
   "sub_multi_agent": "子多智能体",
   "agent_detail": "智能体详情",
