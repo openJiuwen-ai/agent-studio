@@ -43,6 +43,13 @@ class ContextHandler:
         """update nothing to context"""
         pass
 
+    @register_context_handler(ContextHandleType.UPDATE_COMPRESSED_HISTORY)
+    def update_compressed_history(self, context: ContextWindow):
+        """replace chat history with the compressed one"""
+        if context is None or context.chat_history is None:
+            return
+        self._history.msgs = list(context.chat_history)
+
     def create_context_window(self):
         """create context window"""
         return ContextWindow(

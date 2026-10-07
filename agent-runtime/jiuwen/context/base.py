@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 
 OPEN_MEMORY = "openMemory"
 CONVERSATION_VARIABLES = "conversationVariables"
+OPEN_COMPRESS = "openCompress"
+COMPRESS_CONFIG = "compressConfig"
 
 VARIABLE_NAME_KEY = "name"
 VARIABLE_DESC_KEY = "description"
@@ -21,6 +23,17 @@ VARIABLE_DESC_MAX_LENGTH = 500
 VARIABLE_DEFAULT_MAX_LENGTH = 500
 
 DEFAULT_OPEN_MEMORY_CONFIG = False
+DEFAULT_OPEN_COMPRESS_CONFIG = False
+
+COMPRESS_TRIGGER_TOKEN_NUM_KEY = "triggerTokenNum"
+COMPRESS_KEEP_RECENT_TURNS_KEY = "keepRecentTurns"
+COMPRESS_STRATEGY_KEY = "strategy"
+COMPRESS_SUMMARY_PROMPT_KEY = "summaryPrompt"
+
+COMPRESS_STRATEGY_SUMMARIZE = "summarize"
+COMPRESS_STRATEGY_TRUNCATE = "truncate"
+DEFAULT_COMPRESS_KEEP_RECENT_TURNS = 5
+COMPRESS_SUMMARY_PROMPT_MAX_LENGTH = 8000
 
 
 class ContextConstant:
@@ -50,6 +63,8 @@ class ContextConfig(BaseModel):
 
     enable_memory: bool = False  # enable memory from context ir config
     mem_variables: List[Dict] = Field(default=[])
+    enable_compression: bool = False  # enable long-context compression
+    compress_config: Dict[str, Any] = Field(default_factory=dict)
 
     @staticmethod
     def _validate_variables(variables: List[Dict]):
@@ -110,6 +125,87 @@ class ContextConfig(BaseModel):
                 ),
             )
 
+    @staticmethod
+    def _validate_open_compress(open_compress: bool):
+        """validate open compress field"""
+        if not isinstance(open_compress, bool):
+            raise JiuWenBaseException(
+                error_code=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.code,
+                message=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.errmsg.format(
+                    error_msg="the value of openCompress should be of boolean type."
+                ),
+            )
+
+    @staticmethod
+    def _parse_compress_config(compress_config: Dict[str, Any]) -> Dict[str, Any]:
+        """校验并归一化压缩配置（IR 驼峰键 -> 处理器蛇形键）
+
+        Returns:
+            Dict[str, Any]: {
+                "trigger_token_num": int, "keep_recent_turns": int,
+                "strategy": "summarize" | "truncate", "summary_prompt": str
+            }
+        """
+        if compress_config is None:
+            compress_config = {}
+        if not isinstance(compress_config, dict):
+            raise JiuWenBaseException(
+                error_code=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.code,
+                message=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.errmsg.format(
+                    error_msg="the value of compressConfig should be of dict type."
+                ),
+            )
+
+        def _get_positive_int(key: str, default: int) -> int:
+            value = compress_config.get(key, default)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise JiuWenBaseException(
+                    error_code=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.code,
+                    message=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.errmsg.format(
+                        error_msg=f"compressConfig.{key} should be a positive int."
+                    ),
+                )
+            return value
+
+        trigger_token_num = _get_positive_int(
+            COMPRESS_TRIGGER_TOKEN_NUM_KEY,
+            ContextConstant.DEFAULT_ASYNC_COMPRESS_TRIGGER_TOKEN_NUM,
+        )
+        keep_recent_turns = _get_positive_int(
+            COMPRESS_KEEP_RECENT_TURNS_KEY, DEFAULT_COMPRESS_KEEP_RECENT_TURNS
+        )
+
+        strategy = compress_config.get(COMPRESS_STRATEGY_KEY, COMPRESS_STRATEGY_SUMMARIZE)
+        if strategy not in (COMPRESS_STRATEGY_SUMMARIZE, COMPRESS_STRATEGY_TRUNCATE):
+            raise JiuWenBaseException(
+                error_code=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.code,
+                message=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.errmsg.format(
+                    error_msg=f"compressConfig.strategy should be one of "
+                    f"'{COMPRESS_STRATEGY_SUMMARIZE}', '{COMPRESS_STRATEGY_TRUNCATE}'."
+                ),
+            )
+
+        summary_prompt = compress_config.get(COMPRESS_SUMMARY_PROMPT_KEY, "")
+        if not isinstance(summary_prompt, str) or len(summary_prompt) > (
+            COMPRESS_SUMMARY_PROMPT_MAX_LENGTH
+        ):
+            raise JiuWenBaseException(
+                error_code=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.code,
+                message=StatusCode.CONTEXT_ENGINE_CONFIG_ERROR.errmsg.format(
+                    error_msg=f"compressConfig.{COMPRESS_SUMMARY_PROMPT_KEY} should "
+                    f"be a string with length < {COMPRESS_SUMMARY_PROMPT_MAX_LENGTH}."
+                ),
+            )
+
+        normalized = {
+            "trigger_token_num": trigger_token_num,
+            "keep_recent_turns": keep_recent_turns,
+            "strategy": strategy,
+        }
+        if summary_prompt:
+            normalized["summary_prompt"] = summary_prompt
+        return normalized
+
     @classmethod
     def from_config_dict(cls, context_config: Dict[str, Any]):
         """construct contextConfig from a dict
@@ -131,4 +227,14 @@ class ContextConfig(BaseModel):
         conversation_variables = context_config.get(CONVERSATION_VARIABLES, [])
         cls._validate_variables(conversation_variables)
         cls._validate_open_memory(open_memory)
-        return cls(enable_memory=open_memory, mem_variables=conversation_variables)
+        open_compress = context_config.get(OPEN_COMPRESS, DEFAULT_OPEN_COMPRESS_CONFIG)
+        cls._validate_open_compress(open_compress)
+        compress_config = cls._parse_compress_config(
+            context_config.get(COMPRESS_CONFIG, {})
+        )
+        return cls(
+            enable_memory=open_memory,
+            mem_variables=conversation_variables,
+            enable_compression=open_compress,
+            compress_config=compress_config,
+        )
