@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 import re
@@ -1053,9 +1054,22 @@ class WorkflowRunner:
             has_mem = False
             memory_content = ""
 
-            search_mems = await ltm.search_user_mem(
-                query=query, num=20, user_id=user_id.lower(), scope_id=scope_id
+            # 两次检索相互独立，并行执行以缩短 LLM 调用前的关键路径延迟
+            search_mems, search_summary_mems = await asyncio.gather(
+                ltm.search_user_mem(
+                    query=query, num=20, user_id=user_id.lower(), scope_id=scope_id
+                ),
+                ltm.search_user_history_summary(
+                    query=query, num=5, user_id=user_id.lower(), scope_id=scope_id
+                ),
+                return_exceptions=True,
             )
+            # 任一检索失败即整体降级（与原串行实现任一失败抛出、外层
+            # except 跳过记忆的行为一致）；CancelledError 同样向上传播
+            if isinstance(search_mems, BaseException):
+                raise search_mems
+            if isinstance(search_summary_mems, BaseException):
+                raise search_summary_mems
             for mem in search_mems:
                 if mem is None:
                     continue
@@ -1068,9 +1082,6 @@ class WorkflowRunner:
                     memory_content += f"<mem>{mem_content}</mem>\n"
                     has_mem = True
 
-            search_summary_mems = await ltm.search_user_history_summary(
-                query=query, num=5, user_id=user_id.lower(), scope_id=scope_id
-            )
             for mem in search_summary_mems:
                 if mem is None:
                     continue
@@ -1151,9 +1162,21 @@ class WorkflowRunner:
             has_mem = False
             memory_content = ""
 
-            search_mems = await client.search_memory(
-                query=query, num=20, user_id=uid, scope_id=scope_id,
+            # 两次检索是独立的 POST /v1/search，并行执行消除串行网络 RTT
+            search_mems, search_summary_mems = await asyncio.gather(
+                client.search_memory(
+                    query=query, num=20, user_id=uid, scope_id=scope_id,
+                ),
+                client.search_user_history_summary(
+                    query=query, num=5, user_id=uid, scope_id=scope_id,
+                ),
+                return_exceptions=True,
             )
+            # 任一检索失败即整体降级（与原串行实现行为一致）
+            if isinstance(search_mems, BaseException):
+                raise search_mems
+            if isinstance(search_summary_mems, BaseException):
+                raise search_summary_mems
             for mem in search_mems or []:
                 if mem is None:
                     continue
@@ -1166,9 +1189,6 @@ class WorkflowRunner:
                     memory_content += f"<mem>{mem_content}</mem>\n"
                     has_mem = True
 
-            search_summary_mems = await client.search_user_history_summary(
-                query=query, num=5, user_id=uid, scope_id=scope_id,
-            )
             for mem in search_summary_mems or []:
                 if mem is None:
                     continue
