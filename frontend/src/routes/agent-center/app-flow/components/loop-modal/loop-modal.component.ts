@@ -164,6 +164,13 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
 
   public outputDataTypes = getOutputParamTypes();
 
+  // 循环中间变量"字面量"可选类型：屏蔽 object / array<object>。
+  // 这两类需要"添加子项(addChild)"定义子结构，循环中间变量无此能力，
+  // 配成字面量只能得到空壳对象；这类中间变量应改用"引用"来源承载。
+  public midVarDataTypes = this.outputDataTypes.filter(
+    (option) => option.value !== 'object' && option.value !== 'array<object>',
+  );
+
   onOutputParamTypeChange = NodeUtils.onOutputParamTypeChange;
 
   public isObjectLikeType = NodeUtils.isObjectLikeType;
@@ -749,11 +756,11 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   /**
-   * 中间变量字面量允许的数据类型：与记忆变量/输出参数一致，允许全部类型（含 object/array）。
+   * 中间变量字面量允许的数据类型：屏蔽 object / array<object>（需 addChild 定义子结构，
+   * 循环中间变量不具备该能力，应改用"引用"来源承载）。
    */
   private isValidLiteralDataType(type: unknown): boolean {
-    // 与记忆变量/LLM 一致：复杂类型(object/array)也可作为中间变量类型（值取空值或用引用来源）
-    return this.outputDataTypes.some((option) => option.value === type);
+    return this.midVarDataTypes.some((option) => option.value === type);
   }
 
   /**

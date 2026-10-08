@@ -289,7 +289,7 @@
                     <nz-select
                       *ngIf="param.value.type === 'literal'"
                       style="width: 100%"
-                      [nzOptions]="outputDataTypes"
+                      [nzOptions]="midVarDataTypes"
                       [name]="'midParamDataType' + i"
                       [(ngModel)]="param.type"
                       nzLabelKey="label"
