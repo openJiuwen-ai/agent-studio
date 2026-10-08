@@ -502,7 +502,7 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
         },
         schema: NodeUtils.getDtoInputs(
           midParamsForDto.filter((param) => {
-            if (!param.name || !/^[a-zA-Z0-9_]+$/.test(param.name)) {
+            if (!param.name || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(param.name)) {
               return false;
             }
             if (seenNames.has(param.name)) {
@@ -710,6 +710,9 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * literal 内容按类型归一：integer 仅接受整数值（'1.5'/1.5 → 0）、
    * number 接受有限数值、boolean 仅接受布尔，非法/缺失回退类型默认值。
    * 返回是否发生修正（供读取端触发持久化）。
+   * 注意：nonEmptyValidator 已从值输入框移除，清空 integer/number 值会被
+   * 这里归一为 0 并保存——用户无感知。这是"不拦截保存"方案的固有取舍，
+   * 避免类型切换时表单状态误判导致保存失败。
    * G.CTL.03：拆分 if 保证单条语句操作数 ≤3。
    */
   private normalizeTypedLiteralContent(item: IWorkflowField): boolean {

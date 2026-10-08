@@ -1500,6 +1500,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           if (exceedsList.length) {
             const exceedsStr = exceedsList.join(',')
             MessageComponent.showError(`绑定子智能体【${exceedsStr}】达到最大深度限制，请删除后重试`, 5000);
+            // SubController 早退也需复位 saveStatusMap，否则节点永久无法打开
+            if (this.type !== 'multi' && nodeData?.id) {
+              this.saveStatusMap.set(nodeData.id, false);
+            }
             return
           }
           const controller_node: any = this.workflowDetail.details.nodes.find(contr_item => contr_item.type === 'Controller');
