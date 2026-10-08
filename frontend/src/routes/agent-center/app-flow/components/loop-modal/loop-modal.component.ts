@@ -486,6 +486,8 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
         this.normalizeTypedLiteralContent(copy);
         return copy;
       });
+      // 过滤非法 name（与 variableNameValidator 正则一致）并去重，避免重复字段写入 schema
+      const seenNames = new Set<string>();
       inputs.push({
         name: 'intermediate_loop_var',
         type: 'object',
@@ -499,9 +501,16 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
           default: '',
         },
         schema: NodeUtils.getDtoInputs(
-          midParamsForDto.filter(
-            (param) => param.name && /^[a-zA-Z0-9_]+$/.test(param.name),
-          ),
+          midParamsForDto.filter((param) => {
+            if (!param.name || !/^[a-zA-Z0-9_]+$/.test(param.name)) {
+              return false;
+            }
+            if (seenNames.has(param.name)) {
+              return false;
+            }
+            seenNames.add(param.name);
+            return true;
+          }),
         ),
       });
     }
