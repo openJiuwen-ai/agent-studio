@@ -689,12 +689,18 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * 需要在序列化/读取时做数值化转换的场景。
    */
   /** literal 来源各类型的默认内容：integer/number→0、boolean→false、其余→'' */
-  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
+  private defaultLiteralContent(type: IWorkflowFieldType): any {
     if (type === 'boolean') {
       return false;
     }
     if (type === 'integer' || type === 'number') {
       return 0;
+    }
+    if (type === 'object') {
+      return {};
+    }
+    if (type && type.startsWith('array')) {
+      return [];
     }
     return '';
   }
@@ -745,6 +751,15 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       // 仅无法转换为数值时回退默认 0
       item.value.content = Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
       return true;
+    }
+    if (item.type && item.type.startsWith('array')) {
+      // 数组字面量内容必须为数组，异常值（对象/标量/字符串）回退空数组，
+      // 保证 intermediate_loop_var 的 schema 类型与值类型一致（意见⑤）。
+      if (!Array.isArray(item.value.content)) {
+        item.value.content = [];
+        return true;
+      }
+      return false;
     }
     return false;
   }
