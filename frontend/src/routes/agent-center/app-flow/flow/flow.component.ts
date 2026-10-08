@@ -1377,14 +1377,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
-    // 节点抽屉关闭并触发保存时候
-    this.appFlowServ.nodeModalCloseMonitor$()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(async (nodeData: any) => {
-        if (this.type !== 'multi' && nodeData?.id && !this.isFlowReadonly) {
-          this.saveStatusMap.set(nodeData?.id, true);
-        }
-      })
+    // 说明：节点「保存中」标记 saveStatusMap 不再在“抽屉关闭”时置位。
+    // 关闭先置位、仅靠保存成功复位；若关闭时保存被校验拦截（未发出保存事件），
+    // 标记将永久为 true，导致 openNodeModal 永久跳过、节点无法再次打开。
+    // 现改为与保存生命周期对齐：在真正开始保存时置位（见下方 nodeSaveMonitor$），
+    // 在保存结束的 finally 中复位。
 
     this.appFlowServ
       .nodeSaveMonitor$()
@@ -1399,6 +1396,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           return;
         }
         let {nodeData = {}} = ref || {};
+
+        // 与保存生命周期对齐：保存真正开始时置“保存中”，finally 复位
+        if (this.type !== 'multi' && nodeData?.id) {
+          this.saveStatusMap.set(nodeData.id, true);
+        }
 
         // 保存
         this.exceptionBranchHandler(nodeData);
@@ -1455,6 +1457,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
               },
               bodyParams,
             );
+            // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
+            // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow 提前 return）
+            this.nodeServ.setIsConfirmLoading(false);
+            if (this.type !== 'multi' && nodeData?.id) {
+              this.saveStatusMap.set(nodeData.id, false);
+            }
           });
         }
         // 普通模式
@@ -1532,7 +1540,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         } finally {
           this.nodeServ.setIsConfirmLoading(false);
-          if (this.type !== 'multi' && nodeData?.id) {
+          // 高级意图节点(isAdvancedModeNew)：真实保存在上方 setTimeout 中异步执行，此刻尚未结束，
+          // saveStatusMap 由该异步分支在 updateFlowData 完成后复位，避免过早解锁导致可重开。
+          if (!isSkipUpdateFlow && this.type !== 'multi' && nodeData?.id) {
             setTimeout(() => {
               this.saveStatusMap.set(nodeData?.id, false);
             });
