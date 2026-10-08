@@ -228,7 +228,9 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       });
 
     const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
-    const refs = parentNode ? this.getLoopMidVarRefs(this.loopNodeInfo) : [];
+    // 用最新的 parentNode 而非 ngOnInit 时缓存的 loopNodeInfo：父循环节点保存后
+    // onRefUpdate 重建左值选项时，需拿到最新的中间变量 inputs 才能实时刷新类型
+    const refs = parentNode ? this.getLoopMidVarRefs(parentNode) : [];
 
     if (assignmentMemos.length) {
       const assignmentMemosRefs = NodeUtils.refInfo2Tree(
@@ -319,15 +321,20 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     let changed = false;
 
     // 右值类型同步为左值实时类型：否则模板仍按旧类型渲染字面量输入、
-    // getMetaInfoFromField 也按旧类型转换内容，写出与左值类型不一致的右侧配置
+    // getMetaInfoFromField 也按旧类型转换内容，写出与左值类型不一致的右侧配置。
+    // 类型变化且来源为 literal 时，内容一并归一到新类型默认值，避免
+    // Number('abc')=NaN / 非布尔字符串等脏值随 menusChanged 自动落库。
     if (liveLeftType && param.right.type !== liveLeftType) {
       param.right.type = liveLeftType;
+      if (param.right.value.type === 'literal') {
+        param.right.value.content = this.defaultLiteralContent(liveLeftType);
+      }
       changed = true;
     }
 
     // 收敛「值」来源：当前模式已不在可选集合，或左值变 complex 后 literal 不可选 → 回退 ref；
-    // 同时用 getChangeContent 重置内容（与 onLeftSelect 对齐），避免旧的 literal 内容
-    // 在保存时被 getDtoInput 误当引用、写出 ref_node_id/ref_var_name 为 undefined 的脏 ref
+    // 同时用 getChangeContent 重置内容并清除旧 operator（与 onLeftSelect 对齐），
+    // 避免旧 literal 内容被误当引用、以及 operator 被 onRefUpdate 重新置回。
     const rightSource = param.right?.value?.type;
     const sourceStillValid = param.typeOpts.some(
       (option) => option.value === rightSource
@@ -338,7 +345,20 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (shouldRevertToRef) {
       param.right.value.type = 'ref';
       param.right.value.content = NodeUtils.getChangeContent('ref');
+      delete param.right.value.operator;
       changed = true;
+    }
+
+    // 收敛引用：来源为 ref 但选中节点已被窄化为 disabled（类型不再匹配）→ 清空，
+    // 避免类型不匹配的引用被保留并随 menusChanged 自动落库
+    if (param.right?.value?.type === 'ref') {
+      const selected = Array.isArray(param.right.value.content)
+        ? (param.right.value.content[0] as any)
+        : (param.right.value.content as any);
+      if (selected?.disabled) {
+        param.right.value.content = NodeUtils.getChangeContent('ref');
+        changed = true;
+      }
     }
 
     // 收敛运算符：旧运算符已被新类型菜单剔除 → null(empty)
@@ -353,6 +373,17 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     }
 
     return changed;
+  }
+
+  /** literal 各类型默认内容：integer/number→0、boolean→false、其余→'' */
+  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
+    if (type === 'boolean') {
+      return false;
+    }
+    if (type === 'integer' || type === 'number') {
+      return 0;
+    }
+    return '';
   }
 
   public initParams() {
