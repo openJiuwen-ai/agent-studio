@@ -1377,14 +1377,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
-    // 节点抽屉关闭并触发保存时候
-    this.appFlowServ.nodeModalCloseMonitor$()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(async (nodeData: any) => {
-        if (this.type !== 'multi' && nodeData?.id && !this.isFlowReadonly) {
-          this.saveStatusMap.set(nodeData?.id, true);
-        }
-      })
+    // 说明：节点「保存中」标记 saveStatusMap 不再在“抽屉关闭”时置位。
+    // 关闭先置位、仅靠保存成功复位；若关闭时保存被校验拦截（未发出保存事件），
+    // 标记将永久为 true，导致 openNodeModal 永久跳过、节点无法再次打开。
+    // 现改为与保存生命周期对齐：同步预处理完成、进入 try/finally 保护后才置位
+    // （见下方 nodeSaveMonitor$），预处理抛错/早退时标记未置位不泄漏，
+    // 置位后由 finally 统一复位。
 
     this.appFlowServ
       .nodeSaveMonitor$()
@@ -1400,10 +1398,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         let {nodeData = {}} = ref || {};
 
-        // 保存
+        // 同步预处理阶段不置位任何标记：此段抛错或提前 return 时标记尚未置位，
+        // 不会泄漏；“保存中”与确认 loading 的置位下移到预处理完成、进入 try 之前
         this.exceptionBranchHandler(nodeData);
         nodeData = NodeUtils.traversalNodeSource(nodeData);
-        this.nodeServ.setIsConfirmLoading(true);
         this.isResetNodeHeightMap = true;
         // 高级意图节点与其容器节点的连接线是异步创建的，避免多次调用updateFlowData导致数据不一致
         let isSkipUpdateFlow = false;
@@ -1422,39 +1420,53 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           this.createIntentContainerNode(nodeData.id);
           let bodyParams;
           setTimeout(async () => {
-            if (isContainerNode) {
-              // 若已存在意图动作配置节点，需异步更新DSL
-              bodyParams = FlowUtils.updateContainerNodeDsl(
-                this.graph,
-                this.workflowDetail,
-                nodeData,
-                containerNodeId,
-                this.getNodeInfoById.bind(this),
-                this.appFlowServ,
-              );
-            }
-            this.handleAdvancedIntentConns(nodeData.id);
-            this.updateRef();
-            await this.updateFlowData(
-              {
-                isDrag: false,
-                nodeInfo: nodeData,
-                successCb: () => {
-                  if (isContainerNode) {
-                    this.appFlowServ.setAppRefs(this.ref_workflows);
-                    FlowUtils.syncContainerInfoToGraph(
-                      this.graph,
-                      bodyParams,
-                      containerNodeId,
-                    );
+            // 高级意图节点的容器 DSL 更新、连接线重建与真正的 updateFlowData 均在本异步分支内串行执行，
+            // 任一环节在 await 前抛错（updateContainerNodeDsl / handleAdvancedIntentConns / updateRef）
+            // 都会跳过下方复位逻辑。故用 try/finally 兜底：无论成功、失败还是异常，
+            // 都必须复位“保存中”标记，否则 saveStatusMap 永久为 true、节点无法再次打开。
+            try {
+              if (isContainerNode) {
+                // 若已存在意图动作配置节点，需异步更新DSL
+                bodyParams = FlowUtils.updateContainerNodeDsl(
+                  this.graph,
+                  this.workflowDetail,
+                  nodeData,
+                  containerNodeId,
+                  this.getNodeInfoById.bind(this),
+                  this.appFlowServ,
+                );
+              }
+              this.handleAdvancedIntentConns(nodeData.id);
+              this.updateRef();
+              await this.updateFlowData(
+                {
+                  isDrag: false,
+                  nodeInfo: nodeData,
+                  successCb: () => {
+                    if (isContainerNode) {
+                      this.appFlowServ.setAppRefs(this.ref_workflows);
+                      FlowUtils.syncContainerInfoToGraph(
+                        this.graph,
+                        bodyParams,
+                        containerNodeId,
+                      );
+                    }
+                  },
+                  faildCb: () => {
+
                   }
                 },
-                faildCb: () => {
-
-                }
-              },
-              bodyParams,
-            );
+                bodyParams,
+              );
+            } finally {
+              // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
+              // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow
+              // 提前 return 时已复位确认 loading，此处不可再延迟复位——若延迟到后续其他节点
+              // 保存期间，会错误清除后者的确认 loading；saveStatusMap 由本分支独占复位）
+              if (this.type !== 'multi' && nodeData?.id) {
+                this.saveStatusMap.set(nodeData.id, false);
+              }
+            }
           });
         }
         // 普通模式
@@ -1485,6 +1497,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           if (exceedsList.length) {
             const exceedsStr = exceedsList.join(',')
             MessageComponent.showError(`绑定子智能体【${exceedsStr}】达到最大深度限制，请删除后重试`, 5000);
+            // 深度校验早退发生在置位之前，两个标记均未置位，无泄漏，无需局部复位
             return
           }
           const controller_node: any = this.workflowDetail.details.nodes.find(contr_item => contr_item.type === 'Controller');
@@ -1499,6 +1512,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.updateNodeData(nodeData);
         }
+        // 同步预处理全部完成，进入 try/finally 保护后再置位：“保存中”与确认 loading。
+        // 置位前的抛错/早退分支标记未置位、不会泄漏；置位后的任何路径（含异常）
+        // 都由 finally 统一复位，节点不会永久无法打开
+        if (this.type !== 'multi' && nodeData?.id) {
+          this.saveStatusMap.set(nodeData.id, true);
+        }
+        this.nodeServ.setIsConfirmLoading(true);
         try {
           if (isSkipUpdateFlow) {
             return;
@@ -1532,7 +1552,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         } finally {
           this.nodeServ.setIsConfirmLoading(false);
-          if (this.type !== 'multi' && nodeData?.id) {
+          // 高级意图节点(isAdvancedModeNew)：真实保存在上方 setTimeout 中异步执行，此刻尚未结束，
+          // saveStatusMap 由该异步分支在 updateFlowData 完成后复位，避免过早解锁导致可重开。
+          if (!isSkipUpdateFlow && this.type !== 'multi' && nodeData?.id) {
             setTimeout(() => {
               this.saveStatusMap.set(nodeData?.id, false);
             });
