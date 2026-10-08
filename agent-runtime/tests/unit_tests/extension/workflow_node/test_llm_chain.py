@@ -544,3 +544,55 @@ class TestRenderPromptWithWhitespace:
         chain = LLMChain(conf=_make_llm_chain_conf())
         with pytest.raises(ExecutionError, match="Error parsing the placeholder"):
             chain._render_prompt("{{query.aa}}", {"query": "你好"})
+
+
+class TestResolveImageUrlTlsVerify:
+    """_resolve_image_url 需按 MODEL_CFG_SSL_MODE / MODEL_CFG_SSL_CERT_PATH 决定 TLS 校验方式"""
+
+    @staticmethod
+    def _run_and_capture_verify(monkeypatch):
+        import asyncio
+
+        import httpx
+
+        captured = {}
+
+        class _FakeResponse:
+            headers = {"content-type": "image/png"}
+            content = b"abc"
+
+            def raise_for_status(self):
+                return None
+
+        class _FakeClient:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc_info):
+                return False
+
+            async def get(self, url):
+                return _FakeResponse()
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+        result = asyncio.run(LLMChain._resolve_image_url("http://intranet.example/img.png"))
+        assert result.startswith("data:image/png;base64,")
+        return captured.get("verify")
+
+    def test_default_enables_verification(self, monkeypatch):
+        monkeypatch.delenv("MODEL_CFG_SSL_MODE", raising=False)
+        monkeypatch.delenv("MODEL_CFG_SSL_CERT_PATH", raising=False)
+        assert self._run_and_capture_verify(monkeypatch) is True
+
+    def test_ssl_mode_false_disables_verification(self, monkeypatch):
+        monkeypatch.setenv("MODEL_CFG_SSL_MODE", "false")
+        monkeypatch.delenv("MODEL_CFG_SSL_CERT_PATH", raising=False)
+        assert self._run_and_capture_verify(monkeypatch) is False
+
+    def test_cert_path_is_used_for_intranet_ca(self, monkeypatch):
+        monkeypatch.setenv("MODEL_CFG_SSL_MODE", "true")
+        monkeypatch.setenv("MODEL_CFG_SSL_CERT_PATH", "/etc/ssl/certs/intranet-ca.pem")
+        assert self._run_and_capture_verify(monkeypatch) == "/etc/ssl/certs/intranet-ca.pem"

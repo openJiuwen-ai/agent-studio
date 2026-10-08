@@ -20,6 +20,7 @@ import asyncio
 import base64
 import ast
 import json
+import os
 import re
 import time
 from typing import Any, List, Optional, AsyncGenerator
@@ -28,6 +29,10 @@ from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error, ExecutionError
 from jiuwen.common.exception.status_code import StatusCode as JiuWenStatusCode
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.common.configs.env_constants import (
+    MODEL_CFG_SSL_CERT_PATH_KEY,
+    MODEL_CFG_SSL_MODE_KEY,
+)
 from jiuwen.prompt.agent.common.utils import convert_json_schema
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
@@ -58,6 +63,31 @@ def _format_llm_error_detail(exc: Exception) -> str:
     """
     from model_service.env_resolver import friendly_message
     return friendly_message(exc)
+
+
+def _resolve_vision_tls_verify():
+    """解析图片/视频下载的 TLS 校验配置，语义对齐 ``ModelUtil.parse_ssl_verify``。
+
+    读取 ``MODEL_CFG_SSL_MODE``（默认 ``true``）与 ``MODEL_CFG_SSL_CERT_PATH``：
+    - 未配置时返回 ``True``，默认开启证书校验；
+    - ``MODEL_CFG_SSL_MODE=false`` 时返回 ``False``（内网自签证书场景可关闭）；
+    - 开启校验且配置 ``MODEL_CFG_SSL_CERT_PATH`` 时返回该 CA 证书路径。
+
+    此处直接读取环境变量而非复用 ``ModelUtil``，以免 ``llm_chain`` 因导入
+    ``jiuwen.plugin``/``psycopg2`` 而引入多余的数据库依赖。
+    """
+    verify = True
+    ssl_mode = os.getenv(MODEL_CFG_SSL_MODE_KEY)
+    if ssl_mode and isinstance(ssl_mode, str):
+        try:
+            verify = json.loads(ssl_mode)
+        except json.JSONDecodeError:
+            verify = True
+    if verify:
+        cert_path = os.getenv(MODEL_CFG_SSL_CERT_PATH_KEY)
+        if cert_path:
+            return cert_path
+    return verify
 
 
 class LLMChainModelConfig(BaseModel):
@@ -888,7 +918,9 @@ class LLMChain(WorkflowComponent):
             return url
         try:
             import httpx
-            async with httpx.AsyncClient(verify=True, timeout=30) as client:
+            # 默认开启 TLS 证书校验；内网自签证书场景可设 MODEL_CFG_SSL_MODE=false
+            # 关闭校验，或设 MODEL_CFG_SSL_CERT_PATH 指定内网 CA 证书（推荐）。
+            async with httpx.AsyncClient(verify=_resolve_vision_tls_verify(), timeout=30) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 content_type = resp.headers.get("content-type", "image/jpeg")
