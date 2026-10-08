@@ -1111,7 +1111,8 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   /**
    * 中间变量是否存在会破坏 intermediate_loop_var schema 的非法项：
    * - 变量名为空、非 [a-zA-Z_] 开头、含非法字符或重复（与 valueValidityValidator 口径一致）；
-   * - integer/number 字面量为空或非数值（与 integerStr/numberStr 指令口径一致）。
+   * - integer/number 字面量为空或非数值（与 integerStr/numberStr 指令口径一致）；
+   * - ref 来源未选择引用（content 非选中数组，与 refSelectedRequire 口径一致）。
    * 字符串留空是运行时合法值，不拦截；boolean/复合类型随类型切换已重置为默认值，不在此拦截。
    */
   private hasIllegalMidParams(): boolean {
@@ -1125,6 +1126,15 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
         return true;
       }
       seenNames.add(name);
+      if (param.value?.type === 'ref') {
+        // 切到 ref 未选择引用时 content 是 {ref_node_id:'',...} 对象而非选中数组，
+        // 属非法空引用，不允许写入 schema 并被下游引用
+        const refContent = param.value.content;
+        if (!refContent || !Array.isArray(refContent)) {
+          return true;
+        }
+        continue;
+      }
       if (
         param.value?.type !== 'literal' ||
         (param.type !== 'integer' && param.type !== 'number')

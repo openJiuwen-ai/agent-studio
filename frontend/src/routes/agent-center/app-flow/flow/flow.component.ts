@@ -1460,8 +1460,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
               );
             } finally {
               // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
-              // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow 提前 return）
-              this.nodeServ.setIsConfirmLoading(false);
+              // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow
+              // 提前 return 时已复位确认 loading，此处不可再延迟复位——若延迟到后续其他节点
+              // 保存期间，会错误清除后者的确认 loading；saveStatusMap 由本分支独占复位）
               if (this.type !== 'multi' && nodeData?.id) {
                 this.saveStatusMap.set(nodeData.id, false);
               }
