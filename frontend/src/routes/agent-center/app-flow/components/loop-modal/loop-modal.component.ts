@@ -31,7 +31,6 @@ import { AppFlowService } from '../../app-flow.service';
 import {
   getInitInputParamConfig,
   getInitRefParamConfig,
-  getNoneObjOutputParamTypes,
   getOutputParamTypes,
   WORKFLOW_SVGS,
 } from '../../flow.const';
@@ -149,8 +148,6 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   };
 
   public outputParams: IWorkflowField[] = [];
-
-  public noneObjDataTypes = getNoneObjOutputParamTypes();
 
   // boolean 中间变量的字面量值固定为 true/false 下拉，避免任意文本存成无效布尔
   public booleanLiteralOptions = [
@@ -685,12 +682,18 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * 需要在序列化/读取时做数值化转换的场景。
    */
   /** literal 来源各类型的默认内容：integer/number→0、boolean→false、其余→'' */
-  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
+  private defaultLiteralContent(type: IWorkflowFieldType): any {
     if (type === 'boolean') {
       return false;
     }
     if (type === 'integer' || type === 'number') {
       return 0;
+    }
+    if (type === 'object') {
+      return {};
+    }
+    if (type && type.startsWith('array')) {
+      return [];
     }
     return '';
   }
@@ -746,13 +749,11 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   /**
-   * literal 来源允许的数据类型（noneObjDataTypes 中未禁用的项）。
-   * ref 同步来的 object/array<...> 等复合类型对 literal 非法，需回退 string。
+   * 中间变量字面量允许的数据类型：与记忆变量/输出参数一致，允许全部类型（含 object/array）。
    */
   private isValidLiteralDataType(type: unknown): boolean {
-    return this.noneObjDataTypes.some(
-      (option) => !option.disabled && option.value === type,
-    );
+    // 与记忆变量/LLM 一致：复杂类型(object/array)也可作为中间变量类型（值取空值或用引用来源）
+    return this.outputDataTypes.some((option) => option.value === type);
   }
 
   /**

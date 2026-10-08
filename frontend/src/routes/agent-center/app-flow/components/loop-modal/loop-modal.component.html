@@ -289,7 +289,7 @@
                     <nz-select
                       *ngIf="param.value.type === 'literal'"
                       style="width: 100%"
-                      [nzOptions]="noneObjDataTypes"
+                      [nzOptions]="outputDataTypes"
                       [name]="'midParamDataType' + i"
                       [(ngModel)]="param.type"
                       nzLabelKey="label"
@@ -314,7 +314,9 @@
                         param.value.type === 'literal' &&
                         param.type !== 'integer' &&
                         param.type !== 'number' &&
-                        param.type !== 'boolean'
+                        param.type !== 'boolean' &&
+                        param.type !== 'object' &&
+                        !param.type.startsWith('array')
                       "
                       style="width: 100%"
                       type="text"
@@ -378,6 +380,18 @@
                       [title]="param.value.content"
                       [class.input-error]="midParamForm?.controls['midParamValue' + i]?.invalid && (midParamForm?.controls['midParamValue' + i]?.dirty || midParamForm?.controls['midParamValue' + i]?.touched)"
                     />
+
+                    <!-- 复杂类型(object/array)：不提供标量字面量输入；值取空值([]/{}), 或用“引用”来源 -->
+                    <div
+                      class="combo-select-right flex items-center text-label"
+                      style="width: 100%"
+                      *ngIf="
+                        param.value.type === 'literal' &&
+                        (param.type === 'object' || param.type.startsWith('array'))
+                      "
+                    >
+                      <span>{{ param.type.startsWith('array') ? '[]' : '{}' }}</span>
+                    </div>
 
                     <input-tree-select
                       *ngIf="param.value.type === 'ref'"
