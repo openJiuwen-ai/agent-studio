@@ -199,6 +199,25 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     this.graph = this.appFlowServ.getGraph();
     this.loopNodeInfo = this.getParentNodeInfo(this.graph);
 
+    this.leftRefs = this.buildLeftRefs();
+
+    const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
+    if (parentNode) {
+      this.getLoopInnerNodeRefs(this.loopNodeInfo).subscribe(info => {
+        this.onRefUpdate(info);
+      });
+    } else {
+      this.getSelfRefs().subscribe(info => {
+        this.onRefUpdate(info);
+      });
+    }
+  }
+
+  /**
+   * 构建左值（目标变量）引用选项：循环中间变量 + 赋值型记忆变量 + 请求变量。
+   * 抽出以便引用变化时重建，令左值类型随变量改型实时刷新。
+   */
+  private buildLeftRefs(): IParamRef[] {
     const assignmentMemos = (this.appFlowServ.getFlowConfigs()?.memory ?? [])
       .filter(memo => memo.storage_method === 'assignment')
       .map(memo => {
@@ -209,8 +228,8 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       });
 
     const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
-
     const refs = parentNode ? this.getLoopMidVarRefs(this.loopNodeInfo) : [];
+
     if (assignmentMemos.length) {
       const assignmentMemosRefs = NodeUtils.refInfo2Tree(
         [
@@ -228,17 +247,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (this.requestVariables) {
       refs.push(...this.requestVariables);
     }
-    this.leftRefs = refs;
-
-    if (parentNode) {
-      this.getLoopInnerNodeRefs(this.loopNodeInfo).subscribe(info => {
-        this.onRefUpdate(info);
-      });
-    } else {
-      this.getSelfRefs().subscribe(info => {
-        this.onRefUpdate(info);
-      });
-    }
+    return refs;
   }
 
   ngAfterViewInit(): void {
@@ -255,8 +264,15 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (this.isInit) {
       this.initParams();
     } else {
+      // 引用变化时左值选项可能已更新（如循环中间变量改型）：重建并重选左值，
+      // 令 left.value.content/type 反映当前类型，再据此收敛右值与菜单。
+      this.leftRefs = this.buildLeftRefs();
+      let menusChanged = false;
       this.params.forEach(param => {
         const { left, right } = param;
+
+        left.refs = cloneDeep(this.leftRefs);
+        NodeUtils.selectTreeNodeInRefsChhangeByValue(left);
 
         if (right.value.operator) {
           right.value.type = 'operator';
@@ -265,23 +281,30 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         NodeUtils.reSelectRefWithNewOps(
           right,
           NodeUtils.narrowRefOption(this.rightRefs, {
-            type: left.type,
+            type: (this.isGetLeftType(left) || left.type) as IWorkflowFieldType,
           })
         );
 
-        this.refreshMenusByLiveType(param);
+        if (this.refreshMenusByLiveType(param)) {
+          menusChanged = true;
+        }
       });
+      if (menusChanged) {
+        this.changeUpdateTime();
+      }
     }
 
     this.isInit = false;
   }
 
   /**
-   * 依据左值当前引用类型刷新「值」选项与运算赋值菜单。
-   * 外部（如循环中间变量）改型后，重开节点或引用刷新即可得到正确选项，无需重选左值；
-   * 旧运算符若已不被新类型支持，则归一到 null(empty)，避免脏值入库。
+   * 依据左值当前引用类型刷新「值」选项与运算赋值菜单，并收敛右侧来源/运算符：
+   * - 外部（循环中间变量/记忆变量等）改型后，重开节点或引用刷新即可得到正确选项，无需重选左值；
+   * - 右侧来源(type)已不在可选集合、或左值变为 complex 后 literal 不可选时，回退 ref；
+   * - 旧运算符已不被新类型支持时归一到 null(empty)，避免脏值入库。
+   * 返回是否发生了收敛（供调用方据此标记脏、触发落库，避免归一结果不写回）。
    */
-  private refreshMenusByLiveType(param: IVal) {
+  private refreshMenusByLiveType(param: IVal): boolean {
     param.operatorOpts = this.getOperatorOptions(param);
 
     const liveType = (
@@ -289,24 +312,39 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       param.left.type ||
       ''
     ).toLowerCase();
-    const baseOpts =
-      this.getLeftParamsType(param.left) === 'complex'
-        ? this.refOnlyOptions
-        : this.sourceOptions;
+    const isComplex = this.getLeftParamsType(param.left) === 'complex';
+    const baseOpts = isComplex ? this.refOnlyOptions : this.sourceOptions;
     param.typeOpts = hasEmptyType.includes(liveType)
       ? [...baseOpts, ...this.commonOperatorOptions]
       : baseOpts;
 
-    if (param.right?.value?.type !== 'operator') {
-      return;
+    let changed = false;
+
+    // 收敛「值」来源：当前模式已不在可选集合 → 回退 ref（与 onLeftSelect 对齐）
+    const sourceStillValid = param.typeOpts.some(
+      (option) => option.value === param.right?.value?.type
+    );
+    if (!sourceStillValid) {
+      param.right.value.type = 'ref';
+      changed = true;
+    }
+    if (isComplex && param.right.value.type === 'literal') {
+      param.right.value.type = 'ref';
+      changed = true;
     }
 
-    const operatorStillValid = param.operatorOpts.some(
-      (option) => option.value === param.right.value.operator
-    );
-    if (!operatorStillValid) {
-      param.right.value.operator = 'empty';
+    // 收敛运算符：旧运算符已被新类型菜单剔除 → null(empty)
+    if (param.right?.value?.type === 'operator') {
+      const operatorStillValid = param.operatorOpts.some(
+        (option) => option.value === param.right.value.operator
+      );
+      if (!operatorStillValid) {
+        param.right.value.operator = 'empty';
+        changed = true;
+      }
     }
+
+    return changed;
   }
 
   public initParams() {
@@ -314,6 +352,8 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       this.addParam();
       return;
     }
+
+    let menusChanged = false;
 
     this.params = this.nodeInfo.inputs.map((input: any, index) => {
       const left: IWorkflowField = {
@@ -352,9 +392,15 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       }
 
       const param: IVal = { left, right };
-      this.refreshMenusByLiveType(param);
+      if (this.refreshMenusByLiveType(param)) {
+        menusChanged = true;
+      }
       return param;
     });
+
+    if (menusChanged) {
+      this.changeUpdateTime();
+    }
   }
 
   public initParentInfo() {
