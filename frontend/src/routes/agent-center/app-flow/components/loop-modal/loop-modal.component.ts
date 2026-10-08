@@ -27,6 +27,7 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { cloneDeep } from 'lodash';
 import { takeUntil } from 'rxjs';
 import { ParamLabelPipe } from 'src/pipes/param-label.pipe';
+import { isIntegerStr, isNumberStr } from 'src/utils/utils';
 import { AppFlowService } from '../../app-flow.service';
 import {
   getInitInputParamConfig,
@@ -710,9 +711,8 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * literal 内容按类型归一：integer 仅接受整数值（'1.5'/1.5 → 0）、
    * number 接受有限数值、boolean 仅接受布尔，非法/缺失回退类型默认值。
    * 返回是否发生修正（供读取端触发持久化）。
-   * 注意：nonEmptyValidator 已从值输入框移除，清空 integer/number 值会被
-   * 这里归一为 0 并保存——用户无感知。这是"不拦截保存"方案的固有取舍，
-   * 避免类型切换时表单状态误判导致保存失败。
+   * 归一仅兜底类型切换/旧数据等在途场景：保存入口 hasIllegalMidParams 会先
+   * 拦截空值与非数值内容（并标红提示），因此不会出现表单报错却被静默改写落库。
    * G.CTL.03：拆分 if 保证单条语句操作数 ≤3。
    */
   private normalizeTypedLiteralContent(item: IWorkflowField): boolean {
@@ -1108,10 +1108,58 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     return outputs;
   }
 
+  /**
+   * 中间变量是否存在会破坏 intermediate_loop_var schema 的非法项：
+   * - 变量名为空、非 [a-zA-Z_] 开头、含非法字符或重复（与 valueValidityValidator 口径一致）；
+   * - integer/number 字面量为空或非数值（与 integerStr/numberStr 指令口径一致）。
+   * 字符串留空是运行时合法值，不拦截；boolean/复合类型随类型切换已重置为默认值，不在此拦截。
+   */
+  private hasIllegalMidParams(): boolean {
+    const seenNames = new Set<string>();
+    for (const param of this.midParams || []) {
+      const name = param.name || '';
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+        return true;
+      }
+      if (seenNames.has(name)) {
+        return true;
+      }
+      seenNames.add(name);
+      if (
+        param.value?.type !== 'literal' ||
+        (param.type !== 'integer' && param.type !== 'number')
+      ) {
+        continue;
+      }
+      const content = param.value.content;
+      const isEmpty =
+        content === null ||
+        content === undefined ||
+        (typeof content === 'string' && content.trim() === '');
+      if (isEmpty) {
+        return true;
+      }
+      const isValid =
+        param.type === 'integer'
+          ? isIntegerStr(content as string | number)
+          : isNumberStr(content as string | number);
+      if (!isValid) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   handelSave() {
-    // 不再以 midParamForm.invalid 拦截保存：类型切换（如 string→array<string>）时
-    // *ngIf 移除旧表单控件可能不完整，导致 form.invalid 误判为 true，使保存被拦、
-    // 节点无法保存且无法重开。非法 name 改在 getInputsDSL 序列化时过滤，不写入 schema。
+    // 会破坏 intermediate_loop_var schema 的非法中间变量在保存入口拦截：
+    // 阻止触发 setNodeSaveMonitor 落库，避免非法字段被 getInputsDSL 静默过滤
+    // 导致 schema 丢字段、output 引用悬空（字符串留空场景已豁免，不受影响）。
+    // 用模型校验而非 form.invalid：*ngIf 切换输入控件时表单状态可能滞后误判，
+    // 重新引入“保存被拦、节点无法重开”的卡死问题。
+    if (this.hasIllegalMidParams()) {
+      this.midParamForm?.form.markAllAsTouched();
+      return;
+    }
     if (this.tagCompareNoChange()) {
       return;
     }

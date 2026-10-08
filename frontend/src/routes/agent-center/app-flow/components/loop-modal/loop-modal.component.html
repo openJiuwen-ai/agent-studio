@@ -350,6 +350,7 @@
                       type="text"
                       [name]="'midParamValue' + i"
                       integerStr
+                      nonEmptyValidator
                       nz-input
                       [placeholder]="'input_placeholder' | i18nextEager"
                       (blur)="onMidRefChange()"
@@ -368,6 +369,7 @@
                       type="text"
                       [name]="'midParamValue' + i"
                       numberStr
+                      nonEmptyValidator
                       nz-input
                       [placeholder]="'input_placeholder' | i18nextEager"
                       (blur)="onMidRefChange()"
