@@ -110,12 +110,16 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   ];
 
   public isGetLeftType(param: IWorkflowField) {
-    const { type } = (param.value.content[0] as IParamRef) || {};
+    const { type } = (param.value.content?.[0] as IParamRef) || {};
     return type;
   }
 
   public getParamType(param: IWorkflowField) {
-    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+    if (
+      param.value.type === 'ref' &&
+      Array.isArray(param.value.content) &&
+      param.value.content.length
+    ) {
       const { type = '' } = (param.value.content[0] as IParamRef) || {};
       if (type.startsWith('array')) {
         return 'emptyArr';
@@ -338,12 +342,20 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       changed = true;
     }
 
-    // 收敛引用：选中的引用节点已被窄化为 disabled（类型不再匹配）→ 清空
+    // 收敛引用：选中的引用节点被窄化为 disabled 时，仅当它与左值类型**真正不兼容**才清空。
+    // narrowRefOption 的 disabled 是"类型串精确不等"，比真实兼容性更严（如 string ⊇ file/*），
+    // 故用 getCompatibleTypes 复核，避免误清兼容引用。
     if (param.right?.value?.type === 'ref') {
       const selected = Array.isArray(param.right.value.content)
         ? (param.right.value.content[0] as any)
         : (param.right.value.content as any);
-      if (selected?.disabled) {
+      const selectedType = selected?.type;
+      const compatible =
+        selectedType != null &&
+        (this.getCompatibleTypes(liveLeftType) as string[]).includes(
+          String(selectedType).toLowerCase(),
+        );
+      if (selected?.disabled && !compatible) {
         param.right.value.content = NodeUtils.getChangeContent('ref');
         changed = true;
       }

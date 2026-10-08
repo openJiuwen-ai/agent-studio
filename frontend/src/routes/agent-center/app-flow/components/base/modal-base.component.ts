@@ -353,7 +353,7 @@ export abstract class ModalBaseComponent
     return this.initTime === this.changeTime;
   }
 
-  private getCompatibleTypes(type: string): string[] {
+  protected getCompatibleTypes(type: string): string[] {
     const t = type?.toLowerCase();
 
     if (!t) return [];

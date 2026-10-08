@@ -316,7 +316,7 @@
                         param.type !== 'number' &&
                         param.type !== 'boolean' &&
                         param.type !== 'object' &&
-                        !param.type.startsWith('array')
+                        !(param.type || '').startsWith('array')
                       "
                       style="width: 100%"
                       type="text"
@@ -387,10 +387,10 @@
                       style="width: 100%"
                       *ngIf="
                         param.value.type === 'literal' &&
-                        (param.type === 'object' || param.type.startsWith('array'))
+                        (param.type === 'object' || (param.type || '').startsWith('array'))
                       "
                     >
-                      <span>{{ param.type.startsWith('array') ? '[]' : '{}' }}</span>
+                      <span>{{ (param.type || '').startsWith('array') ? '[]' : '{}' }}</span>
                     </div>
 
                     <input-tree-select
