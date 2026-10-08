@@ -326,7 +326,7 @@ class TestConversationHistory:
             "agent_runtime.runner.react_agent_runner.ReActAgent",
             return_value=agent,
         ):
-            result, _ = getattr(runner, "_create_agent")(ir_json)
+            result, _, _ = getattr(runner, "_create_agent")(ir_json)
 
         assert result is agent
         config.configure_context_engine.assert_called_once_with(
@@ -536,6 +536,138 @@ class TestRegisterWorkflows:
         assert built_first is first_call_workflow
         assert built_second is second_call_workflow
         assert built_first is not built_second
+
+
+class TestPromptTemplateReuse:
+    """run_streaming 应复用 _create_agent 已构建的系统提示词，不重复解析。"""
+
+    @staticmethod
+    def test_create_agent_returns_prompt_messages_for_reuse():
+        runner = ReActAgentRunner(api_key="test")
+        ir_json = {
+            "agentId": "agent-1",
+            "configs": {
+                "sysPromptTemplate": "你是{{inputs.city}}助手",
+                "inputVariables": [
+                    {"variable_key": "city", "default_value": "深圳"}
+                ],
+            },
+        }
+        global_variables = {}
+        config = MagicMock()
+        agent = MagicMock()
+
+        with patch(
+            "agent_runtime.runner.react_agent_runner.ReActAgentConfig",
+            return_value=config,
+        ), patch(
+            "agent_runtime.runner.react_agent_runner.ReActAgent",
+            return_value=agent,
+        ):
+            result_agent, _, prompt_messages = getattr(runner, "_create_agent")(
+                ir_json, "", global_variables, False
+            )
+
+        assert result_agent is agent
+        assert len(prompt_messages) == 1
+        assert prompt_messages[0]["role"] == "system"
+        assert prompt_messages[0]["content"].startswith("你是深圳助手")
+        # 与直接调用 _parse_prompt_template 的结果一致（含入参默认值合并）
+        assert prompt_messages == getattr(runner, "_parse_prompt_template")(
+            ir_json, "", global_variables, False
+        )
+        # 该提示词即 Agent 实际配置，保证复用不会产生不一致
+        config.configure_prompt_template.assert_called_once_with(prompt_messages)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_run_streaming_parses_prompt_template_once():
+        runner = ReActAgentRunner(api_key="test")
+        ir_json = {
+            "agentId": "agent-1",
+            "agentName": "Reuse Agent",
+            "configs": {"sysPromptTemplate": "系统提示词 {{inputs.city}}"},
+        }
+        req = SimpleNamespace(
+            ir_path="ir.json",
+            conversation_id="conv-1",
+            user_id="user-1",
+            query="今天天气如何",
+            resume_input=None,
+            params=SimpleNamespace(
+                conversation_history=[],
+                global_variables={"city": "深圳"},
+                environment_variables={},
+                enable_history=True,
+            ),
+        )
+        parse_results = []
+        real_parse = ReActAgentRunner._parse_prompt_template
+
+        def counting_parse(self_, *args, **kwargs):
+            result = real_parse(self_, *args, **kwargs)
+            parse_results.append(result)
+            return result
+
+        config = MagicMock()
+        agent = MagicMock()
+        agent.register_rail = AsyncMock()
+
+        async def fake_stream(*args, **kwargs):
+            yield SimpleNamespace(type="llm_output")
+
+        agent.stream = fake_stream
+        session = MagicMock()
+        session.pre_run = AsyncMock()
+        session.post_run = AsyncMock()
+        recorded = {}
+        adapter = MagicMock()
+        adapter.set_llm_inputs.side_effect = (
+            lambda value: recorded.setdefault("llm_inputs", value)
+        )
+
+        with patch.object(
+            ReActAgentRunner, "_parse_prompt_template", counting_parse
+        ), patch(
+            "agent_runtime.runner.react_agent_runner.ReActAgentConfig",
+            return_value=config,
+        ), patch(
+            "agent_runtime.runner.react_agent_runner.ReActAgent",
+            return_value=agent,
+        ), patch.object(
+            runner, "_load_ir", new=AsyncMock(return_value=ir_json)
+        ), patch.object(
+            runner, "_create_llm", new=AsyncMock(return_value=MagicMock())
+        ), patch.object(
+            runner, "_register_plugins", new=AsyncMock()
+        ), patch.object(
+            runner, "_register_mcp_servers", new=AsyncMock()
+        ), patch.object(
+            runner, "_register_workflows", new=AsyncMock()
+        ), patch.object(
+            runner, "_register_skills", new=AsyncMock()
+        ), patch.object(
+            runner, "_get_agent_functions", return_value=[]
+        ), patch(
+            "agent_runtime.runner.react_agent_runner"
+            ".create_agent_session_with_trace",
+            return_value=session,
+        ), patch(
+            "agent_runtime.runner.react_agent_runner.ReactStreamDataAdapter",
+            return_value=adapter,
+        ):
+            events = [event async for event in runner.run_streaming(req)]
+
+        assert events, "run_streaming 应产出事件"
+        assert adapter.set_llm_inputs.called, "首次 llm_output 应记录 llm_inputs"
+        # 整条链路只解析一次提示词（_create_agent 内），run_streaming 复用其结果
+        assert len(parse_results) == 1
+        # 记录的 llm_inputs 与 Agent 实际配置的系统提示词一致
+        config.configure_prompt_template.assert_called_once_with(parse_results[0])
+        assert recorded["llm_inputs"] == list(parse_results[0]) + [
+            {"role": "user", "content": "今天天气如何"}
+        ]
+        assert recorded["llm_inputs"][0]["content"].startswith("系统提示词 深圳")
 
 
 if __name__ == "__main__":

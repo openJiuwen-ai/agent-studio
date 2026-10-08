@@ -670,7 +670,7 @@ class ReActAgentRunner:
         skill_work_dir: str = "",
         global_variables: dict = None,
         has_file_links: bool = False,
-    ) -> tuple[ReActAgent, str]:
+    ) -> tuple[ReActAgent, str, list[dict]]:
         """根据 IR 配置创建 ReActAgent 实例
 
         Args:
@@ -678,6 +678,10 @@ class ReActAgentRunner:
             skill_work_dir: skill 文件的实际工作目录
             global_variables: 全局变量（含用户入参变量）
             has_file_links: query 中是否包含文件链接
+
+        Returns:
+            (agent, agent_id, prompt_messages): prompt_messages 为已构建的
+            系统提示词消息，调用方可直接复用，避免重复执行 _parse_prompt_template。
         """
         prompt_template = self._parse_prompt_template(
             ir_json, skill_work_dir, global_variables, has_file_links
@@ -702,7 +706,7 @@ class ReActAgentRunner:
         agent = ReActAgent(card)
         agent.configure(config)
 
-        return agent, agent_id
+        return agent, agent_id, prompt_template
 
     async def run_streaming(
             self, req: ExecutionRequest, execution_id: str | None = None
@@ -750,7 +754,7 @@ class ReActAgentRunner:
         try:
             conversation_history = req.params.conversation_history
             global_variables = req.params.global_variables or {}
-            agent, agent_id = self._create_agent(
+            agent, agent_id, prompt_messages = self._create_agent(
                 ir_json, skill_work_dir, global_variables, has_file_links
             )
             agent.set_llm(llm)
@@ -830,10 +834,8 @@ class ReActAgentRunner:
             # 提取 openjiuwen tracer 并注入到 inputs 中
             inputs.setdefault("_jiuwen_runtime_kwargs", {})["session"] = session
 
-            # 构建 LLM inputs（用于事件记录）—— 包含系统提示词以便调试查看
-            prompt_messages = self._parse_prompt_template(
-                ir_json, skill_work_dir, global_variables, has_file_links
-            )
+            # 构建 LLM inputs（用于事件记录）—— 复用 _create_agent 中已构建的
+            # 系统提示词，保证记录内容与 Agent 实际配置一致，且不重复解析
             llm_inputs = list(prompt_messages) + [{"role": "user", "content": query}]
 
             # 构建 LLM metaData（模型参数）
