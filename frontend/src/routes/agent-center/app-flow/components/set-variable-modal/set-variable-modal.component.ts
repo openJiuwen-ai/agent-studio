@@ -111,7 +111,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   public getLeftParamsType(param: IWorkflowField) {
     if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
-      const { type } = (param.value.content[0] as IParamRef) || {};
+      const { type = '' } = (param.value.content[0] as IParamRef) || {};
       if (type === 'object' || type.startsWith('array')) {
         return 'complex';
       } else {
@@ -128,7 +128,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   public getParamType(param: IWorkflowField) {
     if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
-      const { type } = (param.value.content[0] as IParamRef) || {};
+      const { type = '' } = (param.value.content[0] as IParamRef) || {};
       if (type.startsWith('array')) {
         return 'emptyArr';
       } else if (['number', 'integer'].includes(type)) {
@@ -307,11 +307,9 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   private refreshMenusByLiveType(param: IVal): boolean {
     param.operatorOpts = this.getOperatorOptions(param);
 
-    const liveType = (
-      this.isGetLeftType(param.left) ||
-      param.left.type ||
-      ''
-    ).toLowerCase();
+    const liveLeftType = (this.isGetLeftType(param.left) ||
+      param.left.type) as IWorkflowFieldType;
+    const liveType = (liveLeftType || '').toLowerCase();
     const isComplex = this.getLeftParamsType(param.left) === 'complex';
     const baseOpts = isComplex ? this.refOnlyOptions : this.sourceOptions;
     param.typeOpts = hasEmptyType.includes(liveType)
@@ -319,6 +317,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       : baseOpts;
 
     let changed = false;
+
+    // 右值类型同步为左值实时类型：否则模板仍按旧类型渲染字面量输入、
+    // getMetaInfoFromField 也按旧类型转换内容，写出与左值类型不一致的右侧配置
+    if (liveLeftType && param.right.type !== liveLeftType) {
+      param.right.type = liveLeftType;
+      changed = true;
+    }
 
     // 收敛「值」来源：当前模式已不在可选集合，或左值变 complex 后 literal 不可选 → 回退 ref；
     // 同时用 getChangeContent 重置内容（与 onLeftSelect 对齐），避免旧的 literal 内容
@@ -369,14 +374,23 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       const setting = this.nodeInfo.configs.settings[index];
 
       let queryType = left.type;
-      if (queryType.startsWith('array')) {
-        queryType = `${queryType}<${(left.schema as IWorkflowField).type}>` as IWorkflowFieldType;
-        if (left?.value?.content && (left as any)?.schema.type !== left.value.content[0]?.schema.type) {
-          queryType = `${left.type}<${left.value.content[0]?.schema.type}>` as IWorkflowFieldType;
+      if (typeof queryType === 'string' && queryType.startsWith('array')) {
+        // left.schema 可能缺失（如复杂类型中间变量经 getDtoInput 保存后 type='array' 且无 schema），
+        // 需回退引用节点的 schema/type，否则访问 left.schema.type 会抛错导致面板初始化失败
+        const leftSchema = left.schema as IWorkflowField | undefined;
+        const refContent = left.value?.content?.[0] as any;
+        const elementType =
+          leftSchema?.type ?? refContent?.schema?.type ?? refContent?.type;
+        if (elementType) {
+          queryType = `${queryType}<${elementType}>` as IWorkflowFieldType;
+        }
+        const refSchemaType = refContent?.schema?.type;
+        if (refSchemaType && leftSchema?.type !== refSchemaType) {
+          queryType = `${left.type}<${refSchemaType}>` as IWorkflowFieldType;
         }
       }
 
-      if (left.value?.content[0]?.type && left.type !== left.value.content[0].type) {
+      if (left.value?.content?.[0]?.type && left.type !== left.value.content[0].type) {
         queryType = left.value.content[0].type;
       }
 
@@ -436,7 +450,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   public onLeftSelect(selectedVal: IParamRef[], param: IVal) {
     param.operatorOpts = this.getOperatorOptions(param);
     let typeOpts = this.getLeftParamsType(param.left) === 'complex' ? this.refOnlyOptions : this.sourceOptions;
-    if (hasEmptyType.includes(this.isGetLeftType(param.left).toLowerCase())) {
+    if (hasEmptyType.includes((this.isGetLeftType(param.left) || '').toLowerCase())) {
       param.typeOpts = [...typeOpts, ...this.commonOperatorOptions];
     } else {
       param.typeOpts = typeOpts;
@@ -549,11 +563,11 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       const rightSetting = this.getMetaInfoFromField(rightVal);
       if (rightSetting.value.type === 'operator') {
         rightSetting.value.type = 'ref';
-        if (rightSetting.type.startsWith('array')) {
+        if (rightSetting.type?.startsWith('array')) {
           rightSetting.type = 'array';
           rightSetting.schema = leftSetting.schema;
         }
-        if (rightSetting.type.startsWith('object')) {
+        if (rightSetting.type?.startsWith('object')) {
           rightSetting.type = 'object';
           rightSetting.schema = leftSetting.schema;
         }
