@@ -585,12 +585,24 @@ export const NodeUtils = {
     if (param?.value?.type === 'ref') {
       const paramContent = param?.value.content as IRefContentType;
 
+      let matched = false;
       TreeUtil.traverse(param.refs, (node: any) => {
         if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
+          // 左值改型后，旧引用可能已被兼容性收敛置灰（disabled），
+          // 不可再作为有效引用，交由下方「未命中」逻辑清空，避免脏数据落库。
+          if (node.disabled) {
+            return;
+          }
           node.checked = true;
           param.value.content = [node];
+          matched = true;
         }
       });
+
+      // 未命中任何有效（启用）节点：左值改型导致旧引用失效，清空避免脏数据落库。
+      if (!matched) {
+        param.value.content = { ref_node_id: '', ref_var_name: '', source: 'user' };
+      }
     }
   },
 

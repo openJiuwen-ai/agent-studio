@@ -752,6 +752,15 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       item.value.content = Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
       return true;
     }
+    if (item.type && item.type.startsWith('array')) {
+      // 数组字面量内容必须为数组，异常值（对象/标量/字符串）回退空数组，
+      // 保证 intermediate_loop_var 的 schema 类型与值类型一致（意见⑤）。
+      if (!Array.isArray(item.value.content)) {
+        item.value.content = [];
+        return true;
+      }
+      return false;
+    }
     return false;
   }
 
