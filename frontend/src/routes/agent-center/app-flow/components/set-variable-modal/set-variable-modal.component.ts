@@ -320,16 +320,19 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
     let changed = false;
 
-    // 收敛「值」来源：当前模式已不在可选集合 → 回退 ref（与 onLeftSelect 对齐）
+    // 收敛「值」来源：当前模式已不在可选集合，或左值变 complex 后 literal 不可选 → 回退 ref；
+    // 同时用 getChangeContent 重置内容（与 onLeftSelect 对齐），避免旧的 literal 内容
+    // 在保存时被 getDtoInput 误当引用、写出 ref_node_id/ref_var_name 为 undefined 的脏 ref
+    const rightSource = param.right?.value?.type;
     const sourceStillValid = param.typeOpts.some(
-      (option) => option.value === param.right?.value?.type
+      (option) => option.value === rightSource
     );
-    if (!sourceStillValid) {
+    const shouldRevertToRef =
+      rightSource !== 'ref' &&
+      (!sourceStillValid || (isComplex && rightSource === 'literal'));
+    if (shouldRevertToRef) {
       param.right.value.type = 'ref';
-      changed = true;
-    }
-    if (isComplex && param.right.value.type === 'literal') {
-      param.right.value.type = 'ref';
+      param.right.value.content = NodeUtils.getChangeContent('ref');
       changed = true;
     }
 

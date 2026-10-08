@@ -596,7 +596,11 @@ export const NodeUtils = {
 
   selectTreeNodeInRefsChhangeByValue(param: IWorkflowField) {
     if (param?.value?.type === 'ref') {
-      const paramContent = param?.value.content as IRefContentType;
+      // 兼容两种形态：初始化时 content 为对象；用户选择/重选后为数组 [node]。
+      // 只处理对象形态会导致数组形态永远匹配不到、保留旧类型节点。
+      const paramContent = Array.isArray(param.value.content)
+        ? (param.value.content[0] as IRefContentType)
+        : (param.value.content as IRefContentType);
 
       TreeUtil.traverse(param.refs, (node: any) => {
         if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
