@@ -318,7 +318,14 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
     // 右值类型同步为左值实时类型；类型变化且来源为 literal 时内容归一到新类型默认值，
     // 避免 Number('abc')=NaN / 非布尔字符串等脏值随 menusChanged 自动落库。
-    if (liveLeftType && param.right.type !== liveLeftType) {
+    // ref 来源维持所选引用节点的真实类型（由 getDtoInput 按引用节点类型回写），
+    // 不在此强制同步为左值类型，避免 string 左值 + file/* 右值等兼容但类型串不同的引用
+    // 每次打开被改写为左值类型、触发 tagCompareNoChange 判脏、反复保存/未保存提示。
+    if (
+      liveLeftType &&
+      param.right.value.type !== 'ref' &&
+      param.right.type !== liveLeftType
+    ) {
       param.right.type = liveLeftType;
       if (param.right.value.type === 'literal') {
         param.right.value.content = this.defaultLiteralContent(liveLeftType);
