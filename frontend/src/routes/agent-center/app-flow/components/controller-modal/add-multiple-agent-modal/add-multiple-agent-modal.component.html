@@ -70,7 +70,7 @@
             </div>
           </div>
           <div class="right-area" (click)="$event.stopPropagation()">
-            <label nz-checkbox [disabled]="isSingleAgent ? false : agent.disable" [(ngModel)]="agent.checked" (ngModelChange)="onCardSelected(agent)"></label>
+            <label nz-checkbox [disabled]="agent.disable" [(ngModel)]="agent.checked" (ngModelChange)="onCardSelected(agent)"></label>
           </div>
         </div>
 

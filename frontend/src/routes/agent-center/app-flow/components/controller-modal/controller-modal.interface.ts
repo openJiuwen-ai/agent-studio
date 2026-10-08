@@ -4,6 +4,9 @@ export const CONTROLLER_SUB_FLOW_LIMIT = 50;
 
 export const CONTROLLER_SUB_CONTROLLER_LIMIT = 50;
 
+/** 顶层控制器可挂载的单智能体数量上限，与后端 controller.single-agent-limit 默认值对齐 */
+export const CONTROLLER_SUB_SINGLE_AGENT_LIMIT = 10;
+
 export interface SubApplication {
   id: string;
   node_id?: string;

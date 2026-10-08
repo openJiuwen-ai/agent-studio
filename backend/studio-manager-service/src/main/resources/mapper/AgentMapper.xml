@@ -55,6 +55,7 @@
         <result column="name" jdbcType="VARCHAR" property="name"/>
         <result column="icon" jdbcType="VARCHAR" property="icon"/>
         <result column="created_by" jdbcType="VARCHAR" property="createdBy"/>
+        <result column="sub_type" jdbcType="VARCHAR" property="subType"/>
         <result column="version_id" jdbcType="VARCHAR" property="versionId"/>
         <result column="version_name" jdbcType="VARCHAR" property="versionName"/>
     </resultMap>
@@ -819,6 +820,7 @@
         t1.description,
         t1.icon,
         t1.creator,
+        t1.sub_type,
         t4.version_id,
         t4.version_name
         from (
@@ -827,7 +829,8 @@
         name,
         description,
         icon,
-        creator
+        creator,
+        sub_type
         from t_agent
         where project_id = #{projectId,jdbcType=VARCHAR}
         and deleted = false

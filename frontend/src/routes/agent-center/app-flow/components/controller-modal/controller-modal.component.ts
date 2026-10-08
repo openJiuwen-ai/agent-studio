@@ -655,7 +655,9 @@ export class ControllerModalComponent
     this.associationAgentCtx = this.nodeInfo.configs.agents?.map(
       (agent) => {
         const { configs } = agent;
-        const applicationType = agent.mode === 'PlanExecute'
+        // 单智能体成员 mode 为 PlanExecute/ReAct，子多智能体成员 mode 固定为 Controller；
+        // 历史 DSL 单智能体统一为 PlanExecute，按"非 Controller 即单智能体"判定
+        const applicationType = agent.mode !== 'Controller'
           ? ApplicationType.SINGLE_AGENT : ApplicationType.MULTI_AGENT;
 
         return {
@@ -837,17 +839,21 @@ export class ControllerModalComponent
 
   private getSubSingleAgent(agent) {
     const agentInfo = this.select_agent_detail_map.get(agent.id);
+    // 单智能体不再限定 PlanExecute 类型：通用模式（ReAct，sub_type 为 agent 或空）与
+    // 可控自主规划模式（PlanExecute）均可挂载，mode 按发布版本子类型推导，
+    // 随 DSL/IR 透传给运行时（PlannerFactory/ControlFactory 按 mode 实例化）
+    const agentMode = agentInfo.sub_type === 'planexecute' ? 'PlanExecute' : 'ReAct';
     const agentDetail = {
       node_id: `node_${uuidV4()}`,
       id: agentInfo.agent_id,
       name: agentInfo.name,
-      mode: 'PlanExecute',
+      mode: agentMode,
       type: 'agent',
       configs: {
         node_id: '',
         id: agentInfo.agent_id,
         name: agentInfo.name,
-        mode: 'PlanExecute',
+        mode: agentMode,
         type: ApplicationType.SINGLE_AGENT,
         description: agentInfo.description,
         version: agent.version_id,
@@ -1634,9 +1640,8 @@ export class ControllerModalComponent
 
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
-    if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      return hasNewVersion && app.latest_version_app_sub_type === 'planexecute';
-    }
+    // 单智能体不再限定 planexecute 类型：升级链路（getSubSingleAgent）按发布版本
+    // 子类型推导成员 mode，react 类型升级后 mode 同步为 ReAct，可直接提示升级
     return hasNewVersion;
   }
 

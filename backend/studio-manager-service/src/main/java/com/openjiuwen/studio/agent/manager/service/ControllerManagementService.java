@@ -149,6 +149,9 @@ public class ControllerManagementService {
     @Value("${controller.sub-agent-limit}")
     private int controllerSubAgentLimit;
 
+    @Value("${controller.single-agent-limit}")
+    private int controllerSingleAgentLimit;
+
     @Value("${controller.sub-agent-max-depth}")
     private int controllerSubAgentMaxDepth;
 
@@ -487,11 +490,11 @@ public class ControllerManagementService {
             throw new AgentStudioException(StudioError.MULTI_AGENT_CONTROLLER_CONFIGS_NULL);
         }
 
-        // 校验控制器只能挂载一个Plan&Execute模式的子Agent
-        validatePlanExecuteAgentCount(controllerNodeConfigVo);
+        // 校验控制器挂载的单智能体数量不超过上限
+        validateSingleAgentCount(controllerNodeConfigVo);
 
-        // 校验Plan&Execute模式的子Agent只能挂在顶层控制器
-        validatePlanExecuteAgentParentNode(nodesGroupByTypeId);
+        // 校验单智能体（PlanExecute/ReAct等）只能挂在顶层控制器
+        validateSingleAgentParentNode(nodesGroupByTypeId);
 
         // 检查工作流不能重复
         List<ControllerNodeConfigVOWorkflows> workflows = controllerNodeConfigVo.getWorkflows();
@@ -581,36 +584,41 @@ public class ControllerManagementService {
 
 
     /**
-     * 校验控制器只能挂载一个Plan&Execute模式的子Agent
+     * 校验控制器挂载的单智能体数量不超过上限。
+     * 单智能体成员（mode 为 PlanExecute/ReAct 等非 Controller 模式）支持挂载多个，
+     * 数量上限由 controller.single-agent-limit 配置（默认 10），超出时阻断保存。
      */
-    private void validatePlanExecuteAgentCount(ControllerNodeConfigVO controllerNodeConfigVo) {
+    private void validateSingleAgentCount(ControllerNodeConfigVO controllerNodeConfigVo) {
         List<ControllerNodeConfigVOAgents> agents = controllerNodeConfigVo.getAgents();
         if (CollectionUtils.isEmpty(agents)) {
             return;
         }
 
-        long planExecuteAgentCount = agents.stream()
-                .filter(agent -> AgentMode.PLANEXECUTE.getMode().equals(agent.getMode()))
+        long singleAgentCount = agents.stream()
+                .filter(agent -> AgentMode.isSingleAgentMode(agent.getMode()))
                 .count();
 
-        if (planExecuteAgentCount > 1) {
-            log.error("Controller only supports one PlanExecute mode agent, but found {}", planExecuteAgentCount);
-            throw new AgentStudioException(StudioError.MULTI_AGENT_ONLY_ONE_PLAN_EXECUTE_AGENT);
+        if (singleAgentCount > controllerSingleAgentLimit) {
+            log.error("Controller exceeds single agent limit, limit: {}, found {}",
+                controllerSingleAgentLimit, singleAgentCount);
+            throw new AgentStudioException(StudioError.MULTI_AGENT_SINGLE_AGENT_NUMBER_EXCEED_LIMIT,
+                String.valueOf(singleAgentCount), String.valueOf(controllerSingleAgentLimit));
         }
     }
 
     /**
-     * 校验Plan&Execute模式的子Agent只能挂在顶层控制器
-     * 只需检查所有SubController节点本身是否挂载了PlanExecute模式的Agent
+     * 校验单智能体（PlanExecute/ReAct等）只能挂在顶层控制器。
+     * 只需检查所有SubController节点本身是否挂载了单智能体模式的Agent，
+     * 与顶层控制器放开多单智能体（#1523）的语义保持一致：嵌套层仍不挂单智能体。
      */
-    private void validatePlanExecuteAgentParentNode(Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId) {
+    private void validateSingleAgentParentNode(Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId) {
         // 获取所有SubController节点
         Map<String, ControllerNodeVO> subControllerNodes = nodesGroupByTypeId.get(AgentNodeType.SUB_CONTROLLER.getType());
         if (CollectionUtils.isEmpty(subControllerNodes)) {
             return;
         }
 
-        // 检查每个SubController节点是否直接挂载了PlanExecute模式的Agent
+        // 检查每个SubController节点是否直接挂载了单智能体模式的Agent
         for (ControllerNodeVO subControllerNode : subControllerNodes.values()) {
             ControllerNodeConfigVO controllerNodeConfigVo = JsonUtils.objectToClassRef(
                     subControllerNode.getConfigs(), new TypeReference<>() {}
@@ -623,17 +631,17 @@ public class ControllerManagementService {
 
             List<ControllerNodeConfigVOAgents> agents = controllerNodeConfigVo.getAgents();
             if (!CollectionUtils.isEmpty(agents)) {
-                // 检查当前SubController是否挂载了PlanExecute模式的Agent
-                List<ControllerNodeConfigVOAgents> planExecuteAgents = agents.stream()
-                        .filter(agent -> AgentMode.PLANEXECUTE.getMode().equals(agent.getMode()))
+                // 检查当前SubController是否挂载了单智能体模式的Agent
+                List<ControllerNodeConfigVOAgents> singleAgents = agents.stream()
+                        .filter(agent -> AgentMode.isSingleAgentMode(agent.getMode()))
                         .collect(Collectors.toList());
 
-                if (!planExecuteAgents.isEmpty()) {
-                    List<String> planExecuteAgentNames = planExecuteAgents.stream()
+                if (!singleAgents.isEmpty()) {
+                    List<String> singleAgentNames = singleAgents.stream()
                             .map(ControllerNodeConfigVOAgents::getName)
                             .collect(Collectors.toList());
-                    log.error("SubController {} has forbidden PlanExecute agents: {}",
-                            subControllerNode.getName(), planExecuteAgentNames);
+                    log.error("SubController {} has forbidden single agents: {}",
+                            subControllerNode.getName(), singleAgentNames);
                     throw new AgentStudioException(StudioError.MULTI_AGENT_PLAN_EXECUTE_ONLY_IN_TOP_CONTROLLER);
                 }
             }
@@ -822,7 +830,7 @@ public class ControllerManagementService {
      * version_id 为空（跟随最新）不视为悬空。二者的版本都记录在节点自身 configs
      * （由前端添加子智能体时写入），而非 controller 节点的 agents 列表；mode 分流与保存链路
      * （recordRefSubController/recordRefAgent）一致：Controller 模式挂 SubController 节点，
-     * PlanExecute 模式挂 Agent 节点。校验文案统一报"子智能体节点版本不存在"。
+     * 单智能体模式（PlanExecute/ReAct 等）挂 Agent 节点。校验文案统一报"子智能体节点版本不存在"。
      *
      * <p>版本可用性含可见性判定（对齐 {@link #isSubWorkflowVersionUsable}）：版本查询无
      * project/workspace 过滤，跨空间导入残留的引用（版本全局存在但本空间不可见/未共享授权）
@@ -840,13 +848,14 @@ public class ControllerManagementService {
         if (MapUtils.isEmpty(subControllerNodeMap) && MapUtils.isEmpty(agentNodeMap)) {
             return Collections.emptyList();
         }
-        // 按 mode 分流取节点并按节点 id 去重（与保存链路一致：Controller 挂子多智能体，PlanExecute 挂单智能体）
+        // 按 mode 分流取节点并按节点 id 去重（与保存链路一致：Controller 挂子多智能体，
+        // 单智能体模式（PlanExecute/ReAct 等）挂单智能体）
         Map<String, ControllerNodeVO> nodesToCheck = new HashMap<>();
         for (ControllerNodeConfigVOAgents agent : agents) {
             Map<String, ControllerNodeVO> nodeMap;
             if (AgentMode.CONTROLLER.getMode().equals(agent.getMode())) {
                 nodeMap = subControllerNodeMap;
-            } else if (AgentMode.PLANEXECUTE.getMode().equals(agent.getMode())) {
+            } else if (AgentMode.isSingleAgentMode(agent.getMode())) {
                 nodeMap = agentNodeMap;
             } else {
                 continue;
@@ -1790,11 +1799,11 @@ public class ControllerManagementService {
         if (controllerNodeConfigVo != null) {
             agents = controllerNodeConfigVo.getAgents();
         }
-        // 关联子控制器节点
+        // 关联单智能体节点（PlanExecute/ReAct 等非 Controller 模式成员）
         Set<String> tempAgentsSet = new HashSet<>();
         if (!CollectionUtils.isEmpty(agents)) {
             agents.forEach(agent -> {
-                if (agent.getMode().equals(AgentMode.PLANEXECUTE.getMode())) {
+                if (AgentMode.isSingleAgentMode(agent.getMode())) {
                     ControllerNodeVO agentNode = controllerNodeMap.get(agent.getNodeId());
                     MappingEntity wfMapping = filterResourceAndAddMappings(controllerVo.getId(), controllerVo.getName(),
                             CommonConstant.AGENT_TYPE, tempAgentsSet, agentNode);
@@ -1804,6 +1813,11 @@ public class ControllerManagementService {
                     }
                 }
             });
+        }
+
+        if (relateAgents.size() > controllerSingleAgentLimit) {
+            throw new AgentStudioException(StudioError.MULTI_AGENT_SINGLE_AGENT_NUMBER_EXCEED_LIMIT,
+                String.valueOf(relateAgents.size()), String.valueOf(controllerSingleAgentLimit));
         }
 
         // 过滤已失效引用

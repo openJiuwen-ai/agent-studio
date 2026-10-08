@@ -1409,7 +1409,7 @@
   "use_scenario": "Use Case",
   "association_agent": "Associated Agent",
   "sub_agent": "Sub Agent",
-  "sub_agent_only_tip": "Only one single intelligent entity in the controllable autonomous mode can be added. Other modes are not supported.",
+  "sub_agent_only_tip": "Multiple published single agents (general mode and controllable autonomous planning mode) can be added, up to 10.",
   "sub_single_agent": "Sub Single-agent",
   "sub_multi_agent": "Sub Multi-agent",
   "agent_detail": "Agent Details",

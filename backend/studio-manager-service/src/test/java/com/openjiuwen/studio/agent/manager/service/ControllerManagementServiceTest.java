@@ -4,7 +4,10 @@ package com.openjiuwen.studio.agent.manager.service;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
+import com.openjiuwen.studio.agent.manager.dto.ControllerAgentIR;
+import com.openjiuwen.studio.agent.manager.dto.ControllerIR;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVO;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVOAgents;
 import com.openjiuwen.studio.agent.manager.dto.ControllerNodeConfigVOWorkflows;
@@ -37,6 +40,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -110,6 +114,7 @@ class ControllerManagementServiceTest {
         ReflectionTestUtils.setField(controllerManagementService, "globalIntendDefaultAction", "default");
         ReflectionTestUtils.setField(controllerManagementService, "controllerWorkflowLimit", 5);
         ReflectionTestUtils.setField(controllerManagementService, "controllerSubAgentLimit", 3);
+        ReflectionTestUtils.setField(controllerManagementService, "controllerSingleAgentLimit", 10);
         ReflectionTestUtils.setField(controllerManagementService, "controllerSubAgentMaxDepth", 2);
         ReflectionTestUtils.setField(controllerManagementService, "workflowInteractiveTypes", "type1,type2");
     }
@@ -669,5 +674,214 @@ class ControllerManagementServiceTest {
             () -> controllerManagementService.dslToIr(controllerVo, nodesGroupByTypeId, true));
         assertEquals(StudioError.MULTI_AGENT_SUB_WORKFLOW_VERSION_NOT_FOUND, exception.getErrorCode());
         verify(releaseVersionMapper, times(1)).selectByAppIdAndVersionId("sub-agent-id-1", "v-missing");
+    }
+
+    // ==================== 多单智能体挂载（#1523）tests ====================
+
+    /**
+     * 构造顶层控制器挂载多个单智能体（PlanExecute/ReAct 混合）的 DSL：
+     * controller 节点 agents 列表引用 N 个 Agent 节点，与前端放开多选后的保存结构一致。
+     */
+    private ControllerVO buildControllerVoWithSingleAgents(List<String> modes) {
+        List<ControllerNodeConfigVOAgents> agentConfigs = new ArrayList<>();
+        List<ControllerNodeVO> nodes = new ArrayList<>();
+
+        ControllerNodeConfigVO configVo = new ControllerNodeConfigVO();
+        for (int i = 0; i < modes.size(); i++) {
+            ControllerNodeConfigVOAgents agentConfig = new ControllerNodeConfigVOAgents();
+            agentConfig.setNodeId("agent-node-" + i);
+            agentConfig.setId("single-agent-" + i);
+            agentConfig.setName("single-agent-" + i);
+            agentConfig.setMode(modes.get(i));
+            agentConfigs.add(agentConfig);
+
+            ControllerNodeVO agentNode = new ControllerNodeVO();
+            agentNode.setId("agent-node-" + i);
+            agentNode.setType(AgentNodeType.AGENT.getType());
+            agentNode.setConfigs(Map.of("id", "single-agent-" + i, "version_id", "v-1",
+                "name", "single-agent-" + i));
+            nodes.add(agentNode);
+        }
+        configVo.setAgents(agentConfigs);
+        // dslToIr 校验链路的前置条件：workflows 非空对象、model 与 intent 至少其一
+        configVo.setWorkflows(List.of());
+        configVo.setModel(new ModelConfigVO().setModelDeploymentId("md-1"));
+
+        ControllerNodeVO controllerNode = new ControllerNodeVO();
+        controllerNode.setId("controller-node-1");
+        controllerNode.setType(AgentNodeType.CONTROLLER.getType());
+        controllerNode.setConfigs(configVo);
+        nodes.add(controllerNode);
+
+        ControllerVO controllerVo = new ControllerVO();
+        controllerVo.setId("controller-agent-id");
+        controllerVo.setName("controller-agent");
+        controllerVo.setProjectId("proj-1");
+        controllerVo.setWorkspaceId("ws-1");
+        controllerVo.setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        controllerVo.setInputs(List.of());
+        controllerVo.setGlobalVariables(List.of());
+        controllerVo.setNodes(nodes);
+        return controllerVo;
+    }
+
+    /**
+     * 顶层控制器挂载多个单智能体（2 个 PlanExecute + 1 个 ReAct）时校验通过，
+     * 且成员按声明顺序完整进入 IR agents 列表、mode 原样透传给运行时。
+     */
+    @Test
+    void testDslToIr_MultipleSingleAgents_PassAndBuiltIntoIr() {
+        ReflectionTestUtils.setField(controllerManagementService, "controllerInitIr",
+            "{\"schemaVersion\":\"0.6.0\",\"agentVersion\":\"0.6.0\",\"configs\":{\"mode\":\"Controller\","
+                + "\"specify_workflow_order\":false,\"agents\":[],\"workflows\":[],\"global_intents\":[],"
+                + "\"global_variables\":[]}}");
+        ControllerVO controllerVo = buildControllerVoWithSingleAgents(
+            List.of(AgentMode.PLANEXECUTE.getMode(), AgentMode.PLANEXECUTE.getMode(), AgentMode.REACT.getMode()));
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId =
+            controllerManagementService.groupDslNodes(controllerVo);
+
+        // 版本存在 + 子智能体实体缺失时保守放行（与 isSubAgentVersionUsable 语义一致）
+        when(releaseVersionMapper.selectByAppIdAndVersionId(any(), any())).thenReturn(new ReleaseVersion());
+        when(agentMapper.selectById(any())).thenReturn(null);
+        when(agentCommonService.getAgentObsPath(any(), any(), any())).thenReturn("obs-path");
+        // buildIrModelConfig 内取请求上下文，单测线程无请求，直接注入
+        RequestContextUtils.setRequestAuthTokenAndProjectId("token", "proj-1");
+        try {
+            ControllerIR ir = controllerManagementService.dslToIr(controllerVo, nodesGroupByTypeId, true);
+
+            assertNotNull(ir);
+            assertNotNull(ir.getConfigs());
+            assertEquals(3, ir.getConfigs().getAgents().size());
+            List<String> irModes = ir.getConfigs().getAgents().stream()
+                .map(ControllerAgentIR::getMode)
+                .collect(Collectors.toList());
+            assertEquals(List.of("PlanExecute", "PlanExecute", "ReAct"), irModes);
+        } finally {
+            RequestContextUtils.remove();
+        }
+    }
+
+    /**
+     * 单智能体数量超过 controller.single-agent-limit 上限时阻断保存，
+     * 报明确的数量超限错误（取代原"仅允许一个 Plan&Execute 子 Agent"限制）。
+     */
+    @Test
+    void testDslToIr_SingleAgentCountExceedsLimit_Blocked() {
+        List<String> modes = new ArrayList<>();
+        for (int i = 0; i < 11; i++) {
+            modes.add(i % 2 == 0 ? AgentMode.PLANEXECUTE.getMode() : AgentMode.REACT.getMode());
+        }
+        ControllerVO controllerVo = buildControllerVoWithSingleAgents(modes);
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId =
+            controllerManagementService.groupDslNodes(controllerVo);
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class,
+            () -> controllerManagementService.dslToIr(controllerVo, nodesGroupByTypeId, true));
+        assertEquals(StudioError.MULTI_AGENT_SINGLE_AGENT_NUMBER_EXCEED_LIMIT, exception.getErrorCode());
+    }
+
+    /**
+     * 单智能体（含 ReAct 模式）仍不允许挂在子控制器下：
+     * 放开顶层多单智能体后，嵌套层限制语义保持不变并覆盖全部单智能体模式。
+     */
+    @Test
+    void testDslToIr_ReActAgentInSubController_Blocked() {
+        // 子控制器节点自身 configs 挂载了 ReAct 模式单智能体
+        ControllerNodeConfigVO subControllerConfig = new ControllerNodeConfigVO();
+        ControllerNodeConfigVOAgents reactAgent = new ControllerNodeConfigVOAgents();
+        reactAgent.setNodeId("agent-node-0");
+        reactAgent.setId("single-agent-0");
+        reactAgent.setMode(AgentMode.REACT.getMode());
+        subControllerConfig.setAgents(List.of(reactAgent));
+
+        ControllerNodeVO subControllerNode = new ControllerNodeVO();
+        subControllerNode.setId("sub-controller-node-1");
+        subControllerNode.setType(AgentNodeType.SUB_CONTROLLER.getType());
+        subControllerNode.setConfigs(subControllerConfig);
+
+        // 顶层 controller 引用该子控制器
+        ControllerNodeConfigVO configVo = new ControllerNodeConfigVO();
+        ControllerNodeConfigVOAgents subControllerRef = new ControllerNodeConfigVOAgents();
+        subControllerRef.setNodeId("sub-controller-node-1");
+        subControllerRef.setId("sub-controller-id-1");
+        subControllerRef.setMode(AgentMode.CONTROLLER.getMode());
+        configVo.setAgents(List.of(subControllerRef));
+        configVo.setWorkflows(List.of());
+        configVo.setModel(new ModelConfigVO().setModelDeploymentId("md-1"));
+
+        ControllerNodeVO controllerNode = new ControllerNodeVO();
+        controllerNode.setId("controller-node-1");
+        controllerNode.setType(AgentNodeType.CONTROLLER.getType());
+        controllerNode.setConfigs(configVo);
+
+        ControllerVO controllerVo = new ControllerVO();
+        controllerVo.setId("controller-agent-id");
+        controllerVo.setName("controller-agent");
+        controllerVo.setProjectId("proj-1");
+        controllerVo.setWorkspaceId("ws-1");
+        controllerVo.setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        controllerVo.setInputs(List.of());
+        controllerVo.setGlobalVariables(List.of());
+        controllerVo.setNodes(List.of(controllerNode, subControllerNode));
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId =
+            controllerManagementService.groupDslNodes(controllerVo);
+
+        AgentStudioException exception = assertThrows(AgentStudioException.class,
+            () -> controllerManagementService.dslToIr(controllerVo, nodesGroupByTypeId, true));
+        assertEquals(StudioError.MULTI_AGENT_PLAN_EXECUTE_ONLY_IN_TOP_CONTROLLER, exception.getErrorCode());
+    }
+
+    /**
+     * recordRefAgent 记录所有单智能体模式成员（含 ReAct），
+     * 与放开后的保存链路一致（此前仅记录 PlanExecute 模式）。
+     */
+    @Test
+    void testRecordRefAgent_RecordsReactModeAgent() {
+        ControllerVO controllerVo = new ControllerVO();
+        controllerVo.setId("test-id");
+        controllerVo.setName("test-name");
+
+        ControllerNodeConfigVO configVo = new ControllerNodeConfigVO();
+        ControllerNodeConfigVOAgents agentConfig = new ControllerNodeConfigVOAgents();
+        agentConfig.setNodeId("agent-node-1");
+        agentConfig.setId("agent-id-1");
+        agentConfig.setMode(AgentMode.REACT.getMode());
+        configVo.setAgents(List.of(agentConfig));
+
+        ControllerNodeVO controllerNode = new ControllerNodeVO();
+        controllerNode.setType(AgentNodeType.CONTROLLER.getType());
+        controllerNode.setConfigs(configVo);
+
+        WorkflowNodeConfigVO agentNodeConfig = new WorkflowNodeConfigVO();
+        agentNodeConfig.setId("agent-resource-id-1");
+        agentNodeConfig.setVersionId("v1");
+        agentNodeConfig.setName("react-agent");
+        ControllerNodeVO agentNode = new ControllerNodeVO();
+        agentNode.setType(AgentNodeType.AGENT.getType());
+        agentNode.setConfigs(agentNodeConfig);
+
+        Map<String, ControllerNodeVO> controllerMap = new HashMap<>();
+        controllerMap.put("controller-node-1", controllerNode);
+        Map<String, ControllerNodeVO> agentNodeMap = new HashMap<>();
+        agentNodeMap.put("agent-node-1", agentNode);
+
+        Map<String, Map<String, ControllerNodeVO>> nodesGroupByTypeId = new HashMap<>();
+        nodesGroupByTypeId.put(AgentNodeType.CONTROLLER.getType(), controllerMap);
+        nodesGroupByTypeId.put(AgentNodeType.AGENT.getType(), agentNodeMap);
+
+        when(mappingMapper.selectByAppIdAndAppVersion(any(), any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+
+        ReflectionTestUtils.invokeMethod(controllerManagementService, "recordRefAgent",
+            controllerVo, nodesGroupByTypeId);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<MappingEntity>> captor = ArgumentCaptor.forClass(List.class);
+        verify(mappingMapper).insertBatch(captor.capture());
+
+        List<MappingEntity> captured = captor.getValue();
+        assertNotNull(captured);
+        assertFalse(captured.isEmpty());
+        assertEquals(CommonConstant.CONTROLLER, captured.get(0).getAppType());
     }
 }
