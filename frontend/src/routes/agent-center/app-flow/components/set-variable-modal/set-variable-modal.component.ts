@@ -15,6 +15,7 @@ import type { ILoopNode, IParamRef, IRefContentType, ISetVariableNode, IWorkflow
 import { AccBlockComponent } from '../acc-block/acc-block.component';
 import { ModalBaseComponent } from '../base/modal-base.component';
 import { NodeUtils } from '../utils';
+import { defaultLiteralContent, HAS_EMPTY_TYPE, isComplexLeftType, isMismatchedRefSelected, isOperatorOptionValid, shouldRevertSourceToRef } from '../../utils/set-variable.util';
 import { EditNameComponent } from '@routes/agent-center/app-flow/components/edit-name/edit-name.component';
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
 import { NodeTypeTopic } from '@routes/agent-center/types/common.types';
@@ -30,7 +31,7 @@ interface IVal {
   typeOpts?: any;
 }
 
-const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>'];
+const hasEmptyType = HAS_EMPTY_TYPE;
 @Component({
   selector: 'meta-set-variable-modal',
   templateUrl: './set-variable-modal.component.html',
@@ -108,18 +109,6 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       value: 'empty_arr',
     },
   ];
-
-  public getLeftParamsType(param: IWorkflowField) {
-    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
-      const { type = '' } = (param.value.content[0] as IParamRef) || {};
-      if (type === 'object' || type.startsWith('array')) {
-        return 'complex';
-      } else {
-        return 'normal';
-      }
-    }
-    return 'normal';
-  }
 
   public isGetLeftType(param: IWorkflowField) {
     const { type } = (param.value.content[0] as IParamRef) || {};
@@ -287,7 +276,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
           })
         );
 
-        if (this.refreshMenusByLiveType(param)) {
+        if (this.applyLeftTypeToParam(param)) {
           menusChanged = true;
         }
       });
@@ -300,90 +289,72 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   }
 
   /**
-   * 依据左值当前引用类型刷新「值」选项与运算赋值菜单，并收敛右侧来源/运算符：
-   * - 外部（循环中间变量/记忆变量等）改型后，重开节点或引用刷新即可得到正确选项，无需重选左值；
-   * - 右侧来源(type)已不在可选集合、或左值变为 complex 后 literal 不可选时，回退 ref；
-   * - 旧运算符已不被新类型支持时归一到 null(empty)，避免脏值入库。
-   * 返回是否发生了收敛（供调用方据此标记脏、触发落库，避免归一结果不写回）。
+   * 单一归一函数：按左值实时类型统一收敛「值」来源/类型/内容、引用与运算菜单。
+   * init / onRefUpdate / onLeftSelect 全部走此函数，避免多处镜像实现漂移。
+   * - 右值 type 同步为左值实时类型；类型变化且来源为 literal 时内容归一到新类型默认值；
+   * - 来源已不在可选集合、或左值复杂后 literal 不可选 → 回退 ref（并清除旧 operator）；
+   * - 选中引用被窄化为 disabled（类型不匹配）→ 清空；
+   * - 旧运算符不被新类型支持 → null(empty)。
+   * 返回是否发生了收敛（供调用方标记脏、触发落库）。
    */
-  private refreshMenusByLiveType(param: IVal): boolean {
-    param.operatorOpts = this.getOperatorOptions(param);
-
+  private applyLeftTypeToParam(param: IVal): boolean {
     const liveLeftType = (this.isGetLeftType(param.left) ||
       param.left.type) as IWorkflowFieldType;
     const liveType = (liveLeftType || '').toLowerCase();
-    const isComplex = this.getLeftParamsType(param.left) === 'complex';
-    const baseOpts = isComplex ? this.refOnlyOptions : this.sourceOptions;
-    param.typeOpts = hasEmptyType.includes(liveType)
+    const isComplex = isComplexLeftType(liveLeftType);
+    // 支持"空值/运算"的类型才暴露 literal/operator；复杂类型只暴露 ref
+    const sourceAllowed = hasEmptyType.includes(liveType);
+    const baseOpts =
+      isComplex || !sourceAllowed ? this.refOnlyOptions : this.sourceOptions;
+    param.typeOpts = sourceAllowed
       ? [...baseOpts, ...this.commonOperatorOptions]
       : baseOpts;
+    param.operatorOpts = this.getOperatorOptions(param);
 
     let changed = false;
 
-    // 右值类型同步为左值实时类型：否则模板仍按旧类型渲染字面量输入、
-    // getMetaInfoFromField 也按旧类型转换内容，写出与左值类型不一致的右侧配置。
-    // 类型变化且来源为 literal 时，内容一并归一到新类型默认值，避免
-    // Number('abc')=NaN / 非布尔字符串等脏值随 menusChanged 自动落库。
+    // 右值类型同步为左值实时类型；类型变化且来源为 literal 时内容归一到新类型默认值，
+    // 避免 Number('abc')=NaN / 非布尔字符串等脏值随 menusChanged 自动落库。
     if (liveLeftType && param.right.type !== liveLeftType) {
       param.right.type = liveLeftType;
       if (param.right.value.type === 'literal') {
-        param.right.value.content = this.defaultLiteralContent(liveLeftType);
+        param.right.value.content = defaultLiteralContent(liveLeftType);
       }
       changed = true;
     }
 
-    // 收敛「值」来源：当前模式已不在可选集合，或左值变 complex 后 literal 不可选 → 回退 ref；
-    // 同时用 getChangeContent 重置内容并清除旧 operator（与 onLeftSelect 对齐），
+    // 收敛「值」来源：回退 ref 时同步重置内容并清除旧 operator，
     // 避免旧 literal 内容被误当引用、以及 operator 被 onRefUpdate 重新置回。
     const rightSource = param.right?.value?.type;
     const sourceStillValid = param.typeOpts.some(
       (option) => option.value === rightSource
     );
-    const shouldRevertToRef =
-      rightSource !== 'ref' &&
-      (!sourceStillValid || (isComplex && rightSource === 'literal'));
-    if (shouldRevertToRef) {
+    if (shouldRevertSourceToRef(rightSource, sourceStillValid, isComplex)) {
       param.right.value.type = 'ref';
       param.right.value.content = NodeUtils.getChangeContent('ref');
       delete param.right.value.operator;
       changed = true;
     }
 
-    // 收敛引用：来源为 ref 但选中节点已被窄化为 disabled（类型不再匹配）→ 清空，
-    // 避免类型不匹配的引用被保留并随 menusChanged 自动落库
-    if (param.right?.value?.type === 'ref') {
-      const selected = Array.isArray(param.right.value.content)
-        ? (param.right.value.content[0] as any)
-        : (param.right.value.content as any);
-      if (selected?.disabled) {
-        param.right.value.content = NodeUtils.getChangeContent('ref');
-        changed = true;
-      }
+    // 收敛引用：选中节点被窄化为 disabled（类型不再匹配）→ 清空
+    if (
+      param.right?.value?.type === 'ref' &&
+      isMismatchedRefSelected(param.right.value.content)
+    ) {
+      param.right.value.content = NodeUtils.getChangeContent('ref');
+      changed = true;
     }
 
     // 收敛运算符：旧运算符已被新类型菜单剔除 → null(empty)
-    if (param.right?.value?.type === 'operator') {
-      const operatorStillValid = param.operatorOpts.some(
-        (option) => option.value === param.right.value.operator
-      );
-      if (!operatorStillValid) {
-        param.right.value.operator = 'empty';
-        changed = true;
-      }
+    if (
+      param.right?.value?.type === 'operator' &&
+      !isOperatorOptionValid(param.operatorOpts, param.right.value.operator)
+    ) {
+      param.right.value.operator = 'empty';
+      changed = true;
     }
 
     return changed;
-  }
-
-  /** literal 各类型默认内容：integer/number→0、boolean→false、其余→'' */
-  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
-    if (type === 'boolean') {
-      return false;
-    }
-    if (type === 'integer' || type === 'number') {
-      return 0;
-    }
-    return '';
   }
 
   public initParams() {
@@ -441,7 +412,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       }
 
       const param: IVal = { left, right };
-      if (this.refreshMenusByLiveType(param)) {
+      if (this.applyLeftTypeToParam(param)) {
         menusChanged = true;
       }
       return param;
@@ -480,26 +451,16 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   }
 
   public onLeftSelect(selectedVal: IParamRef[], param: IVal) {
-    param.operatorOpts = this.getOperatorOptions(param);
-    let typeOpts = this.getLeftParamsType(param.left) === 'complex' ? this.refOnlyOptions : this.sourceOptions;
-    if (hasEmptyType.includes((this.isGetLeftType(param.left) || '').toLowerCase())) {
-      param.typeOpts = [...typeOpts, ...this.commonOperatorOptions];
-    } else {
-      param.typeOpts = typeOpts;
-      param.right.value.type = 'ref';
-    }
+    // 按新选中左值收窄右值引用选项并重选
     param.right.refs = cloneDeep(
       NodeUtils.narrowRefOption(this.rightRefs, {
         type: selectedVal[0].type as IWorkflowFieldType,
       })
     );
-    param.right.type = selectedVal[0].type as IWorkflowFieldType;
-
     NodeUtils.selectTreeNodeInRefsByValue(param.right);
-
-    if (this.getLeftParamsType(param.left) === 'complex' && param.right.value.type === 'literal') {
-      param.right.value.type = 'ref';
-      this.onIntegerTypeChange(param);
+    // 统一归一：菜单 + 右值类型/内容/来源/运算符（与 init / onRefUpdate 共用同一实现）
+    if (this.applyLeftTypeToParam(param)) {
+      this.onSave();
     }
   }
 
