@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from types import SimpleNamespace
 import shutil
@@ -33,7 +34,8 @@ _GREP = shutil.which("grep")
 
 
 def _run_grep(*args: str) -> subprocess.CompletedProcess[str]:
-    assert _GREP is not None, "grep is required by the governance tests"
+    if _GREP is None:
+        return _py_grep_fallback(*args)
     result = subprocess.run(
         [_GREP, *args],
         cwd=_RUNTIME_ROOT,
@@ -41,6 +43,60 @@ def _run_grep(*args: str) -> subprocess.CompletedProcess[str]:
     )
     assert result.returncode in (0, 1), result.stderr
     return result
+
+
+def _py_grep_fallback(*args: str) -> subprocess.CompletedProcess[str]:
+    """grep 不可用（如 Windows）时的纯 Python 等价实现。
+
+    仅覆盖本文件用到的调用形式 ``grep -rn FIXED_STRING PATH``：
+    - 输出格式与 grep -rn 一致（posix 相对路径 ``path:line:content``）
+    - returncode：0 有命中 / 1 无命中 / 2 目标不存在（对齐 grep）
+    - 跳过二进制文件、隐藏目录与 __pycache__，只治理源码文本，
+      避免派生缓存造成假阳性
+    """
+    pattern = None
+    target = "."
+    for arg in args:
+        if arg.startswith("-"):
+            continue
+        if pattern is None:
+            pattern = arg
+        else:
+            target = arg
+    if pattern is None:
+        return subprocess.CompletedProcess(args, 2, "", "no pattern given")
+    if not (_RUNTIME_ROOT / target).exists():
+        return subprocess.CompletedProcess(
+            args, 2, "", f"no such file or directory: {target}"
+        )
+
+    hits: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(_RUNTIME_ROOT / target):
+        dirnames[:] = [
+            d for d in dirnames
+            if not d.startswith(".") and d != "__pycache__"
+        ]
+        for filename in sorted(filenames):
+            path = Path(dirpath) / filename
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            if b"\x00" in data[:8192]:
+                continue
+            try:
+                text_lines = data.decode("utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            rel = path.relative_to(_RUNTIME_ROOT).as_posix()
+            for lineno, line in enumerate(text_lines, start=1):
+                if pattern in line:
+                    hits.append(f"{rel}:{lineno}:{line}")
+
+    stdout = "".join(f"{h}\n" for h in hits)
+    return subprocess.CompletedProcess(
+        args, 0 if hits else 1, stdout, ""
+    )
 
 
 _SENTINEL = "SECRET-TOKEN-abc-123-sensitivedetail"
