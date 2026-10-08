@@ -268,10 +268,45 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
             type: left.type,
           })
         );
+
+        this.refreshMenusByLiveType(param);
       });
     }
 
     this.isInit = false;
+  }
+
+  /**
+   * 依据左值当前引用类型刷新「值」选项与运算赋值菜单。
+   * 外部（如循环中间变量）改型后，重开节点或引用刷新即可得到正确选项，无需重选左值；
+   * 旧运算符若已不被新类型支持，则归一到 null(empty)，避免脏值入库。
+   */
+  private refreshMenusByLiveType(param: IVal) {
+    param.operatorOpts = this.getOperatorOptions(param);
+
+    const liveType = (
+      this.isGetLeftType(param.left) ||
+      param.left.type ||
+      ''
+    ).toLowerCase();
+    const baseOpts =
+      this.getLeftParamsType(param.left) === 'complex'
+        ? this.refOnlyOptions
+        : this.sourceOptions;
+    param.typeOpts = hasEmptyType.includes(liveType)
+      ? [...baseOpts, ...this.commonOperatorOptions]
+      : baseOpts;
+
+    if (param.right?.value?.type !== 'operator') {
+      return;
+    }
+
+    const operatorStillValid = param.operatorOpts.some(
+      (option) => option.value === param.right.value.operator
+    );
+    if (!operatorStillValid) {
+      param.right.value.operator = 'empty';
+    }
   }
 
   public initParams() {
@@ -312,26 +347,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       };
       NodeUtils.selectTreeNodeInRefsByValue(right);
 
-      let operatorOpts = this.initOperatorOptions(setting.left.type);
-      let typeOpts = setting.left.type === 'object' || setting.left.type.startsWith('array') ? this.refOnlyOptions : this.sourceOptions;
-      let leftType = setting.left.type.toLowerCase();
-      if (leftType === 'array') {
-        let typeName = 'type';
-        leftType = `array<${setting.left.schema?.[typeName]?.toLowerCase()}>`;
-      }
-      if (hasEmptyType.includes(leftType)) {
-        typeOpts = [...typeOpts, ...this.commonOperatorOptions];
-      }
       if (right.value.operator) {
         right.value.type = 'operator';
       }
 
-      return {
-        typeOpts,
-        operatorOpts,
-        left,
-        right,
-      };
+      const param: IVal = { left, right };
+      this.refreshMenusByLiveType(param);
+      return param;
     });
   }
 
@@ -449,30 +471,6 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   getOperatorOptions(param) {
     let leftType = this.getParamType(param.left);
-    if (leftType === 'emptyArr') {
-      return [...this.EmptyArrOperator, ...this.nullOperator];
-    } else if (leftType === 'emptyStr') {
-      return [...this.EmptyStrOperator, ...this.nullOperator];
-    } else if (leftType === 'emptyNum') {
-      return [...this.operatorOptions, ...this.nullOperator];
-    } else {
-      return [...this.nullOperator];
-    }
-  }
-
-  getLeftType(type) {
-    let leftType = 'emptyNormal';
-    if (type.startsWith('array')) {
-      leftType = 'emptyArr';
-    } else if (['number', 'integer'].includes(type)) {
-      leftType = 'emptyNum';
-    } else if (['string'].includes(type)) {
-      leftType = 'emptyStr';
-    }
-    return leftType;
-  }
-  initOperatorOptions(type) {
-    let leftType = this.getLeftType(type);
     if (leftType === 'emptyArr') {
       return [...this.EmptyArrOperator, ...this.nullOperator];
     } else if (leftType === 'emptyStr') {
