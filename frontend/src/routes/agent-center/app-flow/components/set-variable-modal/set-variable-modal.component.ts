@@ -379,8 +379,9 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         // 需回退引用节点的 schema/type，否则访问 left.schema.type 会抛错导致面板初始化失败
         const leftSchema = left.schema as IWorkflowField | undefined;
         const refContent = left.value?.content?.[0] as any;
-        const elementType =
-          leftSchema?.type ?? refContent?.schema?.type ?? refContent?.type;
+        // 元素类型仅取 schema（left.schema / 引用节点 schema）；refContent.type 是完整类型
+        // （如 array<string>），不能当元素类型，否则会先算出 array<array<string>>。
+        const elementType = leftSchema?.type ?? refContent?.schema?.type;
         if (elementType) {
           queryType = `${queryType}<${elementType}>` as IWorkflowFieldType;
         }
