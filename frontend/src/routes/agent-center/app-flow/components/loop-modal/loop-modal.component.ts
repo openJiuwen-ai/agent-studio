@@ -696,27 +696,13 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * literal 来源且类型为 integer/number、内容为非空字符串——
    * 需要在序列化/读取时做数值化转换的场景。
    */
-  /**
-   * literal 来源各类型的默认内容：integer/number→0、boolean→false、
-   * object→{}、array<...>→[]、其余→''。
-   * 复合类型（object/array）留空壳：循环中间变量无 addChild 能力，
-   * 这类中间变量应改用“引用”来源承载；空壳仅用于保证 schema 类型一致。
-   * （array 字面量适配，原在 2451 意见⑤，按需求迁移至本 PR 自包含处理。）
-   */
-  private defaultLiteralContent(
-    type: IWorkflowFieldType,
-  ): string | number | boolean | object | unknown[] {
+  /** literal 来源各类型的默认内容：integer/number→0、boolean→false、其余→'' */
+  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
     if (type === 'boolean') {
       return false;
     }
     if (type === 'integer' || type === 'number') {
       return 0;
-    }
-    if (type === 'object') {
-      return {};
-    }
-    if (type && type.startsWith('array')) {
-      return [];
     }
     return '';
   }
@@ -769,16 +755,6 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       // 仅无法转换为数值时回退默认 0
       item.value.content = Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
       return true;
-    }
-    if (item.type && item.type.startsWith('array')) {
-      // 数组字面量内容必须为数组，异常值（对象/标量/字符串）回退空数组，
-      // 保证 intermediate_loop_var 的 schema 类型与值类型一致
-      // （array 字面量适配，原在 2451 意见⑤，按需求迁移至本 PR 自包含处理）。
-      if (!Array.isArray(item.value.content)) {
-        item.value.content = [];
-        return true;
-      }
-      return false;
     }
     return false;
   }
@@ -1137,8 +1113,7 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * - 变量名为空、非 [a-zA-Z_] 开头、含非法字符或重复（与 valueValidityValidator 口径一致）；
    * - integer/number 字面量为空或非数值（与 integerStr/numberStr 指令口径一致）；
    * - ref 来源未选择引用（content 非选中数组，与 refSelectedRequire 口径一致）。
-   * 字符串留空是运行时合法值，不拦截；boolean/object/array 等复合类型随类型切换
-   * 已重置为默认值（array 空数组 [] 亦合法），不在此拦截，异常值由 normalizeTypedLiteralContent 兜底。
+   * 字符串留空是运行时合法值，不拦截；boolean/复合类型随类型切换已重置为默认值，不在此拦截。
    */
   private hasIllegalMidParams(): boolean {
     const seenNames = new Set<string>();
