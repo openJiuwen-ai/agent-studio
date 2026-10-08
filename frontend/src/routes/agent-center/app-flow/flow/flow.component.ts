@@ -1424,44 +1424,51 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           this.createIntentContainerNode(nodeData.id);
           let bodyParams;
           setTimeout(async () => {
-            if (isContainerNode) {
-              // 若已存在意图动作配置节点，需异步更新DSL
-              bodyParams = FlowUtils.updateContainerNodeDsl(
-                this.graph,
-                this.workflowDetail,
-                nodeData,
-                containerNodeId,
-                this.getNodeInfoById.bind(this),
-                this.appFlowServ,
-              );
-            }
-            this.handleAdvancedIntentConns(nodeData.id);
-            this.updateRef();
-            await this.updateFlowData(
-              {
-                isDrag: false,
-                nodeInfo: nodeData,
-                successCb: () => {
-                  if (isContainerNode) {
-                    this.appFlowServ.setAppRefs(this.ref_workflows);
-                    FlowUtils.syncContainerInfoToGraph(
-                      this.graph,
-                      bodyParams,
-                      containerNodeId,
-                    );
+            // 高级意图节点的容器 DSL 更新、连接线重建与真正的 updateFlowData 均在本异步分支内串行执行，
+            // 任一环节在 await 前抛错（updateContainerNodeDsl / handleAdvancedIntentConns / updateRef）
+            // 都会跳过下方复位逻辑。故用 try/finally 兜底：无论成功、失败还是异常，
+            // 都必须复位“保存中”标记，否则 saveStatusMap 永久为 true、节点无法再次打开。
+            try {
+              if (isContainerNode) {
+                // 若已存在意图动作配置节点，需异步更新DSL
+                bodyParams = FlowUtils.updateContainerNodeDsl(
+                  this.graph,
+                  this.workflowDetail,
+                  nodeData,
+                  containerNodeId,
+                  this.getNodeInfoById.bind(this),
+                  this.appFlowServ,
+                );
+              }
+              this.handleAdvancedIntentConns(nodeData.id);
+              this.updateRef();
+              await this.updateFlowData(
+                {
+                  isDrag: false,
+                  nodeInfo: nodeData,
+                  successCb: () => {
+                    if (isContainerNode) {
+                      this.appFlowServ.setAppRefs(this.ref_workflows);
+                      FlowUtils.syncContainerInfoToGraph(
+                        this.graph,
+                        bodyParams,
+                        containerNodeId,
+                      );
+                    }
+                  },
+                  faildCb: () => {
+
                   }
                 },
-                faildCb: () => {
-
-                }
-              },
-              bodyParams,
-            );
-            // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
-            // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow 提前 return）
-            this.nodeServ.setIsConfirmLoading(false);
-            if (this.type !== 'multi' && nodeData?.id) {
-              this.saveStatusMap.set(nodeData.id, false);
+                bodyParams,
+              );
+            } finally {
+              // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
+              // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow 提前 return）
+              this.nodeServ.setIsConfirmLoading(false);
+              if (this.type !== 'multi' && nodeData?.id) {
+                this.saveStatusMap.set(nodeData.id, false);
+              }
             }
           });
         }
