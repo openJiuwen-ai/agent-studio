@@ -15,7 +15,6 @@ import type { ILoopNode, IParamRef, IRefContentType, ISetVariableNode, IWorkflow
 import { AccBlockComponent } from '../acc-block/acc-block.component';
 import { ModalBaseComponent } from '../base/modal-base.component';
 import { NodeUtils } from '../utils';
-import { defaultLiteralContent, HAS_EMPTY_TYPE, isComplexLeftType, isMismatchedRefSelected, isOperatorOptionValid, shouldRevertSourceToRef } from '../../utils/set-variable.util';
 import { EditNameComponent } from '@routes/agent-center/app-flow/components/edit-name/edit-name.component';
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
 import { NodeTypeTopic } from '@routes/agent-center/types/common.types';
@@ -31,7 +30,7 @@ interface IVal {
   typeOpts?: any;
 }
 
-const hasEmptyType = HAS_EMPTY_TYPE;
+const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>'];
 @Component({
   selector: 'meta-set-variable-modal',
   templateUrl: './set-variable-modal.component.html',
@@ -301,8 +300,8 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     const liveLeftType = (this.isGetLeftType(param.left) ||
       param.left.type) as IWorkflowFieldType;
     const liveType = (liveLeftType || '').toLowerCase();
-    const isComplex = isComplexLeftType(liveLeftType);
-    // 支持"空值/运算"的类型才暴露 literal/operator；复杂类型只暴露 ref
+    // 复杂类型（对象/数组）只暴露 ref；支持"空值/运算"的类型才额外暴露 literal/operator
+    const isComplex = liveType === 'object' || liveType.startsWith('array');
     const sourceAllowed = hasEmptyType.includes(liveType);
     const baseOpts =
       isComplex || !sourceAllowed ? this.refOnlyOptions : this.sourceOptions;
@@ -318,43 +317,61 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (liveLeftType && param.right.type !== liveLeftType) {
       param.right.type = liveLeftType;
       if (param.right.value.type === 'literal') {
-        param.right.value.content = defaultLiteralContent(liveLeftType);
+        param.right.value.content = this.defaultLiteralContent(liveLeftType);
       }
       changed = true;
     }
 
-    // 收敛「值」来源：回退 ref 时同步重置内容并清除旧 operator，
-    // 避免旧 literal 内容被误当引用、以及 operator 被 onRefUpdate 重新置回。
+    // 收敛「值」来源：已非 ref 且（来源不在可选集合，或复杂左值下 literal 不可选）→ 回退 ref，
+    // 同步重置内容并清除旧 operator（避免被 onRefUpdate 重新置回）
     const rightSource = param.right?.value?.type;
     const sourceStillValid = param.typeOpts.some(
       (option) => option.value === rightSource
     );
-    if (shouldRevertSourceToRef(rightSource, sourceStillValid, isComplex)) {
+    const shouldRevertToRef =
+      rightSource !== 'ref' &&
+      (!sourceStillValid || (isComplex && rightSource === 'literal'));
+    if (shouldRevertToRef) {
       param.right.value.type = 'ref';
       param.right.value.content = NodeUtils.getChangeContent('ref');
       delete param.right.value.operator;
       changed = true;
     }
 
-    // 收敛引用：选中节点被窄化为 disabled（类型不再匹配）→ 清空
-    if (
-      param.right?.value?.type === 'ref' &&
-      isMismatchedRefSelected(param.right.value.content)
-    ) {
-      param.right.value.content = NodeUtils.getChangeContent('ref');
-      changed = true;
+    // 收敛引用：选中的引用节点已被窄化为 disabled（类型不再匹配）→ 清空
+    if (param.right?.value?.type === 'ref') {
+      const selected = Array.isArray(param.right.value.content)
+        ? (param.right.value.content[0] as any)
+        : (param.right.value.content as any);
+      if (selected?.disabled) {
+        param.right.value.content = NodeUtils.getChangeContent('ref');
+        changed = true;
+      }
     }
 
     // 收敛运算符：旧运算符已被新类型菜单剔除 → null(empty)
-    if (
-      param.right?.value?.type === 'operator' &&
-      !isOperatorOptionValid(param.operatorOpts, param.right.value.operator)
-    ) {
-      param.right.value.operator = 'empty';
-      changed = true;
+    if (param.right?.value?.type === 'operator') {
+      const operatorStillValid = param.operatorOpts.some(
+        (option) => option.value === param.right.value.operator
+      );
+      if (!operatorStillValid) {
+        param.right.value.operator = 'empty';
+        changed = true;
+      }
     }
 
     return changed;
+  }
+
+  /** literal 各类型默认内容：integer/number→0、boolean→false、其余→'' */
+  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
+    if (type === 'boolean') {
+      return false;
+    }
+    if (type === 'integer' || type === 'number') {
+      return 0;
+    }
+    return '';
   }
 
   public initParams() {
