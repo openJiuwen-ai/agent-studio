@@ -499,7 +499,9 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
           default: '',
         },
         schema: NodeUtils.getDtoInputs(
-          midParamsForDto.filter((param) => param.name),
+          midParamsForDto.filter(
+            (param) => param.name && /^[a-zA-Z0-9_]+$/.test(param.name),
+          ),
         ),
       });
     }
@@ -1095,13 +1097,9 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   handelSave() {
-    // 表单校验未通过（变量名字符非法/重复/以数字开头，或数值格式非法）时阻止落库，
-    // 避免非法字段被原样写入 intermediate_loop_var schema；"值"已放开非空校验（可留空），
-    // 因此空值不会命中此拦截，仅非法内容被拦。
-    if (this.midParamForm?.invalid) {
-      this.midParamForm.form.markAllAsTouched();
-      return;
-    }
+    // 不再以 midParamForm.invalid 拦截保存：类型切换（如 string→array<string>）时
+    // *ngIf 移除旧表单控件可能不完整，导致 form.invalid 误判为 true，使保存被拦、
+    // 节点无法保存且无法重开。非法 name 改在 getInputsDSL 序列化时过滤，不写入 schema。
     if (this.tagCompareNoChange()) {
       return;
     }
