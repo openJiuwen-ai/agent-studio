@@ -118,7 +118,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   ];
 
   public getLeftParamsType(param: IWorkflowField) {
-    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+    if (param.value.type === 'ref' && (param.value.content as IParamRef[])?.length) {
       const { type } = (param.value.content[0] as IParamRef) || {};
       if (type === 'object' || type.startsWith('array')) {
         return 'complex';
@@ -129,13 +129,18 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     return 'normal';
   }
 
+  /**
+   * 左值引用节点的当前类型（改型后落库 left.type 仍是旧值，故取 content[0].type）。
+   * content 在旧数据/异常数据下可能为 null/undefined，须可选链保护 —— 本 MR 起该方法
+   * 会在 initParams 阶段被无条件调用（上游原 initParams 只按落库 setting.left.type 算菜单，不读 content）。
+   */
   public isGetLeftType(param: IWorkflowField) {
-    const { type } = (param.value.content[0] as IParamRef) || {};
+    const { type } = (param.value?.content?.[0] as IParamRef) || {};
     return type;
   }
 
   public getParamType(param: IWorkflowField) {
-    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+    if (param.value.type === 'ref' && (param.value.content as IParamRef[])?.length) {
       const { type } = (param.value.content[0] as IParamRef) || {};
       if (type.startsWith('array')) {
         return 'emptyArr';
