@@ -366,17 +366,30 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       ? [...baseOpts, ...this.commonOperatorOptions]
       : baseOpts;
 
-    // 实时类型已不在 hasEmptyType（如 file/*、array<object>）→ typeOpts 不再包含 operator，
-    // 但 value.type 仍是 'operator'，模板会继续渲染运算下拉（其仅按 value.type 判断），
-    // 导致「值」来源下拉出现不在选项中的值、且可继续保存无效运算符。
-    // 故在此回退为 ref 并重置内容（对齐上游 onLeftSelect 中 typeOpts 不含 operator 时的既有处理）。
-    if (
-      param.right?.value?.type === 'operator' &&
-      !param.typeOpts.some((option) => option.value === 'operator')
-    ) {
-      param.right.value.type = 'ref';
-      param.right.value.content = NodeUtils.getChangeContent('ref');
+    this.normalizeValueByMenus(param);
+  }
+
+  /**
+   * 菜单（typeOpts / operatorOpts）刷新后校正已存值，供 initParams / onRefUpdate / onLeftSelect 三条路径共用。
+   *
+   * 1. 来源下拉已不含「运算赋值」→ 清除残留运算符，并把 operator 态回退为 ref。
+   *    只回退 type 而不删 operator 是不够的：initParams / onRefUpdate 里
+   *    `if (right.value.operator) { right.value.type = 'operator'; }` 会把节点重新拉回运算态，
+   *    而此时运算下拉里并没有这个运算符。
+   * 2. 来源仍支持运算，但旧运算符不被新类型支持（如 integer→string 后残留「变量自增」）
+   *    → 归一到 'empty'，避免脏运算符随节点保存。
+   */
+  private normalizeValueByMenus(param: IVal) {
+    const operatorAvailable = param.typeOpts.some((option) => option.value === 'operator');
+
+    if (!operatorAvailable) {
       delete param.right.value.operator;
+
+      if (param.right.value.type === 'operator') {
+        param.right.value.type = 'ref';
+        param.right.value.content = NodeUtils.getChangeContent('ref');
+      }
+      return;
     }
 
     if (param.right?.value?.type !== 'operator') {
@@ -434,14 +447,20 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     );
     param.right.type = selectedVal[0].type as IWorkflowFieldType;
 
-    // 与 initParams / onRefUpdate 统一：按新类型收窄后未命中的右值引用即已失效，清空避免残留灰项
-    // （复用 NodeUtils.reSelectRefWithNewOps 的既有语义，全仓 6 处一致）。
+    // 按新类型收窄后，若该右值引用在树中已彻底不存在（节点被删除/改名），则清空。
+    // 注意：narrowRefOption 只把类型不匹配的节点置为 disabled（节点仍在树中），
+    // 而 reSelectRefWithNewOps 仅按 ref_node_id/ref_var_name 匹配、不检查 disabled，
+    // 因此被置灰的引用仍会保留为选中态 —— 这是全仓各节点既有行为，本处不做改动。
     NodeUtils.reSelectRefWithNewOps(param.right, param.right.refs);
 
     if (this.getLeftParamsType(param.left) === 'complex' && param.right.value.type === 'literal') {
       param.right.value.type = 'ref';
       this.onIntegerTypeChange(param);
     }
+
+    // 与 initParams / onRefUpdate 对齐：菜单按实时类型重算后，旧的运算符值若已不被支持则归一，
+    // 来源已不含「运算赋值」时清掉残留运算符（否则重开节点会被 `if (value.operator)` 拉回运算态）。
+    this.normalizeValueByMenus(param);
   }
 
   public addParam() {
