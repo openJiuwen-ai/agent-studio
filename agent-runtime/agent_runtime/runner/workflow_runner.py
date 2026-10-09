@@ -641,7 +641,7 @@ class WorkflowRunner:
             except Termination:
                 raise
             except ExecutionError as e:
-                last_node = workflow_wrapper.get_last_node()
+                last_node = workflow_wrapper.get_last_node() if workflow_wrapper else {}
                 node_id = last_node.get("node_id", "")
                 node_type = last_node.get("node_type", "")
                 node_name = _resolve_node_name(node_defs, workflow_id, node_id)
@@ -752,6 +752,7 @@ class WorkflowRunner:
                 node_type = last_node.get("node_type", "")
                 node_name = _resolve_node_name(node_defs, workflow_id, node_id)
                 # 检查异常链：如果原始异常是 JiuWenBaseException（如变量校验错误），用原始错误码
+                error_msg = None
                 raw_error_code = getattr(e, 'error_code', None)
                 cause = e.__cause__
                 while cause is not None and raw_error_code is None:
@@ -762,7 +763,7 @@ class WorkflowRunner:
                     cause = getattr(cause, '__cause__', None)
                 if raw_error_code is not None:
                     error_code = str(raw_error_code)
-                    if 'error_msg' not in dir():
+                    if error_msg is None:
                         error_msg = str(e)
                 else:
                     error_code = GENERAL_ERROR
