@@ -34,8 +34,15 @@ class Auth:
 
         @wraps(func)
         def decorator(*args, **kwargs):
-            g.get()["domain_id"] = DEFAULT_DOMAIN_ID
-            g.get()["project_id"] = DEFAULT_DOMAIN_ID
+            # copy-then-set: ContextVar 的 default={} 是模块级共享对象，
+            # 原地写入会污染所有后续请求/任务的上下文
+            g.set(
+                {
+                    **(g.get() or {}),
+                    "domain_id": DEFAULT_DOMAIN_ID,
+                    "project_id": DEFAULT_DOMAIN_ID,
+                }
+            )
             logger.debug(f"basic auth: {func.__name__}")
             return func(*args, **kwargs)
 
