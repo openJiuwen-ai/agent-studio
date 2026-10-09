@@ -322,8 +322,10 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
           })
         ),
       };
-      // 与其余节点对齐：按实时类型收窄后未命中的右值引用即已失效，清空避免残留灰项
-      // （复用 NodeUtils.reSelectRefWithNewOps 的既有语义，见其 isMatch 判定）。
+      // 按实时类型收窄后，若该右值引用在树中已彻底不存在（节点被删除/改名），则清空。
+      // 注意：narrowRefOption 只把类型不匹配的节点置为 disabled（节点仍在树中），
+      // 而 reSelectRefWithNewOps 仅按 ref_node_id/ref_var_name 匹配、不检查 disabled，
+      // 因此被置灰的引用仍会保留为选中态 —— 这是全仓各节点既有行为，本处不做改动。
       NodeUtils.reSelectRefWithNewOps(
         right,
         cloneDeep(NodeUtils.narrowRefOption(this.rightRefs, { type: queryType })),
