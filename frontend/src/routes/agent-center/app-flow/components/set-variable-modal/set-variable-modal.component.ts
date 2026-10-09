@@ -324,10 +324,16 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     // ref 来源维持所选引用节点的真实类型（由 getDtoInput 按引用节点类型回写），
     // 不在此强制同步为左值类型，避免 string 左值 + file/* 右值等兼容但类型串不同的引用
     // 每次打开被改写为左值类型、触发 tagCompareNoChange 判脏、反复保存/未保存提示。
+    //
+    // 落库时 operator 来源会把 array<X>/object<X> 的 right.type 归一为通用 'array'/'object'
+    // （见 getNodeParamData），而重新打开时 liveLeftType 仍是具体的 'array<X>'。若按字串严格比较，
+    // 二者永远不等 → 每次打开都回写 liveLeftType 并标记 changed → tagCompareNoChange 恒 false →
+    // 用户未编辑也提示未保存、反复落库；保存后又写回 'array'，下次打开再次触发，形成永久脏标记。
+    // 故按「类型族」归并比较（array*⇔array、object*⇔object），仅在类型族真正变化时才同步并标记 changed。
     if (
       liveLeftType &&
       param.right.value.type !== 'ref' &&
-      param.right.type !== liveLeftType
+      !this.isSameTypeGroup(param.right.type, liveLeftType)
     ) {
       const oldRightType = param.right.type;
       param.right.type = liveLeftType;
@@ -390,6 +396,30 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     }
 
     return changed;
+  }
+
+  /**
+   * 类型族比较：array* 与 'array' 视为同族、object* 与 'object' 视为同族，其余按全等。
+   * 用于抵消 getNodeParamData 对 operator 来源把 array<X>/object<X> 落库归一为通用 array/object 的差异，
+   * 避免重新打开节点时 liveLeftType('array<X>') 与已落库的 'array' 永远不等、反复标记 changed
+   * （导致 tagCompareNoChange 恒 false、未编辑也提示未保存并重复落库，保存后写回 'array' 再循环）。
+   */
+  private isSameTypeGroup(a?: string, b?: string): boolean {
+    if (!a || !b) {
+      return false;
+    }
+    const x = a.toLowerCase();
+    const y = b.toLowerCase();
+    if (x === y) {
+      return true;
+    }
+    if (x.startsWith('array') && y.startsWith('array')) {
+      return true;
+    }
+    if (x.startsWith('object') && y.startsWith('object')) {
+      return true;
+    }
+    return false;
   }
 
   /** literal 各类型默认内容：integer/number→0、boolean→false、array<scalar>→'[]'(JSON 字符串)、其余→'' */
