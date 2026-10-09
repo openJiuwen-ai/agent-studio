@@ -35,6 +35,7 @@
 事实性、结构化、可检索的参考材料。
 
 - [REST API 参考](zh/reference/rest-api.md) — API 接口规范与请求响应示例
+- [Skill 错误码说明](zh/reference/skill-error-codes.md) — Skill 相关错误码与处理建议
 
 ### Explanation 解释文档（我想理解）
 
