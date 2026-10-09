@@ -357,6 +357,23 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       changed = true;
     }
 
+    // array/object 字面量内容兜底：空串/空白不是合法 JSON（typed-json-input 与运行期都要求
+    // 合法 JSON 数组/对象），来源切换或历史脏数据都可能留下空串，且类型相同时上面的
+    // coerceLiteralContent 分支不会触发，故此处独立归一（与 loop-modal 的
+    // normalizeTypedLiteralContent 口径一致），仅对空串回退默认，不覆盖用户已填内容。
+    if (liveLeftType && param.right.value.type === 'literal') {
+      const content = param.right.value.content;
+      if (typeof content === 'string' && content.trim() === '') {
+        const isComplex =
+          liveLeftType === 'object' ||
+          (typeof liveLeftType === 'string' && liveLeftType.startsWith('array'));
+        if (isComplex) {
+          param.right.value.content = this.defaultLiteralContent(liveLeftType);
+          changed = true;
+        }
+      }
+    }
+
     // 收敛「值」来源：已非 ref 且（来源不在可选集合，或复杂左值下 literal 不可选）→ 回退 ref，
     // 同步重置内容并清除旧 operator（避免被 onRefUpdate 重新置回）
     const rightSource = param.right?.value?.type;
@@ -655,7 +672,20 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   }
 
   public onIntegerTypeChange(param: any, event?) {
-    param.right.value.content = NodeUtils.getChangeContent(param.right.value.type);
+    // 来源切换时重置内容：ref/operator 走既有重置；literal 需按左值实时类型给默认值，
+    // 不能统一用 getChangeContent('literal') 的空串——左值为 array*/object 时空串不是合法 JSON，
+    // 且下方的 applyLeftTypeToParam 仅在 right.type 与左值类型不同时才调 coerceLiteralContent 补默认值，
+    // 二者类型相同（如从 ref/operator 切回 literal）时会被跳过，导致数组字面量以空串落库、
+    // 用户已配内容被静默清空（typed-json-input 也拿不到合法 JSON 数组）。
+    if (param.right.value.type === 'literal') {
+      const liveLeftType = (this.isGetLeftType(param.left) ||
+        param.left.type) as IWorkflowFieldType;
+      param.right.value.content = this.defaultLiteralContent(
+        liveLeftType ?? param.right.type,
+      );
+    } else {
+      param.right.value.content = NodeUtils.getChangeContent(param.right.value.type);
+    }
     if (param.right.value.type === 'operator') {
       let leftType = this.getParamType(param.left);
       if (leftType === 'emptyNum') {
