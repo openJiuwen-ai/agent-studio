@@ -690,7 +690,7 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * literal 来源且类型为 integer/number、内容为非空字符串——
    * 需要在序列化/读取时做数值化转换的场景。
    */
-  /** literal 来源各类型的默认内容：integer/number→0、boolean→false、其余→'' */
+  /** literal 来源各类型的默认内容：integer/number→0、boolean→false、object→'{}'、array*→'[]'(JSON 字符串)、其余→'' */
   private defaultLiteralContent(type: IWorkflowFieldType): any {
     if (type === 'boolean') {
       return false;

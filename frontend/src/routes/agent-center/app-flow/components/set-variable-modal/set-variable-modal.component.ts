@@ -31,6 +31,14 @@ interface IVal {
   typeOpts?: any;
 }
 
+/**
+ * 语义有双重性，改动时须同时看 applyLeftTypeToParam 的两个分支：
+ * 1. **operator 可用性**：命中即把 commonOperatorOptions 并入 typeOpts；
+ * 2. **literal 可用性**：未命中则整组来源退化为 refOnly（连 operator 也没有）。
+ * 例外：'object' 虽在此表内（literal 实际不可用），但 operator 对 object 可用；
+ * 其 literal 由 isComplex 守卫强制剔除（baseOpts 退回 refOnly 后再由 shouldRevertToRef 回退来源）。
+ * 因此调整此表 ≠ 仅决定"literal 能否选"，还同时影响 operator 菜单。
+ */
 const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>', 'array<boolean>'];
 @Component({
   selector: 'meta-set-variable-modal',
@@ -424,13 +432,18 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     return false;
   }
 
-  /** literal 各类型默认内容：integer/number→0、boolean→false、array<scalar>→'[]'(JSON 字符串)、其余→'' */
+  /** literal 各类型默认内容：integer/number→0、boolean→false、object→'{}'、array*→'[]'(JSON 字符串)、其余→'' */
   private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
     if (type === 'boolean') {
       return false;
     }
     if (type === 'integer' || type === 'number') {
       return 0;
+    }
+    if (type === 'object') {
+      // 与 loop-modal.component.defaultLiteralContent 保持一致：typed-json-input 期望合法 JSON 字符串，
+      // 若返回 ''，将来放开 object 字面量时会拿到空内容而非 '{}'。当前 object 走 isComplex 仅 ref，此处为口径对齐。
+      return '{}';
     }
     if (typeof type === 'string' && type.startsWith('array')) {
       // array/object 字面量以 JSON 字符串存储（typed-json-input 的 formatText 对 content 做 .replace，
