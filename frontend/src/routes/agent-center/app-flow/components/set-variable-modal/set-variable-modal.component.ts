@@ -322,14 +322,12 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
           })
         ),
       };
-      // 按实时类型收窄后，若该右值引用在树中已彻底不存在（节点被删除/改名），则清空。
-      // 注意：narrowRefOption 只把类型不匹配的节点置为 disabled（节点仍在树中），
-      // 而 reSelectRefWithNewOps 仅按 ref_node_id/ref_var_name 匹配、不检查 disabled，
-      // 因此被置灰的引用仍会保留为选中态 —— 这是全仓各节点既有行为，本处不做改动。
-      NodeUtils.reSelectRefWithNewOps(
-        right,
-        cloneDeep(NodeUtils.narrowRefOption(this.rightRefs, { type: queryType })),
-      );
+      // 右值可选引用按左值「实时类型」收窄（queryType 取自 left.value.content[0].type）。
+      // 回选沿用上游既有口径 selectTreeNodeInRefsByValue：只高亮、不清空 ——
+      // 已选引用在当前树中找不到时保留旧值（全仓各节点一致），避免重开节点静默丢失配置。
+      // 注：narrowRefOption 仅把类型不匹配的节点置为 disabled（节点仍在树中），故改型场景下
+      // 旧引用仍会保留为置灰选中态；该行为属全仓既有口径，已拆独立问题跟踪，本 MR 不改变。
+      NodeUtils.selectTreeNodeInRefsByValue(right);
 
       if (right.value.operator) {
         right.value.type = 'operator';
