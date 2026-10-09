@@ -30,6 +30,14 @@ interface IVal {
   typeOpts?: any;
 }
 
+/**
+ * 语义有双重性，改动时须同时看 refreshMenusByLiveType / onLeftSelect 的两个分支：
+ * 1. **operator 可用性**：命中即把 commonOperatorOptions 并入 typeOpts；
+ * 2. **来源可用性**：未命中则整组来源退化为 refOnly（连 operator 也没有）。
+ * 例外：'object' 虽在此表内，但其字面量已被 getLeftParamsType(param.left) === 'complex'
+ * 收窄为 refOnlyOptions，故命中本表对 object 而言只意味着「保留 operator 选项」，
+ * 并非允许选字面量。调整此表 ≠ 仅决定「字面量能否选」，还同时影响 operator 菜单。
+ */
 const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>'];
 @Component({
   selector: 'meta-set-variable-modal',
@@ -411,7 +419,9 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     );
     param.right.type = selectedVal[0].type as IWorkflowFieldType;
 
-    NodeUtils.selectTreeNodeInRefsByValue(param.right);
+    // 与 initParams / onRefUpdate 统一：按新类型收窄后未命中的右值引用即已失效，清空避免残留灰项
+    // （复用 NodeUtils.reSelectRefWithNewOps 的既有语义，全仓 6 处一致）。
+    NodeUtils.reSelectRefWithNewOps(param.right, param.right.refs);
 
     if (this.getLeftParamsType(param.left) === 'complex' && param.right.value.type === 'literal') {
       param.right.value.type = 'ref';
