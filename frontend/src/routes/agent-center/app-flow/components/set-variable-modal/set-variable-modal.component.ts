@@ -358,13 +358,24 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       param.left.type ||
       ''
     ).toLowerCase();
+    // 复合类型判定与上面的 hasEmptyType 判定同源，均取自 liveType：
+    // 等价于 getLeftParamsType 的 object/array 判定，但在左值引用内容缺失时不会退化为 normal
+    // （上游 initParams 原按落库 setting.left.type 判定，此处以 `|| param.left.type` 保留同等兜底）。
     const baseOpts =
-      this.getLeftParamsType(param.left) === 'complex'
+      liveType === 'object' || liveType.startsWith('array')
         ? this.refOnlyOptions
         : this.sourceOptions;
     param.typeOpts = hasEmptyType.includes(liveType)
       ? [...baseOpts, ...this.commonOperatorOptions]
       : baseOpts;
+
+    // 与 onLeftSelect（其中 `param.right.type = selectedVal[0].type`）对齐：
+    // 右值字段类型同步为左值实时类型。否则中间变量改型后重开节点，right.type 仍是落库旧值
+    // （如 string），却已能选到新类型的运算符（increment），保存出类型矛盾的配置；
+    // literal 分支也会继续按旧类型渲染与转换。
+    if (liveType) {
+      param.right.type = liveType as IWorkflowFieldType;
+    }
 
     this.normalizeValueByMenus(param);
   }
@@ -381,18 +392,29 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
    */
   private normalizeValueByMenus(param: IVal) {
     const operatorAvailable = param.typeOpts.some((option) => option.value === 'operator');
+    const currentType = param.right?.value?.type;
+    const currentSupported = param.typeOpts.some((option) => option.value === currentType);
 
+    // 1. 来源下拉已不含「运算赋值」→ 清除残留运算符。
+    //    只回退 type 而不删 operator 是不够的：initParams / onRefUpdate 里
+    //    `if (right.value.operator) { right.value.type = 'operator'; }` 会把节点重新拉回运算态，
+    //    而此时运算下拉里并没有这个运算符。
     if (!operatorAvailable) {
       delete param.right.value.operator;
+    }
 
-      if (param.right.value.type === 'operator') {
-        param.right.value.type = 'ref';
-        param.right.value.content = NodeUtils.getChangeContent('ref');
-      }
+    // 2. 当前来源已不在选项中 → 回退为 ref 并重置内容。
+    //    覆盖两种情形：类型不再支持运算赋值（operator 被剔除）、左值变为 complex 后 literal 被剔除。
+    //    后者若不处理，模板的来源下拉没有 literal 选项却仍渲染字面量输入框，保存出与左值不匹配的字面量。
+    if (!currentSupported) {
+      param.right.value.type = 'ref';
+      param.right.value.content = NodeUtils.getChangeContent('ref');
       return;
     }
 
-    if (param.right?.value?.type !== 'operator') {
+    // 3. 来源仍支持运算，但旧运算符不被新类型支持（如 integer→string 后残留「变量自增」）
+    //    → 归一到 'empty'，避免脏运算符随节点保存。
+    if (currentType !== 'operator') {
       return;
     }
 
