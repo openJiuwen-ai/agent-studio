@@ -31,7 +31,6 @@ import { AppFlowService } from '../../app-flow.service';
 import {
   getInitInputParamConfig,
   getInitRefParamConfig,
-  getNoneObjOutputParamTypes,
   getOutputParamTypes,
   WORKFLOW_SVGS,
 } from '../../flow.const';
@@ -56,6 +55,7 @@ import { ParamTreeSelectedComponent } from '../param-tree/param-tree-selected.co
 import { ParamTreeComponent } from '../param-tree/param-tree.component';
 import { NodeUtils } from '../utils';
 import { EditNameComponent } from '@routes/agent-center/app-flow/components/edit-name/edit-name.component';
+import { TypedJsonInputComponent } from '@shared/components/typed-json-input/typed-json-input.component';
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
 import { InputTreeSelect } from 'src/routes/agent-center/app-flow/components/input-tree-select/input-tree-select';
 import { NodeTypeTopic } from '@routes/agent-center/types/common.types';
@@ -85,6 +85,7 @@ import { CommonService } from '@services/common.service';
     EditNameComponent,
     NodeDescriptionComponent,
     InputTreeSelect,
+    TypedJsonInputComponent,
   ],
   providers: [
     {
@@ -150,8 +151,6 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
 
   public outputParams: IWorkflowField[] = [];
 
-  public noneObjDataTypes = getNoneObjOutputParamTypes();
-
   // boolean 中间变量的字面量值固定为 true/false 下拉，避免任意文本存成无效布尔
   public booleanLiteralOptions = [
     { label: 'true', value: true },
@@ -166,6 +165,13 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   public refOnlyOptions = [{ label: this.i18n.transform('ref'), value: 'ref' }];
 
   public outputDataTypes = getOutputParamTypes();
+
+  // 循环中间变量"字面量"可选类型：屏蔽 object / array<object>。
+  // 这两类需要"添加子项(addChild)"定义子结构，循环中间变量无此能力，
+  // 配成字面量只能得到空壳对象；这类中间变量应改用"引用"来源承载。
+  public midVarDataTypes = this.outputDataTypes.filter(
+    (option) => option.value !== 'object' && option.value !== 'array<object>',
+  );
 
   onOutputParamTypeChange = NodeUtils.onOutputParamTypeChange;
 
@@ -684,13 +690,19 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
    * literal 来源且类型为 integer/number、内容为非空字符串——
    * 需要在序列化/读取时做数值化转换的场景。
    */
-  /** literal 来源各类型的默认内容：integer/number→0、boolean→false、其余→'' */
-  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
+  /** literal 来源各类型的默认内容：integer/number→0、boolean→false、object→'{}'、array*→'[]'(JSON 字符串)、其余→'' */
+  private defaultLiteralContent(type: IWorkflowFieldType): any {
     if (type === 'boolean') {
       return false;
     }
     if (type === 'integer' || type === 'number') {
       return 0;
+    }
+    if (type === 'object') {
+      return '{}';
+    }
+    if (type && type.startsWith('array')) {
+      return '[]';
     }
     return '';
   }
@@ -742,16 +754,66 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       item.value.content = Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
       return true;
     }
+    if (item.type && item.type.startsWith('array')) {
+      // typed-json-input 以 JSON 字符串承载数组字面量（如 '[1,2]'），
+      // 需先解析再校验；旧逻辑 Array.isArray 会把合法字符串误判为非法并重置为 []，
+      // 导致用户数组内容在保存/打开时被清空、运行时永远得到空数组（意见②）。
+      const parsed = this.parseLiteralContent(item.value.content, 'array');
+      if (parsed === null) {
+        item.value.content = '[]';
+        return true;
+      }
+      // 合法：规范化回 JSON 字符串（FieldValueContent 仅允许 string 承载 array 字面量，
+      // 与 getMidParams 注释「literal 的 content 是字符串」一致）。
+      const canonical = JSON.stringify(parsed);
+      if (item.value.content !== canonical) {
+        item.value.content = canonical;
+        return true;
+      }
+      return false;
+    }
     return false;
   }
 
   /**
-   * literal 来源允许的数据类型（noneObjDataTypes 中未禁用的项）。
-   * ref 同步来的 object/array<...> 等复合类型对 literal 非法，需回退 string。
+   * 解析 literal JSON 字符串内容：typed-json-input/set-default-tip 以字符串承载
+   * array/object 字面量（如 '[1,2]'/'{"a":1}'），归一前需先解析。
+   * 解析失败或类型不符返回 null（调用方回退默认值）。
+   */
+  private parseLiteralContent(
+    content: unknown,
+    kind: 'array' | 'object',
+  ): unknown[] | Record<string, unknown> | null {
+    // JSON 解析内核已收敛到 NodeUtils.parseLiteralContent（set-variable 保存前校验同样复用），
+    // 此处保留薄封装仅为兼容本组件既有调用点。
+    return NodeUtils.parseLiteralContent(content, kind);
+  }
+
+  /**
+   * 中间变量字面量允许的数据类型：屏蔽 object / array<object>（需 addChild 定义子结构，
+   * 循环中间变量不具备该能力，应改用"引用"来源承载）。
+   *
+   * 除精确匹配具体类型外，兼容「基础类型串」`array` / `object`：
+   * 落库-读取往返时 schema 可能只保留不带元素类型的基础串（本PR 前 array 字面量以真实
+   * 数组落库、后续归一为字符串即属此类），若按严格相等判断会把合法 array 误判为非法并
+   * 强制回退成 string，而literal content 仍是 JSON 字符串 → 类型与内容错配 →
+   * 前端渲染分支与校验规则同时失配、弹窗无法正常打开。
+   *
+   * 该放宽只影响"是否要把 type 强制改写为 string"这一个动作：
+   * - 具体类型（array<string> 等）仍精确匹配，行为不变；
+   * - object / array<object> 本就被 midVarDataTypes 过滤掉，屏蔽能力不受影响。
    */
   private isValidLiteralDataType(type: unknown): boolean {
-    return this.noneObjDataTypes.some(
-      (option) => !option.disabled && option.value === type,
+    if (this.midVarDataTypes.some((option) => option.value === type)) {
+      return true;
+    }
+    // 基础类型串与任一同族的具体类型兼容（array↔array<T>、object↔object）
+    return (
+      typeof type === 'string' &&
+      this.midVarDataTypes.some((option) => {
+        const value = option.value as string;
+        return value.startsWith(`${type}<`) || value === type;
+      })
     );
   }
 

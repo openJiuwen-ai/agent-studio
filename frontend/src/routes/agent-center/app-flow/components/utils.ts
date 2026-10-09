@@ -106,6 +106,49 @@ export const NodeUtils = {
         };
   },
 
+  /**
+   * 解析 literal JSON 字符串内容：typed-json-input / set-default-tip 以字符串承载
+   * array/object 字面量（如 '[1,2]' / '{"a":1}'），归一或落库校验前需先解析。
+   *
+   * 兼容历史数据：本PR 之前 array/object 字面量曾以**真实数组/对象**落库，
+   * 故非字符串输入先按真实值判定并直接返回（不回退 null），避免把历史真实值
+   * 误判为非法而清空；调用方拿到真实值后会在归一阶段重新 JSON.stringify 为字符串
+   * （loop-modal.normalizeTypedLiteralContent），完成向字符串形态的迁移。
+   *
+   * 解析失败、空白或类型不符（array 收到对象、object 收到数组等）返回 null，
+   * 由调用方回退类型默认值。
+   */
+  parseLiteralContent(
+    content: unknown,
+    kind: 'array' | 'object',
+  ): unknown[] | Record<string, unknown> | null {
+    const isArrayKind = kind === 'array';
+    if (typeof content !== 'string') {
+      // 历史真实数组/对象：按类型匹配直接放行，交由调用方规范化为 JSON 字符串
+      if (isArrayKind) {
+        return Array.isArray(content) ? content : null;
+      }
+      return content !== null && typeof content === 'object' && !Array.isArray(content)
+        ? (content as Record<string, unknown>)
+        : null;
+    }
+    const trimmed = content.trim();
+    if (trimmed === '') {
+      return null;
+    }
+    try {
+      const val = JSON.parse(trimmed);
+      if (isArrayKind) {
+        return Array.isArray(val) ? val : null;
+      }
+      return val !== null && typeof val === 'object' && !Array.isArray(val)
+        ? val
+        : null;
+    } catch {
+      return null;
+    }
+  },
+
   checkModelExistence(nodeName: string, model_deployment_id: string, models: IModel[]) {
     if (model_deployment_id && models.length > 0 && !models.map(m => m.model_deployment_id).includes(model_deployment_id)) {
       MessageComponent.showError(i18next.t('checkModel_tip', { node: removeHTMLTag(nodeName) }));
@@ -578,32 +621,79 @@ export const NodeUtils = {
   },
 
   initSelectedTreeNode(params: IWorkflowField[]) {
-    params.forEach(this.selectTreeNodeInRefsByValue);
+    // 显式 lambda 而非 forEach(this.selectTreeNodeInRefsByValue)：forEach 会把数组索引作为
+    // 第二参数传入 clearIfUnmatched，索引非 0 时会被误判为「开启清空」而误清有效引用。
+    params.forEach((p) => this.selectTreeNodeInRefsByValue(p));
   },
 
-  selectTreeNodeInRefsByValue(param: IWorkflowField) {
+  /**
+   * 按 ref_var_name/ref_node_id 在引用树中回选高亮。
+   *
+   * @param clearIfUnmatched 是否在未命中任何节点时清空 content。
+   *   默认 false —— 未命中可能只是引用树尚未异步加载完成、或被临时过滤（narrowRefOption 等），
+   *   此时引用本身仍然有效，贸然清空会丢失原本可用的配置（PR 前的既有行为即是不清空）。
+   *   仅在明确知道「引用确已失效」的场景才传 true，如 set-variable 初始化时左值改型
+   *   导致右值引用已不兼容（意见②）。
+   */
+  selectTreeNodeInRefsByValue(param: IWorkflowField, clearIfUnmatched = false) {
     if (param?.value?.type === 'ref') {
-      const paramContent = param?.value.content as IRefContentType;
+      // 兼容两种形态：初始化时 content 为对象；用户选择/重选后为数组 [node]。
+      // 只处理对象形态会导致数组形态永远匹配不到、被误清空（意见②）。
+      const paramContent = Array.isArray(param.value.content)
+        ? (param.value.content[0] as IRefContentType)
+        : (param.value.content as IRefContentType);
 
+      let matched = false;
       TreeUtil.traverse(param.refs, (node: any) => {
         if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
+          // 置灰（disabled）但树中仍存在的节点也允许高亮匹配（与兄弟 selectTreeNodeInRefsChhangeByValue 一致）；
+          // 其是否「类型真正不兼容」交由 applyLeftTypeToParam 的 getCompatibleTypes 复核决定（意见②）。
           node.checked = true;
           param.value.content = [node];
+          matched = true;
         }
       });
+
+      // 未命中：仅在调用方显式要求时清空（左值改型导致旧引用失效，避免脏数据落库）。
+      if (!matched && clearIfUnmatched) {
+        param.value.content = { ref_node_id: '', ref_var_name: '', source: 'user' };
+      }
     }
   },
 
-  selectTreeNodeInRefsChhangeByValue(param: IWorkflowField) {
+  /**
+   * 重新选中引用（节点改型场景）。
+   *
+   * @param clearIfUnmatched 是否在未命中任何节点时清空 content。
+   *   传 true 时行为与右值 selectTreeNodeInRefsByValue 对称：目标变量被删除/改名后清空旧引用，
+   *   避免 applyLeftTypeToParam 按旧类型生成菜单、保存时落旧 ref_var_name。
+   *   传 false（默认）时**不清空**，用于引用树尚未加载完成/被临时过滤的场景，
+   * 此时未匹配不代表引用失效，贸然清空会丢失原本有效的引用。
+   */
+selectTreeNodeInRefsChhangeByValue(param: IWorkflowField, clearIfUnmatched = false) {
     if (param?.value?.type === 'ref') {
-      const paramContent = param?.value.content as IRefContentType;
+      // 兼容两种形态：初始化时 content 为对象；用户选择/重选后为数组 [node]。
+      // 只处理对象形态会导致数组形态永远匹配不到、保留旧类型节点。
+      const paramContent = Array.isArray(param.value.content)
+        ? (param.value.content[0] as IRefContentType)
+        : (param.value.content as IRefContentType);
 
+      let matched = false;
       TreeUtil.traverse(param.refs, (node: any) => {
         if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
+          // 置灰（disabled）但树中仍存在的节点也允许高亮匹配（与兄弟 selectTreeNodeInRefsByValue 一致）；
+          // 其是否「类型真正不兼容」交由 applyLeftTypeToParam 的 getCompatibleTypes 复核决定。
           node.checked = true;
           param.value.content = [node];
+          matched = true;
         }
       });
+
+      // 未命中：仅在调用方显式要求时清空。左值目标变量被删除/改名后旧引用失效，
+      // 清空可避免脏数据落库；但引用树未就绪时应保留，故由参数控制而非无条件清空。
+      if (!matched && clearIfUnmatched) {
+        param.value.content = { ref_node_id: '', ref_var_name: '', source: 'user' };
+      }
     }
   },
 
@@ -721,7 +811,16 @@ export const NodeUtils = {
       }
     }
 
-    if (param.value?.type === 'literal' && typeof param.value.content === 'string') {
+    // object / array 字面量经 typed-json-input 以 JSON 字符串存储，其中的 < > 属于合法 JSON
+    // 文本（如 ["<"] 或 {"html":"x"}），不可当作 HTML 标签剥除，否则保存路径会静默丢数据
+    // （意见③）。仅对标量字面量（string/number/integer/boolean）维持原 HTML 清洗。
+    const isJsonLiteral =
+      param.type === 'object' || String(param.type).startsWith('array');
+    if (
+      param.value?.type === 'literal' &&
+      typeof param.value.content === 'string' &&
+      !isJsonLiteral
+    ) {
       param.value.content = removeHTMLTag(param.value.content);
     }
 

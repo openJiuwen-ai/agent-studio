@@ -289,7 +289,7 @@
                     <nz-select
                       *ngIf="param.value.type === 'literal'"
                       style="width: 100%"
-                      [nzOptions]="noneObjDataTypes"
+                      [nzOptions]="midVarDataTypes"
                       [name]="'midParamDataType' + i"
                       [(ngModel)]="param.type"
                       nzLabelKey="label"
@@ -314,7 +314,9 @@
                         param.value.type === 'literal' &&
                         param.type !== 'integer' &&
                         param.type !== 'number' &&
-                        param.type !== 'boolean'
+                        param.type !== 'boolean' &&
+                        param.type !== 'object' &&
+                        !(param.type || '').startsWith('array')
                       "
                       style="width: 100%"
                       type="text"
@@ -378,6 +380,19 @@
                       [title]="param.value.content"
                       [class.input-error]="midParamForm?.controls['midParamValue' + i]?.invalid && (midParamForm?.controls['midParamValue' + i]?.dirty || midParamForm?.controls['midParamValue' + i]?.touched)"
                     />
+
+                    <!-- 复杂类型(object/array)：复用 typed-json-input 提供 JSON 编辑器（与 global-memory 一致）；
+                         也可改用"引用"来源承载 -->
+                    <typed-json-input
+                      class="combo-select-right"
+                      style="width: 100%"
+                      *ngIf="
+                        param.value.type === 'literal' &&
+                        (param.type === 'object' || (param.type || '').startsWith('array'))
+                      "
+                      [param]="param"
+                      (changeValue)="onMidRefChange()"
+                    ></typed-json-input>
 
                     <input-tree-select
                       *ngIf="param.value.type === 'ref'"
