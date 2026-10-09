@@ -792,9 +792,29 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   /**
    * 中间变量字面量允许的数据类型：屏蔽 object / array<object>（需 addChild 定义子结构，
    * 循环中间变量不具备该能力，应改用"引用"来源承载）。
+   *
+   * 除精确匹配具体类型外，兼容「基础类型串」`array` / `object`：
+   * 落库-读取往返时 schema 可能只保留不带元素类型的基础串（本PR 前 array 字面量以真实
+   * 数组落库、后续归一为字符串即属此类），若按严格相等判断会把合法 array 误判为非法并
+   * 强制回退成 string，而literal content 仍是 JSON 字符串 → 类型与内容错配 →
+   * 前端渲染分支与校验规则同时失配、弹窗无法正常打开。
+   *
+   * 该放宽只影响"是否要把 type 强制改写为 string"这一个动作：
+   * - 具体类型（array<string> 等）仍精确匹配，行为不变；
+   * - object / array<object> 本就被 midVarDataTypes 过滤掉，屏蔽能力不受影响。
    */
   private isValidLiteralDataType(type: unknown): boolean {
-    return this.midVarDataTypes.some((option) => option.value === type);
+    if (this.midVarDataTypes.some((option) => option.value === type)) {
+      return true;
+    }
+    // 基础类型串与任一同族的具体类型兼容（array↔array<T>、object↔object）
+    return (
+      typeof type === 'string' &&
+      this.midVarDataTypes.some((option) => {
+        const value = option.value as string;
+        return value.startsWith(`${type}<`) || value === type;
+      })
+    );
   }
 
   /**
