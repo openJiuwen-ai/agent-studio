@@ -365,7 +365,7 @@ class RedisUtils:
         try:
             return self._redis.llen(self._process_key(key))
         except Exception as e:
-            logger(f"获取列表长度时出错: {e}")
+            logger.error(f"获取列表长度时出错: {e}")
             raise JiuWenBaseException(
                 StatusCode.REDIS_GET_LENGTH_ELEMENTS_FAILED.code,
                 StatusCode.REDIS_GET_LENGTH_ELEMENTS_FAILED.errmsg,
