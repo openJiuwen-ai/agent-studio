@@ -333,7 +333,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (
       liveLeftType &&
       param.right.value.type !== 'ref' &&
-      !this.isSameTypeGroup(param.right.type, liveLeftType)
+      !this.isSameTypeGroup(param.right.type, liveLeftType, param.right.value.type)
     ) {
       const oldRightType = param.right.type;
       param.right.type = liveLeftType;
@@ -400,11 +400,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   /**
    * 类型族比较：array* 与 'array' 视为同族、object* 与 'object' 视为同族，其余按全等。
-   * 用于抵消 getNodeParamData 对 operator 来源把 array<X>/object<X> 落库归一为通用 array/object 的差异，
-   * 避免重新打开节点时 liveLeftType('array<X>') 与已落库的 'array' 永远不等、反复标记 changed
-   * （导致 tagCompareNoChange 恒 false、未编辑也提示未保存并重复落库，保存后写回 'array' 再循环）。
+   * 仅 operator 来源按类型族归并：getNodeParamData 落库时会把 operator 来源的 array<X>/object<X>
+   * 的 right.type 归一为通用 'array'/'object'，重新打开时 liveLeftType 仍是 'array<X>'，若按字串严格比较
+   * 会永远不等、反复标记 changed（永久脏标记）；故仅 operator 来源需要族归并。
+   * literal/ref 来源按完整类型（含元素类型）持久化，必须精确比较，否则 array<string>↔array<number>
+   * 元素类型改型会被误判同族而漏同步 right.type，导致值输入控件/校验/落库类型错误（检视意见 B）。
    */
-  private isSameTypeGroup(a?: string, b?: string): boolean {
+  private isSameTypeGroup(a?: string, b?: string, source?: string): boolean {
     if (!a || !b) {
       return false;
     }
@@ -413,10 +415,10 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (x === y) {
       return true;
     }
-    if (x.startsWith('array') && y.startsWith('array')) {
+    if (source === 'operator' && x.startsWith('array') && y.startsWith('array')) {
       return true;
     }
-    if (x.startsWith('object') && y.startsWith('object')) {
+    if (source === 'operator' && x.startsWith('object') && y.startsWith('object')) {
       return true;
     }
     return false;
@@ -649,6 +651,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         param.right.value.operator = 'empty';
       }
     }
+    // 来源切换后（尤其是 ref → literal/operator）右值 field 类型需同步为左值实时类型：
+    // 新建时 right.type 默认 string，且 ref 阶段 applyLeftTypeToParam 会跳过 right.type 同步
+    // （保留引用节点真实类型，意见⑥），故切到 literal/operator 时 right.type 仍残留旧值，
+    // 会导致值输入控件、校验和落库类型错误（如 integer 左值被保存成 string literal/operator）。
+    // 复用 applyLeftTypeToParam：ref 来源下其 type 同步被 guard 跳过，不影响意见⑥；
+    // literal/operator 来源下则把 right.type 收敛为 liveLeftType（含 array 元素类型精确匹配）。
+    this.applyLeftTypeToParam(param);
     this.onSave();
   }
 
