@@ -974,4 +974,11 @@
         SET memory_config = NULL
         WHERE agent_id = #{agentId}
     </update>
+
+    <select id="selectAllActiveAgents" resultMap="BaseResultMap">
+        SELECT agent_id, project_id, workspace_id, name, description, status, type, sub_type,
+               model_name, model_type, model, creator, creator_id, created_on, updated_on, published_on
+        FROM t_agent
+        WHERE deleted = false
+    </select>
 </mapper>
