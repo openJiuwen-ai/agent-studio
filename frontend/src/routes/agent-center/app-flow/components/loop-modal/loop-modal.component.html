@@ -381,17 +381,18 @@
                       [class.input-error]="midParamForm?.controls['midParamValue' + i]?.invalid && (midParamForm?.controls['midParamValue' + i]?.dirty || midParamForm?.controls['midParamValue' + i]?.touched)"
                     />
 
-                    <!-- 复杂类型(object/array)：不提供标量字面量输入；值取空值([]/{}), 或用“引用”来源 -->
-                    <div
-                      class="combo-select-right flex items-center text-label"
+                    <!-- 复杂类型(object/array)：复用 typed-json-input 提供 JSON 编辑器（与 global-memory 一致）；
+                         也可改用"引用"来源承载 -->
+                    <typed-json-input
+                      class="combo-select-right"
                       style="width: 100%"
                       *ngIf="
                         param.value.type === 'literal' &&
                         (param.type === 'object' || (param.type || '').startsWith('array'))
                       "
-                    >
-                      <span>{{ (param.type || '').startsWith('array') ? '[]' : '{}' }}</span>
-                    </div>
+                      [param]="param"
+                      (changeValue)="onMidRefChange()"
+                    ></typed-json-input>
 
                     <input-tree-select
                       *ngIf="param.value.type === 'ref'"

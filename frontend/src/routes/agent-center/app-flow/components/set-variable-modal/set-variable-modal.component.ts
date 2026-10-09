@@ -19,6 +19,7 @@ import { EditNameComponent } from '@routes/agent-center/app-flow/components/edit
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
 import { NodeTypeTopic } from '@routes/agent-center/types/common.types';
 import { HelpCenterService } from '@services/help-center.service';
+import { TypedJsonInputComponent } from '@shared/components/typed-json-input/typed-json-input.component';
 import { CommonService } from '@services/common.service';
 import { InputTreeSelect } from 'src/routes/agent-center/app-flow/components/input-tree-select/input-tree-select';
 import { takeUntil } from 'rxjs';
@@ -30,7 +31,7 @@ interface IVal {
   typeOpts?: any;
 }
 
-const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>'];
+const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>', 'array<boolean>'];
 @Component({
   selector: 'meta-set-variable-modal',
   templateUrl: './set-variable-modal.component.html',
@@ -46,6 +47,7 @@ const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array
     EditNameComponent,
     NodeDescriptionComponent,
     InputTreeSelect,
+    TypedJsonInputComponent,
   ],
   providers: [
     {
@@ -304,8 +306,9 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     const liveLeftType = (this.isGetLeftType(param.left) ||
       param.left.type) as IWorkflowFieldType;
     const liveType = (liveLeftType || '').toLowerCase();
-    // 复杂类型（对象/数组）只暴露 ref；支持"空值/运算"的类型才额外暴露 literal/operator
-    const isComplex = liveType === 'object' || liveType.startsWith('array');
+    // 复杂类型对象只暴露 ref；array<scalar> 允许字面量（复用 typed-json-input 输入 JSON，与 loop-modal / global-memory 一致）。
+    // object / array<object> 因无 addChild 定义子结构能力，仍仅暴露 ref（与 loop-modal midVarDataTypes 口径一致）。
+    const isComplex = liveType === 'object';
     const sourceAllowed = hasEmptyType.includes(liveType);
     const baseOpts =
       isComplex || !sourceAllowed ? this.refOnlyOptions : this.sourceOptions;
@@ -326,9 +329,16 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       param.right.value.type !== 'ref' &&
       param.right.type !== liveLeftType
     ) {
+      const oldRightType = param.right.type;
       param.right.type = liveLeftType;
       if (param.right.value.type === 'literal') {
-        param.right.value.content = this.defaultLiteralContent(liveLeftType);
+        // 旧内容可转换为新类型时尽量保留（如 string '123' → integer 123），
+        // 仅在确实非法时回退默认值，避免静默数据丢失（意见④）。
+        param.right.value.content = this.coerceLiteralContent(
+          param.right.value.content,
+          oldRightType,
+          liveLeftType,
+        );
       }
       changed = true;
     }
@@ -382,7 +392,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     return changed;
   }
 
-  /** literal 各类型默认内容：integer/number→0、boolean→false、其余→'' */
+  /** literal 各类型默认内容：integer/number→0、boolean→false、array<scalar>→'[]'(JSON 字符串)、其余→'' */
   private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
     if (type === 'boolean') {
       return false;
@@ -390,7 +400,64 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (type === 'integer' || type === 'number') {
       return 0;
     }
+    if (typeof type === 'string' && type.startsWith('array')) {
+      // array/object 字面量以 JSON 字符串存储（typed-json-input 的 formatText 对 content 做 .replace，
+      // 且历史上占位即字符串 '[]'），故返回字符串 '[]' 而非空数组对象，避免与 FieldValueContent 类型冲突。
+      return '[]';
+    }
     return '';
+  }
+
+  /**
+   * literal 来源内容随左值类型变化时的转换：旧内容可转为新类型时尽量保留，
+   * 仅当确实非法（如非数值字符串落到 integer）才回退类型默认值，避免静默数据丢失（意见④）。
+   */
+  private coerceLiteralContent(
+    oldContent: unknown,
+    oldType: IWorkflowFieldType,
+    newType: IWorkflowFieldType,
+  ): string | number | boolean {
+    if (oldType === newType) {
+      return (oldContent ?? this.defaultLiteralContent(newType)) as
+        | string
+        | number
+        | boolean;
+    }
+    // array<scalar> / object：标量旧内容无法安全转换，回退 JSON 字符串默认值
+    if (newType === 'object' || (typeof newType === 'string' && newType.startsWith('array'))) {
+      return this.defaultLiteralContent(newType) as string | number | boolean;
+    }
+    // 目标为 string：数字/布尔转其字面量，字符串原样保留
+    if (newType === 'string') {
+      if (typeof oldContent === 'string') {
+        return oldContent;
+      }
+      if (typeof oldContent === 'number' || typeof oldContent === 'boolean') {
+        return String(oldContent);
+      }
+      return '';
+    }
+    // 目标为 boolean：仅 'true'/'false' 字符串可转，否则回退 false
+    if (newType === 'boolean') {
+      if (oldContent === true || oldContent === 'true') {
+        return true;
+      }
+      if (oldContent === false || oldContent === 'false') {
+        return false;
+      }
+      return false;
+    }
+    // 目标为 integer / number：数字字符串或数字可转，无法转换回退 0
+    const num =
+      typeof oldContent === 'string'
+        ? Number(oldContent)
+        : typeof oldContent === 'number'
+          ? oldContent
+          : NaN;
+    if (!Number.isFinite(num)) {
+      return 0;
+    }
+    return newType === 'integer' ? Math.trunc(num) : num;
   }
 
   public initParams() {

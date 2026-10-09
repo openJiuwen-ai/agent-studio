@@ -170,6 +170,15 @@
                         (paramForm?.controls['rightParamFormValue' + i]?.dirty || paramForm?.controls['rightParamFormValue' + i]?.touched)
                       "
                       />
+
+                      <!-- 复杂类型(object/array)字面量：复用 typed-json-input 提供 JSON 编辑器（与 global-memory 一致） -->
+                      <typed-json-input
+                        *ngIf="param.right.type === 'object' || (param.right.type || '').startsWith('array')"
+                        class="combo-select-right"
+                        style="width: 100%"
+                        [param]="param.right"
+                        (changeValue)="onSave()"
+                      ></typed-json-input>
                     </ng-container>
 
                     <input-tree-select

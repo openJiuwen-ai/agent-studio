@@ -583,16 +583,17 @@ export const NodeUtils = {
 
   selectTreeNodeInRefsByValue(param: IWorkflowField) {
     if (param?.value?.type === 'ref') {
-      const paramContent = param?.value.content as IRefContentType;
+      // 兼容两种形态：初始化时 content 为对象；用户选择/重选后为数组 [node]。
+      // 只处理对象形态会导致数组形态永远匹配不到、被误清空（意见②）。
+      const paramContent = Array.isArray(param.value.content)
+        ? (param.value.content[0] as IRefContentType)
+        : (param.value.content as IRefContentType);
 
       let matched = false;
       TreeUtil.traverse(param.refs, (node: any) => {
         if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
-          // 左值改型后，旧引用可能已被兼容性收敛置灰（disabled），
-          // 不可再作为有效引用，交由下方「未命中」逻辑清空，避免脏数据落库。
-          if (node.disabled) {
-            return;
-          }
+          // 置灰（disabled）但树中仍存在的节点也允许高亮匹配（与兄弟 selectTreeNodeInRefsChhangeByValue 一致）；
+          // 其是否「类型真正不兼容」交由 applyLeftTypeToParam 的 getCompatibleTypes 复核决定（意见②）。
           node.checked = true;
           param.value.content = [node];
           matched = true;

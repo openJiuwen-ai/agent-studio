@@ -55,6 +55,7 @@ import { ParamTreeSelectedComponent } from '../param-tree/param-tree-selected.co
 import { ParamTreeComponent } from '../param-tree/param-tree.component';
 import { NodeUtils } from '../utils';
 import { EditNameComponent } from '@routes/agent-center/app-flow/components/edit-name/edit-name.component';
+import { TypedJsonInputComponent } from '@shared/components/typed-json-input/typed-json-input.component';
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
 import { InputTreeSelect } from 'src/routes/agent-center/app-flow/components/input-tree-select/input-tree-select';
 import { NodeTypeTopic } from '@routes/agent-center/types/common.types';
@@ -84,6 +85,7 @@ import { CommonService } from '@services/common.service';
     EditNameComponent,
     NodeDescriptionComponent,
     InputTreeSelect,
+    TypedJsonInputComponent,
   ],
   providers: [
     {
@@ -697,10 +699,10 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       return 0;
     }
     if (type === 'object') {
-      return {};
+      return '{}';
     }
     if (type && type.startsWith('array')) {
-      return [];
+      return '[]';
     }
     return '';
   }
@@ -753,15 +755,53 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       return true;
     }
     if (item.type && item.type.startsWith('array')) {
-      // 数组字面量内容必须为数组，异常值（对象/标量/字符串）回退空数组，
-      // 保证 intermediate_loop_var 的 schema 类型与值类型一致（意见⑤）。
-      if (!Array.isArray(item.value.content)) {
-        item.value.content = [];
+      // typed-json-input 以 JSON 字符串承载数组字面量（如 '[1,2]'），
+      // 需先解析再校验；旧逻辑 Array.isArray 会把合法字符串误判为非法并重置为 []，
+      // 导致用户数组内容在保存/打开时被清空、运行时永远得到空数组（意见②）。
+      const parsed = this.parseLiteralContent(item.value.content, 'array');
+      if (parsed === null) {
+        item.value.content = '[]';
+        return true;
+      }
+      // 合法：规范化回 JSON 字符串（FieldValueContent 仅允许 string 承载 array 字面量，
+      // 与 getMidParams 注释「literal 的 content 是字符串」一致）。
+      const canonical = JSON.stringify(parsed);
+      if (item.value.content !== canonical) {
+        item.value.content = canonical;
         return true;
       }
       return false;
     }
     return false;
+  }
+
+  /**
+   * 解析 literal JSON 字符串内容：typed-json-input/set-default-tip 以字符串承载
+   * array/object 字面量（如 '[1,2]'/'{"a":1}'），归一前需先解析。
+   * 解析失败或类型不符返回 null（调用方回退默认值）。
+   */
+  private parseLiteralContent(
+    content: unknown,
+    kind: 'array' | 'object',
+  ): unknown[] | Record<string, unknown> | null {
+    if (typeof content !== 'string') {
+      return null;
+    }
+    const trimmed = content.trim();
+    if (trimmed === '') {
+      return null;
+    }
+    try {
+      const val = JSON.parse(trimmed);
+      if (kind === 'array') {
+        return Array.isArray(val) ? val : null;
+      }
+      return val !== null && typeof val === 'object' && !Array.isArray(val)
+        ? val
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

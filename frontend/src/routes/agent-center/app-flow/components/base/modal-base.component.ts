@@ -386,6 +386,6 @@ export abstract class ModalBaseComponent
   }
 
   private getAllFileTypes(): string[] {
-    return ['default', 'doc', 'txt', 'excel', 'ppt', 'image', 'audio', 'video'];
+    return ['default', 'doc', 'txt', 'excel', 'ppt', 'image', 'audio'];
   }
 }
