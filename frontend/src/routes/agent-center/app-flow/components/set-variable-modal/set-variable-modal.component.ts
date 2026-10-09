@@ -278,6 +278,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         left.refs = cloneDeep(this.leftRefs);
         NodeUtils.selectTreeNodeInRefsChhangeByValue(left, true);
 
+        // 左值引用已失效（目标变量被删除/改名或尚未加载完成）时，isGetLeftType 取不到实时类型，
+        // 若继续按陈旧的 left.type 收敛，会生成与实际左值不符的来源菜单/运算符，并把右值
+        // 按旧类型改写后落库，形成不一致数据。故此处跳过本轮收敛，待用户重选左值后再处理。
+        if (!this.isGetLeftType(left)) {
+          return;
+        }
+
         if (right.value.operator) {
           right.value.type = 'operator';
         }
@@ -591,7 +598,9 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
           })
         ),
       };
-      NodeUtils.selectTreeNodeInRefsByValue(right);
+      // 传 true：初始化时左值类型已定，按新类型收窄后的引用树中未命中的右值引用即已失效，
+      // 清空避免落旧 ref_var_name（意见②）。其余调用点（onLeftSelect 重选、新建参数）沿用默认不清空。
+      NodeUtils.selectTreeNodeInRefsByValue(right, true);
 
       if (right.value.operator) {
         right.value.type = 'operator';
