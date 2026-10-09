@@ -265,9 +265,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         NodeUtils.reSelectRefWithNewOps(
           right,
           NodeUtils.narrowRefOption(this.rightRefs, {
-            type: left.type,
+            // 用左值实时引用类型（循环中间变量改型后 left.type 仍是落库旧值）
+            type: (this.isGetLeftType(left) || left.type) as IWorkflowFieldType,
           })
         );
+
+        // 引用刷新后按实时类型重算来源/运算菜单：中间变量改型后无需重选变量名称即可拿到新选项
+        this.refreshMenusByLiveType(param);
       });
     }
 
@@ -310,29 +314,58 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
           })
         ),
       };
-      NodeUtils.selectTreeNodeInRefsByValue(right);
+      // 与其余节点对齐：按实时类型收窄后未命中的右值引用即已失效，清空避免残留灰项
+      // （复用 NodeUtils.reSelectRefWithNewOps 的既有语义，见其 isMatch 判定）。
+      NodeUtils.reSelectRefWithNewOps(
+        right,
+        cloneDeep(NodeUtils.narrowRefOption(this.rightRefs, { type: queryType })),
+      );
 
-      let operatorOpts = this.initOperatorOptions(setting.left.type);
-      let typeOpts = setting.left.type === 'object' || setting.left.type.startsWith('array') ? this.refOnlyOptions : this.sourceOptions;
-      let leftType = setting.left.type.toLowerCase();
-      if (leftType === 'array') {
-        let typeName = 'type';
-        leftType = `array<${setting.left.schema?.[typeName]?.toLowerCase()}>`;
-      }
-      if (hasEmptyType.includes(leftType)) {
-        typeOpts = [...typeOpts, ...this.commonOperatorOptions];
-      }
       if (right.value.operator) {
         right.value.type = 'operator';
       }
 
-      return {
-        typeOpts,
-        operatorOpts,
-        left,
-        right,
-      };
+      // 菜单按左值「实时类型」计算（queryType 已取自left.value.content[0].type）。
+      // 原实现误用 setting.left.type（落库的旧类型），导致循环中间变量改型后重开节点，
+      // 运算下拉仍停留在旧类型的选项集合（如 string→integer 后缺少「变量自增/自减」），
+      // 必须重选一遍变量名称才会更新。
+      const param: IVal = { left, right, typeOpts: [], operatorOpts: [] };
+      this.refreshMenusByLiveType(param);
+      return param;
     });
+  }
+
+  /**
+   * 依据左值当前引用类型刷新「值」来源选项与运算赋值菜单。
+   * 左值（循环中间变量等）在外部改型后，重开节点或引用刷新即可得到正确选项，无需重选左值；
+   * 旧运算符若已不被新类型支持，则归一到 null(empty)，避免脏值入库。
+   */
+  private refreshMenusByLiveType(param: IVal) {
+    param.operatorOpts = this.getOperatorOptions(param);
+
+    const liveType = (
+      this.isGetLeftType(param.left) ||
+      param.left.type ||
+      ''
+    ).toLowerCase();
+    const baseOpts =
+      this.getLeftParamsType(param.left) === 'complex'
+        ? this.refOnlyOptions
+        : this.sourceOptions;
+    param.typeOpts = hasEmptyType.includes(liveType)
+      ? [...baseOpts, ...this.commonOperatorOptions]
+      : baseOpts;
+
+    if (param.right?.value?.type !== 'operator') {
+      return;
+    }
+
+    const operatorStillValid = param.operatorOpts.some(
+      (option) => option.value === param.right.value.operator
+    );
+    if (!operatorStillValid) {
+      param.right.value.operator = 'empty';
+    }
   }
 
   public initParentInfo() {
@@ -449,30 +482,6 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   getOperatorOptions(param) {
     let leftType = this.getParamType(param.left);
-    if (leftType === 'emptyArr') {
-      return [...this.EmptyArrOperator, ...this.nullOperator];
-    } else if (leftType === 'emptyStr') {
-      return [...this.EmptyStrOperator, ...this.nullOperator];
-    } else if (leftType === 'emptyNum') {
-      return [...this.operatorOptions, ...this.nullOperator];
-    } else {
-      return [...this.nullOperator];
-    }
-  }
-
-  getLeftType(type) {
-    let leftType = 'emptyNormal';
-    if (type.startsWith('array')) {
-      leftType = 'emptyArr';
-    } else if (['number', 'integer'].includes(type)) {
-      leftType = 'emptyNum';
-    } else if (['string'].includes(type)) {
-      leftType = 'emptyStr';
-    }
-    return leftType;
-  }
-  initOperatorOptions(type) {
-    let leftType = this.getLeftType(type);
     if (leftType === 'emptyArr') {
       return [...this.EmptyArrOperator, ...this.nullOperator];
     } else if (leftType === 'emptyStr') {
