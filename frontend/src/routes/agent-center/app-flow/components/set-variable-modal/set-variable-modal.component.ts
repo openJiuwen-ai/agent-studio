@@ -461,21 +461,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   /**
    * 校验 array/object 字面量内容是否为与目标类型匹配的合法 JSON。
-   * 空串/空白、非字符串、解析失败、或类型不符（array 收到object 等）均视为非法。
+   * 空串/空白、非字符串、解析失败、或类型不符（array 收到 object 等）均视为非法。
+   * 解析内核复用 NodeUtils.parseLiteralContent（与 loop-modal 归一同源，避免重复实现）。
    */
   private isValidJsonLiteral(content: unknown, type: IWorkflowFieldType): boolean {
-    if (typeof content !== 'string' || content.trim() === '') {
-      return false;
-    }
-    try {
-      const parsed = JSON.parse(content.trim());
-      if (Array.isArray(parsed)) {
-        return typeof type === 'string' && type.startsWith('array');
-      }
-      return type === 'object' && parsed !== null && typeof parsed === 'object';
-    } catch {
-      return false;
-    }
+    const kind: 'array' | 'object' =
+      type === 'object' ? 'object' : 'array';
+    return NodeUtils.parseLiteralContent(content, kind) !== null;
   }
 
   /** literal 各类型默认内容：integer/number→0、boolean→false、object→'{}'、array*→'[]'(JSON 字符串)、其余→'' */

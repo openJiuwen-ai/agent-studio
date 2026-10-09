@@ -106,6 +106,36 @@ export const NodeUtils = {
         };
   },
 
+  /**
+   * 解析 literal JSON 字符串内容：typed-json-input / set-default-tip 以字符串承载
+   * array/object 字面量（如 '[1,2]' / '{"a":1}'），归一或落库校验前需先解析。
+   * 解析失败、空白或类型不符（array 收到对象、object 收到数组等）统一返回 null，
+   * 由调用方回退类型默认值，避免各处重复实现 JSON.parse + 类型判断。
+   */
+  parseLiteralContent(
+    content: unknown,
+    kind: 'array' | 'object',
+  ): unknown[] | Record<string, unknown> | null {
+    if (typeof content !== 'string') {
+      return null;
+    }
+    const trimmed = content.trim();
+    if (trimmed === '') {
+      return null;
+    }
+    try {
+      const val = JSON.parse(trimmed);
+      if (kind === 'array') {
+        return Array.isArray(val) ? val : null;
+      }
+      return val !== null && typeof val === 'object' && !Array.isArray(val)
+        ? val
+        : null;
+    } catch {
+      return null;
+    }
+  },
+
   checkModelExistence(nodeName: string, model_deployment_id: string, models: IModel[]) {
     if (model_deployment_id && models.length > 0 && !models.map(m => m.model_deployment_id).includes(model_deployment_id)) {
       MessageComponent.showError(i18next.t('checkModel_tip', { node: removeHTMLTag(nodeName) }));

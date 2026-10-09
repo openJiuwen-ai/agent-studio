@@ -784,24 +784,9 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     content: unknown,
     kind: 'array' | 'object',
   ): unknown[] | Record<string, unknown> | null {
-    if (typeof content !== 'string') {
-      return null;
-    }
-    const trimmed = content.trim();
-    if (trimmed === '') {
-      return null;
-    }
-    try {
-      const val = JSON.parse(trimmed);
-      if (kind === 'array') {
-        return Array.isArray(val) ? val : null;
-      }
-      return val !== null && typeof val === 'object' && !Array.isArray(val)
-        ? val
-        : null;
-    } catch {
-      return null;
-    }
+    // JSON 解析内核已收敛到 NodeUtils.parseLiteralContent（set-variable 保存前校验同样复用），
+    // 此处保留薄封装仅为兼容本组件既有调用点。
+    return NodeUtils.parseLiteralContent(content, kind);
   }
 
   /**
