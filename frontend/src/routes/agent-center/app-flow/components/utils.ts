@@ -615,12 +615,23 @@ export const NodeUtils = {
         ? (param.value.content[0] as IRefContentType)
         : (param.value.content as IRefContentType);
 
+      let matched = false;
       TreeUtil.traverse(param.refs, (node: any) => {
         if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
+          // 置灰（disabled）但树中仍存在的节点也允许高亮匹配（与兄弟 selectTreeNodeInRefsByValue 一致）；
+          // 其是否「类型真正不兼容」交由 applyLeftTypeToParam 的 getCompatibleTypes 复核决定。
           node.checked = true;
           param.value.content = [node];
+          matched = true;
         }
       });
+
+      // 未命中：左值目标变量被删除/改名，旧引用失效，清空避免脏数据落库
+      // （与右值 selectTreeNodeInRefsByValue 对称，否则 applyLeftTypeToParam 会按旧类型生成菜单、
+      // 保存时落旧 ref_var_name）。注意仅清 content，不改动 left.type，由用户重选刷新。
+      if (!matched) {
+        param.value.content = { ref_node_id: '', ref_var_name: '', source: 'user' };
+      }
     }
   },
 
@@ -738,7 +749,16 @@ export const NodeUtils = {
       }
     }
 
-    if (param.value?.type === 'literal' && typeof param.value.content === 'string') {
+    // object / array 字面量经 typed-json-input 以 JSON 字符串存储，其中的 < > 属于合法 JSON
+    // 文本（如 ["<"] 或 {"html":"x"}），不可当作 HTML 标签剥除，否则保存路径会静默丢数据
+    // （意见③）。仅对标量字面量（string/number/integer/boolean）维持原 HTML 清洗。
+    const isJsonLiteral =
+      param.type === 'object' || String(param.type).startsWith('array');
+    if (
+      param.value?.type === 'literal' &&
+      typeof param.value.content === 'string' &&
+      !isJsonLiteral
+    ) {
       param.value.content = removeHTMLTag(param.value.content);
     }
 
