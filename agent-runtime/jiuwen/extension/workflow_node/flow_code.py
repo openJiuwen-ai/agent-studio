@@ -7,7 +7,6 @@ FlowCode - 代码节点组件
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from copy import deepcopy
@@ -133,9 +132,7 @@ class FlowCode(WorkflowComponent):
             }
             exec_exception = None
             try:
-                await asyncio.to_thread(
-                    exec, exec_code, namespace, namespace
-                )
+                exec(exec_code, namespace, namespace)
             except Exception as e:
                 exec_exception = e
 
