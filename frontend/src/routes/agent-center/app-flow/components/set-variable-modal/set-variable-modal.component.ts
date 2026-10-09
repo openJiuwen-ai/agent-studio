@@ -364,6 +364,19 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       ? [...baseOpts, ...this.commonOperatorOptions]
       : baseOpts;
 
+    // 实时类型已不在 hasEmptyType（如 file/*、array<object>）→ typeOpts 不再包含 operator，
+    // 但 value.type 仍是 'operator'，模板会继续渲染运算下拉（其仅按 value.type 判断），
+    // 导致「值」来源下拉出现不在选项中的值、且可继续保存无效运算符。
+    // 故在此回退为 ref 并重置内容（对齐上游 onLeftSelect 中 typeOpts 不含 operator 时的既有处理）。
+    if (
+      param.right?.value?.type === 'operator' &&
+      !param.typeOpts.some((option) => option.value === 'operator')
+    ) {
+      param.right.value.type = 'ref';
+      param.right.value.content = NodeUtils.getChangeContent('ref');
+      delete param.right.value.operator;
+    }
+
     if (param.right?.value?.type !== 'operator') {
       return;
     }
