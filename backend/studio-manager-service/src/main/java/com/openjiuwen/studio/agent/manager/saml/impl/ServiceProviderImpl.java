@@ -67,8 +67,12 @@ public class ServiceProviderImpl implements ServiceProvider {
         }
     }
 
-    public static final ServiceProviderImpl getInstance() {
-        return ServiceProviderImpl.INSTANCE;
+    public static ServiceProviderImpl getInstance() {
+        return Holder.INSTANCE;
+    }
+
+    private static final class Holder {
+        private static final ServiceProviderImpl INSTANCE = new ServiceProviderImpl();
     }
 
     @Override
@@ -105,8 +109,6 @@ public class ServiceProviderImpl implements ServiceProvider {
     public String getSignatureAlgorithm() {
         return signatureAlgorithm;
     }
-
-    private static final ServiceProviderImpl INSTANCE = new ServiceProviderImpl();
 
     private String getConfigValue(String envVar, String propKey, String defaultValue, boolean decrypt) {
         // 1. 首先检查环境变量
