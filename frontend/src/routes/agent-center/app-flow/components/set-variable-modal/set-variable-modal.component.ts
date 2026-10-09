@@ -276,7 +276,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         const { left, right } = param;
 
         left.refs = cloneDeep(this.leftRefs);
-        NodeUtils.selectTreeNodeInRefsChhangeByValue(left);
+        NodeUtils.selectTreeNodeInRefsChhangeByValue(left, true);
 
         if (right.value.operator) {
           right.value.type = 'operator';
@@ -363,14 +363,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     // normalizeTypedLiteralContent 口径一致），仅对空串回退默认，不覆盖用户已填内容。
     if (liveLeftType && param.right.value.type === 'literal') {
       const content = param.right.value.content;
-      if (typeof content === 'string' && content.trim() === '') {
-        const isComplex =
-          liveLeftType === 'object' ||
-          (typeof liveLeftType === 'string' && liveLeftType.startsWith('array'));
-        if (isComplex) {
-          param.right.value.content = this.defaultLiteralContent(liveLeftType);
-          changed = true;
-        }
+      if (
+        typeof content === 'string' &&
+        content.trim() === '' &&
+        this.isComplexLiteralType(liveLeftType)
+      ) {
+        param.right.value.content = this.defaultLiteralContent(liveLeftType);
+        changed = true;
       }
     }
 
@@ -447,6 +446,36 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
       return true;
     }
     return false;
+  }
+
+  /** 是否为需要合法 JSON 承载的字面量类型（array* / object），即 typed-json-input 覆盖的范围 */
+  private isComplexLiteralType(type: IWorkflowFieldType): boolean {
+    if (!type) {
+      return false;
+    }
+    return (
+      type === 'object' ||
+      (typeof type === 'string' && type.startsWith('array'))
+    );
+  }
+
+  /**
+   * 校验 array/object 字面量内容是否为与目标类型匹配的合法 JSON。
+   * 空串/空白、非字符串、解析失败、或类型不符（array 收到object 等）均视为非法。
+   */
+  private isValidJsonLiteral(content: unknown, type: IWorkflowFieldType): boolean {
+    if (typeof content !== 'string' || content.trim() === '') {
+      return false;
+    }
+    try {
+      const parsed = JSON.parse(content.trim());
+      if (Array.isArray(parsed)) {
+        return typeof type === 'string' && type.startsWith('array');
+      }
+      return type === 'object' && parsed !== null && typeof parsed === 'object';
+    } catch {
+      return false;
+    }
   }
 
   /** literal 各类型默认内容：integer/number→0、boolean→false、object→'{}'、array*→'[]'(JSON 字符串)、其余→'' */
@@ -536,7 +565,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         refs: cloneDeep(this.leftRefs),
       };
 
-      NodeUtils.selectTreeNodeInRefsChhangeByValue(left);
+      NodeUtils.selectTreeNodeInRefsChhangeByValue(left, true);
 
       const setting = this.nodeInfo.configs.settings[index];
 
@@ -783,6 +812,14 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     if (value.type !== 'ref') {
       if (['number', 'integer'].includes(type)) {
         value.content = Number(value.content);
+      }
+      // array/object 字面量以 JSON 字符串承载，保存前须保证是合法 JSON：
+      // typed-json-input 在用户清空输入或键入非法 JSON 后失焦会把 content 置为空串并触发 onSave，
+      // 而 applyLeftTypeToParam 的空串兜底只挂在 init/onRefUpdate/onLeftSelect/onIntegerTypeChange，
+      // 覆盖不到保存这一刻；若原样落库，运行期会拿到非法 JSON。
+      // 这里只对空串/非法 JSON 回退类型默认值，用户已填的合法 JSON 原样保留（对齐 loop-modal 的 getInputsDSL 口径）。
+      if (this.isComplexLiteralType(type) && !this.isValidJsonLiteral(value.content, type)) {
+        value.content = this.defaultLiteralContent(type);
       }
     }
 

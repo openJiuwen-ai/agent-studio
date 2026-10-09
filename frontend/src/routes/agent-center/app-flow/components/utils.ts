@@ -607,7 +607,16 @@ export const NodeUtils = {
     }
   },
 
-  selectTreeNodeInRefsChhangeByValue(param: IWorkflowField) {
+  /**
+   * 重新选中引用（节点改型场景）。
+   *
+   * @param clearIfUnmatched 是否在未命中任何节点时清空 content。
+   *   传 true 时行为与右值 selectTreeNodeInRefsByValue 对称：目标变量被删除/改名后清空旧引用，
+   *   避免 applyLeftTypeToParam 按旧类型生成菜单、保存时落旧 ref_var_name。
+   *   传 false（默认）时**不清空**，用于引用树尚未加载完成/被临时过滤的场景，
+   * 此时未匹配不代表引用失效，贸然清空会丢失原本有效的引用。
+   */
+selectTreeNodeInRefsChhangeByValue(param: IWorkflowField, clearIfUnmatched = false) {
     if (param?.value?.type === 'ref') {
       // 兼容两种形态：初始化时 content 为对象；用户选择/重选后为数组 [node]。
       // 只处理对象形态会导致数组形态永远匹配不到、保留旧类型节点。
@@ -626,10 +635,9 @@ export const NodeUtils = {
         }
       });
 
-      // 未命中：左值目标变量被删除/改名，旧引用失效，清空避免脏数据落库
-      // （与右值 selectTreeNodeInRefsByValue 对称，否则 applyLeftTypeToParam 会按旧类型生成菜单、
-      // 保存时落旧 ref_var_name）。注意仅清 content，不改动 left.type，由用户重选刷新。
-      if (!matched) {
+      // 未命中：仅在调用方显式要求时清空。左值目标变量被删除/改名后旧引用失效，
+      // 清空可避免脏数据落库；但引用树未就绪时应保留，故由参数控制而非无条件清空。
+      if (!matched && clearIfUnmatched) {
         param.value.content = { ref_node_id: '', ref_var_name: '', source: 'user' };
       }
     }
