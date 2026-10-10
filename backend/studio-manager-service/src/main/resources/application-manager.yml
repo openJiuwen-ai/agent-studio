@@ -114,6 +114,15 @@ studio:
     switch: ${studio_operationLog_switch:false}
     # 审计日志参数敏感字段名正则，命中后对字段值做掩码处理
     sensitiveFieldPattern: '${studio_operationLog_sensitiveFieldPattern:(?i)(?:.*(?:password|pwd|token|authorization|api[-_]?key|secret|credential|auth[-_]?(?:info|key|id|value|type|keys)|access[-_]?key|client[-_]?secret|iam[-_]?credentials|oauth[-_]?scope|app[-_]?code|iam[-_]?(?:ak|sk)).*|(?:ak|sk))}'
+  # agent 定义态遥测上报（OTLP logs 单通道：生命周期事件 + 清单快照心跳），默认关闭
+  agentTelemetry:
+    switch: ${studio_agentTelemetry_switch:false}
+    # OTLP logs 端点：grpc 协议填 http://<collector>:4317；http 协议填 http://<collector>:4318/v1/logs（自动补全路径）
+    endpoint: ${studio_agentTelemetry_endpoint:http://localhost:4317}
+    protocol: ${studio_agentTelemetry_protocol:grpc}
+    serviceName: ${studio_agentTelemetry_serviceName:agent-studio}
+    # 清单心跳间隔（毫秒），约束：须 <= 遥测后端 staleness 窗口的 1/5（如 Prometheus lookback 5min -> <= 60s）
+    heartbeatIntervalMillis: ${studio_agentTelemetry_heartbeatIntervalMillis:60000}
 
 server:
   port: 31111

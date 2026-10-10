@@ -185,4 +185,11 @@ public interface AgentMapper {
      * @param agentId 智能体ID
      */
     void clearMemoryConfig(@Param("agentId") String agentId);
+
+    /**
+     * 查询所有在册（未删除）的 agent 清单，用于清单快照心跳遥测
+     *
+     * @return agent列表
+     */
+    List<Agent> selectAllActiveAgents();
 }
