@@ -56,6 +56,16 @@ _TYPE_DEFAULT_VALUE = {
 }
 
 
+def _to_boolean(value):
+    """与 Start._to_boolean 对齐：'false' 字符串必须解析为 False。
+
+    裸 bool() 对任意非空字符串都返回 True，会把 "false" 默认值/上游输出反转成 True。
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
 def _has_response_payload(output: Any) -> bool:
     """判断 output 是否为携带 response 字段的 OutputSchema 类型输出（G.CTL.03：抽取多条件判断）。"""
     return (
@@ -397,6 +407,9 @@ class End(BaseEnd):
             isinstance(actual_value, bool) and expected_type == INTEGER_TYPE
         ):
             try:
+                if expected_type == BOOLEAN_TYPE:
+                    # 裸 bool() 会把 "false" 等任意非空字符串反转为 True，与 Start 对齐
+                    return _to_boolean(actual_value)
                 return convert_action(actual_value)
             except (ValueError, TypeError):
                 return None
