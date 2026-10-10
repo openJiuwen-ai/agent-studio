@@ -797,6 +797,11 @@ class Workflow:
         @param task: 待检查的任务
         @return: None
         """
+        if task.cancelled():
+            # 对已取消的任务调用 task.exception() 会抛 CancelledError，
+            # 导致下方 remove 与错误处理全部跳过、任务残留在 _cur_tasks
+            self._cur_tasks.discard(task)
+            return
         exception = task.exception()
         self._cur_tasks.remove(task)
         if exception and self.chat_manager:
