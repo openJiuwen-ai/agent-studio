@@ -24,9 +24,14 @@
 6. ``ComplexIntentDetection._session`` / ``_context``：执行期状态落实例，
    读点分散在辅助方法；迁 component_exec ContextVar（非路由属主，参照
    LLMChain 模式 set + finally reset）。**嵌套子执行**（分支子工作流）经
-   ``create_task`` 派生自本节点 task，会继承组件级值——子图内分支节点的
-   路由解析（Patch C 优先级 1）读到本组件 session 即遮蔽子图自身 session，
-   故子工作流调用期间通道临时置空（执行后恢复）。
+   is_sub 路径 inline await 在本节点 task 内执行，其子图节点 task 由
+   ``TaskExecutorPool.submit`` 的 ``asyncio.create_task`` 派生、会继承
+   组件级值——子图内分支节点的路由解析（Patch C 优先级 1）读到本组件
+   session 即遮蔽子图自身 session，故子工作流调用期间通道临时置空
+   （执行后恢复）。另：``_state``（status/intent_result/branch_id）执行期
+   状态入口重建，``_sub_workflows``（子工作流实例缓存）与
+   ``_sub_workflow_error`` 不再落实例（前者改为 invoke 链局部传递，
+   后者为只写死状态删除）。
 """
 import asyncio
 import inspect
@@ -428,7 +433,7 @@ def _complex_component():
 
 class TestComplexIntentDetectionStateless:
     def test_no_exec_state_instance_fields(self):
-        """实例不再持有 _session / _context 执行期字段。"""
+        """实例不再持有 _session / _context / 子工作流缓存 / 错误字段。"""
         from agent_runtime.extension.workflow_node.complex_intent_detection import (
             ComplexIntentDetection,
         )
@@ -436,10 +441,14 @@ class TestComplexIntentDetectionStateless:
         src = inspect.getsource(ComplexIntentDetection)
         assert "self._session" not in src
         assert "self._context" not in src
+        assert "self._sub_workflows" not in src
+        assert "self._sub_workflow_error" not in src
 
         comp = _complex_component()
         assert not hasattr(comp, "_session")
         assert not hasattr(comp, "_context")
+        assert not hasattr(comp, "_sub_workflows")
+        assert not hasattr(comp, "_sub_workflow_error")
 
     @pytest.mark.asyncio
     async def test_invoke_sets_and_resets_component_exec(self):
@@ -542,11 +551,12 @@ class TestComplexIntentDetectionStateless:
     async def test_nested_sub_workflow_invocation_clears_component_exec(self):
         """嵌套子执行期间通道置空（执行后恢复）。
 
-        子工作流经 ``Workflow.stream`` 的 background task + ``create_task``
-        派生自本节点 task，会继承组件级值；子图内分支节点的路由解析
-        （Patch C 优先级 1）若读到本组件 session 即遮蔽子图自身 session
-        （分支条件对错误 io_state 求值 → 恒 False → 分支未命中报错）。
-        本用例钉住子执行窗口内通道为空、窗口外恢复。
+        子工作流经 is_sub 路径 inline await 在本节点 task 内执行，其子图各节点
+        task 由 ``TaskExecutorPool.submit`` 的 ``asyncio.create_task``
+        （``graph/pregel/task.py:29``）从本节点 task 派生，会继承组件级值；
+        子图内分支节点的路由解析（Patch C 优先级 1）若读到本组件 session 即
+        遮蔽子图自身 session（分支条件对错误 io_state 求值 → 恒 False →
+        分支未命中报错）。本用例钉住子执行窗口内通道为空、窗口外恢复。
         """
         from agent_runtime.extension.workflow_node.complex_intent_detection import (
             BranchWorkflowConfig,
@@ -566,16 +576,16 @@ class TestComplexIntentDetectionStateless:
         sub_workflow = MagicMock()
         sub_workflow.invoke = _fake_sub_invoke
         sub_workflow.get_state = MagicMock(return_value={"status": "END"})
-        comp._sub_workflows["wf-1"] = {
-            "instance": sub_workflow,
-            "sub_instance": None,
-            "configs": {},
+        sub_workflows = {
+            "wf-1": {"instance": sub_workflow, "sub_instance": None, "configs": {}}
         }
 
         token = ctx.set_component_exec(session, None)
         try:
             await comp._invoke_sub_workflow(
-                {"input": "hi"}, BranchWorkflowConfig(workflow_id="wf-1")
+                {"input": "hi"},
+                BranchWorkflowConfig(workflow_id="wf-1"),
+                sub_workflows,
             )
             # 子执行窗口外：外层组件级值恢复
             assert ctx.current_component_exec() == (session, None)
@@ -583,3 +593,95 @@ class TestComplexIntentDetectionStateless:
             ctx.reset_component_exec(token)
 
         assert seen["exec"] == (None, None)
+
+
+# =============================================================================
+# ComplexIntentDetection 残留执行期状态（fix round 1 / Important-2）
+# =============================================================================
+
+
+def _complex_conf_with_branch_workflow() -> dict:
+    """带分支子工作流配置的最小 CID 配置（branch_0 → wf-1）。"""
+    conf = _complex_conf()
+    conf["branches"] = [
+        {
+            "id": "branch_0",
+            "catalog": "其他意图",
+            "configs": {"workflow_id": "wf-1", "ir_path": "ir/wf-1.json"},
+        }
+    ]
+    return conf
+
+
+class TestComplexIntentDetectionResidualState:
+    @pytest.mark.asyncio
+    async def test_second_execution_on_same_instance_reclassifies(self):
+        """判别用例：同一实例第二次执行必须重新识别意图，不复用上一执行残留。
+
+        复用实例下 `_state.status` 残留为 END/USER_INTERACT 时，
+        `_get_intent_result` 会走"非 START 即复用旧 intent_result/branch_id"
+        分支 → 静默选错分支。本用例驱动真实 `_get_intent_result`
+        （`_intent_detection.invoke` 打桩），第一次执行经真实
+        `_execute_branch_workflow` 把 `_state.status` 推到 END（branch_0 无
+        configs → 早返回），第二次执行必须再次调用意图识别并返回新结果。
+        """
+        comp = _complex_component()
+        session = MagicMock()
+        session.get_session_id = MagicMock(return_value="sess-1")
+        detected = []
+
+        async def _fake_detect(inputs, session_, context, **kwargs):
+            index = len(detected)
+            detected.append(inputs.get("input"))
+            return {"classificationId": index, "result": f"分类{index}"}
+
+        comp._intent_detection = MagicMock()
+        comp._intent_detection.invoke = _fake_detect
+
+        first = await comp.invoke({"input": "查天气"}, session, MagicMock())
+        assert first["classificationId"] == 0
+        # 第一次执行结束：真实 _execute_branch_workflow 把状态推到 END（残留面）
+        from agent_runtime.extension.workflow_node.complex_intent_detection import (
+            ExecutionStatus,
+        )
+
+        assert comp._state.status == ExecutionStatus.END
+
+        second = await comp.invoke({"input": "再见"}, session, MagicMock())
+
+        assert detected == ["查天气", "再见"]
+        assert second["classificationId"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sub_workflow_cache_is_per_execution(self):
+        """子工作流实例缓存为本次 invoke 局部：每次执行从空缓存开始（不残留）。"""
+        from agent_runtime.extension.workflow_node.complex_intent_detection import (
+            ComplexIntentDetection,
+        )
+
+        comp = ComplexIntentDetection(
+            _complex_conf_with_branch_workflow(), node_id="cid_node", node_name="cid"
+        )
+        session = MagicMock()
+        session.get_session_id = MagicMock(return_value="sess-1")
+        comp._get_intent_result = AsyncMock(
+            return_value=({"classificationId": 0}, "branch_0")
+        )
+        seen = []
+
+        async def _fake_init(workflow_id, branch_config, sub_workflows):
+            seen.append(dict(sub_workflows))
+            sub_workflows[workflow_id] = {
+                "instance": None,
+                "sub_instance": None,
+                "configs": {},
+            }
+
+        comp._init_sub_workflow = _fake_init
+
+        await comp.invoke({"input": "a"}, session, MagicMock())
+        await comp.invoke({"input": "b"}, session, MagicMock())
+
+        # 每次执行都从空缓存开始（跨执行无残留），且实例上无缓存字段
+        assert seen == [{}, {}]
+        assert not hasattr(comp, "_sub_workflows")

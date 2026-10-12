@@ -20,6 +20,7 @@ import copy
 from enum import Enum
 import json
 import re
+from typing import Tuple
 
 from agent_runtime.context.request_context import _request_ctx
 from jiuwen.common.exception.status_code import StatusCode
@@ -363,7 +364,7 @@ class FlowMcp(WorkflowComponent):
         outputs = self._format_api_outputs(api_outputs)
         return {USER_FIELDS: outputs}
 
-    def _format_api_inputs(self, inputs: dict) -> tuple:
+    def _format_api_inputs(self, inputs: dict) -> Tuple[dict, dict, dict]:
         """格式化 API 输入参数（基于 client._tool_params 的类型转换）
 
         注意：method=Headers 的参数会被提取到返回值 header_params，不作为
