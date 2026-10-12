@@ -8,9 +8,12 @@
 三个通道，按"谁写入、谁读取"划分：
 
 1. ``_workflow_session``：Patch B 在 ``CompiledGraph._invoke`` 入口 set、
-   finally reset，值为本次执行的 workflow 级 session（WorkflowSession /
-   SubWorkflowSession）。子工作流嵌套经 token 栈式恢复（子执行期间组件
-   解析到子 session）。供 Patch C 的路由第二优先级解析。
+   finally reset，值为传入 ``CompiledGraph._invoke`` 的 session——主/
+   子工作流路径为 WorkflowSession / SubWorkflowSession，循环体路径
+   （AdvancedLoopComponent.on_invoke 以 NodeSession 调 compile/_invoke，
+   loop_comp.py:444-464）为 NodeSession；与各路径现状 set_session 的值
+   一致。子工作流嵌套经 token 栈式恢复（子执行期间组件解析到子
+   session）。供 Patch C 的路由第二优先级解析。
 2. ``_component_exec``：(session, context) 二元组。分支路由属主组件
    （IntentDetection/_RoutedIntentDetection）在 invoke 入口 set 且**不
    reset**——路由 dispatch 发生在 invoke 返回之后的同一 NodeTask 里
