@@ -27,6 +27,7 @@ Questioner - 提问者节点组件
 
 from __future__ import annotations
 
+import asyncio
 import ast
 import json
 import re
@@ -59,6 +60,8 @@ from openjiuwen.core.session.stream.base import CustomSchema
 from openjiuwen.core.workflow import WorkflowComponent
 from openjiuwen.core.workflow.components import Session
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
+
+from jiuwen.extension.workflow.execution_session_ctx import get_stream_final_output
 
 # =============================================================================
 # 常量定义
@@ -1857,9 +1860,10 @@ class Questioner(WorkflowComponent):
         self._prompt: Optional[PromptTemplate] = None
         self._reflection_prompt: Optional[PromptTemplate] = None
         self._initialized = False
-        self._stream_output: Optional[dict] = None
+        # 懒初始化（_initialize_model）双检锁：实例跨执行复用，并发首调
+        # 不得重复建 Model
+        self._init_lock = asyncio.Lock()
         self._node_name: Optional[str] = self._config.name or None
-        self._metadata = None  # 组件元数据，用于 process_on_invoke_info
         self._runtime_context = None  # 运行时上下文
 
         self._init_prompt()
@@ -1880,9 +1884,17 @@ class Questioner(WorkflowComponent):
         )
 
     async def _initialize_model(self):
+        # 双检加锁：实例跨执行复用，并发首调只建一次 Model（无锁时两个协程
+        # 都会通过首检，重复建 Model 且后建覆盖先建、旧实例泄漏）
         if self._initialized:
             return
 
+        async with self._init_lock:
+            if self._initialized:
+                return
+            await self._do_initialize_model()
+
+    async def _do_initialize_model(self):
         try:
             from agent_runtime.common.model_adapters import adapt_questioner_config
             from agent_runtime.common.model_providers import IRModelConfigProvider
@@ -2077,7 +2089,13 @@ class Questioner(WorkflowComponent):
         return self._node_state
 
     def get_stream_output(self):
-        return self._stream_output
+        """末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
+
+        Questioner 为 INVOKE-only 组件（无 stream/transform），引擎
+        ``Vertex._post_stream`` 不触达本方法；通道读保证与其余流式组件同一
+        契约，实例上不再保留引擎不可达的末帧死状态。
+        """
+        return get_stream_final_output()
 
     def load_state(self, state: QuestionerState) -> None:
         self._node_state = deepcopy(state)
@@ -2094,13 +2112,14 @@ class Questioner(WorkflowComponent):
         try:
             await self._initialize_model()
 
-            # 构建组件元数据，用于 process_on_invoke_info 回调
+            # 构建组件元数据，用于 process_on_invoke_info 回调（局部传递，
+            # 不落实例字段：实例跨执行复用）
             node_id = (
                 session.get_component_id()
                 if hasattr(session, "get_component_id")
                 else "questioner"
             )
-            self._metadata = {
+            metadata = {
                 "component_id": node_id,
                 "component_name": self._node_name or node_id,
                 "component_type": "Questioner",
@@ -2120,7 +2139,7 @@ class Questioner(WorkflowComponent):
                 if not has_saved_state:
                     temp_state = QuestionerState()
                     invoke_result = await self._handle_questioner_direct_reply_safe(
-                        inputs, session, context, temp_state, False
+                        inputs, session, context, temp_state, False, metadata=metadata
                     )
                     current_state = invoke_result.pop("_state", temp_state)
                     self._node_state = current_state
@@ -2128,7 +2147,8 @@ class Questioner(WorkflowComponent):
                     # 恢复执行：使用保存的状态继续处理用户的回复
                     try:
                         invoke_result = await self._handle_questioner_direct_reply_safe(
-                            inputs, session, context, current_state, True
+                            inputs, session, context, current_state, True,
+                            metadata=metadata,
                         )
                         current_state = invoke_result.pop("_state", current_state)
                         self._node_state = current_state
@@ -2164,7 +2184,6 @@ class Questioner(WorkflowComponent):
                         type=MESSAGE_NODE_END, index=1, data=custom_data
                     ).model_dump(by_alias=True, exclude_none=False, exclude_unset=False)
                 )
-                self._stream_output = custom_data
                 self._node_state.status = ExecutionStatus.END
                 # 使用 session.interact() 替代手动 raise GraphInterrupt
                 # session.interact() 会自动执行 commit_cmp() + OutputSchema(INTERACTION) + raise GraphInterrupt
@@ -2203,6 +2222,7 @@ class Questioner(WorkflowComponent):
         context,
         current_state: QuestionerState,
         is_resuing=False,
+        metadata: Optional[dict] = None,
     ):
         handler = (
             QuestionerDirectReplyHandler()
@@ -2211,7 +2231,7 @@ class Questioner(WorkflowComponent):
             .state(current_state)
             .prompt(self._prompt)
             .reflection_prompt(self._reflection_prompt)
-            .metadata(self._metadata)
+            .metadata(metadata)
             .runtime_context(self._runtime_context)
             .session(session)
         )

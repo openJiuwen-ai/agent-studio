@@ -38,6 +38,11 @@ from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 from pydantic import BaseModel, Field, ValidationError
 
+from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_exec,
+    reset_component_exec,
+    set_component_exec,
+)
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 
@@ -181,8 +186,6 @@ class ComplexIntentDetection(WorkflowComponent):
         self._build_branch_to_group()
 
         self._sub_workflow_error: Optional[Exception] = None
-        self._session: Optional[Session] = None
-        self._context: Optional[ModelContext] = None
         self._router = BranchRouter()
 
     def _parse_configs(self) -> None:
@@ -331,8 +334,12 @@ class ComplexIntentDetection(WorkflowComponent):
     ) -> Output:
         """同步执行入口"""
         start_time = time.perf_counter()
-        self._session = session
-        self._context = context
+        # 执行期 session/context 走 component_exec ContextVar 通道（实例跨执行
+        # 复用，不落实例）。非路由属主组件（add_component 不加条件边），
+        # 参照 LLMChain 模式 set + finally reset；读点经 current_component_exec()
+        # 取回，存入值为**组件面 Session 包装器**（与迁移前的实例字段同物，
+        # 组件自身读点 get_state / get_state_info(_inner) 依赖包装器 API）。
+        token = set_component_exec(session, context)
 
         try:
             inputs_dict = convert_input(inputs)
@@ -372,6 +379,8 @@ class ComplexIntentDetection(WorkflowComponent):
                 "result": self._get_default_result(),
                 "error": str(e),
             }
+        finally:
+            reset_component_exec(token)
 
     async def _get_intent_result(self, inputs: dict, **kwargs) -> tuple[dict, str]:
         """获取意图识别结果"""
@@ -379,8 +388,11 @@ class ComplexIntentDetection(WorkflowComponent):
             if self._intent_detection is None:
                 self._init_intent_detection()
 
+            # 执行期 session/context 经 ContextVar 通道读取（实例跨执行复用，
+            # 不落实例）
+            session, context = current_component_exec()
             intent_result = await self._intent_detection.invoke(
-                inputs, self._session, self._context, **kwargs
+                inputs, session, context, **kwargs
             )
 
             self._state.intent_result = intent_result
@@ -443,6 +455,10 @@ class ComplexIntentDetection(WorkflowComponent):
         if not workflow_id:
             return {}
 
+        # 执行期 session/context 经 ContextVar 通道读取（实例跨执行复用，
+        # 不落实例；值为组件面 Session 包装器）
+        session, context = current_component_exec()
+
         if workflow_id not in self._sub_workflows:
             await self._init_sub_workflow(workflow_id, branch_config)
 
@@ -459,8 +475,8 @@ class ComplexIntentDetection(WorkflowComponent):
         is_child_resuming = self._check_child_workflow_needs_resume()
 
         sub_checkpoint_exists = False
-        if self._session and workflow_id:
-            inner_session = getattr(self._session, '_inner', None)
+        if session and workflow_id:
+            inner_session = getattr(session, '_inner', None)
             if inner_session:
                 try:
                     checkpointer = inner_session.checkpointer()
@@ -485,9 +501,19 @@ class ComplexIntentDetection(WorkflowComponent):
                     sub_inputs = InteractiveInput(raw_inputs=resume_query)
 
         try:
-            result = await sub_workflow.invoke(
-                sub_inputs, self._session, self._context, is_resuming=should_resume, **kwargs
-            )
+            # 嵌套子执行窗口内组件级通道置空：子工作流经 Workflow.stream 的
+            # background task + TaskExecutorPool.create_task 派生自本节点 task，
+            # 会继承组件级值——子图内分支节点的路由解析（Patch C 优先级 1）
+            # 若读到本组件 session 即遮蔽子图自身 session（分支条件对错误
+            # io_state 求值 → 恒 False → 分支未命中报错）。置空使子图回退到
+            # workflow 级解析（与迁移前行为一致），窗口外恢复本组件级值。
+            nested_token = set_component_exec(None, None)
+            try:
+                result = await sub_workflow.invoke(
+                    sub_inputs, session, context, is_resuming=should_resume, **kwargs
+                )
+            finally:
+                reset_component_exec(nested_token)
 
             sub_workflow_state = sub_workflow.get_state()
             if isinstance(sub_workflow_state, dict):
@@ -520,8 +546,11 @@ class ComplexIntentDetection(WorkflowComponent):
         """检查子工作流是否需要从中断恢复"""
         from openjiuwen.core.common.constants.constant import INTERACTIVE_INPUT
 
+        # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
+        session, _ = current_component_exec()
+
         try:
-            session_state = self._session.get_state() if self._session else {}
+            session_state = session.get_state() if session else {}
             if isinstance(session_state, dict):
                 workflow_state = session_state.get("workflow_state", {})
                 if isinstance(workflow_state, dict):
@@ -548,9 +577,12 @@ class ComplexIntentDetection(WorkflowComponent):
         """从 session 中提取恢复查询"""
         from openjiuwen.core.common.constants.constant import INTERACTIVE_INPUT
 
+        # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
+        session, _ = current_component_exec()
+
         try:
-            if self._session:
-                workflow_state = get_state_info(self._session, "workflow_state")
+            if session:
+                workflow_state = get_state_info(session, "workflow_state")
                 if isinstance(workflow_state, dict):
                     # 优先从 __interactive_input__ (双下划线) 读取恢复输入
                     interactive_input = workflow_state.get("__interactive_input__")
