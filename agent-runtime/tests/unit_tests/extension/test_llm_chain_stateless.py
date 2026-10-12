@@ -19,6 +19,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.foundation.llm import UserMessage
 
 from jiuwen.extension.workflow import execution_session_ctx as ctx
@@ -120,7 +121,6 @@ class TestLLMChainStateless:
         chain = LLMChain(_conf())
         chain._initialized = True
         chain._llm = MagicMock()
-        chain._llm.invoke = AsyncMock(return_value=_FakeLLMOutput())
         session = MagicMock()
         context = MagicMock()
         context.get_messages = MagicMock(return_value=[UserMessage(content="u1")])
@@ -179,10 +179,35 @@ class TestLLMChainStateless:
         assert ctx.current_component_exec() == (None, None)
 
     @pytest.mark.asyncio
-    async def test_stream_resets_prev_exec_final_output(self):
-        """执行入口复位末帧通道：上一执行的末帧不串到本执行。"""
+    async def test_stream_entry_reset_clears_stale_final_output_on_failure(self):
+        """入口复位末帧通道：上一执行的末帧不串入本执行（判别用例）。
+
+        预置 stale 末帧后驱动 stream 在**写末帧之前**失败（非 JSON 路径
+        `_llm.stream` 抛错）。成功路径会写新末帧、掩盖入口复位，故必须用
+        「写末帧前失败」路径判别：删掉入口 `set_stream_final_output(None)`
+        时本用例读到 stale 值转红。
+        """
         ctx.set_stream_final_output({"stale": True})
 
+        chain = LLMChain(_conf())
+        chain._initialized = True
+        chain._llm = MagicMock()
+        chain._llm.stream = MagicMock(side_effect=RuntimeError("boom"))
+        session = MagicMock()
+        session.get_component_id = MagicMock(return_value="llm_node")
+
+        with pytest.raises(BaseError, match="LLM stream failed"):
+            async for _ in chain.stream(
+                {"userFields": {"query": "q"}}, session=session, context=MagicMock()
+            ):
+                pass
+
+        assert chain.get_stream_output() is None
+        assert ctx.current_component_exec() == (None, None)
+
+    @pytest.mark.asyncio
+    async def test_stream_aclose_resets_component_exec(self):
+        """消费方提前 aclose（中断迭代）同样走 finally 复位 component_exec。"""
         chain = LLMChain(_conf(response_type="json"))
         chain._initialized = True
         chain._llm = MagicMock()
@@ -190,10 +215,13 @@ class TestLLMChainStateless:
         session = MagicMock()
         session.get_component_id = MagicMock(return_value="llm_node")
         session.write_custom_stream = AsyncMock()
+        context = MagicMock()
 
         gen = chain.stream(
-            {"userFields": {"query": "q"}}, session=session, context=MagicMock()
+            {"userFields": {"query": "q"}}, session=session, context=context
         )
         assert await gen.__anext__() is not None
-        assert chain.get_stream_output() != {"stale": True}
+        # 迭代期间通道生效（generator 体与消费者同 context）
+        assert ctx.current_component_exec() == (session, context)
         await gen.aclose()
+        assert ctx.current_component_exec() == (None, None)
