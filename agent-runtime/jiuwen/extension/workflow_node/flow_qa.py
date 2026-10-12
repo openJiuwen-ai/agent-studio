@@ -27,6 +27,8 @@ from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.components.flow.end_comp import TemplateUtils
 from pydantic import BaseModel, ConfigDict, Field
 
+from jiuwen.extension.workflow.execution_session_ctx import get_stream_final_output
+
 PARTIAL_CONTENT = "partial_content"
 MESSAGE_NODE_END = "message_end"
 WORKFLOW_CHAT_HISTORY = "workflow_chat_history"
@@ -251,7 +253,6 @@ class FlowQA(WorkflowComponent):
 
         self._node_state = QAState()
         self._node_name: Optional[str] = self._conf.name
-        self._stream_output: Optional[dict] = None
 
         self._qa_state_key = "flow_qa_state"
 
@@ -295,7 +296,13 @@ class FlowQA(WorkflowComponent):
         return self._node_state.status
 
     def get_stream_output(self):
-        return self._stream_output
+        """末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
+
+        FlowQA 为 INVOKE-only 组件（无 stream/transform），引擎
+        ``Vertex._post_stream`` 不触达本方法；通道读保证与其余流式组件
+        同一契约，实例上不再保留引擎不可达的末帧死状态。
+        """
+        return get_stream_final_output()
 
     def error_to_output(self) -> None:
         self._node_state.status = ExecutionStatus.END
@@ -554,7 +561,6 @@ class FlowQA(WorkflowComponent):
                 self._node_state = QAState()
 
             node_id = session.get_component_id()
-            node_name = self._node_name or node_id
             user_fields = inputs.get(USER_FIELDS, inputs) if inputs else {}
             render_fields = self._normalize_struct_inputs(user_fields)
 
@@ -572,14 +578,6 @@ class FlowQA(WorkflowComponent):
                     self._node_state.question = query
                     self._node_state.status = ExecutionStatus.USER_INTERACT
                     self._store_state_to_session(self._node_state, session)
-
-                    self._stream_output = {
-                        "answer": query,
-                        "node_id": node_id,
-                        "node_name": node_name,
-                        "node_type": JIUWEN_QA_TYPE,
-                        "should_interrupt": True,
-                    }
 
                     session._interaction = None
                     session.update_state({INTERACTIVE_INPUT: None})

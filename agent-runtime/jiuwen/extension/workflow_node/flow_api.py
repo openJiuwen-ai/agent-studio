@@ -30,6 +30,10 @@ from enum import Enum
 from typing import AsyncIterator, List, Optional
 
 from jiuwen.common.exception import JiuWenBaseException as CommonJiuWenBaseException
+from jiuwen.extension.workflow.execution_session_ctx import (
+    get_stream_final_output,
+    set_stream_final_output,
+)
 from jiuwen.extension.workflow_node.utils import (
     JiuWenBaseException,
     WorkflowMetadata,
@@ -152,8 +156,6 @@ class FlowApi(WorkflowComponent):
         self._api: Optional[RestfulApiToolNew] = None
         self._outputs: List[dict] = []
         self._user_fields: Optional[dict] = None
-        # 缓存流式末帧输出，供 get_stream_output 写入 io_state
-        self._final_stream_output: Optional[dict] = None
 
         # 如果构造时提供了 conf，直接初始化
         if conf:
@@ -349,6 +351,12 @@ class FlowApi(WorkflowComponent):
         )
 
         try:
+            # 执行入口复位末帧通道：上一执行（或同一执行内前一次 stream）的末帧
+            # 不得经 get_stream_output 串入本次 io_state。末帧输出走 ContextVar
+            # 通道（实例跨执行复用，不落实例；引擎 Vertex._post_stream 在
+            # generator 耗尽后读取，故出口不 reset）。
+            set_stream_final_output(None)
+
             inputs_data = inputs.get(USER_FIELDS, {}) or {}
             api_inputs = await self._format_api_inputs(inputs_data, session=session)
             cur_headers = self._format_api_header(session)
@@ -755,8 +763,9 @@ class FlowApi(WorkflowComponent):
             output.get("id"): final_output_dict["final_output"]
             for output in output_definition_list
         }
-        # 缓存末帧输出，供 get_stream_output 写入 io_state
-        self._final_stream_output = formatted_res
+        # 末帧输出写 ContextVar 通道（保持 userFields 包裹形态：io_state 引用
+        # 路径为 ${node.userFields.field}），供 get_stream_output 写入 io_state
+        set_stream_final_output({USER_FIELDS: formatted_res})
         yield {USER_FIELDS: formatted_res, "__stream_metadata__": finish_meta}
 
     def _get_outputs_list_from_conf(self) -> List[dict]:
@@ -773,12 +782,12 @@ class FlowApi(WorkflowComponent):
         Vertex._post_stream 流结束后会检查组件是否有此方法，
         有则把返回值通过 set_outputs 写入 io_state。
 
+        末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
+
         Returns:
             dict: {USER_FIELDS: {output_id: value}}，或 None
         """
-        if self._final_stream_output is None:
-            return None
-        return {USER_FIELDS: self._final_stream_output}
+        return get_stream_final_output()
 
     # 插件节点中自定义认证header相关的逻辑需要修改
     def get_auth_token(self) -> dict | None:
