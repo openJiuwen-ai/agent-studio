@@ -458,7 +458,9 @@ class IntentDetection(WorkflowComponent):
         # **不 reset**：本组件是分支路由属主，路由 dispatch 发生在 invoke 返回
         # 之后的同一 NodeTask 里（引擎先跑节点函数再 dispatch），组件级 session
         # 必须存活到 dispatch（Patch C 的组件级优先解析）。
-        set_component_exec(session, context)
+        # 写入端解包到 NodeSession：引擎 on_invoke 传入的是 Session 包装器，
+        # 而分支条件求值要求 BaseSession（旧 router.set_session 同款解包语义）。
+        set_component_exec(getattr(session, "_inner", session), context)
         # node_state 为遗留接口（引擎不读写），入口重建复位避免跨执行残留。
         self.node_state = IntentDetectionState()
 
