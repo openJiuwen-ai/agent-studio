@@ -266,6 +266,28 @@ class TestEndRenderIsolation:
         assert st.template._current_position == 0
         assert st.template._chunk_index == 0
 
+    def test_template_clone_has_own_sync_primitives(self):
+        """克隆不共享 _lock/_condition（跨执行队头阻塞防护）。
+
+        父类 _render_stream 在持有 _lock 期间逐帧 yield（模板变量为上游流式
+        生成器时可长时间挂起）：浅拷贝共享同步原语会让执行 B 的渲染阻塞在
+        执行 A 的在途帧上。同一执行内两路共用同一克隆，协调语义不变。
+        """
+        end = End(_end_conf())
+        source = end._template_source
+        st1 = end._exec_state(_FakeSession())
+        st2 = end._exec_state(_FakeSession())
+        end._prepare_render_state(st1)
+        end._prepare_render_state(st2)
+        assert st1.template._lock is not st2.template._lock
+        assert st1.template._condition is not st2.template._condition
+        assert st1.template._lock is not source._lock
+        assert st2.template._condition is not source._condition
+        # 同一执行复用同一克隆（同步原语不重建）
+        lock1 = st1.template._lock
+        end._prepare_render_state(st1)
+        assert st1.template._lock is lock1
+
     def test_capability_entry_does_not_mutate_shared_attrs(self):
         """能力入口不得变更共享属性（I1 不变量）。
 
@@ -308,23 +330,38 @@ class TestEndRenderIsolation:
     async def test_entry_does_not_break_inflight_batch_render(self):
         """执行 A 在途 _render 挂起期间执行 B 走完整入口：A 不受影响（I1）。
 
-        A 的模板变量为 None → 渲染等待（0.2s）后继续；B 的入口/渲染在此期间
-        完成。原实现 B 的入口清 self._batch_template → A 恢复即 AttributeError。
+        A 的模板变量喂入阻塞生成器 → A 确定性地停在渲染中（不依赖超时窗口）；
+        B 在此期间走完整入口 + 渲染。原实现 B 的入口清 self._batch_template
+        → A 恢复即 AttributeError（end_comp.py:239-240）。
         """
         end = End(_end_conf())
+        release = asyncio.Event()
+
+        async def _blocking_answer():
+            yield "a"  # 首帧后阻塞，A 稳定停在渲染中
+            await release.wait()
+            yield "!"
+
         a_sess = _mock_session(_node_session("end_a"))
-        a_task = asyncio.create_task(end.invoke({"answer": None}, a_sess, None))
-        await asyncio.sleep(0.05)  # 让 A 进入渲染等待
+        a_task = asyncio.create_task(
+            end.invoke({"answer": _blocking_answer()}, a_sess, None)
+        )
         st_a = end._exec_state(a_sess)
+        deadline = asyncio.get_running_loop().time() + 1.0
+        while st_a.batch_template is None and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+        assert not a_task.done()
         assert st_a.batch_template is not None  # A 在途持有 batch latch
-        assert st_a.template._current_position == 0  # A 仍停在等待中（未推进）
+        assert st_a.template._current_position == 0  # A 仍停在渲染中（未推进）
 
         b_result = await end.invoke(
             {"answer": "b"}, _mock_session(_node_session("end_b")), None
         )
         assert b_result is not None and b_result["answer"] == "b"
+        assert not a_task.done()  # B 完整执行期间 A 始终在途（真实重叠）
         # B 的入口/渲染不改动 A 的执行状态
         assert end._exec_state(a_sess).batch_template is st_a.batch_template
 
+        release.set()
         a_result = await asyncio.wait_for(a_task, timeout=2.0)
-        assert a_result is not None
+        assert a_result is not None and a_result["answer"] == "a!"  # A 自身渲染完成
