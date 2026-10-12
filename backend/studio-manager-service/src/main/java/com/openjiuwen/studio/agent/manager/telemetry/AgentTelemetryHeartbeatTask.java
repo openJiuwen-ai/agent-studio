@@ -10,21 +10,28 @@ import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Map;
 
 /**
- * agent 清单快照心跳任务。
+ * agent 清单分层心跳任务（漂移令牌门控）。
  *
- * <p>每周期重读 DB 在册 agent 全量存量，经 OTLP logs 逐 agent 发送 snapshot 记录，
- * 作为"当前态快照 + 对账"依据：后端按 agent_id 取最新 snapshot 即当前清单；
- * 生命周期事件丢失时，下一周期快照自动修复（自愈）。
- * DB 为空时仍发送一条 0 计数心跳，用于区分"没有 agent"与"服务不可用"。
+ * <p>每周期（默认 60s，可配）发送一条聚合轻心跳（在册数 + 漂移令牌），仅当清单发生变化
+ * 或到达低频兜底周期时才补发逐 agent 全量快照——安静系统每周期仅 1 条小记录。
+ *
+ * <p>漂移令牌 = COUNT(*) + MAX(updated_on)（一条 index-only 聚合查询，updated_on 带
+ * ON UPDATE CURRENT_TIMESTAMP，任何写操作必然推进）。令牌相对<b>上次成功导出</b>的基线
+ * 变化时立即补发全量快照：生命周期事件（edge，精确时间戳）丢失时，≤1 个周期内由全量
+ * 快照（level）自愈。导出失败基线不推进，下一周期自动重试。
+ *
+ * <p>低频兜底（默认 24h，可配、设 0 或负数禁用）：无条件重发一轮全量快照，防接收端自身
+ * 丢数据（产出侧不可见的风险）。启动首轮无基线，直接发一轮全量（bootstrap）。
  *
  * <p>多实例部署时通过分布式锁保证同一周期只有一个实例上报。
- * 间隔须 <= 遥测后端 staleness 窗口的 1/5（如 Prometheus lookback 5min -> <= 60s）。
  */
 @Component
 @Slf4j
@@ -46,6 +53,19 @@ public class AgentTelemetryHeartbeatTask {
     @Autowired
     private RedisClient redisClient;
 
+    /**
+     * 低频兜底全量快照间隔（毫秒），默认 24h；<=0 表示禁用兜底
+     */
+    @Value("${studio.agentTelemetry.reconcileIntervalMillis:86400000}")
+    private long reconcileIntervalMillis;
+
+    /**
+     * 漂移基线：仅在对应全量快照导出成功后推进
+     */
+    private volatile String confirmedToken;
+
+    private volatile long lastFullSnapshotAt = 0L;
+
     @Scheduled(fixedDelayString = "${studio.agentTelemetry.heartbeatIntervalMillis:60000}",
         initialDelayString = "${studio.agentTelemetry.heartbeatIntervalMillis:60000}")
     public void emitInventorySnapshot() {
@@ -55,10 +75,26 @@ public class AgentTelemetryHeartbeatTask {
         RedisLock lock = null;
         try {
             lock = redisClient.getLock(HEARTBEAT_LOCK);
-            if (lock.tryLock(Duration.ofSeconds(LOCK_TIME))) {
-                telemetryService.emitSnapshot(agentMapper.selectAllActiveAgents());
-            } else {
+            if (!lock.tryLock(Duration.ofSeconds(LOCK_TIME))) {
                 log.debug("skip agent telemetry heartbeat, another instance holds the lock");
+                return;
+            }
+            Map<String, Object> stat = agentMapper.selectInventoryStat();
+            long count = stat.get("agentCount") instanceof Number number ? number.longValue() : 0L;
+            String maxUpdatedOn = stat.get("maxUpdatedOn") == null ? "" : String.valueOf(stat.get("maxUpdatedOn"));
+            String token = count + ":" + maxUpdatedOn;
+
+            telemetryService.emitHeartbeat(count, maxUpdatedOn);
+
+            boolean drift = confirmedToken == null || !confirmedToken.equals(token);
+            boolean reconcileDue = reconcileIntervalMillis > 0
+                && System.currentTimeMillis() - lastFullSnapshotAt >= reconcileIntervalMillis;
+            if (drift || reconcileDue) {
+                telemetryService.emitSnapshot(agentMapper.selectAllActiveAgents());
+                if (telemetryService.flushConfirmed()) {
+                    confirmedToken = token;
+                    lastFullSnapshotAt = System.currentTimeMillis();
+                }
             }
         } catch (Exception e) {
             log.warn("agent telemetry heartbeat failed: {}", e.getMessage());

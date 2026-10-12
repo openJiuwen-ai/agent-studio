@@ -981,4 +981,10 @@
         FROM t_agent
         WHERE deleted = false
     </select>
+
+    <select id="selectInventoryStat" resultType="map">
+        SELECT COUNT(*) AS agentCount, MAX(updated_on) AS maxUpdatedOn
+        FROM t_agent
+        WHERE deleted = false
+    </select>
 </mapper>

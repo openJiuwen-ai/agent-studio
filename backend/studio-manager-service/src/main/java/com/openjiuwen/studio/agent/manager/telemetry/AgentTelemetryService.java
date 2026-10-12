@@ -5,7 +5,12 @@
 package com.openjiuwen.studio.agent.manager.telemetry;
 
 import com.openjiuwen.studio.agent.manager.dto.AgentInfo;
+import com.openjiuwen.studio.agent.manager.dto.McpServerReference;
+import com.openjiuwen.studio.agent.manager.dto.ToolReference;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
+import com.openjiuwen.studio.agent.manager.entity.KnowledgeRepoEntity;
+import com.openjiuwen.studio.agent.manager.rce.models.assistant.KnowledgeRepoListRsp;
+import com.openjiuwen.studio.agent.manager.service.RelationManagementService;
 
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
@@ -13,6 +18,7 @@ import io.opentelemetry.api.logs.Logger;
 import io.opentelemetry.api.logs.Severity;
 import io.opentelemetry.exporter.otlp.http.logs.OtlpHttpLogRecordExporter;
 import io.opentelemetry.exporter.otlp.logs.OtlpGrpcLogRecordExporter;
+import io.opentelemetry.sdk.common.CompletableResultCode;
 import io.opentelemetry.sdk.logs.SdkLoggerProvider;
 import io.opentelemetry.sdk.logs.export.BatchLogRecordProcessor;
 import io.opentelemetry.sdk.logs.export.LogRecordExporter;
@@ -20,6 +26,7 @@ import io.opentelemetry.sdk.resources.Resource;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -27,17 +34,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * agent 定义态遥测上报服务（OTLP logs 单通道）。
  *
- * <p>两类记录共用同一通道，通过 body 区分：
+ * <p>三类记录共用同一通道，通过 body 区分：
  * <ul>
- *     <li>生命周期事件（agent.created / updated / published / deleted）：业务写入口触发，精确时间戳；</li>
- *     <li>清单快照心跳（agent.snapshot / agent.snapshot.empty）：定时任务每周期重读 DB 全量存量，
- *     作为当前态快照与对账依据——事件丢失时下一周期快照自动修复。</li>
+ *     <li>生命周期事件（agent.created / updated / published / deleted）：业务写入口触发，精确时间戳，
+ *     携带 DB 时间戳（updated_on / published_on）与脱敏摘要（删除事件含知识库 / 工具 / MCP 清单）；</li>
+ *     <li>聚合轻心跳（agent.heartbeat）：定时任务每周期发送一条在册数 + 漂移令牌记录，兼作存活信号；</li>
+ *     <li>清单快照（agent.snapshot）：漂移触发 / 低频兜底的全量逐 agent 记录——事件丢失时自愈修复。</li>
  * </ul>
  *
  * <p>开关默认关闭（studio.agentTelemetry.switch=false），关闭时零行为变化；
@@ -61,12 +70,19 @@ public class AgentTelemetryService {
 
     private static final String BODY_SNAPSHOT_EMPTY = "agent.snapshot.empty";
 
+    private static final String BODY_HEARTBEAT = "agent.heartbeat";
+
     private static final String HTTP_LOGS_PATH = "/v1/logs";
 
     /**
      * 属性值安全长度上限，避免超长 description 撑爆单条记录
      */
     private static final int MAX_ATTR_LENGTH = 1024;
+
+    /**
+     * 删除事件摘要（知识库 / 工具 / MCP 清单）的最大条目数，防止异常数据撑爆属性
+     */
+    private static final int MAX_SUMMARY_ENTRIES = 50;
 
     private static final DateTimeFormatter ISO_FORMATTER =
         DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneId.of("UTC"));
@@ -82,6 +98,9 @@ public class AgentTelemetryService {
 
     @Value("${studio.agentTelemetry.serviceName:agent-studio}")
     private String serviceName;
+
+    @Autowired
+    private RelationManagementService relationManagementService;
 
     private volatile SdkLoggerProvider loggerProvider;
 
@@ -126,11 +145,15 @@ public class AgentTelemetryService {
         if (StringUtils.isNotBlank(workspaceId)) {
             builder.put("openjiuwen.workspace.id", workspaceId);
         }
+        putTimestamp(builder, "openjiuwen.agent.updated_on", info.getUpdateTime());
+        putTimestamp(builder, "openjiuwen.agent.published_on", info.getPublishTime());
         emit(BODY_EVENT_PREFIX + eventType, builder.build());
     }
 
     /**
-     * 发送一条删除事件。删除发生在落库之后，实体可能已不可查，属性来自删除前捕获的实体。
+     * 发送一条删除事件。删除为硬删（行 / 版本 / OBS 文件均清理），删除后定义态不可再查，
+     * 属性来自删除前捕获的实体，并附带知识库 / 工具 / MCP 的脱敏清单（仅 id 与名称，
+     * 不含参数与鉴权原文）作为该 agent 的最后一份配置摘要。
      *
      * @param capturedAgent 删除前捕获的 agent 实体（可能为 null）
      * @param projectId 归属项目
@@ -161,8 +184,104 @@ public class AgentTelemetryService {
                 .put("openjiuwen.agent.model.name", StringUtils.defaultString(capturedAgent.getModelName()))
                 .put("openjiuwen.agent.model.type", StringUtils.defaultString(capturedAgent.getModelType()))
                 .put("openjiuwen.agent.creator", StringUtils.defaultString(capturedAgent.getCreator()));
+            putTimestamp(builder, "openjiuwen.agent.updated_on", capturedAgent.getUpdatedOn());
+            putTimestamp(builder, "openjiuwen.agent.published_on", capturedAgent.getPublishedOn());
         }
+        appendDeletedSummaries(builder, projectId, workspaceId, agentId);
         emit(BODY_EVENT_PREFIX + EVENT_DELETED, builder.build());
+    }
+
+    /**
+     * 删除事件的脱敏摘要：知识库 / 工具 / MCP 仅取 id 与名称。任何一项查询失败只影响该项，
+     * 不影响事件本身发出。
+     */
+    private void appendDeletedSummaries(AttributesBuilder builder, String projectId, String workspaceId,
+        String agentId) {
+        if (StringUtils.isBlank(agentId)) {
+            return;
+        }
+        try {
+            KnowledgeRepoListRsp repoRsp =
+                relationManagementService.listAgentKnowledge(projectId, workspaceId, agentId, 0, MAX_SUMMARY_ENTRIES);
+            if (repoRsp != null && repoRsp.getKnowledgeRepoEntityList() != null) {
+                String repos = repoRsp.getKnowledgeRepoEntityList().stream()
+                    .limit(MAX_SUMMARY_ENTRIES)
+                    .map(r -> StringUtils.defaultString(r.getKnowledgeRepoId()) + ","
+                        + StringUtils.defaultString(r.getDisplayName()))
+                    .reduce((a, b) -> a + ";" + b)
+                    .orElse("");
+                builder.put("openjiuwen.agent.knowledge.repos", truncate(repos));
+            }
+        } catch (Exception e) {
+            log.warn("agent telemetry: summary of knowledge repos failed: {}", e.getMessage());
+        }
+        try {
+            List<ToolReference> tools =
+                relationManagementService.listAgentTools(projectId, workspaceId, agentId, 0, MAX_SUMMARY_ENTRIES);
+            if (tools != null && !tools.isEmpty()) {
+                String names = tools.stream()
+                    .limit(MAX_SUMMARY_ENTRIES)
+                    .map(t -> StringUtils.defaultIfBlank(t.getToolDisplayName(),
+                        StringUtils.defaultString(t.getPluginDisplayName())))
+                    .reduce((a, b) -> a + ";" + b)
+                    .orElse("");
+                builder.put("openjiuwen.agent.tools", truncate(names));
+            }
+        } catch (Exception e) {
+            log.warn("agent telemetry: summary of tools failed: {}", e.getMessage());
+        }
+        try {
+            List<McpServerReference> mcpServers = relationManagementService.listAgentMcpServers(agentId);
+            if (mcpServers != null && !mcpServers.isEmpty()) {
+                String servers = mcpServers.stream()
+                    .limit(MAX_SUMMARY_ENTRIES)
+                    .map(m -> StringUtils.defaultString(m.getMcpServerName())
+                        + "(" + (m.getToolsNum() == null ? 0 : m.getToolsNum()) + ")")
+                    .reduce((a, b) -> a + ";" + b)
+                    .orElse("");
+                builder.put("openjiuwen.agent.mcp.servers", truncate(servers));
+            }
+        } catch (Exception e) {
+            log.warn("agent telemetry: summary of mcp servers failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 发送一条聚合轻心跳：在册 agent 数 + 漂移令牌（最后修改时间），每周期一条，
+     * 兼作存活信号（区分"没有 agent"与"服务不可用"）。
+     *
+     * @param count DB 当前在册 agent 数
+     * @param maxUpdatedOn DB 当前 MAX(updated_on) 的字符串形态（空表传空串）
+     */
+    public void emitHeartbeat(long count, String maxUpdatedOn) {
+        if (!enabled) {
+            return;
+        }
+        AttributesBuilder builder = Attributes.builder()
+            .put("openjiuwen.agent.count", count);
+        if (StringUtils.isNotBlank(maxUpdatedOn)) {
+            builder.put("openjiuwen.agent.max_updated_on", maxUpdatedOn);
+        }
+        emit(BODY_HEARTBEAT, builder.build());
+    }
+
+    /**
+     * 等待已入队的遥测记录完成一次导出。全量快照发送后调用，仅当导出成功才允许调用方推进
+     * 漂移基线（对齐 K8s workqueue 语义：失败即视为未完成，下一周期自然重试）。
+     */
+    public boolean flushConfirmed() {
+        SdkLoggerProvider provider = loggerProvider;
+        if (provider == null) {
+            return false;
+        }
+        try {
+            CompletableResultCode code = provider.forceFlush();
+            code.join(10, java.util.concurrent.TimeUnit.SECONDS);
+            return code.isSuccess();
+        } catch (Exception e) {
+            log.warn("agent telemetry flush failed: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -267,6 +386,12 @@ public class AgentTelemetryService {
             return "";
         }
         return value.length() <= MAX_ATTR_LENGTH ? value : value.substring(0, MAX_ATTR_LENGTH);
+    }
+
+    private void putTimestamp(AttributesBuilder builder, String key, Date value) {
+        if (value != null) {
+            builder.put(key, ISO_FORMATTER.format(value.toInstant()));
+        }
     }
 
     @PreDestroy

@@ -16,6 +16,7 @@ import org.apache.ibatis.annotations.Param;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * agent 数据库操作mapper
@@ -192,4 +193,12 @@ public interface AgentMapper {
      * @return agent列表
      */
     List<Agent> selectAllActiveAgents();
+
+    /**
+     * 查询在册 agent 的漂移令牌（数量 + 最后修改时间），一条 index-only 聚合查询，
+     * 用于轻心跳判断清单是否发生变化（新建 / 修改 / 删除任一动作都会改变结果）
+     *
+     * @return agentCount（在册数）与 maxUpdatedOn（MAX(updated_on)，空表为 null）
+     */
+    Map<String, Object> selectInventoryStat();
 }
