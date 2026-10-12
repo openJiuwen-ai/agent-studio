@@ -109,11 +109,12 @@ def resolve_routing_session(fallback: Any = None) -> Any:
     - IntentDetection/_RoutedIntentDetection 每次执行 set_session(组件
       NodeSession) → 对应组件级分支（需存活到同 task 内的 dispatch）。
 
-    组件级值解包到 NodeSession 后返回：分支条件求值（Condition.__call__ →
-    AtomicNode._validate_session_and_state）要求 ``isinstance(BaseSession)``，
-    而引擎 on_invoke 传入的是 Session 包装器（写入端已解包，此处兜底保证
-    未来任何写入方存包装器也安全；NodeSession 自身无 ``_inner``，不会过度
-    解包）。
+    组件级值的契约分离：写入端存**组件面 Session 包装器**（组件自身读点
+    trace / get_global_state / interact 等依赖包装器 API）；Patch C 消费方
+    （分支条件 Condition.__call__ → AtomicNode._validate_session_and_state）
+    要求 ``isinstance(BaseSession)``——其 BaseSession 契约由本函数的读取端
+    解包承担（``getattr(session, "_inner", session)``；NodeSession 自身无
+    ``_inner``，不会过度解包）。读取端解包是**主机制**（非兜底）。
     """
     session, _ = _component_exec.get()
     if session is not None:
