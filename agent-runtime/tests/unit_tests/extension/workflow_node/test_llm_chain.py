@@ -4,8 +4,28 @@
 from unittest.mock import MagicMock
 
 import pytest
+from jiuwen.extension.workflow import execution_session_ctx as _exec_ctx
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
 from openjiuwen.core.common.exception.errors import BaseError
+
+
+def _set_context(context):
+    """把执行期 context 写入 ContextVar 通道（替代已删除的实例字段 _context）。
+
+    组件实例跨执行复用后不再持有执行期 session/context（issue #1555 / Task 11），
+    测试改经 Task 1 的 component_exec 通道注入。
+    """
+    _exec_ctx.set_component_exec(None, context)
+
+
+@pytest.fixture(autouse=True)
+def _clean_exec_channels():
+    """component_exec / stream_final_output 通道进程内共享，用例前后复位避免串扰。"""
+    _exec_ctx.set_component_exec(None, None)
+    _exec_ctx.set_stream_final_output(None)
+    yield
+    _exec_ctx.set_component_exec(None, None)
+    _exec_ctx.set_stream_final_output(None)
 
 
 def _make_llm_chain_conf(
@@ -67,8 +87,7 @@ class TestLLMChainThinkingStreamErrorPropagation:
         chain = LLMChain(conf=conf)
         chain._llm = MagicMock()
         chain._llm.stream = MagicMock(return_value=failing_stream())
-        chain._session = None
-        chain._context = None
+        _set_context(None)
 
         with pytest.raises(BaseError, match="LLM stream failed"):
             await chain._process_thinking_stream(
@@ -90,9 +109,8 @@ class TestLLMChainThinkingStreamErrorPropagation:
         chain._initialized = True
         chain._llm = MagicMock()
         chain._llm.stream = MagicMock(return_value=failing_stream())
-        chain._session = None
-        chain._context = None
-        chain._stream_final_output = None
+        _set_context(None)
+        _exec_ctx.set_stream_final_output(None)
         session = MagicMock()
 
         with pytest.raises(BaseError, match="LLM stream failed"):
@@ -121,8 +139,7 @@ class TestLLMChainThinkingStreamHappyPath:
         chain = LLMChain(conf=conf)
         chain._llm = MagicMock()
         chain._llm.stream = MagicMock(return_value=successful_stream())
-        chain._session = None
-        chain._context = None
+        _set_context(None)
 
         gen, reasoning_content, _ = await chain._process_thinking_stream(
             chain._llm.stream(messages=[]),
@@ -240,25 +257,25 @@ class TestGetHistory:
     def test_get_chat_history_no_context(self):
         """context 为 None 时返回空列表"""
         chain = self._make_chain()
-        chain._context = None
+        _set_context(None)
         assert chain._get_chat_history() == []
 
     def test_get_chat_history_empty_messages(self):
         """context 返回空消息列表"""
         chain = self._make_chain()
-        chain._context = self._mock_context([])
+        _set_context(self._mock_context([]))
         assert chain._get_chat_history() == []
 
     def test_get_chat_history_with_messages(self):
         """正常从 context 获取消息并转换为 dict"""
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain()
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="user1"),
             AssistantMessage(content="asst1"),
             UserMessage(content="user2"),
             AssistantMessage(content="asst2"),
-        ])
+        ]))
         result = chain._get_chat_history()
         assert len(result) == 4
         assert result[0] == {"role": "user", "content": "user1"}
@@ -271,7 +288,7 @@ class TestGetHistory:
         chain = self._make_chain()
         ctx = MagicMock()
         ctx.get_messages = MagicMock(side_effect=RuntimeError("boom"))
-        chain._context = ctx
+        _set_context(ctx)
         assert chain._get_chat_history() == []
 
     # ── _get_history_size ────────────────────────────────────────────
@@ -362,12 +379,12 @@ class TestGetHistory:
         """
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="我叫张三"),
             AssistantMessage(content="你好，张三！"),
             UserMessage(content="我的工号是832132"),
             AssistantMessage(content="您好，张三！请问有什么我可以帮您的吗？"),
-        ])
+        ]))
         messages = chain._get_history(user_prompt="我的工号是什么", system_prompt=None)
 
         assistant_contents = [m["content"] for m in messages if m["role"] == "assistant"]
@@ -384,10 +401,10 @@ class TestGetHistory:
         """
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="你好"),
             AssistantMessage(content="你好！"),
-        ])
+        ]))
         messages = chain._get_history(user_prompt="今天天气怎么样", system_prompt=None)
 
         assert len(messages) == 3
@@ -398,7 +415,7 @@ class TestGetHistory:
     def test_get_history_empty_chat_history(self):
         """无历史消息时，只有 system(可选) + user_prompt"""
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([])
+        _set_context(self._mock_context([]))
         messages = chain._get_history(user_prompt="hello", system_prompt=None)
         assert messages == [{"role": "user", "content": "hello"}]
 
@@ -406,10 +423,10 @@ class TestGetHistory:
         """system_prompt 应出现在消息列表开头"""
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="你好"),
             AssistantMessage(content="你好！"),
-        ])
+        ]))
         messages = chain._get_history(user_prompt="问题", system_prompt="你是一个助手")
         assert messages[0] == {"role": "system", "content": "你是一个助手"}
         assert messages[-1] == {"role": "user", "content": "问题"}
@@ -421,7 +438,7 @@ class TestGetHistory:
         for i in range(10):
             history_msgs.append(MagicMock(type="human", content=f"user msg {i}"))
             history_msgs.append(MagicMock(type="ai", content=f"assistant reply {i}"))
-        chain._context = self._mock_context(history_msgs)
+        _set_context(self._mock_context(history_msgs))
 
         messages = chain._get_history(user_prompt="当前问题", system_prompt=None)
         history_part = messages[:-1]  # 去掉最后的 user_prompt
@@ -432,11 +449,11 @@ class TestGetHistory:
         """content 为空的消息应被过滤"""
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="你好"),
             AssistantMessage(content=""),       # 空 content — 应被过滤
             AssistantMessage(content="你好！"),
-        ])
+        ]))
         messages = chain._get_history(user_prompt="test", system_prompt=None)
         # 所有 assistant 消息的 content 应非空
         assistant_contents = [m["content"] for m in messages if m["role"] == "assistant"]
@@ -446,9 +463,9 @@ class TestGetHistory:
         """只有 1 条 user history 时不应丢失（修复前 [:-1] 会截掉它）"""
         from openjiuwen.core.foundation.llm import UserMessage
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="之前的用户消息"),
-        ])
+        ]))
         messages = chain._get_history(user_prompt="当前问题", system_prompt=None)
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "之前的用户消息"}
@@ -458,14 +475,14 @@ class TestGetHistory:
         """historySize 从 IR 配置读取，而非硬编码常量"""
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain(enable_history=True, history_size=1)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="u1"),
             AssistantMessage(content="a1"),
             UserMessage(content="u2"),
             AssistantMessage(content="a2"),
             UserMessage(content="u3"),
             AssistantMessage(content="a3"),
-        ])
+        ]))
         messages = chain._get_history(user_prompt="当前问题", system_prompt=None)
         # historySize=1: 只取最近 1 轮 (u3 + a3) + 当前 user_prompt
         assert len(messages) == 3
@@ -478,9 +495,9 @@ class TestGetHistory:
     def test_process_inputs_disabled(self):
         """enableHistory=False 时 CHAT_HISTORY 为空字符串"""
         chain = self._make_chain(enable_history=False)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             MagicMock(type="human", content="你好"),
-        ])
+        ]))
         inputs = {}
         chain._process_inputs(inputs)
         assert inputs.get("CHAT_HISTORY") == ""
@@ -489,12 +506,12 @@ class TestGetHistory:
         """CHAT_HISTORY 变量应包含所有历史消息，不丢失 assistant 回复"""
         from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([
+        _set_context(self._mock_context([
             UserMessage(content="我叫张三"),
             AssistantMessage(content="你好，张三！"),
             UserMessage(content="我的工号是832132"),
             AssistantMessage(content="您好，张三！请问有什么我可以帮您的吗？"),
-        ])
+        ]))
         inputs = {}
         chain._process_inputs(inputs)
         chat_history_str = inputs.get("CHAT_HISTORY", "")
@@ -508,7 +525,7 @@ class TestGetHistory:
         for i in range(10):
             history_msgs.append(MagicMock(type="human", content=f"用户{i}"))
             history_msgs.append(MagicMock(type="ai", content=f"助手{i}"))
-        chain._context = self._mock_context(history_msgs)
+        _set_context(self._mock_context(history_msgs))
 
         inputs = {}
         chain._process_inputs(inputs)
@@ -522,7 +539,7 @@ class TestGetHistory:
     def test_process_inputs_empty_history(self):
         """无历史消息时 CHAT_HISTORY 为空字符串"""
         chain = self._make_chain(enable_history=True)
-        chain._context = self._mock_context([])
+        _set_context(self._mock_context([]))
         inputs = {}
         chain._process_inputs(inputs)
         assert inputs.get("CHAT_HISTORY") == ""
