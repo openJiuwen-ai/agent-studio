@@ -249,11 +249,13 @@ class TestComponentExecSessionTypeContract:
     引擎 `WorkflowComponent.on_invoke`（component.py:95-99）以
     `Session(node_session, False)` 包装器调 invoke——包装器**不是** BaseSession、
     无 state()、无 __getattr__ 委托；dispatch 同 NodeTask → patched
-    BranchRouter.__call__ → resolve_routing_session 原样返回 → 分支条件
+    BranchRouter.__call__ → `resolve_routing_session` **读取端解包**
+    （通道存包装器，路由解析返回 NodeSession）→ 分支条件
     Condition.__call__ → AtomicNode._validate_session_and_state
     （atomic_node.py:13-26）要求 isinstance BaseSession + CommitState，
-    否则抛 GRAPH_STATE_COMMIT_ERROR。旧 `set_session`（branch_router.py:82-90）
-    会解包 `_inner` 到 NodeSession——通道值必须同语义解包。
+    否则抛 GRAPH_STATE_COMMIT_ERROR。写入端存组件面包装器（组件自身读点
+    trace / get_global_state / interact 依赖包装器 API），BaseSession 契约
+    全由读取端解包承担（双契约分离）。
     """
 
     @staticmethod
