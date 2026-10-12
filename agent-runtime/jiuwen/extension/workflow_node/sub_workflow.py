@@ -94,15 +94,6 @@ CHILD_INTERRUPT_STATE_KEYS: tuple[str, ...] = (
     FLOW_QA_STATE_KEY,
     FLOW_INPUT_STATE_KEY,
 )
-
-# 子工作流 stream 结束时 comp_state 兜底扫描：需 session.update_state 写入
-# {key: {status, question, ...}} 且 status=user_interact 的组件 state key。
-# 新增同类中断组件时，在此 tuple 追加一项即可。
-CHILD_INTERRUPT_STATE_KEYS: tuple[str, ...] = (
-    QUESTIONER_STATE_KEY,
-    FLOW_QA_STATE_KEY,
-    FLOW_INPUT_STATE_KEY,
-)
 from openjiuwen.core.session.utils import is_ref_path, extract_origin_key
 GLOBAL_REF_PREFIX = "MEMORY_VARIABLE."
 
@@ -298,6 +289,20 @@ class SubWorkflow(WorkflowComponent):
 
     def _write_last_child_completed(self, session: Session, value: bool) -> None:
         self._write_session_exec_state(session, SUB_WF_LAST_CHILD_COMPLETED_KEY, value)
+
+    def _resolve_interrupt_child_node_id(self, session: Session) -> Optional[str]:
+        """本次执行中断子节点 ID 的局部镜像（执行入口调用一次，参数下传）。
+
+        读点不能每次回读 session state：`_detect_child_interrupt` 的写入只入
+        comp_state._updates（staged），`get_state` 读的是已提交 `_state`，同请求内
+        「首次检测到中断」后立即可见性丢失。旧实例属性模型下检测结果立即可见，
+        故此处「session state（上一请求已提交）优先，其次本次检测结果」与旧行为等价。
+        """
+        child_node_id = self._read_interrupt_child_node_id(session)
+        if child_node_id:
+            return child_node_id
+        detected = self._detect_child_interrupt(session)
+        return detected[0] if detected else None
 
     @staticmethod
     def _collect_global_refs_from_schema(schema, inputs, result, global_var_names):
@@ -547,14 +552,22 @@ class SubWorkflow(WorkflowComponent):
                 continue
         return None
 
-    def _extract_parent_resume_query(self, session: Session) -> Optional[str]:
-        """提取父工作流恢复时本次用户输入，优先于 Start 节点 checkpoint 中的 query。"""
+    def _extract_parent_resume_query(
+        self, session: Session, child_node_id: Optional[str] = None
+    ) -> Optional[str]:
+        """提取父工作流恢复时本次用户输入，优先于 Start 节点 checkpoint 中的 query。
+
+        Args:
+            child_node_id: 本次执行的中断子节点 ID 局部镜像（执行入口解析后下传）。
+                为 None 时回退读 session state（兼容直接调用）。
+        """
         workflow_query = self._read_workflow_interactive_input(session)
         if workflow_query is not None:
             return workflow_query
 
-        # 中断子节点 ID 从 session state 取（上一请求写入、checkpoint 恢复）
-        child_node_id = self._read_interrupt_child_node_id(session)
+        # 中断子节点 ID：优先用下传的局部镜像（同请求内首次检测结果对 staged 写不可见）
+        if child_node_id is None:
+            child_node_id = self._read_interrupt_child_node_id(session)
         if child_node_id:
             messages = (
                 session.get_state(
@@ -629,18 +642,26 @@ class SubWorkflow(WorkflowComponent):
         *,
         for_stream: bool,
         params: Optional[dict] = None,
+        interrupt_child_node_id: Optional[str] = None,
     ) -> Any:
         """构建子工作流输入：恢复场景使用 InteractiveInput，否则使用普通 dict。
 
         Args:
             params: ``_build_invoke_params`` 的结果；调用方以局部变量传入，便于
                 query 在本次执行内传递（不再经组件实例属性）。
+            interrupt_child_node_id: 本次执行中断子节点 ID 局部镜像（执行入口
+                经 ``_resolve_interrupt_child_node_id`` 解析后下传）。
         """
         is_resume = self._should_resume_child_workflow(session)
         if params is None:
-            params = await self._build_invoke_params(inputs, session, context)
+            params = await self._build_invoke_params(
+                inputs, session, context,
+                interrupt_child_node_id=interrupt_child_node_id,
+            )
         if is_resume:
-            resume_query = self._extract_parent_resume_query(session)
+            resume_query = self._extract_parent_resume_query(
+                session, interrupt_child_node_id
+            )
             if resume_query is None:
                 # 兜底：尝试从 inputs（InteractiveInput）中直接提取用户最新输入，
                 # 避免回退到 Start 节点 checkpoint 中的陈旧 query。
@@ -651,7 +672,7 @@ class SubWorkflow(WorkflowComponent):
                 workflow_logger.warning(
                     "SubWorkflow resume: failed to extract user reply for child %s, "
                     "falling back to Start-node query=%r (may be stale)",
-                    self._read_interrupt_child_node_id(session),
+                    interrupt_child_node_id,
                     params.get("query"),
                 )
             query = resume_query if resume_query is not None else params["query"]
@@ -937,7 +958,11 @@ class SubWorkflow(WorkflowComponent):
         return workflow_instance
 
     async def _build_invoke_params(
-        self, inputs: dict, session: Session, context: ModelContext
+        self,
+        inputs: dict,
+        session: Session,
+        context: ModelContext,
+        interrupt_child_node_id: Optional[str] = None,
     ) -> dict:
         """构建子工作流调用参数，并将 query 作为用户消息写入对话历史。
 
@@ -949,6 +974,8 @@ class SubWorkflow(WorkflowComponent):
             inputs: 输入数据
             session: 工作流会话
             context: 模型上下文
+            interrupt_child_node_id: 本次执行中断子节点 ID 局部镜像；None 时
+                回退读 session state（兼容直接调用）
 
         Returns:
             dict: 调用参数，包含 query、global_variables、conversation_history
@@ -960,8 +987,12 @@ class SubWorkflow(WorkflowComponent):
             memory_fields = {}
 
         query = system_fields.get("query", "")
-        if self._read_interrupt_child_node_id(session):
-            resume_query = self._extract_parent_resume_query(session)
+        if interrupt_child_node_id is None:
+            interrupt_child_node_id = self._read_interrupt_child_node_id(session)
+        if interrupt_child_node_id:
+            resume_query = self._extract_parent_resume_query(
+                session, interrupt_child_node_id
+            )
             if resume_query is not None:
                 query = resume_query
 
@@ -1040,10 +1071,23 @@ class SubWorkflow(WorkflowComponent):
             metadata={"node_id": self._node_id},
         )
 
+        # 执行入口复位末帧通道：上一执行的末帧不得串到本执行
+        set_stream_final_output(None)
+
         workflow_instance = await self._get_workflow_instance(session)
-        params = await self._build_invoke_params(inputs, session, context)
+        # 中断子节点 ID 局部镜像：同请求内首次检测结果对 staged 写不可见，须下传
+        interrupt_child_node_id = self._resolve_interrupt_child_node_id(session)
+        params = await self._build_invoke_params(
+            inputs, session, context,
+            interrupt_child_node_id=interrupt_child_node_id,
+        )
         child_inputs = await self._prepare_child_inputs(
-            inputs, session, context, for_stream=False, params=params
+            inputs,
+            session,
+            context,
+            for_stream=False,
+            params=params,
+            interrupt_child_node_id=interrupt_child_node_id,
         )
         # 记录传入的全局变量值（调试信息）
         global_vars, global_var_names = self._collect_global_vars(inputs, session)
@@ -1194,14 +1238,23 @@ class SubWorkflow(WorkflowComponent):
             )
 
         workflow_instance = await self._get_workflow_instance(session)
-        params = await self._build_invoke_params(inputs, session, context)
+        # 中断子节点 ID 局部镜像：同请求内首次检测结果对 staged 写不可见，须下传
+        interrupt_child_node_id = self._resolve_interrupt_child_node_id(session)
+        params = await self._build_invoke_params(
+            inputs, session, context,
+            interrupt_child_node_id=interrupt_child_node_id,
+        )
         child_inputs = await self._prepare_child_inputs(
-            inputs, session, context, for_stream=True, params=params
+            inputs,
+            session,
+            context,
+            for_stream=True,
+            params=params,
+            interrupt_child_node_id=interrupt_child_node_id,
         )
         # 本次执行的局部状态：query / 待交互 prompt / 中断子节点 ID
         current_query = params.get("query", "")
         pending_interact_prompt = ""
-        interrupt_child_node_id = self._read_interrupt_child_node_id(session)
         # 记录传入的全局变量值（调试信息）
         global_vars, global_var_names = self._collect_global_vars(inputs, session)
         if global_vars:
