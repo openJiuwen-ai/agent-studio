@@ -93,6 +93,17 @@ class TestStructureAssertions:
         failures = static_graph_patch._structure_assertions()
         assert any("BranchRouter" in f for f in failures)
 
+    def test_branch_component_structure_change_detected(self, monkeypatch):
+        """C2：模拟 BranchComponent.invoke 不再调用 set_session → 断言命中。"""
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
+
+        async def _alien_invoke(self, inputs, session, context):
+            return {}
+
+        monkeypatch.setattr(BranchComponent, "invoke", _alien_invoke)
+        failures = static_graph_patch._structure_assertions()
+        assert any("BranchComponent" in f for f in failures)
+
     def test_vertex_shape_change_detected(self, monkeypatch):
         """模拟 Vertex.__init__ 签名变化 → 断言命中。"""
         from openjiuwen.core.graph.vertex import Vertex
@@ -658,6 +669,92 @@ class TestPatchC:
         assert await router() == ["hit"]
 
 
+class TestPatchD:
+    """Patch D：BranchComponent.invoke 包装——补写组件级 session（路由保真）。
+
+    BranchComponent（venv 不可改）invoke 唯一动作是
+    ``self._router.set_session(session)``；Patch C 读侧改走 ContextVar 后
+    该写入成为死写。包装层在调用原函数前 set component_exec 且**不 reset**
+    （值须存活到同 NodeTask 内 invoke 返回之后的 dispatch，与
+    BranchComponent 的"路由属主"语义一致，见 execution_session_ctx
+    docstring 第 2 点）。
+    """
+
+    @pytest.mark.asyncio
+    async def test_wrapper_sets_component_exec_without_reset(self):
+        from jiuwen.extension.patches.static_graph_patch import (
+            _wrap_branch_component_invoke,
+        )
+        from jiuwen.extension.workflow import execution_session_ctx as ctx
+
+        seen = {}
+
+        async def fake_prev(self, inputs, session, context):
+            seen["during"] = ctx.current_component_exec()
+            seen["args"] = (inputs, session, context)
+            return {"orig": True}
+
+        wrapped = _wrap_branch_component_invoke(fake_prev)
+        marker_session, marker_context = object(), object()
+        inputs = {"i": 1}
+
+        result = await wrapped(object(), inputs, marker_session, marker_context)
+
+        assert result == {"orig": True}  # 原函数行为保持（参数原样透传）
+        assert seen["args"] == (inputs, marker_session, marker_context)
+        assert seen["during"] == (marker_session, marker_context)
+        # 不 reset：invoke 返回后（同 task 的 dispatch 窗口）仍可读到
+        assert ctx.current_component_exec() == (marker_session, marker_context)
+
+    @pytest.mark.asyncio
+    async def test_apply_wires_real_branch_component_invoke(self):
+        """apply 接线：真实 BranchComponent.invoke 为包装版；真实调用行为保持。"""
+        import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401 触发 apply
+
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
+        from jiuwen.extension.workflow import execution_session_ctx as ctx
+
+        assert (
+            getattr(BranchComponent.invoke, "__name__", "")
+            == "_invoke_with_component_exec"
+        )
+
+        comp_marker, _, _ = _routing_session_markers()
+        comp = BranchComponent()
+        result = await comp.invoke({}, comp_marker, None)
+
+        assert result == {}  # venv 原行为（BranchComponent.invoke 恒返回 {}）
+        # 写入端存组件面 session 原样（不解包——组件自身读点依赖包装器 API）
+        assert ctx.current_component_exec() == (comp_marker, None)
+
+    @pytest.mark.asyncio
+    async def test_dead_write_resolution_equivalent(self):
+        """死写等价：router.set_session 与 Patch D 通道的解析结果是同一 NodeSession。
+
+        真实引擎经 ``Session(node_session, False)`` 包装器调 invoke——Patch D
+        存包装器原样、Patch C 读取端解包（``getattr(session, "_inner",
+        session)``）；死写（set_session 写入端解包）与读取端解包结果必须同一，
+        路由解析语义与现状（原 set_session 路径）一致。
+        """
+        import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401 触发 apply
+
+        from openjiuwen.core.session.node import Session
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
+        from jiuwen.extension.workflow import execution_session_ctx as ctx
+
+        node_marker, _, _ = _routing_session_markers()
+        component_face = Session(node_marker, False)  # 引擎 on_invoke 传入的包装器
+        comp = BranchComponent()
+
+        await comp.invoke({}, component_face, None)
+
+        # 通道存包装器原样（写入端不解包）
+        assert ctx.current_component_exec() == (component_face, None)
+        # 死写值（set_session 已解包）与 Patch C 读取端解包结果同一
+        assert comp._router._session is node_marker  # pylint: disable=protected-access
+        assert ctx.resolve_routing_session(None) is node_marker
+
+
 class TestApplyAndDowngrade:
     """apply 编排：正常应用、幂等、断言失败自动降级（Task 6 接线后的语义）。
 
@@ -677,6 +774,7 @@ class TestApplyAndDowngrade:
         import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401
 
         from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
         from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 
         assert static_graph_patch._original_pregel_graph_compile is not None, (
@@ -686,6 +784,7 @@ class TestApplyAndDowngrade:
             PregelGraph.compile,
             CompiledGraph._invoke,
             BranchRouter.__call__,
+            BranchComponent.invoke,
             static_graph_patch._STATIC_GRAPH_PATCH_APPLIED,
             static_graph_patch.STATIC_GRAPH_DOWNGRADED,
         )
@@ -693,6 +792,7 @@ class TestApplyAndDowngrade:
         PregelGraph.compile = static_graph_patch._original_pregel_graph_compile
         CompiledGraph._invoke = static_graph_patch._original_compiled_invoke
         BranchRouter.__call__ = static_graph_patch._original_branch_router_call
+        BranchComponent.invoke = static_graph_patch._original_branch_component_invoke
         static_graph_patch._STATIC_GRAPH_PATCH_APPLIED = False
         static_graph_patch.STATIC_GRAPH_DOWNGRADED = False
         yield
@@ -700,22 +800,33 @@ class TestApplyAndDowngrade:
             PregelGraph.compile,
             CompiledGraph._invoke,
             BranchRouter.__call__,
-        ) = saved[0], saved[1], saved[2]
-        static_graph_patch._STATIC_GRAPH_PATCH_APPLIED = saved[3]
-        static_graph_patch.STATIC_GRAPH_DOWNGRADED = saved[4]
+            BranchComponent.invoke,
+        ) = saved[0], saved[1], saved[2], saved[3]
+        static_graph_patch._STATIC_GRAPH_PATCH_APPLIED = saved[4]
+        static_graph_patch.STATIC_GRAPH_DOWNGRADED = saved[5]
 
-    def test_apply_patches_all_three_and_is_idempotent(self, _restore_engine):
+    def test_apply_patches_all_four_and_is_idempotent(self, _restore_engine):
         from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
         from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
         from jiuwen.extension.patches import workflow_sub_stream_patch
 
         baseline_compile = static_graph_patch._original_pregel_graph_compile
         baseline_invoke = static_graph_patch._original_compiled_invoke
         baseline_call = static_graph_patch._original_branch_router_call
+        baseline_branch_invoke = static_graph_patch._original_branch_component_invoke
 
         assert static_graph_patch.apply_static_graph_patch() is True
         assert PregelGraph.compile is static_graph_patch._patched_pregel_graph_compile
         assert BranchRouter.__call__ is static_graph_patch._patched_branch_router_call
+        # Patch D：BranchComponent.invoke 为包装版（包装链最内层是 venv 原版）
+        assert BranchComponent.invoke.__name__ == "_invoke_with_component_exec"
+        assert (
+            static_graph_patch._unwrap_wrapper_chain(
+                BranchComponent.invoke, "_invoke_with_component_exec"
+            )
+            is baseline_branch_invoke
+        )
         # _invoke 是包装版（包装了 sub_stream 的 _patched_compiled_invoke），
         # 包装链最内层仍是 sub_stream 补丁版（Patch B 不改写执行语义）
         assert CompiledGraph._invoke.__name__ == "_invoke_with_session_ctx"
@@ -724,23 +835,28 @@ class TestApplyAndDowngrade:
             is workflow_sub_stream_patch._patched_compiled_invoke
         )
         assert not static_graph_patch.STATIC_GRAPH_DOWNGRADED
-        # apply 后结构断言仍全过（B1 容忍已包装态）
+        # apply 后结构断言仍全过（B1/C2 容忍已包装态）
         assert static_graph_patch._structure_assertions() == []
         # 重放 apply 不覆盖原版基线（_original_* 仅首次捕获）
         assert static_graph_patch._original_pregel_graph_compile is baseline_compile
         assert static_graph_patch._original_compiled_invoke is baseline_invoke
         assert static_graph_patch._original_branch_router_call is baseline_call
+        assert (
+            static_graph_patch._original_branch_component_invoke is baseline_branch_invoke
+        )
 
         # 幂等：第二次调用返回 False
         assert static_graph_patch.apply_static_graph_patch() is False
 
     def test_assertion_failure_downgrades_and_skips_patches(self, _restore_engine, monkeypatch, caplog):
         from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
         from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 
         original_compile = PregelGraph.compile
         original_invoke = CompiledGraph._invoke
         original_call = BranchRouter.__call__
+        original_branch_invoke = BranchComponent.invoke
         monkeypatch.setattr(
             static_graph_patch, "_structure_assertions", lambda: ["模拟上游结构变更"]
         )
@@ -750,6 +866,7 @@ class TestApplyAndDowngrade:
         assert PregelGraph.compile is original_compile  # 未被替换
         assert CompiledGraph._invoke is original_invoke  # 未被替换
         assert BranchRouter.__call__ is original_call  # 未被替换
+        assert BranchComponent.invoke is original_branch_invoke  # 未被替换
         assert any("结构断言失败" in r.message for r in caplog.records)
 
         # 降级后再次调用不重复告警（幂等守卫）

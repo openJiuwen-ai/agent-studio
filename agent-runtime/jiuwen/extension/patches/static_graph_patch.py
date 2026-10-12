@@ -1,13 +1,15 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-"""静态图复用 patch 三件套（issue #1555 / spec 2026-10-12 §4）。
+"""静态图复用 patch 集（A/B/C/D，issue #1555 / spec 2026-10-12 §4）。
 
 - Patch A：PregelGraph.compile 纯函数化（每次执行全新 Pregel/channels/
   checkpointer/Vertex，fresh vertex 包装共享 executable）；
 - Patch B：CompiledGraph._invoke 入口 set workflow 级 session ContextVar；
-- Patch C：BranchRouter.__call__ 解析链 组件级 → workflow 级 → self._session。
+- Patch C：BranchRouter.__call__ 解析链 组件级 → workflow 级 → self._session；
+- Patch D：BranchComponent.invoke 包装——补写组件级 session（分支源节点的
+  路由 dispatch 保真；venv 源码不可改，包装其唯一动作 set_session）。
 
-三件套**始终应用**（含 WORKFLOW_INSTANCE_REUSE_MODE=off）：off 模式下
+四件**始终应用**（含 WORKFLOW_INSTANCE_REUSE_MODE=off）：off 模式下
 每请求新建 Workflow 实例，patched 路径与现状严格等价（spec §4.4 与计划
 "等价性论证"）。openjiuwen 结构变化时由 _structure_assertions 兜底：
 断言失败 → 不应用补丁 + STATIC_GRAPH_DOWNGRADED=True + ERROR 日志，
@@ -51,19 +53,18 @@ STATIC_GRAPH_DOWNGRADED = False
 _original_pregel_graph_compile: Any = None
 _original_compiled_invoke: Any = None
 _original_branch_router_call: Any = None
+_original_branch_component_invoke: Any = None
 
 
-def _invoke_chain_root(invoke_fn):
-    """展开 Patch B 包装链，返回最内层被包装函数。
+def _unwrap_wrapper_chain(fn, wrapper_name):
+    """展开指定名称的包装链，返回最内层被包装函数（B1/C2 断言共用）。
 
-    `_wrap_compiled_invoke` 产出的 `_invoke_with_session_ctx` 闭包自由变量
-    仅 prev_invoke（模块级 `_session_ctx` 非 callable），故沿 callable
-    cell 逐层下钻即可。invoke_fn 非包装版时原样返回；闭包不可内省时返回
-    当前层（调用方按不匹配处理，安全降级）。
+    Patch B/D 的包装闭包自由变量仅 prev_invoke（模块级引用非 callable），
+    故沿 callable cell 逐层下钻即可。fn 非包装版时原样返回；闭包不可内省
+    时返回当前层（调用方按不匹配处理，安全降级）。
     """
-    fn = invoke_fn
     seen = set()
-    while getattr(fn, "__name__", "") == "_invoke_with_session_ctx" and id(fn) not in seen:
+    while getattr(fn, "__name__", "") == wrapper_name and id(fn) not in seen:
         seen.add(id(fn))
         prev = None
         for cell in getattr(fn, "__closure__", None) or ():
@@ -78,6 +79,11 @@ def _invoke_chain_root(invoke_fn):
             break
         fn = prev
     return fn
+
+
+def _invoke_chain_root(invoke_fn):
+    """展开 Patch B 包装链，返回最内层被包装函数。"""
+    return _unwrap_wrapper_chain(invoke_fn, "_invoke_with_session_ctx")
 
 
 def _structure_assertions() -> list:
@@ -182,6 +188,27 @@ def _structure_assertions() -> list:
                 failures.append(f"BranchRouter.__call__ 源码不可内省: {e}")
         if not hasattr(BranchRouter, "set_session"):
             failures.append("BranchRouter.set_session 不存在")
+
+    # C2: BranchComponent.invoke 的 set_session 写入点（Patch D 包装基础）。
+    # 经包装链展开后校验最内层（apply 后 BranchComponent.invoke 即本模块
+    # 包装版——直接 getsource 会读到包装函数源码而误报，与 B1 的容忍语义同理）。
+    # 导入失败仅跳过本组（引擎无此组件时 ir_converter 自身 import 即失败，
+    # 该路径不可达；不因单一可选组件缺失而整体降级）。
+    try:
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
+    except (ImportError, OSError):
+        pass  # 引擎无此组件（版本差异），跳过
+    else:
+        branch_invoke = _unwrap_wrapper_chain(
+            BranchComponent.invoke, "_invoke_with_component_exec"
+        )
+        try:
+            branch_invoke_src = inspect.getsource(branch_invoke)
+        except (OSError, TypeError, ValueError) as e:
+            failures.append(f"BranchComponent.invoke 源码不可内省: {e}")
+        else:
+            if "set_session" not in branch_invoke_src:
+                failures.append("BranchComponent.invoke 不再调用 set_session（Patch D 基础失效）")
 
     # D1: Vertex 实例属性与签名——fresh-vertex 包装依赖
     try:
@@ -289,6 +316,28 @@ async def _patched_branch_router_call(self, *args, **kwargs) -> list:
     )
 
 
+def _wrap_branch_component_invoke(prev_invoke):
+    """Patch D：BranchComponent.invoke 设置 component_exec（路由保真）。
+
+    BranchComponent（venv）invoke 唯一动作是 router.set_session(session)
+    （NodeSession）——Patch C 读侧改走 ContextVar 后，需在此补写组件级
+    session，保证分支源节点的 dispatch 解析到与现状一致的 NodeSession。
+    不 reset：BranchComponent 是路由属主（router 经 add_conditional_edges
+    注册），值须存活到同 NodeTask 内 invoke 返回之后的 dispatch。
+
+    值类型契约（T12 审查）：写入端存**组件面 Session 包装器原样**（不解包
+    ——组件自身读点依赖包装器 API）；Patch C 的 BaseSession 契约由
+    ``resolve_routing_session`` 读取端解包承担。原函数照常执行——其
+    set_session 写成为死写（Patch C 下不被读），语义由本通道等价承接。
+    """
+
+    async def _invoke_with_component_exec(self, inputs, session, context):
+        _session_ctx.set_component_exec(session, context)
+        return await prev_invoke(self, inputs, session, context)
+
+    return _invoke_with_component_exec
+
+
 def _compile_pregel_fresh(graph, fresh_nodes, graph_store, step_callback):
     """对影子图调用原版 _compile（nodes 注入点）。
 
@@ -385,7 +434,7 @@ def apply_static_graph_patch() -> bool:
     """
     global _STATIC_GRAPH_PATCH_APPLIED, STATIC_GRAPH_DOWNGRADED
     global _original_pregel_graph_compile, _original_compiled_invoke
-    global _original_branch_router_call
+    global _original_branch_router_call, _original_branch_component_invoke
     if _STATIC_GRAPH_PATCH_APPLIED:
         return False
 
@@ -408,10 +457,22 @@ def apply_static_graph_patch() -> bool:
     if _original_branch_router_call is None:
         _original_branch_router_call = BranchRouter.__call__
 
-    # 三件套安装：A（PregelGraph.compile）/ B（CompiledGraph._invoke）/ C（BranchRouter.__call__）
+    # Patch D 的引擎侧目标（可选组件：无此模块时跳过，不整体降级——
+    # 该缺失态下 ir_converter 自身 import 即失败，本补丁路径不可达）
+    try:
+        from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
+    except ImportError:
+        BranchComponent = None
+    if BranchComponent is not None and _original_branch_component_invoke is None:
+        _original_branch_component_invoke = BranchComponent.invoke
+
+    # 四件安装：A（PregelGraph.compile）/ B（CompiledGraph._invoke）/ C（BranchRouter.__call__）
+    # / D（BranchComponent.invoke）
     CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)
     PregelGraph.compile = _patched_pregel_graph_compile
     BranchRouter.__call__ = _patched_branch_router_call
+    if BranchComponent is not None:
+        BranchComponent.invoke = _wrap_branch_component_invoke(BranchComponent.invoke)
 
     _STATIC_GRAPH_PATCH_APPLIED = True
     return True
