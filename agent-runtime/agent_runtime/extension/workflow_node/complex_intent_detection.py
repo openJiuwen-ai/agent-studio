@@ -181,11 +181,9 @@ class ComplexIntentDetection(WorkflowComponent):
 
         self._state = ComplexIntentState()
         self._state_retry = ComplexIntentState()
-        self._sub_workflows: Dict[str, Any] = {}
         self._branch2group: Dict[str, Dict[str, List[List[str]]]] = {}
         self._build_branch_to_group()
 
-        self._sub_workflow_error: Optional[Exception] = None
         self._router = BranchRouter()
 
     def _parse_configs(self) -> None:
@@ -252,10 +250,8 @@ class ComplexIntentDetection(WorkflowComponent):
                     ).append(desc[1:])
 
     def reset(self) -> bool:
-        """重置组件状态"""
+        """重置组件状态（遗留接口：引擎不调用，执行期复位由 invoke 入口重建承担）"""
         self._state = deepcopy(self._state_retry)
-        self._sub_workflows.clear()
-        self._sub_workflow_error = None
         return True
 
     def get_state(self) -> ComplexIntentState:
@@ -263,63 +259,13 @@ class ComplexIntentDetection(WorkflowComponent):
         return self._state
 
     async def load_state(self, state: ComplexIntentState) -> None:
-        """从输入状态恢复
+        """从输入状态恢复（遗留接口：引擎不调用）
 
-        恢复状态后，需要同时恢复子工作流的实例。
+        仅恢复执行状态本身；子工作流实例不在此恢复——执行期子工作流实例按
+        ``branch_config.ir_path`` 由 ``_init_sub_workflow`` 按需重建（每次
+        invoke 局部持有），子图自身的续跑状态在 checkpointer / session 侧。
         """
         self._state = deepcopy(state)
-
-        if self._state.sub_workflows and self._state.workflow_id:
-            workflow_id = self._state.workflow_id
-            if workflow_id in self._state.sub_workflows:
-                recover_data = self._state.sub_workflows[workflow_id]
-                await self._recover_sub_workflow(workflow_id, recover_data)
-
-    async def _recover_sub_workflow(self, workflow_id: str, recover_data: dict) -> None:
-        """恢复子工作流实例"""
-        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
-        from storage import get_storage_provider
-        from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
-
-        try:
-            recover_config = recover_data.get("configs")
-            instance_data = recover_data.get("instance_data")
-            if not recover_config:
-                workflow_logger.warning(f"No recover config for workflow {workflow_id}")
-                return
-
-            branch_config = BranchWorkflowConfig(**recover_config)
-
-            ir_path = branch_config.ir_path
-            if not ir_path:
-                return
-
-            provider = get_storage_provider()
-            ir_json_str = await provider.get_content(ir_path)
-            import json
-            child_ir = json.loads(ir_json_str)
-            child_workflow = await IRConverter.async_ir_to_workflow(child_ir)
-
-            sub_workflow_comp = SubWorkflowComponentWrapper(
-                workflow=child_workflow,
-                node_id=workflow_id,
-                node_name=f"{self._node_name}-sub",
-            )
-
-            if instance_data and hasattr(sub_workflow_comp, 'load_state'):
-                await sub_workflow_comp.load_state(instance_data)
-
-            self._sub_workflows[workflow_id] = {
-                "instance": sub_workflow_comp,
-                "sub_instance": child_workflow,
-                "configs": recover_config,
-            }
-
-            workflow_logger.info(f"Recovered sub-workflow {workflow_id}")
-        except (StorageConfigError, StorageReadError) as e:
-            workflow_logger.error(f"Failed to load sub-workflow IR for recovery: {e}")
-        except Exception as e:
-            workflow_logger.error(f"Failed to recover sub-workflow {workflow_id}: {e}")
 
     def add_component(self, graph: Graph, node_id: str, wait_for_all: bool = False) -> None:
         """将组件添加到工作流图"""
@@ -340,6 +286,16 @@ class ComplexIntentDetection(WorkflowComponent):
         # 取回，存入值为**组件面 Session 包装器**（与迁移前的实例字段同物，
         # 组件自身读点 get_state / get_state_info(_inner) 依赖包装器 API）。
         token = set_component_exec(session, context)
+        # 执行期状态入口重建（参照 T12 IntentDetection.node_state 先例）：实例
+        # 跨执行复用，上一执行残留的 status 会让 _get_intent_result 走"非 START
+        # 即复用旧 intent_result/branch_id"分支 → 静默选错分支。off 模式每请求
+        # 新建实例，入口重建与该模式语义等价（中断续跑依赖 session 侧信号：
+        # _check_child_workflow_needs_resume / sub_checkpoint_exists /
+        # __interactive_input__，不依赖本字段）。
+        self._state = ComplexIntentState()
+        # 子工作流实例缓存为执行期状态：本次 invoke 局部持有（含中断续跑窗口），
+        # 不落实例（缓存中的 wrapper 自带 per-execution 状态，跨执行复用会串）
+        sub_workflows: Dict[str, Any] = {}
 
         try:
             inputs_dict = convert_input(inputs)
@@ -349,7 +305,9 @@ class ComplexIntentDetection(WorkflowComponent):
             if inputs_dict.get("__single_debug_recovery__", False):
                 return intent_result
 
-            wf_id, wf_result = await self._execute_branch_workflow(inputs_dict, intent_branch, **kwargs)
+            wf_id, wf_result = await self._execute_branch_workflow(
+                inputs_dict, intent_branch, sub_workflows, **kwargs
+            )
 
             intent_result[_RESPONSE_CONTENT] = wf_result.get(_RESPONSE_CONTENT, "") if wf_result else ""
             result = self._get_aggregate_result(wf_id, wf_result, intent_result)
@@ -407,9 +365,9 @@ class ComplexIntentDetection(WorkflowComponent):
         return intent_result, intent_branch
 
     async def _execute_branch_workflow(
-        self, inputs: dict, intent_branch: str, **kwargs
+        self, inputs: dict, intent_branch: str, sub_workflows: Dict[str, Any], **kwargs
     ) -> tuple[Optional[str], Optional[dict]]:
-        """执行分支工作流"""
+        """执行分支工作流（sub_workflows：本次 invoke 的子工作流实例缓存）"""
         branch_config = self._branches.get(intent_branch)
         if not branch_config:
             workflow_logger.warning(f"Branch {intent_branch} not found in configuration")
@@ -424,14 +382,15 @@ class ComplexIntentDetection(WorkflowComponent):
         self._state.workflow_id = workflow_id
 
         try:
-            wf_result = await self._invoke_sub_workflow(inputs, branch_config.configs, **kwargs)
+            wf_result = await self._invoke_sub_workflow(
+                inputs, branch_config.configs, sub_workflows, **kwargs
+            )
             return workflow_id, wf_result
         except Exception as e:
             from openjiuwen.core.graph.pregel import GraphInterrupt
             if isinstance(e, GraphInterrupt):
                 raise
             self._state.status = ExecutionStatus.END
-            self._sub_workflow_error = e
             workflow_logger.error(
                 f"Sub-workflow execution failed: {e}\n{traceback.format_exc()}",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
@@ -439,7 +398,11 @@ class ComplexIntentDetection(WorkflowComponent):
             raise
 
     async def _invoke_sub_workflow(
-        self, inputs: dict, branch_config: BranchWorkflowConfig, **kwargs
+        self,
+        inputs: dict,
+        branch_config: BranchWorkflowConfig,
+        sub_workflows: Dict[str, Any],
+        **kwargs,
     ) -> dict:
         """调用子工作流
 
@@ -448,6 +411,8 @@ class ComplexIntentDetection(WorkflowComponent):
         2. 如果需要恢复，使用 InteractiveInput 包装用户输入
         3. 调用子工作流的 invoke 方法（SubWorkflow 会自动处理中断）
         4. 保存子工作流状态，以便下次恢复
+
+        sub_workflows 为本次 invoke 局部持有的子工作流实例缓存（不落实例）。
         """
         from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 
@@ -459,10 +424,10 @@ class ComplexIntentDetection(WorkflowComponent):
         # 不落实例；值为组件面 Session 包装器）
         session, context = current_component_exec()
 
-        if workflow_id not in self._sub_workflows:
-            await self._init_sub_workflow(workflow_id, branch_config)
+        if workflow_id not in sub_workflows:
+            await self._init_sub_workflow(workflow_id, branch_config, sub_workflows)
 
-        sub_workflow_info = self._sub_workflows.get(workflow_id)
+        sub_workflow_info = sub_workflows.get(workflow_id)
         if not sub_workflow_info:
             return {}
 
@@ -501,9 +466,10 @@ class ComplexIntentDetection(WorkflowComponent):
                     sub_inputs = InteractiveInput(raw_inputs=resume_query)
 
         try:
-            # 嵌套子执行窗口内组件级通道置空：子工作流经 Workflow.stream 的
-            # background task + TaskExecutorPool.create_task 派生自本节点 task，
-            # 会继承组件级值——子图内分支节点的路由解析（Patch C 优先级 1）
+            # 嵌套子执行窗口内组件级通道置空：子工作流经 is_sub 路径 inline await
+            # 在本节点 task 内执行，其子图各节点 task 由 TaskExecutorPool.submit
+            # 的 asyncio.create_task（graph/pregel/task.py:29）从本节点 task
+            # 派生，会继承组件级值——子图内分支节点的路由解析（Patch C 优先级 1）
             # 若读到本组件 session 即遮蔽子图自身 session（分支条件对错误
             # io_state 求值 → 恒 False → 分支未命中报错）。置空使子图回退到
             # workflow 级解析（与迁移前行为一致），窗口外恢复本组件级值。
@@ -523,7 +489,7 @@ class ComplexIntentDetection(WorkflowComponent):
             else:
                 self._state.status = getattr(sub_workflow_state, 'status', ExecutionStatus.END)
 
-            if self._state.status != ExecutionStatus.END and workflow_id in self._sub_workflows:
+            if self._state.status != ExecutionStatus.END and workflow_id in sub_workflows:
                 if sub_instance and hasattr(sub_instance, 'get_state'):
                     self._state.sub_workflows.setdefault(workflow_id, {})["sub_instance_data"] = \
                         sub_instance.get_state()
@@ -614,9 +580,12 @@ class ComplexIntentDetection(WorkflowComponent):
         return None
 
     async def _init_sub_workflow(
-        self, workflow_id: str, branch_config: BranchWorkflowConfig
+        self,
+        workflow_id: str,
+        branch_config: BranchWorkflowConfig,
+        sub_workflows: Dict[str, Any],
     ) -> None:
-        """初始化子工作流"""
+        """初始化子工作流（实例写入本次 invoke 局部缓存 sub_workflows）"""
         from jiuwen.serve.controllers.execution.ir_converter import IRConverter
         from storage import get_storage_provider
         from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
@@ -640,7 +609,7 @@ class ComplexIntentDetection(WorkflowComponent):
                 node_name=f"{self._node_name}-sub",
             )
 
-            self._sub_workflows[workflow_id] = {
+            sub_workflows[workflow_id] = {
                 "instance": sub_workflow_comp,
                 "sub_instance": child_workflow,
                 "configs": branch_config.model_dump() if hasattr(branch_config, "model_dump") else {},
