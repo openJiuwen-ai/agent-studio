@@ -3,6 +3,7 @@ import copy
 import inspect
 import re
 import weakref
+from contextvars import ContextVar
 from enum import Enum
 from typing import Any, Optional, Union, AsyncGenerator
 
@@ -61,6 +62,14 @@ _TYPE_DEFAULT_VALUE = {
     NUMBER_TYPE: None,
     BOOLEAN_TYPE: None,
 }
+
+# 当前执行容器键（执行期属性 _template/_batch_template 的解析上下文）。
+# 能力方法入口 set，不 reset：值随节点执行任务（pregel task.py:29 每节点
+# create_task）存活，同一任务内父类渲染路径（end_comp.py:107/155/217）
+# 读取时可见；任务结束即随 context 丢弃，不跨执行残留。
+_current_exec_key: ContextVar[Optional[Any]] = ContextVar(
+    "jiuwen_end_exec_key", default=None
+)
 
 
 def _has_response_payload(output: Any) -> bool:
@@ -291,6 +300,9 @@ class _EndExecState:
         # 本执行的 TemplateProcessor 克隆（同一执行内 batch/stream 两路共享，
         # 渲染位置推进是 mix 协调的一部分；跨执行隔离）
         self.template = None
+        # 本执行的 batch 渲染器 latch（父类 _render 的 self._batch_template 解析目标；
+        # 共享属性会跨执行互相清空/顶替 → 在途 _render 恢复后 AttributeError/串答案）
+        self.batch_template = None
 
 
 class EndConfig(BaseEndConfig):
@@ -309,6 +321,10 @@ class End(BaseEnd):
     """
 
     def __init__(self, conf: Union[EndConfig, dict] = None):
+        # build 期原对象槽位：父类 __init__ 经 _template/_batch_template 属性 setter
+        # 写入（见属性定义），执行期读取解析到 per-execution 克隆
+        self._template_source = None
+        self._batch_template_source = None
         super().__init__(conf)
         # 从配置中提取结构化输出相关参数
         conf_dict = conf if isinstance(conf, dict) else {}
@@ -344,40 +360,103 @@ class End(BaseEnd):
         # stream 路径负责 merge + render + signal
         # None 表示兼容 openjiuwen 默认行为；IR converter 会显式标记纯流式/混合场景。
         self._expect_mix: Optional[bool] = None
-        # 执行期协调状态（四个能力幂等标志 + mix 协调 + 模板克隆）迁移到
-        # per-execution 容器：Pregel 引擎在 wait_for_all=False 时每条入边分别
-        # 触发 End 节点，导致 stream()/invoke() 被多次调用，用各自独立的标志
+        # 执行期协调状态（四个能力幂等标志 + mix 协调 + 模板克隆 + batch latch）
+        # 迁移到 per-execution 容器：Pregel 引擎在 wait_for_all=False 时每条入边
+        # 分别触发 End 节点，导致 stream()/invoke() 被多次调用，用各自独立的标志
         # 保证同一执行内幂等；跨执行必须隔离（否则复用实例第二次执行被短路）。
-        # key 为 NodeSession（Patch A 下每次执行新建 Vertex 时重建），
-        # 弱引用键控随执行结束自动回收。
+        # 键归一到底层 NodeSession（见 _exec_key），弱引用键控随执行结束自动回收。
         self._exec_states: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+
+    @staticmethod
+    def _exec_key(session):
+        """执行容器键归一。
+
+        引擎 ComponentExecutable.on_invoke/on_stream/on_collect/on_transform
+        每次调用都新建 Session(session, ...) 包装器（component.py:95-119），
+        Session 无 __eq__/__hash__（session/node.py:13-18，身份哈希）——直接用
+        入参做键会让同一执行的四个能力各建容器（mix 双路协调断裂、幂等失效）。
+        包装器的 _inner 即其包裹的 NodeSession（session/node.py:14），故归一
+        到底层 NodeSession；裸 NodeSession（NodeSession 自身无 _inner）原样返回。
+        """
+        inner = getattr(session, "_inner", None)
+        return inner if inner is not None else session
 
     def _exec_state(self, session) -> "_EndExecState":
         """当前执行的协调状态（按 NodeSession 隔离；单事件循环内无 await，原子）。"""
-        st = self._exec_states.get(session)
+        key = self._exec_key(session)
+        st = self._exec_states.get(key)
         if st is None:
             st = _EndExecState()
-            self._exec_states[session] = st
+            self._exec_states[key] = st
         return st
+
+    def _resolve_exec_state(self) -> "Optional[_EndExecState]":
+        """解析当前执行状态（执行期属性读取用）。
+
+        解析键由能力方法入口写入当前任务 context（_current_exec_key）；
+        容器查找走实例自身 → 外来的键解析为 None，安全回退 build 期原对象。
+        """
+        key = _current_exec_key.get()
+        if key is None:
+            return None
+        return self._exec_states.get(key)
+
+    @property
+    def _template(self):
+        """当前执行的模板（执行外回退 build 期原对象）。
+
+        父类渲染路径（end_comp.py:107/155/217 → render_stream）逐段推进
+        TemplateProcessor 的位置状态（_current_position/_chunk_index/_count），
+        复用实例下并发执行共享同一对象会互踩渲染位置，故执行内解析到
+        per-execution 克隆（st.template）。属性解析不改任何共享属性：能力入口
+        变更共享属性会打断并发执行在途的父类 _render（end_comp.py:239-240 在
+        await 后重读 self._batch_template → None → AttributeError）。
+        """
+        st = self._resolve_exec_state()
+        if st is not None and st.template is not None:
+            return st.template
+        return self._template_source
+
+    @_template.setter
+    def _template(self, value):
+        # 仅 build 期赋值（父类 __init__ 等）；执行期读取经 getter 解析克隆
+        self._template_source = value
+
+    @property
+    def _batch_template(self):
+        """父类 _render 的 batch 渲染器 latch（按执行隔离）。
+
+        end_comp.py:216-242 把 latch 放在 self._batch_template 上并在 await 后
+        重读（:239-242）；复用实例下共享会让并发执行互相清空/顶替 → 在途渲染
+        恢复后 AttributeError（None）或渲染另一执行的输入（串答案）。
+        """
+        st = self._resolve_exec_state()
+        if st is not None:
+            return st.batch_template
+        return self._batch_template_source
+
+    @_batch_template.setter
+    def _batch_template(self, value):
+        st = self._resolve_exec_state()
+        if st is not None:
+            st.batch_template = value
+        else:
+            self._batch_template_source = value
 
     def _prepare_render_state(self, st: "_EndExecState") -> None:
         """per-execution 渲染隔离：共享 TemplateProcessor 按执行克隆。
 
-        父类渲染路径经 self._template 读取（render_stream 逐段推进
-        _current_position/_chunk_index/_count），复用实例下并发执行会互踩渲染
-        位置。同一执行内 batch/stream 两路必须共用同一克隆（mix 协调依赖共享
-        位置推进），故克隆缓存在 per-execution 容器；克隆时复位位置字段
-        （等价父类 set_mix 的 reset 语义），_data_source_count 继承共享配置
-        （set_mix 2 / _sanitize_end_node_inputs 0，均在本入口之前写入）。
-        同时清空父类 _batch_template latch（执行期状态，异常路径可能跨执行残留）。
+        同一执行内 batch/stream 两路必须共用同一克隆（mix 协调依赖共享位置
+        推进），故克隆缓存在 per-execution 容器；克隆时复位位置字段（等价
+        父类 set_mix 的 reset 语义），_data_source_count 继承共享配置
+        （set_mix 2 / _sanitize_end_node_inputs 0，均写 build 期原对象，早于本入口）。
+        入口不改任何共享属性（I1 不变量）。
         """
         if st.template is None:
-            if self._template is None:
+            if self._template_source is None:
                 return
-            st.template = copy.copy(self._template)
+            st.template = copy.copy(self._template_source)
             st.template.reset()
-            self._batch_template = None
-        self._template = st.template
 
     @staticmethod
     def _is_workflow_interrupted(session: Session) -> bool:
@@ -679,6 +758,7 @@ class End(BaseEnd):
             return {}
         st.invoke_executed = True
         set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
         self._prepare_render_state(st)
 
         # 处理输入中的生成器值
@@ -825,6 +905,7 @@ class End(BaseEnd):
             return
         st.stream_executed = True
         set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
         self._prepare_render_state(st)
 
         # 处理输入中的生成器值
@@ -1044,6 +1125,7 @@ class End(BaseEnd):
             return None
         st.collect_executed = True
         set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
         self._prepare_render_state(st)
         # 聚合流式输入
         collected_inputs = []
@@ -1219,6 +1301,7 @@ class End(BaseEnd):
 
         # 开始时清空缓存（末帧 ContextVar 通道）
         set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
         self._prepare_render_state(st)
 
         # 提取上游节点的流式 metadata（由 FlowApi/FlowMcp 在 yield 中附带）

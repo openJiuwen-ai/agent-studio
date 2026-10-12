@@ -5,17 +5,26 @@
 End 在 wait_for_all=False 下会被 Pregel 引擎按入边多次触发，组件用四个能力
 幂等标志（invoke/stream/collect/transform）防重复。实例复用后这些标志与 mix
 协调状态若仍落在实例属性上，第二次执行会被直接短路（返回空）。本测试钉住：
-1. 执行期状态按 NodeSession 隔离（容器随执行回收）；
-2. 末帧输出走 Task 1 的 ContextVar 通道（引擎 Vertex._post_stream 流耗尽后读取）；
-3. 渲染隔离：共享 TemplateProcessor 按执行克隆（位置字段互不互踩）。
+1. 执行期状态按执行容器隔离（容器随会话 GC 回收）；
+2. 容器键归一：引擎 on_invoke/on_stream/on_collect/on_transform 每次调用新建
+   Session 包装器（component.py:95-119），包装器无 __eq__/__hash__ → 必须以
+   底层 NodeSession 为键，否则同一执行的四个能力各建容器（mix 双路断裂、
+   幂等失效）；
+3. 末帧输出走 Task 1 的 ContextVar 通道（引擎 Vertex._post_stream 流耗尽后读取）；
+4. 渲染隔离：共享 TemplateProcessor 按执行克隆，且能力入口不变更任何共享属性
+   （否则并发执行 B 的入口会打断 A 在途的父类 _render）。
 """
 
+import asyncio
 import gc
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openjiuwen.core.session.internal.workflow import NodeSession, WorkflowSession
+from openjiuwen.core.session.node import Session as EngineSession
 
 from jiuwen.extension.workflow import execution_session_ctx as ctx
+from jiuwen.extension.workflow_node import end as end_module
 from jiuwen.extension.workflow_node.end import End, _EndExecState
 
 
@@ -27,9 +36,24 @@ def _end_conf():
     return {"name": "end", "outputMode": "direct", "responseTemplate": "{{answer}}"}
 
 
-def _mock_session() -> MagicMock:
-    """驱动能力方法的 session 替身（io 写入链路异步 mock）。"""
+def _node_session(comp_id: str = "end_node") -> NodeSession:
+    wf = WorkflowSession(workflow_id="test_wf", session_id="test_sess")
+    return NodeSession(wf, comp_id, "End")
+
+
+def _wrapper(node_session, stream_mode: bool = False) -> EngineSession:
+    """引擎 on_* 每次调用新建的 Session 包装器（component.py:95-119）。"""
+    return EngineSession(node_session, stream_mode)
+
+
+def _mock_session(node_session=None) -> MagicMock:
+    """驱动能力方法的 session 替身：包装器语义（_inner → NodeSession）+ io mock。
+
+    `_inner` 是引擎 Session 包装器指向底层 NodeSession 的字段（session/node.py:14），
+    也是容器键归一读取的字段。
+    """
     session = MagicMock()
+    session._inner = node_session if node_session is not None else _node_session()
     session.write_custom_stream = AsyncMock()
     session.get_global_state.return_value = ""
     session.get_env.return_value = 0.2  # 模板渲染超时（env 读取链路）
@@ -45,6 +69,16 @@ class TestEndExecStateIsolation:
         assert isinstance(st1, _EndExecState)
         assert st1 is not st2
         assert end._exec_state(s1) is st1  # 同 session 复用同一容器
+
+    def test_engine_wrappers_normalize_to_same_container(self):
+        """引擎每次能力调用新建的包装器 → 归一底层 NodeSession（C1）。"""
+        end = End(_end_conf())
+        node = _node_session()
+        batch = _wrapper(node, False)      # on_invoke/on_stream 包装器
+        stream = _wrapper(node, True)      # on_collect/on_transform 包装器
+        assert batch is not stream
+        assert end._exec_state(batch) is end._exec_state(stream)
+        assert end._exec_state(node) is end._exec_state(batch)  # 裸 NodeSession 亦同键
 
     def test_flags_do_not_leak_across_executions(self):
         end = End(_end_conf())
@@ -115,7 +149,7 @@ class TestEndExecStateIsolation:
 class TestEndCapabilityIsolation:
     @pytest.mark.asyncio
     async def test_second_execution_invoke_not_short_circuited(self):
-        """复用实例：第二次执行的 invoke 不被第一次执行的幂等标志短路。"""
+        """复用实例：第二次执行（新 NodeSession → 新包装器）不被幂等标志短路。"""
         end = End(_end_conf())
         r1 = await end.invoke({"answer": "first"}, _mock_session(), None)
         assert r1 is not None and r1["answer"] == "first"
@@ -128,13 +162,17 @@ class TestEndCapabilityIsolation:
         assert r2["userFields"]["answer"] == "second"
 
     @pytest.mark.asyncio
-    async def test_same_execution_invoke_still_idempotent(self):
-        """同一执行内（同 NodeSession）多入边触发仍只执行一次。"""
+    async def test_same_execution_two_wrappers_still_idempotent(self):
+        """同一执行内两个包装器（引擎按入边分别触发）归一同一容器 → 仍幂等。"""
         end = End(_end_conf())
-        session = _mock_session()
-        first = await end.invoke({"answer": "first"}, session, None)
+        node = _node_session()
+        first_wrapper = _wrapper(node, False)
+        second_wrapper = _wrapper(node, False)
+        assert first_wrapper is not second_wrapper
+
+        first = await end.invoke({"answer": "first"}, first_wrapper, None)
         assert first
-        assert await end.invoke({"answer": "first"}, session, None) == {}
+        assert await end.invoke({"answer": "first"}, second_wrapper, None) == {}
 
     @pytest.mark.asyncio
     async def test_invoke_entry_resets_and_writes_final_output_channel(self):
@@ -145,40 +183,148 @@ class TestEndCapabilityIsolation:
         assert final is not None
         assert final["user_fields"]["answer"] == "fresh"
 
+    @pytest.mark.asyncio
+    async def test_mix_two_paths_share_one_exec_state(self):
+        """mix 双路（batch 包装器 + stream 包装器）解析同一容器：
+
+        批路径 push 后等待，流路径 push 合并渲染并唤醒批路径；批路径让位
+        （is_renderer=False）而非各等满 3s 超时自渲染出双份结束帧。
+        键未归一时两路各建容器：批路径等满 3s 超时自渲染（本用例经
+        asyncio.wait_for 1s 兜底暴露），push_count 也各自停在 1。
+        """
+        end = End(_end_conf())
+        end.set_mix()
+        node = _node_session()
+        batch_sess = _mock_session(node)   # invoke/stream 路径包装器
+        stream_sess = _mock_session(node)  # collect/transform 路径包装器
+        assert end._exec_state(batch_sess) is end._exec_state(stream_sess)
+
+        batch_task = asyncio.create_task(
+            end._mix_coordinate("batch", {"b": 1}, {"ob": 1}, batch_sess)
+        )
+        await asyncio.sleep(0.05)  # 让批路径先 push 并进入等待
+        merged_inputs, merged_outputs, is_renderer = await end._mix_coordinate(
+            "stream", {"s": 2}, {"os": 2}, stream_sess
+        )
+        assert is_renderer is True  # 流路径负责渲染
+        assert merged_inputs == {"s": 2, "b": 1}  # batch 侧优先
+        assert merged_outputs == {"os": 2, "ob": 1}
+
+        _, _, batch_is_renderer = await asyncio.wait_for(batch_task, timeout=1.0)
+        assert batch_is_renderer is False  # 批路径让位，未超时自渲染
+
+        st = end._exec_state(batch_sess)
+        assert st.mix_push_count == 2
+        assert st.mix_batch_pushed is True
+        assert st.mix_render_complete is True
+
 
 class TestEndRenderIsolation:
     def test_template_cloned_per_execution(self):
         end = End(_end_conf())
-        end._prepare_render_state(end._exec_state(_FakeSession()))
-        t1 = end._template
-        end._prepare_render_state(end._exec_state(_FakeSession()))
-        t2 = end._template
-        assert t1 is not t2
-        assert type(t1) is type(t2)
+        pristine = end._template_source
+        st1 = end._exec_state(_FakeSession())
+        st2 = end._exec_state(_FakeSession())
+        end._prepare_render_state(st1)
+        end._prepare_render_state(st2)
+        assert st1.template is not st2.template
+        assert st1.template is not pristine
+        assert type(st1.template) is type(pristine)
+        # 执行外：解析回 build 期原对象（永不触碰）
+        assert end._template is pristine
+
+    def test_template_resolves_to_exec_clone_inside_execution(self):
+        end = End(_end_conf())
+        s1 = _FakeSession()
+        st1 = end._exec_state(s1)
+        end._prepare_render_state(st1)
+        assert end._template is end._template_source  # 执行外
+        token = end_module._current_exec_key.set(end._exec_key(s1))
+        try:
+            assert end._template is st1.template  # 执行内
+        finally:
+            end_module._current_exec_key.reset(token)
+        assert end._template is end._template_source
 
     def test_template_clone_shared_within_execution(self):
         """同一执行内 batch/stream 两路必须共用同一克隆（mix 依赖共享位置推进）。"""
         end = End(_end_conf())
         st = end._exec_state(_FakeSession())
         end._prepare_render_state(st)
-        t1 = end._template
+        t1 = st.template
         end._prepare_render_state(st)
-        assert end._template is t1
         assert st.template is t1
 
     def test_template_clone_starts_at_zero_position(self):
         """克隆复位渲染位置（等价父类 set_mix 的 reset 语义）。"""
         end = End(_end_conf())
-        end._template._current_position = 5
-        end._template._chunk_index = 3
-        end._template._count = 1
-        end._prepare_render_state(end._exec_state(_FakeSession()))
-        assert end._template._current_position == 0
-        assert end._template._chunk_index == 0
+        end._template_source._current_position = 5
+        end._template_source._chunk_index = 3
+        end._template_source._count = 1
+        st = end._exec_state(_FakeSession())
+        end._prepare_render_state(st)
+        assert st.template._current_position == 0
+        assert st.template._chunk_index == 0
 
-    def test_stale_batch_renderer_cache_cleared_on_new_execution(self):
-        """父类 _batch_template latch 属执行期状态，新执行入口清残留。"""
+    def test_capability_entry_does_not_mutate_shared_attrs(self):
+        """能力入口不得变更共享属性（I1 不变量）。
+
+        原实现入口做 `self._template = 克隆` + `self._batch_template = None`：
+        执行 B 的入口会清掉执行 A 在途 _render 的 latch（end_comp.py:239-240
+        在 await 后重读 self._batch_template → None → AttributeError）。
+        """
         end = End(_end_conf())
-        end._batch_template = object()  # 模拟上一执行异常路径残留
-        end._prepare_render_state(end._exec_state(_FakeSession()))
+        pristine = end._template_source
+        st = end._exec_state(_FakeSession())
+        end._prepare_render_state(st)
+        assert end._template_source is pristine
+        assert end._template is pristine
+        assert end._batch_template_source is None
         assert end._batch_template is None
+
+    def test_batch_template_latch_resolves_per_execution(self):
+        """父类 _render 的 batch 渲染器 latch 按执行隔离（不落共享属性）。"""
+        end = End(_end_conf())
+        s1, s2 = _FakeSession(), _FakeSession()
+        st1 = end._exec_state(s1)
+        token = end_module._current_exec_key.set(end._exec_key(s1))
+        try:
+            end._batch_template = "processor-of-exec-1"
+            assert st1.batch_template == "processor-of-exec-1"
+            assert end._batch_template == "processor-of-exec-1"
+        finally:
+            end_module._current_exec_key.reset(token)
+        assert end._batch_template is None  # 执行外
+        assert end._batch_template_source is None
+
+        token = end_module._current_exec_key.set(end._exec_key(s2))
+        try:
+            assert end._batch_template is None  # 另一执行看不到执行 1 的 latch
+        finally:
+            end_module._current_exec_key.reset(token)
+        assert end._exec_state(s2).batch_template is None
+
+    @pytest.mark.asyncio
+    async def test_entry_does_not_break_inflight_batch_render(self):
+        """执行 A 在途 _render 挂起期间执行 B 走完整入口：A 不受影响（I1）。
+
+        A 的模板变量为 None → 渲染等待（0.2s）后继续；B 的入口/渲染在此期间
+        完成。原实现 B 的入口清 self._batch_template → A 恢复即 AttributeError。
+        """
+        end = End(_end_conf())
+        a_sess = _mock_session(_node_session("end_a"))
+        a_task = asyncio.create_task(end.invoke({"answer": None}, a_sess, None))
+        await asyncio.sleep(0.05)  # 让 A 进入渲染等待
+        st_a = end._exec_state(a_sess)
+        assert st_a.batch_template is not None  # A 在途持有 batch latch
+        assert st_a.template._current_position == 0  # A 仍停在等待中（未推进）
+
+        b_result = await end.invoke(
+            {"answer": "b"}, _mock_session(_node_session("end_b")), None
+        )
+        assert b_result is not None and b_result["answer"] == "b"
+        # B 的入口/渲染不改动 A 的执行状态
+        assert end._exec_state(a_sess).batch_template is st_a.batch_template
+
+        a_result = await asyncio.wait_for(a_task, timeout=2.0)
+        assert a_result is not None
