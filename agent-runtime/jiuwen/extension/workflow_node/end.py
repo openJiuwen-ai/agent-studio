@@ -451,11 +451,18 @@ class End(BaseEnd):
         父类 set_mix 的 reset 语义），_data_source_count 继承共享配置
         （set_mix 2 / _sanitize_end_node_inputs 0，均写 build 期原对象，早于本入口）。
         入口不改任何共享属性（I1 不变量）。
+
+        浅拷贝会连 _lock/_condition 一起共享（模板变量为上游流式生成器时，
+        父类 _render_stream 在持有 _lock 期间逐帧 yield、可长时间挂起）——
+        跨执行共享会让执行 B 的渲染阻塞在执行 A 的在途帧上（队头阻塞），
+        故按执行重建同步原语；同一执行内两路仍共用同一克隆，协调语义不变。
         """
         if st.template is None:
             if self._template_source is None:
                 return
             st.template = copy.copy(self._template_source)
+            st.template._lock = asyncio.Lock()
+            st.template._condition = asyncio.Condition()
             st.template.reset()
 
     @staticmethod
