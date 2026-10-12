@@ -19,7 +19,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from openjiuwen.core.common.constants.constant import INTERACTION
+from openjiuwen.core.common.constants.constant import INTERACTION, INTERACTIVE_INPUT
 from openjiuwen.core.session.interaction.interaction import InteractionOutput
 from openjiuwen.core.session.stream.base import OutputSchema
 
@@ -62,13 +62,37 @@ def _conf():
 
 
 def _mock_session(state=None, component_id="sub_node"):
-    """带 state 字典的 mock session（get_state/update_state 语义对齐 NodeSession）。"""
+    """带 state 字典的 mock session，保真引擎 staged/committed 分离语义。
+
+    - ``update_state`` 只入 ``_updates``（staged，等价 comp_state._updates）；
+    - ``get_state`` 只读 ``_store``（committed，等价 comp_state._state）；
+    - ``commit()`` 模拟框架提交点（``interact()`` 内 commit_cmp / 图 super-step
+      收尾 commit），按 update_dict 语义合并（value 为 None 删除该 key）。
+
+    若 mock 让写立即可读，Important-1（同请求 staged 写不可见）这类风险在单测中
+    永远暴露不出，故此处按真实语义分层。
+    """
     session = MagicMock()
-    store = dict(state or {})
-    session.get_state.side_effect = lambda key=None: (
-        store.get(key) if key else dict(store)
-    )
-    session.update_state.side_effect = lambda data: store.update(data)
+    committed = dict(state or {})
+    updates = {}
+
+    def _get_state(key=None):
+        return committed.get(key) if key else dict(committed)
+
+    def _update_state(data):
+        updates.update(data)
+
+    def _commit():
+        for key, value in updates.items():
+            if value is None:
+                committed.pop(key, None)
+            else:
+                committed[key] = value
+        updates.clear()
+
+    session.get_state.side_effect = _get_state
+    session.update_state.side_effect = _update_state
+    session.commit.side_effect = _commit
     session.get_global_state.return_value = {}
     session.get_env.return_value = None
     session.get_component_id.return_value = component_id
@@ -76,7 +100,8 @@ def _mock_session(state=None, component_id="sub_node"):
     session.write_custom_stream = AsyncMock()
     session.trace = AsyncMock()
     session.interact = AsyncMock()
-    session._store = store
+    session._store = committed  # 已提交 state
+    session._updates = updates  # staged updates
     return session
 
 
@@ -126,7 +151,7 @@ class TestSubWorkflowStatelessAttrs:
 class TestInterruptChildNodeIdInSessionState:
     @pytest.mark.asyncio
     async def test_interrupt_child_id_written_to_session_state(self):
-        """中断子节点 ID 写 session state，不落实例属性。"""
+        """中断子节点 ID 写 session state（staged → 框架提交点后可见），不落实例。"""
         component = SubWorkflow(_conf())
         session = _mock_session()
         chunk = OutputSchema(
@@ -137,6 +162,8 @@ class TestInterruptChildNodeIdInSessionState:
 
         await component._raise_user_interact_from_chunk(session, chunk)
 
+        assert session._updates[INTERRUPT_CHILD_KEY] == "childA"
+        session.commit()  # 等价 interact() 内 commit_cmp / 图 super-step 收尾提交
         assert session._store[INTERRUPT_CHILD_KEY] == "childA"
         assert not hasattr(component, "_interrupt_child_node_id")
         session.interact.assert_awaited_once_with("ask me")
@@ -151,7 +178,7 @@ class TestInterruptChildNodeIdInSessionState:
         component = SubWorkflow(_conf())
         session_old = _mock_session()
 
-        # 执行 1：子工作流中断，写入中断子节点 ID
+        # 执行 1：子工作流中断，写入中断子节点 ID 并提交（模拟 checkpoint 落盘）
         await component._raise_user_interact_from_chunk(
             session_old,
             OutputSchema(
@@ -160,6 +187,7 @@ class TestInterruptChildNodeIdInSessionState:
                 payload=InteractionOutput(id="childA", value="ask me"),
             ),
         )
+        session_old.commit()
         assert session_old._store[INTERRUPT_CHILD_KEY] == "childA"
 
         # 执行 2：全新 session，不得进入 resume 分支
@@ -188,7 +216,49 @@ class TestInterruptChildNodeIdInSessionState:
         )
 
         assert params["query"] == "RESUME_REPLY"
-        spy.assert_called_once_with(session)
+        spy.assert_called_once_with(session, "childA")
+
+    @pytest.mark.asyncio
+    async def test_first_detection_visible_within_same_request(self):
+        """同请求内首次检测到的中断 ID 必须对本请求的 query 构建立即可见。
+
+        真实引擎里 update_state 只入 comp_state._updates（staged），get_state 读不到
+        已提交 `_state`；旧实例属性模型下检测结果立即可见。修复前：ID 读不到 →
+        `_extract_parent_resume_query` 跳过点分查找/嵌套树扫描 → 恢复输入提取失败 →
+        query 回落到 Start 节点陈旧值。
+        """
+        child = _FakeChildWorkflow()
+        component = SubWorkflow(_conf(), sub_workflow=child)
+        # 检测源：本节点 state 处于 USER_INTERACT + 目标节点下的用户回复；
+        # 私有 key 从未提交（同请求首次检测）
+        session = _mock_session(
+            {
+                "status": "user_interact",
+                "question": "ask me",
+                f"sub_node.{INTERACTIVE_INPUT}": "user reply",
+            }
+        )
+
+        await _drain(component.stream(_inputs(query="stale"), session, None))
+
+        assert child.stream_kwargs["inputs"].raw_inputs == "user reply"
+
+    @pytest.mark.asyncio
+    async def test_first_detection_visible_within_same_request_invoke(self):
+        """invoke 路径同链路：同请求首次检测结果对 query 构建立即可见。"""
+        child = _FakeChildWorkflow(result={"answer": "done", "user_fields": {}})
+        component = SubWorkflow(_conf(), sub_workflow=child)
+        session = _mock_session(
+            {
+                "status": "user_interact",
+                "question": "ask me",
+                f"sub_node.{INTERACTIVE_INPUT}": "user reply",
+            }
+        )
+
+        await component.invoke(_inputs(query="stale"), session, None)
+
+        assert child.invoke_kwargs["inputs"].raw_inputs == "user reply"
 
 
 class TestLastChildCompletedInSessionState:
@@ -235,7 +305,8 @@ class TestStreamCompletionClearsInterruptMarker:
 
         await _drain(component.stream(_inputs(), session, None))
 
-        assert session._store[INTERRUPT_CHILD_KEY] is None
+        session.commit()  # 等价图 super-step 收尾提交
+        assert session._store.get(INTERRUPT_CHILD_KEY) is None  # 已清空
         assert session._store[LAST_CHILD_COMPLETED_KEY] is True
         assert component.get_stream_output() == {
             "responseContent": "",
@@ -254,7 +325,8 @@ class TestStreamCompletionClearsInterruptMarker:
         result = await component.invoke(_inputs(), session, None)
 
         assert result["responseContent"] == "done"
-        assert session._store[INTERRUPT_CHILD_KEY] is None
+        session.commit()  # 等价图 super-step 收尾提交
+        assert session._store.get(INTERRUPT_CHILD_KEY) is None  # 已清空
         assert session._store[LAST_CHILD_COMPLETED_KEY] is True
         assert component.get_stream_output() == {
             "responseContent": "done",
