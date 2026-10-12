@@ -16,6 +16,7 @@ import org.apache.ibatis.annotations.Param;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * agent 数据库操作mapper
@@ -185,4 +186,27 @@ public interface AgentMapper {
      * @param agentId 智能体ID
      */
     void clearMemoryConfig(@Param("agentId") String agentId);
+
+    /**
+     * 查询所有在册（未删除）的 agent 清单，用于清单快照心跳遥测
+     *
+     * @return agent列表
+     */
+    List<Agent> selectAllActiveAgents();
+
+    /**
+     * 查询在册 agent 的漂移令牌（数量 + 最后修改时间），一条 index-only 聚合查询，
+     * 用于轻心跳判断清单是否发生变化（新建 / 修改 / 删除任一动作都会改变结果）
+     *
+     * @return agentCount（在册数）与 maxUpdatedOn（MAX(updated_on)，空表为 null）
+     */
+    Map<String, Object> selectInventoryStat();
+
+    /**
+     * 一次性聚合查询每 agent 的资源绑定数（t_mapping 草稿态绑定，按 app_id + resource_type 分组），
+     * 供清单快照携带知识库 / 工具 / MCP 计数字段，避免逐 agent 逐类型查询
+     *
+     * @return agentId、resourceType、cnt 三列
+     */
+    List<Map<String, Object>> selectResourceBindingCounts();
 }
