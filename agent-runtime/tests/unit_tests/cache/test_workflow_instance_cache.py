@@ -10,8 +10,10 @@ from jiuwen.serve.controllers.execution import workflow_instance_cache as wic
 @pytest.fixture(autouse=True)
 def _clean_cache():
     wic.clear_workflow_instance_cache()
+    wic._DOWNGRADE_METRIC_LOGGED = False
     yield
     wic.clear_workflow_instance_cache()
+    wic._DOWNGRADE_METRIC_LOGGED = False
 
 
 def _published_ir():
@@ -53,6 +55,31 @@ class TestGating:
         r2 = await wic.aget_or_create_workflow_instance("p", _published_ir(), build)
         assert r1 is not r2
         assert len(builds) == 2
+
+    @pytest.mark.asyncio
+    async def test_production_module_rebinding_visible(self, monkeypatch):
+        """生产降级通道：static_graph_patch 模块属性重绑定必须可见。
+
+        from-import 只拷贝导入时刻的值；apply 内部与两个接线点的 except
+        路径都是对 static_graph_patch 模块属性的重绑定。本模块若先于接线
+        模块被导入，仅读 from-import 名字会永远看不到 True（T7 审查
+        Important-1：未打补丁仍启用实例缓存 = 误用静态图）。
+        """
+        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
+        from jiuwen.extension.patches import static_graph_patch
+
+        monkeypatch.setattr(static_graph_patch, "STATIC_GRAPH_DOWNGRADED", True)
+        builds = []
+
+        async def build(ir_data, **kwargs):
+            builds.append(ir_data)
+            return object()
+
+        r1 = await wic.aget_or_create_workflow_instance("p", _published_ir(), build)
+        r2 = await wic.aget_or_create_workflow_instance("p", _published_ir(), build)
+        assert r1 is not r2
+        assert len(builds) == 2
+        assert wic._cache == {}
 
     @pytest.mark.asyncio
     async def test_unpublished_ir_bypasses(self, monkeypatch):
