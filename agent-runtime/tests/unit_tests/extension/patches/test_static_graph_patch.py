@@ -2,8 +2,11 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """static_graph_patch 结构断言与降级语义单测。
 
-断言策略：真实 venv（openjiuwen 0.1.19，已由 ir_converter import 时应用
-sub_stream 补丁）→ 断言全过；monkeypatch 破坏结构 → 对应断言命中。
+断言策略：真实 venv（openjiuwen 0.1.19）→ 断言全过；monkeypatch 破坏结构
+→ 对应断言命中。Task 6 接线后，import ir_converter / sub_workflow 即完成
+sub_stream → static_graph_patch 的应用序列，进程内引擎类属性为"已应用
+态"；B1 断言容忍两种合法态（_invoke 为 sub_stream 补丁版 = apply 前，
+或 Patch B 包装版 = apply 后，其包装链最内层仍须是 sub_stream 补丁版）。
 """
 import asyncio
 import sys
@@ -35,15 +38,26 @@ def _restore_flags():
 
 class TestStructureAssertions:
     def test_real_engine_passes_all_assertions(self):
-        """真实 openjiuwen 0.1.19 + 已应用 sub_stream 补丁 → 断言全过。
+        """真实 openjiuwen 0.1.19 + import 链已应用补丁 → 断言全过。
 
-        前置：import ir_converter（应用 sub_stream 补丁）。static_graph_patch
-        自身不应用 sub_stream 补丁（B1 断言要求调用方保证应用顺序），
-        sub_stream 补丁需 ir_converter 的 import 时应用——此处显式 import
-        保证顺序。
+        前置：import ir_converter。其应用序列为 sub_stream → ... →
+        static_graph_patch（Task 6 接线），故进程内 CompiledGraph._invoke
+        已是 Patch B 包装版（B1 断言必须容忍"已包装态"，否则接线后本用例
+        必红）；_structure_assertions 对已包装态经包装链最内层校验，仍须
+        等价于 sub_stream 补丁先行应用。sub_stream 补丁由 ir_converter 的
+        import 应用——此处显式 import 保证顺序。
         """
         import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401
 
+        from openjiuwen.core.graph.graph import CompiledGraph
+        from jiuwen.extension.patches import workflow_sub_stream_patch
+
+        # 接线后 _invoke 为 Patch B 包装版（合法态之一）
+        assert getattr(CompiledGraph._invoke, "__name__", "") == "_invoke_with_session_ctx"
+        assert (
+            static_graph_patch._invoke_chain_root(CompiledGraph._invoke)
+            is workflow_sub_stream_patch._patched_compiled_invoke
+        )
         assert static_graph_patch._structure_assertions() == []
 
     def test_compile_structure_change_detected(self, monkeypatch):
@@ -332,9 +346,11 @@ class TestPatchA:
     async def test_structural_equivalence_vs_original_compile_on_fresh_graph(self):
         """I3：patched 产物与"全新图实例 + 原版 compile"结构逐项等价。
 
-        原版 compile 需要未被 monkeypatch 的类属性，故本用例不挂
-        `_patched_compile` fixture，直接调用 `_patched_pregel_graph_compile`。
         "全新图实例 + 原版 compile"即 off 模式下每请求新实例的等价基线。
+        Task 6 接线后 PregelGraph.compile 进程内恒为 patched（import
+        ir_converter 即应用三件套），原版基线改经 apply 替换前保存的
+        `_original_pregel_graph_compile` 引用取得（本用例不挂
+        `_patched_compile` fixture，直接调用 patched 函数做对照）。
         """
         import json
 
@@ -349,7 +365,10 @@ class TestPatchA:
         original_graph = (await (await IRConverter.async_ir_to_workflow(ir_data)).instantiate())._internal._graph
 
         patched = _patched_pregel_graph_compile(patched_graph, self._fake_session())
-        original = original_graph.compile(self._fake_session())  # 原版 compile（未打补丁）
+        assert static_graph_patch._original_pregel_graph_compile is not None
+        original = static_graph_patch._original_pregel_graph_compile(
+            original_graph, self._fake_session()
+        )  # 原版 compile（apply 替换前保存的引用，未打补丁）
 
         # 各节点 PregelNode.func 的 _executable 同一性：fresh vertex 包装的是
         # 本图 build 期同一 executable 实例（共享，不复制）；build 期 Vertex
@@ -637,3 +656,101 @@ class TestPatchC:
         router.add_branch(_SessionArgFuncCondition(lambda s: s is marker), ["hit"])
         router.set_session(marker)
         assert await router() == ["hit"]
+
+
+class TestApplyAndDowngrade:
+    """apply 编排：正常应用、幂等、断言失败自动降级（Task 6 接线后的语义）。
+
+    接线后 import ir_converter / sub_workflow 即完成应用，进程内引擎类属性
+    为"已应用态"、`_STATIC_GRAPH_PATCH_APPLIED` 为 True。`_restore_engine`
+    fixture 在 setup 阶段把引擎恢复到首次 apply 替换前保存的 `_original_*`
+    基线（未应用态）并复位 flag，使本类用例能真实重放 apply（而非依赖
+    import 期的既成应用，也避免在已包装态上二次包装）；teardown 恢复保存
+    的已应用态。`_original_*` 自身不改动——apply 仅在其为 None 时捕获，
+    保证基线恒为原版。
+    """
+
+    @pytest.fixture
+    def _restore_engine(self):
+        """保存/恢复引擎类方法与模块 flag（apply 会改类属性）。"""
+        # import 触发接线：若本进程尚未应用，首次 apply 在此完成并捕获 _original_*
+        import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401
+
+        from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+
+        assert static_graph_patch._original_pregel_graph_compile is not None, (
+            "首次 apply 未成功捕获原版基线（真实 venv 下断言应全过）"
+        )
+        saved = (
+            PregelGraph.compile,
+            CompiledGraph._invoke,
+            BranchRouter.__call__,
+            static_graph_patch._STATIC_GRAPH_PATCH_APPLIED,
+            static_graph_patch.STATIC_GRAPH_DOWNGRADED,
+        )
+        # 复位到未应用基线，供测试内真实重放 apply
+        PregelGraph.compile = static_graph_patch._original_pregel_graph_compile
+        CompiledGraph._invoke = static_graph_patch._original_compiled_invoke
+        BranchRouter.__call__ = static_graph_patch._original_branch_router_call
+        static_graph_patch._STATIC_GRAPH_PATCH_APPLIED = False
+        static_graph_patch.STATIC_GRAPH_DOWNGRADED = False
+        yield
+        (
+            PregelGraph.compile,
+            CompiledGraph._invoke,
+            BranchRouter.__call__,
+        ) = saved[0], saved[1], saved[2]
+        static_graph_patch._STATIC_GRAPH_PATCH_APPLIED = saved[3]
+        static_graph_patch.STATIC_GRAPH_DOWNGRADED = saved[4]
+
+    def test_apply_patches_all_three_and_is_idempotent(self, _restore_engine):
+        from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+        from jiuwen.extension.patches import workflow_sub_stream_patch
+
+        baseline_compile = static_graph_patch._original_pregel_graph_compile
+        baseline_invoke = static_graph_patch._original_compiled_invoke
+        baseline_call = static_graph_patch._original_branch_router_call
+
+        assert static_graph_patch.apply_static_graph_patch() is True
+        assert PregelGraph.compile is static_graph_patch._patched_pregel_graph_compile
+        assert BranchRouter.__call__ is static_graph_patch._patched_branch_router_call
+        # _invoke 是包装版（包装了 sub_stream 的 _patched_compiled_invoke），
+        # 包装链最内层仍是 sub_stream 补丁版（Patch B 不改写执行语义）
+        assert CompiledGraph._invoke.__name__ == "_invoke_with_session_ctx"
+        assert (
+            static_graph_patch._invoke_chain_root(CompiledGraph._invoke)
+            is workflow_sub_stream_patch._patched_compiled_invoke
+        )
+        assert not static_graph_patch.STATIC_GRAPH_DOWNGRADED
+        # apply 后结构断言仍全过（B1 容忍已包装态）
+        assert static_graph_patch._structure_assertions() == []
+        # 重放 apply 不覆盖原版基线（_original_* 仅首次捕获）
+        assert static_graph_patch._original_pregel_graph_compile is baseline_compile
+        assert static_graph_patch._original_compiled_invoke is baseline_invoke
+        assert static_graph_patch._original_branch_router_call is baseline_call
+
+        # 幂等：第二次调用返回 False
+        assert static_graph_patch.apply_static_graph_patch() is False
+
+    def test_assertion_failure_downgrades_and_skips_patches(self, _restore_engine, monkeypatch, caplog):
+        from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+
+        original_compile = PregelGraph.compile
+        original_invoke = CompiledGraph._invoke
+        original_call = BranchRouter.__call__
+        monkeypatch.setattr(
+            static_graph_patch, "_structure_assertions", lambda: ["模拟上游结构变更"]
+        )
+
+        assert static_graph_patch.apply_static_graph_patch() is False
+        assert static_graph_patch.STATIC_GRAPH_DOWNGRADED is True
+        assert PregelGraph.compile is original_compile  # 未被替换
+        assert CompiledGraph._invoke is original_invoke  # 未被替换
+        assert BranchRouter.__call__ is original_call  # 未被替换
+        assert any("结构断言失败" in r.message for r in caplog.records)
+
+        # 降级后再次调用不重复告警（幂等守卫）
+        assert static_graph_patch.apply_static_graph_patch() is False

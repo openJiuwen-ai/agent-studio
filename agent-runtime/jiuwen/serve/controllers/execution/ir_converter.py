@@ -31,7 +31,7 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.llm_service.base import ModelFactory
 from jiuwen.common.llm_service.model_util import ModelUtil
 from jiuwen.common.log.base import logger, get_x_execution_id
-from openjiuwen.core.common.logging import performance_logger
+from openjiuwen.core.common.logging import performance_logger, workflow_logger
 from jiuwen.common.utils.utils import safe_json_loads_raise_exception, timed_cache_op
 from jiuwen.context.memory_engine.config.memory_ir_config import MemoryIrConfig
 from jiuwen.controller.agent.agent import Agent
@@ -45,6 +45,10 @@ from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
 )
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
+)
+from jiuwen.extension.patches import static_graph_patch
+from jiuwen.extension.patches.static_graph_patch import (
+    apply_static_graph_patch,
 )
 from jiuwen.extension.workflow_node.end import End
 from jiuwen.extension.workflow_node.exception_handler import (
@@ -112,6 +116,16 @@ apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
 apply_global_memory_ref_resolution_patch()
+# 三件套（静态图复用）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
+# apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
+# 确保静态图复用降级而非拖垮 ir_converter 的 import。
+try:
+    apply_static_graph_patch()
+except Exception as e:  # pylint: disable=broad-except
+    static_graph_patch.STATIC_GRAPH_DOWNGRADED = True
+    workflow_logger.error(
+        f"[static_graph_patch] apply 异常，自动降级（实例缓存强制关闭）: {e}"
+    )
 from jiuwen.extension.workflow_node.utils import WorkflowMetadata
 
 from jiuwen.serve.controllers.execution.ir_parallel_utils import (

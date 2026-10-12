@@ -1566,8 +1566,22 @@ from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
 )
+from jiuwen.extension.patches import static_graph_patch
+from jiuwen.extension.patches.static_graph_patch import (
+    apply_static_graph_patch,
+)
 
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
 apply_global_memory_ref_resolution_patch()
+# 三件套（静态图复用）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
+# apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
+# 确保静态图复用降级而非拖垮 sub_workflow 的 import。
+try:
+    apply_static_graph_patch()
+except Exception as e:  # pylint: disable=broad-except
+    static_graph_patch.STATIC_GRAPH_DOWNGRADED = True
+    workflow_logger.error(
+        f"[static_graph_patch] apply 异常，自动降级（实例缓存强制关闭）: {e}"
+    )
