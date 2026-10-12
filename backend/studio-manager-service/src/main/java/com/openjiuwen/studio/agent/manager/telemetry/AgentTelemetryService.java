@@ -4,7 +4,9 @@
 
 package com.openjiuwen.studio.agent.manager.telemetry;
 
+import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentInfo;
+import com.openjiuwen.studio.agent.manager.dto.KnowledgeRepoReference;
 import com.openjiuwen.studio.agent.manager.dto.McpServerReference;
 import com.openjiuwen.studio.agent.manager.dto.ToolReference;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -36,6 +38,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -133,8 +136,11 @@ public class AgentTelemetryService {
             .put("openjiuwen.agent.description", truncate(info.getDescription()))
             .put("openjiuwen.agent.status", StringUtils.defaultString(info.getStatus()))
             .put("openjiuwen.agent.type", StringUtils.defaultString(info.getType()))
+            .put("openjiuwen.agent.sub_type", StringUtils.defaultString(info.getSubType()))
+            .put("openjiuwen.agent.scheduling_mode", StringUtils.defaultString(info.getSchedulingMode()))
             .put("openjiuwen.agent.model.name", StringUtils.defaultString(info.getModelName()))
             .put("openjiuwen.agent.model.type", StringUtils.defaultString(info.getModelType()))
+            .put("openjiuwen.agent.plan_model.name", StringUtils.defaultString(info.getPlanModelName()))
             .put("openjiuwen.agent.creator", StringUtils.defaultString(info.getCreator()))
             .put("openjiuwen.event.operator", StringUtils.defaultString(operator));
         if (StringUtils.isNotBlank(projectId)) {
@@ -147,7 +153,67 @@ public class AgentTelemetryService {
         }
         putTimestamp(builder, "openjiuwen.agent.updated_on", info.getUpdateTime());
         putTimestamp(builder, "openjiuwen.agent.published_on", info.getPublishTime());
+        putEventSummaries(builder, info);
         emit(BODY_EVENT_PREFIX + eventType, builder.build());
+    }
+
+    /**
+     * 事件携带的知识库 / 工具 / MCP 脱敏清单（仅 id 与名称）。清单是写接口返回对象的
+     * 现成字段，进程内直取、无额外查询；任何异常只影响摘要、不影响事件发出。
+     */
+    private void putEventSummaries(AttributesBuilder builder, AgentInfo info) {
+        try {
+            String repos = joinKnowledgeRepos(info.getKnowledgeRepos());
+            if (StringUtils.isNotEmpty(repos)) {
+                builder.put("openjiuwen.agent.knowledge.repos", truncate(repos));
+            }
+            String tools = joinTools(info.getTools());
+            if (StringUtils.isNotEmpty(tools)) {
+                builder.put("openjiuwen.agent.tools", truncate(tools));
+            }
+            String servers = joinMcpServers(info.getMcpServers());
+            if (StringUtils.isNotEmpty(servers)) {
+                builder.put("openjiuwen.agent.mcp.servers", truncate(servers));
+            }
+        } catch (Exception e) {
+            log.warn("agent telemetry: event summaries failed: {}", e.getMessage());
+        }
+    }
+
+    private String joinKnowledgeRepos(List<KnowledgeRepoReference> repos) {
+        if (repos == null || repos.isEmpty()) {
+            return "";
+        }
+        return repos.stream()
+            .limit(MAX_SUMMARY_ENTRIES)
+            .map(r -> StringUtils.defaultString(r.getKnowledgeRepoId()) + ","
+                + StringUtils.defaultString(r.getKnowledgeRepoName()))
+            .reduce((a, b) -> a + ";" + b)
+            .orElse("");
+    }
+
+    private String joinTools(List<ToolReference> tools) {
+        if (tools == null || tools.isEmpty()) {
+            return "";
+        }
+        return tools.stream()
+            .limit(MAX_SUMMARY_ENTRIES)
+            .map(t -> StringUtils.defaultIfBlank(t.getToolDisplayName(),
+                StringUtils.defaultString(t.getPluginDisplayName())))
+            .reduce((a, b) -> a + ";" + b)
+            .orElse("");
+    }
+
+    private String joinMcpServers(List<McpServerReference> servers) {
+        if (servers == null || servers.isEmpty()) {
+            return "";
+        }
+        return servers.stream()
+            .limit(MAX_SUMMARY_ENTRIES)
+            .map(m -> StringUtils.defaultString(m.getMcpServerName())
+                + "(" + (m.getToolsNum() == null ? 0 : m.getToolsNum()) + ")")
+            .reduce((a, b) -> a + ";" + b)
+            .orElse("");
     }
 
     /**
@@ -181,8 +247,11 @@ public class AgentTelemetryService {
                 .put("openjiuwen.agent.description", truncate(capturedAgent.getDescription()))
                 .put("openjiuwen.agent.status", StringUtils.defaultString(capturedAgent.getStatus()))
                 .put("openjiuwen.agent.type", StringUtils.defaultString(capturedAgent.getType()))
+                .put("openjiuwen.agent.sub_type", StringUtils.defaultString(capturedAgent.getSubType()))
+                .put("openjiuwen.agent.scheduling_mode", StringUtils.defaultString(capturedAgent.getSchedulingMode()))
                 .put("openjiuwen.agent.model.name", StringUtils.defaultString(capturedAgent.getModelName()))
                 .put("openjiuwen.agent.model.type", StringUtils.defaultString(capturedAgent.getModelType()))
+                .put("openjiuwen.agent.plan_model.name", StringUtils.defaultString(capturedAgent.getPlanModelName()))
                 .put("openjiuwen.agent.creator", StringUtils.defaultString(capturedAgent.getCreator()));
             putTimestamp(builder, "openjiuwen.agent.updated_on", capturedAgent.getUpdatedOn());
             putTimestamp(builder, "openjiuwen.agent.published_on", capturedAgent.getPublishedOn());
@@ -210,7 +279,9 @@ public class AgentTelemetryService {
                         + StringUtils.defaultString(r.getDisplayName()))
                     .reduce((a, b) -> a + ";" + b)
                     .orElse("");
-                builder.put("openjiuwen.agent.knowledge.repos", truncate(repos));
+                if (StringUtils.isNotEmpty(repos)) {
+                    builder.put("openjiuwen.agent.knowledge.repos", truncate(repos));
+                }
             }
         } catch (Exception e) {
             log.warn("agent telemetry: summary of knowledge repos failed: {}", e.getMessage());
@@ -218,13 +289,8 @@ public class AgentTelemetryService {
         try {
             List<ToolReference> tools =
                 relationManagementService.listAgentTools(projectId, workspaceId, agentId, 0, MAX_SUMMARY_ENTRIES);
-            if (tools != null && !tools.isEmpty()) {
-                String names = tools.stream()
-                    .limit(MAX_SUMMARY_ENTRIES)
-                    .map(t -> StringUtils.defaultIfBlank(t.getToolDisplayName(),
-                        StringUtils.defaultString(t.getPluginDisplayName())))
-                    .reduce((a, b) -> a + ";" + b)
-                    .orElse("");
+            String names = joinTools(tools);
+            if (StringUtils.isNotEmpty(names)) {
                 builder.put("openjiuwen.agent.tools", truncate(names));
             }
         } catch (Exception e) {
@@ -232,13 +298,8 @@ public class AgentTelemetryService {
         }
         try {
             List<McpServerReference> mcpServers = relationManagementService.listAgentMcpServers(agentId);
-            if (mcpServers != null && !mcpServers.isEmpty()) {
-                String servers = mcpServers.stream()
-                    .limit(MAX_SUMMARY_ENTRIES)
-                    .map(m -> StringUtils.defaultString(m.getMcpServerName())
-                        + "(" + (m.getToolsNum() == null ? 0 : m.getToolsNum()) + ")")
-                    .reduce((a, b) -> a + ";" + b)
-                    .orElse("");
+            String servers = joinMcpServers(mcpServers);
+            if (StringUtils.isNotEmpty(servers)) {
                 builder.put("openjiuwen.agent.mcp.servers", truncate(servers));
             }
         } catch (Exception e) {
@@ -289,8 +350,9 @@ public class AgentTelemetryService {
      * 用于区分“没有 agent”与“服务不可用”。
      *
      * @param agents DB 当前全量在册 agent
+     * @param bindingCounts 每 agent 的资源绑定计数（key = agentId，value = resource_type -> 数量），可为 null
      */
-    public void emitSnapshot(List<Agent> agents) {
+    public void emitSnapshot(List<Agent> agents, Map<String, Map<String, Long>> bindingCounts) {
         if (!enabled) {
             return;
         }
@@ -307,13 +369,22 @@ public class AgentTelemetryService {
                 .put("openjiuwen.agent.description", truncate(agent.getDescription()))
                 .put("openjiuwen.agent.status", StringUtils.defaultString(agent.getStatus()))
                 .put("openjiuwen.agent.type", StringUtils.defaultString(agent.getType()))
+                .put("openjiuwen.agent.sub_type", StringUtils.defaultString(agent.getSubType()))
+                .put("openjiuwen.agent.scheduling_mode", StringUtils.defaultString(agent.getSchedulingMode()))
                 .put("openjiuwen.agent.model.name", StringUtils.defaultString(agent.getModelName()))
                 .put("openjiuwen.agent.model.type", StringUtils.defaultString(agent.getModelType()))
+                .put("openjiuwen.agent.plan_model.name", StringUtils.defaultString(agent.getPlanModelName()))
                 .put("openjiuwen.agent.creator", StringUtils.defaultString(agent.getCreator()))
                 .put("openjiuwen.project.id", StringUtils.defaultString(agent.getProjectId()))
                 .put("openjiuwen.workspace.id", StringUtils.defaultString(agent.getWorkspaceId()));
             if (agent.getUpdatedOn() != null) {
                 builder.put("openjiuwen.agent.updated_on", ISO_FORMATTER.format(agent.getUpdatedOn().toInstant()));
+            }
+            Map<String, Long> counts = bindingCounts == null ? null : bindingCounts.get(agent.getAgentId());
+            if (counts != null) {
+                builder.put("openjiuwen.agent.knowledge.count", counts.getOrDefault(CommonConstant.REPO_TYPE, 0L))
+                    .put("openjiuwen.agent.tools.count", counts.getOrDefault(CommonConstant.TOOL_TYPE, 0L))
+                    .put("openjiuwen.agent.mcp.count", counts.getOrDefault(CommonConstant.MCP_TYPE, 0L));
             }
             emit(BODY_SNAPSHOT, builder.build());
         }

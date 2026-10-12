@@ -201,4 +201,12 @@ public interface AgentMapper {
      * @return agentCount（在册数）与 maxUpdatedOn（MAX(updated_on)，空表为 null）
      */
     Map<String, Object> selectInventoryStat();
+
+    /**
+     * 一次性聚合查询每 agent 的资源绑定数（t_mapping 草稿态绑定，按 app_id + resource_type 分组），
+     * 供清单快照携带知识库 / 工具 / MCP 计数字段，避免逐 agent 逐类型查询
+     *
+     * @return agentId、resourceType、cnt 三列
+     */
+    List<Map<String, Object>> selectResourceBindingCounts();
 }

@@ -15,6 +15,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -90,7 +92,7 @@ public class AgentTelemetryHeartbeatTask {
             boolean reconcileDue = reconcileIntervalMillis > 0
                 && System.currentTimeMillis() - lastFullSnapshotAt >= reconcileIntervalMillis;
             if (drift || reconcileDue) {
-                telemetryService.emitSnapshot(agentMapper.selectAllActiveAgents());
+                telemetryService.emitSnapshot(agentMapper.selectAllActiveAgents(), selectBindingCounts());
                 if (telemetryService.flushConfirmed()) {
                     confirmedToken = token;
                     lastFullSnapshotAt = System.currentTimeMillis();
@@ -102,6 +104,29 @@ public class AgentTelemetryHeartbeatTask {
             if (lock != null) {
                 lock.unlock();
             }
+        }
+    }
+
+    /**
+     * 一次性聚合查询每 agent 的资源绑定数（t_mapping 草稿态，按 app_id + resource_type 分组），
+     * 转成 agentId -> resource_type -> 数量；查询失败返回 null，快照退化为不带计数字段。
+     */
+    private Map<String, Map<String, Long>> selectBindingCounts() {
+        try {
+            List<Map<String, Object>> rows = agentMapper.selectResourceBindingCounts();
+            Map<String, Map<String, Long>> counts = new HashMap<>();
+            for (Map<String, Object> row : rows) {
+                String agentId = row.get("agentId") == null ? null : String.valueOf(row.get("agentId"));
+                String resourceType = row.get("resourceType") == null ? null : String.valueOf(row.get("resourceType"));
+                long cnt = row.get("cnt") instanceof Number number ? number.longValue() : 0L;
+                if (agentId != null && resourceType != null) {
+                    counts.computeIfAbsent(agentId, k -> new HashMap<>()).put(resourceType, cnt);
+                }
+            }
+            return counts;
+        } catch (Exception e) {
+            log.warn("agent telemetry: binding counts failed: {}", e.getMessage());
+            return null;
         }
     }
 }
