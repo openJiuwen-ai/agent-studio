@@ -263,15 +263,14 @@ class TestComponentExecSessionTypeContract:
         from openjiuwen.core.session.node import Session as SessionWrapper
 
         wf_session = WorkflowSession(workflow_id="wf_t12", session_id="wf-sess")
-        # skip_trace：裸 WorkflowSession 无 tracer，与本用例的类型契约无关
-        node_session = NodeSession(wf_session, "intent_node", skip_trace=True)
+        node_session = NodeSession(wf_session, "intent_node")
         return node_session, SessionWrapper(node_session, False)
 
     @pytest.mark.asyncio
     async def test_component_exec_unwraps_session_wrapper_for_router_conditions(
         self, monkeypatch
     ):
-        """写入端解包 + 消费端（patched BranchRouter → Condition）类型契约。"""
+        """双契约分离：通道存包装器（组件自身读点），解析链解包 NodeSession（Patch C 消费方）。"""
         from openjiuwen.core.session import BaseSession
         from openjiuwen.core.workflow.components.flow.branch_router import (
             BranchRouter,
@@ -297,9 +296,12 @@ class TestComponentExecSessionTypeContract:
         comp = _RoutedIntentDetection(_conf())
         await comp.invoke({}, wrapper, None)
 
-        # 写入端解包：通道内为 NodeSession（与旧 set_session 解包语义一致）
+        # 契约 1（组件自身读点）：通道内存组件面包装器（NodeSession 无
+        # trace/get_global_state/interact，解包存储会打断组件主路径）
         stored, _ = ctx.current_component_exec()
-        assert stored is node_session
+        assert stored is wrapper
+
+        # 契约 2（Patch C 消费方）：解析链返回解包后的 NodeSession（BaseSession）
         assert ctx.resolve_routing_session() is node_session
         assert isinstance(ctx.resolve_routing_session(), BaseSession)
 
@@ -316,8 +318,8 @@ class TestComponentExecSessionTypeContract:
         assert seen["session"] is node_session
 
     @pytest.mark.asyncio
-    async def test_base_invoke_unwraps_session_wrapper(self):
-        """基类 invoke 写入端同样解包（真实 Session 包装器驱动完整路径）。"""
+    async def test_base_invoke_stores_session_wrapper(self):
+        """基类 invoke 写入端存包装器（真实 Session 包装器驱动完整路径）。"""
         node_session, wrapper = self._engine_session()
         comp = IntentDetection(_conf())
         comp.get_llm_result = AsyncMock(
@@ -328,7 +330,40 @@ class TestComponentExecSessionTypeContract:
 
         assert result["result"] == "分类1"
         stored, _ = ctx.current_component_exec()
-        assert stored is node_session
+        assert stored is wrapper
+
+    @pytest.mark.asyncio
+    async def test_wrapper_in_channel_supports_component_own_session_reads(self):
+        """逃逸面：真实包装器入通道 + 真实 get_llm_result/interact 读点不抛 AttributeError。
+
+        IntentDetection 自身读点只用包装器 API（trace / get_global_state /
+        interact / get_session_id / get_component_id）——NodeSession 无这些
+        方法（写入端若解包存储，生产主路径（FAQ 未命中/未开知识库时必经的
+        `get_llm_result` 无条件 trace）即 AttributeError）。本用例不 mock
+        `get_llm_result` 本体，仅 mock Model，钉住该逃逸面。
+        """
+        from openjiuwen.core.graph.pregel.base import GraphInterrupt
+
+        node_session, wrapper = self._engine_session()
+        comp = IntentDetection(_conf())
+        llm = MagicMock()
+        llm.invoke = AsyncMock(
+            return_value=SimpleNamespace(content='{"class": "分类1"}')
+        )
+        comp.llm = llm  # 跳过懒初始化，驱动真实 get_llm_result
+
+        result = await comp.invoke({"input": "你好"}, wrapper, None)
+
+        assert result["result"] == "分类1"
+        stored, _ = ctx.current_component_exec()
+        assert stored is wrapper
+
+        # 中断路径：wrapper.interact 可达（NodeSession 无 interact → AttributeError）；
+        # 真实语义为等待用户输入（GraphInterrupt）。
+        with pytest.raises(GraphInterrupt):
+            await comp._handle_global_intent(
+                "分类1", "r", {"分类1": SimpleNamespace(intent_id="i-1")}
+            )
 
     def test_resolve_routing_session_unwraps_wrapper_from_any_writer(self):
         """读取端防御性解包：通道内即使是包装器（未来写入方），解析结果仍满足契约。"""
