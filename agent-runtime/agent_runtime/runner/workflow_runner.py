@@ -27,6 +27,9 @@ from agent_runtime.schemas.orchestration_mgr import (
 )
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
+from jiuwen.serve.controllers.execution.workflow_instance_cache import (
+    aget_or_create_workflow_instance,
+)
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.utils import WorkflowAbortException
@@ -338,10 +341,14 @@ class WorkflowRunner:
             _ctx = _request_ctx.get()
             _cust_headers = _ctx.customer_headers if _ctx else {}
             _project_id = _ctx.project_id if _ctx else ""
-            workflow = await self._ir_converter.async_ir_to_workflow(
+            workflow = await aget_or_create_workflow_instance(
+                ir_path,
                 ir_json,
-                cust_headers=_cust_headers,
-                project_id=_project_id,
+                build=self._ir_converter.async_ir_to_workflow,
+                build_kwargs={
+                    "cust_headers": _cust_headers,
+                    "project_id": _project_id,
+                },
             )
             performance_logger.info(
                 f"ir_convert|{round((time.perf_counter() - t_convert_start) * 1000)}"
