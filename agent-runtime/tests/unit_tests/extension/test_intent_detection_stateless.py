@@ -47,7 +47,16 @@ def _conf() -> dict:
 
 
 def _mock_session(session_id: str = "sess-1") -> MagicMock:
-    session = MagicMock()
+    """最小 session 桩（spec_set 限定接口面）。
+
+    spec_set 必要：普通 MagicMock 会**自动生成**任意属性（含 `_inner`），
+    使写入端 `getattr(session, "_inner", session)` 解包到一个假包装器上——
+    与真实引擎 session（NodeSession 无 `_inner`）不同构，会掩盖类型契约缺陷。
+    """
+    session = MagicMock(
+        spec_set=["get_session_id", "get_component_id", "get_global_state",
+                  "trace", "interact"]
+    )
     session.get_session_id = MagicMock(return_value=session_id)
     session.get_component_id = MagicMock(return_value="intent_node")
     session.get_global_state = MagicMock(return_value=None)
@@ -62,6 +71,22 @@ def _clean_component_exec():
     ctx.set_component_exec(None, None)
     yield
     ctx.set_component_exec(None, None)
+
+
+def _session_arg_condition(func):
+    """session 透传条件（测试专用）。
+
+    引擎 FuncCondition.invoke 为**无参**调用（condition.py:44 `self._func()`），
+    条件函数收不到 session；本变体把 session 透传给条件函数，使断言能直接
+    观察 Patch C 解析出的 session 对象（同 test_static_graph_patch 的助手）。
+    """
+    from openjiuwen.core.workflow.components.condition.condition import FuncCondition
+
+    class _SessionArgFuncCondition(FuncCondition):
+        def invoke(self, inputs, session):
+            return self._func(session)
+
+    return _SessionArgFuncCondition(func)
 
 
 class TestIntentDetectionStateless:
@@ -216,3 +241,105 @@ class TestIntentDetectionStateless:
 
         session.interact.assert_called_once()
         assert comp.node_state.status == ExecutionStatus.USER_INTERACT
+
+
+class TestComponentExecSessionTypeContract:
+    """Critical-1：component_exec 值的类型契约（Patch C 消费方）。
+
+    引擎 `WorkflowComponent.on_invoke`（component.py:95-99）以
+    `Session(node_session, False)` 包装器调 invoke——包装器**不是** BaseSession、
+    无 state()、无 __getattr__ 委托；dispatch 同 NodeTask → patched
+    BranchRouter.__call__ → resolve_routing_session 原样返回 → 分支条件
+    Condition.__call__ → AtomicNode._validate_session_and_state
+    （atomic_node.py:13-26）要求 isinstance BaseSession + CommitState，
+    否则抛 GRAPH_STATE_COMMIT_ERROR。旧 `set_session`（branch_router.py:82-90）
+    会解包 `_inner` 到 NodeSession——通道值必须同语义解包。
+    """
+
+    @staticmethod
+    def _engine_session():
+        """真实引擎 session 三元组：WorkflowSession → NodeSession → Session 包装器。"""
+        from openjiuwen.core.session import NodeSession, WorkflowSession
+        from openjiuwen.core.session.node import Session as SessionWrapper
+
+        wf_session = WorkflowSession(workflow_id="wf_t12", session_id="wf-sess")
+        # skip_trace：裸 WorkflowSession 无 tracer，与本用例的类型契约无关
+        node_session = NodeSession(wf_session, "intent_node", skip_trace=True)
+        return node_session, SessionWrapper(node_session, False)
+
+    @pytest.mark.asyncio
+    async def test_component_exec_unwraps_session_wrapper_for_router_conditions(
+        self, monkeypatch
+    ):
+        """写入端解包 + 消费端（patched BranchRouter → Condition）类型契约。"""
+        from openjiuwen.core.session import BaseSession
+        from openjiuwen.core.workflow.components.flow.branch_router import (
+            BranchRouter,
+        )
+        from jiuwen.extension.patches.static_graph_patch import (
+            _patched_branch_router_call,
+        )
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            _RoutedIntentDetection,
+        )
+        import jiuwen.extension.workflow_node.intent_detection as idm
+
+        monkeypatch.setattr(BranchRouter, "__call__", _patched_branch_router_call)
+
+        node_session, wrapper = self._engine_session()
+        assert not isinstance(wrapper, BaseSession)  # 包装器不满足条件求值契约
+
+        async def fake_super_invoke(self, inputs, session, context, **kwargs):
+            return {}
+
+        monkeypatch.setattr(idm.IntentDetection, "invoke", fake_super_invoke)
+
+        comp = _RoutedIntentDetection(_conf())
+        await comp.invoke({}, wrapper, None)
+
+        # 写入端解包：通道内为 NodeSession（与旧 set_session 解包语义一致）
+        stored, _ = ctx.current_component_exec()
+        assert stored is node_session
+        assert ctx.resolve_routing_session() is node_session
+        assert isinstance(ctx.resolve_routing_session(), BaseSession)
+
+        # 消费端：patched BranchRouter → 条件求值不抛类型错，收到 NodeSession
+        seen = {}
+
+        def _record(session):
+            seen["session"] = session
+            return True
+
+        router = BranchRouter(report_trace=False)
+        router.add_branch(_session_arg_condition(_record), ["node_a"])
+        assert await router() == ["node_a"]
+        assert seen["session"] is node_session
+
+    @pytest.mark.asyncio
+    async def test_base_invoke_unwraps_session_wrapper(self):
+        """基类 invoke 写入端同样解包（真实 Session 包装器驱动完整路径）。"""
+        node_session, wrapper = self._engine_session()
+        comp = IntentDetection(_conf())
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+
+        result = await comp.invoke({"input": "你好"}, wrapper, None)
+
+        assert result["result"] == "分类1"
+        stored, _ = ctx.current_component_exec()
+        assert stored is node_session
+
+    def test_resolve_routing_session_unwraps_wrapper_from_any_writer(self):
+        """读取端防御性解包：通道内即使是包装器（未来写入方），解析结果仍满足契约。"""
+        from openjiuwen.core.session import BaseSession
+
+        node_session, wrapper = self._engine_session()
+        token = ctx.set_component_exec(wrapper, None)
+        try:
+            resolved = ctx.resolve_routing_session()
+        finally:
+            ctx.reset_component_exec(token)
+
+        assert resolved is node_session
+        assert isinstance(resolved, BaseSession)

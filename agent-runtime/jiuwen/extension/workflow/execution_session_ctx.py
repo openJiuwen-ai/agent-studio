@@ -22,6 +22,27 @@
    的路由误解析到组件级 session（与现状 add_conditional_connection 的
    ProxySession 语义对齐）。NodeTask 每节点独立 context
    （asyncio.create_task 拷贝），天然跨执行隔离。
+
+   值类型契约：引擎 ``WorkflowComponent.on_invoke`` 传给 invoke 的是
+   ``Session(node_session, False)`` 包装器（component.py:95-99，无
+   state()、无 __getattr__ 委托），而该通道的消费方（Patch C →
+   BranchRouter 分支条件 → ``AtomicNode._validate_session_and_state``）
+   要求 ``isinstance(session, BaseSession)``。故写入端解包到 NodeSession
+   （``getattr(session, "_inner", session)``，与旧 ``BranchRouter.set_session``
+   解包语义一致），``resolve_routing_session`` 读取端亦防御性解包
+   （NodeSession 自身无 ``_inner``，不会过度解包）。
+
+   前提与已知限制：
+   - **前提（per-node timeout）**：值仅在"节点函数与 dispatch 同 task"时
+     可达。per-node ``timeout < 0``（默认 -1.0）时 vertex.py 直接 await
+     ``_run_executable``（同 task）；``timeout >= 0`` 时经
+     ``asyncio.wait_for`` 新建子 task（vertex.py:250-253），invoke 内的
+     set 留在子 task 上下文、dispatch 读不到 → 回退 workflow 级/调用方
+     回退（= 旧行为，安全，仅分支粒度降级）。
+   - **已知限制（嵌套继承）**：组件级值随 task 上下文继承进嵌套子执行，
+     深嵌套时优先于子工作流自己的 workflow 级值（影响面：trace / 节点级
+     state 的归属；条件求值路径不受影响——子执行路径经 token 栈式恢复
+     ``_workflow_session``，组件级仅在属主节点自己的 dispatch 窗口内有值）。
 3. ``_stream_final_output``：流式组件的末帧输出。**不 reset**——引擎
    Vertex._post_stream 在 generator 耗尽后读取（vertex.py:624-628），
    reset 会丢值。同样依赖 NodeTask 的 context 隔离。
@@ -82,10 +103,16 @@ def resolve_routing_session(fallback: Any = None) -> Any:
       对应 workflow 级分支；
     - IntentDetection/_RoutedIntentDetection 每次执行 set_session(组件
       NodeSession) → 对应组件级分支（需存活到同 task 内的 dispatch）。
+
+    组件级值解包到 NodeSession 后返回：分支条件求值（Condition.__call__ →
+    AtomicNode._validate_session_and_state）要求 ``isinstance(BaseSession)``，
+    而引擎 on_invoke 传入的是 Session 包装器（写入端已解包，此处兜底保证
+    未来任何写入方存包装器也安全；NodeSession 自身无 ``_inner``，不会过度
+    解包）。
     """
     session, _ = _component_exec.get()
     if session is not None:
-        return session
+        return getattr(session, "_inner", session)
     workflow_session = _workflow_session.get()
     if workflow_session is not None:
         return workflow_session

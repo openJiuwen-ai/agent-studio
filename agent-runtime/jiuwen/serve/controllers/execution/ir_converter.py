@@ -909,7 +909,9 @@ class _RoutedIntentDetection(IntentDetection):
         # 路由属主组件：session/context 走 component_exec ContextVar（**不
         # reset**——路由 dispatch 在 invoke 返回后的同一 NodeTask 里执行，
         # 需读到组件级 session；super().invoke 入口同值再 set，幂等）。
-        set_component_exec(session, context)
+        # 写入端解包到 NodeSession（引擎传入 Session 包装器，分支条件求值
+        # 要求 BaseSession，与旧 router.set_session 解包语义一致）。
+        set_component_exec(getattr(session, "_inner", session), context)
         return await super().invoke(inputs, session, context, **kwargs)
 
     def add_component(
