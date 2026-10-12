@@ -216,10 +216,12 @@ def test_subworkflow_collects_updated_memory_from_memory_variable_global_key():
             "reference": {"id": "child", "path": "child.json"},
         }
     )
-    component._global_var_names = ["parent_mem_one"]
 
     session = MagicMock()
     values = {"MEMORY_VARIABLE.parent_mem_one": "8272", "parent_mem_one": None}
     session.get_global_state.side_effect = lambda key=None: values.get(key)
 
-    assert component._collect_updated_memory(session) == {"parent_mem_one": "8272"}
+    # 变量名经参数传递（`_global_var_names` 已局部化，不再落组件实例属性）
+    assert component._collect_updated_memory(session, ["parent_mem_one"]) == {
+        "parent_mem_one": "8272"
+    }
