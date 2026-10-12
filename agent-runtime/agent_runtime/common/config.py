@@ -274,6 +274,16 @@ class CacheSettings(BaseSettings):
     mem_cache_ttl_seconds: int = Field(
         default=3600, validation_alias="MEM_CACHE_TTL_SECONDS"
     )
+    # Workflow 实例复用模式（issue #1555）：off = 现状（每请求重建，零行为变化）；
+    # static_graph = 复用已构建图（patch 三件套 + LazyWorkflow 保留制缓存）。
+    # 注意与 MAX_WORKFLOW_CACHE_NUM 区分：后者是 BPMN spec 缓存队列（jiuwen
+    # orchestration 路径）的容量，本配置是 openjiuwen Workflow 实例缓存的容量。
+    workflow_instance_reuse_mode: Literal["off", "static_graph"] = Field(
+        default="off", validation_alias="WORKFLOW_INSTANCE_REUSE_MODE"
+    )
+    workflow_instance_cache_num: int = Field(
+        default=100, ge=1, validation_alias="WORKFLOW_INSTANCE_CACHE_NUM"
+    )
     max_cache_data_size: int = Field(
         default=2 * 1024 * 1024, validation_alias="MAX_CACHE_DATA_SIZE"
     )
