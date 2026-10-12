@@ -29,6 +29,8 @@ FlowCard - 卡片节点组件
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import datetime
 from datetime import timezone, timedelta
 from enum import Enum
@@ -230,6 +232,28 @@ class FlowCard(WorkflowComponent):
             )
             return None
 
+    def _new_renderer(self):
+        """按调用克隆 TemplateProcessor，隔离渲染位置（issue #1555 审计）。
+
+        共享实例的 ``render_stream`` 逐段推进 ``_current_position/_chunk_index/
+        _count``：复用组件实例下并发执行会互踩渲染位置（顺序复用可经
+        render_stream finally 的 reset 自愈，并发不行）。浅拷贝足以隔离位置字段
+        （int），模板 split 结果 ``_segments`` 只读共享；但浅拷贝会连
+        ``_lock/_condition`` 一起共享——父类 ``_render_stream``
+        （end_comp.py:399-441）在持有 ``_lock`` 期间逐帧 yield（变量为上游
+        AsyncGenerator 时可长时间挂起），跨执行共享同步原语会让执行 B 阻塞在
+        执行 A 的在途帧上（队头阻塞），故按调用重建同步原语（参照 end.py
+        ``_prepare_render_state``）。``_template_processor`` 为 None（降级路径）
+        时返回 None。入口不改共享属性（I1 不变量）。
+        """
+        if self._template_processor is None:
+            return None
+        renderer = copy.copy(self._template_processor)
+        renderer._lock = asyncio.Lock()
+        renderer._condition = asyncio.Condition()
+        renderer.reset()
+        return renderer
+
     def _check_end_interrupt(self, event: Dict[str, Any]) -> bool:
         """检查是否为结束中断节点
 
@@ -325,13 +349,12 @@ class FlowCard(WorkflowComponent):
             final_output = self._format_structured_output(rendered_output, user_fields)
 
             # 4. 流式返回结果
-            if self._template_processor and hasattr(
-                self._template_processor, "render_stream"
-            ):
-                # 使用模板处理器的流式渲染
+            renderer = self._new_renderer()
+            if renderer is not None and hasattr(renderer, "render_stream"):
+                # 使用模板处理器的流式渲染（克隆实例，渲染位置按调用隔离）
                 try:
                     timeout = self._get_stream_timeout(session)
-                    generator = self._template_processor.render_stream(
+                    generator = renderer.render_stream(
                         user_fields, session, timeout=timeout
                     )
                     node_id = session.get_component_id()
@@ -421,7 +444,9 @@ class FlowCard(WorkflowComponent):
 
         try:
             if self._template_processor:
-                return self._template_processor.render(variables)
+                # 克隆实例：共享 processor 不直接参与渲染（渲染位置按调用隔离）
+                renderer = self._new_renderer()
+                return renderer.render(variables)
             else:
                 # 简单模板替换降级方案
                 return self._simple_template_replace(variables)
