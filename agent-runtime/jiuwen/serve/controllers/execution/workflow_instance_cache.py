@@ -5,7 +5,9 @@
 - 缓存对象为 LazyWorkflow（构建时机不变：仍发生在首次 stream，
   LazyWorkflow._instantiate_lock 双检锁天然去重并发首调构建）；
 - key = ir_path + IR 内容 hash（canonical JSON 的 sha256 前 16 位）——
-  重新发布即刻 miss，不存在旧图窗口；
+  重新发布即刻 miss，不存在旧图窗口；key 不含 build_kwargs（构建期 IO
+  参数，如 cust_headers/project_id 不影响产物图）——若未来 build 参数
+  影响图结构，须把其纳入 key；
 - 仅进程内 memory LRU：Workflow 实例含 Future/Lock/闭包不可序列化，
   不进 Redis，不复用 cache_workflow_queue（BPMN spec 专用）；
 - 资格：static_graph 模式 + 未降级 + is_published（跟随 IR 缓存惯例）。
@@ -13,6 +15,12 @@
 注意 `STATIC_GRAPH_DOWNGRADED` 一旦置位即进程级终态（T6 审查裁定）：
 接线点异常路径置 flag 不置幂等守卫，另一入口重试成功也无法自愈；
 误差方向保守——实例缓存被强制关闭，不会误用静态图。
+
+降级标志经**双通道**读取（T7 审查 Important-1）：from-import 名字是
+导入时刻的值拷贝（仅作测试 monkeypatch 目标），生产端降级都是对
+static_graph_patch 模块属性的重绑定，故门控同时 OR 读活属性——
+本模块先于接线模块被导入时（如测试进程），模块属性通道仍能看到 True，
+降级闸不会失效。
 """
 from __future__ import annotations
 
@@ -25,8 +33,14 @@ from typing import Any, Awaitable, Callable, Optional
 from agent_runtime.common.config import settings
 from openjiuwen.core.common.logging import performance_logger
 
-# 降级标志经模块属性引用（测试 monkeypatch wic.STATIC_GRAPH_DOWNGRADED 生效）
-from jiuwen.extension.patches.static_graph_patch import STATIC_GRAPH_DOWNGRADED  # noqa: F401
+# 降级标志双通道读取：from-import 名字是导入时刻的值拷贝，仅作测试
+# monkeypatch 目标（wic.STATIC_GRAPH_DOWNGRADED）；生产端三处降级
+# （apply 内 global、ir_converter/sub_workflow 的 except 兜底）都是对
+# static_graph_patch 模块属性的重绑定，须经活属性通道才可见。
+from jiuwen.extension.patches import static_graph_patch
+from jiuwen.extension.patches.static_graph_patch import (  # noqa: F401 测试 monkeypatch 目标
+    STATIC_GRAPH_DOWNGRADED,
+)
 
 _lock = asyncio.Lock()
 _cache: "OrderedDict[str, Any]" = OrderedDict()
@@ -55,7 +69,7 @@ async def aget_or_create_workflow_instance(
 
     if settings.cache.workflow_instance_reuse_mode != "static_graph":
         return await build(ir_data, **(build_kwargs or {}))
-    if STATIC_GRAPH_DOWNGRADED:
+    if STATIC_GRAPH_DOWNGRADED or static_graph_patch.STATIC_GRAPH_DOWNGRADED:
         if not _DOWNGRADE_METRIC_LOGGED:
             _DOWNGRADE_METRIC_LOGGED = True
             performance_logger.info("workflow_cache|downgrade")
