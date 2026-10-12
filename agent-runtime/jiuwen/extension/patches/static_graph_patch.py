@@ -22,6 +22,8 @@ import inspect
 
 from openjiuwen.core.common.logging import workflow_logger
 
+from jiuwen.extension.workflow import execution_session_ctx as _session_ctx
+
 _STATIC_GRAPH_PATCH_APPLIED = False
 STATIC_GRAPH_DOWNGRADED = False
 
@@ -46,25 +48,33 @@ def _structure_assertions() -> list:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
         PregelGraph = None
     if PregelGraph is not None:
-        try:
-            compile_src = inspect.getsource(PregelGraph.compile)
-        except (OSError, TypeError) as e:
-            failures.append(f"PregelGraph.compile 源码不可内省: {e}")
-            compile_src = ""
-        if "self.pregel is None" not in compile_src:
-            failures.append(
-                "PregelGraph.compile 不再包含 'self.pregel is None' 分支（Patch A 基础失效）"
-            )
-        if "self._session" not in compile_src:
-            failures.append("PregelGraph.compile 不再写/读 self._session（after_step 竞态改写点缺失）")
+        compile_fn = getattr(PregelGraph, "compile", None)
+        if compile_fn is None:
+            failures.append("PregelGraph.compile 不存在（结构断言失败，自动降级）")
+        else:
+            try:
+                compile_src = inspect.getsource(compile_fn)
+            except (OSError, TypeError, ValueError) as e:
+                failures.append(f"PregelGraph.compile 源码不可内省: {e}")
+                compile_src = ""
+            if "self.pregel is None" not in compile_src:
+                failures.append(
+                    "PregelGraph.compile 不再包含 'self.pregel is None' 分支（Patch A 基础失效）"
+                )
+            if "self._session" not in compile_src:
+                failures.append("PregelGraph.compile 不再写/读 self._session（after_step 竞态改写点缺失）")
 
         # A2: _compile 读取 self.nodes——shadow-copy 方案的注入点
-        try:
-            compile_internal_src = inspect.getsource(PregelGraph._compile)
-            if "self.nodes" not in compile_internal_src:
-                failures.append("PregelGraph._compile 不再读取 self.nodes（shadow 方案失效）")
-        except (OSError, TypeError) as e:
-            failures.append(f"PregelGraph._compile 源码不可内省: {e}")
+        compile_internal_fn = getattr(PregelGraph, "_compile", None)
+        if compile_internal_fn is None:
+            failures.append("PregelGraph._compile 不存在（结构断言失败，自动降级）")
+        else:
+            try:
+                compile_internal_src = inspect.getsource(compile_internal_fn)
+                if "self.nodes" not in compile_internal_src:
+                    failures.append("PregelGraph._compile 不再读取 self.nodes（shadow 方案失效）")
+            except (OSError, TypeError, ValueError) as e:
+                failures.append(f"PregelGraph._compile 源码不可内省: {e}")
 
     # B1: Patch B 包装对象必须是 sub_stream 补丁版本（应用顺序断言）
     try:
@@ -74,7 +84,18 @@ def _structure_assertions() -> list:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
         CompiledGraph = workflow_sub_stream_patch = None
     if CompiledGraph is not None and workflow_sub_stream_patch is not None:
-        if CompiledGraph._invoke is not workflow_sub_stream_patch._patched_compiled_invoke:
+        patched_invoke = getattr(
+            workflow_sub_stream_patch, "_patched_compiled_invoke", None
+        )
+        current_invoke = getattr(CompiledGraph, "_invoke", None)
+        if patched_invoke is None:
+            failures.append(
+                "workflow_sub_stream_patch._patched_compiled_invoke 不存在"
+                "（结构断言失败，自动降级）"
+            )
+        elif current_invoke is None:
+            failures.append("CompiledGraph._invoke 不存在（结构断言失败，自动降级）")
+        elif current_invoke is not patched_invoke:
             failures.append(
                 "CompiledGraph._invoke 不是 workflow_sub_stream_patch._patched_compiled_invoke"
                 "（static_graph_patch 必须在 apply_workflow_sub_stream_patch 之后应用）"
@@ -87,12 +108,18 @@ def _structure_assertions() -> list:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
         BranchRouter = None
     if BranchRouter is not None:
-        try:
-            call_src = inspect.getsource(BranchRouter.__call__)
-            if "self._session" not in call_src:
-                failures.append("BranchRouter.__call__ 不再读取 self._session")
-        except (OSError, TypeError) as e:
-            failures.append(f"BranchRouter.__call__ 源码不可内省: {e}")
+        call_fn = getattr(BranchRouter, "__call__", None)
+        # 类上无 __call__ 时 getattr 回退到元类的 type.__call__（method-wrapper），
+        # isfunction 区分"真实实现缺失"与元类回退——缺失即跳过该组断言。
+        if call_fn is None or not inspect.isfunction(call_fn):
+            failures.append("BranchRouter.__call__ 不存在（结构断言失败，自动降级）")
+        else:
+            try:
+                call_src = inspect.getsource(call_fn)
+                if "self._session" not in call_src:
+                    failures.append("BranchRouter.__call__ 不再读取 self._session")
+            except (OSError, TypeError, ValueError) as e:
+                failures.append(f"BranchRouter.__call__ 源码不可内省: {e}")
         if not hasattr(BranchRouter, "set_session"):
             failures.append("BranchRouter.set_session 不存在")
 
@@ -111,10 +138,28 @@ def _structure_assertions() -> list:
             params = tuple(inspect.signature(Vertex.__init__).parameters)
             if params != ("self", "node_id", "executable"):
                 failures.append(f"Vertex.__init__ 签名变化: {params}（期望 (self, node_id, executable)）")
-        except (OSError, TypeError) as e:
+        except (OSError, TypeError, ValueError) as e:
             failures.append(f"Vertex 不可内省: {e}")
 
     return failures
+
+
+def _wrap_compiled_invoke(prev_invoke):
+    """Patch B：包装当前 CompiledGraph._invoke（已被 sub_stream 补丁替换的版本）。
+
+    执行树根 set workflow 级 session，finally token 式 reset——嵌套子工作流
+    的子 _invoke set 为子 session、返回后恢复父 session，与现状"子编译时
+    set_session(子session)"语义一致（spec §4.2）。
+    """
+
+    async def _invoke_with_session_ctx(self, inputs, session, config=None):
+        token = _session_ctx.set_workflow_session(session)
+        try:
+            return await prev_invoke(self, inputs, session, config)
+        finally:
+            _session_ctx.reset_workflow_session(token)
+
+    return _invoke_with_session_ctx
 
 
 def apply_static_graph_patch() -> bool:
@@ -137,6 +182,10 @@ def apply_static_graph_patch() -> bool:
         _STATIC_GRAPH_PATCH_APPLIED = True  # 降级也视为已处理，防重复告警
         return False
 
-    # Task 3/4/5 在此填充：PregelGraph.compile / CompiledGraph._invoke / BranchRouter.__call__
+    # Task 4/5 在此填充：PregelGraph.compile / BranchRouter.__call__
+    from openjiuwen.core.graph.graph import CompiledGraph
+
+    CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)
+
     _STATIC_GRAPH_PATCH_APPLIED = True
     return True
