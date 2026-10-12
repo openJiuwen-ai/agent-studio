@@ -16,6 +16,7 @@ from pathlib import Path
 # openjiuwen.core.graph.graph，任何用例都会 ImportError。
 import openjiuwen.core.workflow  # noqa: F401
 import pytest
+from openjiuwen.core.workflow.components.condition.condition import FuncCondition
 
 from jiuwen.extension.patches import static_graph_patch
 
@@ -554,3 +555,85 @@ class TestPatchAStreamEdge:
 
         assert first == [{"collected": ["chunk0", "chunk1", "chunk2"]}]
         assert second == [{"collected": ["chunk0", "chunk1", "chunk2"]}]
+
+
+class _SessionArgFuncCondition(FuncCondition):
+    """FuncCondition 的 session 透传变体（测试专用）。
+
+    引擎原版 FuncCondition.invoke 为**无参**调用（condition.py:44
+    `self._func()`），条件函数收不到 session；本变体把 session 透传给
+    条件函数，使 TestPatchC 能以 `lambda s: s is marker` 直接断言
+    "Patch C 解析出的 session 是哪一个"。
+    """
+
+    def invoke(self, inputs, session):
+        return self._func(session)
+
+
+def _routing_session_markers():
+    """真实 session 三元组（组件级 NodeSession / workflow 级 WorkflowSession / 回退）。
+
+    引擎 BranchRouter.set_session 只接受 Session/BaseSession
+    （branch_router.py:83-90，普通对象抛 ValueError），且
+    Condition.__call__ → AtomicNode._validate_session_and_state 要求
+    BaseSession + CommitState——故测试用真实 session（构建零成本）而非
+    object() 哨兵。
+    """
+    from openjiuwen.core.session import NodeSession, WorkflowSession
+
+    wf_marker = WorkflowSession(workflow_id="wf_patch_c", session_id="wf-sess")
+    comp_marker = NodeSession(wf_marker, "node_a")
+    fallback_marker = WorkflowSession(workflow_id="wf_patch_c", session_id="fb-sess")
+    return comp_marker, wf_marker, fallback_marker
+
+
+class TestPatchC:
+    """Patch C：BranchRouter 解析链 组件级 → workflow 级 → self._session。"""
+
+    @pytest.fixture
+    def _patched_call(self, monkeypatch):
+        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+        from jiuwen.extension.patches.static_graph_patch import _patched_branch_router_call
+
+        monkeypatch.setattr(BranchRouter, "__call__", _patched_branch_router_call)
+
+    @pytest.mark.asyncio
+    async def test_resolution_order_three_tiers(self, _patched_call):
+        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+        from jiuwen.extension.workflow import execution_session_ctx as ctx
+
+        comp_marker, wf_marker, fallback_marker = _routing_session_markers()
+
+        router = BranchRouter(report_trace=False)
+        router.add_branch(_SessionArgFuncCondition(lambda s: s is comp_marker), ["component_tier"])
+        router.add_branch(_SessionArgFuncCondition(lambda s: s is wf_marker), ["workflow_tier"])
+        router.add_branch(_SessionArgFuncCondition(lambda s: s is fallback_marker), ["fallback_tier"])
+        router.set_session(fallback_marker)
+
+        # 仅 fallback（兼容层：与原版行为一致）
+        assert await router() == ["fallback_tier"]
+
+        # + workflow 层（add_conditional_connection 注册的路由今日语义：ProxySession→workflow session）
+        t1 = ctx.set_workflow_session(wf_marker)
+        assert await router() == ["workflow_tier"]
+
+        # + component 层（_RoutedIntentDetection 今日语义：set_session(NodeSession)）
+        t2 = ctx.set_component_exec(comp_marker, None)
+        assert await router() == ["component_tier"]
+
+        # 逐层退栈
+        ctx.reset_component_exec(t2)
+        assert await router() == ["workflow_tier"]
+        ctx.reset_workflow_session(t1)
+        assert await router() == ["fallback_tier"]
+
+    @pytest.mark.asyncio
+    async def test_set_session_still_works_as_fallback(self, _patched_call):
+        """set_session 保留（兼容层）：无 ContextVar 时与原版行为一致。"""
+        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+
+        _, _, marker = _routing_session_markers()
+        router = BranchRouter(report_trace=False)
+        router.add_branch(_SessionArgFuncCondition(lambda s: s is marker), ["hit"])
+        router.set_session(marker)
+        assert await router() == ["hit"]

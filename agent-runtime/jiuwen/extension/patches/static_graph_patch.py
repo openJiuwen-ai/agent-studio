@@ -26,11 +26,15 @@ import inspect
 # 若为进程内首个触碰 openjiuwen.core.graph.graph 的模块会 ImportError（与
 # tests/unit_tests/extension/patches/test_static_graph_patch.py 顶部同理）。
 import openjiuwen.core.workflow  # noqa: F401  # pylint: disable=unused-import
+from openjiuwen.core.common.exception.codes import StatusCode
+from openjiuwen.core.common.exception.errors import build_error
 from openjiuwen.core.common.logging import LogEventType, graph_logger, workflow_logger
 from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
 from openjiuwen.core.graph.pregel.constants import SESSION_ID
 from openjiuwen.core.graph.store import GraphStore
 from openjiuwen.core.graph.vertex import Vertex
+from openjiuwen.core.session.tracer import TracerWorkflowUtils
+from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 
 from jiuwen.extension.workflow import execution_session_ctx as _session_ctx
 
@@ -209,6 +213,36 @@ def _wrap_compiled_invoke(prev_invoke):
     return _invoke_with_session_ctx
 
 
+async def _patched_branch_router_call(self, *args, **kwargs) -> list:
+    """Patch C：session 解析链（spec §4.3）。
+
+    原版首行 `session = self._session`（branch_router.py:93）——共享
+    router 实例并发执行时读到错误会话；且 BaseWorkflow.compile 每次替换
+    共享 ProxySession._stub 的竞态也经此封堵（执行期间 ContextVar 恒有
+    值，racy 的 _stub 永不被读到）。其余逻辑与原版一致。
+    """
+    session = _session_ctx.resolve_routing_session(self._session)
+    if self.report_trace:
+        branches = []
+        for branch in self._branches:
+            branches.append({
+                "branch_id": branch.branch_id,
+                "condition": branch.trace_info(session)
+            })
+        await TracerWorkflowUtils.trace_component_begin(session)
+        await TracerWorkflowUtils.trace_component_inputs(session, {"branches": branches})
+    for branch in self._branches:
+        if branch.evaluate(session):
+            if self.report_trace:
+                await TracerWorkflowUtils.trace_component_outputs(session, {"branch_id": branch.branch_id})
+                await TracerWorkflowUtils.trace_component_done(session)
+            return branch.target
+    raise build_error(
+        StatusCode.COMPONENT_BRANCH_EXECUTION_ERROR,
+        reason="branch meeting the condition was not found"
+    )
+
+
 def _compile_pregel_fresh(graph, fresh_nodes, graph_store, step_callback):
     """对影子图调用原版 _compile（nodes 注入点）。
 
@@ -315,9 +349,10 @@ def apply_static_graph_patch() -> bool:
         _STATIC_GRAPH_PATCH_APPLIED = True  # 降级也视为已处理，防重复告警
         return False
 
-    # Task 4/5 在此填充：PregelGraph.compile / BranchRouter.__call__
+    # 三件套安装：A（PregelGraph.compile）/ B（CompiledGraph._invoke）/ C（BranchRouter.__call__）
     CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)
     PregelGraph.compile = _patched_pregel_graph_compile
+    BranchRouter.__call__ = _patched_branch_router_call
 
     _STATIC_GRAPH_PATCH_APPLIED = True
     return True
