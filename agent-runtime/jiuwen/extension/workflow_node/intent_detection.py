@@ -26,6 +26,7 @@ IntentDetection - 意图识别组件
 """
 
 import ast
+import asyncio
 import copy
 import json
 import logging
@@ -39,6 +40,10 @@ from enum import Enum
 from typing import Any, Optional
 from typing import Callable, Union
 
+from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_exec,
+    set_component_exec,
+)
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
 from openjiuwen.core.context_engine import ModelContext
@@ -359,6 +364,8 @@ class IntentDetection(WorkflowComponent):
         super().__init__()
         self._llm_conf = conf
         self.llm = None
+        # 懒初始化双检锁：实例跨执行复用，并发首调只建一次 Model
+        self._init_lock: asyncio.Lock = asyncio.Lock()
         self.intent_config = IntentDetectionConfig(**self._get_config_info(conf))
         self.intent_config_retry = IntentDetectionConfig(**self._get_config_info(conf))
         self.node_state = IntentDetectionState()
@@ -368,8 +375,10 @@ class IntentDetection(WorkflowComponent):
         self.get_kg_instance(self.faq_config)
         llm_configs = conf.get(LLM, {})
         model_configs = llm_configs.get(MODEL, {})
-        self.few_shot_example = ""
-        self.conversation_id = ""
+        # 执行期状态（session / conversation_id / few_shot_example）不落实例：
+        # session 走 execution_session_ctx 的 component_exec 通道（invoke 入口
+        # set、**不 reset**——本组件是路由属主，同 task 的 dispatch 需读取）；
+        # conversation_id 走局部变量/参数传递；few_shot_example 仅局部拼接。
         self.matching_items = [
             item for item in conf.get("branches") if item.get("id") == "branch_0"
         ]
@@ -386,7 +395,6 @@ class IntentDetection(WorkflowComponent):
         """重置组件状态。"""
         self.intent_config = copy.deepcopy(self.intent_config_retry)
         self.node_state = copy.deepcopy(self.node_state_retry)
-        self.few_shot_example = ""
         if len(self.matching_items) == 0:
             self.intent_config.default_class = CLASSIFICATION_DEAFULT_OLD
         return True
@@ -444,10 +452,15 @@ class IntentDetection(WorkflowComponent):
         self, inputs: Input, session: Session, context: ModelContext, **kwargs
     ) -> Output:
         start_time = time.perf_counter()
-        self.conversation_id = session.get_session_id()
-        self._session = session
+        conversation_id = session.get_session_id()
 
-        self._router.set_session(session)
+        # 执行期 session/context 走 ContextVar 通道（实例跨执行复用，不落实例）。
+        # **不 reset**：本组件是分支路由属主，路由 dispatch 发生在 invoke 返回
+        # 之后的同一 NodeTask 里（引擎先跑节点函数再 dispatch），组件级 session
+        # 必须存活到 dispatch（Patch C 的组件级优先解析）。
+        set_component_exec(session, context)
+        # node_state 为遗留接口（引擎不读写），入口重建复位避免跨执行残留。
+        self.node_state = IntentDetectionState()
 
         chat_history = self._get_chat_history(context, session)
         current_inputs = dict()
@@ -457,7 +470,7 @@ class IntentDetection(WorkflowComponent):
 
         try:
             current_inputs = self._prepare_detection_inputs(
-                inputs, chat_history, global_intents
+                inputs, chat_history, global_intents, conversation_id=conversation_id
             )
             global_intent_map = current_inputs.pop("global_intent_map", {})
         except Exception as e:
@@ -468,7 +481,7 @@ class IntentDetection(WorkflowComponent):
         if self.intent_config.enable_knowledge:
             try:
                 intent_class = await self.get_faq_result(
-                    current_inputs, chat_history, **kwargs
+                    current_inputs, chat_history, conversation_id=conversation_id, **kwargs
                 )
             except Exception as exc:
                 raise build_intent_detection_error(
@@ -484,11 +497,11 @@ class IntentDetection(WorkflowComponent):
             get_intent_end_time = time.perf_counter()
             get_intent_duration = round((get_intent_end_time - start_time) * 1000)
             workflow_logger.info(
-                f"{self.conversation_id}|intent faq cost {get_intent_duration}ms",
+                f"{conversation_id}|intent faq cost {get_intent_duration}ms",
                 event_type=LogEventType.WORKFLOW_COMPONENT_END,
                 component_id=session.get_component_id(),
                 component_type_str="IntentDetection",
-                session_id=self.conversation_id,
+                session_id=conversation_id,
             )
             intent_id_name = self._get_intent_id_name(self.intent_config, intent_class)
             return dict(
@@ -498,28 +511,32 @@ class IntentDetection(WorkflowComponent):
                 name=intent_id_name.get(CLASSIFICATION_NAME, ""),
             )
 
-        llm_output = await self.get_llm_result(current_inputs)
+        llm_output = await self.get_llm_result(
+            current_inputs, conversation_id=conversation_id
+        )
         workflow_logger.info(
-            f"{self.conversation_id}|get llm result successfully",
+            f"{conversation_id}|get llm result successfully",
             event_type=LogEventType.WORKFLOW_COMPONENT_END,
             component_id=session.get_component_id(),
             component_type_str="IntentDetection",
-            session_id=self.conversation_id,
+            session_id=conversation_id,
         )
 
-        intent_res = self._handle_detection_result(llm_output, global_intent_map)
+        intent_res = self._handle_detection_result(
+            llm_output, global_intent_map, conversation_id=conversation_id
+        )
         get_intent_end_time = time.perf_counter()
         get_intent_duration = round((get_intent_end_time - start_time) * 1000)
         workflow_logger.info(
-            f"{self.conversation_id}|intent llm cost {get_intent_duration}ms",
+            f"{conversation_id}|intent llm cost {get_intent_duration}ms",
             event_type=LogEventType.WORKFLOW_COMPONENT_END,
             component_id=session.get_component_id(),
             component_type_str="IntentDetection",
-            session_id=self.conversation_id,
+            session_id=conversation_id,
         )
         # 对齐 OLD wf_performance_buffer：额外通过 session.trace 把性能指标送入调试信息
-        if self._session:
-            await self._session.trace(data={
+        if session:
+            await session.trace(data={
                 "performance_metric": {
                     "intent llm cost": get_intent_duration,
                 }
@@ -596,13 +613,15 @@ class IntentDetection(WorkflowComponent):
         return Runner.resource_mgr.get_tool(tool_id=api_id)
 
     async def get_faq_result(
-        self, current_inputs: dict, chat_history: list, **kwargs
+        self, current_inputs: dict, chat_history: list, conversation_id: str = "",
+        **kwargs
     ) -> str:
         """获取 FAQ 匹配结果。
 
         Args:
             current_inputs: 当前输入参数。
             chat_history: 对话历史。
+            conversation_id: 会话 ID（仅日志用，调用链参数传递）。
             **kwargs: 可含 session 参数。
 
         Returns:
@@ -611,7 +630,9 @@ class IntentDetection(WorkflowComponent):
         few_shot_example = ""
         intent_class = self.intent_config.default_class
         user_query = self.build_kg_query(current_inputs, chat_history)
-        qq_result = await self.get_search_answer(user_query, **kwargs)
+        qq_result = await self.get_search_answer(
+            user_query, conversation_id=conversation_id, **kwargs
+        )
         if self.kg_conf and self.kg_conf.scope == "faq":
             qq_result_ans = qq_result.get("output_list", [])
             match_result = []
@@ -638,17 +659,20 @@ class IntentDetection(WorkflowComponent):
                 self.intent_config.q2label_few_shot_score,
             )
             workflow_logger.debug(
-                f"{self.conversation_id}|search_result|{str(match_result)}"
+                f"{conversation_id}|search_result|{str(match_result)}"
             )
         elif SEARCH_TYPE == "doc_line":
-            few_shot_example = self.doc_search(qq_result)
+            few_shot_example = self.doc_search(
+                qq_result, conversation_id=conversation_id
+            )
         else:
             few_shot_example = str(qq_result)
         current_inputs.update({"example_content": few_shot_example})
-        self.few_shot_example += "\n" + few_shot_example
         return intent_class
 
-    async def get_search_answer(self, user_query: dict, **kwargs) -> dict:
+    async def get_search_answer(
+        self, user_query: dict, conversation_id: str = "", **kwargs
+    ) -> dict:
         """调用知识库搜索 API 获取结果。
 
         与原组件 jiuwen/orchestration/flow/components/intent_detection.py 中的
@@ -656,6 +680,7 @@ class IntentDetection(WorkflowComponent):
 
         Args:
             user_query: 查询参数。
+            conversation_id: 会话 ID（仅日志用，调用链参数传递）。
             **kwargs: 可含 runtime_auth_headers 参数。
 
         Returns:
@@ -675,22 +700,22 @@ class IntentDetection(WorkflowComponent):
             # workflow_logger 是 LazyLogger→DefaultLogger，会先做格式化再判级别，
             # 故需显式守卫，避免 DEBUG 关闭时仍对 res 做 str() 拼接（KB 检索结果可能很大）。
             if workflow_logger.logger().isEnabledFor(logging.DEBUG):
-                workflow_logger.debug(f"{self.conversation_id}|search_result|{str(res)}")
+                workflow_logger.debug(f"{conversation_id}|search_result|{str(res)}")
             if isinstance(res, dict) and res.get("errCode") == 0:
                 data = res.get("data", {})
             elif hasattr(res, "err_code") and res.err_code == 0:
                 data = getattr(res, "data", {})
         except Exception as e:
             workflow_logger.debug(
-                f"{self.conversation_id}|search api error: {str(e)}\n{traceback.format_exc()}"
+                f"{conversation_id}|search api error: {str(e)}\n{traceback.format_exc()}"
             )
         search_duration = round((time.perf_counter() - start_time) * 1000)
         workflow_logger.debug(
-            f"{self.conversation_id}|onlysearch cost {search_duration}ms"
+            f"{conversation_id}|onlysearch cost {search_duration}ms"
         )
         return data
 
-    def anayls_search(self, search_data: dict) -> list:
+    def anayls_search(self, search_data: dict, conversation_id: str = "") -> list:
         """分析搜索结果（文档类型）。"""
         res = []
         query_category = DEFAULT_QUERY_CATE
@@ -709,7 +734,7 @@ class IntentDetection(WorkflowComponent):
                     res.append(addlist)
         except Exception as e:
             workflow_logger.debug(
-                f"{self.conversation_id}|search analysis error: {str(e)}\n{traceback.format_exc()}"
+                f"{conversation_id}|search analysis error: {str(e)}\n{traceback.format_exc()}"
             )
         return res
 
@@ -734,7 +759,7 @@ class IntentDetection(WorkflowComponent):
                 res += addstr
         return res
 
-    def doc_search(self, qqresult) -> str:
+    def doc_search(self, qqresult, conversation_id: str = "") -> str:
         """文档搜索结果处理。"""
         res = ""
         try:
@@ -752,7 +777,7 @@ class IntentDetection(WorkflowComponent):
         except Exception as e:
             res = str(qqresult)
             workflow_logger.debug(
-                f"{self.conversation_id}|search analysis doc wrong: {str(e)}\n{traceback.format_exc()}"
+                f"{conversation_id}|search analysis doc wrong: {str(e)}\n{traceback.format_exc()}"
             )
         return res
 
@@ -786,10 +811,17 @@ class IntentDetection(WorkflowComponent):
             model_config=llm_comp_config.model_config,
         )
 
-    async def get_llm_result(self, current_inputs: dict) -> str:
+    async def get_llm_result(
+        self, current_inputs: dict, conversation_id: str = ""
+    ) -> str:
+        # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
+        session, _ = current_component_exec()
         # Lazy initialization of LLM (cannot await in __init__)
+        # 双检加锁：并发首调只建一次 Model（实例跨执行复用）
         if self.llm is None:
-            self.llm = await self._get_llm_instance(self._llm_conf)
+            async with self._init_lock:
+                if self.llm is None:
+                    self.llm = await self._get_llm_instance(self._llm_conf)
 
         template = self.intent_config.intent_detection_template
         if template is None:
@@ -798,20 +830,20 @@ class IntentDetection(WorkflowComponent):
 
         user_profile = self.mem_conf.get(USER_PROFILE_KEY)
         if isinstance(user_profile, dict) and user_profile.get(ENABLE_KEY, False):
-            memory_msg = self._session.get_global_state(MEMORY_MESSAGE)
+            memory_msg = session.get_global_state(MEMORY_MESSAGE)
             if isinstance(memory_msg, BaseMessage):
                 llm_inputs.append(memory_msg)
 
         workflow_logger.debug(
-            f"{self.conversation_id}|intent detection llm_inputs prepared"
+            f"{conversation_id}|intent detection llm_inputs prepared"
         )
 
         # 对齐 OLD process_on_invoke_info：在 LLM 调用前发送调试信息
         # 载荷字段与 OLD 一致（input / llm_inputs / chat_history 等合并到 current_inputs）
         trace_data = dict(current_inputs)
         trace_data[LLM_INPUTS] = llm_inputs
-        if self._session:
-            await self._session.trace(data=trace_data)
+        if session:
+            await session.trace(data=trace_data)
 
         try:
             llm_output = await self.llm.invoke(messages=llm_inputs)
@@ -824,19 +856,22 @@ class IntentDetection(WorkflowComponent):
     # 全局意图处理
     # --------------------------------------------------------------------------
 
-    def add_global_intents(self, global_intents: list, global_intent_map: dict) -> str:
+    def add_global_intents(
+        self, global_intents: list, global_intent_map: dict, conversation_id: str = ""
+    ) -> str:
         """合并全局意图到分类信息中。
 
         Args:
             global_intents: 全局意图列表。
             global_intent_map: 分类名到全局意图的映射（会被修改）。
+            conversation_id: 会话 ID（仅日志用，调用链参数传递）。
 
         Returns:
             合并后的 category_info 字符串。
         """
         category_info = self.intent_config.category_info
         workflow_logger.debug(
-            f"{self.conversation_id}|category_info and global_intents received"
+            f"{conversation_id}|category_info and global_intents received"
         )
 
         if global_intents:
@@ -882,7 +917,7 @@ class IntentDetection(WorkflowComponent):
 
             category_info = "\n".join(category_info_list)
         workflow_logger.debug(
-            f"{self.conversation_id}|global intent map: {global_intent_map}"
+            f"{conversation_id}|global intent map: {global_intent_map}"
         )
         return category_info
 
@@ -896,7 +931,8 @@ class IntentDetection(WorkflowComponent):
             "intent": result,
         }
         self.node_state.status = ExecutionStatus.USER_INTERACT
-        return self._session.interact(interrupt_message)
+        session, _ = current_component_exec()
+        return session.interact(interrupt_message)
 
     def _handle_global_other_intent(self) -> Any:
         result = dict(intent_id="0", reason="其他")
@@ -905,7 +941,8 @@ class IntentDetection(WorkflowComponent):
             "intent": result,
         }
         self.node_state.status = ExecutionStatus.USER_INTERACT
-        return self._session.interact(interrupt_message)
+        session, _ = current_component_exec()
+        return session.interact(interrupt_message)
 
     # --------------------------------------------------------------------------
     # 输入准备与后处理
@@ -943,7 +980,8 @@ class IntentDetection(WorkflowComponent):
         return messages
 
     def _prepare_detection_inputs(
-        self, inputs: dict, chat_history: list, global_intents: Any
+        self, inputs: dict, chat_history: list, global_intents: Any,
+        conversation_id: str = "",
     ) -> dict:
         """准备意图检测所需的输入参数。"""
         current_inputs = {}
@@ -952,7 +990,9 @@ class IntentDetection(WorkflowComponent):
         # 处理全局意图，合并到 category_info
         category_info = self.intent_config.category_info
         if global_intents and isinstance(global_intents, list):
-            category_info = self.add_global_intents(global_intents, global_intent_map)
+            category_info = self.add_global_intents(
+                global_intents, global_intent_map, conversation_id=conversation_id
+            )
 
         current_inputs.update(
             {
@@ -1047,10 +1087,10 @@ class IntentDetection(WorkflowComponent):
         return result in self.intent_config.category_list
 
     def _handle_detection_result(
-        self, llm_output: str, global_intent_map: dict
+        self, llm_output: str, global_intent_map: dict, conversation_id: str = ""
     ) -> dict:
         intent_class, reason = self.intent_detection_post_process(llm_output)
-        workflow_logger.debug(f"{self.conversation_id}|intent_class: {intent_class}")
+        workflow_logger.debug(f"{conversation_id}|intent_class: {intent_class}")
 
         if intent_class in global_intent_map:
             return self._handle_global_intent(intent_class, reason, global_intent_map)
