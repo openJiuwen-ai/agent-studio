@@ -151,6 +151,43 @@ def _structure_assertions() -> list:
         except (OSError, TypeError, ValueError) as e:
             failures.append(f"Vertex 不可内省: {e}")
 
+    # A4: StreamActor 持有的 vertex 可被替换——C1 修复的注入点
+    # （fresh vertex 注册进 StreamGraph 的 per-execution 副本）。
+    try:
+        from openjiuwen.core.graph.stream_actor.base import StreamActor
+        from openjiuwen.core.graph.stream_actor.manager import ActorManager
+    except (ImportError, OSError) as e:
+        failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
+        StreamActor = ActorManager = None
+    if ActorManager is not None:
+        init_fn = getattr(ActorManager, "__init__", None)
+        if init_fn is None:
+            failures.append("ActorManager.__init__ 不存在（结构断言失败，自动降级）")
+        else:
+            try:
+                manager_src = inspect.getsource(init_fn)
+                if "self._streams[consumer_id] = StreamActor(" not in manager_src:
+                    failures.append(
+                        "ActorManager.__init__ 不再以 'self._streams[consumer_id] = StreamActor('"
+                        " 构造 StreamActor（C1 修复的 actor 定位点缺失）"
+                    )
+            except (OSError, TypeError, ValueError) as e:
+                failures.append(f"ActorManager.__init__ 源码不可内省: {e}")
+    if StreamActor is not None:
+        init_fn = getattr(StreamActor, "__init__", None)
+        if init_fn is None:
+            failures.append("StreamActor.__init__ 不存在（结构断言失败，自动降级）")
+        else:
+            try:
+                actor_src = inspect.getsource(init_fn)
+                if "self._vertex = vertex" not in actor_src:
+                    failures.append(
+                        "StreamActor.__init__ 不再保存 'self._vertex = vertex'"
+                        "（C1 修复的 actor._vertex 替换点缺失）"
+                    )
+            except (OSError, TypeError, ValueError) as e:
+                failures.append(f"StreamActor.__init__ 源码不可内省: {e}")
+
     return failures
 
 
@@ -201,7 +238,9 @@ def _patched_pregel_graph_compile(self, session, **kwargs):
        并发执行时的竞态根源）；
     4. 保留 self.pregel/checkpointer/_session 属性写入（读取方仅为
        compile/after_step 自身，见计划"属性读取方审计"；保留写入使
-       off 模式等价论证成立）。
+       off 模式等价论证成立）。异常路径下写入时序与原版不同：原版先写
+       checkpointer 再 _compile，本实现统一在 _compile 之后写三者——
+       读取方为零，无实质影响（M6）。
     """
     fresh_nodes = {}
     for node_id, node in self.nodes.items():
@@ -229,8 +268,27 @@ def _patched_pregel_graph_compile(self, session, **kwargs):
     store = GraphStore(checkpointer.graph_store())
     pregel = _compile_pregel_fresh(self, fresh_nodes, graph_store=store, step_callback=after_step)
 
+    # StreamActor 的 vertex 换成本次执行的 fresh vertex（C1 修复）。
+    # ActorManager 为每执行新建（_create_workflow_session / LoopGroup.on_invoke），
+    # 在 compile 之前构造、经 StreamGraph.get_node() 持有 build 期 vertex；
+    # StreamActor.send 的 should_handle_message/is_done/stream_call 依赖
+    # Vertex.init 设置的 _component_ability/_session。manager 属 per-execution
+    # 状态，此处替换不写任何共享对象。三条路径（主/子工作流/循环体）的
+    # compile 收到的 session 均可达 actor_manager()。
+    manager = None
+    try:
+        manager = session.actor_manager()
+    except Exception:
+        manager = None
+    streams = getattr(manager, "_streams", None)
+    if isinstance(streams, dict):
+        for actor in streams.values():
+            fresh = fresh_nodes.get(getattr(actor, "_node_id", None))
+            if fresh is not None:
+                actor._vertex = fresh  # pylint: disable=protected-access
+
     # 属性保留写入（偏离②）：兼容潜在读取方；off 模式下每请求新实例的
-    # 首次 compile 本来就执行等价赋值。
+    # 首次 compile 本来就执行等价赋值（异常路径时序差异见 docstring 第 4 点）。
     self.pregel = pregel
     self.checkpointer = checkpointer
     self._session = session

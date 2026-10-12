@@ -5,6 +5,7 @@
 断言策略：真实 venv（openjiuwen 0.1.19，已由 ir_converter import 时应用
 sub_stream 补丁）→ 断言全过；monkeypatch 破坏结构 → 对应断言命中。
 """
+import asyncio
 import sys
 from pathlib import Path
 
@@ -129,6 +130,39 @@ class TestStructureAssertions:
         )
         assert "BranchRouter.__call__ 不存在（结构断言失败，自动降级）" in failures
 
+    def test_stream_actor_structure_change_detected(self, monkeypatch):
+        """A4：模拟 ActorManager/StreamActor 构造模式变化（C1 修复注入点缺失）→ 断言命中。"""
+        from openjiuwen.core.graph.stream_actor.base import StreamActor
+        from openjiuwen.core.graph.stream_actor.manager import ActorManager
+
+        def _alien_actor_init(self, node_id, vertex, abilities, source_groups,
+                              stream_generator_timeout=1):
+            self._node_id = node_id
+
+        def _alien_manager_init(self, workflow_spec, graph, sub_graph, session):
+            self._streams = {}
+
+        monkeypatch.setattr(StreamActor, "__init__", _alien_actor_init)
+        monkeypatch.setattr(ActorManager, "__init__", _alien_manager_init)
+
+        failures = static_graph_patch._structure_assertions()
+
+        assert any("StreamActor" in f for f in failures)
+        assert any("ActorManager" in f for f in failures)
+
+    def test_stream_actor_attributes_missing_degrade_not_raise(self, monkeypatch):
+        """A4：上游删除 __init__（改名）→ 记为断言失败而非 AttributeError。"""
+        from openjiuwen.core.graph.stream_actor.base import StreamActor
+        from openjiuwen.core.graph.stream_actor.manager import ActorManager
+
+        monkeypatch.delattr(StreamActor, "__init__")
+        monkeypatch.delattr(ActorManager, "__init__")
+
+        failures = static_graph_patch._structure_assertions()
+
+        assert any("StreamActor" in f for f in failures)
+        assert any("ActorManager" in f for f in failures)
+
 
 class TestPatchB:
     """Patch B：包装当前 _invoke，执行期间 workflow session ContextVar 可见。"""
@@ -251,7 +285,11 @@ class TestPatchA:
         c1 = graph.compile(s1)
         c2 = graph.compile(s2)
 
-        # 每次编译产出全新 Pregel（全新 channels）与全新 checkpointer
+        # 每次编译产出全新 Pregel（全新 channels）与全新 checkpointer。
+        # 注：真实 WorkflowSession.checkpointer() 无父 session 时走
+        # CheckpointerFactory 进程级单例（session/internal/workflow.py:72-77），
+        # 生产语义是"重新取工厂实例 + GraphStore 全新包装"；MagicMock session
+        # 下两次调用返回不同 mock，本断言据此成立（执行隔离本体是 fresh Pregel）。
         assert c1._pregel is not c2._pregel
         assert c1._checkpointer is not c2._checkpointer
         # 属性保留写入（读取方兼容，spec §4.1 偏离②）
@@ -283,6 +321,70 @@ class TestPatchA:
         c2 = graph.compile(self._fake_session())
         n2 = c2._pregel.nodes["node_start"]
         assert n1 is not n2
+        # PregelNode.func 才是 Vertex（pregel/base.py:46-50）；两次 compile 各自
+        # 新建，且本次 compile 的 fresh vertex 已被 init——Vertex.init 会把
+        # session 包成 NodeSession，故以 parent() 校验绑定的是本次 compile 的 session。
+        assert n1.func is not n2.func
+        assert c1._pregel.nodes["node_start"].func._session.parent() is s1
+
+    @pytest.mark.asyncio
+    async def test_structural_equivalence_vs_original_compile_on_fresh_graph(self):
+        """I3：patched 产物与"全新图实例 + 原版 compile"结构逐项等价。
+
+        原版 compile 需要未被 monkeypatch 的类属性，故本用例不挂
+        `_patched_compile` fixture，直接调用 `_patched_pregel_graph_compile`。
+        "全新图实例 + 原版 compile"即 off 模式下每请求新实例的等价基线。
+        """
+        import json
+
+        from openjiuwen.core.graph.pregel.channels import BarrierChannel
+        from jiuwen.extension.patches.static_graph_patch import (
+            _patched_pregel_graph_compile,
+        )
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+        ir_data = json.loads(self.IR_PATH.read_text(encoding="utf-8"))
+        patched_graph = (await (await IRConverter.async_ir_to_workflow(ir_data)).instantiate())._internal._graph
+        original_graph = (await (await IRConverter.async_ir_to_workflow(ir_data)).instantiate())._internal._graph
+
+        patched = _patched_pregel_graph_compile(patched_graph, self._fake_session())
+        original = original_graph.compile(self._fake_session())  # 原版 compile（未打补丁）
+
+        # 各节点 PregelNode.func 的 _executable 同一性：fresh vertex 包装的是
+        # 本图 build 期同一 executable 实例（共享，不复制）；build 期 Vertex
+        # 本身不再进入 Pregel。（__start__/__end__ 为 builder 内置 lambda，
+        # 非 Vertex，故只遍历图节点。）
+        assert set(patched._pregel.nodes) == set(original._pregel.nodes)
+        for node_id in patched_graph.nodes:
+            assert (
+                patched._pregel.nodes[node_id].func._executable
+                is patched_graph.nodes[node_id]._executable
+            )
+            assert patched._pregel.nodes[node_id].func is not patched_graph.nodes[node_id]
+
+        # channels 数量与类型序列
+        assert [type(c).__name__ for c in patched._pregel.channels] == [
+            type(c).__name__ for c in original._pregel.channels
+        ]
+
+        # 各节点 routers 类型集合
+        def _router_types(pregel):
+            return {
+                node_id: sorted(type(router).__name__ for router in node.routers)
+                for node_id, node in pregel.nodes.items()
+            }
+
+        assert _router_types(patched._pregel) == _router_types(original._pregel)
+
+        # BarrierChannel.expected_groups（barrier/CNF 语义，含仓库 barrier 补丁效果）
+        def _barrier_groups(pregel):
+            return sorted(
+                (channel.key, sorted(sorted(group) for group in channel.expected_groups))
+                for channel in pregel.channels
+                if isinstance(channel, BarrierChannel)
+            )
+
+        assert _barrier_groups(patched._pregel) == _barrier_groups(original._pregel)
 
     @pytest.mark.asyncio
     async def test_after_step_commits_captured_session_not_shared_attr(self, _patched_compile):
@@ -326,3 +428,129 @@ class TestPatchA:
         compiled = graph.compile(self._fake_session())
         assert isinstance(compiled, CompiledGraph)
         assert compiled._pregel is graph.pregel
+
+
+class TestPatchAStreamEdge:
+    """C1：stream 边工作流——StreamActor 必须换成本次执行的 fresh vertex。
+
+    复现记录（修复前，本类用例失败）：patched compile 只 init fresh vertex，
+    build 期 vertex 永不 init；而 ActorManager（每执行新建，manager.py:53 经
+    `StreamGraph.get_node()` 持有 build 期 vertex）里的 StreamActor.send 会调
+    `should_handle_message()/is_done()/stream_call()`——这些依赖 `Vertex.init`
+    设置的 `_component_ability/_session`。实测失败形态：
+    `TypeError: 'NoneType' object is not iterable`（`_stream_abilities()` 迭代
+    `_component_ability=None`），经 `ActorManager.produce()` 冒泡为
+    `ExecutionError[100054] component 'node_producer' execute 'stream' error,
+    reason=''NoneType' object is not iterable'`。补丁始终应用，故 off 模式
+    （每请求新实例）同样崩。
+    """
+
+    @pytest.fixture
+    def _patched_compile(self, monkeypatch):
+        from openjiuwen.core.graph.graph import PregelGraph
+        from jiuwen.extension.patches.static_graph_patch import (
+            _patched_pregel_graph_compile,
+        )
+
+        monkeypatch.setattr(PregelGraph, "compile", _patched_pregel_graph_compile)
+
+    @staticmethod
+    def _build_stream_workflow():
+        """程序化最小 stream 边工作流（不走 IR）：start → STREAM → COLLECT(end)。"""
+        from openjiuwen.core.workflow.base import WorkflowCard
+        from openjiuwen.core.workflow.components.base import ComponentAbility
+        from openjiuwen.core.workflow.components.component import WorkflowComponent
+        from openjiuwen.core.workflow.workflow import Workflow
+
+        class StartStub(WorkflowComponent):
+            async def invoke(self, inputs, session, context):
+                return {"query": (inputs or {}).get("query")}
+
+        class StreamStub(WorkflowComponent):
+            async def stream(self, inputs, session, context):
+                for i in range(3):
+                    yield {"result": f"chunk{i}"}
+
+        class CollectEndStub(WorkflowComponent):
+            async def invoke(self, inputs, session, context):
+                return {}
+
+            async def collect(self, inputs, session, context):
+                chunks = []
+                generator = ((inputs or {}).get("userFields") or {}).get("chunk")
+                if hasattr(generator, "__aiter__"):
+                    async for chunk in generator:
+                        chunks.append(chunk)
+                return {"collected": chunks}
+
+        workflow = Workflow(card=WorkflowCard(id="wf_stream_edge", name="stream_edge"))
+        workflow.set_start_comp("node_start", StartStub(), inputs_schema={"userFields": {}})
+        workflow.add_workflow_comp(
+            "node_producer", StreamStub(),
+            comp_ability=[ComponentAbility.STREAM],
+            outputs_schema={"userFields": {}},
+        )
+        workflow.set_end_comp(
+            "node_end", CollectEndStub(),
+            stream_inputs_schema={"userFields": {"chunk": "${node_producer.result}"}},
+        )
+        workflow.add_connection("node_start", "node_producer")
+        workflow.add_stream_connection("node_producer", "node_end")
+        return workflow
+
+    @staticmethod
+    async def _run_once(workflow, session_id):
+        from openjiuwen.core.session.workflow import create_workflow_session
+
+        session = create_workflow_session(session_id=session_id)
+        finals = []
+        async for chunk in workflow.stream({"query": "hello"}, session):
+            if getattr(chunk, "type", None) == "workflow_final":
+                finals.append(chunk.payload)
+        return finals
+
+    @pytest.mark.asyncio
+    async def test_actor_vertex_replaced_with_fresh_vertex(self, _patched_compile):
+        """C1 修复机制白盒断言：per-execution ActorManager 的 StreamActor._vertex
+        被换成本次 compile 的 fresh vertex（而非 build 期 vertex）。"""
+        from openjiuwen.core.session.stream import BaseStreamMode
+        from openjiuwen.core.session.workflow import create_workflow_session
+
+        workflow = self._build_stream_workflow()
+        session = create_workflow_session(session_id="sess-c1-actor")
+        workflow_session = workflow._create_workflow_session(
+            session, stream_modes=[BaseStreamMode.OUTPUT], is_sub=False
+        )
+        compiled = workflow._internal.compile(workflow_session, context=None)
+
+        actor = workflow_session.actor_manager()._streams["node_end"]
+        assert actor._vertex is compiled._pregel.nodes["node_end"].func
+        assert actor._vertex is not workflow._internal._graph.nodes["node_end"]
+
+    @pytest.mark.asyncio
+    async def test_stream_edge_workflow_runs_twice_on_same_instance(self, _patched_compile):
+        """同一实例两次执行均成功、chunk 流完整（COLLECT 汇聚到 3 个 chunk）。"""
+        workflow = self._build_stream_workflow()
+
+        first = await self._run_once(workflow, "sess-c1-run1")
+        second = await self._run_once(workflow, "sess-c1-run2")
+
+        assert first == [{"collected": ["chunk0", "chunk1", "chunk2"]}]
+        assert second == [{"collected": ["chunk0", "chunk1", "chunk2"]}]
+
+    @pytest.mark.asyncio
+    async def test_stream_edge_workflow_concurrent_runs(self, _patched_compile):
+        """并发两次执行同一实例：各自 session/actor 独立，chunk 流完整。
+
+        对照：原版 compile 并发两次执行时共享 Pregel/vertex，实测其中一次
+        产出为空（final 缺失）——本用例即该场景的回归守卫。
+        """
+        workflow = self._build_stream_workflow()
+
+        first, second = await asyncio.gather(
+            self._run_once(workflow, "sess-c1-conc1"),
+            self._run_once(workflow, "sess-c1-conc2"),
+        )
+
+        assert first == [{"collected": ["chunk0", "chunk1", "chunk2"]}]
+        assert second == [{"collected": ["chunk0", "chunk1", "chunk2"]}]
