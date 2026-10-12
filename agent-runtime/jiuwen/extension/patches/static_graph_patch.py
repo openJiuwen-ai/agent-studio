@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import inspect
+from typing import Any
 
 # 打断 openjiuwen 循环 import（graph.py → vertex.py → workflow.components.base
 # → workflow/__init__ → workflow.py:34 回引 graph.py）。缺此先行导入时，本模块
@@ -40,6 +41,43 @@ from jiuwen.extension.workflow import execution_session_ctx as _session_ctx
 
 _STATIC_GRAPH_PATCH_APPLIED = False
 STATIC_GRAPH_DOWNGRADED = False
+
+# 替换前保存的原版引用（patches/ 惯例，nested_branch_barrier_patch 等同理）：
+# 供测试取"未打补丁"基线（接线后 PregelGraph.compile 等进程内恒为 patched，
+# 无法再经类属性取得原版）。注意 _original_compiled_invoke 捕获的是 sub_stream
+# 补丁版（本补丁替换前值，B1 应用顺序语义），非引擎出厂原版。
+# 仅在首次 apply 时捕获（None 判断）——测试复位 flag 重放 apply 时类属性
+# 可能已是 patched 版本，覆盖会把 patched 误当原版。
+_original_pregel_graph_compile: Any = None
+_original_compiled_invoke: Any = None
+_original_branch_router_call: Any = None
+
+
+def _invoke_chain_root(invoke_fn):
+    """展开 Patch B 包装链，返回最内层被包装函数。
+
+    `_wrap_compiled_invoke` 产出的 `_invoke_with_session_ctx` 闭包自由变量
+    仅 prev_invoke（模块级 `_session_ctx` 非 callable），故沿 callable
+    cell 逐层下钻即可。invoke_fn 非包装版时原样返回；闭包不可内省时返回
+    当前层（调用方按不匹配处理，安全降级）。
+    """
+    fn = invoke_fn
+    seen = set()
+    while getattr(fn, "__name__", "") == "_invoke_with_session_ctx" and id(fn) not in seen:
+        seen.add(id(fn))
+        prev = None
+        for cell in getattr(fn, "__closure__", None) or ():
+            try:
+                contents = cell.cell_contents
+            except ValueError:  # 未填充 cell（理论不可达）
+                continue
+            if callable(contents):
+                prev = contents
+                break
+        if prev is None:
+            break
+        fn = prev
+    return fn
 
 
 def _structure_assertions() -> list:
@@ -90,7 +128,10 @@ def _structure_assertions() -> list:
             except (OSError, TypeError, ValueError) as e:
                 failures.append(f"PregelGraph._compile 源码不可内省: {e}")
 
-    # B1: Patch B 包装对象必须是 sub_stream 补丁版本（应用顺序断言）
+    # B1: Patch B 包装对象必须是 sub_stream 补丁版本（应用顺序断言）。
+    # 容忍两种合法态：apply 前 _invoke 即 sub_stream 补丁版；apply 后为
+    # Patch B 包装版（其包装链最内层仍须是 sub_stream 补丁版）——Task 6
+    # 接线后进程内 import 即应用，_structure_assertions 常态看到已包装态。
     try:
         from openjiuwen.core.graph.graph import CompiledGraph
         from jiuwen.extension.patches import workflow_sub_stream_patch
@@ -109,9 +150,14 @@ def _structure_assertions() -> list:
             )
         elif current_invoke is None:
             failures.append("CompiledGraph._invoke 不存在（结构断言失败，自动降级）")
-        elif current_invoke is not patched_invoke:
+        elif current_invoke is patched_invoke:
+            pass  # apply 前：_invoke 即 sub_stream 补丁版
+        elif _invoke_chain_root(current_invoke) is patched_invoke:
+            pass  # apply 后：Patch B 包装版，包装链最内层是 sub_stream 补丁版
+        else:
             failures.append(
-                "CompiledGraph._invoke 不是 workflow_sub_stream_patch._patched_compiled_invoke"
+                "CompiledGraph._invoke 既非 workflow_sub_stream_patch._patched_compiled_invoke"
+                " 也非其 Patch B 包装版"
                 "（static_graph_patch 必须在 apply_workflow_sub_stream_patch 之后应用）"
             )
 
@@ -330,12 +376,16 @@ def _patched_pregel_graph_compile(self, session, **kwargs):
 
 
 def apply_static_graph_patch() -> bool:
-    """幂等应用入口（Task 3/4/5 逐步填充三件套，Task 6 完成编排）。
+    """幂等应用入口（真实入口：ir_converter / sub_workflow import 链调用）。
+
+    必须在 `apply_workflow_sub_stream_patch()` 之后调用（B1 断言强制）。
 
     Returns:
         True = 本次应用；False = 已应用或断言失败降级。
     """
     global _STATIC_GRAPH_PATCH_APPLIED, STATIC_GRAPH_DOWNGRADED
+    global _original_pregel_graph_compile, _original_compiled_invoke
+    global _original_branch_router_call
     if _STATIC_GRAPH_PATCH_APPLIED:
         return False
 
@@ -348,6 +398,15 @@ def apply_static_graph_patch() -> bool:
             )
         _STATIC_GRAPH_PATCH_APPLIED = True  # 降级也视为已处理，防重复告警
         return False
+
+    # 替换前保存原版引用（仅首次捕获：测试复位 flag 重放 apply 时类属性
+    # 可能已是 patched 版本，覆盖会把 patched 误当原版基线）
+    if _original_pregel_graph_compile is None:
+        _original_pregel_graph_compile = PregelGraph.compile
+    if _original_compiled_invoke is None:
+        _original_compiled_invoke = CompiledGraph._invoke
+    if _original_branch_router_call is None:
+        _original_branch_router_call = BranchRouter.__call__
 
     # 三件套安装：A（PregelGraph.compile）/ B（CompiledGraph._invoke）/ C（BranchRouter.__call__）
     CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)
