@@ -67,9 +67,10 @@ public class ZipValidationUtils {
 
 
     /**
-     * 存储解析后的SKILL.md文件frontmatter
+     * 存储解析后的SKILL.md文件frontmatter（线程隔离，避免并发导入时互相覆盖）
      */
-    private static Map<String, Object> frontmatter = new LinkedHashMap<>();
+    private static final ThreadLocal<Map<String, Object>> FRONTMATTER =
+            ThreadLocal.withInitial(LinkedHashMap::new);
 
 
     /**
@@ -78,7 +79,7 @@ public class ZipValidationUtils {
      * @return frontmatter数据
      */
     public static Map<String, Object> getFrontmatter() {
-        return new LinkedHashMap<>(frontmatter);
+        return new LinkedHashMap<>(FRONTMATTER.get());
     }
 
 
@@ -89,6 +90,10 @@ public class ZipValidationUtils {
      * @throws AgentStudioException 校验失败时抛出异常
      */
     public static void validateZipFile(File zipFile) {
+        // 入口统一清理线程内残留：校验在前置阶段（格式/大小/安全/结构）失败时，
+        // 后续 getFrontmatter() 不应读到上一次成功解析的旧数据
+        FRONTMATTER.remove();
+
         // 1. 文件格式检查
         validateFileFormat(zipFile);
 
@@ -274,14 +279,13 @@ public class ZipValidationUtils {
     private static void validateExtractedContent(File zipFile) {
         Path tempDir = null;
         Path tempDirForValidation = null;
-        String zipFileName;
         try {
-            zipFileName = zipFile.getName().substring(0, zipFile.getName().lastIndexOf('.'));
+            // 临时目录与解压子目录均使用固定名，不引入用户可控的文件名：
+            // 唯一性由 createTempDirectory 的随机后缀保证；原始文件名无扩展名
+            // 或含文件系统非法字符时不再影响校验流程
+            tempDir = Files.createTempDirectory("agent-studio-skill-");
 
-            // 创建临时目录
-            tempDir = Files.createTempDirectory(zipFileName);
-
-            tempDirForValidation = tempDir.resolve(zipFileName);
+            tempDirForValidation = tempDir.resolve("skill");
 
             // 解压ZIP文件
             unzip(zipFile, tempDirForValidation);
@@ -411,7 +415,8 @@ public class ZipValidationUtils {
         Map<String, Object> result = new LinkedHashMap<>();
 
         // 重置frontmatter，避免多次调用时的数据残留
-        ZipValidationUtils.frontmatter = new LinkedHashMap<>();
+        Map<String, Object> frontmatter = FRONTMATTER.get();
+        frontmatter.clear();
 
         // YAML frontmatter解析
         if (content.startsWith("---")) {
@@ -444,8 +449,8 @@ public class ZipValidationUtils {
                         }
 
                         result.put(key, value);
-                        // 同时保存到静态变量中
-                        ZipValidationUtils.frontmatter.put(key, value);
+                        // 同时保存到线程隔离的frontmatter中
+                        frontmatter.put(key, value);
                     }
                 }
             }

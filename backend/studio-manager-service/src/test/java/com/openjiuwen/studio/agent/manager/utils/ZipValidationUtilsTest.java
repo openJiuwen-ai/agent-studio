@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -577,6 +578,124 @@ public class ZipValidationUtilsTest {
         assertEquals("valid", frontmatter.get("name"));
         assertEquals("A valid skill", frontmatter.get("description"));
         assertEquals("MIT", frontmatter.get("license"));
+    }
+
+    // ==================== 文件名健壮性测试用例 ====================
+
+    /**
+     * 创建指定文件名的有效ZIP包（目录/技能名固定为valid，避免与校验规则耦合）
+     */
+    private File createValidZipFileNamed(String fileName) throws IOException {
+        File zipFile = tempDir.resolve(fileName).toFile();
+        try (FileOutputStream fos = new FileOutputStream(zipFile);
+             ZipOutputStream zos = new ZipOutputStream(fos)) {
+
+            ZipEntry skillMdEntry = new ZipEntry("valid/SKILL.md");
+            zos.putNextEntry(skillMdEntry);
+            String skillMdContent = """
+                    ---
+                    name: valid
+                    description: A valid skill
+                    license: MIT
+                    allowed-tools: []
+                    metadata: {}
+                    compatibility: "version1"
+                    ---
+                    # Skill Description
+                    This is a valid skill description.""";
+            zos.write(skillMdContent.getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+        return zipFile;
+    }
+
+    /**
+     * 文件名无扩展名（lastIndexOf('.')为-1）时不应抛StringIndexOutOfBoundsException，
+     * 校验流程应正常完成（修复前：substring(0, -1)抛未捕获的运行时异常）
+     */
+    @Test
+    public void testValidateZipFile_NoExtensionFilename() throws IOException {
+        File noExtFile = createValidZipFileNamed("skillzip");
+
+        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(noExtFile));
+        assertEquals("valid", ZipValidationUtils.getFrontmatter().get("name"));
+    }
+
+    /**
+     * 文件名去掉扩展名后含文件系统敏感字符（如尾部空格，Windows下目录名不允许）
+     * 时不应影响校验流程——临时目录名不使用用户可控文件名
+     */
+    @Test
+    public void testValidateZipFile_FilenameWithTrailingSpaceBeforeExtension() throws IOException {
+        File trailingSpaceFile = createValidZipFileNamed("skill .zip");
+
+        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(trailingSpaceFile));
+        assertEquals("valid", ZipValidationUtils.getFrontmatter().get("name"));
+    }
+
+    // ==================== frontmatter线程隔离测试用例 ====================
+
+    /**
+     * frontmatter为线程隔离存储：其他线程不应看到当前线程解析的结果
+     * （修复前为共享静态字段，并发导入会互相覆盖/串数据）
+     */
+    @Test
+    public void testFrontmatter_IsolatedBetweenThreads() throws Exception {
+        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(validZipFile));
+        assertEquals("valid", ZipValidationUtils.getFrontmatter().get("name"));
+
+        AtomicReference<Map<String, Object>> otherThreadView = new AtomicReference<>();
+        Thread other = new Thread(() -> otherThreadView.set(ZipValidationUtils.getFrontmatter()));
+        other.start();
+        other.join();
+
+        assertNotNull(otherThreadView.get());
+        assertTrue(otherThreadView.get().isEmpty());
+    }
+
+    /**
+     * 校验在前置阶段失败（如非ZIP文件）时，frontmatter 应被入口统一清理，
+     * getFrontmatter() 不应返回上一次成功解析的残留数据
+     * （检视意见：ThreadLocal 需在 validateZipFile 入口或 finally 统一清理）
+     */
+    @Test
+    public void testFrontmatter_ClearedWhenValidationFailsEarly() {
+        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(validZipFile));
+        assertEquals("valid", ZipValidationUtils.getFrontmatter().get("name"));
+
+        assertThrows(AgentStudioException.class,
+                () -> ZipValidationUtils.validateZipFile(nonZipFile));
+
+        assertTrue(ZipValidationUtils.getFrontmatter().isEmpty());
+    }
+
+    /**
+     * 同一线程内连续校验多个ZIP包时，frontmatter应被重置为最新一次的解析结果
+     */
+    @Test
+    public void testFrontmatter_ResetBetweenValidations() throws IOException {
+        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(validZipFile));
+
+        File secondZip = tempDir.resolve("second.zip").toFile();
+        try (FileOutputStream fos = new FileOutputStream(secondZip);
+             ZipOutputStream zos = new ZipOutputStream(fos)) {
+
+            ZipEntry skillMdEntry = new ZipEntry("valid2/SKILL.md");
+            zos.putNextEntry(skillMdEntry);
+            String skillMdContent = """
+                    ---
+                    name: valid2
+                    description: A second valid skill
+                    license: MIT
+                    ---
+                    # Skill Description
+                    This is a second valid skill description.""";
+            zos.write(skillMdContent.getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+
+        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(secondZip));
+        assertEquals("valid2", ZipValidationUtils.getFrontmatter().get("name"));
     }
 
     // ====================  isZipFile 方法测试用例 ====================
