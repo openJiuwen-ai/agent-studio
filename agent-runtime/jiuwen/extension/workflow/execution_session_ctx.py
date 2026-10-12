@@ -25,24 +25,29 @@
 
    值类型契约：引擎 ``WorkflowComponent.on_invoke`` 传给 invoke 的是
    ``Session(node_session, False)`` 包装器（component.py:95-99，无
-   state()、无 __getattr__ 委托），而该通道的消费方（Patch C →
-   BranchRouter 分支条件 → ``AtomicNode._validate_session_and_state``）
-   要求 ``isinstance(session, BaseSession)``。故写入端解包到 NodeSession
-   （``getattr(session, "_inner", session)``，与旧 ``BranchRouter.set_session``
-   解包语义一致），``resolve_routing_session`` 读取端亦防御性解包
-   （NodeSession 自身无 ``_inner``，不会过度解包）。
+   state()、无 __getattr__ 委托）——通道按**组件面包装器**存储（与旧
+   ``self._session = session`` 同物；组件自身读点 trace /
+   get_global_state / interact 等只有包装器提供，NodeSession 无这些方法；
+   与 LLMChain 的通道存包装器契约一致）。该通道的 Patch C 消费方
+   （BranchRouter 分支条件 → ``AtomicNode._validate_session_and_state``）
+   则要求 ``isinstance(session, BaseSession)``——由
+   ``resolve_routing_session`` **读取端解包**满足（``getattr(session,
+   "_inner", session)``，与旧 ``BranchRouter.set_session`` 解包语义一致；
+   NodeSession 自身无 ``_inner``，不会过度解包）。写入/读取两端契约分离，
+   写入端不得解包。
 
    前提与已知限制：
-   - **前提（per-node timeout）**：值仅在"节点函数与 dispatch 同 task"时
-     可达。per-node ``timeout < 0``（默认 -1.0）时 vertex.py 直接 await
-     ``_run_executable``（同 task）；``timeout >= 0`` 时经
-     ``asyncio.wait_for`` 新建子 task（vertex.py:250-253），invoke 内的
-     set 留在子 task 上下文、dispatch 读不到 → 回退 workflow 级/调用方
-     回退（= 旧行为，安全，仅分支粒度降级）。
-   - **已知限制（嵌套继承）**：组件级值随 task 上下文继承进嵌套子执行，
-     深嵌套时优先于子工作流自己的 workflow 级值（影响面：trace / 节点级
-     state 的归属；条件求值路径不受影响——子执行路径经 token 栈式恢复
-     ``_workflow_session``，组件级仅在属主节点自己的 dispatch 窗口内有值）。
+   - **前提（per-node 同 task）**：值仅在"节点函数与 dispatch 同 task"时
+     可达。vertex.py 有两条同 task 直 await 分支——``max_retries < 0``
+     早返回（:243-244）与 ``timeout < 0``（默认 -1.0，:248-249）；其余
+     （``max_retries >= 0`` 且 ``timeout >= 0``）经 ``asyncio.wait_for``
+     新建子 task（:250-253），invoke 内的 set 留在子 task 上下文、dispatch
+     读不到 → 回退 workflow 级解析（粒度降级，非严格等价；条件求值安全）。
+   - **作用域（嵌套隔离）**：``TaskExecutorPool.submit`` 以 ``create_task``
+     从**引擎 task** 派生节点 task——组件级值只在属主节点自己的 task 上下文
+     及其子协程内，**不进入嵌套子执行**（子工作流/循环的承载节点 task 继承
+     自引擎 task，引擎 task 从不携带组件级值）。其生命周期为整个属主
+     NodeTask（invoke 期间即被组件自身读取），不限于 dispatch 窗口。
 3. ``_stream_final_output``：流式组件的末帧输出。**不 reset**——引擎
    Vertex._post_stream 在 generator 耗尽后读取（vertex.py:624-628），
    reset 会丢值。同样依赖 NodeTask 的 context 隔离。
