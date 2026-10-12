@@ -75,6 +75,7 @@ from jiuwen.extension.workflow_node.loop_set_variable import LoopSetVariable
 from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.sub_workflow import SubWorkflow
 from jiuwen.extension.workflow.lazy_workflow import LazyWorkflow
+from jiuwen.extension.workflow.execution_session_ctx import set_component_exec
 from jiuwen.extension.wrapper.single_component_debug_wrapper import SingleComponentInfo
 from jiuwen.multi_agent.agent_group.config import AgentGroupConfig, GroupSettings
 from jiuwen.multi_agent.agent_group.hierarchical_group.agent_group import (
@@ -905,7 +906,10 @@ class _RoutedIntentDetection(IntentDetection):
     async def invoke(
         self, inputs: Any, session: Any, context: Any, **kwargs: Any
     ) -> Any:
-        self._router.set_session(session)
+        # 路由属主组件：session/context 走 component_exec ContextVar（**不
+        # reset**——路由 dispatch 在 invoke 返回后的同一 NodeTask 里执行，
+        # 需读到组件级 session；super().invoke 入口同值再 set，幂等）。
+        set_component_exec(session, context)
         return await super().invoke(inputs, session, context, **kwargs)
 
     def add_component(

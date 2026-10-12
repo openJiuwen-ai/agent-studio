@@ -1,0 +1,218 @@
+# -*- coding: UTF-8 -*-
+# Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+"""IntentDetection / _RoutedIntentDetection 组件跨执行隔离测试。
+
+审计发现（issue #1555 / Task 12）：实例复用后，执行期状态落在组件实例上——
+`self._session`（辅助方法回读）、`self.conversation_id`（仅日志读）、
+`self._router.set_session(session)`（路由会话写死在共享 router 上）、
+`self.few_shot_example += ...`（只写不读的无界累积），以及 `get_llm_result`
+懒初始化 `self.llm` 无锁（并发首调重复建 Model）。
+
+本测试钉住：
+1. 路由属主组件的 component_exec **不 reset**——invoke 返回后仍可读，
+   存活到同一 NodeTask 的 dispatch（Patch C 优先级 1）；
+2. 实例上不再挂执行期字段（`_session` / `conversation_id` /
+   `few_shot_example`），辅助方法经 ContextVar / 参数取会话；
+3. 懒初始化双检加锁：并发首调只建一次 Model；
+4. node_state 为遗留接口，invoke 入口重建复位（上一执行残留不串入）。
+"""
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from jiuwen.extension.workflow import execution_session_ctx as ctx
+from jiuwen.extension.workflow_node.intent_detection import (
+    ExecutionStatus,
+    IntentDetection,
+)
+
+
+def _conf() -> dict:
+    """最小可用 IntentDetection 配置（无 LLM / 无 KG 调用）。"""
+    return {
+        "name": "intent",
+        "branches": [
+            {"id": "branch_0", "catalog": "其他意图"},
+            {"id": "branch_1", "catalog": "查天气"},
+        ],
+        "prompt": "test prompt",
+        "enableHistory": False,
+        "enableInput": True,
+        "chatHistoryMaxTurn": 3,
+        "exampleContent": [],
+        "overridable": False,
+    }
+
+
+def _mock_session(session_id: str = "sess-1") -> MagicMock:
+    session = MagicMock()
+    session.get_session_id = MagicMock(return_value=session_id)
+    session.get_component_id = MagicMock(return_value="intent_node")
+    session.get_global_state = MagicMock(return_value=None)
+    session.trace = AsyncMock()
+    session.interact = MagicMock(return_value={"result": "interrupt"})
+    return session
+
+
+@pytest.fixture(autouse=True)
+def _clean_component_exec():
+    """执行期 ContextVar 通道进程内共享，用例前后复位避免互相串扰。"""
+    ctx.set_component_exec(None, None)
+    yield
+    ctx.set_component_exec(None, None)
+
+
+class TestIntentDetectionStateless:
+    def test_no_exec_state_instance_fields(self):
+        """实例不再持有执行期 session/conversation_id/few_shot_example 字段。"""
+        comp = IntentDetection(_conf())
+        assert not hasattr(comp, "_session")
+        assert not hasattr(comp, "conversation_id")
+        assert not hasattr(comp, "few_shot_example")
+
+    @pytest.mark.asyncio
+    async def test_invoke_sets_component_exec_without_reset(self):
+        """invoke 设置 component_exec 且不 reset——返回后仍可读（存活到 dispatch）。"""
+        comp = IntentDetection(_conf())
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+        session = _mock_session()
+        context = MagicMock()
+
+        result = await comp.invoke({"input": "你好"}, session, context)
+
+        assert result["result"] == "分类1"
+        # 路由属主组件：值须存活到同一 NodeTask 的 dispatch（Patch C 优先级 1）
+        assert ctx.current_component_exec() == (session, context)
+        # 无执行期字段残留
+        assert not hasattr(comp, "_session")
+        assert not hasattr(comp, "conversation_id")
+
+    @pytest.mark.asyncio
+    async def test_routed_intent_sets_component_exec_without_reset(self, monkeypatch):
+        """_RoutedIntentDetection.invoke 设置 component_exec（不 reset——存活到 dispatch）。"""
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            _RoutedIntentDetection,
+        )
+        import jiuwen.extension.workflow_node.intent_detection as idm
+
+        comp = _RoutedIntentDetection(_conf())
+        session = _mock_session()
+        context = MagicMock()
+        seen = {}
+
+        async def fake_super_invoke(self, inputs, session, context, **kwargs):
+            seen["exec"] = ctx.current_component_exec()
+            return {"result": "ok"}
+
+        monkeypatch.setattr(idm.IntentDetection, "invoke", fake_super_invoke)
+        result = await comp.invoke({"input": "x"}, session, context)
+
+        assert result == {"result": "ok"}
+        # super 执行期间可见
+        assert seen["exec"] == (session, context)
+        # 返回后未 reset（同 task 的 dispatch 需要读到组件级 session）
+        assert ctx.current_component_exec() == (session, context)
+        # 不再写死共享 router 的 session（Patch C 读侧改走 ContextVar）
+        assert comp._router._session is None
+
+    @pytest.mark.asyncio
+    async def test_routed_intent_full_path_keeps_component_exec(self, monkeypatch):
+        """路由子类走真实 super().invoke（两处 set 同值幂等）：返回后通道仍可读。"""
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            _RoutedIntentDetection,
+        )
+
+        comp = _RoutedIntentDetection(_conf())
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+        session = _mock_session()
+        context = MagicMock()
+
+        result = await comp.invoke({"input": "你好"}, session, context)
+
+        assert result["result"] == "分类1"
+        assert ctx.current_component_exec() == (session, context)
+
+    @pytest.mark.asyncio
+    async def test_faq_result_keeps_few_shot_example_local(self):
+        """get_faq_result 不再把 few_shot_example 累加/挂到实例上。"""
+        comp = IntentDetection(_conf())
+        comp.intent_config.enable_knowledge = True
+        current_inputs = {"input": "天气"}
+
+        await comp.get_faq_result(current_inputs, [], conversation_id="sess-1")
+
+        # 行为保留：example_content 仍写进 current_inputs（局部）
+        assert "example_content" in current_inputs
+        assert not hasattr(comp, "few_shot_example")
+
+    @pytest.mark.asyncio
+    async def test_invoke_faq_path_no_few_shot_residue(self):
+        """完整 invoke 的 FAQ 路径（真实 get_faq_result/get_search_answer）无残留。"""
+        comp = IntentDetection(_conf())
+        comp.intent_config.enable_knowledge = True  # api 为 None → 搜索空结果
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+        session = _mock_session()
+
+        result = await comp.invoke({"input": "天气"}, session, MagicMock())
+
+        # FAQ 未命中 → 落到默认分类后继续走 LLM 分支（已 mock）
+        assert result["result"] == "分类1"
+        assert not hasattr(comp, "few_shot_example")
+
+    @pytest.mark.asyncio
+    async def test_lazy_llm_init_lock_dedupes_concurrent_first_calls(self):
+        """并发首调只建一次 Model（锁双检）。
+
+        side_effect 内 sleep(0) 让出事件循环制造真交错：无锁时两个协程都会
+        通过 `if self.llm is None` 检查，重复建 Model。
+        """
+        comp = IntentDetection(_conf())
+        llm = MagicMock()
+        llm.invoke = AsyncMock(return_value=SimpleNamespace(content="{}"))
+
+        async def _slow_create(_conf):
+            await asyncio.sleep(0)
+            return llm
+
+        comp._get_llm_instance = AsyncMock(side_effect=_slow_create)
+        await asyncio.gather(
+            comp.get_llm_result({"input": "a"}),
+            comp.get_llm_result({"input": "b"}),
+        )
+        assert comp._get_llm_instance.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_node_state_rebuilt_at_invoke_entry(self):
+        """invoke 入口重建 node_state：上一执行残留状态不串入本执行。"""
+        comp = IntentDetection(_conf())
+        comp.node_state.status = ExecutionStatus.END  # 上一执行残留
+        # FAQ 命中路径提前返回、不写 node_state——只有入口重建才能回到 START
+        comp.intent_config.enable_knowledge = True
+        comp.get_faq_result = AsyncMock(return_value="分类1")
+
+        await comp.invoke({"input": "查天气"}, _mock_session(), MagicMock())
+
+        assert comp.node_state.status == ExecutionStatus.START
+
+    def test_global_intent_interrupt_reads_session_from_component_exec(self):
+        """中断路径（_handle_global_intent）经 ContextVar 读 session，不再读实例字段。"""
+        comp = IntentDetection(_conf())
+        session = _mock_session()
+        token = ctx.set_component_exec(session, None)
+        try:
+            comp._handle_global_intent(
+                "分类1", "r", {"分类1": SimpleNamespace(intent_id="i-1")}
+            )
+        finally:
+            ctx.reset_component_exec(token)
+
+        session.interact.assert_called_once()
+        assert comp.node_state.status == ExecutionStatus.USER_INTERACT
