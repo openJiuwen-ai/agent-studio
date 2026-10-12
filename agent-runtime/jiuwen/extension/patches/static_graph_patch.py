@@ -18,9 +18,19 @@
 """
 from __future__ import annotations
 
+import copy
 import inspect
 
-from openjiuwen.core.common.logging import workflow_logger
+# 打断 openjiuwen 循环 import（graph.py → vertex.py → workflow.components.base
+# → workflow/__init__ → workflow.py:34 回引 graph.py）。缺此先行导入时，本模块
+# 若为进程内首个触碰 openjiuwen.core.graph.graph 的模块会 ImportError（与
+# tests/unit_tests/extension/patches/test_static_graph_patch.py 顶部同理）。
+import openjiuwen.core.workflow  # noqa: F401  # pylint: disable=unused-import
+from openjiuwen.core.common.logging import LogEventType, graph_logger, workflow_logger
+from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
+from openjiuwen.core.graph.pregel.constants import SESSION_ID
+from openjiuwen.core.graph.store import GraphStore
+from openjiuwen.core.graph.vertex import Vertex
 
 from jiuwen.extension.workflow import execution_session_ctx as _session_ctx
 
@@ -162,6 +172,71 @@ def _wrap_compiled_invoke(prev_invoke):
     return _invoke_with_session_ctx
 
 
+def _compile_pregel_fresh(graph, fresh_nodes, graph_store, step_callback):
+    """对影子图调用原版 _compile（nodes 注入点）。
+
+    原版 _compile 读 self.nodes——无法安全传参，原地替换 self.nodes 在
+    并发 compile 下会串（compile1 换入 fresh1 后 compile2 换入 fresh2，
+    compile1 的 _compile 可能读到 fresh2）。shadow-copy：影子图共享
+    build 期静态属性（edges/waits/branches/branch_targets 构建完成后
+    不再变化），仅覆盖 nodes，各自调用互不可见。
+
+    注意：影子图上 self._resolve_barrier_groups 仍是仓库已 patch 的
+    版本（parallel_branch_grouping/nested_branch_barrier），barrier
+    解析语义保持。
+    """
+    shadow = copy.copy(graph)
+    shadow.nodes = fresh_nodes
+    return PregelGraph._compile(shadow, graph_store=graph_store, step_callback=step_callback)
+
+
+def _patched_pregel_graph_compile(self, session, **kwargs):
+    """Patch A：纯函数化 compile（spec §4.1）。
+
+    与原版（graph.py:239-265）差异：
+    1. 每节点新建 Vertex 包装共享 executable（原 build 期 Vertex 不再被
+       init——规避 Future 绑定旧事件循环、调用计数残留、NodeSession 覆写）；
+    2. 无条件全新构建（不再判断 self.pregel is None）；
+    3. after_step 闭包捕获 session 参数（原版读 self._session——共享实例
+       并发执行时的竞态根源）；
+    4. 保留 self.pregel/checkpointer/_session 属性写入（读取方仅为
+       compile/after_step 自身，见计划"属性读取方审计"；保留写入使
+       off 模式等价论证成立）。
+    """
+    fresh_nodes = {}
+    for node_id, node in self.nodes.items():
+        fresh = Vertex(node_id, node._executable)  # pylint: disable=protected-access
+        fresh.is_end_node = node.is_end_node
+        fresh.init(session, **kwargs)
+        fresh_nodes[node_id] = fresh
+
+    def after_step(loop):
+        if session:
+            session.state().commit()
+        graph_logger.debug(
+            f"Finished to run graph super-step [{loop.step}]",
+            event_type=LogEventType.GRAPH_SUPER_STEP_END,
+            graph_id=loop.config['ns'],
+            session_id=loop.config.get(SESSION_ID),
+            metadata={
+                "ns": loop.config['ns'],
+                "step": loop.step,
+                "active_nodes": list(loop.active_nodes)
+            }
+        )
+
+    checkpointer = session.checkpointer()
+    store = GraphStore(checkpointer.graph_store())
+    pregel = _compile_pregel_fresh(self, fresh_nodes, graph_store=store, step_callback=after_step)
+
+    # 属性保留写入（偏离②）：兼容潜在读取方；off 模式下每请求新实例的
+    # 首次 compile 本来就执行等价赋值。
+    self.pregel = pregel
+    self.checkpointer = checkpointer
+    self._session = session
+    return CompiledGraph(pregel, checkpointer)
+
+
 def apply_static_graph_patch() -> bool:
     """幂等应用入口（Task 3/4/5 逐步填充三件套，Task 6 完成编排）。
 
@@ -183,9 +258,8 @@ def apply_static_graph_patch() -> bool:
         return False
 
     # Task 4/5 在此填充：PregelGraph.compile / BranchRouter.__call__
-    from openjiuwen.core.graph.graph import CompiledGraph
-
     CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)
+    PregelGraph.compile = _patched_pregel_graph_compile
 
     _STATIC_GRAPH_PATCH_APPLIED = True
     return True

@@ -6,6 +6,7 @@
 sub_stream 补丁）→ 断言全过；monkeypatch 破坏结构 → 对应断言命中。
 """
 import sys
+from pathlib import Path
 
 # 打断 openjiuwen 循环 import（单用例 -k 独立运行必需）：
 # graph.py → vertex.py → workflow.components.base → 包 openjiuwen.core.workflow.__init__
@@ -34,10 +35,10 @@ class TestStructureAssertions:
     def test_real_engine_passes_all_assertions(self):
         """真实 openjiuwen 0.1.19 + 已应用 sub_stream 补丁 → 断言全过。
 
-        前置：import ir_converter（应用 sub_stream 补丁）。测试文件顶部只
-        import static_graph_patch（其仅 import openjiuwen.core.common.logging
-        与 execution_session_ctx，不导入引擎类），sub_stream 补丁需
-        ir_converter 的 import 时应用——此处显式 import 保证顺序。
+        前置：import ir_converter（应用 sub_stream 补丁）。static_graph_patch
+        自身不应用 sub_stream 补丁（B1 断言要求调用方保证应用顺序），
+        sub_stream 补丁需 ir_converter 的 import 时应用——此处显式 import
+        保证顺序。
         """
         import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401
 
@@ -207,3 +208,121 @@ class TestPatchB:
         with pytest.raises(RuntimeError):
             await wrapped(FakeCompiled(), {}, object(), None)
         assert ctx.current_workflow_session() is None
+
+
+class TestPatchA:
+    """Patch A：compile 纯函数化——fresh Pregel/checkpointer/Vertex per compile。"""
+
+    IR_PATH = (
+        Path(__file__).resolve().parents[3] / "resource" / "ir_file" / "workflow_message.json"
+    )
+
+    @staticmethod
+    def _fake_session():
+        """MagicMock session（计划期已实验验证可走通真实 compile）。"""
+        from unittest.mock import MagicMock
+
+        session = MagicMock()
+        session.checkpointer.return_value.graph_store.return_value = MagicMock()
+        return session
+
+    @pytest.fixture
+    def _patched_compile(self, monkeypatch):
+        from openjiuwen.core.graph.graph import PregelGraph
+        from jiuwen.extension.patches.static_graph_patch import (
+            _patched_pregel_graph_compile,
+        )
+
+        monkeypatch.setattr(PregelGraph, "compile", _patched_pregel_graph_compile)
+
+    @pytest.mark.asyncio
+    async def test_two_compiles_yield_independent_pregel_and_checkpointer(self, _patched_compile):
+        import json
+
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+        ir_data = json.loads(self.IR_PATH.read_text(encoding="utf-8"))
+        lazy = await IRConverter.async_ir_to_workflow(ir_data)
+        wf = await lazy.instantiate()
+        graph = wf._internal._graph  # BaseWorkflow._graph 即 PregelGraph
+        original_vertices = dict(graph.nodes)
+
+        s1, s2 = self._fake_session(), self._fake_session()
+        c1 = graph.compile(s1)
+        c2 = graph.compile(s2)
+
+        # 每次编译产出全新 Pregel（全新 channels）与全新 checkpointer
+        assert c1._pregel is not c2._pregel
+        assert c1._checkpointer is not c2._checkpointer
+        # 属性保留写入（读取方兼容，spec §4.1 偏离②）
+        assert graph.pregel is c2._pregel
+        assert graph.checkpointer is c2._checkpointer
+        assert graph._session is s2
+
+        # 原 build 期 Vertex 未被 init 污染、self.nodes 未被替换
+        for node_id, vertex in original_vertices.items():
+            assert vertex is graph.nodes[node_id]
+            assert vertex._session is None
+
+    @pytest.mark.asyncio
+    async def test_fresh_vertices_are_initialized_and_isolated(self, _patched_compile):
+        import json
+
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+        ir_data = json.loads(self.IR_PATH.read_text(encoding="utf-8"))
+        lazy = await IRConverter.async_ir_to_workflow(ir_data)
+        wf = await lazy.instantiate()
+        graph = wf._internal._graph
+
+        s1 = self._fake_session()
+        c1 = graph.compile(s1)
+
+        # 两次 compile 的 PregelNode 内包装的是不同 Vertex 实例
+        n1 = c1._pregel.nodes["node_start"]
+        c2 = graph.compile(self._fake_session())
+        n2 = c2._pregel.nodes["node_start"]
+        assert n1 is not n2
+
+    @pytest.mark.asyncio
+    async def test_after_step_commits_captured_session_not_shared_attr(self, _patched_compile):
+        """after_step 闭包捕获 session 参数——竞态根源（原版读 self._session）消除。"""
+        import json
+        from unittest.mock import MagicMock
+
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+        ir_data = json.loads(self.IR_PATH.read_text(encoding="utf-8"))
+        lazy = await IRConverter.async_ir_to_workflow(ir_data)
+        wf = await lazy.instantiate()
+        graph = wf._internal._graph
+
+        s1, s2 = self._fake_session(), self._fake_session()
+        c1 = graph.compile(s1)
+        graph.compile(s2)  # self._session 已被 s2 覆写（属性保留写入）
+
+        loop_stub = MagicMock()
+        loop_stub.step = 1
+        loop_stub.config = {"ns": "wf", "session_id": "s1"}
+        loop_stub.active_nodes = []
+
+        c1._pregel.after_step(loop_stub)  # c1 的 after_step 应 commit s1 而非 s2
+        s1.state().commit.assert_called()
+        s2.state().commit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_compile_equivalence_off_mode(self, _patched_compile):
+        """off 模式等价性：每请求新实例的首次 compile，产物类型与属性绑定正确。"""
+        import json
+
+        from openjiuwen.core.graph.graph import CompiledGraph
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+        ir_data = json.loads(self.IR_PATH.read_text(encoding="utf-8"))
+        lazy = await IRConverter.async_ir_to_workflow(ir_data)
+        wf = await lazy.instantiate()
+        graph = wf._internal._graph
+
+        compiled = graph.compile(self._fake_session())
+        assert isinstance(compiled, CompiledGraph)
+        assert compiled._pregel is graph.pregel
