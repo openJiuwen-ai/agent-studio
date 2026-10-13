@@ -41,7 +41,10 @@ from openjiuwen.core.workflow.components import Session
 from pydantic import BaseModel, Field
 
 from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_state,
     get_stream_final_output,
+    reset_component_state,
+    set_component_state,
     set_stream_final_output,
 )
 
@@ -318,11 +321,12 @@ class FlowInput(WorkflowComponent):
     def __init__(self, conf: dict = None):
         super().__init__()
         self._config = conf or {}
-        # _node_state 为执行期状态：每执行入口从 session 重建（自愈），
-        # 实例不保留跨执行残留；执行期末帧输出走 execution_session_ctx 的
+        # 执行期状态不落实例（PR #1 评审 Suggestion-1，与 FlowQA 同构）：
+        # invoke/stream 内局部 current_state 承载、经调用链传递；逃逸面经
+        # component_state ContextVar 通道读取；session 为持久化真源（每执行
+        # 入口从 session 重建）。执行期末帧输出走 execution_session_ctx 的
         # stream_final_output 通道（invoke/stream 入口复位，引擎
         # Vertex._post_stream 经 get_stream_output 读取，故出口不 reset）。
-        self._node_state = FlowInputState()
         self._node_name: Optional[str] = self._config.get("name") or None
 
     # -------------------------------------------------------------------------
@@ -368,11 +372,12 @@ class FlowInput(WorkflowComponent):
     # -------------------------------------------------------------------------
 
     def should_interrupt(self) -> bool:
-        """读点仅在同一次执行内（状态每执行从 session 重建）。"""
-        return self._node_state.status == ExecutionStatus.USER_INTERACT
+        """执行期状态经组件状态通道读取（实例跨执行复用，不落实例）。"""
+        return self.get_node_status() == ExecutionStatus.USER_INTERACT
 
     def get_state(self) -> FlowInputState:
-        return self._node_state
+        """同通道读取：invoke/stream 期间返回本次执行的 state，之外回退初始状态。"""
+        return current_component_state() or FlowInputState()
 
     def get_stream_output(self) -> Optional[dict]:
         """末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
@@ -382,13 +387,17 @@ class FlowInput(WorkflowComponent):
         return get_stream_final_output()
 
     def load_state(self, state: FlowInputState) -> None:
-        self._node_state = deepcopy(state)
+        """逃逸面（引擎不调用）：写入执行期通道而非实例字段。"""
+        set_component_state(deepcopy(state))
 
     def get_node_status(self) -> ExecutionStatus:
-        return self._node_state.status
+        return (current_component_state() or FlowInputState()).status
 
     def error_to_output(self) -> None:
-        self._node_state.status = ExecutionStatus.END
+        """逃逸面：本次执行存在时标 END（invoke/stream except 为唯一调用方）。"""
+        state = current_component_state()
+        if state is not None:
+            state.status = ExecutionStatus.END
 
     # -------------------------------------------------------------------------
     # 执行入口
@@ -399,6 +408,21 @@ class FlowInput(WorkflowComponent):
         inputs: Input,
         session: Session,
         context: ModelContext,
+    ) -> Output:
+        # 执行期状态局部化 + 通道发布（评审 Suggestion-1，与 FlowQA 同构）
+        current_state = FlowInputState()
+        token = set_component_state(current_state)
+        try:
+            return await self._invoke_with_state(inputs, session, context, current_state)
+        finally:
+            reset_component_state(token)
+
+    async def _invoke_with_state(
+        self,
+        inputs: Input,
+        session: Session,
+        context: ModelContext,
+        current_state: FlowInputState,
     ) -> Output:
         try:
             # 执行入口复位末帧通道：上一执行的末帧不得经 get_stream_output
@@ -412,10 +436,8 @@ class FlowInput(WorkflowComponent):
                 current_state = state_from_session
             else:
                 current_state = FlowInputState()
-
-            # 入口从 session 重建执行状态（自愈）：实例残留被覆盖，
-            # 后续读写一律经本次执行的 current_state 对象。
-            self._node_state = current_state
+            # 重绑定点同步通道（逃逸面读到本次执行的实时状态）
+            set_component_state(current_state)
 
             if current_state.status == ExecutionStatus.START:
                 return await self._handle_start_state(
@@ -454,6 +476,10 @@ class FlowInput(WorkflowComponent):
 
         适配子工作流中断处理模式，与 invoke 逻辑一致但使用 yield 输出。
         """
+        # 执行期状态局部化 + 通道发布（同 invoke；async generator 的
+        # finally 在消费方耗尽/关闭生成器时执行）
+        current_state = FlowInputState()
+        token = set_component_state(current_state)
         try:
             # 执行入口复位末帧通道（同 invoke：上一执行的末帧不跨执行残留）。
             set_stream_final_output(None)
@@ -464,9 +490,7 @@ class FlowInput(WorkflowComponent):
                 current_state = state_from_session
             else:
                 current_state = FlowInputState()
-
-            # 入口从 session 重建执行状态（自愈），同 invoke。
-            self._node_state = current_state
+            set_component_state(current_state)
 
             if current_state.status == ExecutionStatus.START:
                 query = FlowInputUtils.build_inputs_message(self._config)

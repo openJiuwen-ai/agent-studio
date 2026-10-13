@@ -61,7 +61,12 @@ from openjiuwen.core.workflow import WorkflowComponent
 from openjiuwen.core.workflow.components import Session
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
 
-from jiuwen.extension.workflow.execution_session_ctx import get_stream_final_output
+from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_state,
+    get_stream_final_output,
+    reset_component_state,
+    set_component_state,
+)
 
 # =============================================================================
 # 常量定义
@@ -1855,7 +1860,9 @@ class Questioner(WorkflowComponent):
         self._config = (
             conf if isinstance(conf, QuestionerConfig) else QuestionerConfig(**conf)
         )
-        self._node_state = QuestionerState()
+        # 执行期状态不落实例（PR #1 评审 Suggestion-1，与 FlowQA 同构）：
+        # invoke 内局部 current_state 承载、经调用链传递；逃逸面经
+        # component_state ContextVar 通道读取；session 为持久化真源。
         self._model: Optional[Model] = None
         self._prompt: Optional[PromptTemplate] = None
         self._reflection_prompt: Optional[PromptTemplate] = None
@@ -2083,10 +2090,12 @@ class Questioner(WorkflowComponent):
                 )
 
     def should_interrupt(self) -> bool:
-        return self._node_state.status == ExecutionStatus.USER_INTERACT
+        """执行期状态经组件状态通道读取（实例跨执行复用，不落实例）。"""
+        return self.get_node_status() == ExecutionStatus.USER_INTERACT
 
     def get_state(self) -> QuestionerState:
-        return self._node_state
+        """同通道读取：invoke 期间返回本次执行的 state，invoke 外回退初始状态。"""
+        return current_component_state() or QuestionerState()
 
     def get_stream_output(self):
         """末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
@@ -2098,16 +2107,35 @@ class Questioner(WorkflowComponent):
         return get_stream_final_output()
 
     def load_state(self, state: QuestionerState) -> None:
-        self._node_state = deepcopy(state)
+        """逃逸面（引擎不调用）：写入执行期通道而非实例字段。"""
+        set_component_state(deepcopy(state))
 
     def get_node_status(self) -> ExecutionStatus:
-        return self._node_state.status
+        return (current_component_state() or QuestionerState()).status
 
     def error_to_output(self) -> None:
-        self._node_state.status = ExecutionStatus.END
+        """逃逸面：本次执行存在时标 END（invoke except 分支为唯一调用方）。"""
+        state = current_component_state()
+        if state is not None:
+            state.status = ExecutionStatus.END
 
     async def invoke(
         self, inputs: Input, session: Session, context: ModelContext
+    ) -> Output:
+        # 执行期状态：局部变量承载（实例跨执行复用，不落实例——评审
+        # Suggestion-1）。invoke 内经调用链传递；逃逸面经 component_state
+        # 通道读取；session 为持久化真源。current_state 重绑定点（direct_reply
+        # 返回新 state）同步重设通道，保证逃逸面读到本次执行的实时状态。
+        current_state = QuestionerState()
+        token = set_component_state(current_state)
+        try:
+            return await self._invoke_with_state(inputs, session, context, current_state)
+        finally:
+            reset_component_state(token)
+
+    async def _invoke_with_state(
+        self, inputs: Input, session: Session, context: ModelContext,
+        current_state: QuestionerState,
     ) -> Output:
         try:
             await self._initialize_model()
@@ -2131,8 +2159,8 @@ class Questioner(WorkflowComponent):
                 current_state = state_from_session
             else:
                 current_state = QuestionerState()
-
-            self._node_state = current_state
+            # 重绑定点同步通道（逃逸面 get_state 等读到本次执行实时状态）
+            set_component_state(current_state)
 
             invoke_result = dict()
             if self._config.response_type == ResponseType.ReplyDirectly.value:
@@ -2142,7 +2170,7 @@ class Questioner(WorkflowComponent):
                         inputs, session, context, temp_state, False, metadata=metadata
                     )
                     current_state = invoke_result.pop("_state", temp_state)
-                    self._node_state = current_state
+                    set_component_state(current_state)
                 else:
                     # 恢复执行：使用保存的状态继续处理用户的回复
                     try:
@@ -2151,7 +2179,7 @@ class Questioner(WorkflowComponent):
                             metadata=metadata,
                         )
                         current_state = invoke_result.pop("_state", current_state)
-                        self._node_state = current_state
+                        set_component_state(current_state)
                     except GraphInterrupt:
                         raise
                     except Exception:
@@ -2184,14 +2212,12 @@ class Questioner(WorkflowComponent):
                         type=MESSAGE_NODE_END, index=1, data=custom_data
                     ).model_dump(by_alias=True, exclude_none=False, exclude_unset=False)
                 )
-                self._node_state.status = ExecutionStatus.END
+                current_state.status = ExecutionStatus.END
                 # 使用 session.interact() 替代手动 raise GraphInterrupt
                 # session.interact() 会自动执行 commit_cmp() + OutputSchema(INTERACTION) + raise GraphInterrupt
                 await session.interact(invoke_result.get("question", ""))
             else:
-                new_state = QuestionerState()
-                self._node_state = new_state
-                await self._store_state_to_session(new_state, session)
+                await self._store_state_to_session(QuestionerState(), session)
                 # 转换字段名以适配 IR 配置（例如 user_response -> USER_RESPONSE）
                 invoke_result = self._convert_output_field_names(invoke_result)
                 # 包裹 userFields 命名空间，与旧框架输出格式一致
