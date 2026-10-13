@@ -430,17 +430,17 @@ class ComplexIntentDetection(WorkflowComponent):
         is_resuming = state.status == ExecutionStatus.USER_INTERACT
         is_child_resuming = self._check_child_workflow_needs_resume()
 
-        sub_checkpoint_exists = False
-        if session and workflow_id:
-            inner_session = getattr(session, '_inner', None)
-            if inner_session:
-                try:
-                    checkpointer = inner_session.checkpointer()
-                    sub_checkpoint_exists = await checkpointer.session_exists(inner_session.session_id())
-                except (KeyError, AttributeError, RuntimeError):
-                    pass
-
-        should_resume = is_resuming or is_child_resuming or sub_checkpoint_exists
+        # 恢复判定只依赖显式信号（issue #1 修复）：此处不得以外层 session 做
+        # checkpoint 存在性判定——inner_session.session_id() 与外层主工作流
+        # 同 ID，外层执行期间 pre_workflow_execute 已写入，session_exists
+        # 恒 True，会把子工作流 fresh 执行误判为恢复（子图输入被替换为
+        # InteractiveInput 通道，子图 start 节点拿不到输入）。对齐
+        # SubWorkflow._should_resume_child_workflow 模式：判定全部来自
+        # session 通道（state 中断状态 / __interactive_input__ 显式信号）；
+        # 标准恢复链路（InteractiveInput 透传 / __interactive_input__ 信号）
+        # 已覆盖，子图 scope 级 checkpoint 由引擎 checkpointer 在
+        # pre_workflow_execute 自行校验兜底。
+        should_resume = is_resuming or is_child_resuming
 
         if isinstance(inputs, InteractiveInput):
             sub_inputs = inputs

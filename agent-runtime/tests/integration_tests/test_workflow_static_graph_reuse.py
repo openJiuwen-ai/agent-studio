@@ -23,21 +23,21 @@ spec §9.2 补充测试项记录（Task 17 落盘，三子项在下方标注覆�
    并发长短 query 各走各自分支（partial_content 帧来源 message 节点不同）；
 2. **join/aggregate 汇聚正确**——aggregation 节点（``jiuwen.aggregation``
    first-non-null）汇聚已由 ``workflow_aggregation.json`` 覆盖（各自聚合
-   结果 = 各自 query）；**并行 join/barrier（菱形并行分支汇聚）仍为缺口**
-   ——现有 fixture 无并行分支菱形结构；
+   结果 = 各自 query）；并行 join/barrier（菱形并行分支汇聚）已由
+   ``TestConcurrentParallelJoin`` 补齐（start → 双并行 message 分支 →
+   aggregation join → end，测试内构造 IR）；
 3. **checkpointer 隔离**——本层（各 session store 按 session_id 各自建/删、
-   执行后无残留、输出不互串）已由并发用例断言覆盖；**状态级隔离
-   （跨 session 的中断/恢复、checkpoint 复用）仍为缺口**——见下。
+   执行后无残留、输出不互串）已由并发用例断言覆盖；状态级隔离
+   （跨 session 的中断/恢复、checkpoint 复用）已由
+   test_workflow_concurrent_interact_and_nesting.py 的 QA/FlowInput
+   中断-恢复并发用例补齐。
 
-已知不可驱动缺口（Task 17 记入 spec §9.2）：
-1. 缓存实例上的中断/恢复——需 Questioner 交互的 IR；
-2. 嵌套子工作流复用——需含 SubWorkflow 的 IR；
-3. CID（ComplexIntentDetection）并发 invoke 的 ``_state`` 共享写竞争
-   （T14 遗留观察点）——需 ``EI.ComplexIntentDetection`` IR + LLM 支撑的
-   IntentDetection；且该竞争的可观测面在分支/子工作流执行窗口，无 LLM
-   时无法真实驱动（详见 task-16-report.md）；
-4. 并行 join/barrier 汇聚（见上子项 2）与 checkpointer 状态级隔离
-   （见上子项 3）。
+已知不可驱动缺口（Task 17 记入 spec §9.2，剩余项）：
+1. CID（ComplexIntentDetection）并发 invoke 的 ``_state`` 共享写竞争
+   （T14 遗留观察点）——其 ``_state`` 竞争已由单元级并发测试覆盖
+   （test_concurrent_state_isolation.py）；wrapper 路径 checkpoint 误判
+   修复后的集成级并发已由 test_complex_intent_detection_integration.py
+   补齐（LLM 意图识别打桩 + 嵌套子工作流，issue #1 第 1/2 项）。
 """
 import asyncio
 import copy
@@ -330,3 +330,193 @@ class TestCacheConcurrentAccess:
             for _ in range(4)
         ])
         assert len({id(inst) for inst in instances}) == 1
+
+
+def _parallel_join_ir() -> dict:
+    """菱形并行分支汇聚 IR：start → 双并行 message 分支 → aggregation join → end。
+
+    start 两条普通出边（无条件）→ 左右分支并行执行；join 节点双入边构成
+    barrier（pregel 数据依赖等待两前驱都完成）；aggregation 两组分别引用
+    左右分支输出（first-non-null 单来源组，值即分支 message 输出）；end
+    拼接两组回显。流式路径上双分支为并行 stream producer、end 为流汇聚点，
+    覆盖 parallel_branch_grouping_patch 的 co-executing 分支分组敏感面。
+    """
+    def _message_node(node_id, name, template):
+        return {
+            "id": node_id,
+            "type": "jiuwen.message",
+            "outputs": {"result": "", "userFields": {}},
+            "configs": {
+                "template": template,
+                "userFields": {
+                    "inputs": [
+                        {"sourceType": "ref", "id": "input", "type": "string", "required": True}
+                    ],
+                    "outputs": [],
+                },
+                "systemFields": {"inputs": [], "outputs": []},
+                "enable_history": True,
+                "isStructMessage": False,
+            },
+            "inputs": {"userFields": {"input": "${node_start.systemFields.query}"}},
+            "name": name,
+        }
+
+    return {
+        "is_published": True,
+        "workflowName": "parallel-join",
+        "workflowId": "wf-parallel-join",
+        "schemaVersion": "1",
+        "metadata": {},
+        "configs": {},
+        "description": "",
+        "components": [
+            {
+                "id": "node_start",
+                "type": "jiuwen.start",
+                "configs": {
+                    "userFields": {
+                        "inputs": [
+                            {"id": "query", "type": "string", "required": True, "sourceType": "input"}
+                        ],
+                        "outputs": [],
+                    }
+                },
+            },
+            _message_node("node_left", "左分支", "左分支:{{input}}"),
+            _message_node("node_right", "右分支", "右分支:{{input}}"),
+            {
+                "id": "node_join",
+                "type": "jiuwen.aggregation",
+                "outputs": {"userFields": {"group_left": "", "group_right": ""}},
+                "configs": {
+                    "mode": "first-non-null",
+                    "userFields": {
+                        "inputs": [
+                            {"sourceType": "ref", "id": "group_left_1", "type": "string", "required": False},
+                            {"sourceType": "ref", "id": "group_right_1", "type": "string", "required": False},
+                        ],
+                        "outputs": [
+                            {"sourceType": "null", "id": "group_left", "type": "string", "required": False},
+                            {"sourceType": "null", "id": "group_right", "type": "string", "required": False},
+                        ],
+                    },
+                    "systemFields": {"inputs": [], "outputs": []},
+                    "groups": {
+                        "group_left": ["group_left_1"],
+                        "group_right": ["group_right_1"],
+                    },
+                },
+                "inputs": {
+                    "userFields": {
+                        "group_left_1": "${node_left.result}",
+                        "group_right_1": "${node_right.result}",
+                    }
+                },
+                "name": "并行汇聚",
+            },
+            {
+                "id": "node_end",
+                "type": "jiuwen.end",
+                "outputs": {"userFields": {}, "responseContent": ""},
+                "configs": {
+                    "responseMode": "directResponse",
+                    "userFields": {
+                        "inputs": [
+                            {"sourceType": "ref", "id": "left", "type": "string", "required": False},
+                            {"sourceType": "ref", "id": "right", "type": "string", "required": False},
+                        ],
+                        "outputs": [],
+                    },
+                    "responseTemplate": "左={{left}}|右={{right}}",
+                    "systemFields": {"inputs": [], "outputs": []},
+                    "isStreamOut": True,
+                    "enable_history": True,
+                    "isStructMessage": False,
+                },
+                "inputs": {
+                    "userFields": {
+                        "left": "${node_join.userFields.group_left}",
+                        "right": "${node_join.userFields.group_right}",
+                    }
+                },
+                "name": "结束",
+            },
+        ],
+        "connections": [
+            {"source": {"componentId": "node_start"}, "target": {"componentId": "node_left"}},
+            {"source": {"componentId": "node_start"}, "target": {"componentId": "node_right"}},
+            {"source": {"componentId": "node_left"}, "target": {"componentId": "node_join"}},
+            {"source": {"componentId": "node_right"}, "target": {"componentId": "node_join"}},
+            {"source": {"componentId": "node_join"}, "target": {"componentId": "node_end"}},
+        ],
+    }
+
+
+class TestConcurrentParallelJoin:
+    """并行 join/barrier（菱形并行分支汇聚）的并发隔离（spec §9.2 子项 2 补齐）。
+
+    同一实例多 session 并发驱动菱形图：双并行分支（流式 message producer）
+    + aggregation join（双入边 barrier）。静态图 fresh-vertex 与
+    per-execution actor 的组合风险在此暴露：任一分支的 io_state/流分组
+    串扰都会使别路 query 混入本路 join 结果。
+    """
+
+    @pytest.mark.asyncio
+    async def test_concurrent_parallel_join_isolated_per_session(self):
+        """4 路并发：各路终帧 = 本路 query 的左右分支拼接，双分支均真实执行。"""
+        wf = await (await IRConverter.async_ir_to_workflow(_parallel_join_ir())).instantiate()
+
+        queries = [f"pj-{i}" for i in range(4)]
+        results = await asyncio.gather(*[
+            _drive(wf, create_workflow_session(session_id=f"pj-{i}"), q)
+            for i, q in enumerate(queries)
+        ])
+
+        shapes = []
+        for i, (query, chunks) in enumerate(zip(queries, results)):
+            # 双并行分支均真实执行：两路 message 帧都产出
+            left_frames = [
+                c for c in chunks
+                if getattr(c, "type", None) == "partial_content"
+                and (getattr(c, "data", None) or {}).get("node_id") == "node_left"
+            ]
+            right_frames = [
+                c for c in chunks
+                if getattr(c, "type", None) == "partial_content"
+                and (getattr(c, "data", None) or {}).get("node_id") == "node_right"
+            ]
+            assert left_frames, f"执行 {i} 左分支未执行——并行分支缺失"
+            assert right_frames, f"执行 {i} 右分支未执行——并行分支缺失"
+
+            # join barrier 汇聚两分支、按本路输入隔离：终帧 answer 为
+            # 左右分支各自回显本路 query 的拼接（串扰会把别路 query 带进来）
+            assert _final_payload(chunks).get("answer") == f"左=左分支:{query}|右=右分支:{query}", (
+                f"执行 {i} 终结帧汇聚结果异常——并行 join 串扰或 barrier 断裂"
+            )
+            shapes.append(_shape(chunks))
+        # 四路事件序列骨架一致（同一菱形路径，无并发污染）
+        assert all(s == shapes[0] for s in shapes[1:])
+
+    @pytest.mark.asyncio
+    async def test_parallel_join_matches_fresh_build_output(self):
+        """等价性：缓存实例的菱形执行输出 == 每请求新建实例的输出。"""
+        wf_fresh = await (
+            await IRConverter.async_ir_to_workflow(_parallel_join_ir())
+        ).instantiate()
+        out_fresh = await _drive(
+            wf_fresh, create_workflow_session(session_id="pj-fresh"), "pj-fresh"
+        )
+
+        wf_reuse = await wic.aget_or_create_workflow_instance(
+            "integration/parallel_join.json",
+            _parallel_join_ir(),
+            IRConverter.async_ir_to_workflow,
+        )
+        out_reuse = await _drive(
+            wf_reuse, create_workflow_session(session_id="pj-reuse"), "pj-reuse"
+        )
+
+        assert _shape(out_fresh) == _shape(out_reuse)
+        assert _final_payload(out_fresh).get("answer") == "左=左分支:pj-fresh|右=右分支:pj-fresh"
+        assert _final_payload(out_reuse).get("answer") == "左=左分支:pj-reuse|右=右分支:pj-reuse"
