@@ -55,6 +55,11 @@
 3. ``_stream_final_output``：流式组件的末帧输出。**不 reset**——引擎
    Vertex._post_stream 在 generator 耗尽后读取（vertex.py:624-628），
    reset 会丢值。同样依赖 NodeTask 的 context 隔离。
+4. ``_component_state``：组件执行期状态对象（如 FlowQA 的 QAState）。
+   组件在 invoke 入口 set、finally reset（token 栈式）；逃逸面方法
+   （get_state / get_node_status / should_interrupt）经通道读取，invoke
+   外回退默认值。与通道 2 同样依赖 NodeTask 的 context 隔离（PR #1
+   评审修复轮，Critical-1）。
 """
 from __future__ import annotations
 
@@ -69,6 +74,9 @@ _component_exec: ContextVar[Tuple[Optional[Any], Optional[Any]]] = ContextVar(
 )
 _stream_final_output: ContextVar[Optional[dict]] = ContextVar(
     "jiuwen_stream_final_output", default=None
+)
+_component_state: ContextVar[Optional[Any]] = ContextVar(
+    "jiuwen_component_state", default=None
 )
 
 
@@ -102,6 +110,27 @@ def set_stream_final_output(value: Optional[dict]) -> None:
 
 def get_stream_final_output() -> Optional[dict]:
     return _stream_final_output.get()
+
+
+def set_component_state(state: Any) -> Token:
+    """组件执行期状态对象通道（spec §4 第四通道，PR #1 评审修复轮）。
+
+    与 ``_component_exec``（session/context 二元组）分离：存放组件自身的
+    执行期状态对象（如 ``FlowQA`` 的 ``QAState``）。组件在 invoke 入口
+    set、finally reset（token 栈式）；逃逸面方法（``get_state`` /
+    ``get_node_status`` / ``should_interrupt``）经 ``current_component_state``
+    读取——实例跨执行复用后这些值不能落共享实例字段（并发执行互踩）。
+    invoke 外（无执行期上下文）读取方自行回退默认值。
+    """
+    return _component_state.set(state)
+
+
+def reset_component_state(token: Token) -> None:
+    _component_state.reset(token)
+
+
+def current_component_state() -> Optional[Any]:
+    return _component_state.get()
 
 
 def resolve_routing_session(fallback: Any = None) -> Any:

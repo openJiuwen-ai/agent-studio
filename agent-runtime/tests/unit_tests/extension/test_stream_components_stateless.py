@@ -459,7 +459,7 @@ class TestComplexIntentDetectionStateless:
         context = MagicMock()
         seen = {}
 
-        async def _fake_intent(inputs, **kwargs):
+        async def _fake_intent(inputs, state, **kwargs):
             seen["exec"] = ctx.current_component_exec()
             return {"classificationId": 0}, "branch_0"
 
@@ -481,7 +481,7 @@ class TestComplexIntentDetectionStateless:
         context = MagicMock()
         seen = {}
 
-        async def _fail(inputs, **kwargs):
+        async def _fail(inputs, state, **kwargs):
             seen["exec"] = ctx.current_component_exec()
             raise RuntimeError("boom")
 
@@ -560,6 +560,7 @@ class TestComplexIntentDetectionStateless:
         """
         from agent_runtime.extension.workflow_node.complex_intent_detection import (
             BranchWorkflowConfig,
+            ComplexIntentState,
         )
 
         comp = _complex_component()
@@ -586,6 +587,7 @@ class TestComplexIntentDetectionStateless:
                 {"input": "hi"},
                 BranchWorkflowConfig(workflow_id="wf-1"),
                 sub_workflows,
+                ComplexIntentState(),
             )
             # 子执行窗口外：外层组件级值恢复
             assert ctx.current_component_exec() == (session, None)
@@ -618,17 +620,24 @@ class TestComplexIntentDetectionResidualState:
     async def test_second_execution_on_same_instance_reclassifies(self):
         """判别用例：同一实例第二次执行必须重新识别意图，不复用上一执行残留。
 
-        复用实例下 `_state.status` 残留为 END/USER_INTERACT 时，
-        `_get_intent_result` 会走"非 START 即复用旧 intent_result/branch_id"
-        分支 → 静默选错分支。本用例驱动真实 `_get_intent_result`
-        （`_intent_detection.invoke` 打桩），第一次执行经真实
-        `_execute_branch_workflow` 把 `_state.status` 推到 END（branch_0 无
+        复用实例下状态残留为 END/USER_INTERACT 时，``_get_intent_result``
+        会走"非 START 即复用旧 intent_result/branch_id"分支 → 静默选错
+        分支。本用例驱动真实 ``_get_intent_result``
+        （``_intent_detection.invoke`` 打桩），第一次执行经真实
+        ``_execute_branch_workflow`` 把执行期 status 推到 END（branch_0 无
         configs → 早返回），第二次执行必须再次调用意图识别并返回新结果。
+        执行期状态已局部化（不落实例），经 ``_execute_branch_workflow``
+        打桩捕获传参断言其生命周期。
         """
+        from agent_runtime.extension.workflow_node.complex_intent_detection import (
+            ExecutionStatus,
+        )
+
         comp = _complex_component()
         session = MagicMock()
         session.get_session_id = MagicMock(return_value="sess-1")
         detected = []
+        captured_states = []
 
         async def _fake_detect(inputs, session_, context, **kwargs):
             index = len(detected)
@@ -638,19 +647,30 @@ class TestComplexIntentDetectionResidualState:
         comp._intent_detection = MagicMock()
         comp._intent_detection.invoke = _fake_detect
 
+        orig_exec_branch = comp._execute_branch_workflow
+
+        async def _capture_exec_branch(
+            inputs, intent_branch, sub_workflows, state, **kwargs
+        ):
+            captured_states.append(state)
+            return await orig_exec_branch(
+                inputs, intent_branch, sub_workflows, state, **kwargs
+            )
+
+        comp._execute_branch_workflow = _capture_exec_branch
+
         first = await comp.invoke({"input": "查天气"}, session, MagicMock())
         assert first["classificationId"] == 0
-        # 第一次执行结束：真实 _execute_branch_workflow 把状态推到 END（残留面）
-        from agent_runtime.extension.workflow_node.complex_intent_detection import (
-            ExecutionStatus,
-        )
-
-        assert comp._state.status == ExecutionStatus.END
+        # 第一次执行结束：真实 _execute_branch_workflow 把本次执行的
+        # status 推到 END（残留面观察点）
+        assert captured_states[0].status == ExecutionStatus.END
 
         second = await comp.invoke({"input": "再见"}, session, MagicMock())
 
         assert detected == ["查天气", "再见"]
         assert second["classificationId"] == 1
+        # 每次执行独立的执行期状态对象（局部变量，不落实例）
+        assert captured_states[0] is not captured_states[1]
 
     @pytest.mark.asyncio
     async def test_sub_workflow_cache_is_per_execution(self):
