@@ -88,3 +88,6 @@ docker/image/
 docker/AgentBuilder.tar.gz
 docker/.source-build-hash
 docker/.last-build.env
+
+# superpowers SDD workspaces
+.superpowers/
