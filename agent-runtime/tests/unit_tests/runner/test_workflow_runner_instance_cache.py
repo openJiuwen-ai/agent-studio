@@ -76,21 +76,7 @@ class TestWorkflowRunnerInstanceCache:
         wic.clear_workflow_instance_cache()
 
     @pytest.mark.asyncio
-    async def test_off_mode_builds_per_request(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "off")
-        runner = WorkflowRunner()
-
-        build = AsyncMock(side_effect=lambda d, **kw: _make_mock_workflow())
-        with patch.object(runner._ir_converter, "async_ir_to_workflow", new=build):
-            req = _make_mock_req(conversation_id="c1")
-            await _collect(runner.run_streaming(req))
-            req = _make_mock_req(conversation_id="c2")
-            await _collect(runner.run_streaming(req))
-        assert build.call_count == 2
-
-    @pytest.mark.asyncio
     async def test_static_graph_mode_reuses_instance(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
         runner = WorkflowRunner()
 
         sentinel_workflows = []

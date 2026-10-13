@@ -75,8 +75,6 @@ async def aget_or_create_workflow_instance(
     """
     global _DOWNGRADE_METRIC_LOGGED
 
-    if settings.cache.workflow_instance_reuse_mode != "static_graph":
-        return await build(ir_data, **(build_kwargs or {}))
     if STATIC_GRAPH_DOWNGRADED or static_graph_patch.STATIC_GRAPH_DOWNGRADED:
         if not _DOWNGRADE_METRIC_LOGGED:
             _DOWNGRADE_METRIC_LOGGED = True
