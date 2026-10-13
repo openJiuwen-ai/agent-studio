@@ -96,6 +96,10 @@ def _structure_assertions() -> list:
     导入失败（openjiuwen 循环 import 未被打断、上游模块/符号改名等）记为
     断言失败并跳过对应断言组——本函数永不抛 ImportError，调用方据此走
     降级路径（spec §7.2：断言失败必须降级而非抛异常）。
+
+    口径例外：C2 组（BranchComponent，可选组件）导入失败**仅跳过该组、
+    不计入失败**——引擎无此组件时 ir_converter 自身 import 即失败，该
+    路径不可达；不因单一可选组件缺失而整体降级（组内注释同此口径）。
     """
     failures = []
 
