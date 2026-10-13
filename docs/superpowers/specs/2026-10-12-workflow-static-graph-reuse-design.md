@@ -45,7 +45,7 @@ Workflow 执行链路中，`build_openjiuwen_workflow_from_ir`（`agent-runtime/
 | `BranchRouter.__call__` 首行 `session = self._session`，被 `ConditionalRouter.dispatch` 裸调（无参） | `core/workflow/components/flow/branch_router.py:92-93`；`core/graph/pregel/router.py:32-46` | Patch C 的改造对象 |
 | `BaseWorkflow.add_conditional_connection` 让 router 持有 `ProxySession`；每次 `BaseWorkflow.compile` 替换其 `_stub` | `core/workflow/_workflow.py:272-273`、:151、:306 | 缓存实例 + 并发下共享 swap 竞态——由 Patch C 的 ContextVar 优先封堵 |
 | `WorkflowSession.config` / `NodeSession` / `GraphStore` 为 per-execution 薄视图 | `core/session/internal/workflow.py:18/104`；`core/graph/store/base.py:92` | spec 挂载在 per-execution Config 上，无进程级注册表 |
-| `_create_workflow_session` 每次执行调用，内部 `auto_complete_abilities()` 原地改写共享 workflow spec | `core/workflow/workflow.py:707-745`（:715/:734）；`_workflow.py:336-346` | 幂等性需验证（见 §8 风险 3） |
+| `_create_workflow_session` 每次执行调用，内部 `auto_complete_abilities()` 原地改写共享 workflow spec | `core/workflow/workflow.py:707-745`（:715/:734）；`_workflow.py:336-346` | 幂等性已验证（结论见 §5.3：事件循环内原子 + 终态幂等，无需守卫） |
 | `CompiledGraph._invoke` 已被本仓 `workflow_sub_stream_patch.py:539` 替换（增加返回 run 结果、checkpoint scope、sub-workflow IO 清理） | `agent-runtime/jiuwen/extension/patches/workflow_sub_stream_patch.py:139-193` | Patch B 必须包装**已被补丁过的版本** |
 
 **版本现状**：venv 实际安装 openjiuwen **0.1.19**（`pyproject.toml:11` 指向 `git+https://gitcode.com/openJiuwen/agent-core.git@develop`，无版本 pin）；`requirements.txt:20` pin 的 `0.1.17.post2` 已过期失真。因此降级保护**不做版本号检查**，用结构断言（§7.2）。
@@ -154,15 +154,22 @@ CompiledGraph._invoke = _invoke_with_session_ctx
 
 **应用顺序**：static_graph_patch 必须在 `apply_workflow_sub_stream_patch()` **之后**应用。应用点：`ir_converter.py`（紧跟 :111）与 `sub_workflow.py`（紧跟 :1570）两处，与现有 import 时应用惯例一致；`_PATCH_APPLIED` 幂等守卫防重复。
 
-### 4.3 Patch C — `BranchRouter.__call__` ContextVar 优先
+### 4.3 Patch C — `BranchRouter.__call__` 解析链（ContextVar 优先）
 
 替换 `openjiuwen.core.workflow.components.flow.branch_router.BranchRouter.__call__` 的 session 解析：
 
 ```python
-session = current_workflow_session() or self._session   # ContextVar 优先，实例回退
+session = _session_ctx.resolve_routing_session(self._session)  # 解析链，见下
 ```
 
-其余逻辑原样保留（基于 `_original_*` 引用重写或源码级替换）。`set_session` 方法保留（兼容层，非 static_graph 场景仍可用）。
+解析链为**两层 + 调用方回退**（与现状两类路由写入语义对齐）：
+
+1. **组件级**（`_component_exec`，优先）：分支路由属主组件（IntentDetection / `_RoutedIntentDetection`，及实现期补入的 Patch D——`BranchComponent.invoke` 包装，见 §12 实现期演化行）在 invoke 入口 set 且**不 reset**（值须存活到同 task 的 dispatch）。组件级**写入端存组件面 Session 包装器**（与旧 `self._session = session` 同物；组件自身读点 trace / get_global_state / interact 只有包装器提供，NodeSession 无这些 API）；
+2. **workflow 级**（`_workflow_session`，Patch B）：`add_conditional_connection` 注册的 ProxySession 语义由该级承接（对应 workflow 级分支）；执行期间恒有值。
+
+两层均无值时才回退 `self._session`（非 static_graph 场景兼容路径；`set_session` 方法保留）。其余逻辑原样保留（基于 `_original_*` 引用重写或源码级替换）。
+
+消费方（分支条件 → `AtomicNode._validate_session_and_state`）要求 `isinstance(session, BaseSession)`——该契约由 `resolve_routing_session` 的**读取端解包**满足（`getattr(session, "_inner", session)`，与旧 `BranchRouter.set_session` 解包语义一致；NodeSession 自身无 `_inner`，不会过度解包）。**读取端解包是主机制（非兜底），写入端不得解包**：通道读写双方契约不同（组件自身读包装器 API / Patch C 读 BaseSession），解包点必须在读取端按消费方各自适配（T12 修复轮裁定）。
 
 同时封堵 §2.2 所述 `ProxySession._stub` 共享 swap 竞态：执行期间 ContextVar 恒有值，racy 的 `_stub` 永不被读到。
 
@@ -184,7 +191,7 @@ session = current_workflow_session() or self._session   # ContextVar 优先，�
 
 **审计交付物**：组件 × 可变状态 × 处理方式 × 结论 的完整表格，作为本 spec 的附录 A 在实现过程中填充并随 PR 更新（验收标准 6）。
 
-**已知必改项**（探索阶段已核实）：
+**已知必改项**（探索阶段已核实；实现后状态见附录 A，下表末两行按实现期审计结论修正）：
 
 | 项 | 位置 | 处理 |
 |---|---|---|
@@ -192,8 +199,8 @@ session = current_workflow_session() or self._session   # ContextVar 优先，�
 | `LLMChain._stream_final_output` 实例属性 | `llm_chain.py:111`、:212 | 审计跨调用读写后改局部或 ContextVar |
 | `_RoutedIntentDetection.invoke` 的 `self._router.set_session(session)` | `ir_converter.py:894` | 删除（Patch C 经 ContextVar 接管） |
 | intent_detection 的 `set_session` 调用 | `jiuwen/extension/workflow_node/intent_detection.py:450` | 同上 |
-| FlowApi/FlowMcp 工具注册 tag | 待审计 | 确认注册产物是否幂等、是否含 per-execution 数据 |
-| Questioner `set_expect_mix/set_mix` | 待审计 | 确认幂等性与写入时机 |
+| FlowApi/FlowMcp 工具获取/构建（api） | `flow_api.py:188`（`init` 期）；`flow_mcp.py:207`（懒初始化） | 构建期幂等 (a)：FlowApi 于 `init` 期从 Runner 获取/按 IR 构建，产物无 per-execution 数据；FlowMcp 的 `api` 为懒初始化资源，双检锁按 (c) 保留共享。真正的执行期缺陷是 **FlowApi 末帧 `_final_stream_output` 无入口复位**（异常退出会把上一执行输出写入本次 io_state）——已修：ContextVar 末帧 + 入口复位（T14） |
+| `set_expect_mix/set_mix`（实际在 **End** 上，非 Questioner） | `end.py:542/:557`；构建期调用点 `ir_converter.py:2140` | 构建期幂等 (a)：`set_expect_mix` 构建期一次写入 bool；`set_mix` 引擎每执行 hasattr 探测调用、幂等配置自愈（mix 协调状态已迁 per-execution 容器，T9） |
 
 **应急条款**：若某组件经审计确实无法安全无状态化（实现风险不可接受），回到讨论为该类型引入 blocklist（含该类型的工作流绕过缓存）——这是兜底手段，不是默认设计。
 
@@ -210,9 +217,11 @@ workflow = await workflow_instance_cache.aget_or_create(
 
 其余链路（:607 `workflow.stream(...)` 及之后）不变。
 
-### 5.3 `auto_complete_abilities` 幂等性
+### 5.3 `auto_complete_abilities` 幂等性——结论：无需守卫
 
-每次执行 `_create_workflow_session` 都会调用 `BaseWorkflow.auto_complete_abilities()`（`_workflow.py:336-346`）对共享 spec 原地改写（loop/stream/invoke 能力补全、stream source 分组）。**验证其幂等性**（同输入重复应用结果不变）；若非幂等（如列表追加型写入），在 static_graph_patch 中为其加"已完成"守卫（首次完成后置位，后续 no-op）。守卫本身是共享 flag，但 set-once 语义下并发安全。
+每次执行 `_create_workflow_session` 都会调用 `BaseWorkflow.auto_complete_abilities()`（`_workflow.py:336-346`）对共享 spec 原地改写（loop/stream/invoke 能力补全、stream source 分组）。
+
+**结论（计划期验证，T17 同步落盘）：该函数同步且无 `await`——事件循环内原子；且终态幂等**（`_add_ability_to_node` 带 `not in` 检查、`stream_source_groups` 整体赋值，同输入重复应用结果不变）。故**无需"已完成"守卫 patch**（不引入额外共享 flag），幂等性以测试锁定。
 
 ## 6. 实例缓存设计
 
@@ -266,8 +275,8 @@ workflow_instance_cache_num: int = Field(
 | # | 风险 | 缓解 |
 |---|---|---|
 | 1 | patch 与 openjiuwen 版本强耦合（git develop 无 pin，升级即可能破坏结构假设） | §7.2 结构断言 + 自动降级 off + ERROR；触及执行核心，风险高于现有 5 个 patch，靠断言兜底而非版本 pin |
-| 2 | ContextVar 边界：`run_in_executor`/worker 线程新事件循环不传播 contextvars | 风险面已实测收窄（§2.5）；`lakesearch_adapter.py:330` 专项确认（其在 agent_runtime 路径且执行期读 session 才受影响）；回退 `self._session` 与现状等价 |
-| 3 | `auto_complete_abilities` 非幂等 → 并发执行下共享 spec 改写竞态 | §5.3：先验证幂等；非幂等则加守卫 |
+| 2 | ContextVar 边界：`run_in_executor`/worker 线程新事件循环不传播 contextvars | 风险面已实测收窄（§2.5）；`lakesearch_adapter.py:330` 专项确认（其在 agent_runtime 路径且执行期读 session 才受影响）——**已确认（T17）：块内无 session/ContextVar 读取**（`get_spnego_token` 仅经位置参数依赖配置 + 线程内 GSSAPI 状态）；回退 `self._session` 与现状等价 |
+| 3 | `auto_complete_abilities` 非幂等 → 并发执行下共享 spec 改写竞态 | 已排除：同步无 await（事件循环内原子）+ 终态幂等（`not in` 检查 / 整体赋值），无需守卫 patch（§5.3，计划期验证） |
 | 4 | `PregelGraph.pregel/checkpointer/_session` 属性存在未知读取方，Patch A 的写入语义变化破坏读取 | 实现时全量审计读取方（引擎 + 5 个补丁 + 本仓）；保留写入、每次写全新对象使读取方最多个读到"最近一次 compile 的产物"（与现状第二次 compile 后的语义一致） |
 | 5 | 组件审计遗漏 per-execution 状态 → 跨执行污染 | 全量审计表交付 + 真实引擎并发集成测试（§9）兜底；应急 blocklist 条款（§5.1） |
 | 6 | 收益上限：省的是 `ir_build_total` 部分，若首 token 延迟大头在 LLM 推理则整体收益有限 | L0 量化（现有埋点）不在本范围；L2 灰度时以 `workflow_cache|hit` 与 `ir_build_total` 消失情况验证 |
@@ -288,6 +297,14 @@ workflow_instance_cache_num: int = Field(
 - **中断/恢复**：缓存实例上的 interrupt/resume 语义与新鲜实例一致；
 - **嵌套子工作流**：父缓存命中后子 LazyWorkflow 的复用语义、子 session 的 ContextVar 栈式解析；
 - **等价性回归**：同一 IR 分别以"每请求新建（off）"与"缓存复用（static_graph）"执行，输出与事件序列等价。
+
+**实现后覆盖记录（T16 集成测试，T17 落盘）**：并发隔离（同一实例 4 路并发、终结帧回显本路 query、内容级逐帧对照、checkpointer 本层隔离——各 session store 按 session_id 各自建/删、执行后无残留）、**分支路由按各自输入走向**（`workflow_branch.json` 纯布尔条件并发长短交替）、**aggregation 节点汇聚**（first-non-null 各汇聚各自输入）、**等价性回归**（缓存实例 vs 每请求新建，事件序列骨架逐帧相等）已由真实引擎并发用例覆盖。
+
+**记录在案的缺口**（无 LLM fixture 不可驱动，待 L2 灰度前以 stub-LLM fixture / 专门 IR 补测）：
+
+1. **中断/恢复**（需 Questioner 交互 IR）与**嵌套子工作流复用**（需含 SubWorkflow 的 IR）——相关 fixture 均含 LLM 支撑节点，离线不可真实驱动；
+2. **CID（ComplexIntentDetection）并发 invoke 的 `_state` 写竞争**——架构级：并发 invoke 入口 `self._state = ComplexIntentState()` 重建存在窗口（一次性探针取证 `swapped=True`，最终 state 只保留最后写者）；本层返回值不受影响（被 invoke 局部变量屏蔽），可观测污染面在**续跑/交互路径**（`_invoke_sub_workflow` 的 `is_resuming` / `interrupt_child_node_id` 读点与 `_get_aggregate_result` 的 status 读点）。修复（`_state` 彻底局部化/按 session 键控）超出本设计范围，记录待裁决；
+3. **并行 join/barrier 子项**（菱形并行分支汇聚——现有 fixture 无该结构；aggregation 节点已覆盖，见上）与 **checkpointer 状态级隔离**（跨 session 的中断/恢复、checkpoint 恢复路径——本层隔离已覆盖，状态级需交互 IR）。
 
 ### 9.3 回归
 
@@ -317,13 +334,48 @@ workflow_instance_cache_num: int = Field(
 | 1 | 复用 `MAX_WORKFLOW_CACHE_NUM`（默认 100）做容量上限 | 新增独立 `WORKFLOW_INSTANCE_CACHE_NUM`（默认 100） | 验证发现 `MAX_WORKFLOW_CACHE_NUM` 已被 BPMN 队列实际占用（§2.3），且新缓存不复用该队列对象 |
 | 2 | Patch A "不再写 `self.pregel/checkpointer/_session`" | 保留属性写入（每次写全新对象） | 兼容潜在读取方；off 模式严格等价论证更稳（§4.1） |
 | 3 | 调用侧（workflow_runner）接入实例缓存 | 缓存对象为 LazyWorkflow（保留制） | 构建时机不变、双检锁复用、子工作流自动保留、路径统一（§6） |
-| 4 | `auto_complete_abilities` "需验证幂等" | 明确为：验证幂等 + 非幂等时加守卫 patch | 将开放问题落为确定动作（§5.3） |
+| 4 | `auto_complete_abilities` "需验证幂等" | 验证幂等（结论：同步无 await 事件循环内原子 + 终态幂等，**无需守卫 patch**） | 将开放问题落为确定动作（§5.3） |
 | 5 | `cache_workflow_queue` "从未接上读写" | 修正为"仅 agent_runtime 路径成立"（BPMN 路径活跃使用） | 代码验证结论（§2.3） |
 
-## 附录 A：组件无状态化审计表（实现过程填充）
+**实现期演化行**（实现过程发现的偏离/细化，非 issue 原文；T17 落盘）：
 
-> 本附录在实现阶段逐组件填充，每行对应 `_create_component` 注册表中的一个类型。分类口径见 §5.1 (a)/(b)/(c)。已知必改项已列入 §5.1 表格。
+| # | 来源 | 实现期演化 | 理由 |
+|---|---|---|---|
+| 6 | 审计发现（T15） | **Patch D**：包装 venv 侧 `BranchComponent.invoke` 补写组件级 session（`_component_exec`） | `BranchRouter.set_session` 的 venv 写入点（`branch_comp.py:39`）不可改源码；jiuwen.branch 节点的 dispatch 需读到与现状一致的 NodeSession（§4.3） |
+| 7 | 审查发现（T9） | **End 执行态容器键归一**：`getattr(session, "_inner", session)` 解包到 NodeSession | 引擎每次调用新建 `Session` 包装器（component.py:95-119），以入参为键会使同一执行的四个能力各建容器（mix 双路协调断裂、幂等失效） |
+| 8 | 审查发现（T12 发现、T14 修复） | **ComplexIntentDetection 补入组件审计与修复** | 计划期审计清单遗漏：注册表类型（`EI.ComplexIntentDetection`）持有 `_session/_context/_state/_sub_workflows` 执行期状态，深嵌套有遮蔽面 |
+| 9 | 计划缺陷修正（T4） | **Patch A 增加 StreamActor vertex 替换（C1）**：`manager._streams` 各 actor 的 `_vertex` 替换为本执行 fresh vertex | §4.1 的实现细化——StreamGraph 消费者链（ActorManager/StreamActor 为 per-execution 构造）持有 build 期 vertex（永不 init），不替换则流式边工作流在 Patch A 下即崩（off 模式同样） |
+
+## 附录 A：组件无状态化审计表（实现后状态回填）
+
+> 每行对应 `_create_component` 注册表中的一个类型（或实现期确认需保留共享的懒初始化资源）。分类口径见 §5.1 (a)/(b)/(c)。已知必改项已列入 §5.1 表格；实现期演化项（Patch D、CID 补入）见 §12 实现期演化行与文末注 ①②。
 
 | 组件类型 | 实例属性写入清单 | 分类 (a/b/c) | 处理方式 | 结论（可复用/已修复/受阻） |
 |---|---|---|---|---|
-| （实现时填充） | | | | |
+| Start | 仅 `__init__` 的 `_config`（构建期） | (a) | 保留共享 | 可复用 |
+| End | 四幂等标志（`_invoke_executed/_stream_executed/_collect_executed/_transform_executed`）、mix 协调状态（`_mix_condition/_mix_data/_mix_push_count/_mix_render_complete/_mix_batch_pushed`）、末帧 `_stream_output`、共享 `self._template`（渲染位置逐段推进） | (b) | per-execution 容器 `_exec_states`（WeakKeyDictionary）+ **容器键归一** `getattr(session, "_inner", session)` 解包到 NodeSession（引擎每次调用新建 Session 包装器）；末帧迁 ContextVar；模板按执行克隆 + `_lock/_condition` **同步原语重建**（T9） | 已修复 |
+| Message | 本体仅 `__init__` 构建期字段（`end_interrupt/_conf`）；共享 `_processor`（TemplateProcessor 渲染位置互踩） | (a) 本体 + (b) 渲染 | **渲染克隆**：调用点 `copy.copy(self._processor)`（`_new_renderer`）（T13） | 已修复 |
+| LLMChain | `_session/_context` 覆写（invoke/stream）、`_stream_final_output`、`_initialize_if_needed` 无锁懒初始化、死字段 `_state` | (b) + (c) | `_session/_context` → `component_exec`（入口 set + finally reset）；末帧 → `_stream_final_output` ContextVar（入口复位）；`_init_lock` **加锁双检**；死字段删除（T11） | 已修复 |
+| Questioner | `_metadata`（回调读）、`_stream_output`（INVOKE-only 遗留死状态）、`_initialize_model` 无锁 | (b) | `_metadata` 局部变量传递；`_stream_output` 删除；`_init_lock` 加锁双检（T14） | 已修复 |
+| FlowQA | `_stream_output`（INVOKE-only 遗留死状态）；`_node_state`（每执行从 session 重建） | (b) 死状态 | 字段与写点删除；`_node_state` 保留（每执行自愈）（T14） | 已修复 |
+| FlowCode | 仅 `__init__` 的 `_conf`（构建期） | (a) | 保留共享（事件循环内直接 `exec()`，不跨线程） | 可复用 |
+| _RoutedIntentDetection | `self._router.set_session(session)`、`_session`（继承自 IntentDetection） | (b) | `set_component_exec`（**路由属主**：set 后不 reset，存活到同 task 的 dispatch）；`super().invoke` 内同值再 set 幂等（T12） | 已修复 |
+| IntentDetection | `_session`、`conversation_id`、`few_shot_example +=`（无界累积）、`self.llm` 无锁懒初始化、`node_state.status` | (b) | `component_exec`；`conversation_id` 局部变量化；死累积行删除；`_init_lock` 加锁双检；state 入口重建（T12） | 已修复 |
+| BranchComponent（venv，`jiuwen.branch` 节点） | `router.set_session(session)`（venv 源码不可改） | (b) | **Patch D**：包装 `invoke` 补写 `component_exec`（不 reset；原 `set_session` 成为死写，Patch C 下不被读）（T15，见注 ②） | 已修复 |
+| Aggregate | 仅 `__init__` 的 `_conf`（构建期） | (a) | 保留共享 | 可复用 |
+| FlowCard | 本体仅 `__init__` 构建期字段；`_template_processor`（共享渲染位置互踩） | (a) 本体 + (b) 渲染 | 渲染克隆（T13）；`_format_structured_output` 死分支保留共享读（引擎不可达，T13 注记） | 已修复 |
+| FlowApi | `_final_stream_output`（**入口无复位**——异常退出会把上一执行输出写入本次 io_state）；`_api` 构建期获取 | (b) + (a) | 末帧 → ContextVar + 入口复位；`__init__` 删字段；api 构建期获取（`init` 期，幂等无 per-execution 数据）（T14） | 已修复 |
+| FlowMcp | `_header_params`（invoke 内写读间无 await、旧版路径不写无残留）；`api` 懒初始化无锁 | (b) 轻危 + (c) | `_format_api_inputs` 返回值扩为 **3 元组**（api_inputs, schema_patches, header_params）消除实例写；`api` 懒初始化 `_init_lock` 加锁双检（T11/T14） | 已修复 |
+| FlowAgent | `_ensure_initialized` 无锁（并发首调重复建 ReActAgent + `Runner.resource_mgr.add_tool` 严格拒绝重复注册 + `register_rail` 重复） | (b) + (c) | `_init_lock` 加锁双检；`add_tool(..., skip_if_exists=True)`（T14） | 已修复 |
+| LLMReAct | 无自有实例状态（`_convert_llm_react_node` 转译为 FlowAgent 实例）；构建期经 `Runner.resource_mgr` 以 `node_id` 为 tag 注册/获取工具 | (a) 构建期 | 复用 FlowAgent 行（加锁双检 + `skip_if_exists=True`）；tag 注册为构建期幂等（T14） | 已修复（随 FlowAgent） |
+| SubWorkflow | `_current_query`、`_last_child_completed`、`_interrupt_child_node_id`（成功完成后不清空 → 下一执行 query 被污染）、`_pending_interact_prompt`、`_stream_state`、`node_state.status`、`_workflow_instance`（None 降级路径写回）、`_global_var_names` | (b) | 中断/完成标志迁 **session state**（`__sub_wf_interrupt_child` / `__sub_wf_last_child_completed`，与中断-恢复跨请求语义同通道）；query/prompt 局部变量化；末帧 ContextVar；None 降级路径不再写回实例（`_workflow_instance` 仅存构造期 LazyWorkflow）（T10） | 已修复 |
+| ComplexIntentDetection | `_session/_context`、`_state`（含 `_sub_workflows` / `_sub_workflow_error`）、嵌套子执行继承的组件级通道值 | (b) | `component_exec`；`_state` 入口重建（resume 安全）+ `_sub_workflows` 局部化 + `_sub_workflow_error` 删除；嵌套守卫由调用方显式置空（`complex_intent_detection.py:476-482`）（T14，见注 ①） | 已修复 |
+| lane-done 系（`_ParallelInvokeLaneDoneComponent` / `_ParallelTransformLaneDoneComponent` / `_LaneSentinelComponent`） | 无实例写（invoke 纯返回 `{}`；transform 纯流转发） | (a) | 保留共享 | 可复用 |
+| LazyWorkflow._workflow | 懒初始化昂贵资源 | (c) | 双检锁（`lazy_workflow.py:96-119`，既有范式；Patch A 下每次 compile 全新产物） | 可复用（带锁） |
+| FlowMcp.api | 懒初始化昂贵资源（MCPTool） | (c) | `_init_lock` 加锁双检（同 FlowMcp 行） | 可复用（带锁） |
+
+> 注 ①：**ComplexIntentDetection 为计划期审计清单遗漏项**——注册表类型但未列入 §5.1 审计对象清单；T12 审查发现（主路径无害、深嵌套有遮蔽面），T14 补入并按同模式修复。
+>
+> 注 ②：**Patch D 不在原 spec §4 三件套内**——为实现期审计发现 venv 侧 `BranchRouter.set_session` 写入点（`branch_comp.py:39`）后追加，属 §12 实现期演化行 6；`_structure_assertions` C2 组为其结构守卫。
+
+> 范围说明：本表按 §5.1 审计对象清单 + 实现期发现（注 ①②）填写。`_create_component` 注册表中另有 FlowInput、Extractor、ParamOutput、FlowKnowledgeRetrieval、LoopGroup 五型不在 §5.1 审计对象清单内，未做分类与修复（记录于 task-17-report.md"范围外观察"节）。
