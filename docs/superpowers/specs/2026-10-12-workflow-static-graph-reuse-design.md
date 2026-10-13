@@ -173,6 +173,8 @@ session = _session_ctx.resolve_routing_session(self._session)  # 解析链，见
 
 同时封堵 §2.2 所述 `ProxySession._stub` 共享 swap 竞态：执行期间 ContextVar 恒有值，racy 的 `_stub` 永不被读到。
 
+已声明例外：节点配置 `timeout` ≥ 0 且 `max_retries` ≥ 0 时，引擎经 `asyncio.wait_for` 在子任务中运行组件 invoke，组件级 ContextVar 的 set 留在子任务上下文、dispatch 读不到——回退 workflow 级解析（粒度降级非严格等价，条件求值安全；默认 `timeout=-1` 不触发，见 `execution_session_ctx` 模块 docstring）。
+
 ### 4.4 应用策略：始终应用
 
 三件套在 import 时无条件应用（off 模式同样）。理由：off 模式下 patched 路径与现状严格等价（§4.1 论证；B 仅增加 set/reset 一个无人读取的 ContextVar；C 的回退分支命中同一 session）；生产流量持续验证同一份代码路径，灰度切换开关时不引入从未运行过的代码。三种模式（off / static_graph / 降级）跑同一份 patch 代码。
@@ -373,13 +375,13 @@ workflow_instance_cache_num: int = Field(
 | lane-done 系（`_ParallelInvokeLaneDoneComponent` / `_ParallelTransformLaneDoneComponent` / `_LaneSentinelComponent`） | 无实例写（invoke 纯返回 `{}`；transform 纯流转发） | (a) | 保留共享 | 可复用 |
 | LazyWorkflow._workflow | 懒初始化昂贵资源 | (c) | 双检锁（`lazy_workflow.py:96-119`，既有范式；Patch A 下每次 compile 全新产物） | 可复用（带锁） |
 | FlowMcp.api | 懒初始化昂贵资源（MCPTool） | (c) | `_init_lock` 加锁双检（同 FlowMcp 行） | 可复用（带锁） |
-| FlowInput | `_node_state`（invoke :399；stream :447/:453/:478；`_handle_start_state` :520；`_handle_interact_state` :546）、`_stream_output`（stream :464；`_handle_start_state` :531——引擎经 `get_stream_output` :368 读取）；`__init__` :315-316 构建期 | **(b) 残留**——待修复/独立 issue | **仅记录（本次不改）**：`_node_state` 每执行虽经 `_load_state_from_session`（:325）从 session 重建，但写入共享实例，并发执行互踩；`_stream_output` 无入口复位（跨执行残留） | 待修复（记录） |
-| Extractor | `inputs`（invoke :852）、`user_response`（invoke :846）每次 invoke 无条件写；惰性首调 `init`（invoke :822 `if not self.llm` → :436-455，写 `chat_manager`/`llm`/`extractor_config`/`inputs`/`user_response` 等，无锁 latch）；`__init__` :363-378 构建期默认值 | **(b) 残留**——待修复/独立 issue | **仅记录（本次不改）** | 待修复（记录） |
+| FlowInput | `_node_state`（invoke :399；stream :447/:453/:478；`_handle_start_state` :520；`_handle_interact_state` :546）、`_stream_output`（stream :464；`_handle_start_state` :531——引擎经 `get_stream_output` :368 读取）；`__init__` :315-316 构建期 | (b) | 末帧 ContextVar 通道（入口复位）+ `_node_state` 14 写点逐点判定（入口重建/`error_to_output` 保留自愈，覆写型删除） | 已修复（T18） |
+| Extractor | `inputs`（invoke :852）、`user_response`（invoke :846）每次 invoke 无条件写；惰性首调 `init`（invoke :822 `if not self.llm` → :436-455，写 `chat_manager`/`llm`/`extractor_config`/`inputs`/`user_response` 等，无锁 latch）；`__init__` :363-378 构建期默认值 | (b) | `inputs`/`user_response` 局部变量化 + `init` `_init_lock` 双检 + `extracted_key_fields` 局部传递（`ExtractorField` 死容器删除） | 已修复（T18） |
 | ParamOutput | 仅 `__init__` 的 `_config`（:24，构建期）；invoke（:26-33）纯透传，零实例写 | (a) | 保留共享 | 可复用 |
-| FlowKnowledgeRetrieval | `_kb_config`（:193）与实例级 `_kb_provider`（:183）——`ensure_kb_config`（:173，调用点 :571 检索路径）懒加载；`__init__` :56-60 构建期；类级 `_kb_provider`（:54，进程级共享 + `set_kb_provider` :64） | (c) 懒初始化（**记录：无锁**） | 保留共享（昂贵配置资源）；**仅记录**：非原子 check-then-act + await，并发首调可重复加载（赋值幂等、低危），待独立 issue 裁决是否加锁；invoke/stream 无实例写 | 可复用（带记录） |
+| FlowKnowledgeRetrieval | `_kb_config`（:193）与实例级 `_kb_provider`（:183）——`ensure_kb_config`（:173，调用点 :571 检索路径）懒加载；`__init__` :56-60 构建期；类级 `_kb_provider`（:54，进程级共享 + `set_kb_provider` :64） | (c) 懒初始化 | `ensure_kb_config` `_init_lock` 双检 | 已修复（T18） |
 
 > 注 ①：**ComplexIntentDetection 为计划期审计清单遗漏项**——注册表类型但未列入 §5.1 审计对象清单；T12 审查发现（主路径无害、深嵌套有遮蔽面），T14 补入并按同模式修复。
 >
 > 注 ②：**Patch D 不在原 spec §4 三件套内**——为实现期审计发现 venv 侧 `BranchRouter.set_session` 写入点（`branch_comp.py:39`）后追加，属 §12 实现期演化行 6；`_structure_assertions` C2 组为其结构守卫。
 
-> 范围说明：本表按 §5.1 审计对象清单 + 实现期发现（注 ①②）填写；FlowInput、Extractor、ParamOutput、FlowKnowledgeRetrieval 四型（不在 §5.1 清单）为 T17 补轮 grep 级审计结果，见上表末四行（两型 (b) 残留仅记录、一型 (a)、一型 (c) 带记录）。注册表中另有 LoopGroup——`jiuwen.loop` 分支的引擎容器（`openjiuwen/.../loop_comp.py:46`，非叶子组件；其 body 组件经注册表逐型审计），未单列。
+> 范围说明：本表按 §5.1 审计对象清单 + 实现期发现（注 ①②）填写；FlowInput、Extractor、ParamOutput、FlowKnowledgeRetrieval 四型（不在 §5.1 清单）为 T17 补轮 grep 级审计结果，见上表末四行（四型已由 T18 修复：FlowInput/Extractor/FKR；ParamOutput 原即 (a) 干净）。注册表中另有 LoopGroup——`jiuwen.loop` 分支的引擎容器（`openjiuwen/.../loop_comp.py:46`，非叶子组件；其 body 组件经注册表逐型审计），未单列。
