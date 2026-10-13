@@ -26,24 +26,7 @@ def _unpublished_ir():
 
 class TestGating:
     @pytest.mark.asyncio
-    async def test_off_mode_bypasses_cache_entirely(self, monkeypatch):
-        """off 模式：直通 build，缓存零触碰（默认行为不变式）。"""
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "off")
-        builds = []
-
-        async def build(ir_data, **kwargs):
-            builds.append(ir_data)
-            return object()
-
-        r1 = await wic.aget_or_create_workflow_instance("p", _published_ir(), build)
-        r2 = await wic.aget_or_create_workflow_instance("p", _published_ir(), build)
-        assert r1 is not r2
-        assert len(builds) == 2
-        assert wic._cache == {}  # 缓存零触碰
-
-    @pytest.mark.asyncio
     async def test_static_graph_mode_with_downgrade_bypasses(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
         monkeypatch.setattr(wic, "STATIC_GRAPH_DOWNGRADED", True)
         builds = []
 
@@ -65,7 +48,6 @@ class TestGating:
         模块被导入，仅读 from-import 名字会永远看不到 True（T7 审查
         Important-1：未打补丁仍启用实例缓存 = 误用静态图）。
         """
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
         from jiuwen.extension.patches import static_graph_patch
 
         monkeypatch.setattr(static_graph_patch, "STATIC_GRAPH_DOWNGRADED", True)
@@ -83,7 +65,6 @@ class TestGating:
 
     @pytest.mark.asyncio
     async def test_unpublished_ir_bypasses(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
         builds = []
 
         async def build(ir_data, **kwargs):
@@ -99,7 +80,6 @@ class TestGating:
 class TestHitMissAndEviction:
     @pytest.mark.asyncio
     async def test_second_call_hits_cache(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
 
         async def build(ir_data, **kwargs):
             return object()
@@ -110,7 +90,6 @@ class TestHitMissAndEviction:
 
     @pytest.mark.asyncio
     async def test_capacity_lru_eviction(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
         monkeypatch.setattr(settings.cache, "workflow_instance_cache_num", 2)
 
         async def build(ir_data, **kwargs):
@@ -127,7 +106,6 @@ class TestHitMissAndEviction:
     @pytest.mark.asyncio
     async def test_content_hash_key_republish_invalidates(self, monkeypatch):
         """同 path 不同内容 → 不同 key（重新发布即刻 miss，无旧图窗口）。"""
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
 
         async def build(ir_data, **kwargs):
             return object()
@@ -141,7 +119,6 @@ class TestHitMissAndEviction:
 
     @pytest.mark.asyncio
     async def test_evict_by_path_prefix(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
 
         async def build(ir_data, **kwargs):
             return object()
@@ -154,7 +131,6 @@ class TestHitMissAndEviction:
 
     @pytest.mark.asyncio
     async def test_build_kwargs_forwarded_on_miss(self, monkeypatch):
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
         seen = {}
 
         async def build(ir_data, **kwargs):
@@ -169,7 +145,6 @@ class TestHitMissAndEviction:
     @pytest.mark.asyncio
     async def test_whitelisted_build_kwargs_still_cached(self, monkeypatch):
         """白名单内的 build_kwargs（不影响图结构）正常走缓存：同 key 命中。"""
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
 
         async def build(ir_data, **kwargs):
             return object()
@@ -192,7 +167,6 @@ class TestHitMissAndEviction:
         防御路径（评审 Suggestion 防漏项）：未来新增影响图结构的构建参数时，
         在参数进白名单评估前，宁可少缓存也不共享不同结构的产物。
         """
-        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
 
         async def build(ir_data, **kwargs):
             return object()

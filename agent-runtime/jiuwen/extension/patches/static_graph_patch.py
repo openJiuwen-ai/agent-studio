@@ -9,11 +9,11 @@
 - Patch D：BranchComponent.invoke 包装——补写组件级 session（分支源节点的
   路由 dispatch 保真；venv 源码不可改，包装其唯一动作 set_session）。
 
-四件**始终应用**（含 WORKFLOW_INSTANCE_REUSE_MODE=off）：off 模式下
-每请求新建 Workflow 实例，patched 路径与现状严格等价（spec §4.4 与计划
-"等价性论证"）。openjiuwen 结构变化时由 _structure_assertions 兜底：
-断言失败 → 不应用补丁 + STATIC_GRAPH_DOWNGRADED=True + ERROR 日志，
-实例缓存据此强制关闭（即使配置为 static_graph）。
+四件**始终应用**（实例复用为默认且唯一路径，WORKFLOW_INSTANCE_REUSE_MODE
+配置已移除）：patched 路径即引擎现状。openjiuwen 结构变化时由
+_structure_assertions 兜底：断言失败 → 不应用补丁 +
+STATIC_GRAPH_DOWNGRADED=True + ERROR 日志，实例缓存据此强制关闭
+（直建路径）。
 
 本模块不依赖 openjiuwen 的版本号（git develop 依赖无 pin），结构断言
 比版本检查可靠。上游合入等价修复后，按 patches/ 惯例移除本补丁。

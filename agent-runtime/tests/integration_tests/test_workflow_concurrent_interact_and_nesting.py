@@ -53,7 +53,6 @@ MESSAGE_IR_PATH = _IR_DIR / "workflow_message.json"
 @pytest.fixture(autouse=True)
 def _static_graph_mode(monkeypatch):
     """每用例强制 static_graph 模式并清空进程级实例缓存。"""
-    monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
     wic.clear_workflow_instance_cache()
     yield
     wic.clear_workflow_instance_cache()
