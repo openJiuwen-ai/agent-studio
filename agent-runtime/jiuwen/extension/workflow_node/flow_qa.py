@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import random
 import re
-from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
@@ -27,7 +26,12 @@ from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.components.flow.end_comp import TemplateUtils
 from pydantic import BaseModel, ConfigDict, Field
 
-from jiuwen.extension.workflow.execution_session_ctx import get_stream_final_output
+from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_state,
+    get_stream_final_output,
+    reset_component_state,
+    set_component_state,
+)
 
 PARTIAL_CONTENT = "partial_content"
 MESSAGE_NODE_END = "message_end"
@@ -251,7 +255,9 @@ class FlowQA(WorkflowComponent):
                 cause=e,
             )
 
-        self._node_state = QAState()
+        # 执行期状态不落实例（PR #1 评审 Critical-1）：静态图复用后同一实例
+        # 被并发执行共享，invoke 内以局部 current_state 承载、经调用链显式
+        # 传递；session 为持久化真源（中断-恢复经 _load/_store_state_to_session）。
         self._node_name: Optional[str] = self._conf.name
 
         self._qa_state_key = "flow_qa_state"
@@ -287,13 +293,16 @@ class FlowQA(WorkflowComponent):
         return chat_history
 
     def get_state(self) -> QAState:
-        return self._node_state
+        """执行期状态经组件状态通道读取（实例跨执行复用，不落实例）。
 
-    def load_state(self, state: QAState) -> None:
-        self._node_state = deepcopy(state)
+        invoke 期间返回本次执行的 state；invoke 外（无执行期上下文）
+        返回初始状态。引擎不调用本方法（逃逸面）。
+        """
+        return current_component_state() or QAState()
 
     def get_node_status(self) -> ExecutionStatus:
-        return self._node_state.status
+        """同 ``get_state``：经通道读取本次执行状态（逃逸面）。"""
+        return (current_component_state() or QAState()).status
 
     def get_stream_output(self):
         """末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
@@ -303,9 +312,6 @@ class FlowQA(WorkflowComponent):
         同一契约，实例上不再保留引擎不可达的末帧死状态。
         """
         return get_stream_final_output()
-
-    def error_to_output(self) -> None:
-        self._node_state.status = ExecutionStatus.END
 
     @staticmethod
     def _load_state_from_session(session: Session) -> QAState:
@@ -333,7 +339,8 @@ class FlowQA(WorkflowComponent):
             session.update_state({"flow_qa_state": state_dict})
 
     def should_interrupt(self) -> bool:
-        return self._node_state.status == ExecutionStatus.USER_INTERACT
+        """同 ``get_state``：经通道读取（逃逸面）。"""
+        return self.get_node_status() == ExecutionStatus.USER_INTERACT
 
     def get_latest_user_query_intent(self, session: Session) -> Optional[str]:
         chat_history = None
@@ -493,8 +500,14 @@ class FlowQA(WorkflowComponent):
         session: Session,
         answer: str,
         node_id: str,
-        need_reply: bool = True,
+        need_reply: bool,
+        state: QAState,
     ) -> None:
+        """写出问答交互流事件。
+
+        state 为本次执行的执行期状态（调用链显式传递，不读实例字段——
+        实例跨执行复用，await 点后读共享字段会读到并发执行的 state）。
+        """
         stream_related_info = {
             "answer": answer,
             "result": answer,
@@ -514,7 +527,7 @@ class FlowQA(WorkflowComponent):
             # 再渲染，使结构化输出与历史系统字段集合一致。
             render_inputs: Dict[str, Any] = {
                 "_NODE_OUTPUT": answer,
-                **self._normalize_struct_inputs(self._node_state.inputs),
+                **self._normalize_struct_inputs(state.inputs),
             }
             struct_answer = TemplateUtils.render_template(
                 self._conf.struct_output_template,
@@ -544,6 +557,31 @@ class FlowQA(WorkflowComponent):
     async def invoke(
         self, inputs: Input, session: Session, context: ModelContext
     ) -> Output:
+        # 执行期状态：局部变量承载（实例跨执行复用，不落实例——Critical-1）。
+        # invoke 内经调用链显式传递；逃逸面（get_state 等）经组件状态通道读取。
+        # session 为持久化真源：入口恢复（中断续跑）、变更点写回。
+        state_from_session = self._load_state_from_session(session)
+        has_saved_state = state_from_session.status != ExecutionStatus.START
+        if has_saved_state:
+            current_state = state_from_session
+        else:
+            current_state = QAState()
+
+        token = set_component_state(current_state)
+        try:
+            return await self._invoke_with_state(
+                inputs, session, context, current_state
+            )
+        finally:
+            reset_component_state(token)
+
+    async def _invoke_with_state(
+        self,
+        inputs: Input,
+        session: Session,
+        context: ModelContext,
+        current_state: QAState,
+    ) -> Output:
         try:
             workflow_logger.debug(
                 "FlowQA component invoke started",
@@ -553,31 +591,29 @@ class FlowQA(WorkflowComponent):
                 session_id=session.get_session_id(),
             )
 
-            state_from_session = self._load_state_from_session(session)
-            has_saved_state = state_from_session.status != ExecutionStatus.START
-            if has_saved_state:
-                self._node_state = state_from_session
-            else:
-                self._node_state = QAState()
-
             node_id = session.get_component_id()
             user_fields = inputs.get(USER_FIELDS, inputs) if inputs else {}
             render_fields = self._normalize_struct_inputs(user_fields)
 
             if self._conf.need_reply:
-                # 中断结束重新开始
-                if self._node_state.status == ExecutionStatus.END:
-                    self._node_state = QAState()
+                # 中断结束重新开始（字段重置而非对象替换——保持通道内
+                # 对象与 current_state 同一，逃逸面读到本次执行实时状态）
+                if current_state.status == ExecutionStatus.END:
+                    current_state.status = ExecutionStatus.START
+                    current_state.inputs = {}
+                    current_state.question = ""
 
-                if self._node_state.status == ExecutionStatus.START:
+                if current_state.status == ExecutionStatus.START:
                     query = self._get_qa_by_strategy(render_fields)
                     # 先设置 inputs，再调用 _write_interaction_stream（因为模板渲染依赖 inputs）
-                    self._node_state.inputs = render_fields
-                    await self._write_interaction_stream(session, query, node_id, True)
+                    current_state.inputs = render_fields
+                    await self._write_interaction_stream(
+                        session, query, node_id, True, current_state
+                    )
 
-                    self._node_state.question = query
-                    self._node_state.status = ExecutionStatus.USER_INTERACT
-                    self._store_state_to_session(self._node_state, session)
+                    current_state.question = query
+                    current_state.status = ExecutionStatus.USER_INTERACT
+                    self._store_state_to_session(current_state, session)
 
                     session._interaction = None
                     session.update_state({INTERACTIVE_INPUT: None})
@@ -590,24 +626,26 @@ class FlowQA(WorkflowComponent):
 
                     await session.interact(query)
 
-                elif self._node_state.status == ExecutionStatus.USER_INTERACT:
+                elif current_state.status == ExecutionStatus.USER_INTERACT:
                     # 恢复执行：通过 interact() 获取用户输入
                     user_response = await session.interact(
-                        self._node_state.question or ""
+                        current_state.question or ""
                     )
 
-                    self._node_state.status = ExecutionStatus.END
-                    self._store_state_to_session(self._node_state, session)
+                    current_state.status = ExecutionStatus.END
+                    self._store_state_to_session(current_state, session)
 
                     return {USER_FIELDS: {"response": user_response}}
             else:
-                self._node_state.status = ExecutionStatus.END
+                current_state.status = ExecutionStatus.END
                 query = self._get_qa_by_strategy(render_fields)
                 # 先设置 inputs，再调用 _write_interaction_stream（因为模板渲染依赖 inputs）
-                self._node_state.inputs = render_fields
-                await self._write_interaction_stream(session, query, node_id, False)
+                current_state.inputs = render_fields
+                await self._write_interaction_stream(
+                    session, query, node_id, False, current_state
+                )
 
-                self._store_state_to_session(self._node_state, session)
+                self._store_state_to_session(current_state, session)
 
                 return {USER_FIELDS: {"response": query}}
 
@@ -630,7 +668,8 @@ class FlowQA(WorkflowComponent):
                 session_id=session.get_session_id(),
                 exception=e,
             )
-            self.error_to_output()
+            # 原 error_to_output 语义：异常路径状态标 END（不写 session）
+            current_state.status = ExecutionStatus.END
             raise build_error(
                 StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
                 comp=session.get_component_id(),
