@@ -2353,4 +2353,3 @@ Expected: PASS（若 `create_workflow_session` 在测试环境因 checkpointer �
 - [ ] **Step 3: 全量回归** — Run: `.venv/bin/python -m pytest tests/unit_tests/ tests/integration_tests/test_workflow_static_graph_reuse.py -q`
 Expected: 全部 PASS（验收标准 1：默认 off + patch 始终应用 = 现状行为）。
 - [ ] **Step 4: 提交** — `git add docs/superpowers/specs/ && git commit -m "docs(spec): 附录 A 组件审计表回填与 §5.1/§4.3/§5.3 计划期结论同步"`
-
