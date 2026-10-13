@@ -40,6 +40,11 @@ from openjiuwen.core.workflow import WorkflowComponent
 from openjiuwen.core.workflow.components import Session
 from pydantic import BaseModel, Field
 
+from jiuwen.extension.workflow.execution_session_ctx import (
+    get_stream_final_output,
+    set_stream_final_output,
+)
+
 # =============================================================================
 # 常量定义
 # =============================================================================
@@ -313,8 +318,11 @@ class FlowInput(WorkflowComponent):
     def __init__(self, conf: dict = None):
         super().__init__()
         self._config = conf or {}
+        # _node_state 为执行期状态：每执行入口从 session 重建（自愈），
+        # 实例不保留跨执行残留；执行期末帧输出走 execution_session_ctx 的
+        # stream_final_output 通道（invoke/stream 入口复位，引擎
+        # Vertex._post_stream 经 get_stream_output 读取，故出口不 reset）。
         self._node_state = FlowInputState()
-        self._stream_output: Optional[dict] = None
         self._node_name: Optional[str] = self._config.get("name") or None
 
     # -------------------------------------------------------------------------
@@ -360,13 +368,18 @@ class FlowInput(WorkflowComponent):
     # -------------------------------------------------------------------------
 
     def should_interrupt(self) -> bool:
+        """读点仅在同一次执行内（状态每执行从 session 重建）。"""
         return self._node_state.status == ExecutionStatus.USER_INTERACT
 
     def get_state(self) -> FlowInputState:
         return self._node_state
 
     def get_stream_output(self) -> Optional[dict]:
-        return self._stream_output
+        """末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
+
+        形态与迁移前一致：custom_data 原样（不包 userFields 命名空间）。
+        """
+        return get_stream_final_output()
 
     def load_state(self, state: FlowInputState) -> None:
         self._node_state = deepcopy(state)
@@ -388,6 +401,10 @@ class FlowInput(WorkflowComponent):
         context: ModelContext,
     ) -> Output:
         try:
+            # 执行入口复位末帧通道：上一执行的末帧不得经 get_stream_output
+            # 串入本次 io_state（引擎 Vertex._post_stream 在流耗尽后读取，
+            # 故出口不 reset）。
+            set_stream_final_output(None)
             inputs = ast.literal_eval(inputs) if isinstance(inputs, str) else inputs
             state_from_session = self._load_state_from_session(session)
             has_saved_state = state_from_session.is_undergoing_interaction()
@@ -396,6 +413,8 @@ class FlowInput(WorkflowComponent):
             else:
                 current_state = FlowInputState()
 
+            # 入口从 session 重建执行状态（自愈）：实例残留被覆盖，
+            # 后续读写一律经本次执行的 current_state 对象。
             self._node_state = current_state
 
             if current_state.status == ExecutionStatus.START:
@@ -436,6 +455,8 @@ class FlowInput(WorkflowComponent):
         适配子工作流中断处理模式，与 invoke 逻辑一致但使用 yield 输出。
         """
         try:
+            # 执行入口复位末帧通道（同 invoke：上一执行的末帧不跨执行残留）。
+            set_stream_final_output(None)
             inputs = ast.literal_eval(inputs) if isinstance(inputs, str) else inputs
             state_from_session = self._load_state_from_session(session)
             has_saved_state = state_from_session.is_undergoing_interaction()
@@ -444,13 +465,13 @@ class FlowInput(WorkflowComponent):
             else:
                 current_state = FlowInputState()
 
+            # 入口从 session 重建执行状态（自愈），同 invoke。
             self._node_state = current_state
 
             if current_state.status == ExecutionStatus.START:
                 query = FlowInputUtils.build_inputs_message(self._config)
                 current_state.status = ExecutionStatus.USER_INTERACT
                 current_state.question = query
-                self._node_state = current_state
 
                 self._store_state_to_session(current_state, session)
 
@@ -461,8 +482,8 @@ class FlowInput(WorkflowComponent):
                 await session.write_custom_stream(
                     CustomSchema(type=MESSAGE_NODE_END, index=1, data=custom_data)
                 )
-                self._stream_output = custom_data
-                self._node_state.status = ExecutionStatus.END
+                set_stream_final_output(custom_data)
+                current_state.status = ExecutionStatus.END
 
                 await session.interact(query)
                 return
@@ -474,8 +495,8 @@ class FlowInput(WorkflowComponent):
                 FlowInputUtils.fill_inputs(inputs_copy, values, self._config)
                 FlowInputUtils.validate_inputs(inputs_copy, self._config)
 
+                # 状态真源在 session；实例不写（下一执行入口从 session 重建）。
                 new_state = FlowInputState()
-                self._node_state = new_state
                 self._store_state_to_session(new_state, session)
 
                 yield OutputSchema(
@@ -517,7 +538,6 @@ class FlowInput(WorkflowComponent):
         query = FlowInputUtils.build_inputs_message(self._config)
         current_state.status = ExecutionStatus.USER_INTERACT
         current_state.question = query
-        self._node_state = current_state
 
         self._store_state_to_session(current_state, session)
 
@@ -528,8 +548,8 @@ class FlowInput(WorkflowComponent):
         await session.write_custom_stream(
             CustomSchema(type=MESSAGE_NODE_END, index=1, data=custom_data)
         )
-        self._stream_output = custom_data
-        self._node_state.status = ExecutionStatus.END
+        set_stream_final_output(custom_data)
+        current_state.status = ExecutionStatus.END
 
         await session.interact(query)
         return {}
@@ -542,8 +562,8 @@ class FlowInput(WorkflowComponent):
         FlowInputUtils.fill_inputs(inputs_copy, values, self._config)
         FlowInputUtils.validate_inputs(inputs_copy, self._config)
 
+        # 状态真源在 session；实例不写（下一执行入口从 session 重建）。
         new_state = FlowInputState()
-        self._node_state = new_state
         self._store_state_to_session(new_state, session)
 
         return {USER_FIELDS: inputs_copy}

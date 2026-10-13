@@ -57,6 +57,9 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         super().__init__()
         self._conf: Optional[FlowKnowledgeRetrievalConfig] = None
         self._kb_config: Optional[dict] = None  # 从 OBS 加载的完整配置
+        # 懒加载双检锁：实例跨执行复用，并发首调只从 OBS 加载一次
+        # （ensure_kb_config 的 check-then-act 与 await 非原子）。
+        self._init_lock: asyncio.Lock = asyncio.Lock()
         if conf is not None:
             self._init_conf(conf)
 
@@ -174,24 +177,29 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         """确保知识库配置已加载
 
         通过 Provider 从 OBS 加载连接和知识库配置。
+        双检加锁（照 FlowMcp api 范式）：并发首调只加载一次。
         """
         if self._kb_config is not None:
             return self._kb_config
 
-        # 通过 Provider 从 OBS 加载
-        if self._kb_provider is None:
-            self._kb_provider = OBSKnowledgeBaseConfigProvider()
+        async with self._init_lock:
+            if self._kb_config is not None:
+                return self._kb_config
 
-        ir_node = {
-            "configs": {
-                "connectionId": self._conf.connection_id,
-                "knowledgeBaseIds": self._conf.knowledge_base_ids,
-                "retrievalConfig": self._conf.retrieval_config,
+            # 通过 Provider 从 OBS 加载
+            if self._kb_provider is None:
+                self._kb_provider = OBSKnowledgeBaseConfigProvider()
+
+            ir_node = {
+                "configs": {
+                    "connectionId": self._conf.connection_id,
+                    "knowledgeBaseIds": self._conf.knowledge_base_ids,
+                    "retrievalConfig": self._conf.retrieval_config,
+                }
             }
-        }
 
-        self._kb_config = await self._kb_provider.get_kb_config(ir_node)
-        return self._kb_config
+            self._kb_config = await self._kb_provider.get_kb_config(ir_node)
+            return self._kb_config
 
     async def _search_with_faq_fallback(
         self,
