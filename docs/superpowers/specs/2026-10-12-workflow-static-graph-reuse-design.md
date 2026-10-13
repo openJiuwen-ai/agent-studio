@@ -259,7 +259,7 @@ workflow_instance_cache_num: int = Field(
 | `CompiledGraph._invoke` 是 `workflow_sub_stream_patch._patched_compiled_invoke`（同一性或 `__module__` 校验） | Patch B 包装对象正确（应用顺序未被破坏） |
 | `BranchRouter.__call__` 存在且源码读 `self._session`；`set_session` 存在 | Patch C 替换基础成立 |
 | `Vertex` 具备 `_stream_done/_call_count/_stream_call_count`；`init` 签名兼容 | fresh-vertex 包装可行 |
-| `PregelBuilder.add_node`/`add_branch` 签名兼容 | 全新构建分支可用 |
+| `PregelBuilder.add_node`/`add_branch` 签名兼容（**已被 A2 取代**——设计演进，T2 复审裁定：shadow-copy 设计下由"`_compile` 读取 `self.nodes`"断言承担该结构守卫） | 全新构建分支可用 |
 
 不做版本号检查：依赖是 git develop 无 pin 源（§2.2），结构断言比版本号可靠。降级后三模式归一：off 与降级均走"不启用缓存"路径；已应用成功的 patch 保留（对 off 模式等价无害）。
 
@@ -373,9 +373,13 @@ workflow_instance_cache_num: int = Field(
 | lane-done 系（`_ParallelInvokeLaneDoneComponent` / `_ParallelTransformLaneDoneComponent` / `_LaneSentinelComponent`） | 无实例写（invoke 纯返回 `{}`；transform 纯流转发） | (a) | 保留共享 | 可复用 |
 | LazyWorkflow._workflow | 懒初始化昂贵资源 | (c) | 双检锁（`lazy_workflow.py:96-119`，既有范式；Patch A 下每次 compile 全新产物） | 可复用（带锁） |
 | FlowMcp.api | 懒初始化昂贵资源（MCPTool） | (c) | `_init_lock` 加锁双检（同 FlowMcp 行） | 可复用（带锁） |
+| FlowInput | `_node_state`（invoke :399；stream :447/:453/:478；`_handle_start_state` :520；`_handle_interact_state` :546）、`_stream_output`（stream :464；`_handle_start_state` :531——引擎经 `get_stream_output` :368 读取）；`__init__` :315-316 构建期 | **(b) 残留**——待修复/独立 issue | **仅记录（本次不改）**：`_node_state` 每执行虽经 `_load_state_from_session`（:325）从 session 重建，但写入共享实例，并发执行互踩；`_stream_output` 无入口复位（跨执行残留） | 待修复（记录） |
+| Extractor | `inputs`（invoke :852）、`user_response`（invoke :846）每次 invoke 无条件写；惰性首调 `init`（invoke :822 `if not self.llm` → :436-455，写 `chat_manager`/`llm`/`extractor_config`/`inputs`/`user_response` 等，无锁 latch）；`__init__` :363-378 构建期默认值 | **(b) 残留**——待修复/独立 issue | **仅记录（本次不改）** | 待修复（记录） |
+| ParamOutput | 仅 `__init__` 的 `_config`（:24，构建期）；invoke（:26-33）纯透传，零实例写 | (a) | 保留共享 | 可复用 |
+| FlowKnowledgeRetrieval | `_kb_config`（:193）与实例级 `_kb_provider`（:183）——`ensure_kb_config`（:173，调用点 :571 检索路径）懒加载；`__init__` :56-60 构建期；类级 `_kb_provider`（:54，进程级共享 + `set_kb_provider` :64） | (c) 懒初始化（**记录：无锁**） | 保留共享（昂贵配置资源）；**仅记录**：非原子 check-then-act + await，并发首调可重复加载（赋值幂等、低危），待独立 issue 裁决是否加锁；invoke/stream 无实例写 | 可复用（带记录） |
 
 > 注 ①：**ComplexIntentDetection 为计划期审计清单遗漏项**——注册表类型但未列入 §5.1 审计对象清单；T12 审查发现（主路径无害、深嵌套有遮蔽面），T14 补入并按同模式修复。
 >
 > 注 ②：**Patch D 不在原 spec §4 三件套内**——为实现期审计发现 venv 侧 `BranchRouter.set_session` 写入点（`branch_comp.py:39`）后追加，属 §12 实现期演化行 6；`_structure_assertions` C2 组为其结构守卫。
 
-> 范围说明：本表按 §5.1 审计对象清单 + 实现期发现（注 ①②）填写。`_create_component` 注册表中另有 FlowInput、Extractor、ParamOutput、FlowKnowledgeRetrieval、LoopGroup 五型不在 §5.1 审计对象清单内，未做分类与修复（记录于 task-17-report.md"范围外观察"节）。
+> 范围说明：本表按 §5.1 审计对象清单 + 实现期发现（注 ①②）填写；FlowInput、Extractor、ParamOutput、FlowKnowledgeRetrieval 四型（不在 §5.1 清单）为 T17 补轮 grep 级审计结果，见上表末四行（两型 (b) 残留仅记录、一型 (a)、一型 (c) 带记录）。注册表中另有 LoopGroup——`jiuwen.loop` 分支的引擎容器（`openjiuwen/.../loop_comp.py:46`，非叶子组件；其 body 组件经注册表逐型审计），未单列。
