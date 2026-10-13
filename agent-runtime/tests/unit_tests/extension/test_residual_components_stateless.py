@@ -10,8 +10,10 @@ Task 17 全量审计（spec 附录 A）裁定三型组件仍有执行期残留�
    执行期多点写实例（原 :399/:447/:453/:478/:520/:546）——实例跨执行复用后
    上一执行残留会被本执行读到（``should_interrupt`` / ``get_state`` 读点）。
 2. Extractor：``inputs`` / ``user_response`` 执行期写实例（原 :846/:852）并被
-   invoke 链回读（原 :630 / :801）；``init`` 名为初始化、实为 invoke 首调的
-   懒初始化且无锁（并发首调重复建 Model）。
+   invoke 链回读（原 :630 / :801）；``node_field.extracted_key_fields`` 为实例级
+   累积容器（``update_key_fields`` 写 → ``reply_key_fields`` 整体写入输出），
+   跨执行累积；``init`` 名为初始化、实为 invoke 首调的懒初始化且无锁（并发首调
+   重复建 Model）。
 3. FlowKnowledgeRetrieval：``ensure_kb_config`` check-then-act 无锁（并发首调
    重复从 OBS 加载）。
 
@@ -23,7 +25,9 @@ Task 17 全量审计（spec 附录 A）裁定三型组件仍有执行期残留�
   每执行入口从 session 重建（session 恢复型写点保留、覆写型写点删除，实例残留
   被本次执行覆盖）。
 - Extractor：``inputs`` / ``user_response`` 不落实例（局部变量 + 参数在 invoke
-  链内传递）；``_ensure_initialized`` 双检加锁，并发首调只执行一次 ``init``。
+  链内传递）；``extracted_key_fields`` 随返回值传递（``update_key_fields`` 返回
+  → ``reply_key_fields`` 写入输出），实例级累积容器与 ``ExtractorField`` 死字段
+  一并删除；``_ensure_initialized`` 双检加锁，并发首调只执行一次 ``init``。
 - FlowKnowledgeRetrieval：``ensure_kb_config`` 双检加锁，并发首调只加载一次。
 """
 import asyncio
@@ -249,10 +253,7 @@ def _extractor():
 
 def _extractor_ready(llm_response='{"name": "小明"}'):
     """最小可运行 Extractor：绕过懒初始化，注入最小配置与 prompt 桩。"""
-    from jiuwen.extension.workflow_node.flow_extractor import (
-        ExtractorConfig,
-        ExtractorField,
-    )
+    from jiuwen.extension.workflow_node.flow_extractor import ExtractorConfig
 
     ext = _extractor()
     ext.llm = MagicMock()
@@ -262,9 +263,19 @@ def _extractor_ready(llm_response='{"name": "小明"}'):
         with_chat_history=True,
         chat_history_max_rounds=2,
     )
-    ext.node_field = ExtractorField()
     ext.prompt = _RecordingPrompt()
     ext._invoke_llm = AsyncMock(return_value=llm_response)
+    return ext
+
+
+def _extractor_two_fields(llm_response='{"name": "小明"}'):
+    """双字段配置的 Extractor（用于 key_fields 跨执行累积判别）。"""
+    ext = _extractor_ready(llm_response)
+    ext.extractor_config.cn_fields_name = {"name": "姓名", "city": "城市"}
+    ext.extractor_config.key_fields = [
+        {"name": "name", "desc": "名字"},
+        {"name": "city", "desc": "城市"},
+    ]
     return ext
 
 
@@ -292,16 +303,22 @@ def _ctx_with_user(content):
 
 class TestExtractorResidualState:
     def test_no_instance_exec_state_fields(self):
-        """``inputs`` / ``user_response`` 不再落实例（源码级 + 实例级）。"""
+        """``inputs`` / ``user_response`` / ``node_field`` 不再落实例。
+
+        源码级 + 实例级双断言（``node_field.extracted_key_fields`` 累积容器
+        与 ``ExtractorField`` 死字段一并删除）。
+        """
         from jiuwen.extension.workflow_node.flow_extractor import Extractor
 
         src = inspect.getsource(Extractor)
         assert "self.inputs" not in src
         assert "self.user_response" not in src
+        assert "self.node_field" not in src
 
         ext = _extractor()
         assert not hasattr(ext, "inputs")
         assert not hasattr(ext, "user_response")
+        assert not hasattr(ext, "node_field")
 
     @pytest.mark.asyncio
     async def test_concurrent_invokes_do_not_cross_read_user_response(self):
@@ -347,6 +364,56 @@ class TestExtractorResidualState:
         first_dig, second_dig = (item["dig_history"] for item in ext.prompt.inputs)
         assert "first-msg" in first_dig and "second-msg" not in first_dig
         assert "second-msg" in second_dig and "first-msg" not in second_dig
+
+    @pytest.mark.asyncio
+    async def test_second_execution_output_excludes_previous_key_fields(self):
+        """判别用例：第二次执行输出不含上一执行提取的 key_fields。
+
+        旧实现 ``node_field.extracted_key_fields`` 为实例级累积容器
+        （update_key_fields 写 → reply_key_fields 整体写入输出），静态图复用
+        下上一执行的提取值会并入后续执行输出。本用例第二次 LLM 只返回 city，
+        输出必须只有 city（含 name 即转红）。
+        """
+        ext = _extractor_two_fields('{"name": "小明"}')
+        session = _extractor_session()
+
+        first = await ext.invoke({}, session, _ctx_with_user("first-msg"))
+        assert first["userFields"]["name"] == "小明"
+        assert "city" not in first["userFields"]
+
+        ext._invoke_llm = AsyncMock(return_value='{"city": "北京"}')
+        second = await ext.invoke({}, session, _ctx_with_user("second-msg"))
+
+        assert second["userFields"]["city"] == "北京"
+        assert "name" not in second["userFields"]
+
+    @pytest.mark.asyncio
+    async def test_concurrent_executions_do_not_share_extracted_key_fields(self):
+        """判别用例：并发两执行的输出互不含对方的 key_fields（不共享累积容器）。
+
+        session.trace（sleep）真交错：旧实现共享 ``node_field`` 容器，后完成者
+        把先完成者的字段并入自己的输出（本用例断言 B 输出无 A 的字段即转红）。
+        ``responses.pop(0)`` 依赖 gather 下 A 先于 B 到达 ``_invoke_llm``（两执行
+        await 序列一致，顺序确定）。
+        """
+        responses = ['{"name": "小明"}', '{"city": "北京"}']
+
+        async def _llm_by_order(messages):
+            await asyncio.sleep(0.01)
+            return responses.pop(0)
+
+        ext = _extractor_two_fields()
+        ext._invoke_llm = _llm_by_order  # 按调用序返回不同响应
+        session_a = _extractor_session()
+        session_b = _extractor_session()
+
+        results = await asyncio.gather(
+            ext.invoke({}, session_a, _ctx_with_user("A-msg")),
+            ext.invoke({}, session_b, _ctx_with_user("B-msg")),
+        )
+
+        assert set(results[0]["userFields"]) == {"USER_RESPONSE", "name"}
+        assert set(results[1]["userFields"]) == {"USER_RESPONSE", "city"}
 
     @pytest.mark.asyncio
     async def test_init_lock_serializes_concurrent_first_calls(self, monkeypatch):
