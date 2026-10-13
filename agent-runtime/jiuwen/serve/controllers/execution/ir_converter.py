@@ -38,6 +38,7 @@ from jiuwen.controller.agent.agent import Agent
 from jiuwen.controller.common.config import AgentConfig, AgentMetaData
 from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
+    apply_loop_exec_state_isolation_patch,
     apply_loop_state_cleanup_patch,
 )
 from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
@@ -116,6 +117,7 @@ from pydantic import ValidationError
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
+apply_loop_exec_state_isolation_patch()
 apply_global_memory_ref_resolution_patch()
 # 四件套（含 Patch D）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
 # apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，

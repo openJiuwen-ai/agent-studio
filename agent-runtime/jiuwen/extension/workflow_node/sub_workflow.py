@@ -1733,6 +1733,7 @@ class SubWorkflow(WorkflowComponent):
 
 from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
+    apply_loop_exec_state_isolation_patch,
     apply_loop_state_cleanup_patch,
 )
 from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
@@ -1749,6 +1750,7 @@ from jiuwen.extension.patches.static_graph_patch import (
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
+apply_loop_exec_state_isolation_patch()
 apply_global_memory_ref_resolution_patch()
 # 三件套（静态图复用）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
 # apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
