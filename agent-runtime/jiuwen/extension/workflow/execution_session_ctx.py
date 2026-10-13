@@ -45,9 +45,13 @@
      读不到 → 回退 workflow 级解析（粒度降级，非严格等价；条件求值安全）。
    - **作用域（嵌套隔离）**：``TaskExecutorPool.submit`` 以 ``create_task``
      从**引擎 task** 派生节点 task——组件级值只在属主节点自己的 task 上下文
-     及其子协程内，**不进入嵌套子执行**（子工作流/循环的承载节点 task 继承
-     自引擎 task，引擎 task 从不携带组件级值）。其生命周期为整个属主
-     NodeTask（invoke 期间即被组件自身读取），不限于 dispatch 窗口。
+     及其子协程内：**不经其他节点承载的嵌套子执行不继承**（子工作流/循环的
+     承载节点 task 继承自引擎 task，引擎 task 从不携带组件级值）；**属主自身
+     inline 承载子执行（如 ComplexIntentDetection）会继承**，由调用方显式
+     置空守卫（``complex_intent_detection.py`` 嵌套入口
+     ``set_component_exec(None, None)`` + finally reset，窗口外恢复本组件级
+     值）。其生命周期为整个属主 NodeTask（invoke 期间即被组件自身读取），
+     不限于 dispatch 窗口。
 3. ``_stream_final_output``：流式组件的末帧输出。**不 reset**——引擎
    Vertex._post_stream 在 generator 耗尽后读取（vertex.py:624-628），
    reset 会丢值。同样依赖 NodeTask 的 context 隔离。

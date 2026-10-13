@@ -100,7 +100,11 @@ def _final_payload(chunks):
 
 
 def _shape(chunks):
-    """执行事件序列骨架：(chunk 类名, chunk.type, node_id)。"""
+    """执行事件序列骨架：(chunk 类名, chunk.type)。
+
+    第三分量 node_id 非引擎 chunk 字段（OutputSchema/TraceSchema 无该字段，
+    getattr 恒 None；实测本 fixture 各帧均无该属性），不构成判别维度。
+    """
     return [
         (type(c).__name__, getattr(c, "type", None), getattr(c, "node_id", None))
         for c in chunks
@@ -168,7 +172,9 @@ class TestConcurrentIsolationOnSharedInstance:
         # 四路执行事件序列骨架一致：并发未污染任一执行的路径
         assert all(s == shapes[0] for s in shapes[1:])
 
-        # 图实例的编译产物未被并发污染（Patch A：每执行独立 Pregel）
+        # compile 产物已绑定（Patch A 保留 self.pregel 属性写入，指向最近一次
+        # compile 的产物——本断言只证"已绑定"，每执行独立 Pregel 的隔离
+        # 由上方的执行/内容断言承担）
         graph = wf._internal._graph
         assert graph.pregel is not None
 
