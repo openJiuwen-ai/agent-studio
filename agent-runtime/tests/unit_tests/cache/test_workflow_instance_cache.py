@@ -165,3 +165,65 @@ class TestHitMissAndEviction:
             "p", _published_ir(), build, build_kwargs={"cust_headers": {"k": "v"}, "project_id": "pj"}
         )
         assert seen == {"cust_headers": {"k": "v"}, "project_id": "pj"}
+
+    @pytest.mark.asyncio
+    async def test_whitelisted_build_kwargs_still_cached(self, monkeypatch):
+        """白名单内的 build_kwargs（不影响图结构）正常走缓存：同 key 命中。"""
+        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
+
+        async def build(ir_data, **kwargs):
+            return object()
+
+        r1 = await wic.aget_or_create_workflow_instance(
+            "p", _published_ir(), build,
+            build_kwargs={"cust_headers": {"k": "v"}, "project_id": "pj"},
+        )
+        r2 = await wic.aget_or_create_workflow_instance(
+            "p", _published_ir(), build,
+            build_kwargs={"cust_headers": {"other": "h"}, "project_id": "pj2"},
+        )
+        assert r1 is r2
+        assert len(wic._cache) == 1
+
+    @pytest.mark.asyncio
+    async def test_non_whitelisted_build_kwargs_bypass_cache(self, monkeypatch):
+        """非白名单的 build_kwargs 绕过缓存直建（key 不含它们，缓存会误共享）。
+
+        防御路径（评审 Suggestion 防漏项）：未来新增影响图结构的构建参数时，
+        在参数进白名单评估前，宁可少缓存也不共享不同结构的产物。
+        """
+        monkeypatch.setattr(settings.cache, "workflow_instance_reuse_mode", "static_graph")
+
+        async def build(ir_data, **kwargs):
+            return object()
+
+        r1 = await wic.aget_or_create_workflow_instance(
+            "p", _published_ir(), build, build_kwargs={"graph_structure_param": "x"}
+        )
+        r2 = await wic.aget_or_create_workflow_instance(
+            "p", _published_ir(), build, build_kwargs={"graph_structure_param": "y"}
+        )
+        assert r1 is not r2
+        assert len(wic._cache) == 0
+
+    def test_production_build_kwargs_within_whitelist(self):
+        """生产调用点传入的 build_kwargs 键 ⊆ 白名单（同步断言）。
+
+        workflow_runner 是唯一生产调用点；其新增构建参数时若未同步白名单，
+        该断言失败——提示评估参数是否影响图结构（影响则须纳入缓存 key）。
+        """
+        import inspect
+        import re
+
+        from agent_runtime.runner import workflow_runner
+
+        src = inspect.getsource(workflow_runner)
+        match = re.search(r"build_kwargs=\{(.*?)\}", src, re.DOTALL)
+        assert match, "workflow_runner 生产调用点未找到 build_kwargs"
+        keys = set(re.findall(r'"(\w+)":', match.group(1)))
+        assert keys, "build_kwargs 键解析为空"
+        assert keys <= wic._BUILD_KWARGS_NOT_AFFECTING_GRAPH, (
+            f"生产调用点新增了非白名单构建参数 {keys - wic._BUILD_KWARGS_NOT_AFFECTING_GRAPH}："
+            "评估其是否影响产物图结构——影响则须纳入 _cache_key，"
+            "不影响则加入 _BUILD_KWARGS_NOT_AFFECTING_GRAPH 白名单"
+        )
