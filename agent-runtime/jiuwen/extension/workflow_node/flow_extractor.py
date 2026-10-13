@@ -158,15 +158,6 @@ class ExtractorStatusCode(Enum):
 
 
 @dataclass
-class ExtractorField:
-    """Extractor 组件内部状态"""
-
-    extracted_key_fields: dict = field(default_factory=dict)
-    user_response: str = ""
-    inputs: dict = field(default_factory=dict)
-
-
-@dataclass
 class ExtractorConfig:
     """Extractor 组件配置"""
 
@@ -373,14 +364,15 @@ class Extractor(WorkflowComponent):
         self.chat_manager = None
         self.llm = None
         self.prompt: Optional[PromptTemplate] = None
-        self.node_field = ExtractorField()
         self.error_message = DEFAULT_ERROR_INFO
         # 懒初始化双检锁：init 名为初始化、实为 invoke 首调的懒初始化
         # （实例跨执行复用，并发首调只建一次 Model）。
         self._init_lock: asyncio.Lock = asyncio.Lock()
-        # 执行期状态（inputs / user_response）不落实例：每次 invoke 的
+        # 执行期状态（inputs / user_response / extracted_key_fields）不落实例：
         # user_response 随调用链参数传递（invoke → reply_key_fields →
-        # update_key_fields → extract_key_fields → create_prompt_template_input）。
+        # update_key_fields → extract_key_fields → create_prompt_template_input）；
+        # extracted_key_fields 随返回值传递（update_key_fields → reply_key_fields），
+        # 不再经实例字段跨执行累积。
 
     @staticmethod
     def camel_to_snake(text: str) -> str:
@@ -438,7 +430,6 @@ class Extractor(WorkflowComponent):
             session: 工作流会话
             context: 模型上下文
         """
-        self.node_field = ExtractorField()
         self.component_config = deepcopy(conf)
         conf = self.dict_keys_camel_to_snake(conf)
         self.check_config(conf)
@@ -453,8 +444,6 @@ class Extractor(WorkflowComponent):
         self.chat_manager = session.get_global_state(WORKFLOW_CHAT_MANAGER)
 
         self.llm = self._create_llm_instance()
-
-        self.node_field = ExtractorField()
 
         self.initial_prompt()
 
@@ -797,9 +786,12 @@ class Extractor(WorkflowComponent):
 
     async def update_key_fields(
         self, context: ModelContext, session: Session, user_response: str
-    ):
+    ) -> dict:
         """
         updating key fields
+
+        返回本次提取并过滤后的 key fields（执行期状态随返回值传递，不写共享
+        实例——实例跨执行复用后，实例级累积会把上一执行的提取值并入本执行输出）。
         """
         chat_history = self.get_latest_chat_history(
             context, k=self.extractor_config.chat_history_max_rounds
@@ -812,7 +804,7 @@ class Extractor(WorkflowComponent):
             for k, v in cur_extracted_key_fields.items()
             if k in self.extractor_config.cn_fields_name
         }
-        self.node_field.extracted_key_fields.update(cur_extracted_key_fields)
+        return cur_extracted_key_fields
 
     async def reply_key_fields(
         self, context: ModelContext, session: Session, user_response: str
@@ -821,8 +813,10 @@ class Extractor(WorkflowComponent):
         Reply key fields output.
         """
         extractor_output = ExtractorOutput(user_response=user_response)
-        await self.update_key_fields(context, session, user_response)
-        extractor_output.update_key_field(self.node_field.extracted_key_fields)
+        cur_extracted_key_fields = await self.update_key_fields(
+            context, session, user_response
+        )
+        extractor_output.update_key_field(cur_extracted_key_fields)
         return extractor_output
 
     async def invoke(
