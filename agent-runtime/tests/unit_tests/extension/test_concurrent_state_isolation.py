@@ -393,3 +393,158 @@ class TestCIDConcurrentIsolation:
         comp = self._component()
         assert not hasattr(comp, "_state")
         assert not hasattr(comp, "_state_retry")
+
+
+class TestQuestionerConcurrentIsolation:
+    """Questioner._node_state 通道迁移（评审 Suggestion-1）的同构判别。"""
+
+    @staticmethod
+    def _questioner():
+        from agent_runtime.extension.workflow_node.questioner import Questioner
+
+        return Questioner({"model_name": "test-model"})
+
+    @pytest.mark.asyncio
+    async def test_concurrent_invoke_escape_surface_reads_own_state(self):
+        """A 挂起在 handler await 期间 B 完整执行：A 恢复后逃逸面 get_state
+        必须读到 A 本次执行的 state（修复前读到 B 入口重建的实例字段）。
+
+        交错点即评审探针确认的 ``write_custom_stream`` await 后共享
+        ``_node_state`` 指向问题——本用例以 handler 内 await 构造同等交错。
+        """
+        questioner = self._questioner()
+        questioner._initialize_model = AsyncMock()
+
+        a_at_handler = asyncio.Event()
+        b_done = asyncio.Event()
+        seen = {}
+
+        async def _handler_a(inputs, session, context, current_state, is_resuing, metadata=None):
+            seen["state_at_entry"] = questioner.get_state()
+            a_at_handler.set()
+            await b_done.wait()  # 交错窗口：B 完整执行
+            seen["state_after_b"] = questioner.get_state()
+            return {"question": "A 的问题", "_state": current_state}
+
+        async def _handler_b(inputs, session, context, current_state, is_resuing, metadata=None):
+            return {"question": "B 的问题", "_state": current_state}
+
+        def make_session(tag):
+            session = MagicMock()
+            session.get_component_id.return_value = f"node-{tag}"
+            session.get_session_id.return_value = f"sess-{tag}"
+
+            async def _interact(value):
+                return f"answer-{tag}"
+
+            session.interact = AsyncMock(side_effect=_interact)
+            return session
+
+        session_a = make_session("A")
+        session_b = make_session("B")
+
+        # 按会话分派 handler（共享实例的并发执行路径）
+        orig_handlers = {"A": _handler_a, "B": _handler_b}
+
+        async def _dispatch(inputs, session, context, current_state, is_resuing, metadata=None):
+            tag = "A" if session is session_a else "B"
+            return await orig_handlers[tag](
+                inputs, session, context, current_state, is_resuing, metadata=metadata
+            )
+
+        questioner._handle_questioner_direct_reply_safe = _dispatch
+        questioner._load_state_from_session = staticmethod(
+            lambda sess: _async_none_state()
+        )
+
+        task_a = asyncio.create_task(
+            questioner.invoke({"input": "a"}, session_a, MagicMock())
+        )
+        await a_at_handler.wait()  # A 挂起在 handler
+
+        # B 完整执行（入口曾把共享 self._node_state 指向 B 的 state）
+        await questioner.invoke({"input": "b"}, session_b, MagicMock())
+        b_done.set()
+        await task_a
+
+        # A 的逃逸面在交错后仍读到本次执行自己的 state（通道隔离）
+        assert seen["state_after_b"] is seen["state_at_entry"], (
+            "A 恢复后逃逸面读到的是别的执行的状态——共享实例字段竞态"
+        )
+
+    def test_no_shared_node_state_instance_field(self):
+        import inspect
+
+        from agent_runtime.extension.workflow_node.questioner import Questioner
+
+        src = inspect.getsource(Questioner)
+        assert "self._node_state" not in src
+
+        assert not hasattr(self._questioner(), "_node_state")
+
+
+async def _async_none_state():
+    from agent_runtime.extension.workflow_node.questioner import QuestionerState
+
+    return QuestionerState()
+
+
+class TestFlowInputConcurrentIsolation:
+    """FlowInput._node_state 通道迁移（评审 Suggestion-1）的同构判别。"""
+
+    @staticmethod
+    def _flow_input():
+        from jiuwen.extension.workflow_node.flow_input import FlowInput
+
+        return FlowInput({"name": "input"})
+
+    @pytest.mark.asyncio
+    async def test_concurrent_invoke_escape_surface_reads_own_state(self):
+        """A 挂起在 _handle_start_state await 期间 B 完整执行：A 恢复后
+        逃逸面 get_state 读到 A 本次执行的 state（修复前为 B 的）。"""
+        flow_input = self._flow_input()
+
+        a_at_handler = asyncio.Event()
+        b_done = asyncio.Event()
+        seen = {}
+
+        async def _handle_start(inputs, session, context, current_state):
+            tag = "A" if session.get_session_id() == "sess-A" else "B"
+            if tag == "A":
+                seen["state_at_entry"] = flow_input.get_state()
+                a_at_handler.set()
+                await b_done.wait()
+                seen["state_after_b"] = flow_input.get_state()
+            return {tag: True}
+
+        flow_input._handle_start_state = _handle_start
+
+        def make_session(tag):
+            session = MagicMock()
+            session.get_component_id.return_value = f"node-{tag}"
+            session.get_session_id.return_value = f"sess-{tag}"
+            return session
+
+        session_a = make_session("A")
+        session_b = make_session("B")
+
+        task_a = asyncio.create_task(flow_input.invoke({"a": 1}, session_a, MagicMock()))
+        await a_at_handler.wait()
+
+        await flow_input.invoke({"b": 2}, session_b, MagicMock())
+        b_done.set()
+        await task_a
+
+        assert seen["state_after_b"] is seen["state_at_entry"], (
+            "A 恢复后逃逸面读到的是别的执行的状态——共享实例字段竞态"
+        )
+
+    def test_no_shared_node_state_instance_field(self):
+        import inspect
+
+        from jiuwen.extension.workflow_node.flow_input import FlowInput
+
+        src = inspect.getsource(FlowInput)
+        assert "self._node_state" not in src
+
+        assert not hasattr(self._flow_input(), "_node_state")

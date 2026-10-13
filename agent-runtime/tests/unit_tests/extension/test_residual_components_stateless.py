@@ -165,15 +165,14 @@ class TestFlowInputResidualState:
 
     @pytest.mark.asyncio
     async def test_stale_node_state_overwritten_by_session_rebuild(self):
-        """_node_state 入口从 session 重建：实例残留被本次执行覆盖（判别）。
+        """实例残留概念已消除（评审 Suggestion-1 通道迁移）：无 _node_state
+        实例字段，行为等价于"入口重建覆盖残留"。
 
-        判定表：invoke/stream 入口赋值（原 :399/:447）为 session 恢复型，保留；
-        START 分支重复赋值（原 :453）、USER_INTERACT 分支 new_state 赋值
-        （原 :478/:546）、_handle_start_state 入口赋值（原 :520）为覆写型，
-        删除。本用例预置实例残留（USER_INTERACT + stale question）后以空
-        session 执行：必须走 START 路径，且执行后实例状态为本次执行对象。
-        删掉入口重建时 ``should_interrupt()`` 读残留 USER_INTERACT 为 True、
-        ``get_state().question`` 为 stale → 转红。
+        判定表（迁移后）：invoke/stream 入口从 session 恢复（session 为真源）；
+        执行期状态为局部变量，逃逸面经 component_state 通道读取——invoke
+        结束通道复位，get_state 回退初始状态（不再反映上次执行）。
+        本用例验证：空 session 执行走 START 路径（interact 携带 fresh query）、
+        实例无字段可残留、invoke 外逃逸面为初始状态。
         """
         from jiuwen.extension.workflow_node.flow_input import (
             ExecutionStatus,
@@ -182,35 +181,28 @@ class TestFlowInputResidualState:
         )
 
         fi = _flow_input()
-        stale = FlowInputState(
-            status=ExecutionStatus.USER_INTERACT, question="stale-question"
-        )
-        fi._node_state = stale
+        # 实例上已无 _node_state 字段可预置残留（注入也不影响行为）
+        assert not hasattr(fi, "_node_state")
         session = _flow_input_session()
 
         await fi.invoke({}, session, MagicMock())
 
         fresh_query = FlowInputUtils.build_inputs_message(fi.config)
         assert session.interact.await_args.args == (fresh_query,)
-        assert fi.get_state() is not stale
-        assert fi.get_state().question == fresh_query
-        assert fi.get_state().status == ExecutionStatus.END
+        # invoke 外通道已复位：逃逸面回退初始状态（不反映上次执行）
+        assert isinstance(fi.get_state(), FlowInputState)
+        assert fi.get_state().status == ExecutionStatus.START
         assert fi.should_interrupt() is False
 
     @pytest.mark.asyncio
     async def test_session_saved_state_wins_over_instance_residue(self):
-        """session 恢复型保留：恢复态以 session 为准，实例残留不影响读点。"""
+        """session 恢复型保留：恢复态以 session 为准（真源），逃逸面 invoke
+        外回退初始状态（执行期状态经通道，结束即复位）。"""
         from jiuwen.extension.workflow_node.flow_input import (
             FLOW_INPUT_STATE_KEY,
-            ExecutionStatus,
-            FlowInputState,
         )
 
         fi = _flow_input()
-        stale = FlowInputState(
-            status=ExecutionStatus.START, question="instance-residue"
-        )
-        fi._node_state = stale
         session = _flow_input_session(
             saved_state={
                 FLOW_INPUT_STATE_KEY: {
@@ -224,9 +216,8 @@ class TestFlowInputResidualState:
         await fi.invoke({}, session, MagicMock())
 
         assert session.interact.await_args.args == ("from-session-q",)
-        assert fi.get_state() is not stale
-        assert fi.get_state().question == "from-session-q"
-        assert fi.should_interrupt() is True
+        # invoke 外通道已复位：逃逸面为初始状态（恢复态只活在执行窗口内）
+        assert fi.should_interrupt() is False
 
 
 # =============================================================================
