@@ -150,7 +150,8 @@ async def lifespan(_app: FastAPI):
     workflow_log_level = settings.workflow_log.level.upper()
     graph_log_level = settings.workflow_log.graph_level.upper()
     llm_log_level = settings.workflow_log.llm_level.upper()
-    
+    performance_log_level = settings.workflow_log.performance_level.upper()
+
     configure_log_config(
         {
             "backend": "default",
@@ -160,14 +161,14 @@ async def lifespan(_app: FastAPI):
                 "workflow": {"level": workflow_log_level},
                 "graph": {"level": graph_log_level},
                 "llm": {"level": llm_log_level},
-                "performance": {"level": "WARNING"},
+                "performance": {"level": performance_log_level},
                 "sys_operation": {
                     "level": "WARNING"
                 },  # 关闭 sys_operation 的 INFO 日志
             },
         }
     )
-    logger.info(f"Logger level set - workflow: {workflow_log_level}, graph: {graph_log_level}, llm: {llm_log_level}")
+    logger.info(f"Logger level set - workflow: {workflow_log_level}, graph: {graph_log_level}, llm: {llm_log_level}, performance: {performance_log_level}")
 
     # 初始化 OpenTelemetry tracer（当 OTEL_ENABLED=true 时生效）
     setup_otel_tracer()

@@ -192,6 +192,11 @@ class WorkflowLogSettings(BaseSettings):
     level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
     graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
     llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
+    # 性能埋点级别（workflow_cache|hit/miss、ir_convert|、agent_group_stream| 等）。
+    # 缺省 WARNING 保持静默；排查性能问题时设为 INFO 打开埋点。
+    performance_level: str = Field(
+        default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

@@ -170,10 +170,11 @@ Fail to run agent because [{}]
 
 关注底层执行引擎的详细过程和错误：
 
-**性能阶段日志**（`performance_logger`，INFO 级别，默认可见）：
+**性能阶段日志**（`performance_logger`，需 `PERFORMANCE_LOG_LEVEL=INFO`，默认 `WARNING` 静默）：
 
 ```
 ir_convert|{ms}              # IR转换耗时
+ir_build_total|{ms}          # IR -> Workflow 建图总耗时
 node_id_mapping|{ms}         # IR到节点映射耗时
 context_creation|{ms}        # 上下文创建耗时
 session_creation|{ms}        # 会话创建耗时
@@ -182,7 +183,11 @@ pre_exec_total|{ms}          # 执行前总耗时
 first_chunk_latency|{ms}     # 首Token延迟
 workflow_stream|{ms}         # 流式输出总耗时
 total_chunks|{count}         # 总输出块数
+workflow_cache|hit|miss|downgrade   # 工作流实例缓存命中情况
 ```
+
+> 性能埋点默认关闭以避免放大正常运行时日志量；排查性能问题（如工作流
+> 缓存是否命中、建图耗时）时设 `PERFORMANCE_LOG_LEVEL=INFO` 打开。
 
 **请求体日志**（需 `WORKFLOW_LOG_LEVEL=DEBUG`）：
 
