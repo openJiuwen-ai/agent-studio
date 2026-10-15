@@ -224,7 +224,9 @@ public class ZipValidationUtilsTest {
             }
 
             // 验证有效ZIP文件不会抛出异常
-            assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(validZip));
+            assertDoesNotThrow(() -> {
+                ZipValidationUtils.validateZipFile(validZip);
+            });
         } catch (IOException e) {
             fail("创建测试文件失败: " + e.getMessage());
         }
