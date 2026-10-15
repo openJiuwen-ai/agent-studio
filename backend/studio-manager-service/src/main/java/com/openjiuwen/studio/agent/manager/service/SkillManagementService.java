@@ -157,7 +157,7 @@ public class SkillManagementService implements ISkillManagementService {
         // 文件格式转换
         File zipFile = MultipartFileToZipUtils.convertToZipFile(multipartFile);
         try {
-            // 调用校验方法并获取当前ZIP文件的frontmatter信息
+            // 调用校验方法，并获取当前ZIP文件的frontmatter信息
             Map<String, Object> frontmatter = ZipValidationUtils.validateZipFile(zipFile);
 
             // 生成Skill相关
