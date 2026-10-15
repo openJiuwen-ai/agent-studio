@@ -2169,6 +2169,16 @@ class IRConverter:
         # 不进 barrier，仅作数据引用从 io_state 解析），此处经 existing_connections
         # 检查自然跳过。流式 End 汇聚点的分流接线（逐条 stream 边 + set_end_comp
         # 自带 wait_for_all）不受影响。
+        # batch 补边对「以流式消费注册」的目标（stream_input_target_ids 中的
+        # Message/Card/streamTransform）是一条多余的独立触发边：COLLECT 节点被
+        # batch 边 INVOKE 触发而无流数据可收时抛 GRAPH_VERTEX_STREAM_CALL_ERROR
+        # （"no stream data in"）。条件分支场景（判断 if 直达 End，default 链上的
+        # Message 混合引用 start 字段）尤为明显：互斥分支未执行时目标仍被拉起。
+        # 这类目标的批量 $ref 本就不依赖该边取值（StreamProcessor 对未声明源有
+        # 超时兜底），跳过补边即可。End（wait_for_all barrier）不受此守卫影响。
+        # 目标无入边、纯靠 schema 引用拉入执行流时仍按原逻辑补边。
+        _stream_consumer_targets_no_batch_edge = stream_input_target_ids
+
         for target_id in all_target_ids:
             target_node = node_by_id.get(target_id)
             if not target_node:
@@ -2194,6 +2204,8 @@ class IRConverter:
                     workflow.add_stream_connection(source_id, target_id)
                     existing_connections.add((source_id, target_id))
                 elif has_stream_ref and stream_capable_target:
+                    if target_id in _stream_consumer_targets_no_batch_edge:
+                        continue
                     workflow.add_connection(source_id, target_id)
                     existing_connections.add((source_id, target_id))
 
