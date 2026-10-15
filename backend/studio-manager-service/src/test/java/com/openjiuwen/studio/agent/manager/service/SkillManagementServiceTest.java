@@ -222,8 +222,8 @@ public class SkillManagementServiceTest {
             mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("user-001");
             mockedReq.when(RequestContextUtils::getRequestUserName).thenReturn("tester");
             mockedZipUtil.when(() -> MultipartFileToZipUtils.convertToZipFile(any())).thenReturn(tempZipFile);
-            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class))).thenAnswer(i -> null);
-            mockedValidationUtil.when(ZipValidationUtils::getFrontmatter).thenReturn(mockFrontmatter);
+            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class)))
+                .thenReturn(mockFrontmatter);
             when(skillMapper.insert(any(SkillEntity.class))).thenReturn(1);
             when(skillVersionMapper.insert(any(SkillVersionEntity.class))).thenReturn(1);
             lenient().when(mgObsService.uploadObsFile(anyString(), any(InputStream.class), anyInt()))
@@ -287,14 +287,6 @@ public class SkillManagementServiceTest {
                 .thenReturn(mockZipFile);
 
             mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class))).thenAnswer(invocation -> {
-                Map<String, Object> frontmatter = new HashMap<>();
-                frontmatter.put("name", "Test Skill");
-                frontmatter.put("description", "A test skill");
-                return null;
-            });
-
-            // Mock ZipValidationUtils.getFrontmatter
-            mockedValidationUtil.when(ZipValidationUtils::getFrontmatter).thenAnswer(invocation -> {
                 Map<String, Object> frontmatter = new HashMap<>();
                 frontmatter.put("name", "Test Skill");
                 frontmatter.put("description", "A test skill");
