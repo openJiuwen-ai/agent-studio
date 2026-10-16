@@ -24,23 +24,29 @@ class AuthnRequestTest {
 
     private static final String SERVICE_URL = "https://sp.example.com/acs";
 
+    private static final String DESTINATION = "https://idp.example.com/sso";
+
     private AuthnRequest authnRequest;
 
     @BeforeEach
     void setUp() {
-        authnRequest = new AuthnRequest(ISSUER, ISSUE_INSTANT, SERVICE_URL);
+        authnRequest = new AuthnRequest(ISSUER, ISSUE_INSTANT, SERVICE_URL, DESTINATION);
     }
 
     @Test
     void toXML_shouldGenerateCorrectRootElement() {
         Element xml = authnRequest.toXML();
 
-        // 验证根元素名称和命名空间
+        // 验证根元素名称和命名空间（须为 samlp:AuthnRequest）
         assertThat(xml.getName()).isEqualTo("AuthnRequest");
+        assertThat(xml.getNamespacePrefix()).isEqualTo("samlp");
+        assertThat(xml.getNamespaceURI()).isEqualTo("urn:oasis:names:tc:SAML:2.0:protocol");
+        assertThat(xml.getQualifiedName()).isEqualTo("samlp:AuthnRequest");
         assertThat(xml.getNamespaceForPrefix("samlp").getURI()).isEqualTo("urn:oasis:names:tc:SAML:2.0:protocol");
 
         // 验证固定属性值
         assertThat(xml.attributeValue("Version")).isEqualTo("2.0");
+        assertThat(xml.attributeValue("Destination")).isEqualTo(DESTINATION);
         assertThat(xml.attributeValue("ProtocolBinding")).isEqualTo("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST");
         assertThat(xml.attributeValue("AssertionConsumerServiceIndex")).isEqualTo("0");
         assertThat(xml.attributeValue("AssertionConsumerServiceURL")).isEqualTo(SERVICE_URL);
@@ -56,17 +62,27 @@ class AuthnRequestTest {
     void toXML_shouldContainIssuerElementWithCorrectValue() {
         Element xml = authnRequest.toXML();
 
-        // 查找Issuer元素并验证
-        Element issuerElement = xml.element("Issuer");
+        Element issuerElement = xml.element(new org.dom4j.QName("Issuer", AuthnRequest.SAML));
+        assertThat(issuerElement).isNotNull();
+        assertThat(issuerElement.getQualifiedName()).isEqualTo("saml:Issuer");
+        assertThat(issuerElement.getText()).isEqualTo(ISSUER);
     }
 
     @Test
     void toXML_shouldContainNameIDPolicyElement() {
         Element xml = authnRequest.toXML();
 
-        // 验证NameIDPolicy元素及属性
-        Element nameIDPolicy = xml.element("NameIDPolicy");
+        Element nameIDPolicy = xml.element(new org.dom4j.QName("NameIDPolicy", AuthnRequest.SAMLP));
+        assertThat(nameIDPolicy).isNotNull();
+        assertThat(nameIDPolicy.getQualifiedName()).isEqualTo("samlp:NameIDPolicy");
+        assertThat(nameIDPolicy.attributeValue("AllowCreate")).isEqualTo("False");
+    }
 
+    @Test
+    void toXML_shouldOmitDestinationWhenBlank() {
+        AuthnRequest withoutDestination = new AuthnRequest(ISSUER, ISSUE_INSTANT, SERVICE_URL, "  ");
+        Element xml = withoutDestination.toXML();
+        assertThat(xml.attributeValue("Destination")).isNull();
     }
 
     @Test
