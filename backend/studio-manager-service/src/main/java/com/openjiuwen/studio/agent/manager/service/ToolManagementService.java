@@ -994,7 +994,10 @@ public class ToolManagementService implements IToolManagementService {
 
         String contentType = toolEntity.getRequestInfo().getHeaders().get(CommonConstant.CONTENT_TYPE);
         if (contentType == null || contentType.isEmpty() || !CommonConstant.MULTIPART_FORM_DATA.equals(contentType)) {
-            contentType = CommonConstant.APPLICATION_JSON;
+            // FEAT-073: 工具参数含 file/<子类型> 时强制 multipart/form-data（文件以表单文件字段透传）
+            boolean hasFileType = hasFileParam(toolEntity.getInputSchema())
+                || hasFileParam(toolEntity.getRequestInfo().getInputSchema());
+            contentType = hasFileType ? CommonConstant.MULTIPART_FORM_DATA : CommonConstant.APPLICATION_JSON;
         }
 
         // 创建content对象
@@ -1113,6 +1116,48 @@ public class ToolManagementService implements IToolManagementService {
         return json;
     }
 
+    /**
+     * FEAT-073: 检查 input_schema 中是否含 file/<子类型> 参数（如 file/image、file/video）。
+     *
+     * 解析 JSON 后按属性类型递归判定（properties/items），避免字符串包含匹配的
+     * 漏判（空白/缩进变体导致该 multipart 的未 multipart，文件以 JSON 发送后端收不到）
+     * 与误判（description/default 文本含字面量导致非文件插件被强制 multipart）。
+     */
+    private static boolean hasFileParam(String inputSchemaStr) {
+        if (StringUtils.isEmpty(inputSchemaStr)) {
+            return false;
+        }
+        try {
+            return hasFileParamNode(JSON.parseObject(inputSchemaStr));
+        } catch (Exception e) {
+            // 非法 JSON：由 parseInputSchema 的既有校验报错，此处按无 file 参数处理
+            log.warn("hasFileParam parse input schema failed, treat as no file param");
+            return false;
+        }
+    }
+
+    private static boolean hasFileParamNode(com.alibaba.fastjson2.JSONObject node) {
+        if (node == null) {
+            return false;
+        }
+        Object type = node.get("type");
+        if (type instanceof String && ((String) type).startsWith("file/")) {
+            return true;
+        }
+        // 递归 properties（对象属性）与 items（数组元素）
+        com.alibaba.fastjson2.JSONObject properties = node.getJSONObject("properties");
+        if (properties != null) {
+            for (Object child : properties.values()) {
+                if (child instanceof com.alibaba.fastjson2.JSONObject
+                    && hasFileParamNode((com.alibaba.fastjson2.JSONObject) child)) {
+                    return true;
+                }
+            }
+        }
+        com.alibaba.fastjson2.JSONObject items = node.getJSONObject("items");
+        return items != null && hasFileParamNode(items);
+    }
+
     private static void parseInputSchema(String inputSchemaStr, List<Parameter> parameters, SchemaConfig requestBody) {
         if (StringUtils.isEmpty(inputSchemaStr)) {
             // inputSchemaStr可以为空
@@ -1146,7 +1191,10 @@ public class ToolManagementService implements IToolManagementService {
             } else if (ToolParamLocation.BODY.location.equals(location)) {
                 // 请求参数列表中的body
                 requestBody.getProperties().put(name, schemaConfig);
-                if (inputSchema.getRequired().contains(name)) {
+                // FEAT-073: required 列表可能缺失（file 类型参数的 required 存于属性级
+                // boolean 字段而非顶层列表），null 安全处理
+                List<String> requiredList = inputSchema.getRequired();
+                if (requiredList != null && requiredList.contains(name)) {
                     requestBody.getRequired().add(name);
                 }
             } else if (ToolParamLocation.PATH.location.equals(location)) {

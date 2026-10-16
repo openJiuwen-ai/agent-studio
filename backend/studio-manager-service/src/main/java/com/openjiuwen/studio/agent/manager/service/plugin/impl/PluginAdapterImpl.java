@@ -613,8 +613,13 @@ public class PluginAdapterImpl implements IPlugin {
 
         RequestResult requestResult;
         // 区分json和form-data
-        log.info("[runTool] Handling {} request.", headers.get(Constant.CONTENT_TYPE));
-        if (StringUtil.equals(headers.get(Constant.CONTENT_TYPE), Constant.MULTIPART_FORM_DATA)) {
+        // FEAT-073: 工具参数含 file/<子类型> 时强制走 multipart 分支——
+        // file 参数值为 URL（OBS 预签名/直链），须下载后以 multipart 文件字段透传
+        boolean hasFileParam = operation.getRequestBody() != null
+            && operation.getRequestBody().getContent() != null
+            && operation.getRequestBody().getContent().containsKey(Constant.MULTIPART_FORM_DATA);
+        if (hasFileParam || StringUtil.equals(headers.get(Constant.CONTENT_TYPE), Constant.MULTIPART_FORM_DATA)) {
+            log.info("[runTool] Handling multipart/form-data request (hasFileParam={}).", hasFileParam);
             Map<String, String> formParams = new HashMap<>();
             Map<String, MultipartFile> fileParams = new HashMap<>();
             // 下载url数据
@@ -629,6 +634,7 @@ public class PluginAdapterImpl implements IPlugin {
             }
             requestResult = okHttpUtils.callFormData(url, method, headers, urlParamsMap, formParams, fileParams);
         } else {
+            log.info("[runTool] Handling {} request.", headers.get(Constant.CONTENT_TYPE));
             requestResult = okHttpUtils.call(url, method, headers, urlParamsMap, requestBodyJson);
         }
         log.info("[runTool] call tool finished, return code {}", requestResult.getCode());

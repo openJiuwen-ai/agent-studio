@@ -1,4 +1,5 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+import re
 import threading
 from abc import ABC, abstractmethod
 from typing import Dict, Type
@@ -7,7 +8,17 @@ import requests
 from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
-from jiuwen.common.utils.utils import safe_json_loads, url_to_ip_with_protocol_and_port
+from jiuwen.common.utils.utils import safe_json_loads, validate_and_keep_https_url
+
+# 错误报文中的 URL 脱敏：查询串可能携带 OBS 预签名 AccessKeyId/Signature 等凭据
+_URL_QUERY_PATTERN = re.compile(r"(https?://[^\s?'\"]+)(\?[^\s'\"]*)?")
+
+
+def _redact_urls(text: str) -> str:
+    """错误报文脱敏：URL 仅保留 scheme://host/path，去除查询串。"""
+    return _URL_QUERY_PATTERN.sub(
+        lambda m: m.group(1) + ("?***" if m.group(2) else ""), text
+    )
 
 
 class AbstractFileHandler(ABC):
@@ -42,7 +53,9 @@ class FileHandler(AbstractFileHandler):
         try:
             api_cert_env = kwargs.get("api_cert")
             verify = cls._get_valid_api_cert(api_cert_env=api_cert_env)
-            valid_url, _ = url_to_ip_with_protocol_and_port(file_path)
+            # FEAT-073: https 保留原主机名（IP 重写丢 SNI 导致证书校验失败），
+            # SSRF 校验（内网 IP 拦截/白名单）不变
+            valid_url, _ = validate_and_keep_https_url(file_path)
             with requests.get(
                 valid_url, stream=True, verify=verify, allow_redirects=False, timeout=60
             ) as response:
@@ -57,14 +70,14 @@ class FileHandler(AbstractFileHandler):
             raise JiuWenBaseException(
                 error_code=StatusCode.REQUEST_GET_METHOD_ERROR.code,
                 message=StatusCode.REQUEST_GET_METHOD_ERROR.errmsg.format(
-                    reason="url is invalid."
+                    reason=_redact_urls(f"url is invalid: {val_error}")
                 ),
             ) from val_error
         except Exception as e:
             raise JiuWenBaseException(
                 error_code=StatusCode.REQUEST_GET_METHOD_ERROR.code,
                 message=StatusCode.REQUEST_GET_METHOD_ERROR.errmsg.format(
-                    reason=f"{type(e).__name__}"
+                    reason=_redact_urls(f"{type(e).__name__}: {str(e)[:200]}")
                 ),
             ) from e
 

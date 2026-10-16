@@ -5,11 +5,14 @@ import { MonacoEditorModule } from '@materia-ui/ngx-monaco-editor';
 import { TypedJsonInputComponent } from '@shared/components/typed-json-input/typed-json-input.component';
 import { NumberStrValidatorDirective, NzTreeRefSelectedRequireDirective, RefSelectedRequireDirective } from '@shared/directives/common-validator.directive';
 import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-validator.directive';
+import { MessageComponent } from '@shared/services/cfdata.service';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { Subject } from 'rxjs';
 import { AppFlowService } from '../../app-flow.service';
 import { NodeService } from '../../node.service';
+import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.service';
+import { UploadFileAccPipe, UploadFileDescPipe } from 'src/pipes/upload-file.pipe';
 import type { IParamRef, IWorkflowField } from '../../node.type';
 import { AccBlockComponent } from '../acc-block/acc-block.component';
 import { ParamTreeComponent } from '../param-tree/param-tree.component';
@@ -43,6 +46,8 @@ export interface IPluginParamConf {
   imports: [
     MODULES,
     AccBlockComponent,
+    UploadFileAccPipe,
+    UploadFileDescPipe,
     NonEmptyValidatorDirective,
     RefSelectedRequireDirective,
     NzTreeRefSelectedRequireDirective,
@@ -114,6 +119,7 @@ export class PluginConfigModalComponent implements OnInit, OnDestroy {
     protected appFlowServ: AppFlowService,
     private i18n: I18NextEagerPipe,
     private cdr: ChangeDetectorRef,
+    private repoServ: AppAgentRepoService,
     @Optional() @Inject(NzDrawerRef) private drawerRef: NzDrawerRef | null
   ) {}
 
@@ -249,6 +255,41 @@ export class PluginConfigModalComponent implements OnInit, OnDestroy {
 
   public isArrOrObj(type: string) {
     return type.startsWith('array') || type === 'object';
+  }
+
+  /** FEAT-073: 判断是否为 File 类型参数（file/image、file/video、file/default 等） */
+  public isFileType(type: string): boolean {
+    return type?.startsWith('file/');
+  }
+
+  /** FEAT-073: 插件节点 file 参数本地上传 → upload 服务 → OBS URL 存入 value.content */
+  public async onPluginFileUpload(event: Event, param: IWorkflowField): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(extension);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('is_image', JSON.stringify(isImage));
+
+    try {
+      const res = await this.repoServ.uploadFile(formData);
+      param.value.content = res.url;
+      this.cdr.markForCheck();
+    } catch (e) {
+      // 上传失败须反馈用户（禁止静默吞异常），并记录失败上下文便于排障
+      param.value.content = '';
+      MessageComponent.showError(this.i18n.transform('upload_fail'));
+      console.error('[plugin-config-modal] file upload failed:', e);
+      this.cdr.markForCheck();
+    } finally {
+      input.value = '';
+    }
   }
 
   dismiss(): void {

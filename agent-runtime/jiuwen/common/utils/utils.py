@@ -177,6 +177,21 @@ def url_to_ip_with_protocol_and_port(url):
     return new_url, hostname
 
 
+def validate_and_keep_https_url(url):
+    """文件下载 URL 校验（FEAT-073）。
+
+    SSRF 校验（协议合法性/内网 IP 拦截/白名单）与
+    url_to_ip_with_protocol_and_port 完全一致；区别在于 https 场景
+    返回**原始 URL**：IP 重写会丢失 SNI，导致证书主机名校验失败
+    （OBS 预签名等 https 文件地址全部 SSLError）。http 场景维持
+    IP 重写（防 DNS rebinding）。
+    """
+    valid_url, hostname = url_to_ip_with_protocol_and_port(url)
+    if urlparse(url).scheme == "https":
+        return url, hostname
+    return valid_url, hostname
+
+
 def illegal_logo_type(agent_logo):
     """illegal_logo_type"""
     pattern = r"^data:image/([^;]{1,100});base64,"

@@ -182,12 +182,19 @@ public class JsonSchemaUtils {
     }
 
     /**
-     * 判断当前字段类型，是否不属于JsonSchema类型
+     * 判断当前字段类型，是否不属于JsonSchema类型。
+     *
+     * FEAT-073：file/<子类型>（如 file/image、file/video、file/default）为插件
+     * File 类型入参的合法类型标识，与开始节点 File 参数、运行时引擎的识别
+     * 体系三方一致，按前缀放行。
      *
      * @param type 字段类型
      * @return true：不属于JsonSchema类型，false：属于JsonSchema类型
      */
     private static boolean isNotJsonSchemaType(String type) {
+        if (type != null && type.startsWith("file/")) {
+            return false;
+        }
         return Arrays.stream(JsonSchemaType.values()).noneMatch(jsonSchemaType -> jsonSchemaType.type.equals(type));
     }
 
