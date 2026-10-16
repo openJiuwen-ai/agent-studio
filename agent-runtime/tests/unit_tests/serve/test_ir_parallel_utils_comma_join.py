@@ -364,6 +364,41 @@ def _exclusive_dual_source_connections() -> list[dict]:
     ]
 
 
+def _loop_back_join_connections() -> list[dict]:
+    """循环回流汇聚点拓扑：join → loop → 判断 → 两 lane → join。
+
+    循环续跑入边不能作为并行 lane 终端接入 AND barrier，否则中断恢复时
+    汇聚点会被 lane 接管，已完成的循环体内节点被再次调度。
+    """
+    return [
+        _edge("node_loop", "node_b2"),
+        _edge("node_b2", "node_p", branch_id="node_b2-if", parallel_id="geqp"),
+        _edge("node_b2", "node_q", branch_id="node_b2-if", parallel_id="geqp"),
+        _edge("node_p", "node_llm", branch_id="node_p-if"),
+        _edge("node_p", "node_code", branch_id="node_p-default", target_parallel_id="geqp"),
+        _edge("node_q", "node_llm1", branch_id="node_q-if"),
+        _edge("node_q", "node_code", branch_id="node_q-default", target_parallel_id="geqp"),
+        _edge("node_llm", "node_code", target_parallel_id="geqp"),
+        _edge("node_llm1", "node_llm2"),
+        _edge("node_llm2", "node_code", target_parallel_id="geqp"),
+        _edge("node_code", "node_loop"),
+    ]
+
+
+class TestLoopBackJoinEdgeExcluded:
+    """循环回流汇聚点的循环续跑入边不纳入 lane 终端，lane 计划不接管。"""
+
+    @staticmethod
+    def test_cyclic_join_edges_not_registered_as_terminals():
+        node_by_id = _conditional_fork_node_by_id()
+        node_by_id["node_loop"] = {"id": "node_loop", "type": "jiuwen.loop"}
+        plan = build_parallel_join_plan(_loop_back_join_connections(), node_by_id)
+        # 全部 join 入边都在循环回路上，与 collect_parallel_join_nodes 一致地
+        # 过滤掉，不建 lane 计划，保持原有直连边语义。
+        assert plan.joins == {}
+        assert plan.terminal_to_done == {}
+
+
 class TestExclusiveDualForkMerged:
     """互斥双 fork 源（lane 结构等价、波互斥）→ 合并为单 spec 接管汇聚点。"""
 
