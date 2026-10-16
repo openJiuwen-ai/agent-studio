@@ -7,6 +7,7 @@ import { RefTypeToTextPipe } from 'src/pipes/ref-type-to-text.pipe';
 import { HttpService } from '@services/http.service';
 import { SkillApi } from '@agentcore/api/skill.api';
 import { I18nService } from '@agentcore/core/i18n.service';
+import { I18nPipe } from '@agentcore/shared/pipes/i18n.pipe';
 import { BehaviorSubject, catchError, map, of } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 @Component({
@@ -14,7 +15,7 @@ import { ActivatedRoute, Router } from '@angular/router';
   templateUrl: './skill-delete-modal.component.html',
   styleUrls: ['./skill-delete-modal.component.scss'],
   standalone: true,
-  imports: [MODULES, RefTypeToTextPipe],
+  imports: [MODULES, RefTypeToTextPipe, I18nPipe],
   providers: [
     {
       provide: I18NEXT_NAMESPACE,
