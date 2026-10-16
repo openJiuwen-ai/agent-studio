@@ -2932,6 +2932,16 @@ public enum StudioError {
     PLUGIN_AUTH_KEY_DOMAIN_NOT_NULL(BAD_REQUEST, COMPONENT, "1181"),
 
     /**
+     * 插件调测：环境变量加载失败，无法自动回填绑定参数
+     */
+    DEBUG_ENV_VAR_LOAD_FAILED(INTERNAL_SERVER_ERROR, COMPONENT, "1182"),
+
+    /**
+     * 插件调测：参数绑定的环境变量在默认环境中不存在
+     */
+    DEBUG_ENV_VAR_MISSING(BAD_REQUEST, COMPONENT, "1183"),
+
+    /**
      * ============================== 提示词工程 ==============================
      */
     /**

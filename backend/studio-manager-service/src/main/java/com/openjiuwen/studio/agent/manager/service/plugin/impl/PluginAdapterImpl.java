@@ -21,6 +21,7 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SensitiveLogContext;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
@@ -556,7 +557,7 @@ public class PluginAdapterImpl implements IPlugin {
         Map<String, String> pathParams = new HashMap<>();
         Map<String, String> headers = new HashMap<>();
         parseParams(operation, requestBody, urlParamsMap, headers, pathParams);
-        log.info("[runTool] pathParams parse to {}", pathParams);
+        log.info("[runTool] pathParams parse to {}", SensitiveLogContext.mask(String.valueOf(pathParams)));
 
         // 构造鉴权信息，用于前端展示的信息返回ENCRYPTED_VALUE
         Map<String, String> urlParamsEncrypted = new HashMap<>();
@@ -569,13 +570,13 @@ public class PluginAdapterImpl implements IPlugin {
         String url = operation.getServers().get(0).getUrl();
 
         // 替换url占位符
-        log.info("[runTool] before url replace: {}", url);
+        log.info("[runTool] before url replace: {}", SensitiveLogContext.mask(url));
         for (Map.Entry<String, String> entry : pathParams.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             url = url.replaceAll("\\{" + key + "\\}", Matcher.quoteReplacement(value));
         }
-        log.info("[runTool] after url replace: {}", url);
+        log.info("[runTool] after url replace: {}", SensitiveLogContext.mask(url));
 
         // 如果是预置插件就不做黑名单网段IP校验
         log.info("[runTool] plugin is preset ? {}", pluginId.startsWith(PRESET));
@@ -597,7 +598,7 @@ public class PluginAdapterImpl implements IPlugin {
             urlShown = sb.toString().substring(0, sb.toString().length() - 1);
         }
         // 发送请求
-        log.info("[runTool] open api file parse success, start to make request {}", urlShown);
+        log.info("[runTool] open api file parse success, start to make request {}", SensitiveLogContext.mask(urlShown));
 
         // 构造请求体
         String requestBodyJson;
@@ -775,7 +776,7 @@ public class PluginAdapterImpl implements IPlugin {
      */
     @SneakyThrows
     public Optional<MultipartFile> downloadFileAsMultipartFile(String fileUrl) {
-        log.info("downloadFileAsMultipartFile: {}", fileUrl);
+        log.info("downloadFileAsMultipartFile: {}", SensitiveLogContext.mask(fileUrl));
 
         if (!VALID_URL_PATTERN.matcher(fileUrl).matches()) {
             return Optional.empty();
@@ -795,7 +796,8 @@ public class PluginAdapterImpl implements IPlugin {
 
             // 创建MultipartFile对象
             String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
-            log.info("downloadFileAsMultipartFile:{}, cost: {} ms", fileUrl, System.currentTimeMillis() - startTime);
+            log.info("downloadFileAsMultipartFile:{}, cost: {} ms", SensitiveLogContext.mask(fileUrl),
+                System.currentTimeMillis() - startTime);
             return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
         } finally {
             closeResources(inputStream, outputStream);
@@ -882,10 +884,10 @@ public class PluginAdapterImpl implements IPlugin {
     }
 
     public String processNestedStructure(String rawJson) {
-        log.info("Start processing JSON: {}", rawJson);
+        log.info("Start processing JSON: {}", SensitiveLogContext.mask(rawJson));
 
         JSONObject root = JSON.parseObject(rawJson);
-        log.info("Parsed JSON: {}", root.toJSONString());
+        log.info("Parsed JSON: {}", SensitiveLogContext.mask(root.toJSONString()));
 
         // 遍历 JSON 中的所有字段
         for (String key : root.keySet()) {
@@ -929,7 +931,7 @@ public class PluginAdapterImpl implements IPlugin {
         }
 
         String newJson = root.toJSONString();
-        log.info("Processed JSON result: {}", newJson);
+        log.info("Processed JSON result: {}", SensitiveLogContext.mask(newJson));
 
         return newJson;
     }
@@ -970,7 +972,7 @@ public class PluginAdapterImpl implements IPlugin {
      * @param hostBlackList 连接器host黑名单
      */
     public void checkSwaggerUrlValid(String swaggerUrl, String hostBlackList) {
-        log.info("Start: check url {} from black list.", swaggerUrl);
+        log.info("Start: check url {} from black list.", SensitiveLogContext.mask(swaggerUrl));
         if (hostBlackList.isEmpty()) {
             return;
         }
@@ -992,13 +994,15 @@ public class PluginAdapterImpl implements IPlugin {
                 }
             } catch (UnknownHostException e) {
                 // 不做控制，运行态DNS一样，有问题会调不通，没有影响
-                log.warn("swagger base url is Unknown Host: {}", host);
+                log.warn("swagger base url is Unknown Host: {}", SensitiveLogContext.mask(host));
             }
         } catch (MalformedURLException e) {
             throw new AgentStudioException(StudioError.INVALID_URL);
         } catch (Exception e) {
-            // 捕获其他异常，防止程序崩溃
-            log.error("Error while checking swagger URL: {}", swaggerUrl, e);
+            // 捕获其他异常，防止程序崩溃；异常消息可能带上原始 url/host，脱敏后再记录，避免明文落日志
+            log.error("Error while checking swagger URL: {}, type: {}, message: {}",
+                SensitiveLogContext.mask(swaggerUrl), e.getClass().getSimpleName(),
+                SensitiveLogContext.mask(e.getMessage()));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
         log.info("End: check url from black list.");
@@ -1011,11 +1015,11 @@ public class PluginAdapterImpl implements IPlugin {
      * @param connectorHostBlackList 连接器host黑名单
      */
     public void checkHostValid(String host, Set<String> connectorHostBlackList) {
-        log.info("Start: check host {} from black list.", host);
+        log.info("Start: check host {} from black list.", SensitiveLogContext.mask(host));
 
         // 判断host是否在黑名单中
         if (connectorHostBlackList.contains(host)) {
-            log.warn("checkHostValid failed, host: {}", host);
+            log.warn("checkHostValid failed, host: {}", SensitiveLogContext.mask(host));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
 
@@ -1029,8 +1033,9 @@ public class PluginAdapterImpl implements IPlugin {
                 try {
                     IPAddressString ipAddress = new IPAddressString(ips);
                     if (ipAddress.contains(hostAddress) || host.contains(ips)) {
+                        // host 可能来自加密环境变量，打印前统一脱敏
                         log.warn("checkHostValid failed, ipAddress:{}, hostAddress: {}, host: {}, ips:{}", ipAddress,
-                                hostAddress, host, ips);
+                                SensitiveLogContext.mask(String.valueOf(hostAddress)), SensitiveLogContext.mask(host), ips);
                         throw new AgentStudioException(StudioError.INVALID_URL);
                     }
                 } catch (IllegalArgumentException e) {
@@ -1040,7 +1045,7 @@ public class PluginAdapterImpl implements IPlugin {
             }
         } catch (IllegalArgumentException e) {
             // host 不是合法的IP地址，可能是域名，不进行网段判断
-            log.warn("Host is not a valid IP address, skip subnet check: {}", host);
+            log.warn("Host is not a valid IP address, skip subnet check: {}", SensitiveLogContext.mask(host));
         }
     }
 

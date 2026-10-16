@@ -8,6 +8,8 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SensitiveLogContext;
+import com.openjiuwen.studio.agent.common.utils.SensitiveTextMasker;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
@@ -21,6 +23,7 @@ import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
+import com.openjiuwen.studio.agent.manager.mapper.EnvironmentVariableMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseChannelMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
@@ -33,6 +36,8 @@ import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
+import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
+import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,8 +52,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -105,6 +113,15 @@ class AgentServiceProxyServiceTest {
     private EnvironmentManagerMapper environmentManagerMapper;
 
     @Mock
+    private EnvironmentVariableMapper environmentVariableMapper;
+
+    @Mock
+    private EnvironmentCacheUtil environmentCacheUtil;
+
+    @Mock
+    private IPluginBase pluginBase;
+
+    @Mock
     private ReleaseChannelMapper releaseChannelMapper;
 
     @Mock
@@ -122,7 +139,8 @@ class AgentServiceProxyServiceTest {
     void setUp() {
         proxyService = new AgentServiceProxyService(runtimeClient, builderClient, redisClient, agentMapper, workflowMapper,
             modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper,
-            environmentManagerMapper, releaseChannelMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
+            environmentManagerMapper, environmentVariableMapper, environmentCacheUtil, pluginBase,
+            releaseChannelMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");
@@ -1089,6 +1107,67 @@ class AgentServiceProxyServiceTest {
         assertEquals("http://runtime:8080/v1/workflows/chat/code-1/conversations/conv-1?workspace_id=ws-1",
             urlCaptor.getValue());
         verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * 加密变量为纯数字、schema 类型为 integer/number 时解密值被归一为 JSON 裸数字，
+     * 回显脱敏需替换为「带引号掩码」：既脱敏又保持 JSON 合法，避免明文经回显泄漏。
+     */
+    @Test
+    void testMaskSecretText_JsonBareNumberSecret() {
+        Set<String> secrets = new LinkedHashSet<>(Arrays.asList("123456", "123456.0"));
+        assertEquals("{\"port\":\"******\"}", SensitiveTextMasker.mask("{\"port\":123456}", secrets, true));
+        assertEquals("{\"port\":\"******\"}", SensitiveTextMasker.mask("{\"port\":123456.0}", secrets, true));
+        // 数字出现在 JSON 字符串内部时替换为裸掩码，字符串内容仍合法
+        assertEquals("{\"msg\":\"count ****** items\"}",
+            SensitiveTextMasker.mask("{\"msg\":\"count 123456 items\"}", secrets, true));
+        // 无符号密钥不应把 -123456 这类带符号数字拆坏（保持 JSON 合法）
+        assertEquals("{\"a\":-123456}", SensitiveTextMasker.mask("{\"a\":-123456}", secrets, true));
+    }
+
+    /**
+     * 加密变量为布尔字面量时：裸布尔替换为带引号掩码，且字符串内的布尔词不被误替换（保持 JSON 合法）。
+     */
+    @Test
+    void testMaskSecretText_JsonBareBooleanSecret() {
+        Set<String> secrets = new LinkedHashSet<>(Collections.singletonList("true"));
+        assertEquals("{\"flag\":\"******\"}", SensitiveTextMasker.mask("{\"flag\":true}", secrets, true));
+        assertEquals("{\"msg\":\"it is ******\"}", SensitiveTextMasker.mask("{\"msg\":\"it is true\"}", secrets, true));
+        // 布尔词出现在 JSON 字符串中间时同样替换，且不破坏 JSON
+        assertEquals("{\"msg\":\"a ****** flag\"}", SensitiveTextMasker.mask("{\"msg\":\"a true flag\"}", secrets, true));
+    }
+
+    /**
+     * 字符串字面量密钥整体替换；相邻的更长数字不应被误替换。
+     */
+    @Test
+    void testMaskSecretText_JsonQuotedSecretAndNonSecretPreserved() {
+        Set<String> secrets = new LinkedHashSet<>(Collections.singletonList("123456"));
+        assertEquals("{\"port\":\"******\"}", SensitiveTextMasker.mask("{\"port\":\"123456\"}", secrets, true));
+        assertEquals("{\"port\":1234567}", SensitiveTextMasker.mask("{\"port\":1234567}", secrets, true));
+    }
+
+    /**
+     * 非 JSON 回显（URL/Header/错误信息）中裸密钥仍替换为掩码。
+     */
+    @Test
+    void testMaskSecretText_NonJsonBareSecret() {
+        Set<String> secrets = new LinkedHashSet<>(Collections.singletonList("123456"));
+        assertEquals("host?port=******", SensitiveTextMasker.mask("host?port=123456", secrets, false));
+    }
+
+    /**
+     * 日志脱敏上下文：登记敏感值后 mask 替换为掩码，clear 后不再替换（避免线程复用跨请求泄漏）。
+     */
+    @Test
+    void testSensitiveLogContext_RegisterAndClear() {
+        try {
+            SensitiveLogContext.register(Collections.singletonList("S3cretValue"));
+            assertEquals("https://host/******", SensitiveLogContext.mask("https://host/S3cretValue"));
+        } finally {
+            SensitiveLogContext.clear();
+        }
+        assertEquals("https://host/S3cretValue", SensitiveLogContext.mask("https://host/S3cretValue"));
     }
 
     /**
