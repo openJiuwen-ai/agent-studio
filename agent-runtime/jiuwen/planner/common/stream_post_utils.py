@@ -44,7 +44,7 @@ def convert_ai_message_to_llm_output(llm_message: AIMessage) -> LlmOutput:
     if not llm_message.tool_calls:
         return LlmOutput(role=role, content=content)
 
-    if isinstance(llm_message.tool_calls, List):  # 适配生成多插件结果
+    if isinstance(llm_message.tool_calls, list):  # 适配生成多插件结果
         function_call_list = list()
         for item in llm_message.tool_calls:
             function_name = item.name
