@@ -682,9 +682,11 @@ POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}
 | 参数 | 必选 | 类型 | 描述 |
 |------|------|------|------|
 | workspace_id | 是 | String | 工作空间 ID |
-| import_workflows | 否 | String | 是否导入工作流，传 `true` 时启用 |
+| import_workflows | 否 | String | 待导入的工作流 ID 列表（逗号分隔），每个 ID 需匹配导出文件中工作流的 `metadata.id` |
 | import_tools | 否 | String | 是否导入插件，传 `true` 时启用 |
 | mode | 否 | String | 导入模式：`STRICT`（严格模式）/ `SPACIOUS`（宽松模式），默认 `STRICT` |
+
+> **注意**：`import_workflows` 是逗号分隔的工作流 ID 列表，并非布尔开关。上传的 `.jsonl` 文件中，只有 `metadata.id` 在该列表内的工作流才会被导入。可从创建工作流导出文件时使用的 `workflow_ids`，或导出文件中每个工作流条目的 `metadata.id` 字段获取这些 ID。
 
 **请求 Header 参数**
 
@@ -716,7 +718,7 @@ POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}
 **请求示例**
 
 ```
-POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}&import_workflows=true&import_tools=true&mode=SPACIOUS HTTP/1.1
+POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}&import_workflows=cd7a8f33-66e3-455c-b008-a6b18dd27319&import_tools=true&mode=SPACIOUS HTTP/1.1
 Host: api.example.com
 Content-Type: multipart/form-data
 X-Auth-Token: {token}
