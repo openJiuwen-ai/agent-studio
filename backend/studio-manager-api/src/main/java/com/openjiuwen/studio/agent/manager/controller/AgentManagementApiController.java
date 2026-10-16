@@ -22,6 +22,7 @@ import com.openjiuwen.studio.agent.manager.dto.CreateVersionReq;
 import com.openjiuwen.studio.agent.manager.dto.ExportParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceRsp;
+import com.openjiuwen.studio.agent.manager.dto.RuntimeAssetExportParams;
 import com.openjiuwen.studio.agent.manager.dto.GetAgentVersionQo;
 import com.openjiuwen.studio.agent.manager.dto.ImportListInfo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
@@ -152,6 +153,21 @@ public class AgentManagementApiController implements AgentManagementApi {
     public ResponseEntity<ExportResourceRsp> exportResource(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         return ResponseModel.success(agentManagementService.exportResource(projectId, workspaceId, accept, body));
+    }
+
+    @Override
+    public ResponseEntity<org.springframework.core.io.Resource> exportRuntimeAsset(String projectId,
+        String workspaceId, RuntimeAssetExportParams body) {
+        Resource zipResource = agentManagementService.exportRuntimeAssetZip(
+            projectId, workspaceId,
+            body.getResourceType(), body.getResourceId(), body.getVersion());
+        String fileName = body.getResourceType() + "_" + body.getResourceId() + "_runtime_asset.zip";
+        String encoded = java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8)
+            .replaceAll("\\+", "%20");
+        return ResponseEntity.ok()
+            .header("Content-Disposition", "attachment;filename=" + encoded + ";filename*=utf-8''" + encoded)
+            .header("Content-Type", "application/zip")
+            .body(zipResource);
     }
 
     @Override

@@ -508,6 +508,10 @@ export:
   signature:
     enable: ${export_signature_enable:false}
     key: ${export_signature_key:}
+  # 运行时资产导出（SDD 4.5.1）
+  runtime-asset:
+    max-concurrent: ${asset_runtime_export_max_concurrent:5}
+    max-assets: ${asset_runtime_export_max_assets:100}
 
 # 委托换取token
 agency:

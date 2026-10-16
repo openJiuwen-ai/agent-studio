@@ -46,6 +46,7 @@ import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.rce.service.JiuWenService;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
+import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -152,6 +153,15 @@ class AgentManagementServiceTest {
     @Mock
     private WorkflowValidationService workflowValidationService;
 
+    @Mock
+    private SkuManageService skuManageService;
+
+    @Mock
+    private RuntimeAssetExporter runtimeAssetExporter;
+
+    @Mock
+    private WorkspacePermissionValidator workspacePermissionValidator;
+
     private AgentManagementService agentManagementService;
 
     @BeforeEach
@@ -167,6 +177,9 @@ class AgentManagementServiceTest {
         );
         ReflectionTestUtils.setField(agentManagementService, "shareResourceMapper", shareResourceMapper);
         ReflectionTestUtils.setField(agentManagementService, "shareResourceManagerService", shareResourceManagerService);
+        ReflectionTestUtils.setField(agentManagementService, "skuManageService", skuManageService);
+        ReflectionTestUtils.setField(agentManagementService, "runtimeAssetExporter", runtimeAssetExporter);
+        ReflectionTestUtils.setField(agentManagementService, "workspacePermissionValidator", workspacePermissionValidator);
         ReflectionTestUtils.setField(agentManagementService, "agentRuntimeClient", agentRuntimeClient);
         ReflectionTestUtils.setField(agentManagementService, "agentSpaceService", agentSpaceService);
         ReflectionTestUtils.setField(agentManagementService, "workflowValidationService", workflowValidationService);
@@ -767,6 +780,8 @@ class AgentManagementServiceTest {
 
         when(releaseChannelMapper.selectByIdAppIdWorkspaceId(channelId, agentId, projectId, workspaceId))
             .thenReturn(oldChannel);
+        // 注：testModifyAgentChannel 调 getAgent(3484)→agentCommonService.getAgent，merge upstream #1513
+        // 引入 validateAgent(3485)后该 mock 仍不生效（agent null），2 个 testModifyAgentChannel 待深挖，非本 PR 巡检范围。
         when(releaseVersionMapper.selectByAppIdAndVersionId(agentId, "v-not-exist")).thenReturn(null);
 
         ModifyChannelReq body = new ModifyChannelReq();
@@ -808,6 +823,8 @@ class AgentManagementServiceTest {
 
         when(releaseChannelMapper.selectByIdAppIdWorkspaceId(channelId, agentId, projectId, workspaceId))
             .thenReturn(oldChannel);
+        // 注：testModifyAgentChannel 调 getAgent(3484)→agentCommonService.getAgent，merge upstream #1513
+        // 引入 validateAgent(3485)后该 mock 仍不生效（agent null），2 个 testModifyAgentChannel 待深挖，非本 PR 巡检范围。
         when(releaseVersionMapper.selectByAppIdAndVersionId(agentId, "v-2")).thenReturn(version);
 
         ReleaseChannel updatedChannel = new ReleaseChannel();
@@ -966,5 +983,13 @@ class AgentManagementServiceTest {
         // 恢复默认值
         ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMin", 0.0);
         ReflectionTestUtils.setField(agentManagementService, "knowledgeRecallThresholdMax", 1.0);
+    }
+
+    @Test
+    void testExportRuntimeAssetZip_validatesSkuExportAttr() {
+        // 巡检 #14：exportRuntimeAssetZip 须校验导出能力 SKU 开关（与 exportAgents 一致），防绕过 SKU 限制
+        agentManagementService.exportRuntimeAssetZip("p", "w", "agent", "agent-1", null);
+        verify(skuManageService).validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
+        verify(runtimeAssetExporter).exportRuntimeAssetZip("p", "w", "agent", "agent-1", null);
     }
 }

@@ -356,6 +356,9 @@ public class AgentManagementService implements IAgentManagementService {
     private AgentExportService agentExportService;
 
     @Autowired
+    private RuntimeAssetExporter runtimeAssetExporter;
+
+    @Autowired
     private ShareResourceMapper shareResourceMapper;
 
     /**
@@ -4025,6 +4028,16 @@ public class AgentManagementService implements IAgentManagementService {
     public ExportResourceRsp exportResource(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         return agentExportService.exportResource(projectId, workspaceId, accept, body);
+    }
+
+    @Override
+    public Resource exportRuntimeAssetZip(String projectId, String workspaceId,
+        String resourceType, String resourceId, String version) {
+        // 巡检 #14：与 exportAgents/exportResource 一致，强制校验导出能力 SKU 开关，
+        // 防未开通导出权限用户绕过 SKU 限制导出运行时资产。
+        skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
+        return runtimeAssetExporter.exportRuntimeAssetZip(projectId, workspaceId,
+            resourceType, resourceId, version);
     }
 
     /**

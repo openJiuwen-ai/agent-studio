@@ -1069,6 +1069,8 @@
   "no_application": "No application",
   "workflow_export": "Exporting Workflows",
   "workflow_export_desc": "Configurations of the plug-ins associated with workflows will be exported.",
+  "runtime_asset_export": "Runtime Asset",
+  "runtime_asset_export_tooltip": "Export ZIP asset package (IR + model config + metadata) for runtime deployment",
   "plugin_export": "Export plug-in",
   "plugin_export_desc": "{{number}} plug-ins selected",
   "no_plugin": "No plug-in",

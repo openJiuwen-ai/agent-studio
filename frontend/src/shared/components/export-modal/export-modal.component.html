@@ -109,6 +109,19 @@
     </button>
     <button
       type="button"
+      *ngIf="supportsRuntimeAssetExport"
+      nz-button
+      nzType="default"
+      [disabled]="setOfCheckedId.size !== 1 || isRuntimeAssetExporting"
+      [nzLoading]="isRuntimeAssetExporting"
+      (click)="handleExportRuntimeAsset()"
+      nz-tooltip
+      [nzTooltipTitle]="'runtime_asset_export_tooltip' | i18nextEager"
+    >
+      {{ 'runtime_asset_export' | i18nextEager }}
+    </button>
+    <button
+      type="button"
       nz-button
       nzType="primary"
       [disabled]="!setOfCheckedId.size"

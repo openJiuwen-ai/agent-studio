@@ -1075,6 +1075,8 @@
   "no_application": "暂无应用",
   "workflow_export": "导出工作流",
   "workflow_export_desc": "工作流关联的插件等配置将同步导出",
+  "runtime_asset_export": "导出运行时资产",
+  "runtime_asset_export_tooltip": "导出 ZIP 资产包（含 IR+模型配置+元数据），供运行态加载",
   "plugin_export": "导出插件",
   "plugin_export_desc": "已选{{number}}个插件",
   "no_plugin": "暂无插件",
