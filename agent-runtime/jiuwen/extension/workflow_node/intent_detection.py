@@ -56,6 +56,7 @@ from openjiuwen.core.foundation.llm import (
 from openjiuwen.core.foundation.prompt import PromptTemplate
 from openjiuwen.core.graph.base import Graph
 from openjiuwen.core.graph.executable import Input, Output
+from openjiuwen.core.session import BaseSession
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.components.condition.condition import Condition
@@ -463,6 +464,17 @@ class IntentDetection(WorkflowComponent):
         # （NodeSession 无这些方法）；Patch C 消费方的 BaseSession 契约由
         # resolve_routing_session 读取端解包满足（双契约分离）。
         set_component_exec(session, context)
+        # 降级兼容写入：结构断言失败时四补丁均不安装（apply_static_graph_patch
+        # 降级分支），Patch C 读侧不存在，原版 BranchRouter.__call__ 直接读
+        # self._session——该字段的唯一写入方是 set_session，不写则降级模式下
+        # 路由 session 恒为 None（分支条件 ExpressionCondition 求值需
+        # NodeSession，直接失败）。补丁态下 Patch C 优先 ContextVar
+        # （dispatch 恒在 _invoke 内、workflow 级 session 恒有值），本写入为
+        # 死写——与 BranchComponent 的 set_session 死写（Patch D 契约）同物。
+        # 类型守卫：生产入口恒为引擎 Session(node_session, False) 包装器
+        # （component.py on_invoke），测试桩（非 Session/BaseSession）跳过。
+        if isinstance(session, (Session, BaseSession)):
+            self._router.set_session(session)
         # node_state 为遗留接口（引擎不读写），入口重建复位避免跨执行残留。
         self.node_state = IntentDetectionState()
 

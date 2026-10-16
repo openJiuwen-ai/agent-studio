@@ -172,6 +172,27 @@ class TestFlowInputResidualState:
         assert "stale" not in out
 
     @pytest.mark.asyncio
+    async def test_stream_path_resets_component_state_on_exhaustion(self):
+        """stream 耗尽后组件状态通道复位（入口 set、出口 finally reset，同 invoke）。
+
+        不 reset 时本执行状态残留在消费生成器的节点 task 上下文中（同 task 的
+        嵌套执行读到错误状态）；复位须回到入口前值（token 栈式，非置空）。
+        末帧通道不在复位之列（引擎 ``Vertex._post_stream`` 在流耗尽后读取）。
+        """
+        fi = _flow_input()
+        session = _flow_input_session()
+
+        sentinel = object()
+        outer_token = ctx.set_component_state(sentinel)
+        try:
+            frames = [frame async for frame in fi.stream({}, session, MagicMock())]
+
+            assert frames == []
+            assert ctx.current_component_state() is sentinel  # 复位到入口前值
+        finally:
+            ctx.reset_component_state(outer_token)
+
+    @pytest.mark.asyncio
     async def test_stale_node_state_overwritten_by_session_rebuild(self):
         """实例残留概念已消除（评审 Suggestion-1 通道迁移）：无 _node_state
         实例字段，行为等价于"入口重建覆盖残留"。
