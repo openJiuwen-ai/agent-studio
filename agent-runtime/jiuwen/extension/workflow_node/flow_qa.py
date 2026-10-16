@@ -615,14 +615,17 @@ class FlowQA(WorkflowComponent):
                     current_state.status = ExecutionStatus.USER_INTERACT
                     self._store_state_to_session(current_state, session)
 
-                    session._interaction = None
+                    # 上游会话的中断态字段无公开重置入口，本处须原样清空以复位交互状态
+                    session._interaction = None  # pylint: disable=protected-access
                     session.update_state({INTERACTIVE_INPUT: None})
                     # 清除 workflow_state 中残留的 INTERACTIVE_INPUT，防止父工作流的
                     # raw_inputs 泄漏导致 WorkflowInteraction 误读而跳过中断
-                    session._inner.state().update_and_commit_workflow_state(
+                    # 上游会话包装器未暴露内层会话，清除残留交互输入须直达其 state
+                    session._inner.state().update_and_commit_workflow_state(  # pylint: disable=protected-access
                         {INTERACTIVE_INPUT: None}
                     )
-                    session._inner.state().commit()
+                    # 内层会话的提交无公开入口，须经该私有成员落盘
+                    session._inner.state().commit()  # pylint: disable=protected-access
 
                     await session.interact(query)
 
@@ -677,7 +680,7 @@ class FlowQA(WorkflowComponent):
                 reason=str(e),
                 workflow=session.get_workflow_id(),
                 cause=e,
-            )
+            ) from e
 
     @property
     def node_type(self) -> str:

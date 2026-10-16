@@ -11,19 +11,22 @@ from jiuwen.extension.workflow import execution_session_ctx as ctx
 
 
 class TestWorkflowSessionChannel:
-    def test_set_and_reset(self):
+    @staticmethod
+    def test_set_and_reset():
         sentinel = object()
         token = ctx.set_workflow_session(sentinel)
         assert ctx.current_workflow_session() is sentinel
         ctx.reset_workflow_session(token)
         assert ctx.current_workflow_session() is None
 
-    def test_default_is_none(self):
+    @staticmethod
+    def test_default_is_none():
         assert ctx.current_workflow_session() is None
 
 
 class TestComponentExecChannel:
-    def test_set_and_reset(self):
+    @staticmethod
+    def test_set_and_reset():
         s, c = object(), object()
         token = ctx.set_component_exec(s, c)
         assert ctx.current_component_exec() == (s, c)
@@ -32,7 +35,8 @@ class TestComponentExecChannel:
 
 
 class TestStreamFinalOutputChannel:
-    def test_set_without_reset_is_visible(self):
+    @staticmethod
+    def test_set_without_reset_is_visible():
         # 语义：不 reset——引擎 Vertex._post_stream 在 generator 耗尽后读取
         ctx.set_stream_final_output({"userFields": "x"})
         assert ctx.get_stream_final_output() == {"userFields": "x"}
@@ -41,7 +45,8 @@ class TestStreamFinalOutputChannel:
 
 
 class TestResolveRoutingSession:
-    def test_priority_component_over_workflow_over_fallback(self):
+    @staticmethod
+    def test_priority_component_over_workflow_over_fallback():
         component_s, workflow_s, fallback_s = object(), object(), object()
 
         # 仅 fallback

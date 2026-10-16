@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是 IntentDetection 组件跨执行隔离的白盒验收：判据的观测面就是组件实例上的
+# 执行期私有成员（路由会话 _router._session、懒初始化入口 _get_llm_instance、中断
+# 处理入口 _handle_global_intent），这些成员没有公开入口可读写，断言必须直接钉住
+# “执行期状态不再落共享实例”这一内部不变量，故按测试需要直接访问。
+# pylint: disable=protected-access
 """IntentDetection / _RoutedIntentDetection 组件跨执行隔离测试。
 
 审计发现（issue #1555 / Task 12）：实例复用后，执行期状态落在组件实例上——
@@ -90,7 +95,8 @@ def _session_arg_condition(func):
 
 
 class TestIntentDetectionStateless:
-    def test_no_exec_state_instance_fields(self):
+    @staticmethod
+    def test_no_exec_state_instance_fields():
         """实例不再持有执行期 session/conversation_id/few_shot_example 字段。"""
         comp = IntentDetection(_conf())
         assert not hasattr(comp, "_session")
@@ -227,7 +233,8 @@ class TestIntentDetectionStateless:
 
         assert comp.node_state.status == ExecutionStatus.START
 
-    def test_global_intent_interrupt_reads_session_from_component_exec(self):
+    @staticmethod
+    def test_global_intent_interrupt_reads_session_from_component_exec():
         """中断路径（_handle_global_intent）经 ContextVar 读 session，不再读实例字段。"""
         comp = IntentDetection(_conf())
         session = _mock_session()

@@ -1,5 +1,9 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 白盒单测：缓存字典、降级标记、构建参数白名单都是模块级内部状态，没有公开读取入口，
+# 而本用例要断言的正是它们自身的取值（缓存是否为空、键集是否被生产调用点覆盖），
+# 只能直接访问这些成员，属测试观测面的正当用法。
+# pylint: disable=protected-access
 """workflow_instance_cache：LazyWorkflow 保留制实例缓存单测（spec §6）。"""
 import pytest
 
@@ -180,7 +184,8 @@ class TestHitMissAndEviction:
         assert r1 is not r2
         assert len(wic._cache) == 0
 
-    def test_production_build_kwargs_within_whitelist(self):
+    @staticmethod
+    def test_production_build_kwargs_within_whitelist():
         """生产调用点传入的 build_kwargs 键 ⊆ 白名单（同步断言）。
 
         workflow_runner 是唯一生产调用点；其新增构建参数时若未同步白名单，

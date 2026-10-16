@@ -2241,7 +2241,9 @@ class Questioner(WorkflowComponent):
                 cause=e,
             ) from e
 
-    async def _handle_questioner_direct_reply_safe(
+    # 参数不宜收拢：多处调用方与测试桩均按位置传参，合并会改变调用契约
+    # （metadata 由调用方按节点信息构造，is_resuing 语义独立）
+    async def _handle_questioner_direct_reply_safe(  # pylint: disable=huawei-too-many-arguments
         self,
         inputs: Input,
         session: Session,

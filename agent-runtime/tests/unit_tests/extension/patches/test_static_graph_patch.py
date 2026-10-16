@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是静态图补丁的白盒断言测试：断言观测面即引擎类与补丁模块的受保护成员
+# （CompiledGraph._invoke、PregelGraph.compile、补丁模块的 _original_* 基线与
+# _structure_assertions 等），上游引擎未提供公开访问入口，只能直接读取这些成员
+# 来验证补丁应用、包装链与降级行为。
+# pylint: disable=protected-access
 """static_graph_patch 结构断言与降级语义单测。
 
 断言策略：真实 venv（openjiuwen 0.1.19）→ 断言全过；monkeypatch 破坏结构
@@ -37,7 +42,8 @@ def _restore_flags():
 
 
 class TestStructureAssertions:
-    def test_real_engine_passes_all_assertions(self):
+    @staticmethod
+    def test_real_engine_passes_all_assertions():
         """真实 openjiuwen 0.1.19 + import 链已应用补丁 → 断言全过。
 
         前置：import ir_converter。其应用序列为 sub_stream → ... →
@@ -60,7 +66,8 @@ class TestStructureAssertions:
         )
         assert static_graph_patch._structure_assertions() == []
 
-    def test_compile_structure_change_detected(self, monkeypatch):
+    @staticmethod
+    def test_compile_structure_change_detected(monkeypatch):
         """模拟上游改掉 compile 的 'pregel is None' 模式 → 断言命中。"""
         from openjiuwen.core.graph.graph import PregelGraph
 
@@ -71,7 +78,8 @@ class TestStructureAssertions:
         failures = static_graph_patch._structure_assertions()
         assert any("PregelGraph.compile" in f for f in failures)
 
-    def test_invoke_ordering_violation_detected(self, monkeypatch):
+    @staticmethod
+    def test_invoke_ordering_violation_detected(monkeypatch):
         """模拟 sub_stream 补丁未先行应用（_invoke 不是其版本）→ 断言命中。"""
         from openjiuwen.core.graph.graph import CompiledGraph
 
@@ -82,7 +90,8 @@ class TestStructureAssertions:
         failures = static_graph_patch._structure_assertions()
         assert any("CompiledGraph._invoke" in f for f in failures)
 
-    def test_branch_router_structure_change_detected(self, monkeypatch):
+    @staticmethod
+    def test_branch_router_structure_change_detected(monkeypatch):
         """模拟 BranchRouter.__call__ 不再读 self._session → 断言命中。"""
         from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 
@@ -93,7 +102,8 @@ class TestStructureAssertions:
         failures = static_graph_patch._structure_assertions()
         assert any("BranchRouter" in f for f in failures)
 
-    def test_branch_component_structure_change_detected(self, monkeypatch):
+    @staticmethod
+    def test_branch_component_structure_change_detected(monkeypatch):
         """C2：模拟 BranchComponent.invoke 不再调用 set_session → 断言命中。"""
         from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
 
@@ -115,7 +125,8 @@ class TestStructureAssertions:
         failures = static_graph_patch._structure_assertions()
         assert any("Vertex" in f for f in failures)
 
-    def test_engine_import_failure_degrades_not_raises(self, monkeypatch):
+    @staticmethod
+    def test_engine_import_failure_degrades_not_raises(monkeypatch):
         """引擎导入失败（循环 import 未打断/上游改名）→ 记为断言失败，不抛异常。
 
         spec §7.2：断言失败必须走降级（STATIC_GRAPH_DOWNGRADED=True），
@@ -127,7 +138,8 @@ class TestStructureAssertions:
         assert failures
         assert any("引擎导入失败" in f for f in failures)
 
-    def test_missing_attributes_degrade_not_raise(self, monkeypatch):
+    @staticmethod
+    def test_missing_attributes_degrade_not_raise(monkeypatch):
         """上游删除引擎属性（改名）→ 记为断言失败，不抛 AttributeError。
 
         Task 2 审查遗留：属性获取未设防时 AttributeError 会逃出降级路径
@@ -161,8 +173,11 @@ class TestStructureAssertions:
         from openjiuwen.core.graph.stream_actor.base import StreamActor
         from openjiuwen.core.graph.stream_actor.manager import ActorManager
 
-        def _alien_actor_init(self, node_id, vertex, abilities, source_groups,
-                              stream_generator_timeout=1):
+        # 该桩函数按位替换上游 StreamActor 构造器（上游按位置传 6 个实参），
+        # 签名须与上游保持一致才能真实模拟构造模式变化，故不合并参数。
+        def _alien_actor_init(  # pylint: disable=huawei-too-many-arguments
+            self, node_id, vertex, abilities, source_groups, stream_generator_timeout=1
+        ):
             self._node_id = node_id
 
         def _alien_manager_init(self, workflow_spec, graph, sub_graph, session):
@@ -176,7 +191,8 @@ class TestStructureAssertions:
         assert any("StreamActor" in f for f in failures)
         assert any("ActorManager" in f for f in failures)
 
-    def test_stream_actor_attributes_missing_degrade_not_raise(self, monkeypatch):
+    @staticmethod
+    def test_stream_actor_attributes_missing_degrade_not_raise(monkeypatch):
         """A4：上游删除 __init__（改名）→ 记为断言失败而非 AttributeError。"""
         from openjiuwen.core.graph.stream_actor.base import StreamActor
         from openjiuwen.core.graph.stream_actor.manager import ActorManager
@@ -193,7 +209,8 @@ class TestStructureAssertions:
 class TestPatchB:
     """Patch B：包装当前 _invoke，执行期间 workflow session ContextVar 可见。"""
 
-    def _make_wrapped(self, seen):
+    @staticmethod
+    def _make_wrapped(seen):
         from jiuwen.extension.patches.static_graph_patch import _wrap_compiled_invoke
         from jiuwen.extension.workflow import execution_session_ctx as ctx
 
@@ -209,7 +226,7 @@ class TestPatchB:
         from jiuwen.extension.workflow import execution_session_ctx as ctx
 
         seen = {}
-        wrapped = self._make_wrapped(seen)
+        wrapped = TestPatchB._make_wrapped(seen)
         sentinel_session = object()
 
         class FakeCompiled:
@@ -218,8 +235,8 @@ class TestPatchB:
         result = await wrapped(FakeCompiled(), {"i": 1}, sentinel_session, None)
 
         assert result == "result"
-        assert seen["during"] is sentinel_session
-        assert seen["session_arg"] is sentinel_session
+        assert seen.get("during") is sentinel_session
+        assert seen.get("session_arg") is sentinel_session
         assert ctx.current_workflow_session() is None  # finally 已 reset
 
     @pytest.mark.asyncio
@@ -228,7 +245,7 @@ class TestPatchB:
         from jiuwen.extension.workflow import execution_session_ctx as ctx
 
         seen = {}
-        wrapped = self._make_wrapped(seen)
+        wrapped = TestPatchB._make_wrapped(seen)
         outer_session, inner_session = object(), object()
 
         class FakeCompiled:
@@ -541,7 +558,10 @@ class TestPatchAStreamEdge:
         return finals
 
     @pytest.mark.asyncio
-    async def test_actor_vertex_replaced_with_fresh_vertex(self, _patched_compile):
+    # docstring 缩进与函数体一致（8 空格），是本文件全部用例的统一写法。
+    async def test_actor_vertex_replaced_with_fresh_vertex(  # pylint: disable=function-docstring-indents-four
+        self, _patched_compile
+    ):
         """C1 修复机制白盒断言：per-execution ActorManager 的 StreamActor._vertex
         被换成本次 compile 的 fresh vertex（而非 build 期 vertex）。"""
         from openjiuwen.core.session.stream import BaseStreamMode
@@ -805,7 +825,8 @@ class TestApplyAndDowngrade:
         static_graph_patch._STATIC_GRAPH_PATCH_APPLIED = saved[4]
         static_graph_patch.STATIC_GRAPH_DOWNGRADED = saved[5]
 
-    def test_apply_patches_all_four_and_is_idempotent(self, _restore_engine):
+    @staticmethod
+    def test_apply_patches_all_four_and_is_idempotent(_restore_engine):
         from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
         from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
         from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
@@ -848,7 +869,8 @@ class TestApplyAndDowngrade:
         # 幂等：第二次调用返回 False
         assert static_graph_patch.apply_static_graph_patch() is False
 
-    def test_assertion_failure_downgrades_and_skips_patches(self, _restore_engine, monkeypatch, caplog):
+    @staticmethod
+    def test_assertion_failure_downgrades_and_skips_patches(_restore_engine, monkeypatch, caplog):
         from openjiuwen.core.graph.graph import CompiledGraph, PregelGraph
         from openjiuwen.core.workflow.components.flow.branch_comp import BranchComponent
         from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter

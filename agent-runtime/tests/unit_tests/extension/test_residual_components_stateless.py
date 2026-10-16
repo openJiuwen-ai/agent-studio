@@ -1,5 +1,12 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是 FlowInput / Extractor / FlowKnowledgeRetrieval 跨执行状态清理的白盒验收：
+# 判据的观测面就是组件的私有实现细节（懒初始化锁、初始化入口、LLM 调用桩、加载后的
+# 知识库配置缓存），这些成员没有公开入口可读写，断言必须直接钉住“并发首调只初始化
+# 一次”“末帧输出不再落实例”这类内部不变量，故按测试需要直接访问。
+# 用例 docstring 均写在 def 下一行并缩进 4 空格；多行正文的续行与首行对齐、
+# 收尾三引号随末行正文，为本文件统一写法。
+# pylint: disable=protected-access,function-docstring-indents-four
 """FlowInput / Extractor / FlowKnowledgeRetrieval 执行期状态清理钉住测试
 （issue #1555 / Task 18）。
 
@@ -85,7 +92,8 @@ def _flow_input_session(saved_state=None, user_response=None):
 
 
 class TestFlowInputResidualState:
-    def test_no_instance_stream_output_field(self):
+    @staticmethod
+    def test_no_instance_stream_output_field():
         """实例不再持有末帧字段 ``_stream_output``（源码级 + 实例级）。"""
         from jiuwen.extension.workflow_node.flow_input import FlowInput
 
@@ -293,7 +301,8 @@ def _ctx_with_user(content):
 
 
 class TestExtractorResidualState:
-    def test_no_instance_exec_state_fields(self):
+    @staticmethod
+    def test_no_instance_exec_state_fields():
         """``inputs`` / ``user_response`` / ``node_field`` 不再落实例。
 
         源码级 + 实例级双断言（``node_field.extracted_key_fields`` 累积容器

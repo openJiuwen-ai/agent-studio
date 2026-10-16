@@ -1,5 +1,9 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 白盒单测：WorkflowRunner 持有的转换器没有公开注入点，只有替换它的 IR 构建入口
+# 才能驱动出真实的构建路径，从而断言"第二次调用复用同一实例"；该成员即本用例
+# 唯一可用的观测面。
+# pylint: disable=protected-access
 """workflow_runner 实例缓存接入单测。
 
 复用 test_workflow_runner.py 的 mock 范式：mock async_ir_load 等基础设施，

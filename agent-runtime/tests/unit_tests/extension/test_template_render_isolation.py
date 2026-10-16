@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件验证模板渲染按调用克隆、原 processor 的位置字段不被推进，判据的观测面
+# 就是受保护成员（_processor/_template_processor/_current_position/_chunk_index/
+# _count/_lock/_condition/_new_renderer）：渲染隔离性与同步原语是否按调用重建
+# 没有公开入口可观测，故必须直接访问这些成员。
+# pylint: disable=protected-access
 """Message/FlowCard 模板渲染位置并发隔离测试。
 
 审计结论：两组件本体零执行期实例写入，但共享 ``self._processor`` /

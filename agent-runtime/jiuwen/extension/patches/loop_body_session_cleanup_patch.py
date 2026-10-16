@@ -227,7 +227,8 @@ async def _patched_advanced_loop_on_invoke(
     # （并发执行各自任务上下文内可见；finally 复位防泄漏到同任务后续代码）
     token = _LOOP_EXEC_SESSION.set(node_session)
     try:
-        compiled = self._graph.compile(loop_session, **kwargs)
+        # 上游内部图对象无公开访问入口，本补丁须沿用其既有编译路径
+        compiled = self._graph.compile(loop_session, **kwargs)  # pylint: disable=protected-access
         await compiled.invoke(inputs, loop_session)
     finally:
         _LOOP_EXEC_SESSION.reset(token)
@@ -267,14 +268,16 @@ def _patched_advanced_loop_atomic_invoke(self, **kwargs) -> Any:
     """条件判定入口：尊重调用方传入的 session（原实现强制 self._node_session）。"""
     session = kwargs.get("session") or _resolve_loop_session(self)
     try:
-        return self._condition_invoke(session=session)
+        # 条件判定是上游私有方法，本补丁的接管点即它，无公开等价入口
+        return self._condition_invoke(session=session)  # pylint: disable=protected-access
     except Exception as e:
         if isinstance(e, BaseError):
             raise
         raise build_error(
             StatusCode.COMPONENT_LOOP_CONDITION_EXECUTION_ERROR,
             reason=str(e),
-            comp=self._node_id,
+            # 错误上下文需带节点标识，该标识只存在于上游私有字段
+            comp=self._node_id,  # pylint: disable=protected-access
             cause=e,
         ) from e
 
@@ -297,7 +300,8 @@ async def _patched_post_body_on_invoke(
 def _patched_post_body_get_finish_index(self) -> int:
     loop_session = _LOOP_EXEC_SESSION.get()
     if loop_session is None:
-        return self._finish_index
+        # 无执行期会话时回退上游私有字段，保持引擎原有取值行为
+        return self._finish_index  # pylint: disable=protected-access
     value = loop_session.state().get(FINISH_INDEX)
     return value if isinstance(value, int) else -1
 
@@ -305,7 +309,8 @@ def _patched_post_body_get_finish_index(self) -> int:
 def _patched_post_body_set_finish_index(self, finish_index: int) -> None:
     loop_session = _LOOP_EXEC_SESSION.get()
     if loop_session is None:
-        self._finish_index = finish_index
+        # 无执行期会话时回退上游私有字段，保持引擎原有写入行为
+        self._finish_index = finish_index  # pylint: disable=protected-access
         return
     loop_session.state().update({FINISH_INDEX: finish_index})
     loop_session.state().commit()
@@ -325,7 +330,8 @@ def apply_loop_exec_state_isolation_patch() -> bool:
     AdvancedLoopComponent.is_broken = _patched_advanced_loop_is_broken
     AdvancedLoopComponent.break_loop = _patched_advanced_loop_break
     AdvancedLoopComponent.__call__ = _patched_advanced_loop_call
-    AdvancedLoopComponent._atomic_invoke = _patched_advanced_loop_atomic_invoke
+    # 补丁的接管点即该私有方法本身，上游未提供公开的替换入口
+    AdvancedLoopComponent._atomic_invoke = _patched_advanced_loop_atomic_invoke  # pylint: disable=protected-access
     PostLoopBody.on_invoke = _patched_post_body_on_invoke
     PostLoopBody.get_finish_index = _patched_post_body_get_finish_index
     PostLoopBody.set_finish_index = _patched_post_body_set_finish_index

@@ -1,5 +1,12 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是 FlowQA / ComplexIntentDetection / Questioner / FlowInput 跨执行隔离的
+# 白盒验收：判据的观测面就是组件实例上的执行期私有成员（意图识别与子工作流注入点、
+# 懒初始化入口、中断处理与状态加载入口），这些成员没有公开入口可读写，断言必须直接
+# 钉住“并发执行各读各的执行期状态”这一内部不变量，故按测试需要直接访问。
+# 用例 docstring 均写在 def 下一行并缩进 4 空格；多行正文的续行与首行对齐、
+# 收尾三引号随末行正文，为本文件统一写法。
+# pylint: disable=protected-access,function-docstring-indents-four
 """FlowQA / ComplexIntentDetection 同实例并发执行隔离测试（PR #1 评审修复轮）。
 
 评审 Critical-1 / Critical-2：静态图复用后同一组件实例被并发执行共享，
@@ -61,8 +68,15 @@ def _make_qa_session(tag: str, interact_impl=None):
     session.get_session_id.return_value = f"sess-{tag}"
     session.get_session_id = MagicMock(return_value=f"sess-{tag}")
     stored: dict = {}
-    session.update_state.side_effect = lambda d, _s=stored: _s.update(d)
-    session.get_state.side_effect = lambda *a, **k: dict(stored)
+
+    def _update_state(data):
+        stored.update(data)
+
+    def _read_state(*args, **kwargs):
+        return dict(stored)
+
+    session.update_state.side_effect = _update_state
+    session.get_state.side_effect = _read_state
     session.stored = stored
     session.written = []
 
@@ -181,7 +195,8 @@ class TestFlowQAConcurrentIsolation:
         assert final_a["question"] == "opt-A"
         assert final_a["inputs"] == {"name": "A"}
 
-    def test_no_shared_node_state_instance_field(self):
+    @staticmethod
+    def test_no_shared_node_state_instance_field():
         """源码级：执行期状态不再落实例字段（spec 附录 A 4 型审计项）。"""
         import inspect
 
@@ -193,7 +208,8 @@ class TestFlowQAConcurrentIsolation:
         qa = FlowQA(_qa_conf(need_reply=False))
         assert not hasattr(qa, "_node_state")
 
-    def test_escape_surface_reads_component_state_channel(self):
+    @staticmethod
+    def test_escape_surface_reads_component_state_channel():
         """逃逸面 get_state/get_node_status/should_interrupt 经执行期组件状态
         通道读取（invoke 外无执行期上下文 → 初始状态）。"""
         from jiuwen.extension.workflow_node.flow_qa import (
@@ -419,14 +435,21 @@ class TestQuestionerConcurrentIsolation:
         b_done = asyncio.Event()
         seen = {}
 
-        async def _handler_a(inputs, session, context, current_state, is_resuing, metadata=None):
+        # 该桩按位替换 Questioner 的处理入口（组件以位置实参传 6 个参数），
+        # 签名须与调用方保持一致，收拢参数会改变调用契约。
+        async def _handler_a(  # pylint: disable=huawei-too-many-arguments
+            inputs, session, context, current_state, is_resuing, metadata=None
+        ):
             seen["state_at_entry"] = questioner.get_state()
             a_at_handler.set()
             await b_done.wait()  # 交错窗口：B 完整执行
             seen["state_after_b"] = questioner.get_state()
             return {"question": "A 的问题", "_state": current_state}
 
-        async def _handler_b(inputs, session, context, current_state, is_resuing, metadata=None):
+        # 同上：与 _handler_a 同签名的替换桩，参数不可收拢。
+        async def _handler_b(  # pylint: disable=huawei-too-many-arguments
+            inputs, session, context, current_state, is_resuing, metadata=None
+        ):
             return {"question": "B 的问题", "_state": current_state}
 
         def make_session(tag):
@@ -446,9 +469,15 @@ class TestQuestionerConcurrentIsolation:
         # 按会话分派 handler（共享实例的并发执行路径）
         orig_handlers = {"A": _handler_a, "B": _handler_b}
 
-        async def _dispatch(inputs, session, context, current_state, is_resuing, metadata=None):
+        # 同上：分派桩替换组件入口，参数表须与调用方一致，不可收拢。
+        async def _dispatch(  # pylint: disable=huawei-too-many-arguments
+            inputs, session, context, current_state, is_resuing, metadata=None
+        ):
             tag = "A" if session is session_a else "B"
-            return await orig_handlers[tag](
+            handler = orig_handlers.get(tag)
+            if handler is None:
+                raise KeyError(tag)
+            return await handler(
                 inputs, session, context, current_state, is_resuing, metadata=metadata
             )
 

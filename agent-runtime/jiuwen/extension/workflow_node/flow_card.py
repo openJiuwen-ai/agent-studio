@@ -249,8 +249,9 @@ class FlowCard(WorkflowComponent):
         if self._template_processor is None:
             return None
         renderer = copy.copy(self._template_processor)
-        renderer._lock = asyncio.Lock()
-        renderer._condition = asyncio.Condition()
+        # 同步原语为上游渲染器的私有字段，按执行重建只能直接替换
+        renderer._lock = asyncio.Lock()  # pylint: disable=protected-access
+        renderer._condition = asyncio.Condition()  # pylint: disable=protected-access
         renderer.reset()
         return renderer
 
