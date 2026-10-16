@@ -2309,13 +2309,18 @@ public class WorkflowValidationService {
                 .setReason(i18nUtil.getMessage("openjiuwen.02201094")));
         }
 
-        // 校验 frame_template 的格式是 json
-        try {
-            JSONObject.parseObject(frame_template);
-        } catch (Exception e) {
-            errors.add(new WorkflowValidationVOErrors().setId(node.getId())
-                .setType(node.getType())
-                .setReason(i18nUtil.getMessage("openjiuwen.02201095")));
+        // 校验 frame_template 的格式：支持纯占位符（如 {{raw_output}}）或有效 JSON
+        // 纯占位符格式：只包含 {{xxx}} 模式的模板变量
+        String templateWithoutPlaceholders = frame_template.replaceAll("\\{\\{[^}]+\\}\\}", "").trim();
+        if (!templateWithoutPlaceholders.isEmpty()) {
+            // 如果去除占位符后还有内容，则必须是有效 JSON
+            try {
+                JSONObject.parseObject(frame_template);
+            } catch (Exception e) {
+                errors.add(new WorkflowValidationVOErrors().setId(node.getId())
+                    .setType(node.getType())
+                    .setReason(i18nUtil.getMessage("openjiuwen.02201095")));
+            }
         }
 
         // 校验concat字段是在frame_template里的

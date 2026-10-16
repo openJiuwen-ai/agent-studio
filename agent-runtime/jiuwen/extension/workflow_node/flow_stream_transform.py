@@ -163,6 +163,7 @@ class FlowStreamTransform(WorkflowComponent):
                 self._output_field = first_output["id"]
                 self._direct_assign_output = False
 
+        self._is_pure_placeholder = False
         if not isinstance(self._transformer_conf, dict):
             raise build_flow_stream_transform_error(
                 error_code=FlowStreamTransformStatusCode.CONFIG_ERROR[0],
@@ -198,6 +199,9 @@ class FlowStreamTransform(WorkflowComponent):
             else v
             for v in cfg.variables
         ]
+        self._is_pure_placeholder = any(
+            v.src_path == "" and v.name == self._source_field for v in new_vars
+        )
         return _dc_replace(cfg, variables=new_vars)
 
     async def invoke(
@@ -345,6 +349,22 @@ class FlowStreamTransform(WorkflowComponent):
                             yield {"answer": remainder}
                     workflow_logger.debug("JSON parse failed, used ast fallback: %s", remainder[:100])
 
+    def _format_answer(self, frame: Any) -> Any:
+        """格式化输出答案，支持直接引用 {{raw_output}} 不包裹 JSON
+
+        当用户填写 {{raw_output}} 直接引用完整输入时，frame 是 dict 类型。
+        直接序列化为 JSON 字符串返回。
+
+        Args:
+            frame: 流式帧数据，可能是 dict/list/str 或其他类型
+
+        Returns:
+            Any: 序列化后的答案
+        """
+        if isinstance(frame, (dict, list)):
+            return json.dumps(frame, ensure_ascii=False, default=str)
+        return frame
+
     def _build_result(self, value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """构建返回结果
 
@@ -377,7 +397,11 @@ class FlowStreamTransform(WorkflowComponent):
 
         async for frame in out_stream:
             if prev is not None:
-                answer = json.dumps(prev, ensure_ascii=False, default=str) if isinstance(prev, (dict, list)) else prev
+                if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                    _val = list(prev.values())[0]
+                    answer = self._format_answer(_val)
+                else:
+                    answer = self._format_answer(prev)
                 await session.write_stream(
                     OutputSchema(
                         type=STREAM_TYPE_PARTIAL_CONTENT,
@@ -391,7 +415,11 @@ class FlowStreamTransform(WorkflowComponent):
             prev = frame
 
         if prev is not None:
-            answer = json.dumps(prev, ensure_ascii=False, default=str) if isinstance(prev, (dict, list)) else prev
+            if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                _val = list(prev.values())[0]
+                answer = self._format_answer(_val)
+            else:
+                answer = self._format_answer(prev)
             await session.write_stream(
                 OutputSchema(
                     type=STREAM_TYPE_MESSAGE_END,
@@ -469,7 +497,11 @@ class FlowStreamTransform(WorkflowComponent):
         prev = None
         async for frame in out_stream:
             if prev is not None:
-                answer = json.dumps(prev, ensure_ascii=False, default=str) if isinstance(prev, (dict, list)) else prev
+                if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                    _val = list(prev.values())[0]
+                    answer = self._format_answer(_val)
+                else:
+                    answer = self._format_answer(prev)
                 yield OutputSchema(
                     type=STREAM_TYPE_PARTIAL_CONTENT,
                     index=idx,
@@ -481,7 +513,11 @@ class FlowStreamTransform(WorkflowComponent):
             prev = frame
 
         if prev is not None:
-            answer = json.dumps(prev, ensure_ascii=False, default=str) if isinstance(prev, (dict, list)) else prev
+            if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                _val = list(prev.values())[0]
+                answer = self._format_answer(_val)
+            else:
+                answer = self._format_answer(prev)
             yield OutputSchema(
                 type=STREAM_TYPE_MESSAGE_END,
                 index=idx,
