@@ -153,10 +153,17 @@ class FlowInput(Invokable, InteractiveComponent):
 
         if self.node_state.status == ExecutionStatus.USER_INTERACT:
             conv_history = self.get_latest_chat_history()
-            user_response = conv_history[-1].get("content") if conv_history else ""
+            # content 可能缺失（None），按空串兜底，避免 None.split 崩溃
+            user_response = (
+                conv_history[-1].get("content") or "" if conv_history else ""
+            )
+            # 逐行解析 "field: value"；用户回复是自由文本，
+            # 不含冒号的行（含末尾换行产生的空行）直接跳过，
+            # 缺失字段由下方 field not in values 的结构化异常兜底
             values = {
-                value.split(":")[0]: value.split(":", 1)[1]
+                value.split(":", 1)[0]: value.split(":", 1)[1]
                 for value in user_response.split("\n")
+                if ":" in value
             }
 
             for input_config in self.conf.get(USER_FIELDS, {}).get("inputs", []):
