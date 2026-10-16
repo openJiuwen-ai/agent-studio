@@ -26,7 +26,7 @@ services:
       - "${DB_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:z
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -115,7 +115,7 @@ services:
       # DSL 版本对比大 DSL 降级阈值（单侧规范化后文本字节，Monaco 保护阈值），暂定 10MB，压测后调整
       LARGE_DSL_BYTES_THRESHOLD: ${LARGE_DSL_BYTES_THRESHOLD:-10485760}
     volumes:
-      - ./config/nginx.conf:/home/conf/nginx.conf
+      - ./config/nginx.conf:/home/conf/nginx.conf:z
       - console_logs:/opt/cloud/wiseagent-nginx/logs
       # HTTPS启动：取消以下注释，并将证书文件放到 ./config/ 目录
       # - ./config/keypassfifo:/home/service/nginx/keypassfifo
@@ -481,7 +481,7 @@ services:
       APP_LOG_TIMEZONE: ${APP_LOG_TIMEZONE:-Asia/Shanghai}
       APP_PROJECT_NAME: ${APP_PROJECT_NAME:-deploy}
     volumes:
-      - ./config/vector.yaml:/etc/vector/vector.yaml:ro
+      - ./config/vector.yaml:/etc/vector/vector.yaml:ro,z
       # 与各 app 服务共享同一命名卷（只读），tail 其中的日志文件
       - manager_logs:/logs/studio-manager:ro
       - runtime_logs:/logs/studio-runtime:ro
@@ -520,9 +520,9 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       # 启动时自动 provisioning VictoriaLogs 数据源和日志 dashboard
-      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
-      - ./observability/config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./observability/dashboards:/var/lib/grafana/dashboards:ro
+      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro,z
+      - ./observability/config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro,z
+      - ./observability/dashboards:/var/lib/grafana/dashboards:ro,z
     depends_on:
       victoria-logs:
         condition: service_healthy
