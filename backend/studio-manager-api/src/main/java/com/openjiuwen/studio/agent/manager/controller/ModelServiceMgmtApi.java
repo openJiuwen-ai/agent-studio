@@ -7,7 +7,6 @@ package com.openjiuwen.studio.agent.manager.controller;
 import com.openjiuwen.studio.agent.manager.dto.AvailableModelServicesQo;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
-import com.openjiuwen.studio.agent.manager.dto.MaasServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelNameResp;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceListQo;
@@ -62,14 +61,14 @@ import org.springframework.web.multipart.MultipartFile;
     String projectId, @ApiParam(value = "AvailableModelServicesQo: converted from multi query params") @Valid
     AvailableModelServicesQo availableModelServicesQo);
 
-    @ApiOperation(value = "", nickname = "createModelService", notes = "新增模型服务", response = Object.class,
+    @ApiOperation(value = "", nickname = "createModelService", notes = "新增模型服务", response = String.class,
         tags = {"ModelServiceMgmt"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "成功", response = Object.class)
+        @ApiResponse(code = 200, message = "成功", response = String.class)
     })
     @RequestMapping(value = "/v1/{project_id}/model-manager/model-services", produces = {"application/json"},
         consumes = {"application/json"}, method = RequestMethod.POST)
-    ResponseEntity<Object> createModelService(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+    ResponseEntity<String> createModelService(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
         String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
@@ -103,17 +102,6 @@ import org.springframework.web.multipart.MultipartFile;
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @Size(min = 2, max = 64) @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "model_name", required = true) String modelName);
-
-    @ApiOperation(value = "", nickname = "maasModelServiceList", notes = "查询模型服务",
-        response = MaasServiceRsp.class, tags = {"ModelServiceMgmt"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "成功", response = MaasServiceRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/model-manager/maas-model-services", produces = {"application/json"},
-        method = RequestMethod.GET)
-    ResponseEntity<MaasServiceRsp> maasModelServiceList(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
-    @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-    String projectId);
 
     @ApiOperation(value = "", nickname = "modelServiceDetail", notes = "查询模型服务详情",
         response = ModelServiceRsp.class, tags = {"ModelServiceMgmt"})
@@ -203,14 +191,13 @@ import org.springframework.web.multipart.MultipartFile;
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "provider_id", required = true) String providerId);
 
-    @ApiOperation(value = "", nickname = "updateModelService", notes = "更新模型服务", response = Object.class,
-        tags = {"ModelServiceMgmt"})
+    @ApiOperation(value = "", nickname = "updateModelService", notes = "更新模型服务", tags = {"ModelServiceMgmt"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "成功", response = Object.class)
+        @ApiResponse(code = 200, message = "成功")
     })
     @RequestMapping(value = "/v1/{project_id}/model-manager/model-services/{id}", produces = {"application/json"},
         consumes = {"application/json"}, method = RequestMethod.PUT)
-    ResponseEntity<Object> updateModelService(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+    ResponseEntity<Void> updateModelService(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
         String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @Parameter(in = ParameterIn.QUERY, description = "", required = true, schema = @Schema()) @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,

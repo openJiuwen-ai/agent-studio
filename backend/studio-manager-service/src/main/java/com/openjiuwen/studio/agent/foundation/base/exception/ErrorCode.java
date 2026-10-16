@@ -157,6 +157,12 @@ public enum ErrorCode {
     KNOWLEDGE_BASE_NOT_CONFIGURED(HttpStatus.INTERNAL_SERVER_ERROR.value(), "0026",
         "Connect to knowledge base failed."),
 
+    /**
+     * 仅支持配置默认知识库连接（请求的 kb_connection_id 不是默认占位 id）
+     */
+    DEFAULT_KNOWLEDGE_BASE_CONNECTION_UNSUPPORTED(HttpStatus.BAD_REQUEST.value(), "0027",
+        "Only the default knowledge base connection is supported for configuration."),
+
     /********************************************** 业务通用的一些错误码 *************************************************/
 
     /**

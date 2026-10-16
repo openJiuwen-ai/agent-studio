@@ -307,7 +307,7 @@ public class SkillManagementService implements ISkillManagementService {
     public ListStudioSkillsResponseBody listStudioSkills(String projectId, ListStudioSkillsQo listStudioSkillsQo) {
         // 1. 获取匹配列表
         SkillEntity selectCondition;
-        if ( 1 == listStudioSkillsQo.getPublishedAsset()){
+        if (Integer.valueOf(1).equals(listStudioSkillsQo.getPublishedAsset())) {
             selectCondition = new SkillEntity()
                 .setName(escapeSqlSpecialChars(listStudioSkillsQo.getName()))
                 .setDescription(escapeSqlSpecialChars(listStudioSkillsQo.getDescription()))

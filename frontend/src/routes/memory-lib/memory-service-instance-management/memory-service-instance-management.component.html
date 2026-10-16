@@ -1,0 +1,111 @@
+<div class="instance-management h-full flex flex-col">
+  <div class="mb-[24px] flex w-full items-center justify-between">
+    <span class="text-[20px] font-bold leading-[30px]">
+      {{ 'memory.instance.title' | i18nextEager }}
+      @if (instances().length) {
+        <span class="ml-2">({{ instances().length }})</span>
+      }
+    </span>
+    <button nz-button nzType="primary" (click)="createInstance()">
+      {{ 'memory.instance.create.button' | i18nextEager }}
+    </button>
+  </div>
+
+  <div class="instance-top-operate">
+    <div class="instance-search">
+      <nz-input-search>
+        <input
+          nz-input
+          [placeholder]="'memory.instance.search.placeholder' | i18nextEager"
+          [ngModel]="searchText()"
+          (ngModelChange)="searchText.set($event)"
+        />
+      </nz-input-search>
+    </div>
+
+    <button nz-button nzType="default" (click)="queryInstances()">
+      <span nz-icon nzType="reload"></span>
+    </button>
+  </div>
+
+  <nz-spin [nzSpinning]="loading()" class="instance-list-area flex-1 overflow-auto">
+    <nz-table
+      #instanceTable
+      class="table-style table-border"
+      [nzData]="filteredInstances()"
+      [nzFrontPagination]="false"
+      [nzShowPagination]="false"
+      [nzNoResult]="emptyTpl"
+    >
+      <thead>
+        <tr style="height:48px;">
+          <th>{{ 'memory.instance.column.name' | i18nextEager }}</th>
+          <th>{{ 'memory.instance.column.baseUrl' | i18nextEager }}</th>
+          <th nzWidth="120px">{{ 'memory.instance.column.health' | i18nextEager }}</th>
+          <th nzWidth="180px">{{ 'memory.instance.column.lastCheck' | i18nextEager }}</th>
+          <th nzWidth="180px">{{ 'memory.instance.column.createTime' | i18nextEager }}</th>
+          <th nzWidth="80px">{{ 'memory.listHeader.operator' | i18nextEager }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of instanceTable.data; track item.instance_id) {
+          <tr style="height:64px;">
+            <td>
+              <div class="flex flex-col min-w-0">
+                <span class="truncate">{{ item.name }}</span>
+                <div class="flex items-center">
+                  <span class="text-[12px] text-[#808080] truncate leading-[18px]">{{ item.instance_id }}</span>
+                  <span nz-typography nzCopyable [nzCopyText]="item.instance_id" class="copy-id"></span>
+                </div>
+              </div>
+            </td>
+            <td nzEllipsis>
+              <span nz-tooltip [nzTooltipTitle]="item.base_url">{{ item.base_url }}</span>
+            </td>
+            <td>
+              <nz-badge
+                [nzStatus]="item.health_status === 'HEALTHY' ? 'success' : item.health_status === 'UNHEALTHY' ? 'error' : 'default'"
+                [nzText]="getHealthText(item.health_status)"
+              ></nz-badge>
+            </td>
+            <td>{{ item.last_check_at | formateTime }}</td>
+            <td>{{ item.create_time | formateTime }}</td>
+            <td>
+              <button nz-button nzType="text" nz-dropdown [nzDropdownMenu]="menu">
+                <span nz-icon nzType="more"></span>
+              </button>
+              <nz-dropdown-menu #menu="nzDropdownMenu">
+                <ul nz-menu>
+                  <li nz-menu-item (click)="healthCheck(item)">
+                    {{ 'memory.instance.operation.healthCheck' | i18nextEager }}
+                  </li>
+                  <li nz-menu-item (click)="editInstance(item)">{{ 'memory.management.edit' | i18nextEager }}</li>
+                  <li nz-menu-item (click)="deleteInstance(item)">{{ 'memory.management.delete' | i18nextEager }}</li>
+                </ul>
+              </nz-dropdown-menu>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </nz-table>
+  </nz-spin>
+
+  <ng-template #emptyTpl>
+    <div class="py-[48px] flex flex-col items-center justify-center">
+      <nz-empty
+        nzNotFoundImage="simple"
+        [nzNotFoundContent]="'memory.instance.noData' | i18nextEager"
+      ></nz-empty>
+      <button nz-button nzType="primary" class="mt-[16px]" (click)="createInstance()">
+        {{ 'memory.instance.create.button' | i18nextEager }}
+      </button>
+    </div>
+  </ng-template>
+</div>
+
+<memory-service-instance-modal
+  [visible]="modalVisible()"
+  [instanceId]="editingInstanceId()"
+  (saved)="onModalSaved()"
+  (cancelled)="modalVisible.set(false)"
+></memory-service-instance-modal>

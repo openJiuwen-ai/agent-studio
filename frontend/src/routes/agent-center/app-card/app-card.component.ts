@@ -5,11 +5,13 @@ import {
   EventEmitter,
   HostBinding,
   Input,
+  OnDestroy,
   OnInit,
   Output,
   ViewChild,
   ViewContainerRef
 } from "@angular/core";
+import { Subscription } from "rxjs";
 import { Router } from "@angular/router";
 import { MessageComponent, StorageService } from '@shared/services/cfdata.service';
 import { I18nNamespace } from "@i18n";
@@ -36,6 +38,7 @@ import { CommonUtils } from "src/utils/common.util";
 import { AppAgentHighCodeService } from "@services/agent-center/app-agent-high-code.service";
 import { ExportResultModalComponent } from "@shared/components/export-modal/export-result-modal/export-result-modal.component";
 import { NzModalService } from "ng-zorro-antd/modal";
+import { PermissionService } from "@services/permission.service";
 
 export interface CardAction {
   id: string;
@@ -63,9 +66,10 @@ enum mapKeys {
     FormateTimePipe
   ]
 })
-export class AppCardComponent implements OnInit {
+export class AppCardComponent implements OnInit, OnDestroy {
   @Input() type = 0;
   @Input() data: any;
+  private permissionSubscription?: Subscription;
   @Input() isFromDevelopSpace = false;
   @Input() cardIndex: Number;
   @Output() handleAction = new EventEmitter();
@@ -151,6 +155,7 @@ export class AppCardComponent implements OnInit {
     private readonly http: HttpService,
     private formateTimePipe: FormateTimePipe,
     private highCodeService: AppAgentHighCodeService,
+    private permissionService: PermissionService,
     protected cdr: ChangeDetectorRef,
     private viewContainerRef: ViewContainerRef
   ) {
@@ -159,6 +164,15 @@ export class AppCardComponent implements OnInit {
       this.initCardActions();
       this.cdr.markForCheck();
     });
+    // 订阅权限变化:permissions$ 异步加载完成后重新过滤 delete action
+    this.permissionSubscription = this.permissionService.permissions$.subscribe(() => {
+      this.initCardActions();
+      this.cdr.markForCheck();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.permissionSubscription?.unsubscribe();
   }
 
   ngOnInit(): void {
@@ -225,7 +239,31 @@ export class AppCardComponent implements OnInit {
     if (this.type !== TabIndex.SINGLE_AGENT) {
       this.cardActions = this.cardActions.filter((item) => item.id !== "releaseChannel");
     }
+    // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的资源(后端 creatorCheckPermissions 配置驱动)
+    if (!this.canDeleteCurrentResource()) {
+      this.cardActions = this.cardActions.filter((item) => item.id !== "delete");
+      // 渠道管理同属编辑类操作，非创建者隐藏
+      this.cardActions = this.cardActions.filter((item) => item.id !== "releaseChannel");
+    }
     this.splitActions();
+  }
+
+  // 判断当前用户能否删除该卡片资源(供 delete action 显隐)
+  // 当前用户能否对该卡片资源执行操作(delete/channel)。creatorId=userId
+  private canModifyCurrentResource(action: string): boolean {
+    if (this.type === TabIndex.HIGH) {
+      // 高阶 agent 走 relay-agent-builder，未纳入创建人校验，保持原状
+      return true;
+    }
+    // 后端 AgentInfo/WorkflowInfo 的 creatorId 序列化为 creator_id(snake_case)
+    const creator = this.data?.creator_id ?? this.data?.creatorId;
+    return this.isApplication
+      ? this.permissionService.canModifyAgent(creator, action)
+      : this.permissionService.canModifyWorkflow(creator, action);
+  }
+
+  private canDeleteCurrentResource(): boolean {
+    return this.canModifyCurrentResource('delete');
   }
 
   private splitActions(): void {

@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
 from agent_builder.common.exception.status_code import StatusCode
+from agent_builder.serve.common.concurrency import submit_with_log_vars
 from agent_builder.common.logging.base import logger
 from agent_builder.prompt.common.config import LLMModelInfo
 from agent_builder.prompt.mmapo.VQA_core import VQA
@@ -68,7 +69,7 @@ class ApoEvaluatorWithRef:
             max_workers=min(WORKERS_NUM, len(candidates))
         ) as executor:
             futures = {
-                executor.submit(self.evaluate_one_prompt, prompt, eval_dataset): prompt
+                submit_with_log_vars(executor, self.evaluate_one_prompt, prompt, eval_dataset): prompt
                 for prompt in candidates
             }
             for future in as_completed(futures):
@@ -132,7 +133,7 @@ class ApoEvaluatorWithRef:
             max_workers=min(WORKERS_NUM, len(test_examples))
         ) as executor:
             futures = [
-                executor.submit(
+                submit_with_log_vars(executor,
                     self.process_example,
                     example_index,
                     example,

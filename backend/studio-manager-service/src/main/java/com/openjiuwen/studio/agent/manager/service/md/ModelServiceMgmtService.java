@@ -24,7 +24,6 @@ import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AvailableModelServicesQo;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
-import com.openjiuwen.studio.agent.manager.dto.MaasServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelNameResp;
@@ -60,6 +59,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.CustomModelManagerClient;
 import com.openjiuwen.studio.agent.manager.rce.models.CustomModelListRsp;
 import com.openjiuwen.studio.agent.manager.service.IModelServiceMgmtService;
+import com.openjiuwen.studio.agent.manager.service.WorkspacePermissionValidator;
 import com.openjiuwen.studio.prompt.engineering.utils.HttpUtil;
 
 import jakarta.annotation.PostConstruct;
@@ -106,6 +106,9 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
 
     @Autowired
     private RouterStrategyMapper routerStrategyMapper;
+
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
 
     @Value("${agentBuilder_provider_id:101}")
     private String agentBuilderProviderId;
@@ -379,6 +382,8 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     )
     public Void deleteModelService(String projectId, String workspaceId, String id) {
         ModelServiceBase base = queryMSAndPermissionCheck(projectId, workspaceId, id, false);
+        workspacePermissionValidator.validateModelService(projectId, workspaceId, base.getCreatedByUser(), "delete",
+            "SYSTEM".equals(base.getProjectId()) && "SYSTEM".equals(base.getWorkspaceId()));
         if ("online".equals(base.getPublishStatus())) {
             log.error("Model service publish status is already publish. cannot delete. {}", id);
             throw new AgentStudioException(StudioError.MD_MODEL_SERVICE_IS_PUBLISH);
@@ -396,11 +401,6 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     public ModelNameResp existsModelName(String projectId, String workspaceId, String modelName) {
         return new ModelNameResp().setExistModelName(
             modelServiceMapper.countByModelName(projectId, workspaceId, modelName) > 0);
-    }
-
-    @Override
-    public MaasServiceRsp maasModelServiceList(String projectId) {
-        return new MaasServiceRsp();
     }
 
     private ModelServiceBase queryMSAndPermissionCheck(String projectId, String workspaceId, String id,
@@ -563,6 +563,8 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     )
     public Void offlineModelService(String projectId, String workspaceId, String id) {
         ModelServiceBase base = queryMSAndPermissionCheck(projectId, workspaceId, id, false);
+        workspacePermissionValidator.validateModelService(projectId, workspaceId, base.getCreatedByUser(), "offline",
+            "SYSTEM".equals(base.getProjectId()) && "SYSTEM".equals(base.getWorkspaceId()));
         if ("offline".equals(base.getPublishStatus())) {
             log.error("Model service publish status is already offline. cannot change. {}", id);
             throw new AgentStudioException(StudioError.MD_MODEL_SERVICE_CANNOT_CHANGE);
@@ -582,6 +584,8 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     )
     public Void onlineModelService(String projectId, String workspaceId, Boolean availableCheck, String id) {
         ModelServiceBase serviceBase = queryMSAndPermissionCheck(projectId, workspaceId, id, false);
+        workspacePermissionValidator.validateModelService(projectId, workspaceId, serviceBase.getCreatedByUser(),
+            "online", "SYSTEM".equals(serviceBase.getProjectId()) && "SYSTEM".equals(serviceBase.getWorkspaceId()));
         if ("online".equals(serviceBase.getPublishStatus())) {
             log.error("Model service publish status is already publish. cannot change. {}", id);
             throw new AgentStudioException(StudioError.MD_MODEL_SERVICE_CANNOT_CHANGE);
@@ -872,6 +876,8 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     public Void updateModelService(String projectId, String workspaceId, Boolean availableCheck, String id,
         ModelServiceReq serviceReq) {
         ModelServiceBase base = queryMSAndPermissionCheck(projectId, workspaceId, id, false);
+        workspacePermissionValidator.validateModelService(projectId, workspaceId, base.getCreatedByUser(), "edit",
+            "SYSTEM".equals(base.getProjectId()) && "SYSTEM".equals(base.getWorkspaceId()));
         if ("online".equals(base.getPublishStatus())) {
             log.error("Model service publish status is already publish. cannot change. {}", id);
             throw new AgentStudioException(StudioError.MD_MODEL_SERVICE_CANNOT_CHANGE);

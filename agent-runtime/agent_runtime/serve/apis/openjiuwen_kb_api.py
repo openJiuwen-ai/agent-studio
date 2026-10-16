@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agent_runtime.extension.workflow_node.kb_adapter.openjiuwen_kb_manager import (
     KBSearchOptions,
@@ -211,6 +212,8 @@ async def delete_document(kb_id: str, doc_id: str, request: DeleteDocumentsReque
     manager = OpenJiuwenKBManager()
     doc_ids = request.doc_ids if request.doc_ids else [doc_id]
     result = await manager.delete_documents(kb_id, doc_ids)
+    if not result["success"]:
+        raise StarletteHTTPException(status_code=500, detail=result["message"])
     return KBResponse(success=result["success"], message=result["message"])
 
 

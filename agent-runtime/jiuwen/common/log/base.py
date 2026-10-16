@@ -28,9 +28,11 @@ from jiuwen.common.configs.env_constants import (
     JIUWEN_LOG_MAX_BYTES_KEY,
     JIUWEN_LOG_LEVEL_KEY,
     JIUWEN_LOG_PATH_KEY,
+    JIUWEN_PERF_LOG_LEVEL_KEY,
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
+from jiuwen.common.log.diagnostics import DiagnosticPolicy, get_default_policy
 from jiuwen.serve.common.context import request_json, request_ctx
 
 CRITICAL = 50
@@ -66,7 +68,8 @@ GRAY_DEBUG_ENABLED = "gray_debug_enabled"
 
 ENV_BACKUP_COUNT = os.environ.get(JIUWEN_LOG_BACKUP_COUNT_KEY)
 ENV_MAX_BYTES = os.environ.get(JIUWEN_LOG_MAX_BYTES_KEY)
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
+# COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy.from_env()
+# (jiuwen/common/log/diagnostics.py)，不再在本模块读取环境变量。
 
 COMMON_LOG_FORMAT = (
     "%(asctime)s|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
@@ -334,7 +337,10 @@ class SingletonLogger:
 
     @classmethod
     def _get_logger(cls, log_type, log_config, output, log_file):
-        level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
+        if log_type == "performance":
+            level = os.environ.get(JIUWEN_PERF_LOG_LEVEL_KEY, log_config.get("performance_level", "WARNING"))
+        else:
+            level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
         max_bytes = (
             get_log_max_bytes(ast.literal_eval(ENV_MAX_BYTES))
             if ENV_MAX_BYTES
@@ -547,29 +553,34 @@ class MaskingFormatter(logging.Formatter):
 
 
 class LogRouter:
-    def __init__(self):
-        self._verbose_mode = os.getenv("LOG_VERBOSE", "false").lower() == "true"
+    # COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy，不再在此读取环境变量。
 
-    def route_log(self, original_method: Callable) -> Callable:
+    @staticmethod
+    def route_log(original_method: Callable) -> Callable:
         """route log."""
 
         @wraps(original_method)
         def wrapper(msg: str, *args: Any, **kwargs: Any) -> None:
             has_simple_log = "simple_log" in kwargs
             simple_log = kwargs.pop("simple_log", msg)
-            if self._verbose_mode:
-                processed_msg = msg
-            else:
-                processed_msg = simple_log
-                kwargs.pop("exc_info", None)  # 去掉异常堆栈
+            # COM-08: always use safe (simple_log) as base message;
+            # exc_info 不再因 verbose=False 删除，始终到达底层 logger。
+            processed_msg = simple_log
 
-            if LOG_VERBOSE_MODE:
-                kwargs.setdefault("stacklevel", 2)
-                return original_method(msg, *args, **kwargs)
-            kwargs.setdefault("stacklevel", 1)
+            # COM-08 §4.3条5: verbose 仅追加 allowlist 治理字段（opt-in）。
+            event = kwargs.pop("event", None)
+            verbose_fields = kwargs.pop("verbose_fields", None)
+            if event is not None and verbose_fields:
+                policy = get_default_policy()
+                if policy.verbose:
+                    extra = policy.build_verbose_fields(event, verbose_fields)
+                    if extra:
+                        processed_msg = f"{processed_msg} | {extra}"
+
+            kwargs.setdefault("stacklevel", 2)
             if has_simple_log:
                 # simple 消息不含 msg 的占位符：丢弃其惰性格式化参数，
-                # 避免 non-verbose 下占位符与参数错配触发 logging 格式化错误
+                # 避免占位符与参数错配触发 logging 格式化错误
                 return original_method(processed_msg, **kwargs)
             return original_method(processed_msg, *args, **kwargs)
 

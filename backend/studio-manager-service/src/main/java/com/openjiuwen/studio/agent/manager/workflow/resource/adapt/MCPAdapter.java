@@ -192,6 +192,8 @@ public class MCPAdapter extends ResourceAdapter {
             }
             mcpServiceMapper.updateById(existingMcp.getId(), mcp);
         }
+        // 导入后若URL含环境变量占位符，使用目标空间环境变量刷新工具列表
+        mcpServiceManager.refreshToolsAfterImport(mcp);
     }
 
     private void updateMetadata(ImportInfo importInfo, McpServiceEntity mcp) {
@@ -202,6 +204,7 @@ public class MCPAdapter extends ResourceAdapter {
         mcp.setLastUpdatedByUserId(importInfo.getCreatorId());
         mcp.setLastUpdatedDate(new Timestamp(new Date().getTime()));
         mcp.setDomainId(importInfo.getTargetDomainId());
+        mcp.setTenantId(RequestContextUtils.getRequestUserDomainId());
         mcp.setServerConfig(encryptionAdapter.encrypt(mcp.getServerConfig(), mcp.getDomainId()));
 
     }

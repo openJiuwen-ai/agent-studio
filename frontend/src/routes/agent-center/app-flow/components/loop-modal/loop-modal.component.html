@@ -233,8 +233,9 @@
           <div class="w-1/3 text-label">{{ 'param_name' | i18nextEager }}</div>
           <div class="flex w-2/3 items-center gap-2 text-label">
             <div class="flex h-fit w-[calc(100%-16px)] items-center">
-              <div class="w-[35%]">{{ 'type' | i18nextEager }}</div>
-              <div class="w-[65%]">{{ 'value' | i18nextEager }}</div>
+              <div class="w-[25%]">{{ 'type' | i18nextEager }}</div>
+              <div class="w-[25%]">{{ 'data_type' | i18nextEager }}</div>
+              <div class="w-[50%]">{{ 'value' | i18nextEager }}</div>
             </div>
             <div class="h-full w-[16px]"></div>
           </div>
@@ -272,7 +273,7 @@
             <div class="flex items-start w-2/3 gap-[8px]">
               <div class="flex h-fit w-[calc(100%-16px)] items-start gap-2">
                 <div class="flex w-full">
-                  <div class="w-[35%]">
+                  <div class="w-[25%]">
                     <nz-select
                       class="combo-select-left"
                       style="width: 100%"
@@ -284,13 +285,90 @@
                     ></nz-select>
                   </div>
 
-                  <div class="w-[65%]">
+                  <div class="w-[25%]">
+                    <nz-select
+                      *ngIf="param.value.type === 'literal'"
+                      style="width: 100%"
+                      [nzOptions]="noneObjDataTypes"
+                      [name]="'midParamDataType' + i"
+                      [(ngModel)]="param.type"
+                      nzLabelKey="label"
+                      (ngModelChange)="onMidParamDataTypeChange(param)"
+                    ></nz-select>
+                    <div
+                      class="flex h-full items-center"
+                      *ngIf="param.value.type === 'ref'"
+                    >
+                      <span
+                        class="w-full truncate text-label"
+                        [title]="param.type"
+                        >{{ param.type }}</span
+                      >
+                    </div>
+                  </div>
+
+                  <div class="w-[50%]">
                     <input
                       class="combo-select-right"
-                      *ngIf="param.value.type === 'literal'"
+                      *ngIf="
+                        param.value.type === 'literal' &&
+                        param.type !== 'integer' &&
+                        param.type !== 'number' &&
+                        param.type !== 'boolean'
+                      "
                       style="width: 100%"
                       type="text"
                       [name]="'midParamValue' + i"
+                      nz-input
+                      [placeholder]="'input_placeholder' | i18nextEager"
+                      (blur)="onMidRefChange()"
+                      [(ngModel)]="param.value.content"
+                      [title]="param.value.content"
+                      [class.input-error]="midParamForm?.controls['midParamValue' + i]?.invalid && (midParamForm?.controls['midParamValue' + i]?.dirty || midParamForm?.controls['midParamValue' + i]?.touched)"
+                    />
+
+                    <nz-select
+                      class="combo-select-right"
+                      *ngIf="
+                        param.value.type === 'literal' &&
+                        param.type === 'boolean'
+                      "
+                      style="width: 100%"
+                      [nzOptions]="booleanLiteralOptions"
+                      [name]="'midParamValue' + i"
+                      [(ngModel)]="param.value.content"
+                      (ngModelChange)="onMidRefChange()"
+                    ></nz-select>
+
+                    <input
+                      class="combo-select-right"
+                      *ngIf="
+                        param.value.type === 'literal' &&
+                        param.type === 'integer'
+                      "
+                      style="width: 100%"
+                      type="text"
+                      [name]="'midParamValue' + i"
+                      integerStr
+                      nonEmptyValidator
+                      nz-input
+                      [placeholder]="'input_placeholder' | i18nextEager"
+                      (blur)="onMidRefChange()"
+                      [(ngModel)]="param.value.content"
+                      [title]="param.value.content"
+                      [class.input-error]="midParamForm?.controls['midParamValue' + i]?.invalid && (midParamForm?.controls['midParamValue' + i]?.dirty || midParamForm?.controls['midParamValue' + i]?.touched)"
+                    />
+
+                    <input
+                      class="combo-select-right"
+                      *ngIf="
+                        param.value.type === 'literal' &&
+                        param.type === 'number'
+                      "
+                      style="width: 100%"
+                      type="text"
+                      [name]="'midParamValue' + i"
+                      numberStr
                       nonEmptyValidator
                       nz-input
                       [placeholder]="'input_placeholder' | i18nextEager"
@@ -307,7 +385,7 @@
                       [options]="param.refs"
                       [name]="'midParamValue' + i"
                       refSelectedRequire
-                      (select)="treeSelect()"
+                      (select)="onMidParamRefSelect()"
                       [placeholder]="'select_placeholder' | i18nextEager"
                     ></input-tree-select>
 

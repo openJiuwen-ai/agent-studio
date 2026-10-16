@@ -386,8 +386,7 @@ public class PluginService implements IPluginService {
         log.info("operation log {}: start to delete plugin", projectId);
         PluginEntity pluginEntity = pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, projectId, workspaceId);
         if (Objects.isNull(pluginEntity)) {
-            log.info("No plugin entity found, plugin ID: {}, project ID: {}.", pluginId, projectId);
-            return null;
+            throw new AgentStudioException(StudioError.RESOURCE_NOT_EXISTS);
         }
 
         shareInnerService.cancelPluginShared(projectId, workspaceId, pluginId);
@@ -530,6 +529,8 @@ public class PluginService implements IPluginService {
             resource.setFilename("plugins.jsonl");
             resource.setLength((long) bytes.length);
             return resource;
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to export the plug-in.", e);
             throw new AgentStudioException(StudioError.TOOL_EXPORT_FILE);
@@ -594,7 +595,7 @@ public class PluginService implements IPluginService {
                 // 检查工作流是否被授权
                 ShareResourceEntity shareResourceEntity = shareResourceMapper.selectShareResourceEntityByResourceId(
                     pluginId);
-                if (!shareResourceEntity.getVersionList().contains(versionId)) {
+                if (!shareResourceEntity.containsVersion(versionId)) {
                     log.error(
                         "getToolVersion, request project id: {} workspace id: {}, tool project id {} workspace id {}",
                         projectId, getPluginVersionQo.getWorkspaceId(), pluginEntity.getProjectId(),
@@ -736,6 +737,8 @@ public class PluginService implements IPluginService {
                 }
             }
             buildImportRsp(importRsp, wfImportDataWrapper);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to import the plug-in.", e);
             throw new AgentStudioException(StudioError.TOOL_IMPORT_FILE);
@@ -1905,16 +1908,19 @@ public class PluginService implements IPluginService {
 
         // 构建requestInfo字段，包括BasicInfo和tool_info
         UrlInfo urlInfo = null;
-        if (pluginInfo.getUrl().contains("{")) {
-            urlInfo = parseVariableUrl(pluginInfo.getUrl());
+        String url = pluginInfo != null ? pluginInfo.getUrl() : null;
+        if (StringUtils.isBlank(url)) {
+            urlInfo = new UrlInfo();
+        } else if (url.contains("{")) {
+            urlInfo = parseVariableUrl(url);
         } else {
-            urlInfo = parseUrl(pluginInfo.getUrl());
+            urlInfo = parseUrl(url);
         }
         BasicInfo basicInfo = BasicInfo.builder()
             .host(urlInfo.getHost())
             .protocol(urlInfo.getProtocol())
             .path(urlInfo.getBasePath())
-            .inputSchema(pluginInfo.getInputSchema())
+            .inputSchema(pluginInfo != null ? pluginInfo.getInputSchema() : null)
             .build();
 
         // 适配多斜杠的问题
@@ -2006,17 +2012,20 @@ public class PluginService implements IPluginService {
         BasicInfo basicInfo = null;
         RequestInfo requestInfo = body.getRequestInfo();
         UrlInfo urlInfo = null;
-        if (requestInfo.getUrl().contains("{")) {
-            urlInfo = parseVariableUrl(requestInfo.getUrl());
+        String url = requestInfo != null ? requestInfo.getUrl() : null;
+        if (StringUtils.isBlank(url)) {
+            urlInfo = new UrlInfo();
+        } else if (url.contains("{")) {
+            urlInfo = parseVariableUrl(url);
         } else {
-            urlInfo = parseUrl(requestInfo.getUrl());
+            urlInfo = parseUrl(url);
         }
 
         basicInfo = BasicInfo.builder()
             .host(urlInfo.getHost())
             .protocol(urlInfo.getProtocol())
             .path(urlInfo.getBasePath())
-            .inputSchema(requestInfo.getInputSchema())
+            .inputSchema(requestInfo != null ? requestInfo.getInputSchema() : null)
             .build();
 
         // basic path若只有/,则忽略
@@ -2282,7 +2291,7 @@ public class PluginService implements IPluginService {
      */
     public void adaptPluginUrlWhenCreateOrModify(BasicInfo basicInfo, UrlInfo urlInfo) {
         String basePath = urlInfo.getBasePath();
-        if (basePath.endsWith("/")) {
+        if (basePath != null && basePath.endsWith("/")) {
             basePath = basePath.substring(0, basePath.length() - 1);
             basicInfo.setPath(basePath);
         }

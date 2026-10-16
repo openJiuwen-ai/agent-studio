@@ -89,6 +89,18 @@ public class ShowMemoryRepoResponseBody implements Serializable {
     @Schema(description = "时间跨度（天）", example = "30")
     private Integer timeSpan = null;
 
+    @JsonProperty("memory_backend_type")
+    @Schema(description = "记忆后端类型：BUILTIN/EXTERNAL", example = "BUILTIN")
+    private String memoryBackendType = null;
+
+    @JsonProperty("memory_service_instance_id")
+    @Schema(description = "外部记忆服务实例ID（EXTERNAL时非空）", example = "instance-001")
+    private String memoryServiceInstanceId = null;
+
+    @JsonProperty("scope_model_config")
+    @Schema(description = "scope级模型配置JSON")
+    private String scopeModelConfig = null;
+
     public String getMemoryRepoId() {
         return memoryRepoId;
     }
@@ -207,6 +219,33 @@ public class ShowMemoryRepoResponseBody implements Serializable {
         return this;
     }
 
+    public String getMemoryBackendType() {
+        return memoryBackendType;
+    }
+
+    public ShowMemoryRepoResponseBody setMemoryBackendType(String memoryBackendType) {
+        this.memoryBackendType = memoryBackendType;
+        return this;
+    }
+
+    public String getMemoryServiceInstanceId() {
+        return memoryServiceInstanceId;
+    }
+
+    public ShowMemoryRepoResponseBody setMemoryServiceInstanceId(String memoryServiceInstanceId) {
+        this.memoryServiceInstanceId = memoryServiceInstanceId;
+        return this;
+    }
+
+    public String getScopeModelConfig() {
+        return scopeModelConfig;
+    }
+
+    public ShowMemoryRepoResponseBody setScopeModelConfig(String scopeModelConfig) {
+        this.scopeModelConfig = scopeModelConfig;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -225,6 +264,9 @@ public class ShowMemoryRepoResponseBody implements Serializable {
         sb.append("    updateTime: ").append(toIndentedString(updateTime)).append("\n");
         sb.append("    conversationRound: ").append(toIndentedString(conversationRound)).append("\n");
         sb.append("    timeSpan: ").append(toIndentedString(timeSpan)).append("\n");
+        sb.append("    memoryBackendType: ").append(toIndentedString(memoryBackendType)).append("\n");
+        sb.append("    memoryServiceInstanceId: ").append(toIndentedString(memoryServiceInstanceId)).append("\n");
+        sb.append("    scopeModelConfig: ").append(toIndentedString(scopeModelConfig)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -249,14 +291,17 @@ public class ShowMemoryRepoResponseBody implements Serializable {
             showMemoryRepoResponseBody.lastUpdateUserName) && Objects.equals(this.updateTime,
             showMemoryRepoResponseBody.updateTime)
             && Objects.equals(this.conversationRound, showMemoryRepoResponseBody.conversationRound)
-            && Objects.equals(this.timeSpan, showMemoryRepoResponseBody.timeSpan);
+            && Objects.equals(this.timeSpan, showMemoryRepoResponseBody.timeSpan)
+            && Objects.equals(this.memoryBackendType, showMemoryRepoResponseBody.memoryBackendType)
+            && Objects.equals(this.memoryServiceInstanceId, showMemoryRepoResponseBody.memoryServiceInstanceId)
+            && Objects.equals(this.scopeModelConfig, showMemoryRepoResponseBody.scopeModelConfig);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(memoryRepoId, name, description, icon, longTermMemoryStrategies, createdUserId,
             createdUserName, createTime, lastUpdateUserId, lastUpdateUserName, updateTime,
-            conversationRound, timeSpan);
+            conversationRound, timeSpan, memoryBackendType, memoryServiceInstanceId, scopeModelConfig);
     }
 
     /**

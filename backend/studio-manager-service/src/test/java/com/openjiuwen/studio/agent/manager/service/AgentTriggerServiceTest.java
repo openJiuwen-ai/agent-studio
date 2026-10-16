@@ -93,4 +93,45 @@ class AgentTriggerServiceTest {
     void testExecuteInternal_NoTaskType() {
         assertDoesNotThrow(() -> agentTriggerService.executeInternal(jobExecutionContext));
     }
+
+    @Test
+    void testExecuteTarget_AgentTask_InvokesHandleAgentTask() {
+        jobDataMap.put(CommonConstant.AGENT_ID, "agent-1");
+        jobDataMap.put(CommonConstant.PROMPT, "hello");
+        jobDataMap.put(CommonConstant.PROJECT_ID, "proj-1");
+        jobDataMap.put(CommonConstant.AGENT_RUNTIME_ENDPOINT, "http://runtime");
+        jobDataMap.put(CommonConstant.RUN_AGENT_STREAM_URL, "/api/%s/%s/stream");
+        jobDataMap.put(CommonConstant.WORKSPACE_ID, "ws-1");
+        jobDataMap.put(CommonConstant.TRIGGER_ID, "trigger-1");
+
+        assertDoesNotThrow(() -> agentTriggerService.executeTarget(jobDataMap));
+    }
+
+    @Test
+    void testExecuteTarget_WorkflowTask_InvokesHandleWorkflowTask() {
+        jobDataMap.put(CommonConstant.Workflow.ID, "wf-1");
+        jobDataMap.put(CommonConstant.PROMPT, "hello");
+        jobDataMap.put(CommonConstant.PROJECT_ID, "proj-1");
+        jobDataMap.put(CommonConstant.AGENT_RUNTIME_ENDPOINT, "http://runtime");
+        jobDataMap.put(CommonConstant.RUN_AGENT_STREAM_URL, "/api/%s/%s/stream/%s");
+        jobDataMap.put(CommonConstant.WORKSPACE_ID, "ws-1");
+        jobDataMap.put(CommonConstant.TRIGGER_ID, "trigger-1");
+
+        assertDoesNotThrow(() -> agentTriggerService.executeTarget(jobDataMap));
+    }
+
+    @Test
+    void testExecuteTarget_NoValidTarget_LogsErrorAndDoesNotThrow() {
+        jobDataMap.put(CommonConstant.TRIGGER_ID, "trigger-orphan");
+        jobDataMap.put(CommonConstant.PROMPT, "orphan prompt");
+
+        // 既无 AGENT_ID 也无 Workflow.ID，应进入 else 分支打 ERROR 日志，不抛异常
+        assertDoesNotThrow(() -> agentTriggerService.executeTarget(jobDataMap));
+    }
+
+    @Test
+    void testExecuteTarget_EmptyJobDataMap_LogsErrorAndDoesNotThrow() {
+        // 完全空的 JobDataMap，应进入 else 分支打 ERROR 日志，不抛异常
+        assertDoesNotThrow(() -> agentTriggerService.executeTarget(jobDataMap));
+    }
 }

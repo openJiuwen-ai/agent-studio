@@ -119,7 +119,20 @@ class ControllerEventsProcessor(BaseEventsProcessor):
     @classmethod
     def process_agent_interrupted_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         trace.block = True
-        return None
+        # 转发中断事件（仅透传 runner 层注入的 start_time/end_time 白名单字段），
+        # 供前端在中断轮（如等待用户输入）也能显示本轮运行时间，与 task_end 表现一致
+        data = {}
+        incoming_data = full_data.get("data")
+        if isinstance(incoming_data, dict):
+            for timing_key in ("start_time", "end_time"):
+                if timing_key in incoming_data:
+                    data[timing_key] = incoming_data[timing_key]
+        return EventField(
+            event=ConversationEvent.AGENT_INTERRUPTED.value,
+            conversation_id=trace.conversation_id,
+            data=data,
+            createdTime=full_data.get("createdTime"),
+        )
 
     @classmethod
     def process_task_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
@@ -129,6 +142,13 @@ class ControllerEventsProcessor(BaseEventsProcessor):
             if not execution_id:
                 execution_id = "executionId"
             data["executionId"] = execution_id
+        # 透传 runner 层（jiwen _process_streaming_output）注入的 start_time/end_time，
+        # 供前端计算多智能体任务的运行时间，与工作流 workflow_finished 事件的表现对齐
+        incoming_data = full_data.get("data")
+        if isinstance(incoming_data, dict):
+            for timing_key in ("start_time", "end_time"):
+                if timing_key in incoming_data:
+                    data[timing_key] = incoming_data[timing_key]
         return EventField(
             event=ConversationEvent.TASK_END.value,
             conversation_id=trace.conversation_id,

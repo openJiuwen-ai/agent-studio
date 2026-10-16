@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
+import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.relation.ReferenceTypeEnum;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginBaseImpl;
 
@@ -80,7 +81,7 @@ class WorkflowManagementTest {
         when(shareResourceEntity.getResourceId()).thenReturn("resourceId");
         when(pluginBaseImpl.isInnerType(eq("resourceId"))).thenReturn(true);
 
-        String result = workflowManagementService.getReferenceType(shareResourceEntity);
+        String result = workflowManagementService.getReferenceType(ResourceTypeEnum.TOOL, shareResourceEntity);
         assertEquals(ReferenceTypeEnum.DIRECT.getValue(), result);
     }
 
@@ -94,7 +95,7 @@ class WorkflowManagementTest {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("workspaceId");
 
-            String result = workflowManagementService.getReferenceType(shareResourceEntity);
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.TOOL, shareResourceEntity);
             assertEquals(ReferenceTypeEnum.DIRECT.getValue(), result);
         }
     }
@@ -109,7 +110,7 @@ class WorkflowManagementTest {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("differentWorkspaceId");
 
-            String result = workflowManagementService.getReferenceType(shareResourceEntity);
+            String result = workflowManagementService.getReferenceType(ResourceTypeEnum.TOOL, shareResourceEntity);
             assertEquals(ReferenceTypeEnum.SHARE.getValue(), result);
         }
     }
@@ -126,7 +127,7 @@ class WorkflowManagementTest {
                 when(pluginBaseImpl.isInnerType(anyString())).thenReturn(true);
 
                 // When
-                String result = workflowManagementService.getReferenceType(null);
+                String result = workflowManagementService.getReferenceType(ResourceTypeEnum.TOOL, null);
             }
         });
     }

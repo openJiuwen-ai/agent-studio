@@ -170,7 +170,7 @@ class TestGetConversationVariables:
             "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
-            "agent_runtime.serve.apis.conversation_variable_api.ErrorContextBuilder"
+            "agent_runtime.serve.error_rsp.ErrorContextBuilder"
             ".get_language_context",
             return_value=("err", "msg", "reason", "suggestion"),
         ), patch(
@@ -262,17 +262,14 @@ class TestUpdateConversationVariable:
             assert result.value == "brand_new"
 
     @pytest.mark.asyncio
-    async def test_redis_empty_returns_400(self):
+    async def test_redis_empty_upserts_variable(self):
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=None)
+        mock_client.set = AsyncMock(return_value=None)
 
         with patch(
             "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
-        ), patch(
-            "agent_runtime.serve.apis.conversation_variable_api.ErrorContextBuilder"
-            ".get_language_context",
-            return_value=("err", "msg", "reason", "suggestion"),
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
         ) as mock_ctx:
@@ -290,5 +287,12 @@ class TestUpdateConversationVariable:
                 conversation_id="conv-456",
                 var_id="var1",
             )
-            assert isinstance(result, JSONResponse)
-            assert result.status_code == 400
+            # upsert：无历史记录时直接创建并写入（200，不返回 400）
+            assert isinstance(result, VariableInfo)
+            assert result.name == "var1"
+            assert result.value == "val"
+            mock_client.set.assert_called_once()
+            set_args = mock_client.set.call_args[0]
+            assert set_args[0] == "global.vals.agent-123.conv-456"
+            assert json.loads(set_args[1]) == {"var1": "val"}
+

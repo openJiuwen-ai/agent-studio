@@ -43,13 +43,24 @@ class ConversationHistory:
         return self._result_message
 
     @staticmethod
-    def convert_messages_to_chat_history_dict(latest_messages):
-        """convert conversation messages to array of dict"""
+    def convert_messages_to_chat_history_dict(
+        latest_messages, filter_history: bool = True
+    ):
+        """convert conversation messages to array of dict
+
+        Args:
+            latest_messages: 待转换的消息列表
+            filter_history: 是否过滤enable_history=False的消息；持久化场景
+                （intermediate_message）需保留这些消息并携带标志位，应传False，
+                否则下一轮加载时标志位丢失会被默认补True
+        """
         formatted_messages = []
         for msg in latest_messages:
-            if not msg.enable_history:
+            if filter_history and not msg.enable_history:
                 continue
             message_dict = {"role": msg.role, "content": msg.content}
+            if msg.enable_history is False:
+                message_dict["enable_history"] = False
             if msg.files:
                 message_dict["files"] = msg.files
             if msg.agent_id:

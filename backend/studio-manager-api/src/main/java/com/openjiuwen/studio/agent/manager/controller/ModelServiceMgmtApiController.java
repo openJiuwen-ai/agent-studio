@@ -5,7 +5,6 @@ package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.manager.dto.AvailableModelServicesQo;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
-import com.openjiuwen.studio.agent.manager.dto.MaasServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelNameResp;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceListQo;
@@ -59,7 +58,7 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
     }
 
     @Override
-    public ResponseEntity<Object> createModelService(String projectId, String workspaceId, Boolean availableCheck,
+    public ResponseEntity<String> createModelService(String projectId, String workspaceId, Boolean availableCheck,
         ModelServiceReq body) {
         return ResponseModel.success(
             modelServiceMgmtService.createModelService(projectId, workspaceId, availableCheck, body));
@@ -73,11 +72,6 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
     @Override
     public ResponseEntity<ModelNameResp> existsModelName(String projectId, String workspaceId, String modelName) {
         return ResponseModel.success(modelServiceMgmtService.existsModelName(projectId, workspaceId, modelName));
-    }
-
-    @Override
-    public ResponseEntity<MaasServiceRsp> maasModelServiceList(String projectId) {
-        return ResponseModel.success(modelServiceMgmtService.maasModelServiceList(projectId));
     }
 
     @Override
@@ -115,7 +109,7 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
     }
 
     @Override
-    public ResponseEntity<Object> updateModelService(String projectId, String workspaceId, Boolean availableCheck,
+    public ResponseEntity<Void> updateModelService(String projectId, String workspaceId, Boolean availableCheck,
         String id, ModelServiceReq body) {
         return ResponseModel.success(
             modelServiceMgmtService.updateModelService(projectId, workspaceId, availableCheck, id, body));

@@ -57,7 +57,11 @@ class TestThinkingEnabled:
         model_config = result.model_config
         extra_body = getattr(model_config, "extra_body", None)
         assert extra_body is not None
-        assert extra_body == {"thinking": {"type": "enabled"}}
+        assert extra_body == {
+            "thinking": {"type": "enabled"},
+            "enable_thinking": True,
+            "chat_template_kwargs": {"enable_thinking": True},
+        }
 
 
 class TestThinkingDisabled:
@@ -71,7 +75,11 @@ class TestThinkingDisabled:
 
         model_config = result.model_config
         extra_body = getattr(model_config, "extra_body", None)
-        assert extra_body == {"thinking": {"type": "disabled"}}
+        assert extra_body == {
+            "thinking": {"type": "disabled"},
+            "enable_thinking": False,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
 
 
 class TestThinkingAbsent:

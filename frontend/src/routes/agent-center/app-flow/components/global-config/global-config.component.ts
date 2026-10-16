@@ -1,8 +1,8 @@
 import { TextFieldModule } from "@angular/cdk/text-field";
 import {
   ChangeDetectorRef,
-  Component, ElementRef,
-  EventEmitter, HostListener,
+  Component,
+  EventEmitter,
   Input,
   OnInit,
   Output,
@@ -47,17 +47,15 @@ import {
 import { AuditConfigModalComponent } from "@routes/agent-center/app-agent/components/audit-config-modal/audit-config-modal.component";
 import { TtsPlayerService } from "@services/tts-player.service";
 import { LLMSelectComponent } from "@routes/agent-center/app-flow/components/llm-select/llm-select.component";
-import { EnvManagementService } from "@routes/platform-management/environment-management/env-management.service";
-import { EnvVariableComponent } from "@routes/platform-management/environment-management/env-variable/env-variable.component";
 import {
   StartImportJsonModalComponent
 } from "@routes/agent-center/app-flow/components/start-import-json-modal/start-import-json-modal.component";
 import { CommonService } from "@services/common.service";
 import { NzModalService } from "ng-zorro-antd/modal";
 import { NzMessageService } from "ng-zorro-antd/message";
-import { ClickOutsideDirective } from "@shared/directives/click-outside.directive";
 import { NzTreeNodeOptions } from "ng-zorro-antd/tree";
 import { startSchemaStrField } from '@routes/agent-center/app-plugin/utils';
+import { ClickOutsideDirective } from "@shared/directives/click-outside.directive";
 import { ObjectTemplateComponent } from '@routes/object-manage/component/object-template/object-template.component';
 
 const QUES_LIMIT = 3;
@@ -78,9 +76,8 @@ const QUES_LIMIT = 3;
     TextFieldModule,
     AuditConfigModalComponent,
     LLMSelectComponent,
-    EnvVariableComponent,
     MemoryLibSelector,
-    ClickOutsideDirective
+    ClickOutsideDirective,
   ],
   providers: [
     {
@@ -104,6 +101,8 @@ export class GlobalConfigComponent
 
   @Output() configsChange = new EventEmitter<IFlowConfigs>();
 
+  @Output() memoryRenamed = new EventEmitter<{ oldRef: string; newRef: string }[]>();
+
   @Output() close = new EventEmitter<void>();
 
   @ViewChild('genPrologueTip') genPrologueTip: any;
@@ -121,8 +120,6 @@ export class GlobalConfigComponent
   @ViewChild("addMemoModal") addMemoModal: TemplateRef<HTMLDivElement>;
 
   @ViewChild(AuditConfigModalComponent) auditConfigModal: any;
-
-  @Output() upDateEnv = new EventEmitter<any>();
 
   public changeUrl = cdnAssetUrl;
 
@@ -213,14 +210,14 @@ export class GlobalConfigComponent
     });
   }
 
-  public envCfgOptions: any = [];
-  public selectEnv = "";
   public showSafetyBarrier = false;
   public memoryLibData = {
     data: [],
     isLoading: false
   };
   public treeNodes: NzTreeNodeOptions[] = [];
+
+  private originNames = new WeakMap<object, string>();
 
   protected isHCS = false;
   public showSettingContentReview = false;
@@ -255,8 +252,6 @@ export class GlobalConfigComponent
     public configServ: AgentConfigService,
     private ttsPlayerServe: TtsPlayerService,
     private nzMessage: NzMessageService,
-    private environmentManagementService: EnvManagementService,
-    private el: ElementRef,
     private commonService: CommonService
   ) {
     super(nodeServ, appFlowServ);
@@ -270,7 +265,6 @@ export class GlobalConfigComponent
       this.configs = flowConfig;
     }
     this.getTimbreList();
-    this.getInitEnvOptions();
     this.modelListSubscription = this.appFlowServ
       .modelListUpdate()
       .pipe(takeUntil(this.destroy$))
@@ -284,7 +278,6 @@ export class GlobalConfigComponent
       this.modelOptions
     );
     this.modelSwitch = this.configs?.default_model_switch;
-    this.selectEnv = this.configs?.environment || "";
 
     this.questions = cloneDeep(this.configs?.suggest_queries) ?? [];
     if (this.questions.length < QUES_LIMIT) {
@@ -321,6 +314,8 @@ export class GlobalConfigComponent
     );
     this.treeNodes = this.convertToTreeNodes(this.assignmentMemos);
 
+    this.stampOriginNames();
+
     this.showSafetyBarrier =
       !!this.configServ.getConfigs()?.safety_barrier_display;
 
@@ -328,26 +323,6 @@ export class GlobalConfigComponent
     this.probeConfig.enabled = this.configs.additional_questions_config?.enable ?? false;
     this.probeConfig.probeInputed = this.configs.additional_questions_config?.prompt || this.followupPlaceholder;
     this.resetProbeDisable();
-  }
-
-  getInitEnvOptions() {
-    this.envCfgOptions = [];
-
-    this.environmentManagementService
-      .getEnvironmentList({
-        offset: 0,
-        limit: 99
-      })
-      .then((res) => {
-        const selectEnv = res.env_info?.find((item) => item.id === this.selectEnv);
-        if (!selectEnv && this.selectEnv) {
-          this.selectEnv = "";
-        }
-        this.envCfgOptions = res?.env_info?.map((item) => {
-          item.disabled = item.status !== "READY";
-          return item;
-        });
-      });
   }
 
   private getTimbreList() {
@@ -759,6 +734,8 @@ export class GlobalConfigComponent
       desc: ""
     };
     this.treeNodes = [...this.treeNodes, child];
+    // New node has empty name from getInitOutputParamConfig; a valid
+    // snapshot is established on the first onConfirm → restampOriginNames.
     this.cdr.detectChanges();
   }
 
@@ -861,10 +838,64 @@ export class GlobalConfigComponent
   onNameChange() {
   }
 
+  private stampOriginNames() {
+    this.autoMemos.forEach((m) => { if (!this.originNames.has(m)) this.originNames.set(m, m.name); });
+    const stampTree = (nodes: any[], parentPath: string) => {
+      nodes.forEach((t) => {
+        const fullPath = this.buildChildPath(parentPath, t);
+        // Skip empty names: a child created by addChild/addAssignmentMemos has
+        // name '' until the user types one; its baseline is stamped on the
+        // next restampOriginNames after save.
+        if (t.name && !this.originNames.has(t)) this.originNames.set(t, fullPath);
+        if (t.children) stampTree(t.children, fullPath);
+      });
+    };
+    stampTree(this.treeNodes, '');
+  }
+
+  private buildChildPath(parentPath: string, child: any): string {
+    if (!parentPath) return child.name;
+    if (child.parentType?.startsWith('array')) return `${parentPath}[0].${child.name}`;
+    return `${parentPath}.${child.name}`;
+  }
+
+  private restampOriginNames() {
+    this.originNames = new WeakMap<object, string>();
+    this.stampOriginNames();
+  }
+
+  private detectRenames(): { oldRef: string; newRef: string }[] {
+    const renames: { oldRef: string; newRef: string }[] = [];
+    this.autoMemos.forEach((m) => {
+      const originName = this.originNames.get(m);
+      if (!originName || !m.name || originName === m.name) {
+        return;
+      }
+      renames.push({
+        oldRef: `memory.${originName}`,
+        newRef: `memory.${m.name}`,
+      });
+    });
+    const detectTree = (nodes: any[], parentPath: string) => {
+      nodes.forEach((t) => {
+        const originFullPath = this.originNames.get(t);
+        const currentFullPath = this.buildChildPath(parentPath, t);
+        if (originFullPath && t.name && originFullPath !== currentFullPath) {
+          renames.push({
+            oldRef: `memory.${originFullPath}`,
+            newRef: `memory.${currentFullPath}`,
+          });
+        }
+        if (t.children) detectTree(t.children, currentFullPath);
+      });
+    };
+    detectTree(this.treeNodes, '');
+    return renames;
+  }
+
   onConfirm(): void {
     this.assignmentMemos = this.convertToAssignMemos(this.treeNodes);
     const newConf: IFlowConfigs = cloneDeep(this.configs);
-    newConf.environment = this.selectEnv || "";
     newConf.trigger_list = this.triggerAdded.list;
     newConf.prologue = this.prologue;
     newConf.suggest_queries = this.questions.filter((question) => question);
@@ -905,11 +936,9 @@ export class GlobalConfigComponent
       enable: this.probeConfig.enabled,
       prompt: this.probeConfig.enabled || this.probeConfig.probeInputed !== this.followupPlaceholder ? this.probeConfig.probeInputed : ""
     };
+    this.memoryRenamed.emit(this.detectRenames());
     this.configsChange.emit(newConf);
-  }
-
-  resetEnvList(e) {
-    this.upDateEnv.emit(e);
+    this.restampOriginNames();
   }
 
   updateModel(e) {
@@ -933,8 +962,6 @@ export class GlobalConfigComponent
     return index;
   }
 
-  public showCard = false;
-
   importJson() {
     const modalRef = this.nzModal.create({
       nzTitle: this.i18n.transform("import_json"),
@@ -950,6 +977,7 @@ export class GlobalConfigComponent
       const req = startSchemaStrField(JSON.stringify(data));
       this.assignmentMemos = this.fields2Views(req);
       this.treeNodes=this.convertToTreeNodes(this.assignmentMemos);
+      this.stampOriginNames();
       this.cdr.detectChanges();
       modalRef.close();
     })
@@ -967,6 +995,7 @@ export class GlobalConfigComponent
         templatesSelected: (data) => {
           this.assignmentMemos = [...this.assignmentMemos, ...this.fields2Views(data)];
           this.treeNodes = this.convertToTreeNodes(this.assignmentMemos);
+          this.stampOriginNames();
           this.cdr.detectChanges();
           modalRef.close();
         },
@@ -1048,27 +1077,6 @@ export class GlobalConfigComponent
     });
 
     return views;
-  }
-
-  envSelect($event) {
-    this.showCard = false;
-  }
-
-  ngModelChange($event) {
-    this.showCard = false;
-  }
-
-  @HostListener("document:click", ["$event"])
-  onDocumentClick(event: Event) {
-    if (!this.showCard) return;
-
-    const target = event.target as HTMLElement;
-    const button = this.el.nativeElement.querySelector("button[nz-button]");
-    const card = this.el.nativeElement.querySelector(".card");
-
-    if (!(button?.contains(target) || card?.contains(target))) {
-      this.showCard = false;
-    }
   }
 
   get site() {

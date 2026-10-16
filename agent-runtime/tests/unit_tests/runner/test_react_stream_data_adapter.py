@@ -57,3 +57,23 @@ def test_interaction_accepts_dict_payload_and_structured_question():
     assert events[0]["data"]["answer"] == "是否批准？"
     assert events[0]["data"]["interaction_id"] == "approval-r01"
     assert events[0]["data"]["should_interrupt"] is True
+
+
+def test_interaction_pending_flag_set_by_interaction_chunk():
+    """交互中断帧应置位 interaction_pending，供 runner 决定 post_run 同步/后台。"""
+    adapter = ReactStreamDataAdapter(execution_id="exec-r04")
+    assert adapter.interaction_pending is False
+
+    chunk = SimpleNamespace(
+        type="__interaction__",
+        payload=SimpleNamespace(id="questioner-r04", value="请确认是否继续？"),
+    )
+    adapter.adapt(chunk)
+    assert adapter.interaction_pending is True
+
+
+def test_interaction_pending_not_set_by_non_interaction_chunks():
+    """普通流式帧不应置位 interaction_pending。"""
+    adapter = ReactStreamDataAdapter(execution_id="exec-r05")
+    adapter.adapt(SimpleNamespace(type="llm_output", payload={"content": "hi"}))
+    assert adapter.interaction_pending is False

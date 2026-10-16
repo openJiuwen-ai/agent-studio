@@ -34,12 +34,12 @@ public class AuthConfigListQo implements Serializable {
     private String workspaceId = null;
 
     @JsonProperty("provider_id")
-    @Schema(description = "提供者ID", example = "example-id-123")
+    @Schema(description = "提供者ID；provider_id 与 metadata_id 至少传其一", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String providerId = null;
 
     @JsonProperty("metadata_id")
-    @Schema(description = "元数据", example = "example-id-123")
+    @Schema(description = "元数据；provider_id 与 metadata_id 至少传其一", example = "example-id-123")
     @Pattern(regexp = "^[a-zA-Z0-9_-]{1,80}$")
     private String metadataId = null;
 

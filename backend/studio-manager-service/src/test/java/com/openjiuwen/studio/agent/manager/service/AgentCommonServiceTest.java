@@ -617,12 +617,33 @@ class AgentCommonServiceTest {
         when(releaseVersion.getAppType()).thenReturn("agent");
         when(releaseVersion.getStatus()).thenReturn("published");
 
+        when(historyReleaseVersionMapper.findByAppIdAndVersionId("testAppId", "v1.0")).thenReturn(null);
         when(historyReleaseVersionMapper.insert(any(HistoryReleaseVersionEntity.class))).thenReturn(1);
         when(releaseVersionMapper.deleteByPrimaryKey(anyString())).thenReturn(1);
 
         agentCommonService.softDeleteReleaseVersionById(releaseVersion);
 
+        verify(historyReleaseVersionMapper, times(1)).findByAppIdAndVersionId("testAppId", "v1.0");
         verify(historyReleaseVersionMapper, times(1)).insert(any(HistoryReleaseVersionEntity.class));
+        verify(releaseVersionMapper, times(1)).deleteByPrimaryKey("id-123");
+    }
+
+    @Test
+    void testSoftDeleteReleaseVersionById_historyExist() {
+        // 版本删除后又被导入重建（同appId+versionId），再次删除时历史表已有归档记录，应跳过插入避免唯一索引冲突
+        ReleaseVersion releaseVersion = mock(ReleaseVersion.class);
+        when(releaseVersion.getId()).thenReturn("id-123");
+        when(releaseVersion.getVersionId()).thenReturn("v1.0");
+        when(releaseVersion.getAppId()).thenReturn("testAppId");
+
+        HistoryReleaseVersionEntity existingHistory = mock(HistoryReleaseVersionEntity.class);
+        when(historyReleaseVersionMapper.findByAppIdAndVersionId("testAppId", "v1.0")).thenReturn(existingHistory);
+        when(releaseVersionMapper.deleteByPrimaryKey(anyString())).thenReturn(1);
+
+        agentCommonService.softDeleteReleaseVersionById(releaseVersion);
+
+        verify(historyReleaseVersionMapper, times(1)).findByAppIdAndVersionId("testAppId", "v1.0");
+        verify(historyReleaseVersionMapper, times(0)).insert(any(HistoryReleaseVersionEntity.class));
         verify(releaseVersionMapper, times(1)).deleteByPrimaryKey("id-123");
     }
 

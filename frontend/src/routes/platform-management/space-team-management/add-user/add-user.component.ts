@@ -48,13 +48,14 @@ export class AddUserComponent implements OnInit, OnDestroy {
     private modalRef: NzModalRef
   ) {}
 
- async ngOnInit() {
+  async ngOnInit() {
     const lang = CommonUtils.getLanguage();
-   this.integrationTabsOption = this.roles_all.map((item) => {
-      item.disabled = item.roleId === 'OWNER';
-      item.roleName = lang === 'zh-cn' ? item.roleNameCn : CommonUtils.titleCase3(item.roleNameEn)
+    // nz-select 的 [nzOptions] 需要 { label, value } 结构，否则下拉选项显示为空白
+    this.integrationTabsOption = this.roles_all.map((item) => {
       return {
-        ...item,
+        label: lang === 'zh-cn' ? item.roleNameCn : CommonUtils.titleCase3(item.roleNameEn),
+        value: item.roleId,
+        disabled: item.roleId === 'OWNER',
       };
     });
     await this.get_space_members();
@@ -133,6 +134,38 @@ export class AddUserComponent implements OnInit, OnDestroy {
     this.checkedArray = this.checkedArray.filter(
       (item) => item.memberId !== data.memberId,
     );
+    this.syncCheckAll();
+  }
+
+  /** 单个成员是否已勾选（按 memberId 比较，避免对象引用差异导致状态不同步） */
+  isChecked(item: any): boolean {
+    return this.checkedArray.some((c) => c.memberId === item.memberId);
+  }
+
+  /** 单个成员勾选变化：同步到 checkedArray，左侧勾选态与右侧“已选”才会响应 */
+  onItemChecked(item: any, checked: boolean) {
+    if (checked) {
+      if (!this.isChecked(item)) {
+        this.checkedArray = [...this.checkedArray, item];
+      }
+    } else {
+      this.checkedArray = this.checkedArray.filter(
+        (c) => c.memberId !== item.memberId,
+      );
+    }
+    this.syncCheckAll();
+  }
+
+  /** 当前列表中可勾选的成员（搜索过滤后即为可见项；已存在成员 disabled，不参与） */
+  private get selectableMembers(): Array<any> {
+    return this.dataArray1.filter((item) => !item.disabled);
+  }
+
+  /** 根据当前列表的勾选情况回填“全部”复选框 */
+  syncCheckAll() {
+    const selectable = this.selectableMembers;
+    this.checkAll =
+      selectable.length > 0 && selectable.every((item) => this.isChecked(item));
   }
 
   async getAllUsersFn() {
@@ -164,38 +197,45 @@ export class AddUserComponent implements OnInit, OnDestroy {
       this.dataArray1 = list;
       this.originDataArray1 = list;
       this.checkedArray = this.has_add_user;
+      this.syncCheckAll();
     });
   }
 
   onClear() {
     this.dataArray1 = this.originDataArray1;
+    this.syncCheckAll();
   }
 
   onSearch(value: string) {
     if (!value) {
       this.dataArray1 = this.originDataArray1;
-      return;
+    } else {
+      // 始终基于完整列表过滤，避免在已过滤结果上二次过滤导致结果丢失
+      this.dataArray1 = this.originDataArray1.filter(
+        (item) => item.memberName.indexOf(value) > -1,
+      );
     }
-    this.dataArray1 = this.dataArray1.filter(
-      (item) => item.memberName.indexOf(value) > -1,
-    );
-  }
-
-  onSelectChange(info) {
-    if (!info) {
-      this.dataArray1 = this.originDataArray1;
-      return;
-    }
+    // 可见列表变化后同步“全部”复选框状态
+    this.syncCheckAll();
   }
 
   onNgcheckAll(info) {
+    const selectable = this.selectableMembers;
     if (info) {
-      const has_no_add = this.dataArray1.filter(
-        (item) => !this.has_add_user_id.includes(item.memberId),
+      // 全选：仅补齐当前列表中尚未勾选的成员，保留其余已勾选项
+      // （含搜索前已勾选、当前被过滤隐藏的成员，避免整体重建导致勾选丢失）
+      const checkedIds = this.checkedArray.map((c) => c.memberId);
+      const toAdd = selectable.filter(
+        (item) => !checkedIds.includes(item.memberId),
       );
-      this.checkedArray = [...this.has_add_user, ...has_no_add];
+      this.checkedArray = [...this.checkedArray, ...toAdd];
     } else {
-      this.checkedArray = this.has_add_user;
+      // 取消全选：仅移除当前列表中的成员，保留其余已勾选项
+      const selectableIds = selectable.map((item) => item.memberId);
+      this.checkedArray = this.checkedArray.filter(
+        (c) => !selectableIds.includes(c.memberId),
+      );
     }
+    this.syncCheckAll();
   }
 }

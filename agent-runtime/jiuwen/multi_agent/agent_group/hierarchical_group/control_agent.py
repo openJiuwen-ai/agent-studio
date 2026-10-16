@@ -5,6 +5,7 @@
 
 import asyncio
 import time
+import logging
 from typing import Union, Any, AsyncGenerator, List, Optional, Set, Tuple
 
 from jiuwen.common.exception.status_code import StatusCode
@@ -29,6 +30,10 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.interrupted_agents: List[str] = []
         self.call_agent_history: List[str] = []
         self.message_context: ConversationHistory = ConversationHistory()
+        # 本轮是否由「恢复被中断 agent」触发（WaitUserInput 等待输入场景）。
+        # select_agent 命中中断恢复时置位，execute 据此补发一次 workflow_resume，
+        # 使 manager 端取回上一轮缓存的 executionId、把调试记录合并为一条。
+        self._resumed_from_interrupt: bool = False
 
     @staticmethod
     def _create_error_message(
@@ -46,6 +51,32 @@ class HierarchicalControlAgent(BaseControlAgent):
                     message=error_msg,
                 ),
                 execution_id=execution_id,
+            ),
+            timestamp=time.time(),
+        )
+
+    @staticmethod
+    def _create_workflow_resume_message(agent_id: str) -> Message:
+        """创建恢复中断agent的流消息
+
+        WaitUserInput（等待输入）场景下工作流是正常完成后中断的，任务队列中
+        没有 WORKFLOW_RESUME 任务，工作流级 resume 事件不会发出；manager 端
+        依赖 workflow_resume 事件取回上一轮缓存的 executionId 来合并调试记录，
+        因此在恢复被中断 agent 时由控制 agent 补发该事件。
+        """
+        logger.info(f"Creating agent resume stream data for agent: {agent_id}")
+        return Message(
+            type=MemberMessageType.STREAM,
+            agent_id="control_agent",
+            data=StreamData(
+                code=StreamCode.WORKFLOW_RESUME_MESSAGE.value,
+                msg="controller_agent_resume",
+                data={
+                    "type": "controller_agent_resume",
+                    "reason": "resume_interrupted_agent",
+                    "agent_id": agent_id,
+                },
+                execution_id="",
             ),
             timestamp=time.time(),
         )
@@ -69,13 +100,22 @@ class HierarchicalControlAgent(BaseControlAgent):
                     force_default_workflow,
                 ) = await self._select_agent_with_cycle_check(current_inputs)
                 self.current_agent_calls_count += 1
-                logger.info(
-                    f"Agent call count: {self.current_agent_calls_count}/{self.config.max_agent_calls}"
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "Agent call count: %s/%s", self.current_agent_calls_count, self.config.max_agent_calls
+                    )
 
                 if not agent_id:
-                    logger.info("No more agents available for execution")
+                    logger.debug("No more agents available for execution")
                     break
+
+                # 恢复被中断 agent（如 WaitUserInput 等待输入后的下一轮）：
+                # 补发 workflow_resume 事件，manager 端据此取回上一轮缓存的
+                # executionId，把本轮调试记录合并进上一条 execution
+                if self._resumed_from_interrupt:
+                    self._resumed_from_interrupt = False
+                    yield self._create_workflow_resume_message(agent_id)
+
                 self.call_agent_history.append(agent_id)
                 # 2. 调用agent
                 stream_handler = StreamHandler()
@@ -87,9 +127,8 @@ class HierarchicalControlAgent(BaseControlAgent):
                     )
                     logger.debug(
                         "load conv_history related to agent_id %s: %s",
-                        agent_id,
-                        self._get_history(current_inputs),
-                        simple_log=f"load conv_history related to agent_id {agent_id}",
+                        agent_id, self._get_history(current_inputs),
+                        simple_log="load conv_history related to agent_id %s" % (agent_id),
                     )
                     send_task = asyncio.create_task(
                         self.runner.send_message(
@@ -121,6 +160,13 @@ class HierarchicalControlAgent(BaseControlAgent):
                             agent_id,
                         )
 
+                except asyncio.CancelledError:
+                    # 上游终止（运行中取消）传播到本层：连带取消在飞的成员执行
+                    # （级联终止，避免 finally 里 await send_task 拖到自然结束），
+                    # 然后继续向上传播，保证 HTTP 流即时掐断且无终态 done
+                    if send_task and not send_task.done():
+                        send_task.cancel()
+                    raise
                 except Exception as e:
                     error_msg = f"Agent execution failed: {str(e)}"
                     yield self._log_and_yield_error(error_msg, agent_id)
@@ -134,7 +180,7 @@ class HierarchicalControlAgent(BaseControlAgent):
 
             # 如果达到最大调用次数，返回Error消息
             if (
-                self.current_agent_calls_count > self.config.max_agent_calls
+                self.current_agent_calls_count >= self.config.max_agent_calls
                 and not force_default_workflow
             ):
                 error_msg = (
@@ -166,14 +212,19 @@ class HierarchicalControlAgent(BaseControlAgent):
         if message.type == MemberMessageType.HANDOFF:
             target_agent = self._extract_handoff_target(message)
             if target_agent and target_agent in self.agents:
-                logger.info(f"Handoff from {agent_id} to {target_agent}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Handoff from %s to %s", agent_id, target_agent)
                 target_agent_info["agent_id"] = target_agent
                 return ExecutionAction.HANDOFF, False
-            logger.warning(f"Invalid handoff target: {target_agent}")
+            logger.warning(
+                "Invalid handoff target: %s",
+                target_agent,
+            )
             return ExecutionAction.ERROR, True
 
         if message.type == MemberMessageType.INTERRUPT:
-            logger.info(f"Agent {agent_id} requested interrupt")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Agent %s requested interrupt", agent_id)
             # 直接处理中断逻辑
             self._handle_agent_interrupt(agent_id)
             return ExecutionAction.INTERRUPT, True
@@ -182,7 +233,8 @@ class HierarchicalControlAgent(BaseControlAgent):
             _inner = getattr(message.data, "data", None)
             _err_msg = _inner.get("message") if isinstance(_inner, dict) else None
             logger.error(
-                f"Agent {agent_id} returned error: message={_err_msg}, raw={message.data}"
+                "Agent %s returned error: message=%s, raw=%s",
+                agent_id, _err_msg, message.data,
             )
             return ExecutionAction.ERROR, True
 
@@ -190,7 +242,8 @@ class HierarchicalControlAgent(BaseControlAgent):
             message.type == MemberMessageType.STREAM
             and message.data.code == StreamCode.CONTROLLER_FINISH_MESSAGE.value
         ):
-            logger.info(f"Agent {agent_id} finished control")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Agent %s finished control", agent_id)
             self.task_end = True
             return ExecutionAction.FINISH, True
 
@@ -236,7 +289,8 @@ class HierarchicalControlAgent(BaseControlAgent):
         if isinstance(inputs, dict) and "handoff_context" in inputs:
             target_agent = inputs["handoff_context"].get("to_agent")
             if target_agent and target_agent in self.agents:
-                logger.info(f"Selected agent from handoff context: {target_agent}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Selected agent from handoff context: %s", target_agent)
                 # 清除handoff上下文，避免重复使用
                 del inputs["handoff_context"]
                 return target_agent
@@ -246,13 +300,17 @@ class HierarchicalControlAgent(BaseControlAgent):
             recent_interrupted_agent = self.interrupted_agents.pop()
 
             if recent_interrupted_agent in self.agents:
-                logger.info(f"Resuming interrupted agent: {recent_interrupted_agent}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Resuming interrupted agent: %s", recent_interrupted_agent)
+                # 标记本轮为中断恢复，execute 将补发 workflow_resume 事件
+                self._resumed_from_interrupt = True
                 return recent_interrupted_agent
 
         # 3. 默认选择main_agent
         main_agent_id = self.config.main_agent.metadata.id
         if main_agent_id in self.agents:
-            logger.info(f"Selected main agent: {main_agent_id}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Selected main agent: %s", main_agent_id)
             return main_agent_id
 
         logger.warning("No available agents found")
@@ -275,24 +333,26 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.interrupted_agents = (
             state.interrupted_agents.copy() if state.interrupted_agents else []
         )
-        logger.info(
-            f"Loaded state: calls={self.current_agent_calls_count}, "
-            f"interrupted_agents={len(self.interrupted_agents)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Loaded state: calls=%s, interrupted_agents=%s",
+                self.current_agent_calls_count, len(self.interrupted_agents),
+            )
 
     def reset_execution_state(self) -> None:
         """重置执行状态"""
         self.current_agent_calls_count = 0
         self.interrupted_agents.clear()
-        logger.info("Execution state reset")
+        logger.debug("Execution state reset")
 
     def _log_and_yield_error(
         self, error_msg: str, agent_id: str = "control_agent", execution_id: str = ""
     ) -> Message:
         """记录日志并生成错误消息"""
         logger.error(
-            f"Error in agent {agent_id}: {error_msg}",
-            simple_log=f"Error in agent {agent_id}",
+            "Error in agent %s: %s",
+            agent_id, error_msg,
+            simple_log="Error in agent %s" % (agent_id),
         )
         return self._create_error_message(error_msg, agent_id, execution_id)
 
@@ -306,9 +366,10 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.interrupted_agents.append(agent_id)
         # 中断时不消耗调用次数，回退计数器
         self.current_agent_calls_count -= 1
-        logger.info(
-            f"Agent {agent_id} interrupted. Total interrupted: {len(self.interrupted_agents)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Agent %s interrupted. Total interrupted: %s", agent_id, len(self.interrupted_agents)
+            )
 
     def _extract_handoff_target(self, message: Message) -> Optional[str]:
         """从handoff消息中提取目标agent"""
@@ -362,9 +423,8 @@ class HierarchicalControlAgent(BaseControlAgent):
         ]
         logger.debug(
             "get chat_history for agent: %s chat_history: %s",
-            agent_id,
-            selected_chat_history,
-            simple_log=f"get chat_history for agent: {agent_id}",
+            agent_id, selected_chat_history,
+            simple_log="get chat_history for agent: %s" % (agent_id),
         )
         context = current_inputs["runtime_context"].agent_workflow_context
         context["workflow_chat_history"] = ConversationHistory(selected_chat_history)
@@ -393,8 +453,9 @@ class HierarchicalControlAgent(BaseControlAgent):
         if self.current_agent_calls_count >= self.config.max_agent_calls:
             if self._detect_cycle():
                 logger.warning(
-                    f"Cyclic repeated calls, call chain: {self.call_agent_history}",
-                    simple_log="Cyclic repeated calls.",
+                    "Cyclic repeated calls, call chain: %s",
+                    self.call_agent_history,
+                    simple_log='Cyclic repeated calls.',
                 )
                 return self.config.main_agent.metadata.id, True
             return None, False
@@ -404,6 +465,7 @@ class HierarchicalControlAgent(BaseControlAgent):
         """检测调用历史中是否存在死循环"""
         history = self.call_agent_history
         history_len = len(history)
+
         if history_len < 2:
             return False
 

@@ -11,7 +11,7 @@
           nz-input
           [placeholder]="'enter_user_nickname_to_search' | i18nextEager"
           [(ngModel)]="search_value"
-          (ngModelChange)="onSelectChange($event)"
+          (ngModelChange)="onSearch($event)"
         />
       </nz-input-group>
       <ng-template #suffixIconSearch>
@@ -19,13 +19,12 @@
       </ng-template>
       <div class="user-list overflow-auto">
         <div class="flex">
-          <label class="flex items-center gap-[10px] cursor-pointer">
-            <input
-              type="checkbox"
-              nz-checkbox
-              [(ngModel)]="checkAll"
-              (ngModelChange)="onNgcheckAll($event)"
-            />
+          <label
+            nz-checkbox
+            class="flex items-center gap-[10px] cursor-pointer"
+            [(ngModel)]="checkAll"
+            (ngModelChange)="onNgcheckAll($event)"
+          >
             <span>{{ 'all'|i18nextEager }}</span>
           </label>
         </div>
@@ -33,14 +32,15 @@
           *ngFor="let item of dataArray1; index as i"
           class="user-item flex items-center"
         >
-          <label class="flex items-center gap-[10px] cursor-pointer" [class.opacity-50]="item.disabled">
-            <input
-              type="checkbox"
-              nz-checkbox
-              [id]="'checkitem-temp-' + i"
-              [nzChecked]="checkedArray.includes(item)"
-              [nzDisabled]="item.disabled"
-            />
+          <label
+            nz-checkbox
+            class="flex items-center gap-[10px] cursor-pointer"
+            [class.opacity-50]="item.disabled"
+            [nzId]="'checkitem-temp-' + i"
+            [nzChecked]="isChecked(item)"
+            [nzDisabled]="item.disabled"
+            (nzCheckedChange)="onItemChecked(item, $event)"
+          >
             <span class="w-[240px] overflow-hidden text-ellipsis whitespace-nowrap">{{
               item.memberName
             }}</span>
@@ -58,7 +58,7 @@
               style="width: 150px"
               [nzOptions]="integrationTabsOption"
               [(ngModel)]="item.value"
-              nzPlaceHolder="please_select_a_character"
+              nzPlaceHolder="{{ 'please_select_a_character' | i18nextEager }}"
               [nzDisabled]="item.disabled"
             >
             </nz-select>

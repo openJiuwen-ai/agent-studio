@@ -322,8 +322,23 @@ export class PreviewDebugComponent {
   }
 
   ngOnDestroy(): void {
+    this.revokeDialogHistoryImgs();
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /** 释放对话历史中用户消息图片附件的本地预览 blob URL（清空对话/面板销毁时调用，闭环 blob 生命周期） */
+  private revokeDialogHistoryImgs(): void {
+    this.dialogHistory?.forEach((round: any[]) => {
+      round?.forEach((message: any) => {
+        message?.uploadData?.forEach((item: any) => {
+          if (item?.img) {
+            URL.revokeObjectURL(item.img);
+            item.img = undefined;
+          }
+        });
+      });
+    });
   }
 
   private checkPrologueTextOverflow(): void {
@@ -417,6 +432,7 @@ export class PreviewDebugComponent {
   public clearChat() {
     this.sseInstance?.close(); // 作用：上一轮对话中，断开 (cancel) 最后一个问题的流式接口
     this.isShowStopIcon = false; // 隐藏"停止生成"按钮
+    this.revokeDialogHistoryImgs(); // 释放已发送消息图片附件的本地预览 blob URL
     this.dialogHistory = []; // 置空页面主体的多轮对话
     this.isRequesting = false; // 在新一轮对话中，保证能发送输入的新问题
     this.isLoading = false;
@@ -913,6 +929,22 @@ export class PreviewDebugComponent {
     this.isLoading = false;
     this.isShowStopIcon = false;
     this.isStopped = true;
+    // 标记本轮终止，用于展示"已停止生成"提示
+    const currentIndex = this.dialogHistory.length - 1;
+    if (currentIndex >= 0) {
+      const assistantMessage = this.dialogHistory[currentIndex].find(
+        (item) => item.role === "assistant"
+      );
+      if (assistantMessage) {
+        assistantMessage.terminate = true;
+      } else {
+        this.dialogHistory[currentIndex] = [
+          ...this.dialogHistory[currentIndex],
+          { role: "assistant", terminate: true }
+        ];
+      }
+      this.endThink(currentIndex);
+    }
     this.scrollToBottom();
     this.cdr.markForCheck();
   }

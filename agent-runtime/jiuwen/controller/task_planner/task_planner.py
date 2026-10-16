@@ -170,7 +170,9 @@ class TaskPlanner:
         async for chunk in self.stream(message):
             if isinstance(chunk, Task):
                 detected_task_list.append(chunk)
-                logger.info(f"Detected Task object in stream: {chunk.task_type}")
+                logger.debug(
+                    "Detected Task object in stream: %s", chunk.task_type
+                )
                 # 找到任务后仍然继续处理流，但不传递任务对象
             else:
                 # 传递非任务类型的流式输出
@@ -187,9 +189,10 @@ class TaskPlanner:
                 # 将任务添加到队列
                 self.task_queue.add_task(detected_task)
 
-        logger.info(
-            f"task_id: {self.task_id}| Before execute task in task queue, "
-            f"length of task queue = {len(self.task_queue.pending_tasks)}"
+        logger.debug(
+            "task_id: %s| Before execute task in task queue, "
+            "length of task queue = %s",
+            self.task_id, len(self.task_queue.pending_tasks),
         )
         end_workflow_context = self.context_manager.get_end_workflow_contexts()
         while not self.task_queue.is_pending_task_empty():
@@ -226,17 +229,19 @@ class TaskPlanner:
                             WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY
                         )
                     )
-                logger.info(
-                    f"task_id: {self.task_id}| get next task from queue: {next_task.task_type}"
+                logger.debug(
+                    "task_id: %s| get next task from queue: %s",
+                    self.task_id, next_task.task_type,
                 )
                 yield next_task
                 if (
                     self.context_manager.agent_config.plan_config.plan_mode
                     == "Controller"
                 ):
-                    logger.info(
-                        f"task_id: {self.task_id}| For Controller mode, execute ONE task in task queue "
-                        f"each time!"
+                    logger.debug(
+                        "task_id: %s| For Controller mode, execute ONE task in task queue "
+                        "each time!",
+                        self.task_id,
                     )
                     break
 

@@ -22,7 +22,7 @@ RUN mirror=mirrors.aliyun.com; \
       sed -i "s|deb.debian.org|${mirror}|g" "$old_src"; \
     fi \
     && apt-get update \
-    && apt-get install -y bash coreutils findutils sed gawk hostname procps vim curl wget tar unzip net-tools iptables cron libpq-dev \
+    && apt-get install -y bash coreutils findutils sed gawk hostname procps vim curl wget tar unzip net-tools cron libpq-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo 'alias ll="ls -alF"' >> /etc/bash.bashrc
 
@@ -38,6 +38,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev
     && cd /tmp/agent-core && pip3 install . && rm -rf /tmp/agent-core \
     && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 变更频率极低，放在应用代码之前以充分利用 Docker 缓存
+COPY extensions/ $SERVICE_HOME/app/extensions/
 
 # 再复制应用代码（变更频率高，放在依赖安装之后）
 COPY agent_builder/ $SERVICE_HOME/app/agent_builder/
@@ -74,8 +77,8 @@ USER root
 RUN chmod 700 /opt/cloud/logs \
     && echo service >> /etc/cron.allow \
     && chmod u+s /usr/sbin/cron \
-    && touch /var/run/crond.pid && chmod 760 /var/run/crond.pid
+    && touch /var/run/crond.pid && chown service:service /var/run/crond.pid && chmod 760 /var/run/crond.pid
 
-USER service
+USER 1000:1000
 
 CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh;./bin/start.sh"]

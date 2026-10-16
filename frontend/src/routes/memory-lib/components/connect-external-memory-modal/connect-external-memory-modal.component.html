@@ -1,0 +1,156 @@
+<div class="com-drawer-title">
+  {{ 'memory.connectExternal.title' | i18nextEager }}
+</div>
+
+<div class="com-drawer-content">
+  <nz-spin [nzSpinning]="loading()">
+    <div class="connect-external-memory-content">
+      <!-- 基本信息 -->
+      <div class="mb-6">
+        <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
+          {{ 'memory.create.basic.title' | i18nextEager }}
+        </div>
+
+        <form nz-form nzLayout="vertical" [formGroup]="basicInfoFormGroup">
+          <nz-form-item>
+            <nz-form-label>{{ 'memory.detail.icon' | i18nextEager }}</nz-form-label>
+            <nz-form-control>
+              <upload-image [initialImage]="defaultIcon" (imageChanged)="onImageChanged($event)"></upload-image>
+            </nz-form-control>
+          </nz-form-item>
+
+          <nz-form-item>
+            <nz-form-label nzRequired>{{ 'memory.detail.name' | i18nextEager }}</nz-form-label>
+            <nz-form-control [nzErrorTip]="nameErrorTpl">
+              <input
+                nz-input
+                type="text"
+                formControlName="name"
+                maxlength="50"
+                style="width: 100%"
+                [placeholder]="'memory.connectExternal.name.placeholder' | i18nextEager"
+              />
+              <ng-template #nameErrorTpl let-control>
+                @if (control.hasError('required')) {
+                  {{ 'memory.create.errorTip.nameRequired' | i18nextEager }}
+                }
+                @if (control.hasError('name')) {
+                  {{ control.getError('name').tiErrorMessage }}
+                }
+              </ng-template>
+              <div class="tip-text mt-1">
+                {{ 'memory.create.tip.nameRegxWithNumber' | i18nextEager: { currentNameLength } }}
+              </div>
+            </nz-form-control>
+          </nz-form-item>
+
+          <nz-form-item>
+            <nz-form-label>{{ 'memory.create.descriptionOptional' | i18nextEager }}</nz-form-label>
+            <nz-form-control>
+              <textarea
+                nz-input
+                formControlName="description"
+                [nzAutosize]="{ minRows: 3, maxRows: 6 }"
+                [placeholder]="'memory.create.descriptionPlaceholder' | i18nextEager"
+                maxlength="1000"
+                style="width: 100%; resize: vertical"
+              ></textarea>
+            </nz-form-control>
+          </nz-form-item>
+        </form>
+      </div>
+
+      <!-- 实例选择 -->
+      <div class="mb-6">
+        <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
+          {{ 'memory.connectExternal.instance.title' | i18nextEager }}
+        </div>
+
+        <form nz-form nzLayout="vertical" [formGroup]="instanceFormGroup">
+          <nz-form-item>
+            <nz-form-label nzRequired>{{ 'memory.connectExternal.instance.label' | i18nextEager }}</nz-form-label>
+            <nz-form-control [nzErrorTip]="'memory.connectExternal.instance.required' | i18nextEager">
+              <nz-select
+                formControlName="memory_service_instance_id"
+                [nzPlaceHolder]="'memory.connectExternal.instance.placeholder' | i18nextEager"
+                nzAllowClear
+                nzShowSearch
+                style="width: 100%"
+              >
+                @for (item of instances(); track item.instance_id) {
+                  <nz-option
+                    [nzValue]="item.instance_id"
+                    [nzLabel]="item.name + ' (' + item.base_url + ')'"
+                  ></nz-option>
+                }
+              </nz-select>
+            </nz-form-control>
+          </nz-form-item>
+        </form>
+      </div>
+
+      <!-- 记忆提取策略 -->
+      <div class="mb-6">
+        <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
+          {{ 'memory.create.title.lmtStrategy' | i18nextEager }}
+        </div>
+        <form [formGroup]="ltmRetrievalStrategyFormGroup">
+          <nz-form-item>
+            <nz-form-control>
+              <ltm-retrieval-strategy formControlName="ltmRetrievalStrategy"></ltm-retrieval-strategy>
+            </nz-form-control>
+          </nz-form-item>
+        </form>
+      </div>
+
+      <!-- 提取频率 -->
+      <div class="mb-6">
+        <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
+          {{ 'memory.create.title.extractionFrequency' | i18nextEager }}
+        </div>
+        <form nz-form nzLayout="vertical" [formGroup]="extractionFrequencyFormGroup">
+          <div class="extraction-frequency-row">
+            <nz-form-item class="extraction-frequency-item">
+              <nz-form-label>{{ 'memory.create.conversationRound' | i18nextEager }}</nz-form-label>
+              <nz-form-control [nzErrorTip]="'memory.create.errorTip.range.conversationRound' | i18nextEager">
+                <div class="input-with-unit">
+                  <nz-input-number
+                    formControlName="conversation_round"
+                    [nzMin]="1"
+                    [nzMax]="30"
+                    [nzStep]="1"
+                    [nzPlaceHolder]="'memory.create.conversationRoundPlaceholder' | i18nextEager"
+                  ></nz-input-number>
+                  <span class="input-unit">{{ 'memory.create.conversationRoundUnit' | i18nextEager }}</span>
+                </div>
+              </nz-form-control>
+            </nz-form-item>
+
+            <nz-form-item class="extraction-frequency-item">
+              <nz-form-label>{{ 'memory.create.timeSpan' | i18nextEager }}</nz-form-label>
+              <nz-form-control [nzErrorTip]="'memory.create.errorTip.range.timeSpan' | i18nextEager">
+                <div class="input-with-unit">
+                  <nz-input-number
+                    formControlName="time_span"
+                    [nzMin]="5"
+                    [nzMax]="60"
+                    [nzStep]="5"
+                    [nzPlaceHolder]="'memory.create.timeSpanPlaceholder' | i18nextEager"
+                  ></nz-input-number>
+                  <span class="input-unit">{{ 'memory.create.timeSpanUnit' | i18nextEager }}</span>
+                </div>
+              </nz-form-control>
+            </nz-form-item>
+          </div>
+        </form>
+      </div>
+    </div>
+  </nz-spin>
+</div>
+
+<div class="com-drawer-footer">
+  <button nz-button nzType="default" (click)="dismiss()">{{ 'cancel' | i18nextEager }}</button>
+  <button nz-button nzType="primary" [nzLoading]="loading()" (click)="close()">
+    {{ 'ok' | i18nextEager }}
+  </button>
+</div>

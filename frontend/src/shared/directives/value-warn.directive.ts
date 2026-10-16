@@ -33,6 +33,7 @@ export class ValueWarnDirective implements OnInit, OnChanges {
   * noRequired 参数值不必填的 ，必填校验空,默认必填，非必填才传此参数
   * refWithout 引用的值 不存在了
   * isInteger 整数
+  * hasInvalidDescendant 后代字段名违规（父字段自身名合法时，用于向上传递高亮）
   *
   */
   private updateColor() {
@@ -61,6 +62,11 @@ export class ValueWarnDirective implements OnInit, OnChanges {
       if (this.data.refWithout) {
         showWarn = true;
       }
+    }
+
+    // 后代字段名违规，向上传递高亮（父字段自身名可能合法）
+    if (this.data.hasInvalidDescendant) {
+      showWarn = true;
     }
 
 

@@ -922,7 +922,7 @@ class MemoryEngine(metaclass=Singleton):
     async def _get_user_profile_config(
         self, topics: list[ProfileTopicConfig] | None = None
     ) -> List[ProfileTopicConfig]:
-        if isinstance(topics, List) and len(topics) == 0:
+        if isinstance(topics, list) and len(topics) == 0:
             return []
         if topics is None:
             # return all stored topic config, if the topics is empty

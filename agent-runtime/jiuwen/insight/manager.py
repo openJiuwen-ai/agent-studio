@@ -3,6 +3,7 @@
 
 import asyncio
 import uuid
+import logging
 from typing import Any, Dict, List, Type, Optional, Union
 
 from jiuwen.common.log.base import logger
@@ -23,7 +24,8 @@ async def _trace_event(
     trace_handlers: List[BaseDataHandler], event_name: str, *args: Any, **kwargs: Any
 ):
     """Invoke trace event"""
-    logger.info(f"insight trace type:{event_name}, invoke_id:{kwargs.get('invoke_id')}")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("insight trace type:%s, invoke_id:%s", event_name, kwargs.get("invoke_id"))
     for trace_handler in trace_handlers:
         handler = getattr(trace_handler, event_name)
         result = handler(*args, **kwargs)

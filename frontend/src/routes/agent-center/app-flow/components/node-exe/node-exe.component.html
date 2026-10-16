@@ -388,7 +388,7 @@
                           <div
                             *ngIf="param.urlMode !== 'url' && !param.uploadDatas?.length"
                             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
-                            (click)="fileInput.click()"
+                            (click)="addMultiFile(i)"
                           >
                             <div class="flex items-center">
                               <img alt=""
@@ -671,9 +671,20 @@
                   *ngIf="isAnswerValid(runInfo)"
                   class="flex shrink-0 flex-col gap-[8px] rounded-lg bg-[#fafafa] p-[16px]"
                 >
-                  <span class="font-semibold text-[#191919]">{{
+                  <div class="flex items-center gap-[8px]">
+                    <span class="font-semibold text-[#191919]">{{
                       'output_result' | i18nextEager
                     }}</span>
+                    <asset-copy-icon
+                      *ngIf="!showAnswerCopySuccess"
+                      class="cursor-pointer"
+                      (click)="handleCopy(runInfo.answer, 'answer')"
+                    ></asset-copy-icon>
+                    <asset-copy-success-icon
+                      *ngIf="showAnswerCopySuccess"
+                      class="cursor-pointer"
+                    ></asset-copy-success-icon>
+                  </div>
                   <div class="break-words whitespace-pre-wrap">
                     {{ runInfo.answer }}
                   </div>
@@ -689,7 +700,9 @@
                       *ngIf="runInfo?.inputs"
                       class="flex items-center gap-[8px]"
                     >
-                      <div>{{ 'input' | i18nextEager }}</div>
+                      <div class="font-semibold text-[#191919]">
+                        {{ 'input' | i18nextEager }}
+                      </div>
                       <asset-copy-icon
                         *ngIf="!showInputsCopySuccess"
                         class="cursor-pointer"
@@ -711,7 +724,9 @@
 
                   <div class="flex flex-col gap-[8px]" *ngIf="runInfo?.outputs">
                     <div class="flex items-center gap-[8px]">
-                      <div>{{ 'output' | i18nextEager }}</div>
+                      <div class="font-semibold text-[#191919]">
+                        {{ 'output' | i18nextEager }}
+                      </div>
                       <asset-copy-icon
                         *ngIf="!showOutputsCopySuccess"
                         class="cursor-pointer"

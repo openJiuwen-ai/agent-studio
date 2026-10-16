@@ -624,7 +624,7 @@ public class ShareResourceManagerService implements IShareResourceManagerService
 
         ShareResourceEntity shareResourceEntity = shareResourceMapper.selectShareResourceEntityByResourceId(resourceId);
 
-        if (!shareResourceEntity.getVersionList().contains(versionId)) {
+        if (!shareResourceEntity.containsVersion(versionId)) {
             return null;
         }
         return shareResourceEntity;
@@ -650,8 +650,7 @@ public class ShareResourceManagerService implements IShareResourceManagerService
             return;
         }
         ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(resourceId);
-        if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
-            && shareResource.getVersionList().contains(versionId)) {
+        if (ObjectUtils.isNotEmpty(shareResource) && shareResource.containsVersion(versionId)) {
             log.error("the resource version [{}] of resource [{}] has been shared, you can't delete it",
                 versionId, resourceId);
             throw new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY);

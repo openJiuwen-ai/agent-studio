@@ -106,6 +106,36 @@ export const NodeUtils = {
         };
   },
 
+  /**
+   * 判断入参是否为环境变量引用字段。
+   * 创建插件/MCP 时绑定环境变量后，对应字段的 value.type 会映射为 'ref'，
+   * 且解析后的 content.source 为 'environment'（ref_node_id 为 'envParams'）。
+   */
+  isEnvVarRefField(field: IWorkflowField): boolean {
+    if (field?.value?.type !== 'ref') {
+      return false;
+    }
+    const content: any = field.value.content;
+    const item = Array.isArray(content) ? content[0] : content;
+    return !!item && (item.source === 'environment' || item.ref_node_id === 'envParams');
+  },
+
+  /**
+   * 收集 schema 顶层 properties 中携带 env_var_ref 的属性名。
+   * 与后端 IrAdapterService.extractEnvVarReferences 的扫描口径保持一致（仅顶层 properties）。
+   */
+  collectEnvVarRefNames(schema: any, into: Set<string>): void {
+    const props = schema?.properties;
+    if (!props) {
+      return;
+    }
+    Object.keys(props).forEach(key => {
+      if (props[key]?.env_var_ref) {
+        into.add(key);
+      }
+    });
+  },
+
   checkModelExistence(nodeName: string, model_deployment_id: string, models: IModel[]) {
     if (model_deployment_id && models.length > 0 && !models.map(m => m.model_deployment_id).includes(model_deployment_id)) {
       MessageComponent.showError(i18next.t('checkModel_tip', { node: removeHTMLTag(nodeName) }));

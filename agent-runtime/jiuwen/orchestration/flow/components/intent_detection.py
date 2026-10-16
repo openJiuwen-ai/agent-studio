@@ -94,8 +94,6 @@ KG_FILTER_KEY = "filter_string"
 KG_FILTER_PREFIX = "category:"
 KG_SCOPE = "scope"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class IntentDetectionLLMConfig(BaseModel):
     model_type: StrictStr = Field(min_length=1)
@@ -275,7 +273,7 @@ class IntentDetection(Invokable):
             global_intent_map = current_inputs.pop("global_intent_map", {})
         except Exception as e:
             self._raise_input_error(
-                str(e) if LOG_VERBOSE_MODE else str(type(e).__name__)
+                str(type(e).__name__)
             )
         # 进行 faq 匹配
         if self.intent_config.enable_knowledge:

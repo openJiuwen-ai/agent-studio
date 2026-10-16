@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.PollingTriggerStateMapper">
+    <resultMap id="BaseResultMap"
+        type="com.openjiuwen.studio.agent.manager.entity.PollingTriggerStateEntity">
+        <id column="trigger_id" jdbcType="VARCHAR" property="triggerId"/>
+        <result column="last_seen_hash" jdbcType="CHAR" property="lastSeenHash"/>
+        <result column="last_checked_at" jdbcType="TIMESTAMP" property="lastCheckedAt"/>
+        <result column="created_at" jdbcType="TIMESTAMP" property="createdAt"/>
+        <result column="updated_at" jdbcType="TIMESTAMP" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        trigger_id, last_seen_hash, last_checked_at, created_at, updated_at
+    </sql>
+
+    <insert id="initialize">
+        INSERT INTO t_polling_trigger_state (trigger_id)
+        VALUES (#{triggerId,jdbcType=VARCHAR})
+    </insert>
+
+    <select id="selectByTriggerId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_polling_trigger_state
+        WHERE trigger_id = #{triggerId,jdbcType=VARCHAR}
+    </select>
+
+    <select id="selectForUpdate" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_polling_trigger_state
+        WHERE trigger_id = #{triggerId,jdbcType=VARCHAR}
+        FOR UPDATE
+    </select>
+
+    <update id="compareAndSetLastSeenHash">
+        UPDATE t_polling_trigger_state
+        SET last_seen_hash = #{newHash,jdbcType=CHAR},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE trigger_id = #{triggerId,jdbcType=VARCHAR}
+        <choose>
+            <when test="expectedHash == null">
+                AND last_seen_hash IS NULL
+            </when>
+            <otherwise>
+                AND last_seen_hash = #{expectedHash,jdbcType=CHAR}
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="updateLastCheckedAt">
+        UPDATE t_polling_trigger_state
+        SET last_checked_at = #{lastCheckedAt,jdbcType=TIMESTAMP},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE trigger_id = #{triggerId,jdbcType=VARCHAR}
+    </update>
+
+    <delete id="deleteByTriggerId">
+        DELETE FROM t_polling_trigger_state
+        WHERE trigger_id = #{triggerId,jdbcType=VARCHAR}
+    </delete>
+</mapper>

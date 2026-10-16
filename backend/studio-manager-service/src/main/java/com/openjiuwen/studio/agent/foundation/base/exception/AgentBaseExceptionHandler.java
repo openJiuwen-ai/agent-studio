@@ -31,8 +31,8 @@ import java.util.Optional;
  *
  * @since 2024-08-05
  */
+@Deprecated
 @Slf4j
-@ControllerAdvice
 public class AgentBaseExceptionHandler {
 
     /**

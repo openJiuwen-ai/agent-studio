@@ -7,8 +7,6 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.security.cryptor import Crypt
 from jiuwen.plugin.common import constant
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 def transform_type(value, expected_type, key):
     """转换数据类型"""
@@ -17,10 +15,7 @@ def transform_type(value, expected_type, key):
             str_res = str(value)
         except ValueError as e:
             base_err_msg = StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.errmsg
-            if LOG_VERBOSE_MODE:
-                message = f"{base_err_msg},param name is {key}, expected_type is {expected_type}"
-            else:
-                message = f"{base_err_msg},expected_type is {expected_type}"
+            message = f"{base_err_msg},expected_type is {expected_type}"
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.code,
                 message=message,
@@ -31,10 +26,7 @@ def transform_type(value, expected_type, key):
             bool_res = bool(value)
         except ValueError as e:
             base_err_msg = StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.errmsg
-            if LOG_VERBOSE_MODE:
-                message = f"{base_err_msg},param name is {key}, expected_type is {expected_type}"
-            else:
-                message = f"{base_err_msg},expected_type is {expected_type}"
+            message = f"{base_err_msg},expected_type is {expected_type}"
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.code,
                 message=message,
@@ -48,10 +40,7 @@ def transform_type(value, expected_type, key):
             ValueError,
         ) as e:  # expected_type为integer或者number时，如果value为复杂类型则可能报TypeError
             base_err_msg = StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.errmsg
-            if LOG_VERBOSE_MODE:
-                message = f"{base_err_msg},param name is {key}, expected_type is {expected_type}"
-            else:
-                message = f"{base_err_msg},expected_type is {expected_type}"
+            message = f"{base_err_msg},expected_type is {expected_type}"
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.code,
                 message=message,
@@ -65,10 +54,7 @@ def transform_type(value, expected_type, key):
             ValueError,
         ) as e:  # expected_type为integer或者number时，如果value为复杂类型则可能报TypeError
             base_err_msg = StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.errmsg
-            if LOG_VERBOSE_MODE:
-                message = f"{base_err_msg},param name is {key}, expected_type is {expected_type}"
-            else:
-                message = f"{base_err_msg},expected_type is {expected_type}"
+            message = f"{base_err_msg},expected_type is {expected_type}"
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_API_PARAMS_CHECK_ERROR.code,
                 message=message,

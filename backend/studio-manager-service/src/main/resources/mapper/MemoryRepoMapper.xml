@@ -11,6 +11,9 @@
         <result column="time_span" property="timeSpan" jdbcType="INTEGER"/>
         <result column="conversation_round" property="conversationRound" jdbcType="INTEGER"/>
         <result column="long_term_memory_strategies" property="longTermMemoryStrategies" jdbcType="VARCHAR" typeHandler="com.openjiuwen.studio.agent.manager.mapper.handler.LongTermMemoryStrategyHandler"/>
+        <result column="memory_backend_type" property="memoryBackendType" jdbcType="VARCHAR"/>
+        <result column="memory_service_instance_id" property="memoryServiceInstanceId" jdbcType="VARCHAR"/>
+        <result column="scope_model_config" property="scopeModelConfig" jdbcType="VARCHAR"/>
         <result column="project_id" property="projectId" jdbcType="VARCHAR"/>
         <result column="workspace_id" property="workspaceId" jdbcType="VARCHAR"/>
         <result column="domain_id" property="domainId" jdbcType="VARCHAR"/>
@@ -25,7 +28,8 @@
     <!-- 基础列 -->
     <sql id="Base_Column_List">
         id, name, description, icon, time_span, conversation_round,
-        long_term_memory_strategies, project_id, workspace_id, domain_id,
+        long_term_memory_strategies, memory_backend_type, memory_service_instance_id,
+        scope_model_config, project_id, workspace_id, domain_id,
         created_user_id, created_user_name, last_update_user_id,
         last_update_user_name, create_time, update_time
     </sql>
@@ -34,11 +38,14 @@
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity">
         INSERT INTO t_memory_repo (
             id, name, description, icon, time_span, conversation_round,
-            long_term_memory_strategies, project_id, workspace_id, domain_id,
+            long_term_memory_strategies, memory_backend_type, memory_service_instance_id,
+            scope_model_config, project_id, workspace_id, domain_id,
             created_user_id, created_user_name, last_update_user_id, last_update_user_name
         ) VALUES (
                      #{id}, #{name}, #{description}, #{icon}, #{timeSpan}, #{conversationRound},
-                     #{longTermMemoryStrategies,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.LongTermMemoryStrategyHandler}, #{projectId}, #{workspaceId}, #{domainId},
+                     #{longTermMemoryStrategies,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.LongTermMemoryStrategyHandler},
+                     #{memoryBackendType}, #{memoryServiceInstanceId}, #{scopeModelConfig},
+                     #{projectId}, #{workspaceId}, #{domainId},
                      #{createdUserId}, #{createdUserName}, #{lastUpdateUserId}, #{lastUpdateUserName}
                  )
     </insert>
@@ -78,6 +85,15 @@
             </if>
             <if test="longTermMemoryStrategies != null and longTermMemoryStrategies != ''">
                 long_term_memory_strategies = #{longTermMemoryStrategies,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.LongTermMemoryStrategyHandler},
+            </if>
+            <if test="memoryBackendType != null and memoryBackendType != ''">
+                memory_backend_type = #{memoryBackendType},
+            </if>
+            <if test="memoryServiceInstanceId != null">
+                memory_service_instance_id = #{memoryServiceInstanceId},
+            </if>
+            <if test="scopeModelConfig != null">
+                scope_model_config = #{scopeModelConfig},
             </if>
             <if test="lastUpdateUserId != null and lastUpdateUserId != ''">
                 last_update_user_id = #{lastUpdateUserId},

@@ -13,8 +13,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agent_runtime.serve.apis.inner_tools import inner_tools_router
+from agent_runtime.serve.error_rsp import build_error_response
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -27,6 +29,16 @@ def _make_app():
     """Build a FastAPI app with only the inner_tools router."""
     app = FastAPI()
     app.include_router(inner_tools_router)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception_handler(request, exc: StarletteHTTPException):
+        """与 server.py 一致：HTTPException 统一为四字段 ErrorRsp."""
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        code_key = "02001003" if exc.status_code == 400 else "02001002"
+        return build_error_response(
+            exc.status_code, code_key, language=language, reason=str(exc.detail)
+        )
+
     return app
 
 
@@ -101,7 +113,9 @@ class TestResolveFile:
                     params={"file_url": "http://internal-ip/file.txt"},
                 )
         assert resp.status_code == 400
-        assert "非法文件URL" in resp.json()["detail"]
+        data = resp.json()
+        assert data["error_code"] == "openjiuwen.02001003"
+        assert "非法文件URL" in data["error_reason"]
 
     @pytest.mark.asyncio
     async def test_download_failure_returns_400(self):
@@ -123,7 +137,9 @@ class TestResolveFile:
                     params={"file_url": "https://example.com/file.txt"},
                 )
         assert resp.status_code == 400
-        assert "下载文件失败" in resp.json()["detail"]
+        data = resp.json()
+        assert data["error_code"] == "openjiuwen.02001003"
+        assert "下载文件失败" in data["error_reason"]
 
     @pytest.mark.asyncio
     async def test_unsupported_xls_format_returns_message(self):
@@ -298,7 +314,7 @@ class TestResolveFile:
                     params={"file_url": "https://example.com/file.xlsx"},
                 )
         assert resp.status_code == 500
-        assert "解析文件失败" in resp.json()["detail"]
+        assert "解析文件失败" in resp.json()["error_reason"]
 
 
 # ===========================================================================
@@ -359,7 +375,7 @@ class TestCreateDocument:
                     json={"input": "content", "document_name": "report.txt"},
                 )
         assert resp.status_code == 500
-        assert "上传文档失败" in resp.json()["detail"]
+        assert "上传文档失败" in resp.json()["error_reason"]
 
     @pytest.mark.asyncio
     async def test_presigned_url_failure_returns_500(self):
@@ -384,7 +400,7 @@ class TestCreateDocument:
                     json={"input": "content", "document_name": "report.txt"},
                 )
         assert resp.status_code == 500
-        assert "生成下载链接失败" in resp.json()["detail"]
+        assert "生成下载链接失败" in resp.json()["error_reason"]
 
     @pytest.mark.asyncio
     async def test_custom_expires_used(self):

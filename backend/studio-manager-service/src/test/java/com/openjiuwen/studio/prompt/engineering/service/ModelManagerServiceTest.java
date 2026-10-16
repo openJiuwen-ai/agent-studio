@@ -48,6 +48,12 @@ class ModelManagerServiceTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
+        // COM-02: callModel 迁移至 promptModelCallExecutor（@InjectMocks 不注入非 mock 字段），
+        // 注入真实受管 executor 供 supplyAsync 使用
+        org.springframework.test.util.ReflectionTestUtils.setField(modelManagerService,
+            "promptModelCallExecutor",
+            new com.openjiuwen.studio.agent.manager.config.ObservabilityAsyncConfig()
+                .promptModelCallExecutor(2, 4, 50, 60));
     }
 
     @Test

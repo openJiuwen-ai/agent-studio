@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.exception;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -102,8 +103,10 @@ public class MgGlobalExceptionHandlerTest extends BaseTest {
         // run the test
         ResponseEntity<ErrorRsp> result = globalExceptionHandler.handleMethodArgumentNotValidException(exception);
 
-        // verify the results
-        assertEquals("fieldA: field error", Objects.requireNonNull(result.getBody()).getErrorMsg());
+        // verify the results（切 factory 后 errorMsg = canonical i18n，非 joined field errors；errorCode 准确 + requestId 存在）
+        assertNotNull(Objects.requireNonNull(result.getBody()).getErrorMsg());
+        assertEquals("openjiuwen.02001003", result.getBody().getErrorCode());
+        assertNotNull(result.getBody().getRequestId());
     }
 
     @Test
@@ -118,7 +121,7 @@ public class MgGlobalExceptionHandlerTest extends BaseTest {
         // Then
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("openjiuwen.02001003", Objects.requireNonNull(response.getBody()).getErrorCode());
-        assertEquals("", response.getBody().getErrorMsg());
+        assertNotNull(response.getBody().getErrorMsg());
     }
 
     @Test
@@ -129,8 +132,10 @@ public class MgGlobalExceptionHandlerTest extends BaseTest {
         // run the test
         ResponseEntity<ErrorRsp> result = globalExceptionHandler.handleNoResourceFoundException(exception);
 
-        // verify the results
-        assertEquals("No static resource fake_resource_path.", result.getBody().getErrorMsg());
+        // verify the results（切 factory 后 errorMsg = canonical i18n，非 exception.getMessage()，不泄漏路径）
+        String errorMsg = result.getBody().getErrorMsg();
+        assertNotNull(errorMsg);
+        assertNotEquals(exception.getMessage(), errorMsg);
     }
 
     @Test

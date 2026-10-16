@@ -255,6 +255,8 @@ export class NodeExeComponent implements OnChanges {
 
   public showOutputsCopySuccess = false;
 
+  public showAnswerCopySuccess = false;
+
   public tabs = [
     {
       id: 'conf',
@@ -765,7 +767,7 @@ export class NodeExeComponent implements OnChanges {
 
   public handleCopy(
     content: string | Record<string, any>,
-    type: 'inputs' | 'outputs',
+    type: 'inputs' | 'outputs' | 'answer',
   ) {
     if (typeof content === 'string') {
       this.clipboard.copy(content);
@@ -773,19 +775,24 @@ export class NodeExeComponent implements OnChanges {
       this.clipboard.copy(JSON.stringify(content));
     }
 
-    if (type === 'inputs') {
-      this.showInputsCopySuccess = true;
-    } else {
-      this.showOutputsCopySuccess = true;
-    }
-
+    this.setCopySuccessFlag(type, true);
     window.setTimeout(() => {
-      if (type === 'inputs') {
-        this.showInputsCopySuccess = false;
-      } else {
-        this.showOutputsCopySuccess = false;
-      }
+      this.setCopySuccessFlag(type, false);
     }, 2000);
+  }
+
+  /** 按复制目标切换对应的成功图标标记 */
+  private setCopySuccessFlag(
+    type: 'inputs' | 'outputs' | 'answer',
+    value: boolean,
+  ) {
+    if (type === 'inputs') {
+      this.showInputsCopySuccess = value;
+    } else if (type === 'answer') {
+      this.showAnswerCopySuccess = value;
+    } else {
+      this.showOutputsCopySuccess = value;
+    }
   }
 
   handleCopyErrorCode(code) {
@@ -822,8 +829,10 @@ export class NodeExeComponent implements OnChanges {
     uploadType = 'multi',
   ): Promise<void> {
     const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
     if (uploadType === 'single') {
-      const file: File = input.files[0];
+      const file: File = files[0];
       if (!file) {
         return;
       }
@@ -865,7 +874,7 @@ export class NodeExeComponent implements OnChanges {
           this.cdr.detectChanges();
         });
     } else {
-      const len = input?.files?.length;
+      const len = files?.length;
       if (!len) {
         return;
       }
@@ -883,7 +892,7 @@ export class NodeExeComponent implements OnChanges {
       }
       // 同名文件整批拒绝（完整文件名含后缀，忽略大小写）
       if (
-        Array.from(input.files).some((f) =>
+        Array.from(files).some((f) =>
           inputItem.uploadDatas.some(
             (u) => u.name.toLowerCase() === f.name.toLowerCase(),
           ),
@@ -894,7 +903,9 @@ export class NodeExeComponent implements OnChanges {
         );
         return;
       }
-      for (const file of input.files) {
+      // 批次开始置位、整批结束复位，驱动一键清空/添加按钮的上传中禁用
+      this.isUploading = true;
+      for (const file of files) {
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
           extension,
@@ -907,16 +918,13 @@ export class NodeExeComponent implements OnChanges {
         const fileItem = createFileItem(file);
         inputItem.uploadDatas.push(fileItem);
         this.cdr.detectChanges();
-        this.isUploading = true;
         await new Promise(resolve => setTimeout(resolve));
-        uploadFile(this.repoServ, file, isImage, fileItem, () => {
+        await uploadFile(this.repoServ, file, isImage, fileItem, () => {
           inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
           this.cdr.detectChanges();
-        }).finally(() => {
-          this.cdr.detectChanges();
-          this.isUploading = false;
         });
       }
+      this.isUploading = false;
       input.value = '';
     }
   }

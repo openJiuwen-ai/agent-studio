@@ -55,6 +55,14 @@
         <span class="type-tag">
           {{ 'sub_single_agent' | i18nextEager }}
         </span>
+        <div
+          *ngIf="isChildFlowsUpdated?.showIcon"
+          class="update-flow-icon"
+          nz-tooltip
+          [nzTooltipTitle]="updateFlowTip"
+          nzTooltipPlacement="top"
+          (click)="onConfirmUpdateFlow()"
+        ></div>
       </div>
 
       <div class="node-oprs" style="width: fit-content">

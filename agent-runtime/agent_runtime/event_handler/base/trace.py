@@ -80,6 +80,8 @@ class Trace:
     language: str = "en-us"
     # 本轮用户输入，用于落库时把 user 一轮写入会话历史（对齐旧 Java 路径的 seed 行为）
     query: str = ""
+    # 本轮请求级 enable_history，落库补写 user query 时保持标志位不丢失
+    enable_history: Optional[bool] = None
 
     # 运行时状态
     start_time: int = field(default_factory=lambda: int(time.time() * 1000))

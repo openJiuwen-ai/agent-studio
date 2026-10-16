@@ -21,13 +21,30 @@ dl(){
   if [ -n "${GITHUB_MIRROR:-}" ] && [[ "$url" == https://github.com/* ]]; then
     url="${GITHUB_MIRROR}${url}"
   fi
+  # 缓存指纹（$out.src）：缓存文件名不含版本号（如 redis-linux.rpm），依赖改版本时
+  # （如 redis 7.4.2→7.0.14）防止旧文件被同名误命中——指纹不匹配即重新下载。
+  local cached=0 mark="$out.src"
   if [ -f "$out" ] && [ -s "$out" ]; then
+    cached=1
+    if [ -f "$mark" ]; then
+      if [ "$(cat "$mark")" != "$url" ]; then
+        cached=0
+        log "  缓存指纹不匹配（依赖版本变更），重新下载: $(basename "$out")"
+      fi
+    else
+      # 历史缓存无指纹：补写当前指纹并沿用（避免存量缓存全量重下；沿用即认定其版本
+      # 与当前 versions.env 一致，此后任何版本变更都受指纹保护）
+      printf '%s\n' "$url" > "$mark"
+    fi
+  fi
+  if [ "$cached" = 1 ]; then
     log "  缓存命中: $(basename "$out")"
   else
     log "  下载: $url"
     # --ssl-no-revoke：Windows schannel curl 默认查 CRL/OCSP，连不上吊销服务器抛 CRYPT_E_REVOCATION_OFFLINE (exit 35)。
     # Linux OpenSSL 下为 no-op（默认不查吊销）。跳过吊销仍校验证书链。
     curl -fSL --ssl-no-revoke --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 2400 -o "$out" "$url" || die "下载失败: $url"
+    printf '%s\n' "$url" > "$mark"
   fi
   if [ -n "$sha" ]; then
     local got; got=$(sha256sum "$out" | awk '{print $1}')

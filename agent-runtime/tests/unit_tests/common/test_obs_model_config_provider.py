@@ -63,7 +63,20 @@ class TestOBSModelConfigProviderThin:
     def test_thinking_extra_body(self):
         ir = _make_ir_node("svc", hyperparams={"thinking": {"type": "enabled"}})
         cfg = self._run(OBSModelConfigProvider().get_llm_config(ir))
-        assert cfg.model_config.extra_body == {"thinking": {"type": "enabled"}}
+        assert cfg.model_config.extra_body == {
+            "thinking": {"type": "enabled"},
+            "enable_thinking": True,
+            "chat_template_kwargs": {"enable_thinking": True},
+        }
+
+    def test_thinking_disabled_extra_body(self):
+        ir = _make_ir_node("svc", hyperparams={"thinking": {"type": "disabled"}})
+        cfg = self._run(OBSModelConfigProvider().get_llm_config(ir))
+        assert cfg.model_config.extra_body == {
+            "thinking": {"type": "disabled"},
+            "enable_thinking": False,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
 
     def test_thinking_without_type_ignored(self):
         ir = _make_ir_node("svc", hyperparams={"thinking": {"foo": "bar"}})  # 无 type

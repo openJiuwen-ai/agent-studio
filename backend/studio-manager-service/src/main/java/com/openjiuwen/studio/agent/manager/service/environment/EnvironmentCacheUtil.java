@@ -88,6 +88,34 @@ public class EnvironmentCacheUtil {
     }
 
     /**
+     * 更新项目默认环境缓存（runtime 直连时按 project_id 读取默认环境 id）
+     *
+     * @param projectId 项目id
+     * @param envId 默认环境id
+     */
+    public void updateDefaultEnvironmentCache(String projectId, String envId) {
+        if (StringUtils.isBlank(projectId) || StringUtils.isBlank(envId)) {
+            return;
+        }
+        redisClient.set(String.format(PROJECT_DEFAULT_ENVIRONMENT, projectId), envId,
+            Duration.ofDays(ENVIRONMENT_EXPIRE_DAYS));
+        log.info("update default environment cache, projectId: {}, envId: {}", projectId, envId);
+    }
+
+    /**
+     * 删除项目默认环境缓存（项目环境全部删除时调用）
+     *
+     * @param projectId 项目id
+     */
+    public void deleteDefaultEnvironmentCache(String projectId) {
+        if (StringUtils.isBlank(projectId)) {
+            return;
+        }
+        redisClient.delete(String.format(PROJECT_DEFAULT_ENVIRONMENT, projectId));
+        log.info("delete default environment cache, projectId: {}", projectId);
+    }
+
+    /**
      * 定时刷新环境变量
      */
     @Scheduled(cron = "${env-management.variables.cache-refresh-cron: 0 30 1 * * ?}")
@@ -123,6 +151,15 @@ public class EnvironmentCacheUtil {
                                 Duration.ofDays(ENVIRONMENT_EXPIRE_DAYS));
                         });
                     });
+                    // 补写项目默认环境缓存（兼容历史数据：老项目从未写过该 key，
+                    // 定时刷新时按 DB 当前默认环境补齐，runtime 直连才能解析）
+                    List<EnvironmentManagerEntity> defaults = environmentManagerMapper
+                        .findByProjectIdAndIsDefaultTrue(projectId);
+                    if (!CollectionUtils.isEmpty(defaults)) {
+                        updateDefaultEnvironmentCache(projectId, defaults.get(0).getId());
+                    } else {
+                        deleteDefaultEnvironmentCache(projectId);
+                    }
                 });
             }
             log.info("Environment variables refresh end.");

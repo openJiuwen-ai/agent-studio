@@ -151,7 +151,8 @@ export type ConversationContent = {
   timeConsumptionStr?: any;
   isConfirmed?: string,
   dialogId?:string,
-  hasSummary?:boolean
+  hasSummary?:boolean,
+  terminate?: boolean
 };
 
 export type FuncCallItem = {
@@ -306,6 +307,8 @@ export interface ITriggerList {
   prompt: string;
   params: ITriggerParam[];
   hook_url: string;
+  poll_url?: string;
+  poll_interval_seconds?: number;
   created_on: string;
 }
 

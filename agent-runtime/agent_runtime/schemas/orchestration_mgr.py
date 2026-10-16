@@ -51,11 +51,13 @@ class ExecutionParams(BaseModel):
     tool_switch_dict: Optional[dict] = Field(
         alias="toolSwitchDict", default_factory=dict
     )
+    # 默认 None=未提供（Controller 使用全部业务工作流）；
+    # 显式空列表 [] 表示明确的权限收窄（无业务工作流候选），二者必须可区分
     workflow_sequence: Optional[list[str]] = Field(
-        alias="workflowSequence", default_factory=list
+        alias="workflowSequence", default=None
     )
     active_workflows: Optional[list[str]] = Field(
-        alias="activeWorkflows", default_factory=list
+        alias="activeWorkflows", default=None
     )
     intent: Optional[str] = Field(alias="intent", default="")
     enable_history: Optional[bool] = Field(alias="enableHistory", default=True)
@@ -126,6 +128,11 @@ class ExecutionRequest(BaseModel):
         default=None,
         alias="resumeInput",
         description="恢复中断时的用户输入（后端自动检测会话状态决定是否使用）",
+    )
+    dialogue_count: int = Field(
+        default=1,
+        alias="dialogueCount",
+        description="对话轮次计数，用于消息历史裁剪与统计",
     )
 
 

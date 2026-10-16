@@ -67,8 +67,9 @@ OpenJiuwen 的接口分为管理面（Manager）和运行时（Runtime）两部�
 | query-string | 查询参数（可选），多个参数以 `&` 连接，如 `version=latest&workspace_id=xxx` |
 
 > **说明**：
-> - `project_id`：Manager 和 Runtime 服务的所有接口路径均包含此路径参数（必选）。获取方式见 [5.4 获取项目 ID](#54-获取项目-id)。
-> - `workspace_id`：Manager 服务的部分接口需要通过查询参数传递，Runtime 服务为可选。获取方式见 [5.5 获取工作空间 ID](#55-获取工作空间-id)。
+> - `project_id`：Manager 服务接口及 Runtime 对话/调试类接口（如工作流/智能体对话运行、`node_execute`、`variables`、`releases` 等）的必选路径参数；`/internal/v1/*`、`/v1/inner-tools/*`、`/v1/agents/chat/*`、`/v1/workflows/chat/*`、`/v1/orchestration/*`、`/v1/health` 等接口路径不含此参数。获取方式见 [5.4 获取项目 ID](#54-获取项目-id)。
+> - `workspace_id`：Manager 服务接口按各接口契约确认必填；Runtime 服务中仅 `additional-questions` 两接口必填，其余接口可选。获取方式见 [5.5 获取工作空间 ID](#55-获取工作空间-id)。
+> - 内部接口（登录回调 `/saml/login`、本地存储下载 `/api/storage/download`）不对外承诺契约；`/v1/agentspace/*`、`/agentspace/*` 系列接口不属于开源发行包对外契约，未收录。
 
 ### 2.2 请求方法
 

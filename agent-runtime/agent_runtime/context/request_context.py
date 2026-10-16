@@ -26,6 +26,7 @@ class RequestContext:
     user_id: str = ""
     project_id: str = ""
     conversation_id: str = ""
+    trace_id: str = ""
     execution_id: str = ""
     request_id: str = ""
     secret_env_keys: list = field(default_factory=list)
@@ -42,8 +43,32 @@ class RequestContext:
     customer_headers: dict = field(default_factory=dict)
     # 平台 header（X-Auth-Token 等），独立分仓
     platform_headers: dict = field(default_factory=dict)
+    # 请求内 IR 加载 memo；仅由 HTTP 请求中间件初始化，避免跨请求复用。
+    ir_load_cache: dict[str, Any] | None = None
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(
     "request_ctx", default=RequestContext()
 )
+
+
+# D-02（SYNC-01 P3.4）：W3C traceparent 第三方注入已移除（老分支无此函数；
+# 模型/插件/MCP 出站不传播平台关联 Header）。若未来恢复第三方 W3C 传播，
+# 须按 D-02 另行提出协议变更并经用户确认，不得静默恢复。
+
+# B07：第三方发送边界保留的关联 Header 名（小写；匹配大小写不敏感）。
+# 含预置/钩子重引入的伪造值——最终发送前一律剥离；认证/客户 Header 不动。
+_RESERVED_CORRELATION_HEADERS = frozenset(
+    {"x-request-id", "x-execution-id", "traceparent"}
+)
+
+
+def strip_correlation_headers(headers: dict) -> None:
+    """D-02/B07：在最终第三方发送边界剥离平台保留关联 Header（原地，大小写不敏感）。
+
+    模型/插件/MCP 出站 headers 在发送前调用；业务鉴权（X-Auth-*/Authorization）
+    与已授权客户 Header（cust-*）不受影响。内部 Runtime/Builder 目标不适用本函数
+    （P4 按"仅带白名单且覆盖伪造值"另验）。
+    """
+    for key in [k for k in headers if str(k).lower() in _RESERVED_CORRELATION_HEADERS]:
+        headers.pop(key, None)

@@ -113,6 +113,44 @@ DATA_TYPE_CONVERSION = {
     DataType.ARRAY.value: _to_array,       # 原 list() 会把 JSON 字符串拆成字符列表
 }
 
+# 非 string 类型空默认(None/'')归一为合法类型值:直接注入 '' 会让 Start 输出
+# userFields 通过不了 openjiuwen IR 输出校验(json.loads('')/int('') 失败,
+# 报 Incorrect type for key),object/array 空默认注入 {} / [] 后 End 节点
+# _apply_type_conversion 会把空 dict/list 再转为空串输出。
+_NON_STRING_EMPTY_DEFAULT = {
+    DataType.INTEGER.value: 0,
+    DataType.NUMBER.value: 0.0,
+    DataType.BOOLEAN.value: False,
+    DataType.OBJECT.value: {},
+    DataType.ARRAY.value: [],
+}
+
+
+def _fill_object_default(schema: Any) -> dict:
+    """按 object schema 递归填充子字段类型空值。
+
+    对齐 openjiuwen 对节点输出的 _convert_object 行为:空 dict 会被按 schema
+    递归填充(string -> '',integer -> 0,number -> 0.0,boolean -> False,
+    array -> [],嵌套 object 递归)。保证 ${_request.obj} 与
+    ${node_start.userFields.obj} 两种引用得到相同结构。
+    """
+    if not isinstance(schema, list):
+        return {}
+    result = {}
+    for sub in schema:
+        if not isinstance(sub, dict) or not sub.get("id"):
+            continue
+        sub_type = (sub.get("type") or "").lower()
+        if sub_type == DataType.OBJECT.value:
+            result[sub["id"]] = _fill_object_default(sub.get("schema"))
+        elif sub_type == DataType.ARRAY.value:
+            result[sub["id"]] = []
+        elif sub_type == DataType.STRING.value:
+            result[sub["id"]] = ""
+        else:
+            result[sub["id"]] = _NON_STRING_EMPTY_DEFAULT.get(sub_type, "")
+    return result
+
 
 class Start(WorkflowComponent):
     """
@@ -148,11 +186,12 @@ class Start(WorkflowComponent):
         workflow_id = self._get_workflow_id(inputs, session)
         conversation_id = self._get_conversation_id(inputs, session)
 
-        # 1. 验证必需变量
-        self._validate_inputs(inputs)
+        # 1. 合并本轮 _request 中已声明的入参（先于默认值，避免默认值遮蔽真实输入）并校验必填字段
+        effective_inputs = self._merge_request_inputs(inputs, session)
+        self._validate_inputs(effective_inputs)
 
         # 2. 填充默认值
-        inputs_with_defaults = self._fill_default_values(inputs)
+        inputs_with_defaults = self._fill_default_values(effective_inputs)
 
         # 3. 获取 preDefinedFields 中定义的会话级变量
         assignment_inputs = self._get_assignment_inputs()
@@ -270,7 +309,10 @@ class Start(WorkflowComponent):
             time_type (str): 时间类型，必须是 ASSIGNMENT_SESSION 或 ASSIGNMENT_PERMANENT
 
         Returns:
-            dict: 提取后的变量定义字典，格式为 {var_id: default_value}
+            dict: 提取后的变量定义字典，格式为 {var_id: default_value}。
+            空默认值统一为 None 且 key 保留(values_define 的成员资格是
+            Redis 会话变量存取与 SetVariable 持久化的门控依据,
+            key 缺失会导致跨轮丢值)。
         """
         result = {}
         if isinstance(data, list):
@@ -291,25 +333,31 @@ class Start(WorkflowComponent):
                     default_val = data.get("default_value")
                     if data_type == DataType.ARRAY.value:
                         # 数组的 schema 是元素类型定义(标量或 object 皆同),
-                        # default_value 在本层。空默认保持 key 缺失(渲染为空,
-                        # 与历史行为一致;写入 [] 会让模板渲染出 '[]' 字面量)
-                        if default_val not in (None, ""):
-                            result[var_id] = Start._transform_type(
-                                data_type, default_val, var_id
-                            )
+                        # default_value 在本层。空默认(None/''/'[]' 及各空写法)
+                        # 统一归一为 None:渲染为空且不出现 '[]' 字面量,但 key
+                        # 保留在 values_define —— Redis 会话变量存取与
+                        # SetVariable 持久化都以 values_define 成员为门控,
+                        # key 缺失会导致跨轮丢值;引用解析层 None 与
+                        # key 缺失等价(未命中同返 None)
+                        converted = Start._transform_type(
+                            data_type, default_val, var_id
+                        )
+                        result[var_id] = None if converted == [] else converted
                     elif data_type == DataType.OBJECT.value:
-                        # 对象:整体 default_value 优先;为空时从子字段默认值组装,
+                        # 对象:整体 default_value 优先;空默认(None/''/'{}')
+                        # 时从子字段默认值组装,组装仍空则 None(注册语义同上),
                         # 不再把子字段平铺到顶层(旧 else 递归分支的泄漏问题)
-                        if default_val not in (None, ""):
-                            result[var_id] = Start._transform_type(
-                                data_type, default_val, var_id
+                        converted = Start._transform_type(
+                            data_type, default_val, var_id
+                        )
+                        if not converted:
+                            converted = (
+                                Start._assemble_object_default(
+                                    data.get("schema", [])
+                                )
+                                or None
                             )
-                        else:
-                            assembled = Start._assemble_object_default(
-                                data.get("schema", [])
-                            )
-                            if assembled:
-                                result[var_id] = assembled
+                        result[var_id] = converted
                     elif "default_value" in data and "type" in data:
                         # 基本类型(string/integer/number/boolean)。按 type 分支
                         # 而非 schema 存在性,畸形 IR(标量带 schema)也能提取
@@ -327,9 +375,13 @@ class Start(WorkflowComponent):
     def _assemble_object_default(subfields: list) -> dict:
         """从子字段默认值组装 object 记忆变量的默认值。
 
-        空默认的子字段跳过(引用渲染为空);嵌套 object 递归组装,
-        组装结果为空则该子字段整体跳过。
+        嵌套 object 优先取自身 default_value(与顶层语义一致),为空时才
+        从子字段组装;空默认(None/''/[])的子字段跳过(引用渲染为空);
+        组装结果为空则该子字段整体跳过。schema 非法(None/非 list)
+        容错为无子字段,与旧递归实现的容忍度一致。
         """
+        if not isinstance(subfields, list):
+            return {}
         assembled = {}
         for sub in subfields:
             if not isinstance(sub, dict) or not sub.get("id"):
@@ -337,14 +389,25 @@ class Start(WorkflowComponent):
             sub_type = (sub.get("type") or "string").lower()
             sub_default = sub.get("default_value")
             if sub_type == DataType.OBJECT.value:
-                # 嵌套 object:顶层默认为空时仍从其子字段组装(与顶层语义一致)
-                nested = Start._assemble_object_default(sub.get("schema", []))
+                # 嵌套 object:自身默认优先(对齐顶层),为空才从子字段组装
+                nested = Start._transform_type(sub_type, sub_default, sub["id"])
+                if not nested:
+                    nested = Start._assemble_object_default(
+                        sub.get("schema", [])
+                    )
                 if nested:
                     assembled[sub["id"]] = nested
-            elif sub_default not in (None, ""):
-                assembled[sub["id"]] = Start._transform_type(
-                    sub_type, sub_default, sub["id"]
-                )
+            else:
+                # 标量/array 子字段:空默认跳过。None/'' 必须转换前拦截——
+                # _transform_type 对 string 不做空值短路,str(None) 会产出
+                # 字面量 'None';'[]'/'{}' 字面量由转换后判空兜住。
+                # 0/False 是合法默认值,显式比较,不能用 falsy 判断
+                if sub_default not in (None, ""):
+                    converted = Start._transform_type(
+                        sub_type, sub_default, sub["id"]
+                    )
+                    if converted is not None and converted != [] and converted != "":
+                        assembled[sub["id"]] = converted
         return assembled
 
     @staticmethod
@@ -374,6 +437,30 @@ class Start(WorkflowComponent):
                 f"Failed to transform start node vars type: {e}", exc_info=True
             )
         return res
+
+    @staticmethod
+    def convert_user_field_default(
+        data_type: str, default_value: Any, schema: Any = None
+    ) -> Any:
+        """将 Start 用户字段默认值按声明类型归一为可注入 _request 的值。
+
+        供 runner/handler 注入 Start 用户字段默认值前调用:所有类型字段都注入,
+        用户未传时 End 节点 `${_request.xxx}` 能解析到类型正确的值而非 None
+        (328d4923 修复本意,不区分字段类型)。
+        空默认(None/'')按类型归一:string -> '',object -> 按 schema 填充子字段,
+        array -> [],integer -> 0,number -> 0.0,boolean -> False;
+        非空默认按类型转换(object/array 的 JSON 字符串解析为 dict/list)。
+        """
+        if data_type == DataType.STRING.value:
+            return "" if default_value is None else default_value
+        converted = Start._transform_type(data_type, default_value, "")
+        if data_type == DataType.OBJECT.value:
+            if converted is None or converted == {}:
+                return _fill_object_default(schema)
+            return converted
+        if converted is not None:
+            return converted
+        return _NON_STRING_EMPTY_DEFAULT.get(data_type, "")
 
     @staticmethod
     async def _get_redis_session_vars(
@@ -558,6 +645,62 @@ class Start(WorkflowComponent):
                 continue
             result[key] = value
         return result
+
+    @staticmethod
+    def _is_root_workflow(session: Session) -> bool:
+        """仅根工作流(depth==0 且为整数)返回 True。
+
+        复用 flow_message.py 的取法:session._inner.workflow_nesting_depth()。
+        严格限制返回值类型为 int,避免 bool 子类(False == 0)误判为根。
+        前置 _request 合并是本次新增行为,无法判定嵌套层级时不扩大生效
+        范围(保守返回 False,跳过合并)。
+        """
+        inner_session = getattr(session, "_inner", None)
+        depth_getter = getattr(inner_session, "workflow_nesting_depth", None)
+        if not callable(depth_getter):
+            return False
+        try:
+            depth = depth_getter()
+            return type(depth) is int and depth == 0
+        except Exception:
+            return False
+
+    def _merge_request_inputs(self, inputs: dict, session: Session) -> dict:
+        """将本轮 _request 中 Start 已声明的入参合并到直接输入。
+
+        仅对根工作流(depth==0)Start 生效。子工作流经 SubWorkflow 作用域
+        继承父 _request 同名值,若在默认值填充前合并,会遮蔽子工作流默认值,
+        故子工作流直接返回原输入深拷贝,不参与前置合并。
+
+        根工作流优先级:直接输入有效值 > _request 同名非 None 值 > Start 默认值。
+        只允许 Start 声明的用户字段从 _request 进入,避免未声明字段泄漏；
+        顶层已有非 None 值时不覆盖；_request 值为 None 时不覆盖；
+        用 is None 判据而非真值判断,保留 False/0/空集合等合法假值。
+        """
+        merged_inputs = deepcopy(inputs or {})
+
+        if not self._is_root_workflow(session):
+            return merged_inputs
+
+        request_inputs = get_workflow_param(session, REQUEST_VARIABLES) or {}
+
+        declared_fields = self._config.get(USER_FIELDS, {}).get("inputs", [])
+        declared_ids = {
+            field.get("id")
+            for field in declared_fields
+            if isinstance(field, dict) and field.get("id")
+        }
+
+        for field_id in declared_ids:
+            direct_value = merged_inputs.get(field_id)
+            request_has_value = (
+                field_id in request_inputs
+                and request_inputs[field_id] is not None
+            )
+            if (field_id not in merged_inputs or direct_value is None) and request_has_value:
+                merged_inputs[field_id] = request_inputs[field_id]
+
+        return merged_inputs
 
     @staticmethod
     def _assemble_output(inputs: dict, session: Session) -> dict:

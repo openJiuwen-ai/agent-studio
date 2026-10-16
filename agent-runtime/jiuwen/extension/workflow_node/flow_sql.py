@@ -41,6 +41,7 @@ class FlowSqlStatusCode(Enum):
     SQL_INIT_ERROR = (101750, "Sql component init error. msg={msg}")
     SQL_EXECUTE_ERROR = (101751, "Sql component execute error")
     DATASOURCE_NOT_FOUND = (101753, "Datasource not found: {datasourceId}")
+    SQL_INJECTION_BLOCKED = (101754, "Inline variable '{key}' contains unsafe content: {detail}")
 
 
 class FlowSql(WorkflowComponent):
@@ -58,6 +59,7 @@ class FlowSql(WorkflowComponent):
         self._datasource_id: Optional[str] = None
         self._sql: Optional[str] = None
         self._conditions: list = []
+        self._output_format: str = "json"
         if conf:
             self.init(conf)
 
@@ -66,6 +68,7 @@ class FlowSql(WorkflowComponent):
         self._datasource_id = conf.get("id")
         self._sql = conf.get("sql")
         self._conditions = conf.get("conditions", [])
+        self._output_format = conf.get("output_format", "json")
 
     def component_type(self) -> str:
         return "jiuwen.sql"
@@ -81,7 +84,60 @@ class FlowSql(WorkflowComponent):
                 result = result.replace("{{" + key + "}}", str(value))
         return result
 
+    _INLINE_PATTERN = re.compile(r"""\{\{\{(\w+)\}\}\}""")
     _PARAM_PATTERN = re.compile(r"""['"]?\{\{(\w+)\}\}['"]?""")
+
+    _INLINE_ALLOWED_CHARS = re.compile(
+        r"""^[a-zA-Z0-9_.,() \t*=<>'"/+%!?;:-]+$"""
+    )
+    _INLINE_FORBIDDEN_KEYWORDS = re.compile(
+        r"""\b(DROP|DELETE|TRUNCATE|ALTER|CREATE|INSERT|UPDATE|UNION|EXEC|EXECUTE|"""
+        r"""GRANT|REVOKE|MERGE|CALL|DECLARE|CURSOR|FUNCTION|PROCEDURE|"""
+        r"""LOAD_FILE|OUTFILE|DUMPFILE)\b""",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _validate_inline_value(cls, key: str, value: Any) -> str:
+        """验证 {{{variable}}} 内联替换的值，防止 SQL 注入。
+
+        允许常见 SQL 语法字符（字母、数字、标点、运算符等），
+        但禁止 SQL 注释、多语句执行及 DDL/DML 写操作关键词。
+        """
+        str_value = str(value).strip()
+        if not str_value:
+            raise JiuWenBaseException(
+                error_code=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[0],
+                message=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[1].format(
+                    key=key, detail="empty value"
+                ),
+            )
+        if not cls._INLINE_ALLOWED_CHARS.match(str_value):
+            raise JiuWenBaseException(
+                error_code=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[0],
+                message=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[1].format(
+                    key=key,
+                    detail="contains disallowed characters " "(only alphanumerics and common SQL operators allowed)",
+                ),
+            )
+        if "--" in str_value:
+            raise JiuWenBaseException(
+                error_code=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[0],
+                message=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[1].format(
+                    key=key,
+                    detail="sql comment marker '--' not allowed",
+                ),
+            )
+        keyword_match = cls._INLINE_FORBIDDEN_KEYWORDS.search(str_value)
+        if keyword_match:
+            raise JiuWenBaseException(
+                error_code=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[0],
+                message=FlowSqlStatusCode.SQL_INJECTION_BLOCKED.value[1].format(
+                    key=key,
+                    detail=f"forbidden keyword '{keyword_match.group()}'",
+                ),
+            )
+        return str_value
 
     @classmethod
     def _parameterize_template(
@@ -91,9 +147,22 @@ class FlowSql(WorkflowComponent):
 
         去除占位符两侧可能存在的引号，使 ? 成为 PreparedStatement 的裸占位符。
         对于可视化查询模式（SQL 已含 ? 且无 {{}}），返回结果不变。
+
+        支持两种占位符：
+        - {{{variable}}}：内联替换，适用于 SQL 片段（子查询、表名、IN 列表等）
+        - {{variable}}：参数化替换为 ?，适用于标量值（字符串、数字等）
         """
         if not isinstance(template, str) or not variables:
             return template, []
+
+        def inline_match(match: re.Match) -> str:
+            key = match.group(1)
+            value = variables.get(key)
+            if value is not None:
+                return cls._validate_inline_value(key, value)
+            return match.group(0)
+
+        inlined = cls._INLINE_PATTERN.sub(inline_match, template)
 
         params: List[str] = []
 
@@ -105,7 +174,7 @@ class FlowSql(WorkflowComponent):
                 return "?"
             return match.group(0)
 
-        result = cls._PARAM_PATTERN.sub(replace_match, template)
+        result = cls._PARAM_PATTERN.sub(replace_match, inlined)
         return result, params
 
     async def invoke(
@@ -128,6 +197,9 @@ class FlowSql(WorkflowComponent):
                     "row_num": result.get("rowNum", 0),
                 }
             }
+            markdown_table = result.get("markdownTable")
+            if markdown_table is not None:
+                outputs[USER_FIELDS]["markdown_table"] = markdown_table
 
             duration = round((time.perf_counter() - start_time) * 1000)
             workflow_logger.info(
@@ -181,6 +253,7 @@ class FlowSql(WorkflowComponent):
         body = {
             "query": sql,
             "conditions": conditions or None,
+            "outputFormat": self._output_format,
         }
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
         async with aiohttp.ClientSession(timeout=timeout) as http_session:

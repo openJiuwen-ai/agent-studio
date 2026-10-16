@@ -338,10 +338,9 @@
       <nz-select
         style="width: 100%; min-width: 100%; margin-bottom: 16px"
         [nzPlaceHolder]="'select_placeholder' | i18nextEager"
-        [nzOptions]="callItem.questionerRounds"
+        [nzOptions]="callItem.questionerRoundOptions"
+        [compareWith]="compareQuestionerRound"
         [(ngModel)]="callItem.roundSelected"
-        nzLabel="content"
-        nzKey="uuid"
       >
       </nz-select>
       <div *ngIf="!callItem.isIOEmptyInputs; else noInputs" class="cell-bg-border">
@@ -358,29 +357,29 @@
           <json-viewer [jsonData]="callItem.inputs"></json-viewer>
         </div>
       </div>
-      <ng-container *ngIf="callItem.messagesByUuid as curIO">
-        <ng-container *ngIf="curIO.length && !curIO[0].isIOEmpty && curIO[0].roundIndex !== 0">
-          <div *ngIf="curIO.length && !curIO[0].isIOEmpty; else noInputs" class="cell-bg-border">
+      <ng-container *ngIf="getMessagesByUuid(callItem.messages, callItem.roundSelected?.uuid) as curIO">
+        <ng-container *ngIf="curIO.length && !isIOEmpty(curIO[0]) && curIO[0].roundIndex !== 0">
+          <div *ngIf="curIO.length && !isIOEmpty(curIO[0]); else noInputs" class="cell-bg-border">
             <div class="node-inputs-area">
               <span class="text-[#191919]">{{ 'chat_input' | i18nextEager }}</span>
               <asset-copy-icon *ngIf="!curIO[0]?.copyIcon" class="cursor-pointer" (click)="copyQuestionNodeIO(curIO[0])"></asset-copy-icon>
               <asset-copy-success-icon *ngIf="curIO[0]?.copyIcon" class="cursor-pointer"></asset-copy-success-icon>
             </div>
             <div class="json-wrap">
-              <json-viewer [jsonData]="curIO[0].removeUuid"></json-viewer>
+              <json-viewer [jsonData]="removeUuid(curIO[0])"></json-viewer>
             </div>
           </div>
         </ng-container>
       </ng-container>
-      <ng-container *ngIf="callItem.messagesByUuid as curIO">
-        <div *ngIf="curIO.length && !curIO[1].isIOEmpty; else noOutputs" class="cell-bg-border">
+      <ng-container *ngIf="getMessagesByUuid(callItem.messages, callItem.roundSelected?.uuid) as curIO">
+        <div *ngIf="curIO.length && !isIOEmpty(curIO[1]); else noOutputs" class="cell-bg-border">
           <div class="node-inputs-area">
             <span class="text-[#191919]">{{ 'output' | i18nextEager }}</span>
             <asset-copy-icon *ngIf="!curIO[1]?.copyIcon" class="cursor-pointer" (click)="copyQuestionNodeIO(curIO[1])"></asset-copy-icon>
             <asset-copy-success-icon *ngIf="curIO[1]?.copyIcon" class="cursor-pointer"></asset-copy-success-icon>
           </div>
           <div class="json-wrap">
-            <json-viewer [jsonData]="curIO[1].removeUuid"></json-viewer>
+            <json-viewer [jsonData]="removeUuid(curIO[1])"></json-viewer>
           </div>
         </div>
       </ng-container>

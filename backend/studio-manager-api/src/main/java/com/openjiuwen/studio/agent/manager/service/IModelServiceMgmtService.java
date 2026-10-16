@@ -5,7 +5,6 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.manager.dto.AvailableModelServicesQo;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
-import com.openjiuwen.studio.agent.manager.dto.MaasServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelInvokeDataListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelNameResp;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceListQo;
@@ -36,7 +35,7 @@ public interface IModelServiceMgmtService {
      * @param availableCheck availableCheck
      * @param body body
      */
-    Object createModelService(String projectId, String workspaceId, Boolean availableCheck, ModelServiceReq body);
+    String createModelService(String projectId, String workspaceId, Boolean availableCheck, ModelServiceReq body);
 
     /**
      * deleteModelService
@@ -55,13 +54,6 @@ public interface IModelServiceMgmtService {
      * @param modelName modelName
      */
     ModelNameResp existsModelName(String projectId, String workspaceId, String modelName);
-
-    /**
-     * maasModelServiceList
-     *
-     * @param projectId projectId
-     */
-    MaasServiceRsp maasModelServiceList(String projectId);
 
     /**
      * modelServiceDetail
@@ -126,7 +118,7 @@ public interface IModelServiceMgmtService {
      * @param id id
      * @param body body
      */
-    Object updateModelService(String projectId, String workspaceId, Boolean availableCheck, String id,
+    Void updateModelService(String projectId, String workspaceId, Boolean availableCheck, String id,
         ModelServiceReq body);
 
     /**

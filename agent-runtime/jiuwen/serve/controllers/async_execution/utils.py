@@ -32,6 +32,11 @@ from jiuwen.serve.controllers.execution.utils import (
 )
 
 
+# COM-08 §4.7B 条3: 不以 item.data.get("message") / e.message 作为公开文案来源；
+# 两种 LOG_VERBOSE 配置 wire 一致。SYNC-01 P5-R3 Phase 2 落地（与 execution/utils.py 对齐）。
+_SAFE_PUBLIC_ERROR_MESSAGE = "系统内部错误，请参考错误码并联系系统管理员"
+
+
 def get_conversation_history(conversation_key=None):
     """
     第三方需重写此接口，用于获取对话历史
@@ -65,7 +70,7 @@ def handle_init_exceptions(e: JiuWenBaseException, exec_id, conv_id):
         event=ConversationEvent.ERROR,
         index=0,
         executionId=exec_id,
-        data={"code": e.error_code, "message": e.message},
+        data={"code": e.error_code, "message": _SAFE_PUBLIC_ERROR_MESSAGE},
         createdTime=get_current_time_ms(),
     )
 
@@ -123,7 +128,7 @@ def post_process_workflow_streaming_output_async(
             item.data.update(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
-                        code_of_data, item.data.get("message")
+                        code_of_data, _SAFE_PUBLIC_ERROR_MESSAGE
                     )
                 )
             )

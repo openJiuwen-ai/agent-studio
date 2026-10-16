@@ -11,20 +11,29 @@
   display: flex;
 }
 
+::ng-deep {
+  .app-layout {
+    min-width: 0;
+
+    nz-layout {
+      min-width: 0;
+    }
+
+    .app-layout-content {
+      width: 100% !important;
+      min-width: 0;
+      overflow-x: hidden;
+      &[data-set=layout-page] {
+        height: auto !important;
+      }
+    }
+  }
+}
+
 ::ng-deep .ti-app-layout-left-container {
   left: 0 !important;
   z-index: 95 !important;
   box-shadow: none !important;
-}
-
-::ng-deep {
-  .app-layout-content {
-    width: 100% !important;
-    &[data-set=layout-page] {
-      height: auto !important;
-    }
-  }
-
 }
 
 .license-alert-content {

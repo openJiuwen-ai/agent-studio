@@ -31,6 +31,17 @@ export class EditableDatasourceHalfmodalComponent implements OnInit {
     {
       label: 'MySQL',
       value: 'MYSQL',
+      defaultPort: '3306',
+    },
+    {
+      label: 'PostgreSQL',
+      value: 'POSTGRESQL',
+      defaultPort: '5432',
+    },
+    {
+      label: 'GaussDB',
+      value: 'GAUSSDB',
+      defaultPort: '5432',
     },
   ];
 
@@ -65,6 +76,18 @@ export class EditableDatasourceHalfmodalComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.form.controls.type.valueChanges.subscribe((opt) => {
+      if (opt && opt.defaultPort) {
+        const currentPort = this.form.controls.port.value;
+        const isDefaultPort = this.typeOptions.some(
+          (item) => item.defaultPort === currentPort,
+        );
+        if (!currentPort || isDefaultPort) {
+          this.form.controls.port.setValue(opt.defaultPort);
+        }
+      }
+    });
+
     if (this.id) {
       this.getDatasourceDetail();
     }

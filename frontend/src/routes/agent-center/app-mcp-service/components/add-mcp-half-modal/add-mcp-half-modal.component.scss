@@ -31,6 +31,24 @@
     width: 100%;
   }
 
+  ::ng-deep .param-editor {
+    padding: 0;
+
+    .placeholder {
+      line-height: 20px;
+      font-size: 14px;
+      transform: translate(8px, 8px);
+    }
+
+    .editor > div {
+      font-size: 14px;
+      min-height: 36px;
+      line-height: 20px;
+      padding: 8px 8px;
+      box-sizing: border-box;
+    }
+  }
+
   .orgType {
     display: inline-block;
     height: 30px;

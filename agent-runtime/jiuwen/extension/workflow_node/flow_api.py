@@ -52,8 +52,6 @@ EXCEPTIONENABLE = "exceptionEnable"
 EXCEPTIONSUPPRESSION = "exceptionSuppression"
 OLD_IR_PLUGIN_RESPONSE = "raw_output"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class FlowApiStatusCode(Enum):
     """FlowApi 组件专用错误码"""
@@ -483,12 +481,12 @@ class FlowApi(WorkflowComponent):
                     "FlowApi _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                     component_type_str="FlowApi",
-                    metadata={"param_name": name if LOG_VERBOSE_MODE else "unknown"},
+                    metadata={"param_name": "unknown"},
                 )
                 raise _build_flow_api_error(
                     FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR,
                     error_msg=(
-                        f"param is {name if LOG_VERBOSE_MODE else 'not api params'}"
+                        "param is not api params"
                     ),
                 )
         return api_inputs

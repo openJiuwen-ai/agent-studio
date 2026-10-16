@@ -72,7 +72,9 @@ import com.openjiuwen.studio.agent.manager.dto.MemoryUserProfileIR;
 import com.openjiuwen.studio.agent.manager.dto.MemoryUserProfileTagInfoIR;
 import com.openjiuwen.studio.agent.manager.dto.MemoryUserProfileTopicInfoIR;
 import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
+import com.openjiuwen.studio.agent.manager.entity.MemoryServiceInstanceEntity;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
+import com.openjiuwen.studio.agent.manager.mapper.MemoryServiceInstanceMapper;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.Scene;
 import com.openjiuwen.studio.agent.manager.dto.ToolCredential;
@@ -101,6 +103,7 @@ import com.openjiuwen.studio.agent.manager.entity.ir.ConversationInputVariable;
 import com.openjiuwen.studio.agent.manager.entity.ir.ConversationVariable;
 import com.openjiuwen.studio.agent.manager.entity.ir.IrContext;
 import com.openjiuwen.studio.agent.manager.enums.JsonSchemaType;
+import com.openjiuwen.studio.agent.manager.enums.PluginCallModeEnum;
 import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.ToolType;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
@@ -292,6 +295,16 @@ public class IrAdapterService {
      * 参数相关修饰字段
      */
     private static final String PARAMS_WRAPPER = "paramsWrapper";
+
+    /**
+     * 插件调用模式（custom / api）
+     */
+    private static final String CALL_MODE = "callMode";
+
+    /**
+     * 自定义组件类型标识（ComponentClassPool 查找键）
+     */
+    private static final String COMPONENT_TYPE = "componentType";
 
     /**
      * 参数相关修饰字段
@@ -578,6 +591,9 @@ public class IrAdapterService {
     @Autowired
     private MemoryRepoMapper memoryRepoMapper;
 
+    @Autowired
+    private MemoryServiceInstanceMapper memoryServiceInstanceMapper;
+
     private static void markEndBranchId(Map<String, WorkflowEdgeVO> edgeVoMap, WorkflowParallelEndNode parallelEndNode,
         String parallelBranchUuid) {
         for (String edgeId : parallelEndNode.getEdgeIds()) {
@@ -707,6 +723,39 @@ public class IrAdapterService {
         return nodes;
     }
 
+    /**
+     * 将记忆库实体的外部后端配置注入 MemoryConfigIR。
+     * 仅携带非敏感元数据（backend_type/scope_id/instance_id/instance_base_url），
+     * api_key 不入 IR — 已由 MemoryServiceInstanceService 写入 OBS auth 文件，runtime 按 instance_id 惰性取。
+     *
+     * @param memoryConfigIr 正在构建的 IR 对象
+     * @param repoEntity     记忆库实体
+     */
+    public void injectExternalMemoryConfig(MemoryConfigIR memoryConfigIr, MemoryRepoEntity repoEntity) {
+        String backendType = StringUtils.isNotBlank(repoEntity.getMemoryBackendType())
+            ? repoEntity.getMemoryBackendType() : "BUILTIN";
+        memoryConfigIr.setMemoryBackendType(backendType);
+        memoryConfigIr.setScopeId(repoEntity.getId());
+
+        if ("EXTERNAL".equalsIgnoreCase(backendType)
+            && StringUtils.isNotBlank(repoEntity.getMemoryServiceInstanceId())) {
+            String instanceId = repoEntity.getMemoryServiceInstanceId();
+            memoryConfigIr.setInstanceId(instanceId);
+            try {
+                MemoryServiceInstanceEntity instance = memoryServiceInstanceMapper.selectById(instanceId);
+                if (instance != null) {
+                    memoryConfigIr.setInstanceBaseUrl(instance.getBaseUrl());
+                } else {
+                    log.warn("Memory service instance {} not found for repo {}, base_url will be null in IR",
+                        instanceId, repoEntity.getId());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to lookup memory service instance {} for repo {}: {}",
+                    instanceId, repoEntity.getId(), e.getMessage());
+            }
+        }
+    }
+
     private Map<String, Object> adaptConfigs(Map<String, Object> configs) {
         Map<String, Object> irConfigs = new HashMap<>();
         if (configs == null) {
@@ -772,6 +821,7 @@ public class IrAdapterService {
                     if (repoEntity.getLongTermMemoryStrategies() != null && !repoEntity.getLongTermMemoryStrategies().isEmpty()) {
                         memoryConfigIr.setStrategies(repoEntity.getLongTermMemoryStrategies());
                     }
+                    injectExternalMemoryConfig(memoryConfigIr, repoEntity);
                     irConfigs.put(Constants.Workflow.MEMORY, memoryConfigIr);
                 }
             }
@@ -1370,7 +1420,7 @@ public class IrAdapterService {
             // 其他的包括走FG的，都是SSE
             result.put(TYPE, CommonConstant.MCP_SERVER_TYPE.SSE);
         }
-        McpServerManagerService.recoveryAuthInfo(serviceEntity);
+        mcpServiceManager.recoveryAuthInfo(serviceEntity);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(serviceEntity.getOrgType(),
             encryptionAdapter.decrypt(serviceEntity.getServerConfig()), serviceEntity.getAuthInfo()));
         result.put(HEADERS, WorkflowUtils.parseHeadersOfServerConfig(serviceEntity.getOrgType(),
@@ -1620,20 +1670,22 @@ public class IrAdapterService {
         }
         result.put(NAME, displayName);
         result.put(DESCRIPTION, toolEntity.getToolDesc());
-        result.put(URL, toolEntity.getRequestInfo().getUrl());
-        result.put(METHOD, toolEntity.getRequestInfo().getMethod());
-        Map<String, String> headers = toolEntity.getRequestInfo().getHeaders() != null
-            ? toolEntity.getRequestInfo().getHeaders() : new HashMap<>();
-        if (!CollectionUtils.isEmpty(headers)) {
-            // 存量未加密数据无需解密
-            headers.forEach((key, value) -> {
-                try {
-                    String decryptedValue = encryptionAdapter.decrypt(value);
-                    headers.put(key, decryptedValue);
-                } catch (Exception e) {
-                    log.warn("Fail to decrypt plugin header [{}].", key);
-                }
-            });
+        Map<String, String> headers = new HashMap<>();
+        if (toolEntity.getRequestInfo() != null) {
+            result.put(URL, toolEntity.getRequestInfo().getUrl());
+            result.put(METHOD, toolEntity.getRequestInfo().getMethod());
+            Map<String, String> rawHeaders = toolEntity.getRequestInfo().getHeaders() != null
+                ? toolEntity.getRequestInfo().getHeaders() : new HashMap<>();
+            if (!CollectionUtils.isEmpty(rawHeaders)) {
+                rawHeaders.forEach((key, value) -> {
+                    try {
+                        String decryptedValue = encryptionAdapter.decrypt(value);
+                        headers.put(key, decryptedValue);
+                    } catch (Exception e) {
+                        log.warn("Fail to decrypt plugin header [{}].", key);
+                    }
+                });
+            }
         }
         SchemaConfig inputSchema = JSON.parseObject(toolEntity.getInputSchema(), SchemaConfig.class);
         fillHeaders(inputSchema, headers);
@@ -1687,6 +1739,13 @@ public class IrAdapterService {
 
         result.put(ARGUMENTS,
             isAgentPlugin ? parseAgentPluginParams(inputSchema, true) : parseWorkflowPluginParams(inputSchema, true));
+        // 扫描 inputSchema properties 中的 env_var_ref，生成 inputParameters 引用关系
+        if (isAgentPlugin) {
+            Map<String, String> envRefMap = extractEnvVarReferences(inputSchema);
+            if (!envRefMap.isEmpty()) {
+                result.put(INPUT_PARAMETERS, envRefMap);
+            }
+        }
         SchemaConfig outputSchema = JSON.parseObject(toolEntity.getOutputSchema(), SchemaConfig.class);
         result.put(RESPONSE, isAgentPlugin ? parseAgentPluginParams(outputSchema, false)
             : parseWorkflowPluginParams(outputSchema, false));
@@ -1702,7 +1761,65 @@ public class IrAdapterService {
             result.put(CREDENTIAL_OWNER_ID, RequestContextUtils.getRequestUserId());
         }
 
+        // 自定义插件：传递 callMode 和 componentType 供 runtime 分流
+        String callMode = toolEntity.getCallMode();
+        if (StringUtils.isEmpty(callMode)) {
+            callMode = PluginCallModeEnum.API.getCode();
+        }
+        result.put(CALL_MODE, callMode);
+        if (PluginCallModeEnum.CUSTOM.getCode().equals(callMode)) {
+            String componentType = extractComponentType(toolEntity.getMetadata());
+            if (StringUtils.isNotEmpty(componentType)) {
+                result.put(COMPONENT_TYPE, componentType);
+            }
+        }
+
         return result;
+    }
+
+    /**
+     * 从 metadata 中提取 componentType。
+     *
+     * <p>metadata 可能是 JSON 字符串（包含 component_type 字段）或纯字符串。</p>
+     *
+     * @param metadata 工具元数据
+     * @return componentType，未找到时返回 null
+     */
+    private String extractComponentType(String metadata) {
+        if (StringUtils.isEmpty(metadata)) {
+            return null;
+        }
+        try {
+            JSONObject meta = JSON.parseObject(metadata);
+            return meta.getString("component_type");
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 扫描 inputSchema 的 properties，提取其中的 env_var_ref 环境变量引用，
+     * 生成 inputParameters 引用映射（如 {"host": "{{_env.plugin_url_params.host}}"}）。
+     *
+     * @param inputSchema 插件输入Schema
+     * @return 环境变量引用映射，空Map表示无环境变量引用
+     */
+    private Map<String, String> extractEnvVarReferences(SchemaConfig inputSchema) {
+        Map<String, String> envRefMap = new HashMap<>();
+        if (inputSchema == null || inputSchema.getProperties() == null) {
+            return envRefMap;
+        }
+        for (Map.Entry<String, SchemaConfig> entry : inputSchema.getProperties().entrySet()) {
+            SchemaConfig prop = entry.getValue();
+            if (prop == null) {
+                continue;
+            }
+            String envVarRef = prop.getEnvVarRef();
+            if (StringUtils.isNotBlank(envVarRef)) {
+                envRefMap.put(entry.getKey(), "{{_env.plugin_url_params." + envVarRef + "}}");
+            }
+        }
+        return envRefMap;
     }
 
     private String getPluginFreeTrialUsageQuotaKey(String domainId, String pluginId) {
@@ -1808,7 +1925,7 @@ public class IrAdapterService {
             result.put(URL, CommonUtil.parseUrlFromMcpConfig(jsonObject, 0));
         }
 
-        McpServerManagerService.recoveryAuthInfo(mcpServerInfo);
+        mcpServiceManager.recoveryAuthInfo(mcpServerInfo);
         String serverConfig = getServiceConfig(mcpServerInfo);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(mcpServerInfo.getOrgType(), serverConfig, mcpServerInfo.getAuthInfo()));
         result.put(HEADERS, WorkflowUtils.parseHeadersOfServerConfig(mcpServerInfo.getOrgType(),
@@ -2379,6 +2496,7 @@ public class IrAdapterService {
                     if (repoEntity.getLongTermMemoryStrategies() != null && !repoEntity.getLongTermMemoryStrategies().isEmpty()) {
                         memoryConfigIr.setStrategies(repoEntity.getLongTermMemoryStrategies());
                     }
+                    injectExternalMemoryConfig(memoryConfigIr, repoEntity);
                     configs.put("memory", memoryConfigIr);
                 } else {
                     log.info("Memory repo {} not found during agent IR generation, using bare config", repoId);
@@ -2656,8 +2774,16 @@ public class IrAdapterService {
                 objectMapper.convertValue(resourceConfig.get(ARGUMENTS), new TypeReference<>() {});
             // 用户所配置的信息
             List<Map<String, Object>> argumentSettings = parseExtendInfo(extendInfo);
-            // 记录引用关系
+            // 记录引用关系，保留已有的环境变量引用（来自 parsePluginConfig 提取的 defaultValue 占位符）
             Map<String, String> refMap = new HashMap<>();
+            Object existingInputParams = resourceConfig.get(INPUT_PARAMETERS);
+            if (existingInputParams instanceof Map<?, ?> existingMap) {
+                for (Map.Entry<?, ?> entry : existingMap.entrySet()) {
+                    if (entry.getKey() instanceof String k && entry.getValue() instanceof String v) {
+                        refMap.put(k, v);
+                    }
+                }
+            }
             // 更新参数
             setArguments(argumentSettings, argumentsList, true, resourceType, refMap, null);
 
@@ -2740,6 +2866,9 @@ public class IrAdapterService {
      */
     private void setArguments(List<Map<String, Object>> argumentSettings, List<Map<String, Object>> argumentsList,
         Boolean isRoot, String resourceType, Map<String, String> refMap, String nestedName) {
+        if (argumentSettings == null || argumentSettings.isEmpty()) {
+            return;
+        }
         for (Map<String, Object> argumentSetting : argumentSettings) {
             // 参数名称
             String name = String.valueOf(argumentSetting.get("name"));

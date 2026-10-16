@@ -10,7 +10,5 @@ import org.springframework.http.ResponseEntity;
 
 public interface IAuthService {
 
-    String loginOut(String sid);
-
     ResponseEntity<SimpleUser> validateToken(String token);
 }

@@ -71,10 +71,10 @@ export class LLMSelectComponent implements OnDestroy {
 
   @Input() refreshSubscribe = true;
 
-  /** 单智能体场景置 true：禁用 api_url 含环境变量占位符的模型。
-   *  单智能体无环境选择 UI，占位符运行期无法解析（不传 environment_id → 不加载 env_vars），
-   *  故在选模型入口拦截，置灰不可选但显示，并提示「单智能体不支持环境变量占位符模型」。
-   *  多智能体有环境选择，默认 false 不禁用。 */
+  /** 单智能体场景传 true：禁用 api_url 含环境变量占位符的模型。
+   *  单智能体无环境选择 UI，运行时由 manager 兜底用项目默认环境解析占位符；
+   *  未配置默认环境时占位符仍无法解析，故仅在无默认环境时置灰不可选但显示，
+   *  并提示「请先在环境管理中设置默认环境」。多智能体有环境选择，默认 false 不禁用。 */
   @Input() disableEnvPlaceholderModels: boolean = false;
 
   public serviceMap: object = {};
@@ -226,6 +226,11 @@ export class LLMSelectComponent implements OnDestroy {
     if (changes.modelType && changes.modelType.previousValue) {
       this.getModelOptions();
     }
+    // 占位符禁用开关是普通 Input，构造器 effect 只跟踪信号、不会在其翻转时重算；
+    // 触发一次信号更新让 effect 重新执行，下拉选项的置灰状态与最新开关值一致
+    if (changes.disableEnvPlaceholderModels && !changes.disableEnvPlaceholderModels.firstChange) {
+      this._modelOptions.set(this._modelOptions().slice());
+    }
     if (changes.selectedModel && changes.selectedModel.currentValue) {
       this.selectedModel = changes.selectedModel.currentValue;
       if(this.serviceMap[this.selectedModel]){
@@ -337,6 +342,11 @@ export class LLMSelectComponent implements OnDestroy {
   changeSelect(modelId: string) {
     //模型调测 需要返回模型对象 & index
     //路由策略需要加index
+
+    // 立即写回本地选中值：nz-select 显示的已是新选择，但父组件对 [selectedModel]
+    // 的回写要等保存成功后异步绕回，期间 selectedModelIsEnvPlaceholder 等派生状态
+    // 仍按旧模型判定（如存量占位符模型改选普通模型后红框不消失）。清空选择时置空串。
+    this.selectedModel = modelId || '';
 
     // 先设置选中模型的图标信息
     if (this.serviceMap[modelId]) {

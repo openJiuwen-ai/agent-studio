@@ -34,6 +34,10 @@
         <id column="resource_name" jdbcType="VARCHAR" property="resourceName"/>
         <id column="reference_number" jdbcType="VARCHAR" property="referenceNumber"/>
     </resultMap>
+    <resultMap id="VersionReferenceCountMap" type="com.openjiuwen.studio.agent.manager.dto.VersionReferenceCount">
+        <result column="resource_version" jdbcType="VARCHAR" property="resourceVersion"/>
+        <result column="reference_count" jdbcType="BIGINT" property="referenceCount"/>
+    </resultMap>
     <sql id="Base_Column_List">
         mapping_id,
         app_id,
@@ -271,6 +275,49 @@
         </if>
         and valid = true
     </select>
+    <!-- 按资源版本分组统计有效引用数量：普通引用按引用方workspace过滤，共享引用按资源原空间过滤 -->
+    <select id="countReferenceByResourceId" resultMap="VersionReferenceCountMap">
+        select m.resource_version,
+        COUNT(*) AS reference_count
+        from t_mapping m
+        LEFT JOIN t_agent a ON m.app_id = a.agent_id
+        AND m.app_type IN ('agent', 'controller')
+        LEFT JOIN t_agent_workflow w ON m.app_id = w.id
+        AND m.app_type = 'workflow'
+        LEFT JOIN t_agent res_a ON m.resource_id = res_a.agent_id
+        AND m.resource_type IN ('agent', 'controller')
+        LEFT JOIN t_agent_workflow res_w ON m.resource_id = res_w.id
+        AND m.resource_type = 'workflow'
+        where m.resource_id = #{resourceId,jdbcType=VARCHAR}
+        and (
+        (m.reference_type = 'direct' and (a.workspace_id = #{workspaceId,jdbcType=VARCHAR}
+        OR w.workspace_id = #{workspaceId,jdbcType=VARCHAR}))
+        OR (m.reference_type = 'share' and COALESCE(m.resource_workspace_id, res_a.workspace_id, res_w.workspace_id) = #{workspaceId,jdbcType=VARCHAR})
+        OR (m.reference_type IS NULL and (
+            (COALESCE(a.workspace_id, w.workspace_id) = #{workspaceId,jdbcType=VARCHAR}
+            OR COALESCE(res_a.workspace_id, res_w.workspace_id) = #{workspaceId,jdbcType=VARCHAR})
+        ))
+        OR (
+        <!-- 存量数据兼容：历史版本（isInnerType 误判）曾把工作流跨空间引用共享资源误写为 direct，
+             此类记录 resource_workspace_id 与 app_workspace_id 必不一致（合法 direct 引用两侧空间恒相等），
+             按 share 语义计入资源原空间；EXISTS 校验共享仍有效（已取消共享的残留引用不多计）。
+             随存量数据在保存/发布时自然重建为 share，此分支可在数据愈合后移除。 -->
+        m.reference_type = 'direct'
+        and m.app_type = 'workflow'
+        and m.resource_type IN ('workflow', 'mcp')
+        and m.resource_workspace_id = #{workspaceId,jdbcType=VARCHAR}
+        and m.app_workspace_id IS NOT NULL
+        and m.resource_workspace_id != m.app_workspace_id
+        and EXISTS (select 1 from t_share_resource s where s.resource_id = m.resource_id)
+        )
+        )
+        and m.resource_version IS NOT NULL
+        <if test="resourceVersion != null">
+            and m.resource_version = #{resourceVersion,jdbcType=VARCHAR}
+        </if>
+        and m.valid = true
+        GROUP BY m.resource_version
+    </select>
     <update id="updateValidByResourceIdAndVersionId" parameterType="map">
         update t_mapping
         <set>
@@ -280,6 +327,18 @@
         <if test="resourceVersion != null">
             and resource_version = #{resourceVersion,jdbcType=VARCHAR}
         </if>
+    </update>
+
+    <!-- 删除资源版本后回退引用版本：CAS条件更新，仅命中仍指向被删版本的草稿引用（app_version为null）。
+         已发布版本快照（app_version非null）是不可变历史记录，与deleteAgentVersion只删自身快照行的语义一致，
+         不做改动；快照引用的版本被删后在导出/查看时如实报版本不存在。版本全部删除时置null（跟随最新） -->
+    <update id="updateResourceVersionIfMatch">
+        update t_mapping
+        set resource_version = #{newResourceVersion,jdbcType=VARCHAR}
+        where resource_id = #{resourceId,jdbcType=VARCHAR}
+          and resource_version = #{expectedResourceVersion,jdbcType=VARCHAR}
+          and app_version is null
+          and valid = true
     </update>
 
     <update id="updateByPrimaryKeySelective"

@@ -1,53 +1,65 @@
 <nz-table
   #basicTable
   id="memory-lib-list"
+  class="table-style table-border"
   [nzData]="libs() || []"
   [nzFrontPagination]="false"
   [nzShowPagination]="false"
   [nzNoResult]="emptyTpl"
-  nzTableLayout="fixed"
 >
   <thead>
-  <tr>
+  <tr style="height:48px;">
     <th nzWidth="60px">{{ 'memory.management.list.icon' | i18nextEager }}</th>
     <th>{{ 'memory.listHeader.nameAndId' | i18nextEager }}</th>
+    <th nzWidth="100px">{{ 'memory.management.backendType' | i18nextEager }}</th>
     <th>{{ 'memory.detail.description' | i18nextEager }}</th>
     <th>{{ 'memory.listHeader.strategy' | i18nextEager }}</th>
-    <th>{{ 'memory.listHeader.createTime' | i18nextEager }}</th>
-    <th>{{ 'memory.listHeader.updateTime' | i18nextEager }}</th>
-    <th nzWidth="120px">{{ 'memory.listHeader.operator' | i18nextEager }}</th>
+    <th nzWidth="170px">{{ 'memory.listHeader.createTime' | i18nextEager }}</th>
+    <th nzWidth="170px">{{ 'memory.listHeader.updateTime' | i18nextEager }}</th>
+    <th nzWidth="80px">{{ 'memory.listHeader.operator' | i18nextEager }}</th>
   </tr>
   </thead>
   <tbody>
     @for (data of basicTable.data; track data.memory_repo_id) {
-      <tr>
+      <tr style="height:64px;">
         <td>
-          <img class="w-[20px] h-[20px]" [src]="data.icon" alt="" />
+          <img alt="" [src]="data.icon" class="icon-set" />
         </td>
         <td>
-          <div class="flex flex-col">
-            <a class="truncate" [routerLink]="['/home/memory-lib/detail', data.memory_repo_id]">
+          <div class="flex flex-col min-w-0">
+            <a class="cursor-pointer truncate" [routerLink]="['/home/memory-lib/detail', data.memory_repo_id]">
               {{ data.name }}
             </a>
-            <span class="text-xs text-gray-400 truncate mt-1">{{ data.memory_repo_id }}</span>
+            <div class="flex items-center">
+              <span class="text-[12px] text-[#808080] truncate leading-[18px]">{{ data.memory_repo_id }}</span>
+              <span nz-typography nzCopyable [nzCopyText]="data.memory_repo_id" class="copy-id"></span>
+            </div>
           </div>
         </td>
-        <td nzEllipsis>
-          <span nz-tooltip [nzTooltipTitle]="data.description">{{ data.description }}</span>
-        </td>
-        <td nzEllipsis>
-          <span nz-tooltip [nzTooltipTitle]="getStrategyText(data)">{{ getStrategyText(data) }}</span>
-        </td>
-        <td>{{ data.create_time | date:'yyyy-MM-dd HH:mm:ss' }}</td>
-        <td>{{ data.update_time | date:'yyyy-MM-dd HH:mm:ss' }}</td>
         <td>
-          <a
-            (click)="!memoryLibService.subscribeBtnDisabled() && deleteMemory(data)"
-            [class.text-gray-400]="memoryLibService.subscribeBtnDisabled()"
-            [class.cursor-not-allowed]="memoryLibService.subscribeBtnDisabled()"
-          >
-            {{ 'memory.management.delete' | i18nextEager }}
-          </a>
+          <nz-tag [nzColor]="data.memory_backend_type === 'EXTERNAL' ? 'purple' : 'blue'">
+            {{ (data.memory_backend_type === 'EXTERNAL' ? 'memory.management.backend.external' : 'memory.management.backend.builtin') | i18nextEager }}
+          </nz-tag>
+        </td>
+        <td nzEllipsis>
+          <span nz-tooltip [nzTooltipTitle]="data.description">{{ data.description || '--' }}</span>
+        </td>
+        <td nzEllipsis>
+          <span nz-tooltip [nzTooltipTitle]="getStrategyText(data)">{{ getStrategyText(data) || '--' }}</span>
+        </td>
+        <td>{{ data.create_time | formateTime }}</td>
+        <td>{{ data.update_time | formateTime }}</td>
+        <td>
+          <button nz-button nzType="text" nz-dropdown [nzDropdownMenu]="menu" [disabled]="memoryLibService.subscribeBtnDisabled()">
+            <span nz-icon nzType="more"></span>
+          </button>
+          <nz-dropdown-menu #menu="nzDropdownMenu">
+            <ul nz-menu>
+              <li nz-menu-item (click)="editMemory(data)">{{ 'memory.management.edit' | i18nextEager }}</li>
+              <li nz-menu-item (click)="showReference(data)">{{ 'memory.management.referenceResource' | i18nextEager }}</li>
+              <li nz-menu-item (click)="deleteMemory(data)">{{ 'memory.management.delete' | i18nextEager }}</li>
+            </ul>
+          </nz-dropdown-menu>
         </td>
       </tr>
     }
@@ -56,20 +68,8 @@
 
 <ng-template #emptyTpl>
   <nz-empty
+    class="py-[48px]"
     nzNotFoundImage="simple"
-    [nzNotFoundContent]="contentTpl"
-    [nzNotFoundFooter]="footerTpl"
-  >
-    <ng-template #contentTpl>
-      <div class="text-[14px] font-bold text-gray-800 mb-[8px]">
-        {{ 'memory.noData.text.createTip' | i18nextEager }}
-      </div>
-      <div [innerHTML]="'memory.list.nodateDescribe' | i18nextEager" class="text-gray-500"></div>
-    </ng-template>
-    <ng-template #footerTpl>
-      <button nz-button nzType="primary" (click)="router.navigate(['/home/memory/create'])">
-        {{ 'memory.create.button' | i18nextEager }}
-      </button>
-    </ng-template>
-  </nz-empty>
+    [nzNotFoundContent]="'memory.selector.tip.noData' | i18nextEager"
+  ></nz-empty>
 </ng-template>

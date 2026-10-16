@@ -170,17 +170,68 @@
           <div class="font-bold">SQL</div>
         </ng-template>
 
+        <ng-template #right>
+          <div class="flex items-center gap-2" *ngIf="!isFlowReadonly">
+            <div
+              nz-tooltip
+              [nzTooltipTitle]="'sql_param_ref' | i18nextEager"
+              class="icon-border"
+            >
+              <div class="ref-args-icon" (mousedown)="$event.preventDefault()" (click)="onShowVarList($event, showSqlVarListSubject$)"></div>
+            </div>
+            <div
+              nz-tooltip
+              [nzTooltipTitle]="'sql_inline_ref' | i18nextEager"
+              class="icon-border"
+            >
+              <span
+                nz-icon
+                nzType="code"
+                nzTheme="outline"
+                style="font-size: 16px; color: #191919;"
+                (mousedown)="$event.preventDefault()"
+                (click)="onShowVarList($event, showSqlInlineVarListSubject$)"
+              ></span>
+            </div>
+          </div>
+        </ng-template>
+
         <ng-template #content>
           <div class="mt-2 w-full">
-            <textarea
-              nz-input
-              class="w-full"
-              style="min-height: 120px; font-family: monospace;"
+            <meta-cmd-textarea
+              class="block w-full"
               [(ngModel)]="sql"
-              [placeholder]="'sqlmodalcomponent_586' | i18nextEager"
+              [CMDS]="['{']"
+              [variants]="tipVals"
+              [ngModelOptions]="{ standalone: true }"
+              [variantsTrigger]="showSqlVarListSubject$.asObservable()"
+              [inlineVariantsTrigger]="showSqlInlineVarListSubject$.asObservable()"
               (ngModelChange)="changeUpdateTime()"
               (blur)="inputOnSave()"
-            ></textarea>
+              [placeholder]="'sqlmodalcomponent_586' | i18nextEager"
+              [minHeight]="'120px'"
+              [maxHeight]="'400px'"
+            />
+          </div>
+        </ng-template>
+      </meta-acc-block>
+
+      <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
+
+      <meta-acc-block class="mt-4 block" [title]="'output_format' | i18nextEager">
+        <ng-template #content>
+          <div class="mt-2 flex items-center gap-4">
+            <label class="flex items-center gap-2 cursor-pointer" *ngFor="let opt of outputFormatOptions">
+              <input
+                type="radio"
+                name="outputFormat"
+                [value]="opt.value"
+                [ngModel]="outputFormat"
+                (ngModelChange)="onOutputFormatChange($event)"
+                [ngModelOptions]="{ standalone: true }"
+              />
+              <span>{{ opt.label }}</span>
+            </label>
           </div>
         </ng-template>
       </meta-acc-block>

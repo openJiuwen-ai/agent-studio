@@ -61,6 +61,9 @@ export class ChatItemPlanComponent extends ChatItemComponent implements OnDestro
   public printText:string=''
   @Input() isFinished: boolean = false;
 
+  // 本轮是否已有答案正文，控制停止提示的展示位置
+  public roundHasAnswer = false;
+
   @ViewChild('inputNodeParams')
   inputNodeParamsComp!: InputNodeParamsComponent;
 
@@ -99,6 +102,11 @@ export class ChatItemPlanComponent extends ChatItemComponent implements OnDestro
       timeConsumptionStr: TimeConsumptionStr;
     }
     > = [];
+
+    // 本轮是否已有答案正文（有的话停止提示只显示在答案底部，避免计划区重复显示）
+    this.roundHasAnswer = list.some(
+      (item) => item?.role === 'assistant' && item?.content && item?.event !== 'error'
+    );
 
     for (let i = 0; i < list.length; i++) {
       const item = list[i];

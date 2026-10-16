@@ -4,6 +4,8 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CopyWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -15,6 +17,7 @@ import com.openjiuwen.studio.agent.manager.dto.GetWorkflowVersionQo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsV1Qo;
 import com.openjiuwen.studio.agent.common.dto.agent.ListWorkflowsQo;
@@ -24,6 +27,7 @@ import com.openjiuwen.studio.agent.manager.dto.ValidateWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkFlowEnvs;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFrontParamInfo;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowInfo;
@@ -50,6 +54,17 @@ public interface IWorkflowManagementService {
      * @param body body
      */
     TriggerConfig addTrigger(String projectId, String workflowId, String workspaceId, TriggerConfig body);
+
+    /**
+     * batchDeleteWorkflowVersions
+     *
+     * @param projectId projectId
+     * @param workflowId workflowId
+     * @param workspaceId workspaceId
+     * @param body body
+     */
+    BatchDeleteVersionsResponseBody batchDeleteWorkflowVersions(String projectId, String workflowId,
+        String workspaceId, BatchDeleteVersionsRequestBody body);
 
     /**
      * copyWorkflow
@@ -227,6 +242,16 @@ public interface IWorkflowManagementService {
      */
     WorkflowVersionListRsp listWorkflowLastVersions(String projectId,
         ListWorkflowLastVersionsQo listWorkflowLastVersionsQo);
+
+    /**
+     * listWorkflowVersionReferences
+     *
+     * @param projectId projectId
+     * @param workflowId workflowId
+     * @param listWorkflowVersionReferencesQo listWorkflowVersionReferencesQo
+     */
+    VersionReferenceListRsp listWorkflowVersionReferences(String projectId, String workflowId,
+        ListWorkflowVersionReferencesQo listWorkflowVersionReferencesQo);
 
     /**
      * listWorkflowVersions

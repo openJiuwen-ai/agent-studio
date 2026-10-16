@@ -270,6 +270,51 @@ class TestGenerateMemoryHistoryMessages:
         assert result[1] == {"role": "assistant", "content": "hello"}
 
     @staticmethod
+    def test_controller_multi_turn_keeps_original_order():
+        """Controller 多轮：conversation_info 是 engine 全量历史（尾部为本轮
+        query）时必须保持原序——旧实现"前置本轮 query + 去重删除尾部副本"会把
+        query 从尾部搬到头部，逐轮累积导致持久化历史 user 倒序。
+        """
+        trace = Trace(query="q3")
+        trace.conversation_info["messages"] = [
+            {"role": "user", "content": "q1", "agent_id": "m1"},
+            {"role": "assistant", "content": "a1", "agent_id": "m1"},
+            {"role": "user", "content": "q2", "agent_id": "m1"},
+            {"role": "assistant", "content": "a2", "agent_id": "m1"},
+            {"role": "user", "content": "q3", "agent_id": "m1"},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert [m["content"] for m in result] == ["q1", "a1", "q2", "a2", "q3"]
+        # 本轮 query 保留原位（尾部），不前置到头部，也不产生重复
+        assert result[0]["content"] == "q1"
+        assert result[-1] == {"role": "user", "content": "q3", "agent_id": "m1"}
+
+    @staticmethod
+    def test_controller_query_in_middle_not_duplicated():
+        """query 出现在历史中间（非首位）时同样不前置、不重复。"""
+        trace = Trace(query="q2")
+        trace.conversation_info["messages"] = [
+            {"role": "user", "content": "q1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert [m["content"] for m in result] == ["q1", "q2", "a2"]
+
+    @staticmethod
+    def test_dict_query_content_matched_without_prepend():
+        """query 为 dict/list 内容时按归一化 JSON 比较，命中则不前置。"""
+        trace = Trace(query='{"k": "v"}')
+        trace.conversation_info["messages"] = [
+            {"role": "user", "content": {"k": "v"}},
+            {"role": "assistant", "content": "ok"},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert len(result) == 2
+        assert result[0]["content"] == '{"k": "v"}'
+        assert result[1]["content"] == "ok"
+
+    @staticmethod
     def test_empty_messages():
         trace = Trace()
         result = FieldDataProcessor.generate_memory_history_messages(trace)

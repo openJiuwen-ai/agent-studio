@@ -4,13 +4,9 @@
 
 package com.openjiuwen.studio.agent.manager.rce.client;
 
-import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
-import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
-import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
-import com.openjiuwen.studio.agent.common.dto.mcp.McpCallToolResp;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
 import com.openjiuwen.studio.agent.common.dto.run.*;
@@ -21,7 +17,6 @@ import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.manager.dto.openjiuwen.*;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
-import com.openjiuwen.studio.agent.manager.rce.models.McpCallToolRequest;
 import com.openjiuwen.studio.prompt.engineering.dto.IndustryVo;
 import io.swagger.annotations.ApiParam;
 import jakarta.validation.Valid;
@@ -40,7 +35,8 @@ import java.util.List;
  * agent runtime服务client
  *
  */
-@FeignClient(name = "agentRuntime", url = "${feign.client.config.agentRuntime.url:}")
+@FeignClient(name = "agentRuntime", url = "${feign.client.config.agentRuntime.url:}",
+    configuration = RuntimeCorrelationFeignConfig.class)
 public interface AgentRuntimeClient {
     /**
      * 同步应用发布信息接口
@@ -65,30 +61,6 @@ public interface AgentRuntimeClient {
         @NotNull @ApiParam(value = "发布通道类型", required = true)
         @RequestParam(value = "channel_type", required = true) String channelType,
         @ApiParam(value = "版本ID") @RequestParam(value = "version_id", required = false) String versionId);
-
-    /**
-     * 查询 mcp 服务工具列表
-     *
-     * @param authToken 认证 token
-     * @param projectId project id
-     * @param body      mcp 服务信息
-     * @return mcp 服务工具列表
-     */
-    @PostMapping("/v1/{project_id}/mcp-servers/tools")
-    ResponseEntity<McpServerTools> queryMcpServerTools(@RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @RequestBody McpServerReq body);
-
-    /**
-     * 运行 mcp 服务指定工具
-     *
-     * @param authToken 认证 token
-     * @param projectId project id
-     * @param body      工具运行信息
-     * @return mcp 工具运行结果
-     */
-    @PostMapping("/v1/{project_id}/mcp-servers/tools/run")
-    ResponseEntity<McpCallToolResp> callMcpServerTool(@RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @RequestBody McpCallToolRequest body);
 
     /**
      * 运行 agent，带会话 id
@@ -117,33 +89,6 @@ public interface AgentRuntimeClient {
         @PathVariable(value = "conversation_id") String conversationId,
         @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
         @RequestParam(value = "version") String version, @RequestParam(value = "type") String type,
-        @RequestParam(value = "environment_id", required = false) String environmentId,
-        @RequestBody Object request);
-
-    /**
-     * 运行 agent
-     */
-    @SuppressWarnings("checkstyle: all")
-    @PostMapping("/v1/{project_id}/agents/{agent_id}/conversations")
-    ResponseEntity<Object> runAgent(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @PathVariable(value = "agent_id") String agentId,
-        @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
-        @RequestParam(value = "version") String version,
-        @RequestParam(value = "environment_id", required = false) String environmentId,
-        @RequestBody Object request);
-
-    /**
-     * 运行 agent，流式
-     */
-    @SuppressWarnings("checkstyle: all")
-    @PostMapping("/v1/{project_id}/agents/{agent_id}/conversations")
-    Flux<Object> runAgentStream(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @RequestHeader(value = CommonConstant.AUTHORIZATION, required = false) String authorization,
-        @PathVariable(value = "project_id") String projectId, @PathVariable(value = "agent_id") String agentId,
-        @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
-        @RequestParam(value = "version") String version,
         @RequestParam(value = "environment_id", required = false) String environmentId,
         @RequestBody Object request);
 
@@ -216,44 +161,10 @@ public interface AgentRuntimeClient {
         @PathVariable(value = "conversation_id") String conversationId, @PathVariable(value = "node_id") String nodeId,
         @RequestBody WorkflowRunReq body);
 
-    @PostMapping("/v1/{project_id}/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback")
-    ResponseEntity<String> createUserFeedback(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId,
-        @PathVariable("app_id") String appId, @PathVariable("conversation_id") String conversationId,
-        @PathVariable("message_id") String messageId, @RequestParam("app_type") String appType,
-        @RequestParam("version_id") String versionId, @RequestBody @Valid Feedback body);
-
-    @DeleteMapping("/v1/{project_id}/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback")
-    ResponseEntity<ConversationDeleteResp> deleteFeedback(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("app_id") String appId,
-        @PathVariable("conversation_id") String conversationId, @PathVariable("message_id") String messageId,
-        @RequestParam("version_id") String version_id);
-
     @GetMapping("/v1/{project_id}/agent-builder/prompt/industry/list")
     ResponseEntity<List<IndustryVo>> listIndustry(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("project_id") String projectId, @RequestParam("workspace_id") String workspaceId);
-
-    @PostMapping(value = "/v2/{project_id}/agent-runtime/agents/{agent_id}/memories/variables/batch-delete")
-    ResponseEntity<BatchDeleteUserVariableMemoryResponseBody> batchDeleteUserVariableMemory(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @RequestParam("workspace_id") String workspaceId,
-        @RequestBody @NotNull @Valid BatchDeleteUserVariableMemoryRequestBody body);
-
-    @GetMapping(value = "/v2/{project_id}/agent-runtime/agents/{agent_id}/memories/variables")
-    ResponseEntity<ListUserVariableMemoryResponseBody> listUserVariableMemory(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @RequestParam("workspace_id") String workspaceId);
-
-    @PostMapping(value = "/v2/{project_id}/agent-runtime/agents/{agent_id}/memories/variables/reset")
-    ResponseEntity<ResetUserVariableMemoryResponseBody> resetUserVariableMemory(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @RequestParam("workspace_id") String workspaceId);
 
     @PostMapping(value = "/v1/{project_id}/workflows/{workflow_id}/tasks")
     ResponseEntity<TaskRsp> createTask(
@@ -323,6 +234,7 @@ public interface AgentRuntimeClient {
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("short_code") String shortCode,
         @PathVariable("conversation_id") String conversationId, @RequestParam("workspace_id") String workspaceId,
+        @RequestParam(value = "environment_id", required = false) String environmentId,
         @RequestBody WorkflowRunReq body, @RequestHeader("stream") Boolean stream);
 
     @PostMapping("/v1/agents/chat/{short_code}")
@@ -330,6 +242,7 @@ public interface AgentRuntimeClient {
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("short_code") String shortCode,
         @RequestParam("workspace_id") String workspaceId, @RequestHeader("stream") Boolean stream,
+        @RequestParam(value = "environment_id", required = false) String environmentId,
         @RequestBody AgentRunReq body);
 
     @DeleteMapping(value = "/v1/{project_id}/agent-runtime/resource/{resource_id}/clear")

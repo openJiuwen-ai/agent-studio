@@ -27,6 +27,7 @@ import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.GATEWAY_TIMEOUT;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
+import static org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED;
 import static org.springframework.http.HttpStatus.NOT_ACCEPTABLE;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.OK;
@@ -672,6 +673,16 @@ public enum StudioError {
      */
     MAX_UPLOAD_SIZE_EXCEEDED(BAD_REQUEST, COMMON, "1128"),
 
+    /**
+     * 请求方法不支持（如对仅支持GET的接口使用POST调用）
+     */
+    METHOD_NOT_SUPPORTED(org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED, COMMON, "1129"),
+
+    /**
+     * 下游服务依赖调用失败（COM-03 框架 502）
+     */
+    DOWNSTREAM_DEPENDENCY_FAILED(BAD_GATEWAY, COMMON, "1131"),
+
 
     /**
      * ============================== AGENT ==============================
@@ -779,7 +790,7 @@ public enum StudioError {
     /**
      * Agent版本不存在
      */
-    AGENT_VERSION_NOT_EXIST(INTERNAL_SERVER_ERROR, AGENT, "1021"),
+    AGENT_VERSION_NOT_EXIST(NOT_FOUND, AGENT, "1021"),
 
     /**
      * agent发布通道不存在
@@ -889,7 +900,7 @@ public enum StudioError {
     /**
      * 应用发布渠道不存在
      */
-    APPLICATION_PUBLISH_CHANNEL_NOT_EXIST(BAD_REQUEST, AGENT, "1043"),
+    APPLICATION_PUBLISH_CHANNEL_NOT_EXIST(NOT_FOUND, AGENT, "1043"),
 
     /**
      * 缺少输入参数
@@ -1068,7 +1079,7 @@ public enum StudioError {
     /**
      * 工作流异步任务不存在
      */
-    WORKFLOW_ASYNC_TASK_NOT_FOUND(INTERNAL_SERVER_ERROR, WORKFLOW, "1023"),
+    WORKFLOW_ASYNC_TASK_NOT_FOUND(NOT_FOUND, WORKFLOW, "1023"),
 
     /**
      * 工作流异步任务状态不为PENDING
@@ -1113,7 +1124,7 @@ public enum StudioError {
     /**
      * 该租户没有发布权限
      */
-    WORKFLOW_TENANT_NOT_PERMISSION(INTERNAL_SERVER_ERROR, WORKFLOW, "1032"),
+    WORKFLOW_TENANT_NOT_PERMISSION(FORBIDDEN, WORKFLOW, "1032"),
 
     /**
      * IR conversion ERROR, output reference type invalid
@@ -1354,7 +1365,7 @@ public enum StudioError {
     /**
      * 资源不存在
      */
-    RESOURCE_NOT_EXISTS(BAD_REQUEST, WORKFLOW, "1083"),
+    RESOURCE_NOT_EXISTS(NOT_FOUND, WORKFLOW, "1083"),
 
     /**
      * 获取工作流调试事件失败
@@ -1423,6 +1434,11 @@ public enum StudioError {
      * 异常节点template字段非JSON格式字符串，节点名称：{0}
      */
     WORKFLOW_TEMPLATE_INVALID_JSON(BAD_REQUEST, WORKFLOW, "1098"),
+
+    /**
+     * 缺少工作流编码
+     */
+    WORKFLOW_CODE_REQUIRED(BAD_REQUEST, WORKFLOW, "1101"),
 
     /*
      * ============================== 多智能体相关错误码 ==============================
@@ -1625,7 +1641,7 @@ public enum StudioError {
     /**
      * 导入意图包失败
      */
-    INTENT_IMPORT_FILE_ERROR(INTERNAL_SERVER_ERROR, CONFIG, "1002"),
+    INTENT_IMPORT_FILE_ERROR(BAD_REQUEST, CONFIG, "1002"),
 
     /**
      * 导入意图包，Exceeded file size limit
@@ -1729,6 +1745,11 @@ public enum StudioError {
      * args: [0]=撞名的意图包名
      */
     IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_INPUT(BAD_REQUEST, CONFIG, "1027"),
+
+    /**
+     * 意图包已存在（客户端直传或导入场景指定的 id 已存在，创建前预检冲突）
+     */
+    COMPLEX_INTENT_EXIST(BAD_REQUEST, CONFIG, "1036"),
 
     /* ***********************数据源管理***********************/
     /**
@@ -2493,7 +2514,7 @@ public enum StudioError {
     /**
      * 插件不存在或无权限使用
      */
-    TOOLS_NOT_EXIST_OR_NO_PERMISSION(INTERNAL_SERVER_ERROR, COMPONENT, "1086"),
+    TOOLS_NOT_EXIST_OR_NO_PERMISSION(NOT_FOUND, COMPONENT, "1086"),
 
     /**
      * 非法API调用
@@ -2538,7 +2559,7 @@ public enum StudioError {
     /**
      * MCP服务不存在
      */
-    MCP_SERVICE_NOT_EXIST(BAD_REQUEST, COMPONENT, "1095"),
+    MCP_SERVICE_NOT_EXIST(NOT_FOUND, COMPONENT, "1095"),
 
     /**
      * MCP服务配置不是json格式
@@ -2634,6 +2655,11 @@ public enum StudioError {
      * json转换异常
      */
     MCP_JSON_CONVERSION_ERROR(ACCEPTED, COMPONENT, "1114"),
+
+    /**
+     * MCP服务类型无效
+     */
+    MCP_SERVER_TYPE_INVALID(BAD_REQUEST, COMPONENT, "1115"),
 
     /**
      * 插件中文名已存在
@@ -3893,7 +3919,7 @@ public enum StudioError {
     /**
      * The workspace is not existed.
      */
-    WORKSPACE_NOT_EXISTED(BAD_REQUEST, WORKSPACE, "1008"),
+    WORKSPACE_NOT_EXISTED(NOT_FOUND, WORKSPACE, "1008"),
 
     /**
      * The workspace owner cannot exit the workspace before transferring it.
@@ -4360,16 +4386,6 @@ public enum StudioError {
     KNOWLEDGE_SEARCH_EXCEPTION(INTERNAL_SERVER_ERROR, KNOWLEDGE_BASE, "4082"),
 
     /**
-     * The value of knowledge recall threshold is illegal.
-     */
-    KNOW_RECALL_THRESHOLD_ILLEGAL(BAD_REQUEST, KNOWLEDGE_BASE, "4083"),
-
-    /**
-     * The value of knowledge faq threshold is illegal.
-     */
-    FAQ_THRESHOLD_ILLEGAL(BAD_REQUEST, KNOWLEDGE_BASE, "4084"),
-
-    /**
      * agent绑定的知识库数量超过上限
      */
     KNOWLEDGE_REPO_TYPE_INCONSISTENT(BAD_REQUEST, KNOWLEDGE_BASE, "4085"),
@@ -4472,7 +4488,7 @@ public enum StudioError {
     /**
      * 创建环境，参数不合法
      */
-    ENVIRONMENT_CREATE_PARAMETER_VERIFICATION_FAIL(INTERNAL_SERVER_ERROR, Module.ENVIRONMENT_MANAGER, "1008"),
+    ENVIRONMENT_CREATE_PARAMETER_VERIFICATION_FAIL(BAD_REQUEST, Module.ENVIRONMENT_MANAGER, "1008"),
 
     /**
      * 创建环境，vpc不合法或vpc信息不存在
@@ -4507,7 +4523,7 @@ public enum StudioError {
     /**
      * 环境信息不存在
      */
-    ENVIRONMENT_NOT_EXIST(INTERNAL_SERVER_ERROR, Module.ENVIRONMENT_MANAGER, "1017"),
+    ENVIRONMENT_NOT_EXIST(NOT_FOUND, Module.ENVIRONMENT_MANAGER, "1017"),
 
     /**
      * 创建环境超过限额
@@ -4688,9 +4704,35 @@ public enum StudioError {
     MEMORY_REPO_NOT_EXIST(BAD_REQUEST, MEMORY, "1004"),
 
     /**
+     * 外部记忆服务实例不存在
+     */
+    MEMORY_SERVICE_INSTANCE_NOT_EXIST(BAD_REQUEST, MEMORY, "1006"),
+
+    /**
+     * 外部记忆服务实例已被记忆库引用，无法删除
+     */
+    MEMORY_SERVICE_INSTANCE_IN_USE(BAD_REQUEST, MEMORY, "1007"),
+
+    /**
+     * 外部记忆服务实例不可达
+     */
+    MEMORY_SERVICE_INSTANCE_UNREACHABLE(BAD_REQUEST, MEMORY, "1008"),
+
+    /**
      *
      */
     AGENT_TYPE_MEMORY_REPO_NOT_SUPPORT(BAD_REQUEST, MEMORY, "1005"),
+
+    /**
+     * 记忆策略类型重复（同一记忆库不能配置多个同类型策略）
+     * args: [0]=重复的策略类型
+     */
+    MEMORY_STRATEGY_DUPLICATE(BAD_REQUEST, MEMORY, "1009"),
+
+    /**
+     * 记忆策略参数不合法（列表为空/含空策略项，service 直调路径兜底）
+     */
+    MEMORY_STRATEGY_INVALID(BAD_REQUEST, MEMORY, "1010"),
 
 
     /**

@@ -2,7 +2,7 @@
 
 把 AgentStudio 打成一个**单一跨平台包**（含 Windows x64 + Linux x64 两套原生依赖），
 拷到 Windows 或 Linux 机器上**一键拉起全部原生进程**，不依赖 Docker。
-另提供 **ARM64(aarch64) Linux 单平台包**（`build_arm64.sh`，需 Docker），见下文「ARM64 构建」。
+另可用 `./build.sh --arch arm64|all` 产出 **ARM64(aarch64) Linux 单平台包**（需 Docker），见下文「ARM64 构建」。
 
 ## 组成
 
@@ -10,9 +10,8 @@
 native-install/
   versions.env              # 原生依赖下载源（版本/URL/SHA256）—— 改版本只动这里
   versions.arm64.env        # ARM64(aarch64) 侧依赖源（与上平行、自包含，差异见其头部注释）
-  build.sh                  # Linux 构建机：产出含 Win+Linux 依赖的单包（推荐主路径）
-  build.ps1                 # Windows 构建机：同上（Linux redis/nginx 经 WSL 编译）
-  build_arm64.sh            # ARM64 包构建：复用 x86 构建的架构无关产物，仅重建 aarch64 依赖
+  build.sh                  # Linux 构建机单入口：默认 x86 双平台包；--arch arm64/all 产 aarch64 包
+  build.ps1                 # Windows 构建机：同上 x86 双平台包（Linux redis/nginx 经 WSL 编译）
   lib/
     build_apps.sh / .ps1     # 复刻 docker/package.sh：mvn→jar、pnpm→dist、复制 runtime 源码
     fetch_deps.sh / .ps1     # 下载两平台原生依赖并规范化；Linux redis/nginx 从源码编译
@@ -68,8 +67,8 @@ Linux 的 redis/nginx 需 Linux 工具链编译——`fetch_deps.ps1` 会优先�
 ### ARM64(aarch64) Linux 包
 ```bash
 cd native-install
-./build.sh                 # ① 先跑一次 x86 构建，产出 seed（jar/前端/源码/requirements，架构无关）
-./build_arm64.sh           # ② 复用 seed，仅重建 aarch64 侧依赖（deps/linux + wheels）并打包
+./build.sh --arch arm64    # 仅 ARM64 包（应用产物自动复用同版本 x86 staging，没有则现场构建）
+./build.sh --arch all      # 或一次产出 x86 双平台包 + ARM64 包
 ```
 前置：bash + Docker（`docker buildx ls` 应含 linux/arm64，Docker Desktop 自带 QEMU）；
 Windows 构建机用 Git Bash 运行。

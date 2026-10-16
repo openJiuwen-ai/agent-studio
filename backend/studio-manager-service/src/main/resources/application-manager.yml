@@ -51,9 +51,18 @@ spring:
       queueCapacity: ${agent_settings_pools_asyncExecutor_queueCapacity:10}
       threadNamePrefix: asyncExecutor-
       keepAliveSeconds: ${agent_settings_pools_asyncExecutor_keepAliveSeconds:60}
+    pollingCheckExecutor:
+      corePoolSize: ${agent_settings_pools_pollingCheckExecutor_corePoolSize:32}
+      maxPoolSize: ${agent_settings_pools_pollingCheckExecutor_maxPoolSize:32}
+      queueCapacity: ${agent_settings_pools_pollingCheckExecutor_queueCapacity:64}
+      threadNamePrefix: polling-check-
+      keepAliveSeconds: ${agent_settings_pools_pollingCheckExecutor_keepAliveSeconds:60}
+      awaitTerminationSeconds: ${agent_settings_pools_pollingCheckExecutor_awaitTerminationSeconds:25}
   # quartz自动化配置
   quartz:
     job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
     properties:
       org:
         quartz:
@@ -107,6 +116,22 @@ spring:
             url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
             connectTimeout: ${feign.agentRuntime.connectTimeout:10000}
             readTimeout: ${feign.agentRuntime.readTimeout:120000}
+            # COM-04 §5.1/§10.2：禁用自动重定向，3xx 显式失败，防止关联 Header 被携带到非白名单 origin
+            followRedirects: false
+          agentBuilder:
+            # COM-04 §5.1/§10.2：Builder Feign 同样禁用重定向（url 仍由 feign.client.config 业务占位提供）
+            followRedirects: false
+
+trigger:
+  polling:
+    default-interval-seconds: ${trigger_polling_default_interval_seconds:300}
+    min-interval-seconds: ${trigger_polling_min_interval_seconds:60}
+    max-interval-seconds: ${trigger_polling_max_interval_seconds:86400}
+    max-url-length: ${trigger_polling_max_url_length:2048}
+    max-response-bytes: ${trigger_polling_max_response_bytes:10485760}
+    max-redirects: ${trigger_polling_max_redirects:3}
+    check-timeout-seconds: ${trigger_polling_check_timeout_seconds:30}
+    read-timeout-seconds: ${trigger_polling_read_timeout_seconds:10}
 
 # 审计日志配置
 studio:
@@ -217,7 +242,9 @@ inner:
   agent-runtime:
     endpoint: ${agent_runtime_endpoint:}
     run-agent:
-      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations}
+      # 占位符数量必须为 3，与 AgentTriggerService.buildRequest 的 (projectId, resourceId, uuid) 参数强绑定。
+      # 若部署环境 ConfigMap 显式覆盖此值，必须保持 3 个 %s，否则 Agent 类触发器会因 path 少一段而 404 静默失败。
+      stream-url: ${run_agent_stream_url:/v1/%s/agents/%s/conversations/%s}
     run-workflow:
       uri: ${agent_runtime_run-workflow:/v1/%s/workflows/%s/conversations/%s}
   exclude-tools: ${inner_exclude_tools:OCR,Read_Document}
@@ -601,6 +628,21 @@ workflow:
   instance-expire: ${workflow_instance_expire:10}
   conversation-expire: ${workflow_conversation_expire:7}
   max-conversation-size: ${workflow_max_conversation_size:20}
+  # 调试记录事件流 List key 前缀（meta 与 events 分离存储，避免单 key 全量序列化导致 O(N²) 读写阻塞）
+  insight-exec-events: ${workflow_insight_exec_events:insight_exec_events_%s_%s}
+  # 调试记录分 key 存储开关。true=meta 与 events 分离存储（旁路写 O(1)，终态全量 RPUSH events）；
+  # false=保持原样（单 key 全量序列化）。读取始终兼容两种格式，切换不影响已有数据。默认 false。
+  insight-multi-key-enabled: ${workflow_insight_multi_key_enabled:false}
+  # insight 调试记录实时旁路写的节流配置。
+  # 每个 WORKFLOW_NODE_MESSAGE 事件都会触发 saveInsightMessageAsync，
+  # 但只有距上次写入超过 insight-flush-interval-ms 或累计跳过超过 insight-flush-max-skip 次时才真正写 Redis。
+  # 被跳过的事件不会丢失：eventList 在内存持续累积，终态保存(saveInstance)会兜底写入完整数据。
+  insight-flush-interval-ms: ${workflow_insight_flush_interval_ms:3000}
+  insight-flush-max-skip: ${workflow_insight_flush_max_skip:20}
+  # 调试记录实时旁路写总开关（默认关闭）。
+  # false=运行中不对节点事件写 Redis（saveInsightMessageAsync 短路为 no-op），仅终态落盘完整数据；
+  # true=按 insight-flush-* 节流实时旁路写。默认 false。
+  insight-bypass-write-enabled: ${workflow_insight_bypass_write_enabled:false}
   max-query-length: ${workflow_max_query_length:100000}
   sse-timeout-milliseconds: ${workflow_sse_timeout_milliseconds:900000}
 # ==========================================工作流相关配置end=======================================
@@ -695,7 +737,7 @@ front-page:
   # lakesearch_faq_enable: 知识库faq功能开关，默认打开
   default-configs: ${front-page_default-configs:{"knowledge_repo_url":"","son_workflow_level_limit":true,"stream_interval_timeout":900000,"stream_first_chunk_timeout":900000,"opsvc_project_id":"opsvc_project_mock","runtime_api_endpoint_prefix":"","lakesearch_faq_enable":true}}
   configs: ${front-page_configs:{}}
-  block-nodes: ${front_page_block_nodes:DataQuery,Agent,Http}
+  block-nodes: ${front_page_block_nodes:DataQuery,Http}
   code_env_options: ${code_env_options:["sandbox","local"]}
   # exec_env和enable_sandbox没有值时，exec_env取值，默认取sandbox
   code_def_env: ${code_def_env:sandbox}
@@ -820,10 +862,6 @@ saml:
   projectId: ${saml_projectId:0}
   redirectUrl: ${saml_redirectUrl:https://127.0.0.1:30001/modelarts/agent-builder/#/home/overview}
 
-apikey:
-  enable: ${apikey_enable:false}
-  sync:
-    interval: ${apikey_sync_interval:300000}
 # =============== space =========================
 space-service-display: ${space_service_display:false}
 allow-plugin-cross-permission-query: ${allow_plugin_cross_permission_query:false}
@@ -875,15 +913,18 @@ auth:
     validate-url: ${auth_sso_validate_url:}
     # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
     header: ${auth_sso_header:Access-Token}
-  # SSO 响应字段与用户属性映射
+  # SSO 响应字段与用户属性映射（支持点号分隔的多层嵌套路径，如 result.user_id）
   user-info:
     claims:
       user-id: ${user_info_claims_user_id:user_id}
       user-name: ${user_info_claims_user_name:user_name}
       domain-id: ${user_info_claims_domain_id:domain_id}
+      # 域名称，供 IAM 换 domain token 使用；缺失时取 defaults.domain-name
+      domain-name: ${user_info_claims_domain_name:domain_name}
       project-id: ${user_info_claims_project_id:project_id}
     defaults:
       domain-id: ${user_info_defaults_domain_id:0}
+      domain-name: ${user_info_defaults_domain_name:0}
       project-id: ${user_info_defaults_project_id:0}
 
 task:

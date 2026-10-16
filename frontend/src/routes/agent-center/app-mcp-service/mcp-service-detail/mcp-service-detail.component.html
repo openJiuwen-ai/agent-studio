@@ -197,10 +197,10 @@
           *ngIf="!isPendingToolLoading"
           [style]="{height: mcpServiceDetail.fc_instance_status === 'stackFail' ? 'calc(100vh - 420px)' : 'calc(100vh - 232px)'}"
         >
-          <div *ngIf="!mcpServiceDetail.tools" style="display: flex; justify-content: center; width: 100%">
+          <div *ngIf="!mcpServiceDetail.tools || mcpServiceDetail.tools.length === 0" style="display: flex; justify-content: center; width: 100%">
             <app-common-no-data-with-btn [noDataStr]="'no_data' | i18nextEager" />
           </div>
-          <div class="left" *ngIf="mcpServiceDetail.tools">
+          <div class="left" *ngIf="mcpServiceDetail.tools && mcpServiceDetail.tools.length > 0">
             <div style="margin: 0 0 16px; font-size: 18px; font-weight: 600">
               {{ 'Tools' | i18nextEager }}
             </div>
@@ -226,7 +226,7 @@
               </div>
             </div>
           </div>
-          <div class="right" *ngIf="mcpServiceDetail.tools">
+          <div class="right" *ngIf="selectedMcpTool">
             <div class="top">
               <div style="margin: 0 0 16px; font-size: 18px; font-weight: 600">
                 {{ 'params' | i18nextEager }}

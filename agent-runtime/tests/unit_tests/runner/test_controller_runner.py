@@ -10,11 +10,13 @@ run_blocking 必须同时支持两类输入,并按"完整终态优先、delta �
 
 # pylint: disable=no-self-use
 
+import asyncio
 import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_runtime.common.background_task import run_in_background
 from agent_runtime.runner.controller_runner import ControllerRunner
 
 
@@ -163,6 +165,41 @@ class TestControllerRunBlocking:
 
         # 不崩溃;唯一有效帧是 message "x",无终态 → delta 兜底
         assert result == "x"
+
+
+class TestControllerRunBlockingExitJoin:
+    """run_blocking 出口 join：后台化 post_run 完成前 blocking 响应不得返回。"""
+
+    @pytest.mark.asyncio
+    async def test_run_blocking_waits_inflight_background_task(self):
+        runner = ControllerRunner(api_key="test")
+        conv_id = "conv-exit-join-controller"
+        release = asyncio.Event()
+        finished = asyncio.Event()
+
+        async def bg_persist():
+            await release.wait()
+            finished.set()
+
+        async def mock_stream(*args, **kwargs):
+            yield _sse("message", {"answer": "ok"})
+            yield _sse("workflow_end", {"answer": "ok"})
+            # 模拟 run_streaming finally 把 post_run 后台登记（同 track_key）
+            run_in_background(bg_persist(), name="bg-post-run", track_key=conv_id)
+
+        req = MagicMock()
+        req.conversation_id = conv_id
+        with patch.object(runner, "run_streaming", side_effect=mock_stream):
+            task = asyncio.create_task(runner.run_blocking(req))
+            for _ in range(50):
+                await asyncio.sleep(0)
+            assert not task.done(), "run_blocking must not return while persist in flight"
+            assert not finished.is_set()
+            release.set()
+            result = await asyncio.wait_for(task, timeout=2.0)
+
+        assert finished.is_set(), "run_blocking must return only after background task completes"
+        assert result == "ok"
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { cloneDeep } from 'lodash';
 import { takeUntil } from 'rxjs';
 import { ParamLabelPipe } from 'src/pipes/param-label.pipe';
+import { isIntegerStr, isNumberStr } from 'src/utils/utils';
 import { AppFlowService } from '../../app-flow.service';
 import {
   getInitInputParamConfig,
@@ -151,6 +152,12 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   public outputParams: IWorkflowField[] = [];
 
   public noneObjDataTypes = getNoneObjOutputParamTypes();
+
+  // boolean 中间变量的字面量值固定为 true/false 下拉，避免任意文本存成无效布尔
+  public booleanLiteralOptions = [
+    { label: 'true', value: true },
+    { label: 'false', value: false },
+  ];
 
   public sourceOptions = [
     { label: this.i18n.transform('ref'), value: 'ref' },
@@ -471,6 +478,17 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     }
 
     if (this.midParams && this.midParams.length) {
+      // integer/number 的 literal 内容以字符串承载，序列化前转为数值，
+      // 保证 intermediate_loop_var schema 中类型声明与值类型一致
+      const midParamsForDto = this.midParams.map((param) => {
+        const copy = cloneDeep(param);
+        // 校验被绕过的非法内容（如 'abc'）落库前归一为类型默认值，
+        // 避免 integer/number 类型携带字符串/空串
+        this.normalizeTypedLiteralContent(copy);
+        return copy;
+      });
+      // 过滤非法 name（与 variableNameValidator 正则一致）并去重，避免重复字段写入 schema
+      const seenNames = new Set<string>();
       inputs.push({
         name: 'intermediate_loop_var',
         type: 'object',
@@ -484,7 +502,16 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
           default: '',
         },
         schema: NodeUtils.getDtoInputs(
-          this.midParams.filter((param) => param.name),
+          midParamsForDto.filter((param) => {
+            if (!param.name || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(param.name)) {
+              return false;
+            }
+            if (seenNames.has(param.name)) {
+              return false;
+            }
+            seenNames.add(param.name);
+            return true;
+          }),
         ),
       });
     }
@@ -589,14 +616,26 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     this.updateConditionOps();
   }
 
+  /** ref 中间变量是否已选择引用 */
+  private isRefFilled(param: IWorkflowField): boolean {
+    return (
+      Array.isArray(param.value.content) && param.value.content.length > 0
+    );
+  }
+
   onMidRefChange(init?: boolean) {
     const newMidRefs: IParamRef[] = [];
     this.midParams.forEach((param) => {
-      if (
-        (param.name && param.value.type === 'literal' && param.value.content) ||
-        (param.value.type === 'ref' &&
-          (param.value.content as IParamRef[]).length)
-      ) {
+      const isLiteral = param.value.type === 'literal';
+      // literal 中间变量：只要已命名即纳入引用树。
+      // 字符串留空是合法运行时值（hasIllegalMidParams 明确豁免、getInputsDSL 也只按
+      // name 校验与序列化），故不能按其字面量内容是否为空来决定它能否被引用：
+      // 否则内容暂空（如切到 string 时默认内容 ''）会让该变量从引用树消失，
+      // 紧随其后的 reSelectRefsWithNewOps 找不到匹配节点，便把下游已建立的引用
+      // 清空——表现为「引用类型不刷新、引用值丢失」。
+      // integer 0 / boolean false 等同理天然纳入，无需真值判断。
+      // ref 中间变量仍需已选择引用。
+      if ((param.name && isLiteral) || this.isRefFilled(param)) {
         const paramCopy = cloneDeep(param);
 
         let willPush: Partial<IParamRef> = {
@@ -609,12 +648,19 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
 
         if (paramCopy.value.type === 'literal') {
           willPush.source = 'pre_defined';
-          willPush.type = 'string';
+          // 对外暴露真实数据类型，下游 set-variable-modal 据此判断可否自增/自减
+          willPush.type = paramCopy.type || 'string';
         } else {
           willPush = {
             ...paramCopy.value.content[0],
             ...willPush,
           };
+          // ref 来源类型跟随引用值，同步回行数据供数据类型列展示
+          const refType = (paramCopy.value.content[0] as IParamRef)
+            ?.type as IWorkflowFieldType;
+          if (refType) {
+            param.type = refType;
+          }
         }
 
         newMidRefs.push(willPush as IParamRef);
@@ -645,10 +691,107 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     this.onSave();
   }
 
+  /**
+   * literal 来源且类型为 integer/number、内容为非空字符串——
+   * 需要在序列化/读取时做数值化转换的场景。
+   */
+  /** literal 来源各类型的默认内容：integer/number→0、boolean→false、其余→'' */
+  private defaultLiteralContent(type: IWorkflowFieldType): string | number | boolean {
+    if (type === 'boolean') {
+      return false;
+    }
+    if (type === 'integer' || type === 'number') {
+      return 0;
+    }
+    return '';
+  }
+
+  /**
+   * literal 内容按类型归一：integer 仅接受整数值（'1.5'/1.5 → 0）、
+   * number 接受有限数值、boolean 仅接受布尔，非法/缺失回退类型默认值。
+   * 返回是否发生修正（供读取端触发持久化）。
+   * 归一仅兜底类型切换/旧数据等在途场景：保存入口 hasIllegalMidParams 会先
+   * 拦截空值与非数值内容（并标红提示），因此不会出现表单报错却被静默改写落库。
+   * G.CTL.03：拆分 if 保证单条语句操作数 ≤3。
+   */
+  private normalizeTypedLiteralContent(item: IWorkflowField): boolean {
+    if (item?.value?.type !== 'literal') {
+      return false;
+    }
+    if (item.type === 'boolean') {
+      if (typeof item.value.content !== 'boolean') {
+        item.value.content = false;
+        return true;
+      }
+      return false;
+    }
+    if (item.type === 'number') {
+      if (
+        typeof item.value.content === 'number' &&
+        Number.isFinite(item.value.content)
+      ) {
+        return false;
+      }
+      const parsed =
+        typeof item.value.content === 'string' && item.value.content.trim() !== ''
+          ? Number(item.value.content)
+          : NaN;
+      item.value.content = Number.isFinite(parsed) ? parsed : 0;
+      return true;
+    }
+    if (item.type === 'integer') {
+      if (
+        typeof item.value.content === 'number' &&
+        Number.isInteger(item.value.content)
+      ) {
+        return false;
+      }
+      const parsed =
+        typeof item.value.content === 'string' && item.value.content.trim() !== ''
+          ? Number(item.value.content)
+          : NaN;
+      // 非整数值（如 '1.5'/1.5）就近取整（Math.trunc，对齐运行时 int() 截断语义），
+      // 仅无法转换为数值时回退默认 0
+      item.value.content = Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * literal 来源允许的数据类型（noneObjDataTypes 中未禁用的项）。
+   * ref 同步来的 object/array<...> 等复合类型对 literal 非法，需回退 string。
+   */
+  private isValidLiteralDataType(type: unknown): boolean {
+    return this.noneObjDataTypes.some(
+      (option) => !option.disabled && option.value === type,
+    );
+  }
+
+  /**
+   * 中间变量数据类型切换：字面量内容重置为新类型默认值，
+   * 避免旧类型内容（如字符串文本）随 boolean/integer 类型一起保存，
+   * 破坏 intermediate_loop_var schema 的类型一致性。
+   */
+  public onMidParamDataTypeChange(row: IWorkflowField) {
+    if (row.value.type === 'literal') {
+      if (!this.isValidLiteralDataType(row.type)) {
+        row.type = 'string';
+      }
+      row.value.content = this.defaultLiteralContent(row.type);
+    }
+    this.onMidRefChange();
+  }
+
   onMidParamTypeChange(row: IWorkflowField) {
     this.onParamTypeChange(row);
     if (row.value.type === 'literal') {
-      row.type = 'string';
+      if (!this.isValidLiteralDataType(row.type)) {
+        // 缺失/非法类型（如 ref 同步来的 object）回退 string
+        row.type = 'string';
+      }
+      // 来源切回 literal：内容统一为类型默认值，避免 integer/number/boolean 携带空字符串落库
+      row.value.content = this.defaultLiteralContent(row.type);
     }
 
     this.onMidRefChange();
@@ -666,6 +809,7 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   public addMidParam(arr: IWorkflowField[], ops: IParamRef[]) {
     arr.push({
       ...getInitInputParamConfig(),
+      type: 'string',
       source: 'pre_defined',
       refs: cloneDeep(ops),
     });
@@ -687,11 +831,25 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
       const res = NodeUtils.initInputs(currentParams.schema as IWorkflowField[], this.nameRefOptions);
       let save = false;
       res?.forEach(resItem => {
+        // 旧数据兼容：无 type 或类型非法（ref 同步来的复合类型）回退 string
+        if (
+          resItem?.value?.type === 'literal' &&
+          !this.isValidLiteralDataType(resItem.type)
+        ) {
+          resItem.type = 'string';
+          save = true;
+        }
+        // 按类型归一内容并持久化修正：否则 tagCompareNoChange 跳过保存，脏数据无法自愈
+        if (this.normalizeTypedLiteralContent(resItem)) {
+          save = true;
+        }
         let paramsType = resItem.type;
         if (paramsType === 'array') {
           paramsType = `array<${(resItem as any)?.schema?.type}>` as IWorkflowFieldType;
         }
-        if (resItem?.value?.content[0]) {
+        // 仅 ref 来源的 content 是 IParamRef 数组，类型跟随首个引用；
+        // literal 的 content 是字符串，content[0] 是首字符，不可用于类型同步
+        if (resItem?.value?.type === 'ref' && resItem?.value?.content[0]) {
           if (resItem?.value?.content[0]?.type !== paramsType) {
             save = true;
           }
@@ -855,6 +1013,16 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     return [];
   }
 
+  /**
+   * 中间变量 ref 选择回调：保留 treeSelect 的延迟保存时序，
+   * 并触发 onMidRefChange 同步 outputOptions 引用类型与数据类型列展示。
+   */
+  public onMidParamRefSelect() {
+    setTimeout(() => {
+      this.onMidRefChange();
+    });
+  }
+
   treeSelect() {
     setTimeout(() => {
       this.onSave();
@@ -939,7 +1107,68 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     return outputs;
   }
 
+  /**
+   * 中间变量是否存在会破坏 intermediate_loop_var schema 的非法项：
+   * - 变量名为空、非 [a-zA-Z_] 开头、含非法字符或重复（与 valueValidityValidator 口径一致）；
+   * - integer/number 字面量为空或非数值（与 integerStr/numberStr 指令口径一致）；
+   * - ref 来源未选择引用（content 非选中数组，与 refSelectedRequire 口径一致）。
+   * 字符串留空是运行时合法值，不拦截；boolean/复合类型随类型切换已重置为默认值，不在此拦截。
+   */
+  private hasIllegalMidParams(): boolean {
+    const seenNames = new Set<string>();
+    for (const param of this.midParams || []) {
+      const name = param.name || '';
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+        return true;
+      }
+      if (seenNames.has(name)) {
+        return true;
+      }
+      seenNames.add(name);
+      if (param.value?.type === 'ref') {
+        // 切到 ref 未选择引用时 content 是 {ref_node_id:'',...} 对象而非选中数组，
+        // 属非法空引用，不允许写入 schema 并被下游引用
+        const refContent = param.value.content;
+        if (!refContent || !Array.isArray(refContent)) {
+          return true;
+        }
+        continue;
+      }
+      if (
+        param.value?.type !== 'literal' ||
+        (param.type !== 'integer' && param.type !== 'number')
+      ) {
+        continue;
+      }
+      const content = param.value.content;
+      const isEmpty =
+        content === null ||
+        content === undefined ||
+        (typeof content === 'string' && content.trim() === '');
+      if (isEmpty) {
+        return true;
+      }
+      const isValid =
+        param.type === 'integer'
+          ? isIntegerStr(content as string | number)
+          : isNumberStr(content as string | number);
+      if (!isValid) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   handelSave() {
+    // 会破坏 intermediate_loop_var schema 的非法中间变量在保存入口拦截：
+    // 阻止触发 setNodeSaveMonitor 落库，避免非法字段被 getInputsDSL 静默过滤
+    // 导致 schema 丢字段、output 引用悬空（字符串留空场景已豁免，不受影响）。
+    // 用模型校验而非 form.invalid：*ngIf 切换输入控件时表单状态可能滞后误判，
+    // 重新引入“保存被拦、节点无法重开”的卡死问题。
+    if (this.hasIllegalMidParams()) {
+      this.midParamForm?.form.markAllAsTouched();
+      return;
+    }
     if (this.tagCompareNoChange()) {
       return;
     }

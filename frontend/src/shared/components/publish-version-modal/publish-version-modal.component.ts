@@ -108,49 +108,9 @@ export class PublishVersionModalComponent {
     };
 
     this.agentDataServe.setPublishStatus('loading');
-
-    if (['agent', 'multi'].includes(this.app_type)) {
-      await this.agentRepoServe.publishAgentVersion(this.app_id, params);
-      this.publishSuccess.emit();
-      this.close();
-      this.nzModal.create({
-        nzTitle: '',
-        nzFooter: null,
-        nzContent: PublishVersionSubmitSuccessComponent,
-        nzClassName: 'publish-version-modal-success-class',
-      });
-    }
-    if (this.app_type === 'flow') {
-      const version = await this.agentRepoServe.publishFlowVersion(
-        this.app_id,
-        params,
-      );
-      let info:any = {
-        version: version,
-        id: this.app_id,
-      };
-      if (this.from === 'edit-flow') {
-        const multiFlowType = this.route.snapshot.queryParams.multiFlowType;
-        if (multiFlowType) {
-          info.multiFlowType = multiFlowType;
-        }
-        this.agentDataServe.addAgentInfo(info);
-        if (this.orginWorkflowId) {
-          localStorage.setItem('workflowInfo', JSON.stringify(info));
-          if (multiFlowType) {
-            localStorage.setItem('multiFlowTypeInfo', JSON.stringify({
-              ...info,
-              version_name: form.name.value,
-            }));
-          }
-          window.history.go(-2);
-          setTimeout(() => {
-            window.location.reload();
-          }, 0);
-        } else {
-          window.history.go(-2);
-        }
-      } else {
+    try {
+      if (['agent', 'multi'].includes(this.app_type)) {
+        await this.agentRepoServe.publishAgentVersion(this.app_id, params);
         this.publishSuccess.emit();
         this.close();
         this.nzModal.create({
@@ -160,45 +120,90 @@ export class PublishVersionModalComponent {
           nzClassName: 'publish-version-modal-success-class',
         });
       }
-    }
-
-    if (this.app_type === 'tool') {
-      await this.agentRepoServe.publishPluginVersion(this.app_id, params);
-      const from = this.route.snapshot.queryParams.from;
-      const id = this.route.snapshot.queryParams.from_id;
-      const agent_node = this.route.snapshot.queryParams.agent_node;
-
-      if (from && (from==='flow'||from==='agent')) {
-        if (from === 'flow') {
-          await this.router.navigate(['/home/agent-center/app-flow/flow'], {
-            queryParams: {
-              id,
-            },
-            state: {
-              currentModal: 'plugin',
-              new_plugin_id: this.app_id,
-              agent_node: agent_node
-            },
-          });
-        } else if (from === 'agent') {
-          setSessionStorage('pluginState',JSON.stringify({
-            currentModal: 'plugin',
-            new_plugin_id: this.app_id,
-          }));
-          await this.router.navigate(['/home/agent-center/app-agent/detail'], {
-            queryParams: {
-              agentId: id,
-            },
+      if (this.app_type === 'flow') {
+        const version = await this.agentRepoServe.publishFlowVersion(
+          this.app_id,
+          params,
+        );
+        let info:any = {
+          version: version,
+          id: this.app_id,
+        };
+        if (this.from === 'edit-flow') {
+          const multiFlowType = this.route.snapshot.queryParams.multiFlowType;
+          if (multiFlowType) {
+            info.multiFlowType = multiFlowType;
+          }
+          this.agentDataServe.addAgentInfo(info);
+          if (this.orginWorkflowId) {
+            localStorage.setItem('workflowInfo', JSON.stringify(info));
+            if (multiFlowType) {
+              localStorage.setItem('multiFlowTypeInfo', JSON.stringify({
+                ...info,
+                version_name: form.name.value,
+              }));
+            }
+            window.history.go(-2);
+            setTimeout(() => {
+              window.location.reload();
+            }, 0);
+          } else {
+            window.history.go(-2);
+          }
+        } else {
+          this.publishSuccess.emit();
+          this.close();
+          this.nzModal.create({
+            nzTitle: '',
+            nzFooter: null,
+            nzContent: PublishVersionSubmitSuccessComponent,
+            nzClassName: 'publish-version-modal-success-class',
           });
         }
-        this.publishSuccess.emit();
-        this.close();
-        return;
       }
-      this.message.create('success', this.i18n.transform('publish_success'));
-      this.publishSuccess.emit();
+
+      if (this.app_type === 'tool') {
+        await this.agentRepoServe.publishPluginVersion(this.app_id, params);
+        const from = this.route.snapshot.queryParams.from;
+        const id = this.route.snapshot.queryParams.from_id;
+        const agent_node = this.route.snapshot.queryParams.agent_node;
+
+        if (from && (from==='flow'||from==='agent')) {
+          if (from === 'flow') {
+            await this.router.navigate(['/home/agent-center/app-flow/flow'], {
+              queryParams: {
+                id,
+              },
+              state: {
+                currentModal: 'plugin',
+                new_plugin_id: this.app_id,
+                agent_node: agent_node
+              },
+            });
+          } else if (from === 'agent') {
+            setSessionStorage('pluginState',JSON.stringify({
+              currentModal: 'plugin',
+              new_plugin_id: this.app_id,
+            }));
+            await this.router.navigate(['/home/agent-center/app-agent/detail'], {
+              queryParams: {
+                agentId: id,
+              },
+            });
+          }
+          this.publishSuccess.emit();
+          this.close();
+          return;
+        }
+        this.message.create('success', this.i18n.transform('publish_success'));
+        this.publishSuccess.emit();
+      }
+      this.agentDataServe.setPublishStatus('succeeded');
+    } catch (error) {
+      // 发布失败时必须复位loading状态，否则页面级loading永久转圈
+      this.agentDataServe.setPublishStatus('failed');
+      throw error;
     }
-    this.agentDataServe.setPublishStatus('succeeded');
     this.close();
   }
 

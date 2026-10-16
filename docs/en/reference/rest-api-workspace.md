@@ -1,5 +1,7 @@
 # Workspace API
 
+> **Deprecated**: The API documentation on this page is deprecated. Please refer to the OpenAPI specification (`docs/api/studio-manager/openapi.yaml` or the `/v3/api-docs` endpoint) for the latest documentation. The content below may be outdated and is for reference only.
+
 ---
 
 ## Table of Contents

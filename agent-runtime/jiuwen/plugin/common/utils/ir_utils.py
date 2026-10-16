@@ -32,7 +32,6 @@ HEADERS = "headers"
 AUTH = "auth"
 DEFAULT_MAX_STR_LENGTH = 100
 DEFAULT_MIN_STR_LENGTH = 0
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 class PluginIRConverter:

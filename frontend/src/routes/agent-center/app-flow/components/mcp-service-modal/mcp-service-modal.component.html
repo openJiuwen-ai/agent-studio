@@ -68,7 +68,7 @@
       <ng-container [ngTemplateOutlet]="paramList" [ngTemplateOutletContext]="{location: 'Headers', title: 'request_header', params: inputParams}"></ng-container>
       <!-- 出入参配置表格 -->
       <div class="my-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
-      <ng-container [ngTemplateOutlet]="mcpParamList" [ngTemplateOutletContext]="{location: 'Input', title: 'input_params', params: mcpInputParams}"></ng-container>
+      <ng-container [ngTemplateOutlet]="mcpParamList" [ngTemplateOutletContext]="{location: 'Input', title: 'input_params', params: displayMcpInputParams}"></ng-container>
 
       <div class="my-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
 
@@ -104,7 +104,7 @@
       <form #inputForm="ngForm">
         <ng-container *ngFor="let param of params; index as i">
           <div
-            *ngIf="param.location === location"
+            *ngIf="param.location === location && !isEnvRefParam(param)"
             class="mt-2 flex items-start"
           >
             <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center text-label gap-[4px]">

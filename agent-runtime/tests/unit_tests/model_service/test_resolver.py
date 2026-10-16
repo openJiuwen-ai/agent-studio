@@ -19,7 +19,7 @@ import pytest
 from model_service.resolver import (
     InterfaceProtocol, ModelServiceBase, ModelServiceDetail, ModelServiceError,
     ModelStrategy, ProviderAuth, StrategyType, _auth_from_data, _auth_project_id,
-    _cache_ttl_for_model, resolve_strategy,
+    _cache_ttl_for_model, _model_from_data, resolve_strategy,
 )
 from storage.exceptions import StorageNotFoundError, StorageReadError
 
@@ -81,6 +81,23 @@ def test_auth_from_data_unknown_type():
     a = _auth_from_data({"id": "a1", "auth_type": "NO_AUTH", "auth_info": ""})
     assert a.auth_type == "NO_AUTH"
     assert a.auth_info == {}
+
+
+def test_model_from_data_strips_api_url_whitespace():
+    """api_url 前后空白应被剥掉，避免拼出非法 URL（issue #1512）。"""
+    m = _model_from_data({
+        "id": "m1", "model_name": "mm",
+        "api_url": "  http://x/v1/chat/completions  ",
+        "provider_id": "prov1", "interface_protocol": "openai",
+        "project_id": "0", "workspace_id": "w", "auth_metadata_id": "am1",
+    })
+    assert m.api_url == "http://x/v1/chat/completions"
+
+
+def test_model_from_data_none_or_empty_api_url():
+    """api_url 缺失 / None 时得到空串，不抛异常。"""
+    assert _model_from_data({"id": "m1", "model_name": "mm"}).api_url == ""
+    assert _model_from_data({"id": "m1", "model_name": "mm", "api_url": None}).api_url == ""
 
 
 def test_cache_ttl_platform_system_no_ttl():

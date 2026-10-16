@@ -172,9 +172,19 @@ public interface CommonConstant {
     String TRIGGER_ID = "triggerId";
 
     /**
+     * 触发器类型
+     */
+    String TRIGGER_TYPE = "triggerType";
+
+    /**
      * 定时触发器prompt
      */
     String PROMPT = "prompt";
+
+    /**
+     * Polling检查地址
+     */
+    String POLL_URL = "pollUrl";
 
     /**
      * all

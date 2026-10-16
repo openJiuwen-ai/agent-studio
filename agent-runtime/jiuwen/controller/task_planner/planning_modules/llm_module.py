@@ -30,8 +30,6 @@ from jiuwen.plugin.models.plugin import BasePlugin
 from jiuwen.plugin.models.restfulapi import RestFulAPI
 from jiuwen.prompt import TemplateManager
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class LLMModule:
     """

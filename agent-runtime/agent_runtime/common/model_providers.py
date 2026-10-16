@@ -16,7 +16,7 @@ from typing import Optional
 
 from agent_runtime.common.config import settings
 from agent_runtime.common.ir_interfaces import ModelConfigProvider
-from agent_runtime.context.request_context import _request_ctx
+from agent_runtime.context.request_context import _request_ctx, strip_correlation_headers
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
@@ -76,6 +76,9 @@ def _extract_auth_headers(headers: dict) -> dict:
     if deployment_id:
         custom_headers["X-Deployment-Id"] = deployment_id
 
+    # D-02/B07（SYNC-01 P3.4）：最终第三方发送边界——剥离平台保留关联 Header
+    # （含预置伪造值，大小写不敏感）；鉴权/部署 Header 保留。
+    strip_correlation_headers(custom_headers)
     return custom_headers
 
 
@@ -164,6 +167,9 @@ class Nl2ModelConfigProvider:
         deployment_id = headers.get("deployment_id", "")
         if deployment_id:
             custom_headers["X-Deployment-Id"] = deployment_id
+
+        # D-02/B07（SYNC-01 P3.4）：最终边界剥离关联 Header（含伪造值，大小写不敏感）
+        strip_correlation_headers(custom_headers)
 
         model_client_config = ModelClientConfig(
             client_provider="openai",
@@ -374,7 +380,11 @@ class OBSModelConfigProvider(ModelConfigProvider):
         extra_body = None
         thinking = hyper_params.get("thinking")
         if thinking and isinstance(thinking, dict) and "type" in thinking:
-            extra_body = {"thinking": thinking}
+            extra_body = {
+                "thinking": thinking,
+                "enable_thinking": thinking["type"] == "enabled",
+                "chat_template_kwargs": {"enable_thinking": thinking["type"] == "enabled"}
+            }
 
         model_request_config = ModelRequestConfig(
             model=model_service_id,
@@ -440,6 +450,8 @@ class IRModelConfigProvider(ModelConfigProvider):
         ctx = _request_ctx.get()
         auth_token = ctx.headers.get("X-Auth-Token", "") if ctx else ""
         custom_headers = {"X-Auth-Id": auth_id, "X-Auth-Token": auth_token}
+        # D-02/B07（SYNC-01 P3.4）：最终边界剥离关联 Header（含伪造值，大小写不敏感）
+        strip_correlation_headers(custom_headers)
 
         # Build client config
         model_client_config = ModelClientConfig(
@@ -454,7 +466,11 @@ class IRModelConfigProvider(ModelConfigProvider):
         extra_body = None
         thinking = hyper_params.get("thinking")
         if thinking and isinstance(thinking, dict) and "type" in thinking:
-            extra_body = {"thinking": thinking}
+            extra_body = {
+                "thinking": thinking,
+                "enable_thinking": thinking["type"] == "enabled",
+                "chat_template_kwargs": {"enable_thinking": thinking["type"] == "enabled"}
+            }
 
         # 构建 ModelRequestConfig，传递所有已知的超参数
         # ModelRequestConfig 定义了 model_name(aliased as "model"), temperature, top_p, max_tokens, stop

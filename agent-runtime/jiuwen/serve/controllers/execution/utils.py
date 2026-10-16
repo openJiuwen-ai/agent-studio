@@ -79,6 +79,7 @@ from jiuwen.serve.controllers.execution.manager import (
 )
 from jiuwen.serve.controllers.execution.open_utils import (
     async_ir_load,
+    async_ir_load_batch,
     serialize_object,
 )
 from jiuwen.serve.controllers.execution.types import (
@@ -143,8 +144,11 @@ _DEFAULT = "default"
 _AGENT_ERROR_REPLY = "生成回复失败"
 _UTF_8 = "utf-8"
 _BASE_AGENT_SWITCH = "BASE_AGENT_SWITCH"
-
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
+# COM-08 §4.7B: 旧 SSE 出口的固定安全公开文案。不再读取 LOG_VERBOSE_MODE、
+# 不以 item.message / item.data.message 作为公开文案来源。
+# 错误码仍通过模板的 code 槽与 CODE 字段透传；message 槽固定为安全文案，
+# 两种 LOG_VERBOSE 配置下 wire 完全一致。
+_SAFE_PUBLIC_ERROR_MESSAGE = "系统内部错误，请参考错误码并联系系统管理员"
 
 item_code_to_conversation_event_type = {
     StreamCode.PARTIAL_CONTENT.value: ConversationEvent.MESSAGE,
@@ -698,14 +702,22 @@ async def _handle_error_response(item: JiuWenBaseException) -> bytes:
             "data": {
                 MESSAGE: WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
                     item.error_code,
-                    item.message,
+                    _SAFE_PUBLIC_ERROR_MESSAGE,
                 ),
                 CODE: item.error_code,
             },
             "createdTime": get_current_time_ms(),
         }
     ).model_dump_json(by_alias=True, exclude_none=True)
-    logger.error(item.message)
+    # COM-08 §4.7B: 不再把原始 item.message 直接写入普通 ERROR 日志；
+    # 最终责任边界记录固定基础事件 + exc_info（traceback 两种配置都保留），
+    # verbose 时只追加 allowlist 治理字段（error_code），不新增第二条 ERROR。
+    logger.error(
+        "workflow execution failed",
+        exc_info=item,
+        event="workflow.execute",
+        verbose_fields={"error_code": item.error_code},
+    )
     err_resp = f"data: {error_response_str}\n\n".encode(_UTF_8)
     return err_resp
 
@@ -1015,7 +1027,7 @@ async def _format_component_output(
             item.data.update(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
-                        code_of_data, item.data.get("message")
+                        code_of_data, _SAFE_PUBLIC_ERROR_MESSAGE
                     )
                 )
             )
@@ -1050,16 +1062,18 @@ async def _process_streaming_output(
     """
     # 每次对话都需要先生成一个start标识
     start_flag = True
+    stream_start_time_ms: Optional[int] = None
 
     async for item in origin_output:
         # 生成开始标识
         if start_flag:
+            stream_start_time_ms = get_current_time_ms()
             start_stream_data = StreamingChatResponse(
                 event=ConversationEvent.START,
                 index=0,
                 executionId=item.execution_id,
                 data={},
-                createdTime=get_current_time_ms(),
+                createdTime=stream_start_time_ms,
                 isStructMessage=item.is_struct_message,
             ).model_dump_json(by_alias=True, exclude_none=True)
             start_flag = False
@@ -1068,14 +1082,26 @@ async def _process_streaming_output(
         # 处理错误信息
         if item.code == StreamCode.ERROR.value:
             code_of_data = item.data.get("code") or item.code
+            # COM-08 §4.7B 条3: 不以 item.data.get("message") 作为公开文案来源；
+            # 固定安全文案，两种 LOG_VERBOSE 配置 wire 一致。
             item.data.update(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
                         code_of_data,
-                        item.data.get("message"),
+                        _SAFE_PUBLIC_ERROR_MESSAGE,
                     )
                 )
             )
+
+        if (
+            item.code in (
+                StreamCode.CONTROLLER_FINISH_MESSAGE.value,
+                StreamCode.CONTROLLER_AGENT_INTERRUPT_MESSAGE.value,
+            )
+            and isinstance(item.data, dict)
+        ):
+            item.data.setdefault("start_time", stream_start_time_ms)
+            item.data.setdefault("end_time", get_current_time_ms())
 
         # 生成响应数据
         response = await _build_streaming_response(item, collector)
@@ -1168,8 +1194,9 @@ async def post_process_agent_group_streaming_output(
             await AsyncStateManager().save_state(
                 conversation_id, serialized_agent_state
             )
-            logger.info(
-                f"conversation {conversation_id} has saved execution state for agent group"
+            logger.debug(
+                "conversation %s has saved execution state for agent group",
+                conversation_id,
             )
         execution_data.instance.clear_state()
         # 根据task_id删除template
@@ -1266,7 +1293,7 @@ async def post_process_workflow_streaming_output(
             item.data.update(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
-                        code_of_data, item.data.get("message")
+                        code_of_data, _SAFE_PUBLIC_ERROR_MESSAGE
                     )
                 )
             )
@@ -1330,7 +1357,7 @@ async def post_process_workflow_streaming_output_async(
             item.data.update(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
-                        code_of_data, item.data.get("message")
+                        code_of_data, _SAFE_PUBLIC_ERROR_MESSAGE
                     )
                 )
             )
@@ -1607,8 +1634,16 @@ class AgentIrUtils:
             "intent": [],
         }
 
-        for workflow_info in ir_data.get("configs", {}).get("workflows", []):
-            workflow_ir = await async_ir_load(workflow_info.get("ir_path"))
+        workflow_infos = ir_data.get("configs", {}).get("workflows", [])
+        # 并发预取全部工作流 IR；加载语义（含空 ir_path 的处理）与原串行逐个
+        # async_ir_load 一致，失败传播语义也保持 fail-fast
+        workflow_irs = await async_ir_load_batch(
+            [info.get("ir_path") for info in workflow_infos]
+        )
+
+        for workflow_info, workflow_ir in zip(
+            workflow_infos, workflow_irs, strict=True
+        ):
             action_after_completion = ActionAfterCompletionType.from_string(
                 workflow_info.get("action_after_completion", "Continue")
             )
@@ -1645,26 +1680,37 @@ class AgentIrUtils:
         """Process global intent workflows"""
         global_workflow_configs = []
 
-        for intent in ir_data.get("configs", {}).get("global_intents", []):
+        intents = ir_data.get("configs", {}).get("global_intents", [])
+
+        def _needs_workflow_ir(intent) -> bool:
+            """过滤需要预取 workflow IR 的意图；预取与消费经 zip(strict=True)
+            一一配对，数量对齐由构造保证，不再依赖消费侧同源谓词"""
+            return intent.get("handler_type", "Workflow") == (
+                HandlerType.WORKFLOW.value
+            ) and bool(intent.get("handler"))
+
+        # 并发预取需要加载 IR 的意图；zip(strict=True) 把"预取数量==消费数量"
+        # 锁定在构造上，两侧失配抛带上下文的 ValueError 而非裸 StopIteration
+        workflow_intents = [intent for intent in intents if _needs_workflow_ir(intent)]
+        loaded_irs = await async_ir_load_batch(
+            [intent["handler"].get("ir_path") for intent in workflow_intents]
+        )
+
+        for intent, workflow_ir in zip(workflow_intents, loaded_irs, strict=True):
             action = ActionAfterCompletionType.from_string(
                 intent.get(
                     "action_after_completion",
                     ActionAfterCompletionType.WAITING_USER_INPUT.value,
                 )
             )
-            handler_type = intent.get("handler_type", "Workflow")
-
-            if handler_type == HandlerType.WORKFLOW.value and intent.get("handler"):
-                handler = intent["handler"]
-                workflow_ir = await async_ir_load(handler.get("ir_path"))
-                if workflow_ir:
-                    global_workflow_configs.append(
-                        WorkflowConfig(
-                            workflow_ir=workflow_ir,
-                            action_after_completion=action,
-                            config_name=handler.get("name"),
-                        )
+            if workflow_ir:
+                global_workflow_configs.append(
+                    WorkflowConfig(
+                        workflow_ir=workflow_ir,
+                        action_after_completion=action,
+                        config_name=intent["handler"].get("name"),
                     )
+                )
 
         return global_workflow_configs
 

@@ -108,6 +108,7 @@ import { QuestionerModalComponent } from '../components/questioner-modal/questio
 import { RunModalComponent } from '../components/run-modal/run-modal.component';
 import { SetVariableModalComponent } from '../components/set-variable-modal/set-variable-modal.component';
 import { SqlModalComponent } from '../components/sql-modal/sql-modal.component';
+import { HttpModalComponent } from '../components/http-modal/http-modal.component';
 import { StartModalComponent } from '../components/start-modal/start-modal.component';
 import { UpdateNodeNameModalComponent } from '../components/update-node-name-modal/update-node-name-modal.component';
 import { IRefIndex, NodeUtils } from '../components/utils';
@@ -201,6 +202,7 @@ import { HttpService } from '@services/http.service';
 import {
   EnvironmentVariablesManagementService,
 } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
 import { FlowEventUtils } from '@routes/agent-center/app-flow/utils/flow-event-utils';
 
 import { PublishChannelPageComponent } from 'src/shared/components/publish-channel-page/publish-channel-page.component';
@@ -250,6 +252,7 @@ const NodeMap = {
   StructuredMessagesException: ExceptionModalComponent,
   ParamExtraction: ParamExtractionModalComponent,
   StreamTransform: StreamTransformModalComponent,
+  Http: HttpModalComponent,
 };
 
 export interface ICreateNodeConfig {
@@ -360,6 +363,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public conversationId = uuidV4();
 
   public showGlobalConfigDrawer = false;
+  private pendingMemoryRenames: { oldRef: string; newRef: string }[] = [];
   public showLogDrawer = false;
   public showPluginDrawer = false;
   public showChildFlowDrawer = false;
@@ -383,7 +387,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public globalConfigInputs = [];
   public globalConfigVariables = [];
   public globalConfigMemoryConfig = null;
-  public globalConfigEnvironment = '';
   public globalConfigFlowId = null;
   public logConversationId = '';
   public nodeConfigNodeInfo = null;
@@ -573,6 +576,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   private halfModalVersion = 0;
 
   private envList: any = [];
+  public defaultEnvId = '';
 
   showEnv = true;
   public isFromAgentBuilder: boolean = false;
@@ -680,6 +684,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     private tiMessage: NzMessageService,
     private modelRouterStrategiesService: ModelRouterStrategiesService,
     private envVariablesManagement: EnvironmentVariablesManagementService,
+    private envManagementService: EnvManagementService,
     private readonly http: HttpService,
     private helpCenterService: HelpCenterService,
     private flowHelperServ: FlowHelperService,
@@ -736,10 +741,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
                     (node as IControllerNode).configs.agents[index] = {
                       id: agents.id,
                       node_id: agents.node_id,
+                      type: agents.type,
                       mode: agents.mode,
                       name: new_sub_detail.name,
                       configs: new_sub_detail.configs,
-                    };
+                    } as any;
                   }
                 },
               );
@@ -851,6 +857,25 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             ...this.triggerAdded.list,
             {name, type, trigger_id, prompt, hook_url},
           ];
+        }
+        if (type === 'POLLING') {
+          const is_has = this.triggerAdded.list.some(
+            (item) => item.trigger_id === trigger_id,
+          );
+          if (is_has) {
+            for (let i = 0; i < this.triggerAdded.list.length; i++) {
+              const cur = this.triggerAdded.list[i];
+              if (cur?.trigger_id === trigger_id) {
+                this.triggerAdded.list[i] = triggerAdded;
+                break;
+              }
+            }
+          } else {
+            this.triggerAdded.list = [
+              ...this.triggerAdded.list,
+              {name, type, trigger_id, poll_url: triggerAdded.poll_url, poll_interval_seconds: triggerAdded.poll_interval_seconds, prompt, invocation},
+            ];
+          }
         }
       });
 
@@ -1355,14 +1380,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
-    // 节点抽屉关闭并触发保存时候
-    this.appFlowServ.nodeModalCloseMonitor$()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(async (nodeData: any) => {
-        if (this.type !== 'multi' && nodeData?.id && !this.isFlowReadonly) {
-          this.saveStatusMap.set(nodeData?.id, true);
-        }
-      })
+    // 说明：节点「保存中」标记 saveStatusMap 不再在“抽屉关闭”时置位。
+    // 关闭先置位、仅靠保存成功复位；若关闭时保存被校验拦截（未发出保存事件），
+    // 标记将永久为 true，导致 openNodeModal 永久跳过、节点无法再次打开。
+    // 现改为与保存生命周期对齐：同步预处理完成、进入 try/finally 保护后才置位
+    // （见下方 nodeSaveMonitor$），预处理抛错/早退时标记未置位不泄漏，
+    // 置位后由 finally 统一复位。
 
     this.appFlowServ
       .nodeSaveMonitor$()
@@ -1378,10 +1401,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         let {nodeData = {}} = ref || {};
 
-        // 保存
+        // 同步预处理阶段不置位任何标记：此段抛错或提前 return 时标记尚未置位，
+        // 不会泄漏；“保存中”与确认 loading 的置位下移到预处理完成、进入 try 之前
         this.exceptionBranchHandler(nodeData);
         nodeData = NodeUtils.traversalNodeSource(nodeData);
-        this.nodeServ.setIsConfirmLoading(true);
         this.isResetNodeHeightMap = true;
         // 高级意图节点与其容器节点的连接线是异步创建的，避免多次调用updateFlowData导致数据不一致
         let isSkipUpdateFlow = false;
@@ -1400,39 +1423,53 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           this.createIntentContainerNode(nodeData.id);
           let bodyParams;
           setTimeout(async () => {
-            if (isContainerNode) {
-              // 若已存在意图动作配置节点，需异步更新DSL
-              bodyParams = FlowUtils.updateContainerNodeDsl(
-                this.graph,
-                this.workflowDetail,
-                nodeData,
-                containerNodeId,
-                this.getNodeInfoById.bind(this),
-                this.appFlowServ,
-              );
-            }
-            this.handleAdvancedIntentConns(nodeData.id);
-            this.updateRef();
-            await this.updateFlowData(
-              {
-                isDrag: false,
-                nodeInfo: nodeData,
-                successCb: () => {
-                  if (isContainerNode) {
-                    this.appFlowServ.setAppRefs(this.ref_workflows);
-                    FlowUtils.syncContainerInfoToGraph(
-                      this.graph,
-                      bodyParams,
-                      containerNodeId,
-                    );
+            // 高级意图节点的容器 DSL 更新、连接线重建与真正的 updateFlowData 均在本异步分支内串行执行，
+            // 任一环节在 await 前抛错（updateContainerNodeDsl / handleAdvancedIntentConns / updateRef）
+            // 都会跳过下方复位逻辑。故用 try/finally 兜底：无论成功、失败还是异常，
+            // 都必须复位“保存中”标记，否则 saveStatusMap 永久为 true、节点无法再次打开。
+            try {
+              if (isContainerNode) {
+                // 若已存在意图动作配置节点，需异步更新DSL
+                bodyParams = FlowUtils.updateContainerNodeDsl(
+                  this.graph,
+                  this.workflowDetail,
+                  nodeData,
+                  containerNodeId,
+                  this.getNodeInfoById.bind(this),
+                  this.appFlowServ,
+                );
+              }
+              this.handleAdvancedIntentConns(nodeData.id);
+              this.updateRef();
+              await this.updateFlowData(
+                {
+                  isDrag: false,
+                  nodeInfo: nodeData,
+                  successCb: () => {
+                    if (isContainerNode) {
+                      this.appFlowServ.setAppRefs(this.ref_workflows);
+                      FlowUtils.syncContainerInfoToGraph(
+                        this.graph,
+                        bodyParams,
+                        containerNodeId,
+                      );
+                    }
+                  },
+                  faildCb: () => {
+
                   }
                 },
-                faildCb: () => {
-
-                }
-              },
-              bodyParams,
-            );
+                bodyParams,
+              );
+            } finally {
+              // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
+              // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow
+              // 提前 return 时已复位确认 loading，此处不可再延迟复位——若延迟到后续其他节点
+              // 保存期间，会错误清除后者的确认 loading；saveStatusMap 由本分支独占复位）
+              if (this.type !== 'multi' && nodeData?.id) {
+                this.saveStatusMap.set(nodeData.id, false);
+              }
+            }
           });
         }
         // 普通模式
@@ -1463,6 +1500,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           if (exceedsList.length) {
             const exceedsStr = exceedsList.join(',')
             MessageComponent.showError(`绑定子智能体【${exceedsStr}】达到最大深度限制，请删除后重试`, 5000);
+            // 深度校验早退发生在置位之前，两个标记均未置位，无泄漏，无需局部复位
             return
           }
           const controller_node: any = this.workflowDetail.details.nodes.find(contr_item => contr_item.type === 'Controller');
@@ -1477,6 +1515,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.updateNodeData(nodeData);
         }
+        // 同步预处理全部完成，进入 try/finally 保护后再置位：“保存中”与确认 loading。
+        // 置位前的抛错/早退分支标记未置位、不会泄漏；置位后的任何路径（含异常）
+        // 都由 finally 统一复位，节点不会永久无法打开
+        if (this.type !== 'multi' && nodeData?.id) {
+          this.saveStatusMap.set(nodeData.id, true);
+        }
+        this.nodeServ.setIsConfirmLoading(true);
         try {
           if (isSkipUpdateFlow) {
             return;
@@ -1510,7 +1555,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         } finally {
           this.nodeServ.setIsConfirmLoading(false);
-          if (this.type !== 'multi' && nodeData?.id) {
+          // 高级意图节点(isAdvancedModeNew)：真实保存在上方 setTimeout 中异步执行，此刻尚未结束，
+          // saveStatusMap 由该异步分支在 updateFlowData 完成后复位，避免过早解锁导致可重开。
+          if (!isSkipUpdateFlow && this.type !== 'multi' && nodeData?.id) {
             setTimeout(() => {
               this.saveStatusMap.set(nodeData?.id, false);
             });
@@ -2222,7 +2269,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.globalConfigInputs = this.workflowDetail.details.inputs;
       this.globalConfigVariables = this.workflowDetail.details.global_variables;
       this.globalConfigMemoryConfig = this.workflowDetail.memory_config;
-      this.globalConfigEnvironment = this.workflowDetail.details.environment || '';
       this.globalConfigFlowId = this.workflowId;
     } else {
       this.globalConfigInputs = (this.workflowDetail.workflow_details.configs as any)?.inputs || [];
@@ -2235,6 +2281,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.appFlowServ.setNodeClicked(EHalfmodalType.GLOBAL);
   }
 
+  public onMemoryRenamed(renames: { oldRef: string; newRef: string }[]): void {
+    this.pendingMemoryRenames = renames;
+  }
+
   public onGlobalConfigsChange(configs: IFlowConfigs): void {
     FlowUtils.updateRefsAfterConfigsChange(
       configs,
@@ -2242,7 +2292,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.graph,
       this.updateRefType,
       this,
+      this.pendingMemoryRenames,
     );
+    this.pendingMemoryRenames = [];
     if (configs.default_model && configs.default_model_switch) {
       const {model_deployment_id, model_name, model_type, model} =
         configs.default_model;
@@ -2278,25 +2330,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       isDrag: false,
       successCb: () => {
         this.showGlobalConfigDrawer = false;
-        this.envList = [];
-        if (
-          this.workflowDetail.workflow_details.configs
-            ?.environment &&
-          typeof this.workflowDetail.workflow_details.configs
-            ?.environment === 'string'
-        ) {
-          this.envVariablesManagement
-            .getEnvVariablesDetail(
-              this.workflowDetail.workflow_details.configs
-                .environment,
-            )
-            .then((res) => {
-              this.envList = res?.variables;
-              if (this.type !== 'multi') {
-                this.updateOutputsMap();
-              }
-            });
-        }
       },
     });
   }
@@ -2305,12 +2338,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     inputs: IWorkflowField[];
     global_variables: IWorkflowField[];
     memory_config: IMemoryLibBaseInfo;
-    environment: string;
   }) {
     this.workflowDetail.details.inputs = configs.inputs;
     this.workflowDetail.details.global_variables =
       configs.global_variables;
-    this.workflowDetail.details.environment = configs.environment;
     if (this.configServ.isSupportUserPersona()) {
       this.workflowDetail.memory_config = configs.memory_config;
     }
@@ -2350,7 +2381,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.testBtnLoading = false;
       this.appFlowServ.setSaveNodeTestInfo(null);
       if (this.type === 'multi') {
-        this.showRunModal = true;
+        // 预览状态下，不会调用校验接口
+        if (this.isFlowReadonly) {
+          this.showRunModal = true;
+        } else {
+          this.isStartCheckErrorWorkFlow = true;
+          await this.checkErrorMultiAgentFlow(true);
+        }
       } else {
         // 预览状态下，不会调用校验接口
         if (this.isFlowReadonly) {
@@ -2563,26 +2600,39 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       );
 
       this.envList = [];
-      if (
-        this.workflowDetail.workflow_details.configs?.environment &&
-        typeof this.workflowDetail.workflow_details.configs?.environment ===
-        'string'
-      ) {
-        this.envVariablesManagement
-          .getEnvVariablesDetail(
-            this.workflowDetail.workflow_details.configs.environment,
-          )
-          .then((res) => {
-            this.envList = res?.variables;
-            if (this.type !== 'multi') {
-              this.updateOutputsMap();
-            }
-          });
-      } else {
-        setTimeout(() => {
+      const configEnv = (this.type === 'multi'
+        ? this.workflowDetail.details?.environment
+        : this.workflowDetail.workflow_details.configs?.environment);
+      if (configEnv && typeof configEnv === 'string') {
+        // 优先使用工作流配置中绑定的环境
+        this.defaultEnvId = configEnv;
+        this.envVariablesManagement.getEnvVariablesDetail(configEnv).then(res => {
+          this.envList = res?.variables;
           if (this.type !== 'multi') {
             this.updateOutputsMap();
           }
+        }).catch(() => {
+          if (this.type !== 'multi') { this.updateOutputsMap(); }
+        });
+      } else {
+        // 未绑定环境时使用默认环境（is_default 过滤由服务端单条返回，避免分页截断漏判默认环境）
+        this.envManagementService.getEnvironmentList({ offset: 0, limit: 99, isDefault: true }).then(envRes => {
+          const defaultEnv = (envRes?.env_info || []).find((e: any) => e.isDefault);
+          if (defaultEnv?.id) {
+            this.defaultEnvId = defaultEnv.id;
+            this.envVariablesManagement.getEnvVariablesDetail(defaultEnv.id).then(res => {
+              this.envList = res?.variables;
+              if (this.type !== 'multi') {
+                this.updateOutputsMap();
+              }
+            }).catch(() => {
+              if (this.type !== 'multi') { this.updateOutputsMap(); }
+            });
+          } else {
+            if (this.type !== 'multi') { this.updateOutputsMap(); }
+          }
+        }).catch(() => {
+          if (this.type !== 'multi') { this.updateOutputsMap(); }
         });
       }
 
@@ -3680,13 +3730,62 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           this.checkErrorWorkflowIcon = new Set(
             errors.map((error) => error.id),
           ).size;
-          if (showModal && this.checkErrorWorkflowIcon > 0) {
+          if ((showModal || isPublish) && this.checkErrorWorkflowIcon > 0) {
             this.showCheckWorkflowModal();
           }
         }
         this.appFlowServ.setValidateWorkflowList(this.validateWorkflowList);
       }, 10);
     }
+  }
+
+  /** 多智能体试运行前校验：检查下挂子工作流的版本是否存在 */
+  async checkErrorMultiAgentFlow(showModal, isPublish?: boolean) {
+    if (this.checkErrorWorkflowSetTime) {
+      clearTimeout(this.checkErrorWorkflowSetTime);
+      this.checkErrorWorkflowSetTime = null;
+    }
+
+    this.checkErrorWorkflowSetTime = setTimeout(async () => {
+      try {
+        const validateRes = await this.appFlowRepoServ.validateControllerAgent(this.workflowId);
+        const {success, errors} = validateRes;
+        if (success) {
+          this.checkErrorWorkflowIcon = 0;
+          this.appFlowServ.testRunVerificationError = false;
+          this.validateWorkflowList = [];
+          this.checkErrorWorkflowHalfModalRef = false;
+          if (showModal) {
+            this.showRunModal = true;
+          } else if (isPublish) {
+            // 多智能体发布版本
+            this.handelPublish();
+          }
+          this.isStartCheckErrorWorkFlow = false;
+        } else {
+          this.validateWorkflowList = errors;
+          this.appFlowServ.testRunVerificationError = true;
+          this.checkErrorWorkflowIcon = new Set(
+            errors.map((error) => error.id),
+          ).size;
+          if ((showModal || isPublish) && this.checkErrorWorkflowIcon > 0) {
+            this.showCheckWorkflowModal();
+          }
+        }
+        this.appFlowServ.setValidateWorkflowList(this.validateWorkflowList);
+      } catch (error) {
+        // 校验接口异常（网络错误、响应结构非预期等）：复位校验态并统一提示，
+        // 避免试运行/发布停留在无反馈状态（如 isStartCheckErrorWorkFlow 卡在 true）
+        this.checkErrorWorkflowIcon = 0;
+        this.appFlowServ.testRunVerificationError = false;
+        this.validateWorkflowList = [];
+        this.checkErrorWorkflowHalfModalRef = false;
+        this.isStartCheckErrorWorkFlow = false;
+        this.appFlowServ.setRunBtnClicked(false);
+        this.appFlowServ.setValidateWorkflowList(this.validateWorkflowList);
+        handleCommonReqError(error);
+      }
+    }, 10);
   }
 
   showCheckWorkflowModal() {
@@ -4179,13 +4278,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  resetEnvList(e) {
-    this.envList = [];
-    if (this.workflowDetail.workflow_details.configs?.environment && typeof this.workflowDetail.workflow_details.configs?.environment === 'string') {
-      this.envList = e?.variables;
-    }
-  }
-
   // 获取前序节点的引用（outputs）信息，生成引用options
   private getPredecessorsRef(id: string): IRefInfo[] {
     const cell = this.graph.getCellById(id);
@@ -4287,6 +4379,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           envArr.push({
             outputs: outputsCfg,
             refNodeName: this.i18n.transform('envParams'),
+            refNodeId: 'envParams',
             type: 'environment',
           });
         }
@@ -4536,7 +4629,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public publishAgent() {
     if (this.type === 'multi') {
-      this.handelPublish();
+      this.coloseAllWindow();
+      // 调用校验接口，有问题改问题，没问题发布版本（与工作流发布逻辑对齐）
+      MaskComponent.show();
+      setTimeout(async () => {
+        MaskComponent.hide();
+        this.isStartCheckErrorWorkFlow = true;
+        await this.checkErrorMultiAgentFlow(false, true);
+      }, 2000);
     } else {
       this.coloseAllWindow();
       // 调用校验接口,有问题改问题,没问题发布版本
@@ -4850,6 +4950,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (opKey && ['z', 'y'].includes(event.key)) {
+      // Skip canvas undo/redo when focus is in an editable control, let the browser handle it natively
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
       // undo
       if (opKey && event.key === 'z') {
         this.undo();
@@ -5880,7 +5985,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     const resourceNodes = nodes.filter(
       (node) =>
         versionedResNodes.includes(node?.type) ||
-        node?.type === 'ParamExtraction',
+        node?.type === 'ParamExtraction' ||
+        // 多智能体画布上的单智能体成员节点（type='Agent'，shape op-single-agent-node）
+        // 也参与升级标记计算，与工作流/子多智能体节点保持一致。
+        // 注意不能把 'Agent' 加进 versionedResNodes 常量：工作流画布同样存在
+        // type='Agent' 的智能体节点（agent-node 组件，走 boundFlowVersionList 独立升级机制），
+        // 必须限定 type === 'multi' 以免波及工作流画布
+        (this.type === 'multi' && node?.type === 'Agent'),
     );
 
     resourceNodes.forEach((item: any) => {
@@ -5911,10 +6022,16 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           item.parent_node_type = ag_wf_list.find((wf) => wf.node_id === item?.id)
             ?.parent_node_type ?? 'controller';
         }
+        // 单智能体节点：与编排弹窗 isNeedUpdate 判定对齐，最新版本须为
+        // planexecute 类型才提示升级（否则升级后成员 mode='PlanExecute' 与实际版本类型不符）
+        const isSubAgentUpdatable =
+          item.type !== 'Agent' ||
+          matchedFlow?.latest_version_app_sub_type === 'planexecute';
         // 新增!version_id，用于兼容存量数据。绑定的资源是开发态，没有版本号
         if (
           matchedFlow &&
           matchedFlow.last_version_id &&
+          isSubAgentUpdatable &&
           (Number(matchedFlow.last_version_id) > Number(version_id) ||
             !version_id)
         ) {

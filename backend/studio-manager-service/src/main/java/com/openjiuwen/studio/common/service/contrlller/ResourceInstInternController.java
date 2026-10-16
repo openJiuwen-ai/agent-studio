@@ -42,6 +42,8 @@ public class ResourceInstInternController implements ResourceInstInternApi {
             List<ResourceInst> resourceInsts = resourceInstService.queryResourceInsts(domainId, true);
             log.info("AgentBuilder queryResourceInsts end");
             return ResponseEntity.ok(resourceInsts);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("AgentBuilder query tenant info failed", e);
             throw new AgentStudioException(StudioError.UNEXPECTED_ERROR);
@@ -60,6 +62,8 @@ public class ResourceInstInternController implements ResourceInstInternApi {
             List<LicenseInst> licenseInsts = resourceInstService.queryLicense(resId, attrCode, skuCode, domainId);
             log.info("AgentBuilder query license end");
             return ResponseEntity.ok(licenseInsts);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("AgentBuilder query tenant info failed", e);
             throw new AgentStudioException(StudioError.UNEXPECTED_ERROR);
@@ -77,6 +81,8 @@ public class ResourceInstInternController implements ResourceInstInternApi {
             resourceInstService.reportLicense(req, domainId);
             log.info("AgentBuilder report license end");
             return ResponseEntity.ok("Success.");
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("AgentBuilder query tenant info failed", e);
             throw new AgentStudioException(StudioError.UNEXPECTED_ERROR);

@@ -30,6 +30,14 @@ interface IVal {
   typeOpts?: any;
 }
 
+/**
+ * 语义有双重性，改动时须同时看 refreshMenusByLiveType / onLeftSelect 的两个分支：
+ * 1. **operator 可用性**：命中即把 commonOperatorOptions 并入 typeOpts；
+ * 2. **来源可用性**：未命中则整组来源退化为 refOnly（连 operator 也没有）。
+ * 例外：'object' 虽在此表内，但其字面量已被 getLeftParamsType(param.left) === 'complex'
+ * 收窄为 refOnlyOptions，故命中本表对 object 而言只意味着「保留 operator 选项」，
+ * 并非允许选字面量。调整此表 ≠ 仅决定「字面量能否选」，还同时影响 operator 菜单。
+ */
 const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array<string>', 'array<number>', 'array<integer>'];
 @Component({
   selector: 'meta-set-variable-modal',
@@ -110,7 +118,7 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
   ];
 
   public getLeftParamsType(param: IWorkflowField) {
-    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+    if (param.value.type === 'ref' && (param.value.content as IParamRef[])?.length) {
       const { type } = (param.value.content[0] as IParamRef) || {};
       if (type === 'object' || type.startsWith('array')) {
         return 'complex';
@@ -121,13 +129,18 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     return 'normal';
   }
 
+  /**
+   * 左值引用节点的当前类型（改型后落库 left.type 仍是旧值，故取 content[0].type）。
+   * content 在旧数据/异常数据下可能为 null/undefined，须可选链保护 —— 本 MR 起该方法
+   * 会在 initParams 阶段被无条件调用（上游原 initParams 只按落库 setting.left.type 算菜单，不读 content）。
+   */
   public isGetLeftType(param: IWorkflowField) {
-    const { type } = (param.value.content[0] as IParamRef) || {};
+    const { type } = (param.value?.content?.[0] as IParamRef) || {};
     return type;
   }
 
   public getParamType(param: IWorkflowField) {
-    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+    if (param.value.type === 'ref' && (param.value.content as IParamRef[])?.length) {
       const { type } = (param.value.content[0] as IParamRef) || {};
       if (type.startsWith('array')) {
         return 'emptyArr';
@@ -265,9 +278,13 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         NodeUtils.reSelectRefWithNewOps(
           right,
           NodeUtils.narrowRefOption(this.rightRefs, {
-            type: left.type,
+            // 用左值实时引用类型（循环中间变量改型后 left.type 仍是落库旧值）
+            type: (this.isGetLeftType(left) || left.type) as IWorkflowFieldType,
           })
         );
+
+        // 引用刷新后按实时类型重算来源/运算菜单：中间变量改型后无需重选变量名称即可拿到新选项
+        this.refreshMenusByLiveType(param);
       });
     }
 
@@ -310,29 +327,106 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
           })
         ),
       };
+      // 右值可选引用按左值「实时类型」收窄（queryType 取自 left.value.content[0].type）。
+      // 回选沿用上游既有口径 selectTreeNodeInRefsByValue：只高亮、不清空 ——
+      // 已选引用在当前树中找不到时保留旧值（全仓各节点一致），避免重开节点静默丢失配置。
+      // 注：narrowRefOption 仅把类型不匹配的节点置为 disabled（节点仍在树中），故改型场景下
+      // 旧引用仍会保留为置灰选中态；该行为属全仓既有口径，已拆独立问题跟踪，本 MR 不改变。
       NodeUtils.selectTreeNodeInRefsByValue(right);
 
-      let operatorOpts = this.initOperatorOptions(setting.left.type);
-      let typeOpts = setting.left.type === 'object' || setting.left.type.startsWith('array') ? this.refOnlyOptions : this.sourceOptions;
-      let leftType = setting.left.type.toLowerCase();
-      if (leftType === 'array') {
-        let typeName = 'type';
-        leftType = `array<${setting.left.schema?.[typeName]?.toLowerCase()}>`;
-      }
-      if (hasEmptyType.includes(leftType)) {
-        typeOpts = [...typeOpts, ...this.commonOperatorOptions];
-      }
       if (right.value.operator) {
         right.value.type = 'operator';
       }
 
-      return {
-        typeOpts,
-        operatorOpts,
-        left,
-        right,
-      };
+      // 菜单按左值「实时类型」计算（queryType 已取自left.value.content[0].type）。
+      // 原实现误用 setting.left.type（落库的旧类型），导致循环中间变量改型后重开节点，
+      // 运算下拉仍停留在旧类型的选项集合（如 string→integer 后缺少「变量自增/自减」），
+      // 必须重选一遍变量名称才会更新。
+      const param: IVal = { left, right, typeOpts: [], operatorOpts: [] };
+      this.refreshMenusByLiveType(param);
+      return param;
     });
+  }
+
+  /**
+   * 依据左值当前引用类型刷新「值」来源选项与运算赋值菜单。
+   * 左值（循环中间变量等）在外部改型后，重开节点或引用刷新即可得到正确选项，无需重选左值；
+   * 旧运算符若已不被新类型支持，则归一到 null(empty)，避免脏值入库。
+   */
+  private refreshMenusByLiveType(param: IVal) {
+    param.operatorOpts = this.getOperatorOptions(param);
+
+    const liveType = (
+      this.isGetLeftType(param.left) ||
+      param.left.type ||
+      ''
+    ).toLowerCase();
+    // 复合类型判定与上面的 hasEmptyType 判定同源，均取自 liveType：
+    // 等价于 getLeftParamsType 的 object/array 判定，但在左值引用内容缺失时不会退化为 normal
+    // （上游 initParams 原按落库 setting.left.type 判定，此处以 `|| param.left.type` 保留同等兜底）。
+    const baseOpts =
+      liveType === 'object' || liveType.startsWith('array')
+        ? this.refOnlyOptions
+        : this.sourceOptions;
+    param.typeOpts = hasEmptyType.includes(liveType)
+      ? [...baseOpts, ...this.commonOperatorOptions]
+      : baseOpts;
+
+    // 与 onLeftSelect（其中 `param.right.type = selectedVal[0].type`）对齐：
+    // 右值字段类型同步为左值实时类型。否则中间变量改型后重开节点，right.type 仍是落库旧值
+    // （如 string），却已能选到新类型的运算符（increment），保存出类型矛盾的配置；
+    // literal 分支也会继续按旧类型渲染与转换。
+    if (liveType) {
+      param.right.type = liveType as IWorkflowFieldType;
+    }
+
+    this.normalizeValueByMenus(param);
+  }
+
+  /**
+   * 菜单（typeOpts / operatorOpts）刷新后校正已存值，供 initParams / onRefUpdate / onLeftSelect 三条路径共用。
+   *
+   * 1. 来源下拉已不含「运算赋值」→ 清除残留运算符，并把 operator 态回退为 ref。
+   *    只回退 type 而不删 operator 是不够的：initParams / onRefUpdate 里
+   *    `if (right.value.operator) { right.value.type = 'operator'; }` 会把节点重新拉回运算态，
+   *    而此时运算下拉里并没有这个运算符。
+   * 2. 来源仍支持运算，但旧运算符不被新类型支持（如 integer→string 后残留「变量自增」）
+   *    → 归一到 'empty'，避免脏运算符随节点保存。
+   */
+  private normalizeValueByMenus(param: IVal) {
+    const operatorAvailable = param.typeOpts.some((option) => option.value === 'operator');
+    const currentType = param.right?.value?.type;
+    const currentSupported = param.typeOpts.some((option) => option.value === currentType);
+
+    // 1. 来源下拉已不含「运算赋值」→ 清除残留运算符。
+    //    只回退 type 而不删 operator 是不够的：initParams / onRefUpdate 里
+    //    `if (right.value.operator) { right.value.type = 'operator'; }` 会把节点重新拉回运算态，
+    //    而此时运算下拉里并没有这个运算符。
+    if (!operatorAvailable) {
+      delete param.right.value.operator;
+    }
+
+    // 2. 当前来源已不在选项中 → 回退为 ref 并重置内容。
+    //    覆盖两种情形：类型不再支持运算赋值（operator 被剔除）、左值变为 complex 后 literal 被剔除。
+    //    后者若不处理，模板的来源下拉没有 literal 选项却仍渲染字面量输入框，保存出与左值不匹配的字面量。
+    if (!currentSupported) {
+      param.right.value.type = 'ref';
+      param.right.value.content = NodeUtils.getChangeContent('ref');
+      return;
+    }
+
+    // 3. 来源仍支持运算，但旧运算符不被新类型支持（如 integer→string 后残留「变量自增」）
+    //    → 归一到 'empty'，避免脏运算符随节点保存。
+    if (currentType !== 'operator') {
+      return;
+    }
+
+    const operatorStillValid = param.operatorOpts.some(
+      (option) => option.value === param.right.value.operator
+    );
+    if (!operatorStillValid) {
+      param.right.value.operator = 'empty';
+    }
   }
 
   public initParentInfo() {
@@ -378,12 +472,20 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
     );
     param.right.type = selectedVal[0].type as IWorkflowFieldType;
 
-    NodeUtils.selectTreeNodeInRefsByValue(param.right);
+    // 按新类型收窄后，若该右值引用在树中已彻底不存在（节点被删除/改名），则清空。
+    // 注意：narrowRefOption 只把类型不匹配的节点置为 disabled（节点仍在树中），
+    // 而 reSelectRefWithNewOps 仅按 ref_node_id/ref_var_name 匹配、不检查 disabled，
+    // 因此被置灰的引用仍会保留为选中态 —— 这是全仓各节点既有行为，本处不做改动。
+    NodeUtils.reSelectRefWithNewOps(param.right, param.right.refs);
 
     if (this.getLeftParamsType(param.left) === 'complex' && param.right.value.type === 'literal') {
       param.right.value.type = 'ref';
       this.onIntegerTypeChange(param);
     }
+
+    // 与 initParams / onRefUpdate 对齐：菜单按实时类型重算后，旧的运算符值若已不被支持则归一，
+    // 来源已不含「运算赋值」时清掉残留运算符（否则重开节点会被 `if (value.operator)` 拉回运算态）。
+    this.normalizeValueByMenus(param);
   }
 
   public addParam() {
@@ -449,30 +551,6 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
 
   getOperatorOptions(param) {
     let leftType = this.getParamType(param.left);
-    if (leftType === 'emptyArr') {
-      return [...this.EmptyArrOperator, ...this.nullOperator];
-    } else if (leftType === 'emptyStr') {
-      return [...this.EmptyStrOperator, ...this.nullOperator];
-    } else if (leftType === 'emptyNum') {
-      return [...this.operatorOptions, ...this.nullOperator];
-    } else {
-      return [...this.nullOperator];
-    }
-  }
-
-  getLeftType(type) {
-    let leftType = 'emptyNormal';
-    if (type.startsWith('array')) {
-      leftType = 'emptyArr';
-    } else if (['number', 'integer'].includes(type)) {
-      leftType = 'emptyNum';
-    } else if (['string'].includes(type)) {
-      leftType = 'emptyStr';
-    }
-    return leftType;
-  }
-  initOperatorOptions(type) {
-    let leftType = this.getLeftType(type);
     if (leftType === 'emptyArr') {
       return [...this.EmptyArrOperator, ...this.nullOperator];
     } else if (leftType === 'emptyStr') {

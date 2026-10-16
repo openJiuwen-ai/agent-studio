@@ -8,11 +8,13 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.Constants;
 import com.openjiuwen.studio.agent.manager.dto.Environment;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInfoRequest;
+import com.openjiuwen.studio.agent.manager.dto.ModifyEnvironmentInfoRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInstances;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariableValue;
@@ -144,7 +146,7 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
     @Test
     @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testModifyEnvironmentInfo() {
-        EnvironmentInfoRequest request = new EnvironmentInfoRequest();
+        ModifyEnvironmentInfoRequestBody request = new ModifyEnvironmentInfoRequestBody();
         Assertions.assertThrows(AgentStudioException.class, () -> environmentServiceManagerService.modifyEnvironmentInfo(Constants.TEST_PROJECT_ID, "test_env_not_exist", request));
         Assertions.assertThrows(AgentStudioException.class, () -> environmentServiceManagerService.modifyEnvironmentInfo(Constants.TEST_PROJECT_ID, "9c7d551a-0644-4ac2-be48-6d5666928c21", request));
         request.setDescription("test");
@@ -155,10 +157,13 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
     @Test
     @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testQueryEnvironment() {
-        Environment result1 = environmentServiceManagerService.queryEnvironment(Constants.TEST_PROJECT_ID, "test_env_not_exist");
-        Assertions.assertNotNull(result1);
+        // 越权修复：环境查询走 findByIdAndProjectId，环境不存在时抛 ENVIRONMENT_NOT_EXIST
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> environmentServiceManagerService.queryEnvironment(Constants.TEST_PROJECT_ID, "test_env_not_exist"));
+        Assertions.assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
         Environment result3 = environmentServiceManagerService.queryEnvironment(Constants.TEST_PROJECT_ID, "9c7d551a-0644-4ac2-be48-6d5666918c2d");
         Assertions.assertNotNull(result3);
+        Assertions.assertEquals("test_environment", result3.getName());
     }
 
     @Test
@@ -169,6 +174,34 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
         queryEnvironmentsListQo.setOffset(-1);
         Environments result = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, queryEnvironmentsListQo);
         Assertions.assertNotNull(result);
+        // 夹具共 10 条环境，total 应为真实总数而非当前页条数
+        Assertions.assertEquals(10, result.getTotal());
+        Assertions.assertEquals(10, result.getEnvInfo().size());
+    }
+
+    @Test
+    @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    void testQueryEnvironmentsListWithNameFilter() {
+        // 精确前缀过滤：3 条 test_environment2
+        QueryEnvironmentsListQo qo = new QueryEnvironmentsListQo();
+        qo.setLimit(10);
+        qo.setOffset(0);
+        qo.setName("test_environment2");
+        Environments result = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, qo);
+        Assertions.assertEquals(3, result.getTotal());
+        Assertions.assertEquals(3, result.getEnvInfo().size());
+        result.getEnvInfo().forEach(env -> Assertions.assertEquals("test_environment2", env.getName()));
+
+        // 模糊匹配：片段 "environment2" 同样命中 3 条
+        qo.setName("environment2");
+        Environments fuzzyResult = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, qo);
+        Assertions.assertEquals(3, fuzzyResult.getTotal());
+
+        // 无匹配：空列表 + total 0
+        qo.setName("no-such-env");
+        Environments emptyResult = environmentServiceManagerService.queryEnvironmentsList(Constants.TEST_PROJECT_ID, qo);
+        Assertions.assertEquals(0, emptyResult.getTotal());
+        Assertions.assertTrue(emptyResult.getEnvInfo() == null || emptyResult.getEnvInfo().isEmpty());
     }
 
     @Test
@@ -257,10 +290,14 @@ public class EnvironmentServiceManagerServiceTest extends BaseTest {
     @Test
     @Sql(scripts = {"classpath:sql/environment_manager_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testShowEnvironmentVariables() {
-        EnvironmentVariables result = this.environmentServiceManagerService.showEnvironmentVariables(Constants.TEST_PROJECT_ID, "test_env_not_exist", Constants.TEST_WORKSPACE_ID);
-        Assertions.assertNotNull(result);
+        // 越权修复：环境查询走 findByIdAndProjectId，环境不存在时抛 ENVIRONMENT_NOT_EXIST
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> this.environmentServiceManagerService.showEnvironmentVariables(Constants.TEST_PROJECT_ID, "test_env_not_exist", Constants.TEST_WORKSPACE_ID));
+        Assertions.assertEquals(StudioError.ENVIRONMENT_NOT_EXIST, exception.getErrorCode());
         EnvironmentVariables result2 = this.environmentServiceManagerService.showEnvironmentVariables(Constants.TEST_PROJECT_ID, "9c7d551a-0644-4ac2-be48-6d5666928c25", Constants.TEST_WORKSPACE_ID);
         Assertions.assertNotNull(result2);
+        Assertions.assertNotNull(result2.getVariables());
+        Assertions.assertEquals(2, result2.getVariables().size());
     }
 
     @Test

@@ -87,7 +87,7 @@
                       [placeholder]="'input_placeholder' | i18nextEager"
                       (ngModelChange)="changeUpdateTime()"
                       (blur)="inputOnSave()"
-                      [nzStatus]="hasNameError(origin) ? 'error' : ''"
+                      [nzStatus]="hasNameErrorVisual(origin) ? 'error' : ''"
                     />
                     <div class="ant-form-item-explain-error py-1" *ngIf="hasNameError(origin)">
                       {{ getNameErrorTip(origin) }}

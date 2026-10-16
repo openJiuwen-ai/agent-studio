@@ -56,6 +56,21 @@ public class MemoryRepoEntity {
      */
     private List<LongTermMemoryStrategy> longTermMemoryStrategies;
 
+    /**
+     * 记忆后端类型：BUILTIN（内置）/EXTERNAL（外部agent-memory）
+     */
+    private String memoryBackendType;
+
+    /**
+     * 外部记忆服务实例ID（EXTERNAL时必填）
+     */
+    private String memoryServiceInstanceId;
+
+    /**
+     * scope级模型配置JSON（LLM/Embedding + enable_*），由manager推送到实例，不进IR
+     */
+    private String scopeModelConfig;
+
 
     /**
      * 租户唯一标识

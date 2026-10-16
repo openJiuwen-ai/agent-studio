@@ -5,51 +5,6 @@
       <meta-acc-block class="block">
         <ng-template #blockTitle>
           <div class="flex items-center gap-2 font-bold">
-            <span class="font-bold">{{ 'globalconfig_2'|i18nextEager }}</span>
-          </div>
-        </ng-template>
-        <ng-template #content>
-          <div class="mt-[16px]">
-            <div class="switch-environment">{{ 'globalconfig_1'|i18nextEager }}</div>
-            <nz-select
-              style="width: 100%"
-              [nzAllowClear]="true"
-              [(ngModel)]="selectEnv"
-              (ngModelChange)="envSelect($event); ngModelChange($event)"
-              [nzCustomTemplate]="selectedEnvTemplate"
-            >
-              <nz-option
-                *ngFor="let item of envCfgOptions"
-                [nzValue]="item.id"
-                [nzLabel]="item.name"
-                [nzDisabled]="item.disabled"
-                nzCustomContent
-              >
-                <span>{{ item.name }}</span>
-                <nz-tag *ngIf="item.isDefault" [nzColor]="'green'" style="margin-left: 4px;">{{ 'default'|i18nextEager }}</nz-tag>
-              </nz-option>
-            </nz-select>
-            <ng-template #selectedEnvTemplate let-selected>
-              <span>{{ selected.nzLabel }}</span>
-              <ng-container *ngFor="let item of envCfgOptions">
-                <nz-tag *ngIf="item.id === selected.nzValue && item.isDefault" [nzColor]="'green'" style="margin-left: 4px;">{{ 'default'|i18nextEager }}</nz-tag>
-              </ng-container>
-            </ng-template>
-            <div class="relative inline-block" style="margin-top: 8px;">
-              <button nz-button nzType="default" [disabled]="!selectEnv" (click)="showCard = !showCard;">{{ 'globalconfig_3'|i18nextEager }}</button>
-              <div *ngIf="showCard"  class="card absolute z-10 top-0 left-full ml-2 w-[280px] p-4 bg-white border rounded shadow-lg">
-                <env-variable [envId]="selectEnv" (upDateEnv)="resetEnvList($event)"></env-variable>
-              </div>
-            </div>
-          </div>
-        </ng-template>
-      </meta-acc-block>
-
-      <div class="my-[16px] h-[1px] bg-[#f0f0f0]" *ngIf="false"></div>
-
-      <meta-acc-block class="block">
-        <ng-template #blockTitle>
-          <div class="flex items-center gap-2 font-bold">
             <span class="font-bold">{{ 'default_model' | i18nextEager }}</span>
             <nz-icon nzType="question-circle" nzTheme="outline" nz-tooltip [nzTooltipTitle]="'default_model_title_tip' | i18nextEager" class="cursor-pointer"></nz-icon>
           </div>

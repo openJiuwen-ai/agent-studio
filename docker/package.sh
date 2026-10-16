@@ -119,6 +119,9 @@ function runtime_copy() {
   rm -rf ${RUNTIME_TARGET_PATH}/bin
   cp -rf ${RUNTIME_TARGET_PATH}/script ${RUNTIME_TARGET_PATH}/bin
 
+  rm -rf ${RUNTIME_TARGET_PATH}/extensions
+  cp -rf ${WORKSPACE}/agent-runtime/extensions ${RUNTIME_TARGET_PATH}/extensions
+
   echo "[PACKAGE] studio-runtime 源码复制完成"
 }
 
@@ -176,6 +179,9 @@ function clean() {
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/bin" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/bin
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/extensions" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/extensions
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/agent-runtime" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/agent-runtime

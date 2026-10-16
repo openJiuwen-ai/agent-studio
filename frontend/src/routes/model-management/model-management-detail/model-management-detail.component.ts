@@ -1,8 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { ModelManagementService } from '@services/repositories/model-management-new';
@@ -20,6 +21,7 @@ import { ModelType } from '@enums/jiuwen-model.enum';
 import { NewCommonNoDataWithBtnComponent } from '@shared/components/new-common-no-data-with-btn/new-common-no-data-with-btn.component';
 import { CommonService } from '@services/common.service';
 import { HttpService } from '@services/http.service';
+import { PermissionService } from '@services/permission.service';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzTagModule } from 'ng-zorro-antd/tag';
@@ -66,7 +68,8 @@ enum mapKeys {
     NzDrawerService,
   ],
 })
-export class ModalManagementDetailComponent {
+export class ModalManagementDetailComponent implements OnDestroy {
+  private permissionSubscription?: Subscription;
   public changeUrl = cdnAssetUrl;
   subscribeBtnStatus = this.commonService.getSubscribeStatus();
 
@@ -80,8 +83,53 @@ export class ModalManagementDetailComponent {
     private sidebarVisibilityServ: SetSidebarVisibilityService,
     private readonly commonService: CommonService,
     private readonly http: HttpService,
-    private nzMessageService: NzMessageService
-  ) {}
+    private nzMessageService: NzMessageService,
+    private permissionService: PermissionService
+  ) {
+    // 订阅权限异步加载:权限返回后重算 itemsTab2 的 edit/delete disabled
+    this.permissionSubscription = this.permissionService.permissions$.subscribe(() => {
+      this.updateProviderActions();
+    });
+  }
+
+  // 重算 itemsTab2 中受创建人权限约束的 action(edit/delete)的 disabled
+  // 权限异步加载完成或 basicData 获取后调用，保证前端显隐与后端权限一致
+  private updateProviderActions(): void {
+    if (!this.basicData || !Array.isArray(this.itemsTab2) || this.itemsTab2.length === 0) {
+      return;
+    }
+    const canModify = this.canModifyProvider(this.basicData);
+    // edit(index 1)与 delete(index 2)受创建人权限约束
+    if (this.itemsTab2[1]) {
+      this.itemsTab2[1].disabled = !this.subscribeBtnStatus || !canModify;
+    }
+    if (this.itemsTab2[2]) {
+      this.itemsTab2[2].disabled = !this.subscribeBtnStatus || !canModify;
+    }
+  }
+
+  // 判断当前用户能否编辑/删除该模型服务(createdByUser=userName)
+  public canModifyModelService(data: any): boolean {
+    return this.permissionService.canModifyModelService(data?.created_by_user, 'edit', !data?.created_by_user);
+  }
+
+  // 判断当前用户能否编辑/删除该模型供应商(createdByUser=userName)
+  public canModifyProvider(data: any): boolean {
+    return this.permissionService.canModifyProvider(data?.created_by_user, 'edit', !data?.created_by_user);
+  }
+
+  // 鉴权配置按钮显隐:非创建者本人且非 OWNER/ADMIN 不展示鉴权配置(auth_configuration)
+  public get visibleItemsTab1(): Array<any> {
+    return this.canModifyProvider(this.basicData)
+      ? this.itemsTab1
+      : this.itemsTab1.filter(item => item.type !== 'authModal');
+  }
+
+  public get visibleItemsTab2(): Array<any> {
+    return this.canModifyProvider(this.basicData)
+      ? this.itemsTab2
+      : this.itemsTab2.filter(item => item.type !== 'authModal');
+  }
 
   public currentPage = 1;
 
@@ -184,14 +232,14 @@ export class ModalManagementDetailComponent {
           key: 'stopGray',
           icon: statusNewMap[data?.publish_status]?.operateIcon ?? statusNewMap.offline.operateIcon,
           iconDisabled: cdnAssetUrl('assets/images/model/stopGray.svg'),
-          disabled: data?.provider_id.startsWith('cdi-') || !this.subscribeBtnStatus,
+          disabled: data?.provider_id.startsWith('cdi-') || !this.subscribeBtnStatus || !this.canModifyModelService(data),
         },
         {
           label: this.i18n.transform('edit'),
           key: 'edit',
           icon: cdnAssetUrl('assets/images/model/edit.svg'),
           iconDisabled: cdnAssetUrl('assets/images/model/editGray.svg'),
-          disabled: data?.publish_status === 'online' || !this.subscribeBtnStatus,
+          disabled: data?.publish_status === 'online' || !this.subscribeBtnStatus || !this.canModifyModelService(data),
         },
         {
           label: this.i18n.transform('export'),
@@ -202,7 +250,7 @@ export class ModalManagementDetailComponent {
           label: this.i18n.transform('delete'),
           key: 'delete',
           icon: cdnAssetUrl('assets/images/model/delete.svg'),
-          disabled: data?.publish_status === 'online' || !this.subscribeBtnStatus,
+          disabled: data?.publish_status === 'online' || !this.subscribeBtnStatus || !this.canModifyModelService(data),
         },
       ];
     }
@@ -284,10 +332,21 @@ export class ModalManagementDetailComponent {
         }
         let obj = result.filter(item => item.id === this.basicData.id)[0];
         this.basicData = { ...obj };
+        // 供应商级编辑/删除:DEVELOPER/OPERATOR 仅创建者本人可操作
+        const canModify = this.canModifyProvider(this.basicData);
         if (this.basicData.id.startsWith('cdi-') || !this.basicData?.created_by_user) {
           this.itemsTab2.forEach((item, index) => {
             item.disabled = !(index === 0 && !this.basicData?.created_by_user);
           });
+        } else {
+          // 仅在非 cdi- 且有 created_by_user 时，按创建人权限约束 edit/delete
+          // (避免覆盖上面 cdi-/无 created_by_user 的全禁用状态)
+          if (this.itemsTab2[1]) {
+            this.itemsTab2[1].disabled = !this.subscribeBtnStatus || !canModify;
+          }
+          if (this.itemsTab2[2]) {
+            this.itemsTab2[2].disabled = !this.subscribeBtnStatus || !canModify;
+          }
         }
         if (this.basicData.auth_config_status === 'available') {
           this.itemsTab1[0].label = this.i18n.transform('clear_auth');
@@ -422,6 +481,15 @@ export class ModalManagementDetailComponent {
         this.itemsTab2.forEach((item, index) => {
           item.disabled = !(index === 0 && !this.basicData?.created_by_user);
         });
+      } else {
+        // 仅在非 cdi- 且有 created_by_user 时，按创建人权限约束 edit/delete
+        const canModifyTop = this.canModifyProvider(this.basicData);
+        if (this.itemsTab2[1]) {
+          this.itemsTab2[1].disabled = !this.subscribeBtnStatus || !canModifyTop;
+        }
+        if (this.itemsTab2[2]) {
+          this.itemsTab2[2].disabled = !this.subscribeBtnStatus || !canModifyTop;
+        }
       }
 
       this.getData();
@@ -515,6 +583,7 @@ export class ModalManagementDetailComponent {
   }
 
   ngOnDestroy(): void {
+    this.permissionSubscription?.unsubscribe();
     this.sidebarVisibilityServ.setSidebarsVisibilityByState('destroy');
   }
 

@@ -15,6 +15,8 @@ WORKDIR $SERVICE_HOME
 # 基础镜像已包含 apt 系统依赖和 pip Python 依赖，此处只需复制应用代码
 # 注：agent_builder 已从 studio-runtime 镜像剥离，独立构建为 studio-builder 镜像
 
+# 变更频率极低，放在应用代码之前以充分利用 Docker 缓存
+COPY extensions/ $SERVICE_HOME/app/extensions/
 COPY agent_runtime/ $SERVICE_HOME/app/agent_runtime/
 COPY jiuwen/ $SERVICE_HOME/app/jiuwen/
 COPY model_service/ $SERVICE_HOME/app/model_service/
@@ -51,7 +53,7 @@ USER root
 RUN chmod 700 /opt/cloud/logs \
     && echo service >> /etc/cron.allow \
     && chmod u+s /usr/sbin/cron \
-    && touch /var/run/crond.pid && chmod 760 /var/run/crond.pid \
+    && touch /var/run/crond.pid && chown service:service /var/run/crond.pid && chmod 760 /var/run/crond.pid \
     && mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi \
     && chown -R service:service /var/lib/nginx \
     && mkdir -p /var/log/nginx \
@@ -59,6 +61,6 @@ RUN chmod 700 /opt/cloud/logs \
     && touch /run/nginx.pid \
     && chown service:service /run/nginx.pid
 
-USER service
+USER 1000:1000
 
 CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]

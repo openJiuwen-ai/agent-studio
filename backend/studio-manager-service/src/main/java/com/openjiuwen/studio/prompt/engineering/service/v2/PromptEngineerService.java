@@ -252,105 +252,97 @@ public class PromptEngineerService implements IPromptEngineerService {
         log.info("start to get prompt task detail, projectId: {}, workspaceId: {}, taskId: {}",
                 projectId, workspaceId, taskId);
 
-        try {
-            // 基本信息与优化配置
-            PromptTaskEntity promptTaskEntity = promptTaskMapper.selectByPrimaryKey(taskId, projectId, workspaceId);
-            entityEmpty(promptTaskEntity, taskId);
-            checkOperationPermission(promptTaskEntity.getStatus(), PromptTaskStatusEnum.OperatorEnum.QUERY);
+        // 基本信息与优化配置
+        PromptTaskEntity promptTaskEntity = promptTaskMapper.selectByPrimaryKey(taskId, projectId, workspaceId);
+        entityEmpty(promptTaskEntity, taskId);
+        checkOperationPermission(promptTaskEntity.getStatus(), PromptTaskStatusEnum.OperatorEnum.QUERY);
 
-            PromptTaskDetailVo promptTaskDetailVo = promptTaskEntity.convert2PromptTaskDetailVo();
+        PromptTaskDetailVo promptTaskDetailVo = promptTaskEntity.convert2PromptTaskDetailVo();
 
-            // 优化分数
-            if (StringUtils.isNotBlank(promptTaskDetailVo.getJiuwenTaskId())) {
-                log.info("start to get task detail from external service, jiuwenTaskId: {}",
-                        promptTaskDetailVo.getJiuwenTaskId());
+        // 优化分数
+        if (StringUtils.isNotBlank(promptTaskDetailVo.getJiuwenTaskId())) {
+            log.info("start to get task detail from external service, jiuwenTaskId: {}",
+                    promptTaskDetailVo.getJiuwenTaskId());
 
-                JiuWenPromptDeatilRes jiuWenPromptDeatilRes;
-                try {
-                    jiuWenPromptDeatilRes = promptOptimizeTaskService.getTaskDetail(promptTaskDetailVo);
-                } catch (AgentStudioException e) {
-                    // builder 侧 job 已丢失（清理/重启无 store 兜底）：降级为 FAILED + lostTaskMsg，
-                    // 不再冒泡到外层 catch 包成 02701185
-                    if (StudioError.JOB_NOT_FOUND_IN_BUILDER == e.getErrorCode()) {
-                        log.warn("prompt task {} (jiuwenTaskId={}) not found in builder, mark as FAILED",
-                            promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
-                        String lostTaskMsg =
-                            "Task not found in execution engine, may have been cleaned up, please retry or delete.";
-                        promptTaskDetailVo.setMessage(lostTaskMsg);
-                        promptTaskDetailVo.setStatus(PromptTaskStatusEnum.FAILED);
-                        promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(),
-                            lostTaskMsg, projectId, workspaceId);
-                        promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(),
-                            PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
-                        return new PromptBaseResp().setCode(200).setMessage("success").setData(promptTaskDetailVo);
-                    }
-                    throw e;
-                }
-                PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByJiuWenStatus(
-                        jiuWenPromptDeatilRes.getProgress().getStatus());
-
-                if (PromptTaskStatusEnum.statusMaybeChange(promptTaskDetailVo.getStatus().getCode())) {
-                    log.info("update progress rate for task, taskId: {}", promptTaskDetailVo.getId());
-                    promptTaskDetailVo.setProgressRate(jiuWenPromptDeatilRes.getProgress().getProgressRate());
-                    promptTaskMapper.updateProgressRateByPrimaryKey(promptTaskDetailVo.getId(),
-                            jiuWenPromptDeatilRes.getProgress().getProgressRate(), projectId, workspaceId);
-                }
-
-                if (currentStatus != null && currentStatus != promptTaskDetailVo.getStatus()) {
-                    log.info("task status changed from {} to {}", promptTaskDetailVo.getStatus(), currentStatus);
-
-                    if (currentStatus == PromptTaskStatusEnum.FAILED) {
-                        promptTaskDetailVo.setMessage(jiuWenPromptDeatilRes.getProgress().getErrorMsg());
-                        promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(),
-                                jiuWenPromptDeatilRes.getProgress().getErrorMsg(), projectId, workspaceId);
-                    }
-
-                    promptTaskDetailVo.setStatus(currentStatus);
-                    promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(), currentStatus.getCode(),
-                            projectId, workspaceId);
-                } else if (currentStatus == null
-                        && PromptTaskStatusEnum.statusMaybeChange(promptTaskDetailVo.getStatus().getCode())) {
-                    // 反向检查：builder 返回了响应但状态无效（任务信息缺失），
-                    // 对仍处于中间态(RUNNING/PAUSING)的任务标记为 FAILED，避免丢失后永久卡在执行中/暂停中
-                    log.warn("prompt task {} (jiuwenTaskId={}) got invalid status from builder, mark as FAILED",
-                            promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
-                    String lostTaskMsg = "Task not found in execution engine, may have been cleaned up, please retry or delete.";
+            JiuWenPromptDeatilRes jiuWenPromptDeatilRes;
+            try {
+                jiuWenPromptDeatilRes = promptOptimizeTaskService.getTaskDetail(promptTaskDetailVo);
+            } catch (AgentStudioException e) {
+                // builder 侧 job 已丢失（清理/重启无 store 兜底）：降级为 FAILED + lostTaskMsg
+                if (StudioError.JOB_NOT_FOUND_IN_BUILDER == e.getErrorCode()) {
+                    log.warn("prompt task {} (jiuwenTaskId={}) not found in builder, mark as FAILED",
+                        promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
+                    String lostTaskMsg =
+                        "Task not found in execution engine, may have been cleaned up, please retry or delete.";
                     promptTaskDetailVo.setMessage(lostTaskMsg);
                     promptTaskDetailVo.setStatus(PromptTaskStatusEnum.FAILED);
-                    promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(), lostTaskMsg,
-                            projectId, workspaceId);
+                    promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(),
+                        lostTaskMsg, projectId, workspaceId);
                     promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(),
-                            PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
+                        PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
+                    return new PromptBaseResp().setCode(200).setMessage("success").setData(promptTaskDetailVo);
                 }
+                throw e;
+            }
+            PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByJiuWenStatus(
+                    jiuWenPromptDeatilRes.getProgress().getStatus());
 
-                PromptIterationResultVo promptIterationResultVo = PromptIterationResultVo.builder()
-                        .currentBestPrompt(jiuWenPromptDeatilRes.getProgress().getBestPrompt())
-                        .iterationInfoList(new ArrayList<>())
-                        .build();
-
-                // 文本优化任务提示词有填充示例，多模填充示例无效
-                jiuWenPromptDeatilRes.getHistory().forEach(jiuWenHistory -> {
-                    IterationInfo iterationInfo = IterationInfo.builder()
-                            .optimizedPrompt(promptTaskDetailVo.getPtType() == PtTypeEnum.TEXT
-                                    ? jiuWenHistory.getFilledPrompt()
-                                    : jiuWenHistory.getOptimizedPrompt())
-                            .iterationRound(jiuWenHistory.getIterationRound())
-                            .successRate(jiuWenHistory.getSuccessRate())
-                            .build();
-                    promptIterationResultVo.getIterationInfoList().add(iterationInfo);
-                });
-
-                promptTaskDetailVo.setIterationResult(promptIterationResultVo);
+            if (PromptTaskStatusEnum.statusMaybeChange(promptTaskDetailVo.getStatus().getCode())) {
+                log.info("update progress rate for task, taskId: {}", promptTaskDetailVo.getId());
+                promptTaskDetailVo.setProgressRate(jiuWenPromptDeatilRes.getProgress().getProgressRate());
+                promptTaskMapper.updateProgressRateByPrimaryKey(promptTaskDetailVo.getId(),
+                        jiuWenPromptDeatilRes.getProgress().getProgressRate(), projectId, workspaceId);
             }
 
-            log.info("get prompt task detail successfully, taskId: {}", promptTaskDetailVo.getId());
-            return new PromptBaseResp().setCode(200).setMessage("success").setData(promptTaskDetailVo);
+            if (currentStatus != null && currentStatus != promptTaskDetailVo.getStatus()) {
+                log.info("task status changed from {} to {}", promptTaskDetailVo.getStatus(), currentStatus);
 
-        } catch (Exception e) {
-            log.error("get prompt task detail failed, projectId: {}, workspaceId: {}, taskId: {}, error: {}",
-                    projectId, workspaceId, taskId, e.getMessage(), e);
-            throw new AgentStudioException(StudioError.GET_PROMPT_TASK_DETAIL_FAILED);
+                if (currentStatus == PromptTaskStatusEnum.FAILED) {
+                    promptTaskDetailVo.setMessage(jiuWenPromptDeatilRes.getProgress().getErrorMsg());
+                    promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(),
+                            jiuWenPromptDeatilRes.getProgress().getErrorMsg(), projectId, workspaceId);
+                }
+
+                promptTaskDetailVo.setStatus(currentStatus);
+                promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(), currentStatus.getCode(),
+                        projectId, workspaceId);
+            } else if (currentStatus == null
+                    && PromptTaskStatusEnum.statusMaybeChange(promptTaskDetailVo.getStatus().getCode())) {
+                // 反向检查：builder 返回了响应但状态无效（任务信息缺失），
+                // 对仍处于中间态(RUNNING/PAUSING)的任务标记为 FAILED，避免丢失后永久卡在执行中/暂停中
+                log.warn("prompt task {} (jiuwenTaskId={}) got invalid status from builder, mark as FAILED",
+                        promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
+                String lostTaskMsg = "Task not found in execution engine, may have been cleaned up, please retry or delete.";
+                promptTaskDetailVo.setMessage(lostTaskMsg);
+                promptTaskDetailVo.setStatus(PromptTaskStatusEnum.FAILED);
+                promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(), lostTaskMsg,
+                        projectId, workspaceId);
+                promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(),
+                        PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
+            }
+
+            PromptIterationResultVo promptIterationResultVo = PromptIterationResultVo.builder()
+                    .currentBestPrompt(jiuWenPromptDeatilRes.getProgress().getBestPrompt())
+                    .iterationInfoList(new ArrayList<>())
+                    .build();
+
+            // 文本优化任务提示词有填充示例，多模填充示例无效
+            jiuWenPromptDeatilRes.getHistory().forEach(jiuWenHistory -> {
+                IterationInfo iterationInfo = IterationInfo.builder()
+                        .optimizedPrompt(promptTaskDetailVo.getPtType() == PtTypeEnum.TEXT
+                                ? jiuWenHistory.getFilledPrompt()
+                                : jiuWenHistory.getOptimizedPrompt())
+                        .iterationRound(jiuWenHistory.getIterationRound())
+                        .successRate(jiuWenHistory.getSuccessRate())
+                        .build();
+                promptIterationResultVo.getIterationInfoList().add(iterationInfo);
+            });
+
+            promptTaskDetailVo.setIterationResult(promptIterationResultVo);
         }
+
+        log.info("get prompt task detail successfully, taskId: {}", promptTaskDetailVo.getId());
+        return new PromptBaseResp().setCode(200).setMessage("success").setData(promptTaskDetailVo);
     }
 
 
@@ -555,13 +547,6 @@ public class PromptEngineerService implements IPromptEngineerService {
     }
 
     @Override
-    public PromptBaseInfo startPromptTask(String projectId, String taskId, String workspaceId) {
-        log.info("operation log {} : start prompt task.", projectId);
-        return null;
-    }
-
-
-    @Override
     public PromptBaseResp updatePromptTaskDraft(String projectId, String taskId, String workspaceId,
         PromptTaskCreateReq body) {
         log.info("operation log {} : update prompt task.", projectId);
@@ -699,7 +684,7 @@ public class PromptEngineerService implements IPromptEngineerService {
         PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByCode(status);
         if (ObjectUtils.isEmpty(currentStatus) || !currentStatus.isOperatorAllowed(op)) {
             log.error("The task status is not allowed to be operated. status:{}", status);
-            throw new AgentStudioException(StudioError.OPERATOR_ERROR);
+            throw new AgentStudioException(StudioError.OPERATOR_ERROR, status);
         }
     }
 

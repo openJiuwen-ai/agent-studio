@@ -14,7 +14,8 @@ env_vars 由工作流试运行入口（``app_run._execute_workflow_run`` / ``_ex
 
 from common_utils.env_variables_loader import (  # noqa: F401
     load_environment_variables,
+    load_default_environment_id,
     _SECRET_ENV_KEYS_KEY,
 )
 
-__all__ = ["load_environment_variables", "_SECRET_ENV_KEYS_KEY"]
+__all__ = ["load_environment_variables", "load_default_environment_id", "_SECRET_ENV_KEYS_KEY"]

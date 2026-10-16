@@ -48,7 +48,7 @@ def test_n2l_chat_handler_delegates_to_chat(monkeypatch):
     monkeypatch.setattr(n2l_api, "_chat", fake_chat)
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post(
-        "/v1/proj1/ReAct/generator/conversations/c1/chat",
+        "/v1/proj1/agents/generator/conversations/c1/chat",
         json={"query": "hi", "model": {"modelName": "test-model"}},
     )
     assert r.status_code == 200

@@ -11,6 +11,7 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
 
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -49,7 +50,18 @@ public class CodeNodeConverter extends AbstractSDSLNodeConverter {
                 WorkflowFieldVO workflowFieldVO = new WorkflowFieldVO();
                 workflowFieldVO.setSource(WorkflowFieldVO.SourceEnum.USER);
                 workflowFieldVO.setName((String) variable.get("variable"));
-                workflowFieldVO.setType((String) variable.get("value_type"));
+                String valueType = (String) variable.get("value_type");
+                if (StringUtils.isEmpty(valueType)) {
+                    // 部分版本 Dify yml 的 code variables 不带 value_type，此时从上游输出回填 type/schema。
+                    // 否则 DSL type 为空会在 IR 生成时被 formatWorkflowType 兜底为 string，
+                    // 运行时 _coerce_inputs 据此把 object 输入 str() 化，代码节点 .get() 报
+                    // 'str' object has no attribute 'get'。找不到上游时 helper 自身兜底 string，与原行为一致
+                    WorkflowNodeVO refNode = (selector != null && !selector.isEmpty())
+                        ? workflowNodeMap.get(selector.get(0)) : null;
+                    setTypeAndSchemaByName(workflowFieldVO, refNode, selector);
+                } else {
+                    workflowFieldVO.setType(valueType);
+                }
                 workflowFieldVO.setValue(adaptWorkflowFieldVoValue(selector, workflowNodeMap, workflowNodeVO));
                 return workflowFieldVO;
             }).toList();

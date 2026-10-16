@@ -85,6 +85,23 @@ def resolve_env_placeholders(
     return ENV_PLACEHOLDER_PATTERN.sub(_replace, url)
 
 
+def env_url_error_hint(api_url_env_placeholders: Optional[str]) -> str:
+    """上游调用失败消息的占位符来源提示后缀。
+
+    ``api_url_env_placeholders`` 为 ``resolver._build_detail`` 记录的变量名清单
+    （``ModelServiceBase.api_url_env_placeholders``）；非占位符模型为 ``None`` /
+    空串时返回空串，错误消息与历史完全一致（零影响）。占位符模型上游返回非 2xx
+    （如环境变量取值手误导致 404/400）时，在 ``MD_INVOKE_MODEL_SERVICE_FAIL``
+    消息末尾追加提示，引导用户去环境管理检查变量取值而非排查模型服务/密钥。
+    """
+    if not api_url_env_placeholders:
+        return ""
+    return (
+        f"。该 api_url 地址由环境变量占位符解析而来（变量：{api_url_env_placeholders}），"
+        f"若地址不正确请前往环境管理修改对应环境变量的取值"
+    )
+
+
 # 异常 __str__ 的前导错误码前缀，形如 ``[181001]``（agent-core ``ModelError``）或
 # ``[MD_ENV_VAR_UNRESOLVED]``（``JiuWenBaseException``）。错误码已由外层 ``data["code"]``
 # 单独传递，这里剥离前缀避免其在「错误信息」正文中重复出现，仅保留可读消息。

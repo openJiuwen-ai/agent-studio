@@ -135,17 +135,55 @@ class TestProcessTaskStartEvent:
 
 
 class TestProcessAgentInterruptedEvent:
-    """process_agent_interrupted_event — set block flag."""
+    """process_agent_interrupted_event — set block flag and forward timing fields."""
 
     @staticmethod
     def test_sets_block_flag():
-        trace = Trace(handler_type="Controller")
+        trace = Trace(handler_type="Controller", conversation_id="conv-1")
         result = ControllerEventsProcessor.process_event(
             {"event": "agent_interrupted", "createdTime": 1000},
             trace,
         )
         assert trace.block is True
-        assert result is None
+        assert result is not None
+        assert result.event == "agent_interrupted"
+        assert result.conversation_id == "conv-1"
+        assert result.data == {}
+
+    @staticmethod
+    def test_forwards_timing_fields():
+        trace = Trace(handler_type="Controller", conversation_id="conv-1")
+        result = ControllerEventsProcessor.process_event(
+            {
+                "event": "agent_interrupted",
+                "data": {"start_time": 1000, "end_time": 2000},
+                "createdTime": 2000,
+            },
+            trace,
+        )
+        assert trace.block is True
+        assert result.event == "agent_interrupted"
+        assert result.data == {"start_time": 1000, "end_time": 2000}
+
+    @staticmethod
+    def test_filters_non_timing_fields():
+        trace = Trace(handler_type="Controller", conversation_id="conv-1")
+        result = ControllerEventsProcessor.process_event(
+            {
+                "event": "agent_interrupted",
+                "data": {
+                    "reason": "waiting_user_input",
+                    "state": "interrupted",
+                    "start_time": 1000,
+                    "end_time": 2000,
+                },
+                "createdTime": 2000,
+            },
+            trace,
+        )
+        assert trace.block is True
+        assert result.event == "agent_interrupted"
+        assert result.data == {"start_time": 1000, "end_time": 2000}
 
 
 class TestProcessTaskEndEvent:
@@ -210,6 +248,27 @@ class TestProcessTaskEndEvent:
             trace,
         )
         assert result.data["executionId"] == "executionId"
+
+    @staticmethod
+    def test_forwards_timing_fields():
+        """start_time/end_time from runner should be forwarded."""
+        trace = Trace(
+            handler_type="Controller",
+            conversation_id="conv-1",
+            execution_id="exec-5",
+            pre_event="message",
+        )
+        result = ControllerEventsProcessor.process_event(
+            {
+                "event": "task_end",
+                "data": {"start_time": 1000, "end_time": 2000},
+                "createdTime": 2000,
+            },
+            trace,
+        )
+        assert result.data["executionId"] == "exec-5"
+        assert result.data["start_time"] == 1000
+        assert result.data["end_time"] == 2000
 
 
 class TestProcessWorkflowNodeMessage:

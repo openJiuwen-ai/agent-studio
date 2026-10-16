@@ -84,7 +84,7 @@ class MemberInstanceManager:
                 if cache_enabled:
                     agent_instance = await timed_cache_op(
                         "Agent instance retrieval",
-                        cache_agent_queue.aget(config.ir_path),
+                        cache_agent_queue.aget(config.ir_path, should_refresh_ttl=True),
                         config.ir_path,
                     )
 

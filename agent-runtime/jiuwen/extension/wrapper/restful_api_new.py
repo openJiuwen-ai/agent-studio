@@ -76,6 +76,27 @@ _time_out_seconds = float(os.getenv(PLUGIN_REQUEST_TIMEOUT_KEY, REQUEST_TIME_OUT
 _time_out_aiohttp = aiohttp.ClientTimeout(total=_time_out_seconds)
 
 
+def _resolve_env_plugin_url_param(var_name: str):
+    """从请求上下文解析 ``_env.plugin_url_params.VAR`` 环境变量引用。
+
+    从 ``_request_ctx.env_variables.plugin_url_params`` 取值。
+    无环境变量或变量不存在时返回 None。
+    """
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+
+        ctx = _request_ctx.get()
+        env_vars = getattr(ctx, "env_variables", None)
+        if env_vars:
+            params = env_vars.get("plugin_url_params") or {}
+            if var_name in params:
+                val = params[var_name]
+                return str(val).strip() if val is not None else ""
+    except Exception as e:
+        logger.warning(f"Failed to resolve env plugin_url_param '{var_name}': {e}")
+    return None
+
+
 class RestfulApiCardNew(ToolCard):
     """
     扩展的 RESTful API Card
@@ -294,6 +315,27 @@ class RestfulApiToolNew(Tool):
         """检查响应状态是否成功 (200-299)"""
         return 200 <= code < 300
 
+    def _merge_input_parameters(self, inputs: dict) -> dict:
+        """合并 inputParameters 中的环境变量引用到 inputs。
+
+        对于 ``{{_env.plugin_url_params.VAR}}`` 类型的引用，强制用环境变量
+        实际值覆盖 inputs 中的值（LLM 可能生成推测值，必须被覆盖）。
+        """
+        if not self._input_parameters or not isinstance(inputs, dict):
+            return inputs
+        for param_name, template in self._input_parameters.items():
+            if not isinstance(template, str):
+                continue
+            template = template.strip()
+            if template.startswith("{{") and template.endswith("}}"):
+                inner = template[2:-2].strip()
+                if inner.startswith("_env.plugin_url_params."):
+                    var_name = inner[len("_env.plugin_url_params."):]
+                    value = _resolve_env_plugin_url_param(var_name)
+                    if value is not None:
+                        inputs[param_name] = value
+        return inputs
+
     async def invoke(self, inputs: Input, **kwargs) -> Output:
         """
         异步调用（Tool 接口）
@@ -304,6 +346,7 @@ class RestfulApiToolNew(Tool):
         """
         异步调用（与 RestFulAPI.ainvoke 完全一致）
         """
+        inputs = self._merge_input_parameters(inputs)
         trace_manager = self._create_tracer_manager(**kwargs)
         try:
             await trace_manager.on_plugin_start(inputs)
@@ -341,6 +384,7 @@ class RestfulApiToolNew(Tool):
         """
         异步流式输出接口（与 RestFulAPI.astream 完全一致）
         """
+        inputs = self._merge_input_parameters(inputs)
         trace_manager = self._create_tracer_manager(**kwargs)
         try:
             await trace_manager.on_plugin_start(inputs)

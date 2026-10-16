@@ -51,6 +51,7 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "_RoutedIntentDetection": "IntentDetection",
     "LoopComponent": "jiuwen.loop",
     "FlowApi": "Api",
+    "FlowCustomApi": "Api",
     "FlowInput": "jiuwen.input",
     "ExceptionInfo": "jiuwen.exception",
     "LoopSetVariable": "jiuwen.setVariable",
@@ -508,6 +509,7 @@ class WorkflowWrapper:
             "mem_map",
             "enable_memory_retrieve",
             "memory_repo_id",
+            "memory_config",
         ]
         for key in runtime_keys:
             if key in params:

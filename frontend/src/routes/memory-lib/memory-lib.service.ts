@@ -1,10 +1,12 @@
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, signal, inject, ApplicationRef, createComponent, EnvironmentInjector } from '@angular/core';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDrawerRef, NzDrawerService } from 'ng-zorro-antd/drawer';
 import { MemoryLibDeleteModalComponent } from '@routes/memory-lib/components/memory-lib-delete-modal/memory-lib-delete-modal.component';
 import { MemoryLibReferenceHalfmodalComponent } from '@routes/memory-lib/components/memory-lib-reference-halfmodal/memory-lib-reference-halfmodal.component';
 import { MemoryLibSelectorHalfmodalComponent } from '@routes/memory-lib/components/memory-lib-selector-halfmodal/memory-lib-selector-halfmodal.component';
+import { SelectMemoryCreateTypeComponent } from '@routes/memory-lib/components/select-memory-create-type/select-memory-create-type.component';
+import { ConnectExternalMemoryModalComponent } from '@routes/memory-lib/components/connect-external-memory-modal/connect-external-memory-modal.component';
 import { MemoryLibApiService } from '@routes/memory-lib/memory-lib-api.service';
 import { MemoryLibCreationHalfmodalComponent } from '@routes/memory-lib/memory-lib-creation-halfmodal/memory-lib-creation-halfmodal.component';
 import { IMemoryLibCreationData, IMemoryLibItem, IMemoryLibSelectData } from '@routes/memory-lib/memory-lib-interfaces';
@@ -22,6 +24,8 @@ export class MemoryLibService {
   readonly commonService = inject(CommonService);
   readonly memoryLibApiService = inject(MemoryLibApiService);
   readonly i18n = inject(I18NextEagerPipe);
+  private readonly appRef = inject(ApplicationRef);
+  private readonly envInjector = inject(EnvironmentInjector);
 
   subscribeBtnDisabled = signal(false);
 
@@ -61,6 +65,8 @@ export class MemoryLibService {
                   long_term_memory_strategies: ltmRetrievalStrategyFormGroup.getRawValue().ltmRetrievalStrategy ?? [],
                   conversation_round: frequencyValues.conversation_round ?? undefined,
                   time_span: frequencyValues.time_span ?? undefined,
+                  memory_backend_type: creatioComp.memoryBackendType(),
+                  memory_service_instance_id: creatioComp.memoryServiceInstanceId(),
                 },
                 setLoading,
               });
@@ -169,6 +175,65 @@ export class MemoryLibService {
       });
       const content = myModal.getContentComponent();
       content.deletedMemoryLib = memoryLib;
+    });
+  }
+
+  /**
+   * 弹出选择创建类型 Modal（内置 / 外部）
+   * 根据用户选择分别走内置创建或外部连接流程。
+   * 通过动态创建组件实例并调用其 showWithCallback 方法，
+   * 复用组件自身的 modal 模板（title/footer/content）。
+   */
+  showSelectCreateType(callBack: (data: IMemoryLibCreationData) => void) {
+    // Create a detached component instance so we can use its template refs.
+    const compRef = createComponent(SelectMemoryCreateTypeComponent, { environmentInjector: this.envInjector });
+    this.appRef.attachView(compRef.hostView);
+    compRef.instance.showWithCallback(key => {
+      if (key === 'builtin') {
+        this.createOrEditMemLib(callBack);
+      } else if (key === 'external') {
+        this.connectExternalMemoryLib(callBack);
+      }
+      // Cleanup: destroy the detached component after modal closes.
+      setTimeout(() => {
+        this.appRef.detachView(compRef.hostView);
+        compRef.destroy();
+      }, 0);
+    });
+  }
+
+  /**
+   * 打开"连接外部记忆库" Drawer 表单
+   */
+  connectExternalMemoryLib(callBack: (data: IMemoryLibCreationData) => void) {
+    const drawerRef = this.nzDrawerService.create({
+      nzContent: ConnectExternalMemoryModalComponent,
+      nzWidth: '700px',
+      nzMask: true,
+      nzContentParams: {},
+      nzData: {
+        beforeHide: ({ reason }) => {
+          if (reason) {
+            const comp: ConnectExternalMemoryModalComponent = drawerRef.getContentComponent();
+            if (comp.basicInfoFormGroup.invalid || comp.instanceFormGroup.invalid) {
+              return;
+            }
+            callBack({
+              reason: true,
+              halfModalRef: drawerRef as any,
+              data: comp.getFormData(),
+              setLoading: comp.loading.set.bind(comp.loading),
+            });
+          } else {
+            callBack({
+              reason: false,
+              halfModalRef: drawerRef as any,
+              data: null,
+              setLoading: () => {},
+            });
+          }
+        },
+      },
     });
   }
 }

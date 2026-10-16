@@ -185,7 +185,6 @@ NOT_SUPPORT_EXCEPTION_COMPONENT_TYPES = [NodeType.LOOP.value, NodeType.ERROR_END
 # 自定义节点多分支判断标志
 CUSTOM_MULTI_BRANCH_SIGN = "@@"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 CLASSIFICATION_ID = "classificationId"
 INVALID_CLASSIFICATION_ID = -1
 
@@ -1612,6 +1611,16 @@ class BpmnWorkflow(BaseWorkflow):
         )
 
         if is_data_source_valid and is_streaming_api_node:
+
+            if node_id not in data_source:
+                logger.warning(
+                    f"Streaming API node '{node_id}' has not been executed "
+                    f"(possibly on an unselected branch), "
+                    f"reference '{match_str}' will be set to None."
+                )
+                parent[key] = None
+                return True
+
             if validate_ref_recursive(split_string(match_str), node.outputs):
                 parent[key] = self._generator(split_string(match_str), data_source)
             else:
@@ -2273,7 +2282,7 @@ class BpmnWorkflow(BaseWorkflow):
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.code,
                 message=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.errmsg.format(
-                    reason=str(e) if LOG_VERBOSE_MODE else str(type(e).__name__)
+                    reason=str(type(e).__name__)
                 ),
             ) from e
 
@@ -2322,6 +2331,12 @@ class BpmnWorkflow(BaseWorkflow):
         node_id = path_list[0]
         field_name = path_list[-1]
         target_value = None
+
+        if node_id not in data_source:
+            logger.error(f"node_id '{node_id}' not found in data_source, "
+                         f"the node may not been executed. path_list: {path_list}")
+            return None
+
         for i in range(len(path_list) - 1, 0, -1):
             current_field = path_list[i]
             current_value = data_source[node_id]["userFields"].get(current_field, {})

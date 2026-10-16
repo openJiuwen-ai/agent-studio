@@ -31,6 +31,7 @@ Applied once at import from ir_converter / sub_workflow.
 
 from __future__ import annotations
 
+import os
 from typing import Iterable
 
 from openjiuwen.core.common.constants.constant import LOOP_ID
@@ -108,7 +109,7 @@ def _loop_body_io_scope_id(session: BaseSession) -> str:
     loop_compile_session = session.parent() if hasattr(session, "parent") else None
     if loop_compile_session is None:
         return ""
-    return loop_compile_session.node_id()
+    return loop_compile_session.executable_id()
 
 
 async def _patched_loop_group_on_invoke(
@@ -139,34 +140,64 @@ def apply_loop_body_session_cleanup_patch() -> bool:
 # --- AdvancedLoopComponent per-round io_state cleanup ---
 _PATCH_STATE_APPLIED = False
 _orig_advanced_loop_on_invoke = None
+_LOOP_STATE_DIRECT_COMMIT_ENABLED = (
+    os.getenv("LOOP_STATE_DIRECT_COMMIT_ENABLED", "true").strip().lower() == "true"
+)
+_NODE_ID_ATTR = "_node_id"
+_NODE_SESSION_ATTR = "_node_session"
+_IO_STATE_ATTR = "_io_state"
 
 
 async def _patched_advanced_loop_on_invoke(
     self, inputs: Input, session: BaseSession, **kwargs
 ) -> Output:
     loop_session = session
-    self._node_id = loop_session.node_id()
-    self._node_session = NodeSession(loop_session, self._node_id)
-    loop_session.state().set_outputs({LOOP_ID: self._node_id})
-
-    raw_io = loop_session.state()._io_state._state._state
+    loop_state = loop_session.state()
+    node_id = loop_session.node_id()
     parent_id = session.parent_id()
+    io_key = f"{parent_id}.{node_id}" if parent_id else node_id
+    setattr(self, _NODE_ID_ATTR, node_id)
+    node_session = NodeSession(loop_session, node_id)
+    setattr(self, _NODE_SESSION_ATTR, node_session)
+    io_state = getattr(loop_state, _IO_STATE_ATTR)
+    if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
+        io_state.update_by_id_and_commit(
+            io_key,
+            {io_key: {LOOP_ID: node_id}},
+        )
+    else:
+        loop_state.set_outputs({LOOP_ID: node_id})
+
+    raw_io = (
+        io_state.get_state(copied=False)
+        if _LOOP_STATE_DIRECT_COMMIT_ENABLED
+        else io_state.get_state()
+    )
     if parent_id:
         scoped = get_value_by_nested_path(parent_id, raw_io)
         state = dict(scoped) if isinstance(scoped, dict) else {}
     else:
         state = dict(raw_io)
-    if state and self._node_id in state:
-        del state[self._node_id]
-    loop_session.state().set_outputs(state)
-    loop_session.state().commit()
+    if state and node_id in state:
+        del state[node_id]
+    if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
+        io_state.update_by_id_and_commit(
+            io_key,
+            {io_key: state},
+        )
+    else:
+        loop_state.set_outputs(state)
+        loop_state.commit()
 
     if loop_session.tracer() is not None:
         loop_session.tracer().register_workflow_span_manager(loop_session.executable_id())
     compiled = self._graph.compile(loop_session, **kwargs)
     await compiled.invoke(inputs, loop_session)
-    result = self._node_session.state().get_outputs(self._node_id)
-    loop_session.state()._io_state.update_by_id(self._node_id, {self._node_id: None})
+    result = node_session.state().get_outputs(node_id)
+    if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
+        io_state.update_by_id_and_commit(io_key, {io_key: None})
+    else:
+        io_state.update_by_id(io_key, {io_key: None})
     return result
 
 

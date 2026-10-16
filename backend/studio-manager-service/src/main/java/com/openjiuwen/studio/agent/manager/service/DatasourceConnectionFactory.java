@@ -45,6 +45,12 @@ public class DatasourceConnectionFactory {
     @Value("${datasource.max-connections-per-host:5}")
     private int maxConnectionsPerHost;
 
+    private static final int MINIMUM_IDLE = 2;
+    private static final long IDLE_TIMEOUT_MS = 300000L;
+    private static final long MAX_LIFETIME_MS = 1800000L;
+    private static final long KEEPALIVE_TIME_MS = 120000L;
+    private static final long CONNECTION_TIMEOUT_MS = 10000L;
+
     private static final Map<String, String> DB_TYPE_ALIASES = Map.of(
         "postgresql", "postgresql",
         "gaussdb", "opengauss"
@@ -95,16 +101,17 @@ public class DatasourceConnectionFactory {
         config.setUsername(connInfo.getUser());
         config.setPassword(password);
         config.setMaximumPoolSize(maxConnectionsPerHost);
-        config.setMinimumIdle(2);
-        config.setIdleTimeout(300000);
-        config.setMaxLifetime(1800000);
-        config.setKeepaliveTime(120000);
-        config.setConnectionTimeout(10000);
+        config.setMinimumIdle(Math.min(MINIMUM_IDLE, maxConnectionsPerHost));
+        config.setIdleTimeout(IDLE_TIMEOUT_MS);
+        config.setMaxLifetime(MAX_LIFETIME_MS);
+        config.setKeepaliveTime(KEEPALIVE_TIME_MS);
+        config.setConnectionTimeout(CONNECTION_TIMEOUT_MS);
         config.setPoolName("datasource-" + datasourceId);
 
         configureDriver(config, dbType);
 
-        log.info("create connection pool for datasource: {}, type: {}", datasourceId, dbType);
+        log.info("create connection pool for datasource: {}, type: {}, poolSize: {}",
+            datasourceId, dbType, maxConnectionsPerHost);
         return new HikariDataSource(config);
     }
 

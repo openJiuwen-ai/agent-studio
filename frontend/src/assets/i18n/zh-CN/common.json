@@ -515,6 +515,7 @@
   "jiuwen_cloud_store": "",
   "appflowservice_1": "数据查询",
   "appflowservice_2": "影响行数",
+  "output_format": "输出格式",
   "appcentermanagement_1": "当前空间",
   "appcentermanagement_2": "团队共享",
   "instance_list": "实例列表",

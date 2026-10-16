@@ -120,6 +120,7 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
           data: this.appFlowServ.getInitActionPluginNodeData(),
         },
         { data: this.appFlowServ.getInitMcpServiceData() },
+        { data: this.appFlowServ.getInitHttpNodeData() },
       ],
     },
     {

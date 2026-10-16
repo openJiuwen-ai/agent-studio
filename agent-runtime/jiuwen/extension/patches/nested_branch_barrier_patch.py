@@ -9,6 +9,8 @@ Must be applied *after* ``apply_parallel_branch_grouping_patch``.
 
 from __future__ import annotations
 
+import asyncio
+
 from collections import defaultdict, deque
 from typing import Any
 
@@ -161,6 +163,71 @@ def _build_condition_targets(self) -> dict[str, dict[str, set[str]]]:
     return out
 
 
+def _always_executes(
+    co: set[tuple[str, str]],
+    branch_all_conds: dict[str, set[str]],
+    reachable_cond: dict[tuple[str, str, str], set[str]],
+) -> bool:
+    """判断前驱是否为"共行前驱"：无论涉及的分支走哪个条件，它都会执行。
+
+    ``co`` 是该前驱可达的 ``(branch_node, cond_id)`` 集合。当 ``co`` 覆盖了
+    每个涉及分支节点的**全部**条件时（典型场景：分支的多条路径在 fork 之前
+    就已合流，所有并行车道对每个条件都可达），该前驱不是互斥备选，而是
+    必然执行的共行前驱。
+
+    环拓扑保护：含 Loop 的工作流中，分支节点可能在环上，从某条件目标出发
+    会绕环重新进入分支节点、再沿其他条件边到达本不可达的节点，造成"覆盖
+    全部条件"的假象。检测到任一涉及分支节点 bn 出现在**其他条件**目标的
+    可达集中时（同 bn 不同条件不算——那是正常的分支多出口），判 False
+    （回退原 OR-group 语义，避免误加闩锁导致单边路径死锁）。
+    """
+    involved_branches: dict[str, set[str]] = defaultdict(set)
+    for bn, cond_id in co:
+        involved_branches[bn].add(cond_id)
+    for bn, conds in involved_branches.items():
+        all_conds = branch_all_conds.get(bn)
+        if not all_conds or not all_conds <= conds:
+            return False
+
+    # 环拓扑保护：bn 出现在任何条件目标的可达集中（含自身其他条件——
+    # 单 bn 在环上绕回也算污染）=> 环让可达性绕回分支节点再沿其他条件边
+    # 到达本不可达的节点，造成"覆盖全部条件"的假象。判 False 回退原
+    # OR-group 语义，避免误加闩锁导致单边路径死锁。
+    for bn in involved_branches:
+        for (_bn, _cond_id, _t), nodes in reachable_cond.items():
+            if bn in nodes:
+                return False
+    return bool(involved_branches)
+
+
+def _classify_coexec(
+    p: str,
+    root_cond: dict[str, dict[str, set[str]]],
+) -> str:
+    """对共行前驱 p 分类：从所在 OR-group 中概念性移除后判断剩余形态。
+
+    返回:
+    - "latch": 移除后同 root 某条件仅剩 1 个成员（互斥备选退化为单元素
+      AND-group）→ 必须追加单例闩锁并保留 OR 成员身份（case C）。
+    - "standalone": 移除后所有条件仍剩 ≥2 成员 → 共行前驱独立成 AND-group
+      并从 OR-group 中移除（意见1：避免冗余覆盖导致 join 提前触发）。
+    - "noop": p 不在任何 OR-group 中（纯共行，如客户6车道的每个 done
+      都是同条件多目标的共行兄弟）→ 独立成 AND-group（已被 single-condition
+      分支处理，此处无需操作）。
+    """
+    needs_latch = False
+    in_or_group = False
+    for _root, cond_map in root_cond.items():
+        for _cond_id, preds in cond_map.items():
+            if p in preds:
+                in_or_group = True
+                if len(preds) == 2:
+                    needs_latch = True
+    if not in_or_group:
+        return "noop"
+    return "latch" if needs_latch else "standalone"
+
+
 def _resolve_barrier_groups_nested_patched(
     self, target_id: str, source_list: list[set[str]]
 ) -> list[set[str]]:
@@ -170,6 +237,19 @@ def _resolve_barrier_groups_nested_patched(
     - Uses patched ``_forward_reachable`` (traverses conditional edges).
     - Allows ``len(co) >= 1`` instead of ``== 1`` for ownership classification.
     - Uses patched ``_build_branch_parent`` (detects indirect nesting).
+    - Co-executing predecessors (reachable from ALL conditions of every
+      involved branch) are identified; a singleton AND-group latch is appended
+      ONLY when removing the predecessor would degenerate its OR-group's
+      exclusive siblings into a single-member AND-group (case C). When
+      exclusive siblings remain ≥2 after removal, no latch is added—the
+      OR-group already guarantees exclusive alternatives can trigger the join
+      alone, and a latch would redundantly cover the OR-group in CNF, firing
+      the join on the co-executing predecessor's arrival before exclusive
+      siblings finish (truncating their stream output).
+    - Cycle topology guard: a branch node that appears in another condition's
+      reachable set indicates reachability was polluted by a loop; the
+      predecessor is classified as exclusive (OR-group only), avoiding
+      spurious latches that deadlock single-path executions.
     """
     if not self.branch_targets or not source_list:
         return source_list
@@ -203,14 +283,21 @@ def _resolve_barrier_groups_nested_patched(
             if p in nodes:
                 legacy_owned[p].add(bn)
 
+    branch_all_conds: dict[str, set[str]] = {
+        bn: set(cond_map.keys()) for bn, cond_map in cond_targets.items()
+    }
+
     # Level 2 fix: len(co) >= 1 (not just == 1)
     cond_bucket: dict[tuple[str, str], set[str]] = defaultdict(set)
     legacy_bucket: dict[str, set[str]] = defaultdict(set)
     standalone: list[set[str]] = []
+    coexec_candidates: set[str] = set()  # 共行前驱候选，待 root_cond 合并后分类
     for p in all_predecessors:
         co = cond_owned.get(p, set())
         lo = legacy_owned.get(p, set())
         if co and not lo:
+            if _always_executes(co, branch_all_conds, reachable_cond):
+                coexec_candidates.add(p)
             for (bn, cond_id) in co:
                 cond_bucket[(bn, cond_id)].add(p)
         elif lo and not co:
@@ -230,6 +317,16 @@ def _resolve_barrier_groups_nested_patched(
         root = self._branch_root(bn, branch_parent)
         root_legacy[root] |= preds
 
+    # 分类共行前驱：决定从 OR-group 移除 / 追加闩锁 / 不操作
+    latch_preds: set[str] = set()      # 保留 OR 成员 + 追加单例闩锁
+    remove_preds: set[str] = set()    # 从 OR-group 移除，独立成 AND-group
+    for p in coexec_candidates:
+        kind = _classify_coexec(p, root_cond)
+        if kind == "latch":
+            latch_preds.add(p)
+        elif kind == "standalone":
+            remove_preds.add(p)
+
     result: list[set[str]] = []
     for _root, cond_map in root_cond.items():
         if len(cond_map) == 1:
@@ -237,10 +334,13 @@ def _resolve_barrier_groups_nested_patched(
             for p in next(iter(cond_map.values())):
                 result.append({p})
         else:
-            # Multiple conditions of same branch: merge into one OR-group
+            # Multiple conditions of same branch: merge into one OR-group,
+            # excluding standalone-classified co-executing predecessors.
             merged: set[str] = set()
             for preds in cond_map.values():
-                merged |= preds
+                for p in preds:
+                    if p not in remove_preds:
+                        merged.add(p)
             if merged:
                 result.append(merged)
     for _root, preds in root_legacy.items():
@@ -248,6 +348,14 @@ def _resolve_barrier_groups_nested_patched(
             result.append(preds)
     for s in standalone:
         result.append(s)
+    # 共行前驱独立 AND-group（意见1：移出 OR-group 避免冗余覆盖提前触发）
+    for p in remove_preds:
+        result.append({p})
+    # 共行前驱单例闩锁（case C：保留 OR 成员 + 追加闩锁防迟到重武装）
+    for p in latch_preds:
+        singleton = {p}
+        if singleton not in result:
+            result.append(singleton)
     return result if result else source_list
 
 
@@ -268,7 +376,402 @@ def _branch_root_patched(
     return root
 
 
+
+def _make_filtered_selector(original_selector, skip_targets: set[str]):
+    """Wrap a branch selector to filter out targets that have regular incoming edges.
+
+    When a wait_for_all node has both conditional (branch) and regular incoming
+    edges, the conditional edge is redundant: it fires before data is ready
+    (branch nodes evaluate near-instantly, while data-producing nodes take time).
+    This wrapper removes such targets from the selector's return value so the
+    ConditionalRouter no longer sends TriggerMessages that bypass the barrier.
+    """
+    is_async = asyncio.iscoroutinefunction(original_selector) or (
+        callable(original_selector)
+        and asyncio.iscoroutinefunction(getattr(original_selector, "__call__", None))
+    )
+
+    if is_async:
+        async def _filtered(*args, **kwargs):
+            targets = await original_selector(*args, **kwargs)
+            if isinstance(targets, str):
+                targets = [targets]
+            return [t for t in (targets or []) if t not in skip_targets]
+    else:
+        def _filtered(*args, **kwargs):
+            targets = original_selector(*args, **kwargs)
+            if isinstance(targets, str):
+                targets = [targets]
+            return [t for t in (targets or []) if t not in skip_targets]
+
+    return _filtered
+
+
+def _compile_nested_patched(self, graph_store=None, step_callback=None):
+    """Patched ``PregelGraph._compile`` — skip redundant conditional edges to
+    multi-input join nodes.
+
+    Problem: a join node with both conditional (branch) and regular edges is
+    triggered prematurely by the conditional edge's TriggerMessage, which
+    bypasses the BarrierChannel.
+
+    Fix: for targets with both conditional and regular incoming edges,
+    verify deadlock-safety **before** adding to ``self.waits``. Only safe
+    targets are promoted to barrier mode and have their conditional edge
+    selectors filtered.
+
+    Safety check (Step 1.5): for each candidate target J, call
+    ``_resolve_barrier_groups`` to get the CNF groups. Then:
+
+    - **Single group**: for each branch condition c that targets J via a
+      conditional edge, verify that at least one group member fires when c
+      is taken (co-occurrence check). J is only reached on paths where a
+      group member fires, so the group is automatically satisfied.
+
+    - **Multiple groups**: every group must have at least one standalone
+      member (not owned by any branch condition). Standalone members fire
+      on ALL paths, so whenever J is reached via any group's member, all
+      other groups are also satisfied. Without this, J could be reached
+      via group A's member while group B has no firing member on that
+      path → deadlock.
+
+    A member P fires when condition (b_node, c_id) is taken if:
+      - P is standalone (not owned by any branch condition), or
+      - ALL of P's owning conditions co-occur with (b_node, c_id) — i.e. b_node is
+        reachable from cond_id's targets AND from no other condition of
+        the same branch node.
+
+    Branches without ``branch_id`` are skipped (matching
+    ``_build_condition_targets``) to avoid merging unidentified conditions.
+    """
+    original_waits: set[str] = set(self.waits)
+
+    # Step 1: Detect targets with both conditional and regular incoming edges.
+    regular_pred_map: dict[str, set[str]] = defaultdict(set)
+    for (src, tgt) in self.edges:
+        if isinstance(tgt, str):
+            if isinstance(src, str):
+                regular_pred_map[tgt].add(src)
+            elif isinstance(src, list):
+                for s in src:
+                    regular_pred_map[tgt].add(s)
+
+    mixed_targets: dict[str, set[str]] = defaultdict(set)
+    for branch_node, routers in self.branches.items():
+        for _name, br in routers.items():
+            router = getattr(br, "condition", None)
+            if router is None:
+                continue
+            branches_list = getattr(router, "_branches", None)
+            if not branches_list:
+                continue
+            for b in branches_list:
+                tgt = b.target
+                if isinstance(tgt, str):
+                    tgt = [tgt]
+                for t in tgt or []:
+                    if t in regular_pred_map:
+                        mixed_targets[branch_node].add(t)
+
+    # Step 1.5: Safety check — only add to self.waits if filtering is safe.
+    # _resolve_barrier_groups does not depend on self.waits (takes source_list
+    # as parameter), so we can call it before _original_compile.
+    cond_targets = _build_condition_targets(self)
+
+    reachable_cond: dict[tuple[str, str, str], set[str]] = {}
+    for bn, cond_map in cond_targets.items():
+        for cond_id, targets in cond_map.items():
+            for t in targets:
+                reachable_cond[(bn, cond_id, t)] = self._forward_reachable(t)
+
+    reachable_legacy: dict[tuple[str, str], set[str]] = {}
+    for bn, targets in self.branch_targets.items():
+        if bn in cond_targets:
+            continue
+        for t in targets:
+            reachable_legacy[(bn, t)] = self._forward_reachable(t)
+
+    # Forward map of regular (non-conditional) edge targets per source node.
+    # Used by _pred_covers BFS to avoid traversing other branch nodes'
+    # conditional edges (which are non-deterministic at runtime).
+    regular_targets: dict[str, set[str]] = defaultdict(set)
+    for (src, tgt) in self.edges:
+        if isinstance(tgt, str):
+            if isinstance(src, str):
+                regular_targets[src].add(tgt)
+            elif isinstance(src, list):
+                for s in src:
+                    regular_targets[s].add(tgt)
+
+    # Reverse conditional edge map: target -> set of branch nodes with
+    # conditional edges to it. Used by _pred_covers to detect independent
+    # incoming edges to b_node that bypass bn entirely.
+    cond_pred_map: dict[str, set[str]] = defaultdict(set)
+    for bn_id, routers in self.branches.items():
+        for _name, br in routers.items():
+            router = getattr(br, "condition", None)
+            if router is None:
+                continue
+            bl = getattr(router, "_branches", None)
+            if not bl:
+                continue
+            for b in bl:
+                tgt = b.target
+                if isinstance(tgt, str):
+                    tgt = [tgt]
+                for t in tgt or []:
+                    cond_pred_map[t].add(bn_id)
+
+    branch_node_ids: set[str] = set(self.branches.keys())
+
+    def _is_standalone(p: str) -> bool:
+        """True if *p* is not owned by any branch condition or legacy branch."""
+        for nodes in reachable_cond.values():
+            if p in nodes:
+                return False
+        for nodes in reachable_legacy.values():
+            if p in nodes:
+                return False
+        return True
+
+    def _pred_covers(p: str, b_node: str, c_id: str, join_target: str) -> bool:
+        """True if regular pred *p* fires when condition (b_node, c_id) is taken.
+
+        A pred can be owned by multiple conditions (reachable from multiple
+        branch targets). It fires when ANY owning condition co-occurs with
+        (b_node, c_id) AND has a path to *p* that does not pass through
+        b_node\'s other conditions\' conditional edges. The path check
+        prevents false positives where ownership is transitive through a
+        mutually-exclusive branch (e.g. P-default -> B -> B-if -> C, where
+        C is only reachable if B takes B-if, not B-default).
+
+        Additional safety checks:
+        - BFS does not traverse OTHER branch nodes\' conditional edges
+          (only regular edges), preventing false positives when the path
+          passes through a downstream branch node whose specific condition
+          may not be taken at runtime.
+        - Co-occurrence check verifies b_node has no independent incoming
+          edges that bypass bn entirely. If b_node can be reached without
+          bn, it may fire without bn taking cond_id, so p is not guaranteed.
+        - BFS stops expanding the join target\'s outgoing edges when
+          reached. This prevents false positives in cyclic topologies where
+          the join target has a back edge to p (e.g. J -> A where A is a
+          regular predecessor of J). Without this, BFS would traverse
+          J\'s back edge and find p, claiming coverage when p actually
+          fires after J — causing a barrier deadlock.
+        """
+        p_conds: set[tuple[str, str]] = set()
+        for (bn, cond_id, _t), nodes in reachable_cond.items():
+            if p in nodes:
+                p_conds.add((bn, cond_id))
+        p_legacy: set[str] = set()
+        for (bn, _t), nodes in reachable_legacy.items():
+            if p in nodes:
+                p_legacy.add(bn)
+        if not p_conds and not p_legacy:
+            return True
+        if p_legacy:
+            return False
+        # Collect b_node other conditions' targets to exclude from BFS.
+        excluded_targets: set[str] = set()
+        for _name, br in self.branches.get(b_node, {}).items():
+            router = getattr(br, "condition", None)
+            if router is None:
+                continue
+            bl = getattr(router, "_branches", None)
+            if not bl:
+                continue
+            for b in bl:
+                cid = getattr(b, "branch_id", None) or ""
+                if cid != c_id:
+                    tgt = b.target
+                    if isinstance(tgt, str):
+                        tgt = [tgt]
+                    excluded_targets.update(tgt or [])
+        adj = getattr(self, "_adj_cache", None)
+        if adj is None:
+            adj = _build_adjacency_list(self)
+            self._adj_cache = adj
+        for (bn, cond_id) in p_conds:
+            if bn == b_node:
+                if cond_id != c_id:
+                    continue
+                for ct in cond_targets.get(bn, {}).get(cond_id, set()):
+                    visited_b: set[str] = set()
+                    queue_b: deque[str] = deque([ct])
+                    while queue_b:
+                        node = queue_b.popleft()
+                        if node in visited_b:
+                            continue
+                        visited_b.add(node)
+                        if node == p:
+                            return True
+                        if node == join_target:
+                            continue
+                        for neighbor in adj.get(node, []):
+                            if node == b_node:
+                                if neighbor in excluded_targets:
+                                    continue
+                            elif node in branch_node_ids:
+                                if neighbor not in regular_targets.get(node, set()):
+                                    continue
+                            if neighbor not in visited_b:
+                                queue_b.append(neighbor)
+                continue
+            cond_reaches = False
+            other_reaches = False
+            for cid, cts in cond_targets.get(bn, {}).items():
+                for ct in cts:
+                    nodes = reachable_cond.get((bn, cid, ct), set())
+                    if b_node in nodes:
+                        if cid == cond_id:
+                            cond_reaches = True
+                        else:
+                            other_reaches = True
+            if not (cond_reaches and not other_reaches):
+                continue
+            # Check for independent incoming edges to b_node that bypass
+            # bn entirely. If b_node has any predecessor not reachable
+            # from bn's conditions, b_node can fire without bn taking
+            # cond_id, so p is not guaranteed.
+            bn_all_reachable: set[str] = set()
+            for cid, cts in cond_targets.get(bn, {}).items():
+                for ct in cts:
+                    bn_all_reachable |= reachable_cond.get((bn, cid, ct), set())
+            b_preds = (regular_pred_map.get(b_node, set())
+                       | cond_pred_map.get(b_node, set()))
+            if any(pr != bn and pr not in bn_all_reachable for pr in b_preds):
+                continue
+            # Co-occurs. Verify p is reachable from cond_id's targets
+            # without traversing b_node's other conditions' edges or
+            # other branch nodes' conditional edges.
+            for ct in cond_targets.get(bn, {}).get(cond_id, set()):
+                visited: set[str] = set()
+                queue: deque[str] = deque([ct])
+                while queue:
+                    node = queue.popleft()
+                    if node in visited:
+                        continue
+                    visited.add(node)
+                    if node == p:
+                        return True
+                    if node == join_target:
+                        continue
+                    for neighbor in adj.get(node, []):
+                        if node == b_node:
+                            if neighbor in excluded_targets:
+                                continue
+                        elif node in branch_node_ids:
+                            if neighbor not in regular_targets.get(node, set()):
+                                continue
+                        if neighbor not in visited:
+                            queue.append(neighbor)
+        return False
+
+    skip_targets: dict[str, set[str]] = defaultdict(set)
+    for branch_node, targets in mixed_targets.items():
+        if branch_node not in cond_targets:
+            continue
+        bn_conds = cond_targets[branch_node]
+        for t in targets:
+            regular_preds = regular_pred_map.get(t, set())
+            if not regular_preds:
+                continue
+            targeting_conds = [
+                cid for cid, cts in bn_conds.items() if t in cts
+            ]
+            if not targeting_conds:
+                continue
+            source_list: list[set[str]] = []
+            for (src, tgt) in self.edges:
+                if tgt == t:
+                    if isinstance(src, str):
+                        source_list.append({src})
+                    elif isinstance(src, list):
+                        for s in src:
+                            source_list.append({s})
+            if not source_list:
+                continue
+            groups = self._resolve_barrier_groups(t, source_list)
+
+            safe = True
+            if len(groups) <= 1:
+                # Single group: verify co-occurrence for targeting conditions.
+                # J is only reached when a group member fires, so the group
+                # is automatically satisfied.
+                for c_id in targeting_conds:
+                    for g in groups:
+                        if not any(
+                            _pred_covers(p, branch_node, c_id, t) for p in g
+                        ):
+                            safe = False
+                            break
+                    if not safe:
+                        break
+            else:
+                # Multiple groups: every group must have at least one
+                # standalone member. Standalone members fire on ALL paths,
+                # so whenever J is reached via any group, all other groups
+                # are also satisfied. Without this, J could be reached via
+                # group A while group B has no firing member → deadlock.
+                for g in groups:
+                    if not any(_is_standalone(p) for p in g):
+                        safe = False
+                        break
+
+            if safe:
+                skip_targets[branch_node].add(t)
+
+    # Step 1.6: Global per-target decision. A target t may have conditional
+    # edges from multiple branch nodes. self.waits.add(t) is a global side
+    # effect — if any branch's conditional edge to t is NOT filtered, its
+    # TriggerMessage bypasses the BarrierChannel and causes premature
+    # execution. Therefore, only promote t to barrier mode when ALL branch
+    # nodes targeting t are safe (or t was already a barrier node).
+    for t in {t for targets in mixed_targets.values() for t in targets}:
+        safe_branches = {bn for bn, skip in skip_targets.items() if t in skip}
+        all_safe = bool(safe_branches)
+        if all_safe:
+            # Verify every branch_node with a conditional edge to t is safe.
+            for bn, targets in mixed_targets.items():
+                if t in targets:
+                    if bn not in safe_branches:
+                        all_safe = False
+                        break
+        if all_safe:
+            self.waits.add(t)
+        elif t not in original_waits:
+            # Not all safe and t was not already a barrier node — do NOT
+            # promote to barrier mode and do NOT filter any selector.
+            for bn in list(skip_targets.keys()):
+                skip_targets[bn].discard(t)
+        # else: t was already in original_waits (pre-existing barrier node).
+        # Keep partial filtering — filter safe selectors, leave unsafe ones.
+
+    # Step 2: Run original _compile (only safe targets are in self.waits).
+    compiled = _original_compile(
+        self, graph_store=graph_store, step_callback=step_callback
+    )
+
+    # Step 3: Replace ConditionalRouter selectors on safe branch nodes.
+    for branch_node, targets_to_skip in skip_targets.items():
+        if not targets_to_skip:
+            continue
+        node = compiled.nodes.get(branch_node)
+        if node is None:
+            continue
+        for router in node.routers:
+            selector = getattr(router, "selector", None)
+            if selector is None:
+                continue
+            router.selector = _make_filtered_selector(
+                selector, targets_to_skip
+            )
+
+    return compiled
+
 _original_forward_reachable: Any = None
+_original_compile: Any = None
 _original_resolve_barrier_groups: Any = None
 _original_build_branch_parent: Any = None
 _original_branch_root: Any = None
@@ -282,6 +785,7 @@ def apply_nested_branch_barrier_patch() -> bool:
     global _NESTED_PATCH_APPLIED
     global _original_forward_reachable, _original_resolve_barrier_groups
     global _original_build_branch_parent, _original_branch_root
+    global _original_compile
 
     if _NESTED_PATCH_APPLIED:
         return False
@@ -292,11 +796,13 @@ def apply_nested_branch_barrier_patch() -> bool:
     _original_resolve_barrier_groups = PregelGraph._resolve_barrier_groups
     _original_build_branch_parent = PregelGraph._build_branch_parent
     _original_branch_root = PregelGraph._branch_root
+    _original_compile = PregelGraph._compile
 
     PregelGraph._forward_reachable = _forward_reachable_patched  # type: ignore[assignment]
     PregelGraph._resolve_barrier_groups = _resolve_barrier_groups_nested_patched  # type: ignore[assignment]
     PregelGraph._build_branch_parent = _build_branch_parent_patched  # type: ignore[assignment]
     PregelGraph._branch_root = staticmethod(_branch_root_patched)  # type: ignore[assignment]
+    PregelGraph._compile = _compile_nested_patched  # type: ignore[assignment]
 
     _NESTED_PATCH_APPLIED = True
     logger.info("nested_branch_barrier_patch applied")

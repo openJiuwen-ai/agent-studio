@@ -20,14 +20,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -42,9 +40,15 @@ public class CleanResourceServiceImpl implements IRosCleanResourceService {
     @Autowired
     private RedisClient redisClient;
 
-    // 单线程，等待队列5，超过丢弃，等管理面重新通知
-    private ExecutorService executor = new ThreadPoolExecutor(1, 1,  // 核心0，最大100
-        0L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(5));
+    /**
+     * 清理通知单线程池（COM-02 转受管：原自建 ThreadPoolExecutor(1,1,队列5) 迁移为
+     * ObservabilityAsyncConfig.cleanResourceExecutor，保现状容量与 AbortPolicy 拒绝语义
+     * —— 调用点 catch RejectedExecutionException 是业务依赖，Spring 的 TaskRejectedException
+     * 继承 RejectedExecutionException，catch 仍生效）
+     */
+    @Autowired
+    @Qualifier("cleanResourceExecutor")
+    private ThreadPoolTaskExecutor executor;
 
     @Override
     public NotifyResp cleanNotify(String moduleName, NotifyReq body) {

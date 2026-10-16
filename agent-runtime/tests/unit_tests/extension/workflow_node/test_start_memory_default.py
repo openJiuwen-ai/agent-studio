@@ -5,7 +5,15 @@
 背景(2026-09-03 bug 修复):_extract_assignment_values 曾按 schema 存在性分支,
 数组/对象类型记忆变量的 default_value 被整个丢弃;_transform_type 的
 boolean/number/array 转换分别存在 "false" 反转、tuple 不可调用、
-list() 拆字符问题。本文件锁定修复后的全类型行为。
+list() 拆字符问题。
+
+2026-09-10 检视意见修复(方案 D):空默认统一为 key 保留 + 值 None ——
+values_define 的成员资格是 Redis 会话变量存取与 SetVariable 持久化的
+门控依据,key 缺失会导致跨轮丢值(空默认 array 的 SetVariable 赋值
+跨轮丢失已在本地实测复现);渲染层引用解析对 None 与 key 缺失等价。
+同时:嵌套 object 自身 default_value 优先(检视意见1)、schema 为
+None/非 list 容错不再抛 TypeError(检视意见3)、空容器 '[]'/'{}'
+归一为空默认(检视意见4)。
 """
 # pylint: disable=protected-access
 
@@ -36,7 +44,7 @@ class TestExtractAssignmentValues:
 
     @staticmethod
     def test_all_types_extracted_no_leak():
-        """七种类型声明:非空默认全部提取,子字段不泄漏到顶层,空默认 key 缺失。"""
+        """七种类型声明:非空默认全部提取,子字段不泄漏到顶层,空默认为 None。"""
         fields = [
             _var("v_str", "string", "特色美食"),
             _var("v_int", "integer", "5"),
@@ -112,8 +120,9 @@ class TestExtractAssignmentValues:
         assert result["v_arrobj"] == [{"cityname": "南京"}]
         assert result["v_obj"] == {"cityname": "北京", "level": 1}
         assert result["v_obj_children"] == {"c1": "cv1", "c2": 2}
-        # 空默认保持 key 缺失(渲染为空,与历史行为一致)
-        assert "v_arr_empty" not in result
+        # 空默认归一为 None(key 保留在 values_define 注册表,
+        # 门控 Redis 存取与 SetVariable 持久化;渲染层 None ≡ key 缺失)
+        assert result["v_arr_empty"] is None
         # 子字段不泄漏到顶层
         assert "cityname" not in result
         assert "c1" not in result
@@ -146,8 +155,8 @@ class TestExtractAssignmentValues:
         assert "b_empty" not in result["v_obj"]
 
     @staticmethod
-    def test_object_all_children_empty_key_absent():
-        """object 子字段全空时整体 key 缺失(不写入空 dict)。"""
+    def test_object_all_children_empty_defaults_none():
+        """object 子字段全空:整体值为 None,key 保留(不写入空 dict)。"""
         fields = [
             _var(
                 "v_obj",
@@ -159,7 +168,61 @@ class TestExtractAssignmentValues:
 
         result = Start._extract_assignment_values(_memory_inputs(*fields), "session")
 
-        assert "v_obj" not in result
+        assert result["v_obj"] is None
+
+    @staticmethod
+    def test_empty_container_defaults_normalized_to_none():
+        """空容器默认('[]'/'{}' 及各空写法)归一为 None,key 保留(检视意见4)。"""
+        fields = [
+            _var("a1", "array", "[]", schema={"id": "", "type": "string"}),
+            _var("a2", "array", [], schema={"id": "", "type": "string"}),
+            _var("a3", "array", " [ ] ", schema={"id": "", "type": "string"}),
+            _var("a4", "array", "", schema={"id": "", "type": "string"}),
+            _var("o1", "object", "{}", schema=[_var("x", "string", "xv")]),
+            _var("o2", "object", "{\n}"),
+            _var("o3", "object", "{}"),
+        ]
+
+        result = Start._extract_assignment_values(_memory_inputs(*fields), "session")
+
+        assert result["a1"] is None
+        assert result["a2"] is None
+        assert result["a3"] is None
+        assert result["a4"] is None
+        # '{}' 视为无整体默认,回落子字段组装
+        assert result["o1"] == {"x": "xv"}
+        assert result["o2"] is None
+        assert result["o3"] is None
+
+    @staticmethod
+    def test_falsy_defaults_still_extracted():
+        """0/False 是合法默认值,空默认归一不许误伤 falsy 默认。"""
+        fields = [
+            _var("v_zero", "integer", "0"),
+            _var("v_zero_num", "number", "0"),
+            _var("v_false", "boolean", "false"),
+        ]
+
+        result = Start._extract_assignment_values(_memory_inputs(*fields), "session")
+
+        assert result["v_zero"] == 0
+        assert result["v_zero_num"] == 0
+        assert result["v_false"] is False
+
+    @staticmethod
+    def test_object_schema_null_or_malformed_tolerated():
+        """schema 为 null/非 list 容错为无子字段,不再抛 TypeError(检视意见3)。"""
+        fields = [
+            _var("v1", "object", ""),
+            _var("v2", "object", ""),
+        ]
+        fields[0]["schema"] = None
+        fields[1]["schema"] = {"id": "x", "type": "string"}
+
+        result = Start._extract_assignment_values(_memory_inputs(*fields), "session")
+
+        assert result["v1"] is None
+        assert result["v2"] is None
 
     @staticmethod
     def test_permanent_aging_level_treated_as_session():
@@ -259,3 +322,82 @@ class TestAssembleObjectDefault:
             "arr": ["x"],
             "obj": {"inner": False},
         }
+
+    @staticmethod
+    def test_nested_object_own_default_wins():
+        """嵌套 object 自带默认优先(对齐顶层语义),空默认才从子字段组装(检视意见1)。"""
+        subfields = [
+            _var("obj_no_children", "object", '{"x": 1}'),
+            _var(
+                "obj_with_children",
+                "object",
+                '{"y": 2}',
+                schema=[_var("z", "string", "zv")],
+            ),
+            _var(
+                "obj_empty_default",
+                "object",
+                "",
+                schema=[_var("w", "string", "wv")],
+            ),
+        ]
+
+        assembled = Start._assemble_object_default(subfields)
+
+        # 自带默认胜出:子字段不参与;空 schema 也不丢
+        assert assembled["obj_no_children"] == {"x": 1}
+        assert assembled["obj_with_children"] == {"y": 2}
+        # 空默认才回落子字段组装
+        assert assembled["obj_empty_default"] == {"w": "wv"}
+
+    @staticmethod
+    def test_nested_object_empty_default_no_children_skipped():
+        """嵌套 object 空默认且无子字段:组装结果跳过该子字段(不为 None)。"""
+        subfields = [_var("obj", "object", "")]
+
+        assembled = Start._assemble_object_default(subfields)
+
+        assert assembled == {}
+
+    @staticmethod
+    def test_nested_empty_container_skipped_and_falsy_preserved():
+        """嵌套子字段空容器默认('[]')跳过;0/False 正常提取。"""
+        subfields = [
+            _var("arr_empty", "array", "[]", schema={"id": "", "type": "string"}),
+            _var("n_zero", "integer", "0"),
+            _var("b_false", "boolean", "false"),
+        ]
+
+        assembled = Start._assemble_object_default(subfields)
+
+        assert assembled == {"n_zero": 0, "b_false": False}
+
+    @staticmethod
+    def test_nested_string_none_default_skipped():
+        """嵌套 string 子字段 default_value 为 None/缺省时不组装出 'None' 字面量。
+
+        _transform_type 对 string 类型不做空值短路(str(None)='None'),
+        None/'' 必须在转换前拦截。
+        """
+        subfields = [
+            _var("s_none", "string", None),
+            {
+                "storage_method": "assignment",
+                "aging_level": "session",
+                "id": "s_missing",
+                "type": "string",
+            },
+            _var("s_empty", "string", ""),
+            _var("s_ok", "string", "sv"),
+        ]
+
+        assembled = Start._assemble_object_default(subfields)
+
+        assert assembled == {"s_ok": "sv"}
+
+    @staticmethod
+    def test_schema_none_or_non_list_returns_empty():
+        """schema 为 None/非 list 容错为空,不再抛 TypeError(检视意见3)。"""
+        assert Start._assemble_object_default(None) == {}
+        assert Start._assemble_object_default({"id": "x", "type": "string"}) == {}
+        assert Start._assemble_object_default(5) == {}

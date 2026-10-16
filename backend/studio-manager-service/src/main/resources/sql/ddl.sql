@@ -1219,10 +1219,39 @@ CREATE TABLE IF NOT EXISTS `t_memory_repo` (
     `created_user_name` varchar(255) NOT NULL COMMENT '创建人（用户名）',
     `last_update_user_id` varchar(64) DEFAULT NULL COMMENT '更新人（用户id）',
     `last_update_user_name` varchar(255) DEFAULT NULL COMMENT '更新人（用户名）',
+    `memory_backend_type` varchar(16) NOT NULL DEFAULT 'BUILTIN' COMMENT '记忆后端类型：BUILTIN内置/EXTERNAL外部',
+    `memory_service_instance_id` varchar(64) DEFAULT NULL COMMENT '外部记忆服务实例ID（EXTERNAL时必填）',
+    `scope_model_config` TEXT NULL COMMENT 'scope级模型配置JSON（LLM/Embedding+enable_*），由manager推送到实例，不进IR',
     `create_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='记忆库表';
+
+-- migrate: add new columns to existing t_memory_repo.
+ALTER TABLE `t_memory_repo` ADD COLUMN `memory_backend_type` varchar(16) NOT NULL DEFAULT 'BUILTIN' COMMENT '记忆后端类型：BUILTIN内置/EXTERNAL外部';
+ALTER TABLE `t_memory_repo` ADD COLUMN `memory_service_instance_id` varchar(64) DEFAULT NULL COMMENT '外部记忆服务实例ID（EXTERNAL时必填）';
+ALTER TABLE `t_memory_repo` ADD COLUMN `scope_model_config` TEXT NULL COMMENT 'scope级模型配置JSON';
+
+-- memory service instance table (external agent-memory registration)
+CREATE TABLE IF NOT EXISTS `t_memory_service_instance` (
+    `id` varchar(64) NOT NULL COMMENT '主键id',
+    `name` varchar(128) NOT NULL COMMENT '实例名称',
+    `base_url` varchar(512) NOT NULL COMMENT 'agent-memory服务地址（如http://mem-svc-a:8000）',
+    `api_key` varchar(1024) DEFAULT NULL COMMENT 'MEMORY_API_KEY，加密存储，不入IR',
+    `workspace_id` varchar(64) NOT NULL COMMENT '项目空间ID',
+    `project_id` varchar(64) NOT NULL COMMENT '租户唯一标识',
+    `domain_id` varchar(64) NOT NULL COMMENT 'IAM账号ID，租户ID',
+    `health_status` varchar(16) DEFAULT 'UNKNOWN' COMMENT '健康检查状态：HEALTHY/UNHEALTHY/UNKNOWN',
+    `last_check_at` TIMESTAMP NULL DEFAULT NULL COMMENT '最近健康检查时间',
+    `deploy_meta` TEXT NULL COMMENT '展示用JSON：vector_store_type/db_type等',
+    `created_user_id` varchar(64) NOT NULL COMMENT '创建人（用户ID）',
+    `created_user_name` varchar(255) NOT NULL COMMENT '创建人（用户名）',
+    `last_update_user_id` varchar(64) DEFAULT NULL COMMENT '更新人（用户id）',
+    `last_update_user_name` varchar(255) DEFAULT NULL COMMENT '更新人（用户名）',
+    `create_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外部记忆服务实例注册表';
 
 -- model tables
 CREATE TABLE IF NOT EXISTS `t_sys_model_service_provider` (
@@ -1538,22 +1567,6 @@ CREATE TABLE IF NOT EXISTS `t_router_strategy_backup` (
     `LAST_UPDATED_DATE` BIGINT(20) NULL DEFAULT NULL COMMENT '最近更新时间',
     PRIMARY KEY (`ID`) ,
     INDEX `SB_PW_ID_INDEX`(`PROJECT_ID`, `WORKSPACE_ID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE IF NOT EXISTS `t_api_keys` (
-    `API_KEY_ID` VARCHAR(80) NOT NULL COMMENT 'API Key 唯一标识，UUID',
-    `API_KEY_NAME` VARCHAR(64) NOT NULL COMMENT 'API Key 名称',
-    `API_KEY_VALUE` VARCHAR(256) NOT NULL COMMENT 'API Key 加密后的值',
-    `DOMAIN_ID` varchar(64)  NOT NULL COMMENT 'DOMAINID',
-    `PROJECT_ID` varchar(64)  NOT NULL COMMENT '项目ID',
-    `WORKSPACE_ID` varchar(64)  NOT NULL COMMENT '空间ID',
-    `CREATED_BY_USER_NAME` varchar(64)  NULL DEFAULT 'SYSTEM' COMMENT '创建人',
-    `LAST_UPDATED_BY_USER_NAME` varchar(64)  NULL DEFAULT NULL COMMENT '最近使用人',
-    `CREATED_DATE` BIGINT(20) NULL DEFAULT NULL COMMENT '创建时间',
-    `DESCRIPTION` VARCHAR(1024) NOT NULL COMMENT 'API Key 描述',
-    `USER_ID` VARCHAR(64) NOT NULL COMMENT '用户ID',
-    PRIMARY KEY (`API_KEY_ID`) ,
-    INDEX `AK_PW_ID_INDEX`(`PROJECT_ID`, `WORKSPACE_ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `t_provider_auth_bound_records`(
@@ -1926,42 +1939,6 @@ CREATE TABLE IF NOT EXISTS `t_history_op_task` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='历史提示词优化任务表' ROW_FORMAT=DYNAMIC;
 
 -- tool tables
-CREATE TABLE IF NOT EXISTS `t_mcp` (
-    `server_id`     VARCHAR(64) NOT NULL COMMENT 'mcp 服务唯一标识',
-    `project_id`    VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '租户唯一标识',
-    `server_name`   VARCHAR(64) NOT NULL COMMENT 'mcp 服务名称',
-    `server_name_en` VARCHAR(64) NULL COMMENT '服务英文名',
-    `server_desc`   VARCHAR(1000) NOT NULL COMMENT 'mcp 服务描述',
-    `icon`          MEDIUMTEXT NULL COMMENT 'mcp 服务图标',
-    `icon_name`     VARCHAR(64)   NULL COMMENT 'icon图标名称',
-    `tools`         TEXT NOT NULL COMMENT 'mcp 服务暴露的工具',
-    `visibility`    VARCHAR(32) NOT NULL DEFAULT 'project' COMMENT '可见范围：user,project(默认),workspace,domain,global',
-    `url`           VARCHAR(256) NOT NULL COMMENT 'mcp 服务地址',
-    `auth`          VARCHAR(4096) NULL COMMENT 'mcp 认证配置',
-    `type`          VARCHAR(32) NOT NULL COMMENT 'mcp 服务类型，取值为inner或custom，添加的服务为custom类型',
-    `category`      VARCHAR(32) NULL COMMENT '服务类别：public,template',
-    `creator`       VARCHAR(64) NOT NULL COMMENT '创建者',
-    `creator_id`    VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '创建者 user id',
-    `created_on`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_on`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`server_id`),
-    UNIQUE INDEX `idx_t_mcp_project_id_mcp_server_name_en` (`project_id`, `server_name_en`),
-    KEY `idx_t_mcp_server_updated_on` (`updated_on`)
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = DYNAMIC COMMENT = 'mcp服务';
-
-CREATE TABLE IF NOT EXISTS `t_mcp_config`(
-    `id`          VARCHAR(64) NOT NULL COMMENT 'Config唯一标识ID',
-    `server_id`   VARCHAR(64) NOT NULL COMMENT 'mcp服务id',
-    `project_id`  VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '租户 project id',
-    `auth_keys`   VARCHAR(4096) NOT NULL COMMENT 'mcp 认证配置',
-    `creator_id`  VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '租户 user id',
-    `created_on`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_on`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY(`id`),
-    UNIQUE INDEX `idx_t_mcp_config_creator_id_project_id_server_id`(`server_id`, `creator_id`, `project_id`),
-    KEY `idx_t_mcp_config_updated_on`(`updated_on`)
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = DYNAMIC COMMENT = 'mcp服务配置';
-
 CREATE TABLE ws_mcp_server_def
 (
     id                      varchar(64)       not null primary key,
@@ -2199,4 +2176,13 @@ CREATE TABLE IF NOT EXISTS `t_agent_datasource` (
     PRIMARY KEY (`id`),
     INDEX `idx_project_workspace` (`project_id`, `workspace_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据源配置表';
+
+CREATE TABLE IF NOT EXISTS `t_polling_trigger_state` (
+    `trigger_id`         VARCHAR(64)   NOT NULL COMMENT '触发器ID，对应trigger_list中的trigger_id',
+    `last_seen_hash`     CHAR(64)      NULL     COMMENT '上次成功下载内容的SHA-256哈希',
+    `last_checked_at`    TIMESTAMP     NULL     COMMENT '最后检查时间',
+    `created_at`         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`         TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`trigger_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Polling触发器运行状态表';
 

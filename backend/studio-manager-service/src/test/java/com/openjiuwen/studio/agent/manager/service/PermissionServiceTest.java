@@ -178,4 +178,94 @@ class PermissionServiceTest {
         Map<String, List<String>> result = permissionService.getPresetPermissions();
         assertEquals(2, result.size());
     }
+
+    // ============ creatorCheckPermissions 相关 ============
+
+    @Test
+    void testSetPresetCreatorCheckPermissions() {
+        Map<String, List<String>> creatorCheck = new HashMap<>();
+        creatorCheck.put("DEVELOPER", List.of("DELETE#/v1/{project_id}/agent-manager/agents/{agent_id}"));
+        permissionService.setPresetCreatorCheckPermissions(creatorCheck);
+
+        Map<String, List<String>> result = permissionService.getMergedCreatorCheckPermissions();
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertTrue(result.containsKey("DEVELOPER"));
+    }
+
+    @Test
+    void testIsCreatorCheckRequired_True() {
+        Map<String, List<String>> creatorCheck = new HashMap<>();
+        creatorCheck.put("DEVELOPER", List.of("DELETE#/v1/{project_id}/agent-manager/agents/{agent_id}"));
+        permissionService.setPresetCreatorCheckPermissions(creatorCheck);
+
+        // 角色有该 URI 的 creatorCheck，返回 true
+        assertTrue(permissionService.isCreatorCheckRequired("DEVELOPER", "DELETE",
+            "/v1/abc/agent-manager/agents/agent-001"));
+    }
+
+    @Test
+    void testIsCreatorCheckRequired_TemplateMatchTemplate() {
+        Map<String, List<String>> creatorCheck = new HashMap<>();
+        creatorCheck.put("DEVELOPER", List.of("PUT#/v1/{project_id}/model-manager/model-services/{id}"));
+        permissionService.setPresetCreatorCheckPermissions(creatorCheck);
+
+        // 模板匹配模板(AntPathMatcher {var} 互匹配)
+        assertTrue(permissionService.isCreatorCheckRequired("DEVELOPER", "PUT",
+            "/v1/{project_id}/model-manager/model-services/{id}"));
+    }
+
+    @Test
+    void testIsCreatorCheckRequired_WrongMethod() {
+        Map<String, List<String>> creatorCheck = new HashMap<>();
+        creatorCheck.put("DEVELOPER", List.of("DELETE#/v1/{project_id}/agent-manager/agents/{agent_id}"));
+        permissionService.setPresetCreatorCheckPermissions(creatorCheck);
+
+        // 方法不匹配(DELETE 配置，PUT 请求)，返回 false
+        assertFalse(permissionService.isCreatorCheckRequired("DEVELOPER", "PUT",
+            "/v1/abc/agent-manager/agents/agent-001"));
+    }
+
+    @Test
+    void testIsCreatorCheckRequired_WrongUri() {
+        Map<String, List<String>> creatorCheck = new HashMap<>();
+        creatorCheck.put("DEVELOPER", List.of("DELETE#/v1/{project_id}/agent-manager/agents/{agent_id}"));
+        permissionService.setPresetCreatorCheckPermissions(creatorCheck);
+
+        // URI 不匹配(子路径 /triggers 不应误匹配父路径)，返回 false
+        assertFalse(permissionService.isCreatorCheckRequired("DEVELOPER", "DELETE",
+            "/v1/abc/agent-manager/agents/agent-001/triggers/trigger-001"));
+    }
+
+    @Test
+    void testIsCreatorCheckRequired_RoleNotConfigured() {
+        // 角色未配置 creatorCheck(OWNER/ADMIN 全权)，返回 false
+        assertFalse(permissionService.isCreatorCheckRequired("OWNER", "DELETE",
+            "/v1/abc/agent-manager/agents/agent-001"));
+    }
+
+    @Test
+    void testIsCreatorCheckRequired_EmptyList() {
+        Map<String, List<String>> creatorCheck = new HashMap<>();
+        creatorCheck.put("DEVELOPER", new ArrayList<>());
+        permissionService.setPresetCreatorCheckPermissions(creatorCheck);
+
+        // creatorCheck 列表为空，返回 false
+        assertFalse(permissionService.isCreatorCheckRequired("DEVELOPER", "DELETE",
+            "/v1/abc/agent-manager/agents/agent-001"));
+    }
+
+    @Test
+    void testGetMergedCreatorCheckPermissions_DynamicOverridesPreset() {
+        Map<String, List<String>> preset = new HashMap<>();
+        preset.put("DEVELOPER", List.of("DELETE#/v1/old"));
+        permissionService.setPresetCreatorCheckPermissions(preset);
+
+        Map<String, List<String>> dynamic = new HashMap<>();
+        dynamic.put("DEVELOPER", List.of("DELETE#/v1/new"));
+        // 模拟动态覆盖(setPresetCreatorCheckPermissions 只设预置，动态通过 updateDynamicPermissions 未实现 creatorCheck)
+        // 验证:预置生效
+        Map<String, List<String>> merged = permissionService.getMergedCreatorCheckPermissions();
+        assertEquals(List.of("DELETE#/v1/old"), merged.get("DEVELOPER"));
+    }
 }

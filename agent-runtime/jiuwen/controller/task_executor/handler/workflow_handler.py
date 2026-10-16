@@ -3,6 +3,7 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 import copy
 import json
+import logging
 import os
 import time
 from typing import Dict, Any, Generator, Optional, AsyncGenerator, List
@@ -37,6 +38,7 @@ from jiuwen.controller.task_executor.constants import (
 from jiuwen.controller.task_executor.handler.base_handler import BaseHandler
 from jiuwen.controller.utils.utils import MessageConverter
 from jiuwen.controller.workflow.workflow import SpiffWorkflowControllerWorkflow
+from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.wrapper.workflow_instance_layer import (
     OpenJiuWenWorkflowInstanceLayer,
 )
@@ -66,8 +68,6 @@ from jiuwen.plugin.models.tool import WORKFLOW_ANSWER, WORKFLOW_END_TYPE
 from jiuwen.serve.common.context import request, g, request_json
 from jiuwen.serve.controllers.execution.utils import get_current_time_ms
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
-
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 class WorkflowHandler(BaseHandler):
@@ -513,11 +513,14 @@ class WorkflowHandler(BaseHandler):
         workflow_req_params = self.prepare_workflow_params(
             workflow_req_params, workflow_context
         )
+        self.inject_start_field_defaults(workflow_req_params, workflow_context)
         global_variables = workflow_req_params.get("global_variables")
-        logger.info(
-            f"task_id: {self.task_id}| Workflow {workflow_context.workflow_name} request params with "
-            f"global vars: {global_variables}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "task_id: %s| Workflow %s request params with "
+                "global vars: %s",
+                self.task_id, workflow_context.workflow_name, global_variables,
+            )
 
         # 调用流式执行逻辑
         async for exe_res in self._stream_execute_workflow(
@@ -568,6 +571,7 @@ class WorkflowHandler(BaseHandler):
                     global_variables[key] = value
             workflow_req_params["global_variables"] = global_variables
 
+        self.inject_start_field_defaults(workflow_req_params, workflow_context)
         final_answer = None
         async for exe_res in self._stream_execute_workflow(
             task, workflow_context, workflow_req_params, from_pe=True
@@ -1076,6 +1080,47 @@ class WorkflowHandler(BaseHandler):
             WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY, workflow_req_params
         )
 
+    @staticmethod
+    def inject_start_field_defaults(workflow_req_params: dict, workflow_context) -> None:
+        """Inject Start node user field defaults into global_variables.
+
+        ${_request.xxx} resolves against _request built from global_variables.
+        Start node user fields (e.g. optional parameters with default_value)
+        are defined in the sub-workflow IR, not in the request. Without
+        merging defaults, ${_request.test} resolves to None when the user
+        does not pass the field, causing End node output filtering to drop it.
+
+        所有类型字段都注入默认值,默认值按声明类型归一(空默认:object -> {},
+        array -> [],integer -> 0,number -> 0.0,boolean -> False,string -> '');
+        直接注入 '' 会让 Start 输出 userFields 通过不了 openjiuwen IR 输出校验
+        (json.loads('')/int('') 失败,报 Incorrect type for key)。
+        """
+        ir_json = getattr(workflow_context, "workflow_ir", None)
+        if not ir_json:
+            return
+        defaults = {}
+        for comp in ir_json.get("components") or []:
+            if comp.get("type") != "jiuwen.start":
+                continue
+            user_fields = (comp.get("configs") or {}).get("userFields", {}) or {}
+            for field in user_fields.get("inputs") or []:
+                field_id = field.get("id")
+                if field_id and field_id not in defaults:
+                    converted = Start.convert_user_field_default(
+                        (field.get("type") or "").lower(),
+                        field.get("default_value", ""),
+                        field.get("schema"),
+                    )
+                    if converted is not None:
+                        defaults[field_id] = converted
+            break
+        if not defaults:
+            return
+        global_variables = workflow_req_params.setdefault("global_variables", {})
+        for k, v in defaults.items():
+            if global_variables.get(k) is None:
+                global_variables[k] = v
+
     def _prepare_global_variables(self, workflow_req_params):
         def _filter_none(d: dict[str, Any] | None) -> dict[str, Any]:
             """过滤字典中的None值"""
@@ -1185,7 +1230,8 @@ class WorkflowHandler(BaseHandler):
                 # 拦截workflow流出的INTERMEDIATE_MESSAGE
                 if output.code == StreamCode.CONTROLLER_INTERMEDIATE_MESSAGE.value:
                     logger.debug(
-                        f"drop workflow intermediate_message data: {output}",
+                        "drop workflow intermediate_message data: %s",
+                        output,
                         simple_log="drop workflow intermediate_message data",
                     )
                     continue
@@ -1197,8 +1243,9 @@ class WorkflowHandler(BaseHandler):
                 ):
                     workflow_status["workflow_end"] = True
                     # end组件输出更新写入controller global variables全局变量
-                    logger.info(
-                        f"task_id: {self.task_id}| End Message detected in workflow stream: {output.data}",
+                    logger.debug(
+                        "task_id: %s| End Message detected in workflow stream: %s",
+                        self.task_id, output.data,
                         simple_log="End Message detected in workflow stream",
                     )
                     action_after_completion_val = output.data.get(
@@ -1239,8 +1286,9 @@ class WorkflowHandler(BaseHandler):
                 ):
                     workflow_status["questioner_interrupted"] = True
                 elif output.data.get("node_type") == NodeType.QA.value:
-                    logger.info(
-                        f"task_id: {self.task_id}| QA Message detected in workflow stream: {output}",
+                    logger.debug(
+                        "task_id: %s| QA Message detected in workflow stream: %s",
+                        self.task_id, output,
                         simple_log="QA Message detected in workflow stream",
                     )
                     if output.data.get("need_reply", True):
@@ -1338,11 +1386,11 @@ class WorkflowHandler(BaseHandler):
         properties = workflow_context.workflow_parameters.get("parameters", {}).get(
             "properties", {}
         )
-        # 初始化missing_parameters，排除query参数
+        # 初始化missing_parameters，排除query、sys、conversationHistory参数
         missing_parameters = {
             key: value.get("description", "")
             for key, value in properties.items()
-            if value.get("required", False) and key not in ("query", "sys")
+            if value.get("required", False) and key not in ("query", "sys", "conversationHistory")
         }
         # 获取workflow_req_params
         workflow_req_params = self.context_manager.get_global_variables(
@@ -1359,8 +1407,9 @@ class WorkflowHandler(BaseHandler):
             for key, value in missing_parameters.items()
             if global_variables.get(key) is None
         }
-        logger.info(
-            f"task_id: {self.task_id}| missing_params: {missing_parameters}",
+        logger.debug(
+            "task_id: %s| missing_params: %s",
+            self.task_id, missing_parameters,
             simple_log="missing_params update successfully",
         )
         # 如果没有缺失参数，直接返回
@@ -1711,9 +1760,7 @@ class WorkflowHandler(BaseHandler):
                 simple_log=f"Panel execute workflow error: {type(e)}",
             )
             err_func_res["errMessage"][WORKFLOW_ANSWER] = (
-                str(e)
-                if LOG_VERBOSE_MODE
-                else f"Panel execute workflow error: {type(e)}"
+                f"Panel execute workflow error: {type(e)}"
             )
             yield err_func_res
 

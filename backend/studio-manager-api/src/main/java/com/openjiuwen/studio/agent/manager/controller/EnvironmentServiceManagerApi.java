@@ -11,6 +11,7 @@ import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariables;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariablesExport;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariablesResp;
 import com.openjiuwen.studio.agent.manager.dto.Environments;
+import com.openjiuwen.studio.agent.manager.dto.ModifyEnvironmentInfoRequestBody;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListSubnets;
 import com.openjiuwen.studio.agent.manager.dto.QueryEnvironmentInstancesQo;
@@ -239,7 +240,7 @@ import java.util.List;
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "环境第", required = true, schema = @Schema())
         @PathVariable("environment_id") String environmentId,
-        @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody EnvironmentInfoRequest body);
+        @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModifyEnvironmentInfoRequestBody body);
 
     @ApiOperation(value = "查询环境详情", nickname = "queryEnvironment", notes = "查询环境详情",
         response = Environment.class, tags = {"EnvironmentServiceManager"})

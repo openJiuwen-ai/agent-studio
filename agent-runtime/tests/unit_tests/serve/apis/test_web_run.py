@@ -29,7 +29,7 @@ from agent_runtime.serve.apis.app_run_request import (
     WorkflowAppRunRequest,
     AgentAppRunRequest,
 )
-from agent_runtime.serve.apis.web_run import run_web_workflow, run_web_agent
+from agent_runtime.serve.apis.web_run import run_web_workflow, run_web_agent, WorkflowWebRunParams, AgentWebRunParams
 
 
 def _make_request(path_params: dict, language: str = "zh-cn") -> MagicMock:
@@ -79,7 +79,11 @@ class TestRunWebWorkflow:
             ) as mock_exec,
         ):
             mock_service.get_release_info = AsyncMock(return_value=release_info)
-            result = await run_web_workflow(body=body, request=request)
+            result = await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(short_code="abc123", conversation_id="conv-1", language="zh-cn", stream="true")
+            )
 
         assert result is expected_response
         mock_service.get_release_info.assert_awaited_once_with("abc123", "zh-cn")
@@ -105,7 +109,11 @@ class TestRunWebWorkflow:
             "agent_runtime.serve.apis.web_run._release_service"
         ) as mock_service:
             mock_service.get_release_info = AsyncMock(return_value=error_response)
-            result = await run_web_workflow(body=body, request=request)
+            result = await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(short_code="missing", conversation_id="conv-1", language="zh-cn", stream="true")
+            )
 
         assert result is error_response
         mock_service.get_release_info.assert_awaited_once_with("missing", "zh-cn")
@@ -123,7 +131,11 @@ class TestRunWebWorkflow:
             "agent_runtime.serve.apis.web_run._release_service"
         ) as mock_service:
             mock_service.get_release_info = AsyncMock(return_value=error_response)
-            result = await run_web_workflow(body=body, request=request)
+            result = await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(short_code="abc123", conversation_id="conv-1", language="zh-cn", stream="true")
+            )
 
         assert result is error_response
 
@@ -148,7 +160,11 @@ class TestRunWebWorkflow:
             ) as mock_exec,
         ):
             mock_service.get_release_info = AsyncMock(return_value=release_info)
-            await run_web_workflow(body=body, request=request)
+            await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(short_code="abc123", conversation_id="conv-1", language="zh-cn", stream="true")
+            )
 
         ctx = mock_exec.await_args.args[0]
         assert ctx.version is None
@@ -174,7 +190,11 @@ class TestRunWebWorkflow:
             ),
         ):
             mock_service.get_release_info = AsyncMock(return_value=release_info)
-            await run_web_workflow(body=body, request=request)
+            await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(short_code="abc123", conversation_id="conv-1", language="zh-cn", stream="true")
+            )
 
         # Default language zh-cn passed to get_release_info
         mock_service.get_release_info.assert_awaited_once_with("abc123", "zh-cn")
@@ -201,9 +221,51 @@ class TestRunWebWorkflow:
             ),
         ):
             mock_service.get_release_info = AsyncMock(return_value=release_info)
-            await run_web_workflow(body=body, request=request)
+            await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(short_code="abc123", conversation_id="conv-1", language="en-us", stream="true")
+            )
 
         mock_service.get_release_info.assert_awaited_once_with("abc123", "en-us")
+
+    @pytest.mark.asyncio
+    async def test_env_workspace_passed_to_context(self):
+        """environment_id/workspace_id 透传到 WorkflowRunContext，供插件/MCP URL 占位符解析."""
+        release_info = _make_release_info()
+        expected_response = JSONResponse(content={})
+        body = WorkflowAppRunRequest()
+        request = _make_request(
+            {"short_code": "abc123", "conversation_id": "conv-1"}
+        )
+
+        with (
+            patch(
+                "agent_runtime.serve.apis.web_run._release_service"
+            ) as mock_service,
+            patch(
+                "agent_runtime.serve.apis.web_run._execute_workflow_run",
+                new_callable=AsyncMock,
+                return_value=expected_response,
+            ) as mock_exec,
+        ):
+            mock_service.get_release_info = AsyncMock(return_value=release_info)
+            await run_web_workflow(
+                body=body,
+                request=request,
+                params=WorkflowWebRunParams(
+                    short_code="abc123",
+                    conversation_id="conv-1",
+                    workspace_id="ws-1",
+                    environment_id="env-1",
+                    language="zh-cn",
+                    stream="true",
+                ),
+            )
+
+        ctx = mock_exec.await_args.args[0]
+        assert ctx.environment_id == "env-1"
+        assert ctx.workspace_id == "ws-1"
 
 
 class TestRunWebAgent:
@@ -231,8 +293,7 @@ class TestRunWebAgent:
             result = await run_web_agent(
                 body=body,
                 request=request,
-                workspace_id="ws-1",
-                conversation_id="conv-1",
+                params=AgentWebRunParams(short_code="abc123", workspace_id="ws-1", conversation_id="conv-1", language="zh-cn", stream="true")
             )
 
         assert result is expected_response
@@ -258,8 +319,7 @@ class TestRunWebAgent:
             result = await run_web_agent(
                 body=body,
                 request=request,
-                workspace_id="",
-                conversation_id="conv-1",
+                params=AgentWebRunParams(short_code="missing", workspace_id="", conversation_id="conv-1", language="zh-cn", stream="true")
             )
 
         assert result is error_response
@@ -286,8 +346,7 @@ class TestRunWebAgent:
             await run_web_agent(
                 body=body,
                 request=request,
-                workspace_id="",
-                conversation_id="",  # Empty → should generate UUID
+                params=AgentWebRunParams(short_code="abc123", workspace_id="", conversation_id=""),  # Empty → UUID
             )
 
         ctx = mock_exec.await_args.args[0]
@@ -317,8 +376,7 @@ class TestRunWebAgent:
             await run_web_agent(
                 body=body,
                 request=request,
-                workspace_id="",
-                conversation_id="existing-conv-id",
+                params=AgentWebRunParams(short_code="abc123", workspace_id="", conversation_id="existing-conv-id", language="zh-cn", stream="true")
             )
 
         ctx = mock_exec.await_args.args[0]
@@ -346,9 +404,9 @@ class TestRunWebAgent:
             await run_web_agent(
                 body=body,
                 request=request,
-                workspace_id="",
-                conversation_id="conv-1",
+                params=AgentWebRunParams(short_code="abc123", workspace_id="", conversation_id="conv-1", language="zh-cn", stream="true")
             )
 
         ctx = mock_exec.await_args.args[0]
         assert ctx.version is None
+

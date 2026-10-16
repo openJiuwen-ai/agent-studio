@@ -652,11 +652,10 @@ export class ChatKnowledgePageComponent implements OnInit {
     return question.trim();
   }
 
-  /** 复制、点赞和点踩按钮是否可见。大模型的回答可能是空字符串，不能调用反馈接口 */
+  /** 复制按钮是否可见：有已生成内容即可复制。失败/停止/超时轮不隐藏（与试运行窗口口径一致）；空回答不显示 */
   public isVisibleOfLastBtns(item: any): boolean {
     return (
       item.showBottomBtns &&
-      !item.isTimeoutOrError &&
       item.showAnswer?.trim() !== ''
     );
   }
@@ -730,7 +729,7 @@ export class ChatKnowledgePageComponent implements OnInit {
       }
       this.chatLoop[this.activeCurrentIdx].isShowRed = false;
       this.chatLoop[this.activeCurrentIdx].showBottomBtns = true;
-      // 停止生成的这一轮没有复制、点赞和点踩按钮。只有重新生成按钮
+      // 停止/超时/报错轮的复制按钮不再被 isTimeoutOrError 连带隐藏，已生成内容可复制
       this.chatLoop[this.activeCurrentIdx].isTimeoutOrError = true;
       this.chatLoop[this.activeCurrentIdx].chunkIds = [];
       this.isShowStopIcon = false;

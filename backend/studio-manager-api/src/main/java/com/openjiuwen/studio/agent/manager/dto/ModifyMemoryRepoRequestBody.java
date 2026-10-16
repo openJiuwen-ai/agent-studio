@@ -61,6 +61,18 @@ public class ModifyMemoryRepoRequestBody implements Serializable {
     @Schema(description = "时间跨度（秒）", example = "3600")
     private Integer timeSpan = null;
 
+    @JsonProperty("memory_backend_type")
+    @Schema(description = "记忆后端类型：BUILTIN/EXTERNAL", example = "BUILTIN")
+    private String memoryBackendType = null;
+
+    @JsonProperty("memory_service_instance_id")
+    @Schema(description = "外部记忆服务实例ID（EXTERNAL时必填）", example = "instance-001")
+    private String memoryServiceInstanceId = null;
+
+    @JsonProperty("scope_model_config")
+    @Schema(description = "scope级模型配置JSON，由manager推送到实例，不进IR")
+    private String scopeModelConfig = null;
+
     public String getName() {
         return name;
     }
@@ -116,6 +128,33 @@ public class ModifyMemoryRepoRequestBody implements Serializable {
         return this;
     }
 
+    public String getMemoryBackendType() {
+        return memoryBackendType;
+    }
+
+    public ModifyMemoryRepoRequestBody setMemoryBackendType(String memoryBackendType) {
+        this.memoryBackendType = memoryBackendType;
+        return this;
+    }
+
+    public String getMemoryServiceInstanceId() {
+        return memoryServiceInstanceId;
+    }
+
+    public ModifyMemoryRepoRequestBody setMemoryServiceInstanceId(String memoryServiceInstanceId) {
+        this.memoryServiceInstanceId = memoryServiceInstanceId;
+        return this;
+    }
+
+    public String getScopeModelConfig() {
+        return scopeModelConfig;
+    }
+
+    public ModifyMemoryRepoRequestBody setScopeModelConfig(String scopeModelConfig) {
+        this.scopeModelConfig = scopeModelConfig;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -127,6 +166,9 @@ public class ModifyMemoryRepoRequestBody implements Serializable {
         sb.append("    longTermMemoryStrategies: ").append(toIndentedString(longTermMemoryStrategies)).append("\n");
         sb.append("    conversationRound: ").append(toIndentedString(conversationRound)).append("\n");
         sb.append("    timeSpan: ").append(toIndentedString(timeSpan)).append("\n");
+        sb.append("    memoryBackendType: ").append(toIndentedString(memoryBackendType)).append("\n");
+        sb.append("    memoryServiceInstanceId: ").append(toIndentedString(memoryServiceInstanceId)).append("\n");
+        sb.append("    scopeModelConfig: ").append(toIndentedString(scopeModelConfig)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -144,12 +186,16 @@ public class ModifyMemoryRepoRequestBody implements Serializable {
             modifyMemoryRepoRequestBody.description) && Objects.equals(this.icon, modifyMemoryRepoRequestBody.icon)
             && Objects.equals(this.longTermMemoryStrategies, modifyMemoryRepoRequestBody.longTermMemoryStrategies)
             && Objects.equals(this.conversationRound, modifyMemoryRepoRequestBody.conversationRound)
-            && Objects.equals(this.timeSpan, modifyMemoryRepoRequestBody.timeSpan);
+            && Objects.equals(this.timeSpan, modifyMemoryRepoRequestBody.timeSpan)
+            && Objects.equals(this.memoryBackendType, modifyMemoryRepoRequestBody.memoryBackendType)
+            && Objects.equals(this.memoryServiceInstanceId, modifyMemoryRepoRequestBody.memoryServiceInstanceId)
+            && Objects.equals(this.scopeModelConfig, modifyMemoryRepoRequestBody.scopeModelConfig);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description, icon, longTermMemoryStrategies, conversationRound, timeSpan);
+        return Objects.hash(name, description, icon, longTermMemoryStrategies, conversationRound, timeSpan,
+            memoryBackendType, memoryServiceInstanceId, scopeModelConfig);
     }
 
     /**

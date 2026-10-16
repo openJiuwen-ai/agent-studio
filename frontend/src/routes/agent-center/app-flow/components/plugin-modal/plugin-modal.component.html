@@ -64,7 +64,7 @@
 
           <form #inputForm="ngForm">
             <ng-container *ngFor="let param of inputParams; index as i">
-              <div class="mt-2 flex items-start" *ngIf="param.location === 'Headers'">
+              <div class="mt-2 flex items-start" *ngIf="param.location === 'Headers' && !isHiddenInputParam(param)">
                 <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center gap-1 text-label">
                   <span nz-tooltip [nzTooltipTitle]="param.name" [nzTooltipOverlayStyle]="{ 'white-space': 'nowrap', 'max-width': 'none' }" class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap block" [ngClass]="param.required ? 'max-w-[120px]' : 'w-[120px]'">{{ param.name }}</span>
                   <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
@@ -212,7 +212,7 @@
             </div>
           </div>
           <form #inputFormContent="ngForm">
-            <nz-tree id="node-param-tree" [nzData]="toolsInputParams" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
+            <nz-tree id="node-param-tree" [nzData]="displayToolsInputParams" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
               <ng-template #nzTreeTemplate let-node let-origin="origin">
                 <div class="mt-2 flex items-start w-full">
                   <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center gap-1 text-label">

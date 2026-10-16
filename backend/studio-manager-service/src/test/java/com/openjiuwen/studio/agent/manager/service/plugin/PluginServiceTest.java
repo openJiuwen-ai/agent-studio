@@ -193,12 +193,19 @@ class PluginServiceTest {
         assertEquals(StudioError.TOOL_PROJECT_DONE_NOT_EXIST, ex.getErrorCode());
     }
 
+    /**
+     * 用例描述：删除插件时插件不存在，应抛出 RESOURCE_NOT_EXISTS 异常（404）
+     * 预制条件：pluginMapper.selectByPrimaryKeyAndWorkspace 返回 null
+     * 输入参数：projectId=proj-1, pluginId=p-1, workspaceId=ws-1
+     * 预期结果：抛出 AgentStudioException，错误码为 RESOURCE_NOT_EXISTS
+     */
     @Test
-    void testDeletePlugin_NotFound() {
+    void testDeletePlugin_NotFound_ThrowsException() {
         when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(null);
 
-        CommonDeleteRsp result = pluginService.deletePlugin("proj-1", "p-1", "ws-1");
-        assertNull(result);
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.deletePlugin("proj-1", "p-1", "ws-1"));
+        assertEquals(StudioError.RESOURCE_NOT_EXISTS, ex.getErrorCode());
     }
 
     @Test

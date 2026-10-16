@@ -1,0 +1,30 @@
+:host {
+  display: block;
+  height: 100%;
+
+  .instance-top-operate {
+    display: flex;
+    margin-bottom: 24px;
+
+    .instance-search {
+      flex: 1;
+      margin-right: 8px;
+    }
+  }
+
+  .table-style {
+    border-bottom: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .table-border {
+    border-left: 1px solid rgba(240, 240, 240, 100%);
+    border-right: 1px solid rgba(240, 240, 240, 100%);
+  }
+
+  .copy-id {
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
+}

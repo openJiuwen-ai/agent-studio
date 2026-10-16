@@ -21,6 +21,7 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuil
 import org.apache.hc.client5.http.impl.routing.DefaultProxyRoutePlanner;
 import org.apache.hc.client5.http.routing.HttpRoutePlanner;
 import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy;
+import org.apache.hc.client5.http.ssl.HostnameVerificationPolicy;
 import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.util.TimeValue;
@@ -46,7 +47,6 @@ import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Locale;
 
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 
 /**
@@ -219,9 +219,18 @@ public class HttpClientConfig {
     private PoolingHttpClientConnectionManager buildPoolingHttpClientConnectionManager() {
         // 校验服务端的证书
         SSLContext sslContext = SslContextBuilder.buildCommonSslContext(sslEnabled);
-        HostnameVerifier hostnameVerifier = NoopHostnameVerifier.INSTANCE;
-        DefaultClientTlsStrategy sslConnectionSocketFactory = new DefaultClientTlsStrategy(sslContext,
-            hostnameVerifier);
+        DefaultClientTlsStrategy sslConnectionSocketFactory;
+        if (sslEnabled) {
+            // SSL开启：使用BOTH策略，在TLS握手阶段设置endpointIdentificationAlgorithm进行SAN校验，
+            // 同时使用默认HostnameVerifier进行主机名验证，保障证书链校验+主机名校验的完整安全性
+            sslConnectionSocketFactory = new DefaultClientTlsStrategy(sslContext,
+                HostnameVerificationPolicy.BOTH, null);
+        } else {
+            // SSL关闭：使用CLIENT策略，不在TLS握手阶段设置endpointIdentificationAlgorithm，
+            // 配合NoopHostnameVerifier跳过主机名校验，信任所有证书，用于内部服务证书不完善的场景
+            sslConnectionSocketFactory = new DefaultClientTlsStrategy(sslContext,
+                HostnameVerificationPolicy.CLIENT, NoopHostnameVerifier.INSTANCE);
+        }
         // 创建httpClient连接池
         PoolingHttpClientConnectionManagerBuilder connectionManagerBuilder
             = PoolingHttpClientConnectionManagerBuilder.create();

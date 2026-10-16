@@ -5,6 +5,8 @@
 package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CopyWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -17,6 +19,7 @@ import com.openjiuwen.studio.agent.manager.dto.GetWorkflowVersionQo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowVersionsV1Qo;
 import com.openjiuwen.studio.agent.common.dto.agent.ListWorkflowsQo;
@@ -26,6 +29,7 @@ import com.openjiuwen.studio.agent.manager.dto.ValidateWorkflowQo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkFlowEnvs;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFrontParamInfo;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowInfo;
@@ -82,6 +86,30 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
         @NotNull @ApiParam(value = "配置触发器。", required = true) @Valid @RequestBody TriggerConfig body);
+
+    @ApiOperation(value = "批量删除工作流版本", nickname = "batchDeleteWorkflowVersions", notes = "批量删除工作流版本。",
+        response = BatchDeleteVersionsResponseBody.class, tags = {"WorkflowManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "批量删除工作流版本响应。", response = BatchDeleteVersionsResponseBody.class),
+        @ApiResponse(code = 400, message = "请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "鉴权失败。", response = String.class),
+        @ApiResponse(code = 403, message = "没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/batch-delete",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<BatchDeleteVersionsResponseBody> batchDeleteWorkflowVersions(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
+        @PathVariable("workflow_id") String workflowId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "团队空间ID。", required = true, schema = @Schema()) @ApiParam(value = "团队空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "批量删除工作流版本请求。", required = true) @Valid @RequestBody
+        BatchDeleteVersionsRequestBody body);
 
     @ApiOperation(value = "复制工作流", nickname = "copyWorkflow", notes = "复制工作流。", response = WorkflowInfo.class,
         tags = {"WorkflowManagement"})
@@ -425,6 +453,28 @@ import org.springframework.web.multipart.MultipartFile;
         @PathVariable("project_id") String projectId,
         @ApiParam(value = "ListWorkflowLastVersionsQo: converted from multi query params") @Valid
         ListWorkflowLastVersionsQo listWorkflowLastVersionsQo);
+
+    @ApiOperation(value = "查询工作流各版本引用数量", nickname = "listWorkflowVersionReferences",
+        notes = "查询工作流各版本引用数量。", response = VersionReferenceListRsp.class, tags = {"WorkflowManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "版本引用数量列表。", response = VersionReferenceListRsp.class),
+        @ApiResponse(code = 400, message = "请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "鉴权失败。", response = String.class),
+        @ApiResponse(code = 403, message = "没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/versions/references",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<VersionReferenceListRsp> listWorkflowVersionReferences(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "工作流ID。", required = true, schema = @Schema())
+        @PathVariable("workflow_id") String workflowId,
+        @ApiParam(value = "ListWorkflowVersionReferencesQo: converted from multi query params") @Valid
+        ListWorkflowVersionReferencesQo listWorkflowVersionReferencesQo);
 
     @ApiOperation(value = "查询工作流版本列表", nickname = "listWorkflowVersions", notes = "查询工作流版本列表。",
         response = VersionListRsp.class, tags = {"WorkflowManagement"})

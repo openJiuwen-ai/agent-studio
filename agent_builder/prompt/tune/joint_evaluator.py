@@ -11,6 +11,7 @@ import random
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from agent_builder.serve.common.concurrency import submit_with_log_vars
 
 from agent_builder.common.logging.base import logger
 from agent_builder.prompt.common.config import LLMModelInfo
@@ -224,7 +225,7 @@ class JointEvaluatorWithRef:
 
         with ThreadPoolExecutor(max_workers=num_thread) as executor:
             futures = [
-                executor.submit(
+                submit_with_log_vars(executor,
                     self.process_example, example_idx, prompt, example, cancel_event
                 )
                 for example_idx, example in enumerate(dataset)

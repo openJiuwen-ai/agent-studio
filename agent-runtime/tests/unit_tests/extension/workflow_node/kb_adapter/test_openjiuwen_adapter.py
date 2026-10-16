@@ -152,8 +152,8 @@ async def test_search_raises_when_model_service_id_missing():
         )
 
 
-async def test_search_score_threshold_filters_low_scores():
-    """score_threshold 过滤低分结果。"""
+async def test_search_score_threshold_not_filtered_by_adapter():
+    """adapter 不做本地分数过滤，scoreThreshold 过滤由 flow 层统一执行。"""
     adapter = OpenJiuwenKBAdapter()
     mock_results = [
         {"text": "high", "score": 0.9, "metadata": {}},
@@ -169,8 +169,7 @@ async def test_search_score_threshold_filters_low_scores():
             knowledge_bases=[{"external_id": "kb-1"}],
             retrieval_params={"scoreThreshold": 0.5, "topK": 5},
         )
-        assert len(results) == 1
-        assert results[0].text == "high"
+        assert len(results) == 2
 
 
 async def test_search_top_k_limits_results():

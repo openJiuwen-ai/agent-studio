@@ -543,3 +543,77 @@ class TestInitModerationFromIr:
         engine = init_moderation_from_ir(ir_json)
         assert engine is not None
         assert engine.enabled is True
+
+
+class TestNonStringSegmentPassthrough:
+    """FB-6 + MR 检视意见 #3：非字符串分段不参与审核、原样透传，不得被吞成空串。"""
+
+    @pytest.mark.asyncio
+    async def test_message_int_answer_passthrough(self):
+        engine = _make_engine(["badword"], "filter")
+
+        async def raw_gen():
+            yield {"event": "message", "data": {"answer": 0, "think": ""}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        assert result[0]["data"]["answer"] == 0
+
+    @pytest.mark.asyncio
+    async def test_message_int_think_passthrough(self):
+        # 检视意见 #3：think 分支此前无条件写回 safe_think，
+        # 非字符串 think 会被吞成空串，与 answer 的透传处理不一致
+        engine = _make_engine(["badword"], "filter")
+
+        async def raw_gen():
+            yield {"event": "message", "data": {"answer": "ok", "think": 0}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        assert result[0]["data"]["think"] == 0
+
+    @pytest.mark.asyncio
+    async def test_message_bool_think_passthrough(self):
+        engine = _make_engine(["badword"], "filter")
+
+        async def raw_gen():
+            yield {"event": "message", "data": {"answer": "ok", "think": False}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        assert result[0]["data"]["think"] is False
+
+    @pytest.mark.asyncio
+    async def test_workflow_end_int_answer_passthrough(self):
+        engine = _make_engine(["badword"], "filter")
+
+        async def raw_gen():
+            yield {"event": "workflow_end", "data": {"answer": 0}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        assert result[0]["data"]["answer"] == 0
+
+    @pytest.mark.asyncio
+    async def test_message_end_non_str_origin_answer_passthrough(self):
+        # 检视意见 #3：origin_answer 此前只过真值判断（if origin_answer:），
+        # 真值非字符串（HTTP 状态码 200 直出）会进 clean_full_text 按字符串处理报错
+        engine = _make_engine(["badword"], "filter")
+
+        async def raw_gen():
+            yield {"event": "message_end", "data": {"answer": "safe", "think": "", "origin_answer": 200}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        assert result[0]["data"]["answer"] == "safe"
+        assert result[0]["data"]["origin_answer"] == 200
+
+    @pytest.mark.asyncio
+    async def test_workflow_end_non_str_origin_answer_passthrough(self):
+        # 检视意见 #3：workflow_end 同口径——answer 照常审核，origin_answer 非字符串透传
+        engine = _make_engine(["badword"], "replace", "***")
+
+        async def raw_gen():
+            yield {
+                "event": "workflow_end",
+                "data": {"answer": "hello badword world", "origin_answer": {"code": 200}},
+            }
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        assert result[0]["data"]["answer"] == "hello *** world"
+        assert result[0]["data"]["origin_answer"] == {"code": 200}

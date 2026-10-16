@@ -40,41 +40,26 @@ AUTH = "auth"
 
 def load_restful_api_from_ir(ir_data: dict, tag: str | None = None) -> str:
     """
-    从 IR 配置创建并注册 RestfulApi 工具
+    从 IR 配置创建并注册插件工具（统一入口）
+
+    按 ``callMode`` 分流：
+    - ``custom`` → CustomPluginTool（自定义 Python 插件）
+    - 其他 → RestfulApiToolNew（HTTP API 插件，现有逻辑）
 
     Args:
         ir_data: IR 原始配置字典（驼峰命名），包含：
-            - name,
-            - description,
-            - url,
-            - method,
-            - headers,
-            - auth,
-            - arguments,
-            - response
-            - principle, logo, pluginDependency
-            - id, asyncInvoke, inputParameters
-            - fileHandler
+            - name, description, url, method, headers, auth,
+              arguments, response, principle, logo, pluginDependency,
+              id, asyncInvoke, inputParameters, fileHandler,
+              callMode, componentType
         tag: 标签，用于标识工具属于那个agent
 
     Returns:
         注册后的 tool_id
     """
-    card = convert_ir_to_card(ir_data)
+    from jiuwen.extension.wrapper.custom_plugin_tool import create_plugin_tool
 
-    tool = RestfulApiToolNew(card)
-
-    from openjiuwen.core.runner import Runner
-
-    result = Runner.resource_mgr.add_tool(tool, tag=tag)
-
-    if result.is_ok():
-        return tool.id
-    err = result.error()
-    err_msg = str(err)
-    if "resource already exist" in err_msg:
-        return tool.id
-    raise err
+    return create_plugin_tool(ir_data, tag=tag)
 
 
 _PARAM_LOC_HEADERS = "Headers"

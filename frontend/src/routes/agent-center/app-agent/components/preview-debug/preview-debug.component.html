@@ -194,6 +194,7 @@
           [sending]="isShowStopIcon"
           [disabled]="sendDisabled"
           [showClear]="false"
+          [enableImageLocalPreview]="true"
           (disabledSender)="getDisableSender($event)"
           [maxlength]="userQueryLimit"
           (send)="sendQuestion($event)"

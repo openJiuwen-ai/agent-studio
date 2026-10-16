@@ -12,12 +12,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -41,21 +42,33 @@ public class ModelInterfaceProtocolService {
     @Autowired
     private MdInterfaceProtocolMapper mapper;
 
+    /**
+     * 延迟预热迁入受管 ThreadPoolTaskScheduler（COM-02：取代占用工作线程睡眠的 Thread.sleep）；
+     * schedule 提交失败外层 catch 记告警，不阻断启动
+     */
+    @Autowired
+    @Qualifier("delayWarmupTaskScheduler")
+    private ThreadPoolTaskScheduler delayWarmupTaskScheduler;
+
     private List<MdInterfaceProtocol> cache = new ArrayList<>(0);
 
     private long lastRefreshTime;
 
     @PostConstruct
     public void postConstruct() {
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(delayTime);
-                mapper.updateVisible(POC_AGENT_BUILDER, pocAgentBuilderEnable ? "true" : "false");
-                mapper.updateVisible(HIS_INTERFACE_ID, hisEnable ? "true" : "false");
-            } catch (Exception e) {
-                log.warn("Fail update MdInterfaceProtocol visible.");
-            }
-        });
+        try {
+            delayWarmupTaskScheduler.schedule(() -> {
+                try {
+                    mapper.updateVisible(POC_AGENT_BUILDER, pocAgentBuilderEnable ? "true" : "false");
+                    mapper.updateVisible(HIS_INTERFACE_ID, hisEnable ? "true" : "false");
+                } catch (Exception e) {
+                    // 任务体记录完整异常栈（ErrorHandler 只收未捕获异常，此处已捕获故自带栈）
+                    log.warn("Fail update MdInterfaceProtocol visible.", e);
+                }
+            }, delayWarmupTaskScheduler.getClock().instant().plusMillis(delayTime));
+        } catch (org.springframework.core.task.TaskRejectedException e) {
+            log.warn("startup delay-warmup schedule rejected, skip MdInterfaceProtocol visible update.", e);
+        }
     }
 
     private List<MdInterfaceProtocol> getAllProtocols() {

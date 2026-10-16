@@ -30,6 +30,8 @@ class ServerSettings(BaseSettings):
     # Nginx 负载均衡模式。启用时 uvicorn 以单 worker 运行，由 Nginx 做负载均衡
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
     docs_enabled: bool = Field(default=False, validation_alias="API_DOCS_ENABLED")
+    # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出
+    performance_log_enabled: bool = Field(default=True, validation_alias="PERFORMANCE_LOG_ENABLED")
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -45,6 +47,14 @@ class ServerSettings(BaseSettings):
         """兼容 K8s/Docker Compose 中空字符串值。"""
         if v == "" or v is None:
             return False
+        return v
+
+    @field_validator("performance_log_enabled", mode="before")
+    @classmethod
+    def _empty_str_to_true(cls, v):
+        """K8s YAML 中空字符串 value: '' 会导致 bool 解析失败，需转为默认值 True。"""
+        if v == "" or v is None:
+            return True
         return v
 
     @field_validator("workers", mode="before")
@@ -264,6 +274,25 @@ class CacheSettings(BaseSettings):
     mem_cache_ttl_seconds: int = Field(
         default=3600, validation_alias="MEM_CACHE_TTL_SECONDS"
     )
+    # 构建期子 IR 并发预取的单批并发上限（async_ir_load_batch）。
+    # 必须 ≥1：0 会使信号量 acquire 永久阻塞（请求挂起无报错），ge=1
+    # 让非法 env 在启动期即 ValidationError fail-fast。
+    # 注意：这是"每次批量调用"的约束而非全局预算——冷缓存下瞬时 Redis 连接
+    # 需求 ≈ 并发构建请求数 × 本值，需与 REDIS_MAX_CONNECTIONS（共享池，
+    # 默认 50）核算：默认 5 时约 10 个并发冷构建才会触顶（上限 10 时约
+    # 5 个即触顶）；redis-py 池耗尽抛 "Too many connections" 不排队。
+    ir_load_max_concurrency: int = Field(
+        default=5, ge=1, validation_alias="IR_LOAD_MAX_CONCURRENCY"
+    )
+    ir_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="IR_CACHE_TTL_SECONDS", ge=1
+    )
+    workflow_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
+    )
+    agent_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1
+    )
     max_cache_data_size: int = Field(
         default=2 * 1024 * 1024, validation_alias="MAX_CACHE_DATA_SIZE"
     )
@@ -279,6 +308,9 @@ class CacheSettings(BaseSettings):
     )
     model_cache_redis_ttl: int = Field(
         default=300, validation_alias="MODEL_CACHE_REDIS_TTL"
+    )
+    kb_config_cache_ttl: int = Field(
+        default=300, validation_alias="KB_CONFIG_CACHE_TTL"
     )
 
     model_config = SettingsConfigDict(
@@ -395,6 +427,11 @@ class ConversationVariableSettings(BaseSettings):
 
     ttl_seconds: int = Field(
         default=259200, validation_alias="CONVERSATION_VARIABLE_STORE_TIME"
+    )
+
+    # 对话历史 Redis key 的过期时间（压测等场景可调短以控制内存）
+    conversation_ttl_seconds: int = Field(
+        default=86400, validation_alias="CONVERSATION_TTL_SECONDS"
     )
 
     model_config = SettingsConfigDict(

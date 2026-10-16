@@ -262,12 +262,50 @@
           <span style="font-weight: 400">{{ 'params' | i18nextEager }}: </span>
           <span style="color: rgb(89, 89, 89)">{{ 'mcpParamLimit' | i18nextEager }}</span>
         </p>
-        <p class="mb-[8px]" *ngIf="mcpModalSelected.org_type === 'SSE' || mcpModalSelected.org_type === 'STREAMABLE_HTTP'">
+        <p class="mb-[8px] flex items-center gap-2" *ngIf="mcpModalSelected.org_type === 'SSE' || mcpModalSelected.org_type === 'STREAMABLE_HTTP'">
           <span style="font-weight: 400">URL:</span>
+          <button nz-button nzType="default" nzSize="small" (click)="showInserter()" (mousedown)="$event.preventDefault()" nz-tooltip nzTooltipTitle="{{ 'insert_env_var_ref' | i18nextEager }}">
+            <img [src]="changeUrl('assets/prompt/insert_variable.svg')" alt="" class="h-4 w-4" />
+          </button>
         </p>
-        <nz-input-password class="mb-[8px]">
-          <input nz-input [disabled]="this.notChangeMode()" [(ngModel)]="mcpModalData.param.value" (ngModelChange)="mcpModalData.param.isVisible = $event" />
-        </nz-input-password>
+        <div class="mb-[8px]" *ngIf="mcpModalSelected.org_type === 'SSE' || mcpModalSelected.org_type === 'STREAMABLE_HTTP'">
+          <meta-param-editor
+            [backgroundColor]="'transparent'"
+            [placeholder]="'mcpUrlPlaceholder' | i18nextEager"
+            (afterInsertVariable)="hideInserter()"
+            (variablesChange)="updateVariables($event)"
+            [initVariables]="initVariables"
+            [promptType]="PromptType.TEXT"
+            [showInserter]="isShowInserter"
+            [variables]="variables"
+            [styleObj]="'min-height:36px;padding:0 11px'"
+            [(ngModel)]="mcpModalData.param.value"
+            (ngModelChange)="mcpModalData.param.isVisible = true; onMcpUrlChange()"
+          ></meta-param-editor>
+        </div>
+        <div class="mb-[12px]" *ngIf="mcpUrlParams.length > 0 && (mcpModalSelected.org_type === 'SSE' || mcpModalSelected.org_type === 'STREAMABLE_HTTP')">
+          <div class="flex items-center gap-2 mb-[4px]">
+            <div style="width: 200px" class="text-label">{{ 'param_name' | i18nextEager }}</div>
+            <div style="width: 200px" class="text-label">{{ 'value_source' | i18nextEager }}<span style="color: #ff4d4f"> *</span></div>
+          </div>
+          <div class="flex items-center gap-2 mb-[4px]" *ngFor="let param of mcpUrlParams; let i = index">
+            <div style="width: 200px">
+              <p class="leading-[28px]">{{ param.name }}</p>
+            </div>
+            <div style="width: 200px">
+              <nz-select
+                style="width: 100%"
+                [name]="'mcpEnvRef' + i"
+                [(ngModel)]="param.env_var_ref"
+                (ngModelChange)="updateConfirmBtnState()"
+                [title]="''"
+                [nzPlaceHolder]="'select_env_var' | i18nextEager"
+              >
+                <nz-option *ngFor="let env of envVarList" [nzValue]="env.name" [nzLabel]="env.name"></nz-option>
+              </nz-select>
+            </div>
+          </div>
+        </div>
         <div *ngIf="mcpModalSelected.org_type !== 'SSE' && mcpModalSelected.org_type !== 'STREAMABLE_HTTP'" style="margin-top: 16px">
           <p *ngFor="let item of mcpModalData.environments; index as i" class="flex mb-[8px]" style="align-items: center">
             <input

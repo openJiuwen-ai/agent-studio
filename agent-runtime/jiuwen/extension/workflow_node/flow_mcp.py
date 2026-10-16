@@ -19,7 +19,9 @@ from builtins import ExceptionGroup
 import copy
 from enum import Enum
 import json
+import re
 
+from agent_runtime.context.request_context import _request_ctx
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException, get_workflow_param
 from jiuwen.extension.wrapper.mcp_server_loader import convert_ir_to_server_config
@@ -107,6 +109,33 @@ def _create_mcp_client(config: McpServerConfig):
         )
 
 
+_ENV_PLACEHOLDER_PATTERN = re.compile(r"\s*\$\{_env\.plugin_url_params\.([^}]+)\}\s*")
+
+
+def _resolve_env_in_url(url: str) -> str:
+    """解析 URL 中的 ``${_env.plugin_url_params.VAR}`` 环境变量占位符。
+
+    从 ``_request_ctx`` 获取当前请求加载的环境变量，替换 URL 中的占位符。
+    无占位符或无环境变量时原样返回，保持向后兼容。
+    """
+    if not url or not _ENV_PLACEHOLDER_PATTERN.search(url):
+        return url
+    env_vars = getattr(_request_ctx.get(), "env_variables", None)
+    if not env_vars:
+        return url
+    params = env_vars.get("plugin_url_params") or {}
+
+    def _replace(match: re.Match) -> str:
+        name = match.group(1)
+        if name in params:
+            value = params[name]
+            return str(value).strip() if value is not None else ""
+        return match.group(0)
+
+    return _ENV_PLACEHOLDER_PATTERN.sub(_replace, url)
+
+
+
 class FlowMcp(WorkflowComponent):
     """MCP 调用组件
 
@@ -153,6 +182,7 @@ class FlowMcp(WorkflowComponent):
             return
 
         config = convert_ir_to_server_config(conf)
+        config.server_path = _resolve_env_in_url(config.server_path)
         config.auth_headers = self.extends_headers(config.auth_headers)
         self._client = _create_mcp_client(config)
 

@@ -8,7 +8,6 @@ import com.openjiuwen.studio.prompt.engineering.dto.CreatePromptResp;
 import com.openjiuwen.studio.prompt.engineering.dto.GetPromptListsQo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptNewListVo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptTemplateNewVo;
-import com.openjiuwen.studio.prompt.engineering.dto.QueryCustomPromptApiActionsQo;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -20,7 +19,6 @@ import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -61,23 +59,6 @@ public interface PromptApiApi {
         @PathVariable("project_id") String projectId,
         @ApiParam(value = "GetPromptListsQo: converted from multi query params") @Valid
         GetPromptListsQo getPromptListsQo);
-
-    @ApiOperation(value = "查询提示词详情", nickname = "queryCustomPromptApiActions",
-        notes = "Get CustomPromptApi Actions", response = PePromptTemplateNewVo.class, tags = {"PromptApi"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "操作成功,返回CustomPromptApi执行动作列表",
-            response = PePromptTemplateNewVo.class)
-    })
-    @RequestMapping(value = "/v2/{project_id}/agent-builder/prompt", produces = {"application/json"},
-        method = RequestMethod.GET)
-    ResponseEntity<PePromptTemplateNewVo> queryCustomPromptApiActions(
-        @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId,
-        @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-        @Parameter(in = ParameterIn.PATH, description = "ID of CustomPromptApi", required = true, schema = @Schema())
-        @PathVariable("prompt_id") String promptId,
-        @ApiParam(value = "QueryCustomPromptApiActionsQo: converted from multi query params") @Valid
-        QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo);
 
     @ApiOperation(value = "保存模板", nickname = "savePromptTemplate", notes = "Save Prompt Template",
         response = CreatePromptResp.class, tags = {"PromptApi"})

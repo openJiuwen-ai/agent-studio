@@ -24,7 +24,6 @@ import com.openjiuwen.studio.prompt.engineering.dto.CreatePromptResp;
 import com.openjiuwen.studio.prompt.engineering.dto.GetPromptListsQo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptNewListVo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptTemplateNewVo;
-import com.openjiuwen.studio.prompt.engineering.dto.QueryCustomPromptApiActionsQo;
 import com.openjiuwen.studio.prompt.engineering.entity.Industry;
 import com.openjiuwen.studio.prompt.engineering.entity.PePromptTemplate;
 import com.openjiuwen.studio.prompt.engineering.mapper.PePromptTemplateMapper;
@@ -341,81 +340,7 @@ class PromptApiServiceImplTest {
     }
 
     /**
-     * 测试 queryCustomPromptApiActions 方法在正常参数下的行为
-     * 验证方法是否能正确返回非空结果
-     */
-    @Test
-    public void test_queryCustomPromptApiActions_normal() {
-        // Given: 准备测试所需的输入参数和预期对象
-        QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo = new QueryCustomPromptApiActionsQo();
-        queryCustomPromptApiActionsQo.setWorkspaceId(WORKSPACE_ID);
-        PePromptTemplate pePromptTemplate = new PePromptTemplate();
-        pePromptTemplate.setCreatedOn(new Date());
-        pePromptTemplate.setUpdatedOn(new Date());
-        pePromptTemplate.setIndustry(new Industry());
-        pePromptTemplate.getIndustry().setId("test-industry");
-        when(pePromptTemplateMapper.queryTemplateIds(PROMPT_ID, WORKSPACE_ID)).thenReturn(pePromptTemplate);
-
-        PePromptTemplateNewVo result = promptApiService.queryCustomPromptApiActions(PROJECT_ID, PROMPT_ID,
-                queryCustomPromptApiActionsQo);
-
-        // Then: 验证方法返回的结果不为 null
-        assertNotNull(result);
-    }
-
-    /**
-     * 测试 queryCustomPromptApiActions 方法在参数缺失时是否抛出运行时异常
-     * 验证方法的异常处理逻辑
-     */
-    @Test
-    public void test_queryCustomPromptApiActions_exception1() {
-        // Given: 准备测试所需的输入参数，其中 PROJECT_ID 为 null
-        String PROJECT_ID = null;
-        QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo = new QueryCustomPromptApiActionsQo();
-
-        assertThrows(RuntimeException.class, () -> {
-            promptApiService.queryCustomPromptApiActions(PROJECT_ID, PROMPT_ID, queryCustomPromptApiActionsQo);
-        });
-    }
-
-    @Test
-    public void test_queryCustomPromptApiActions_exception2() {
-        // Given: 准备测试所需的输入参数，其中 WORKSPACE_ID 为 null
-        String PROMPT_ID = null;
-        QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo = new QueryCustomPromptApiActionsQo();
-
-        assertThrows(RuntimeException.class, () -> {
-            promptApiService.queryCustomPromptApiActions(PROJECT_ID, PROMPT_ID, queryCustomPromptApiActionsQo);
-        });
-    }
-
-    @Test
-    public void test_queryCustomPromptApiActions_exception3() {
-        // Given: 准备测试所需的输入参数，其中 body 为 null
-        QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo = null;
-
-        assertThrows(RuntimeException.class, () -> {
-            promptApiService.queryCustomPromptApiActions(PROJECT_ID, PROMPT_ID, queryCustomPromptApiActionsQo);
-        });
-    }
-
-    @Test
-    public void test_queryCustomPromptApiActions_exception4() {
-        // Given: 准备测试所需的输入参数和预期对象
-        QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo = new QueryCustomPromptApiActionsQo();
-        queryCustomPromptApiActionsQo.setWorkspaceId(WORKSPACE_ID);
-
-        // 模拟 pePromptTemplateMapper.queryTemplateIds 返回 null，触发异常
-        when(pePromptTemplateMapper.queryTemplateIds(PROMPT_ID, WORKSPACE_ID)).thenReturn(null);
-
-        // When & Then: 调用方法并断言抛出 AgentStudioException
-        assertThrows(AgentStudioException.class, () -> {
-            promptApiService.queryCustomPromptApiActions(PROJECT_ID, PROMPT_ID, queryCustomPromptApiActionsQo);
-        });
-    }
-
-    /**
-     * 测试 queryCustomPromptApiActions 方法在正常参数下的行为
+     * 测试 updateCustomPromptApiAction 方法在正常参数下的行为
      * 验证方法是否能正确返回非空结果
      */
     @Test

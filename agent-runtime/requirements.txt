@@ -4,6 +4,7 @@ pydantic==2.13.3
 pydantic-settings==2.14.2
 boto3==1.40.61
 aioboto3==15.5.0
+aiohttp==3.14.3
 httpx==0.28.1
 urllib3==2.7.0
 psycopg2==2.9.12
@@ -16,7 +17,7 @@ spiffworkflow==2.0.1
 pydantic-core==2.46.3
 elasticsearch==8.19.3
 jieba==0.42.1
-openjiuwen==0.1.17
+openjiuwen==0.1.17.post2
 milvus-lite==3.1.1
 agent-sandbox==0.0.30
 opensearch-py==2.8.0
@@ -31,3 +32,4 @@ opentelemetry-exporter-otlp-proto-http==1.42.1
 starlette==1.3.1
 jinja2==3.1.6
 pyahocorasick==2.3.1
+pypinyin==0.50.0

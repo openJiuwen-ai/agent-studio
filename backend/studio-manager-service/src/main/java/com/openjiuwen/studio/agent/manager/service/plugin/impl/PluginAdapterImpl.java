@@ -319,8 +319,8 @@ public class PluginAdapterImpl implements IPlugin {
 
     @Override
     public boolean isNewTool(PluginEntity pluginEntity) {
-        if (pluginEntity == null) {
-            return false; // 或抛出异常，视业务而定
+        if (pluginEntity == null || pluginEntity.getRequestInfo() == null) {
+            return false;
         }
         return pluginEntity.getRequestInfo().contains("basic_info");
     }
@@ -515,7 +515,7 @@ public class PluginAdapterImpl implements IPlugin {
         body.setParameter(processNestedStructure(body.getParameter()));
         log.info("[runTool] start to run, pluginId {}, toolId {} ", pluginId, toolId);
         JSONObject requestBody = JSON.parseObject(body.getParameter());
-        log.info("[runTool] get requestBody {}", requestBody);
+        log.info("[runTool] get requestBody, size={}", requestBody.size());
 
         // 下载OBS文件
         String objectKey = String.format("%s/%s.json", TOOL_TEST_OBS_PATH, toolId);

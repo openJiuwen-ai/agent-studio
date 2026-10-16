@@ -124,7 +124,7 @@ export class MemoryLibSelectorHalfmodalComponent implements OnInit {
   }
 
   createMemoryLib() {
-    this.memoryLibService.createOrEditMemLib(createData => {
+    this.memoryLibService.showSelectCreateType(createData => {
       const { reason, halfModalRef, data, setLoading } = createData;
       if (reason && data) {
         setLoading(true);

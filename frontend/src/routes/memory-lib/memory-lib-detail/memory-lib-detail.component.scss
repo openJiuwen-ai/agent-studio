@@ -1,39 +1,91 @@
-.memory-lib-detail-container {
-  background-color: #f5f7fa;
-  min-height: 100vh;
-
-  .detail-header {
+.memory-lib-detail {
+  .breadcrumb-bar {
+    padding: 12px 10px;
     background-color: #fff;
-    padding: 16px 24px;
-    border-bottom: 1px solid #e8e8e8;
+    flex-shrink: 0;
 
-    .header-icon {
-      width: 24px;
-      height: 24px;
-      margin-right: 8px;
-      vertical-align: middle;
+    nz-breadcrumb {
+      margin-left: 20px;
     }
   }
 
-  .detail-body {
-    padding: 24px;
-
-    .info-card {
-      border-radius: 4px;
-
-      ::ng-deep .ant-descriptions-item-label {
-        color: #808080;
-        font-weight: normal;
-      }
-    }
-  }
-
-  .header-operators {
+  .detail-header-container {
+    width: 100%;
+    height: 64px;
+    padding: 0 20px;
+    box-sizing: border-box;
+    background-color: #fff;
     display: flex;
-    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
   }
-}
 
-.mt-4 {
-  margin-top: 16px;
+  .left-title {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+
+    .title {
+      font-size: 18px;
+      color: #191919;
+      text-align: left;
+      line-height: 28px;
+      font-weight: 600;
+      max-width: 224px;
+    }
+  }
+
+  .divider {
+    background: #f0f0f0;
+    height: 16px;
+    width: 1px;
+  }
+
+  .status-tag {
+    display: flex;
+    align-items: center;
+    margin-left: 6px;
+  }
+
+  .right {
+    display: flex;
+    gap: 0 16px;
+    align-items: center;
+  }
+
+  .basic-font {
+    font-size: 12px;
+    color: #191919;
+    line-height: 18px;
+  }
+
+  .detail-spin {
+    display: block;
+
+    ::ng-deep .ant-spin-container {
+      height: 100%;
+    }
+  }
+
+  .table-style {
+    border-bottom: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .table-border {
+    border-left: 1px solid rgba(240, 240, 240, 100%);
+    border-right: 1px solid rgba(240, 240, 240, 100%);
+  }
+
+  .prompt-cell {
+    font-size: 12px;
+    color: #191919;
+    line-height: 18px;
+    max-height: 90px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 }

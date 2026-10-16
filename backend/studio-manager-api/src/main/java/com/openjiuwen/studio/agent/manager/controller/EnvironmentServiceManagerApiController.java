@@ -5,6 +5,7 @@ package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.manager.dto.Environment;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInfoRequest;
+import com.openjiuwen.studio.agent.manager.dto.ModifyEnvironmentInfoRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentInstances;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariables;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariablesExport;
@@ -95,7 +96,7 @@ public class EnvironmentServiceManagerApiController implements EnvironmentServic
 
     @Override
     public ResponseEntity<Boolean> modifyEnvironmentInfo(String projectId, String environmentId,
-        EnvironmentInfoRequest body) {
+        ModifyEnvironmentInfoRequestBody body) {
         return ResponseModel.success(
             environmentServiceManagerService.modifyEnvironmentInfo(projectId, environmentId, body));
     }

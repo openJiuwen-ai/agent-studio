@@ -41,6 +41,9 @@ public class SchemaConfig {
     @JsonProperty("default")
     private String defaultValue;
 
+    @JsonProperty("env_var_ref")
+    private String envVarRef;
+
     private Map<String, SchemaConfig> properties;
 
     private SchemaConfig items;

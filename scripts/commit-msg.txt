@@ -1,0 +1,17 @@
+fix: MR2380 检视意见修复落地并同步更新单元测试（3 轮自检通过）
+
+生产代码修复：
+- WorkflowManagementService.createWorkflowChannel/modifyWorkflowChannel：version 查空抛 WORKFLOW_VERSION_NOT_FOUND
+- EnvironmentServiceManagerService.queryEnvironmentVariables：findById 改为 findByIdAndProjectId（越权修复）
+- TaskManagementService.deleteTask：删除死分支 if(!isEmpty(id))，直接 deleteByIds
+- TaskManagementService.checkStatus：currentStatus 为 null 改为抛 WORKFLOW_ASYNC_NOT_PENDING
+- AgentManagementService.createAgentChannel 更新分支：补 version 判空（AGENT_VERSION_NOT_EXIST）+ setVersionName
+- StudioError.AGENT_VERSION_NOT_EXIST：INTERNAL_SERVER_ERROR 改为 NOT_FOUND
+- i18n：jiuwen-msg_zh_CN/en_US 补 1058/1058.reason/1058.suggestion
+
+测试同步：
+- studio-manager：EnvironmentServiceManagerServiceTest.testQueryEnvironment/testShowEnvironmentVariables 改断言抛 ENVIRONMENT_NOT_EXIST；McpServiceManagerTest.testQueryServerDetail 改断言抛 MCP_SERVICE_NOT_EXIST
+- studio-manager-service：TaskManagementServiceTest 删除任务查空抛 WORKFLOW_ASYNC_TASK_NOT_FOUND、checkStatus null 抛 WORKFLOW_ASYNC_NOT_PENDING；补充 WorkflowManagementServiceTest/AgentManagementServiceTest 通道版本校验成功/失败/分支用例；EnvironmentServiceManagerServiceTest 越权相关用例 mock 迁移至 findByIdAndProjectId
+- 修复存量问题：AgentManagementServiceTest retrieveAgent NPE（补 shareResourceManagerService mock）、McpServiceManagerTest 非法 mock 真实 bean、EnvironmentServiceManagerServiceTest 越权后失效用例
+
+自检：3 轮（编译→执行→覆盖率/分支→断言有效性→边界/兼容性）全部通过，目标方法行覆盖率 ≥ 80%

@@ -44,7 +44,7 @@ import { NzModalRef } from 'ng-zorro-antd/modal';
   providers: [
     {
       provide: I18NEXT_NAMESPACE,
-      useValue: [I18nNamespace.MEMORY_LIB],
+      useValue: [I18nNamespace.MEMORY_LIB, I18nNamespace.COMMON],
     },
   ],
   templateUrl: './memory-lib-creation-halfmodal.component.html',
@@ -64,6 +64,9 @@ export class MemoryLibCreationHalfmodalComponent implements OnInit, OnDestroy {
   modalTitle = computed(() => (this.libId ? this.i18n.transform('memory.edit.title') : this.i18n.transform('memory.create.title')));
   loading = signal(false);
   defaultIcon = MEMORY_LIB_DEFAULT_ICON;
+
+  memoryBackendType = signal<string | undefined>(undefined);
+  memoryServiceInstanceId = signal<string | undefined>(undefined);
 
   helpConfig = {
     iconTip: this.i18n.transform('memory.create.strategy.triggerTip'),
@@ -120,6 +123,8 @@ export class MemoryLibCreationHalfmodalComponent implements OnInit, OnDestroy {
             conversation_round: res.conversation_round ?? null,
             time_span: res.time_span ?? null,
           });
+          this.memoryBackendType.set(res.memory_backend_type);
+          this.memoryServiceInstanceId.set(res.memory_service_instance_id);
         })
         .finally(() => {
           this.loading.set(false);
@@ -156,17 +161,14 @@ export class MemoryLibCreationHalfmodalComponent implements OnInit, OnDestroy {
     });
   }
 
-  valueErrorValidator(min, max): ValidatorFn {
+  valueErrorValidator(min: number, max: number): ValidatorFn {
     return (control: AbstractControl): ValidationErrors | null => {
       const value = control.value;
-      return !value || value.length < min || value.length < max
-        ? {
-            isStrategyRequired: {
-              value: control.value,
-              errorMsg: 'valueerror',
-            },
-          }
-        : null;
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      const num = Number(value);
+      return Number.isNaN(num) || num < min || num > max ? { range: { min, max, value } } : null;
     };
   }
 

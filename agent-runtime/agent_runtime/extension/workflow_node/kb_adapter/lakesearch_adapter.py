@@ -50,7 +50,6 @@ class LakeSearchAdapter(KBServiceAdapter):
     ) -> List[KBSearchResult]:
 
         top_k = retrieval_params.get("topK", 10)
-        score_threshold = retrieval_params.get("scoreThreshold", 0.0)
         search_mode = retrieval_params.get("searchMode", "doc")
         tags = retrieval_params.get("tags", [])
 
@@ -126,12 +125,6 @@ class LakeSearchAdapter(KBServiceAdapter):
         # 按 score 降序排列，截取 top_k
         all_results.sort(key=lambda r: r.score, reverse=True)
         all_results = all_results[:top_k]
-
-        # 过滤低于阈值的结果
-        if score_threshold > 0:
-            all_results = [
-                r for r in all_results if r.score >= score_threshold
-            ]
 
         return all_results
 

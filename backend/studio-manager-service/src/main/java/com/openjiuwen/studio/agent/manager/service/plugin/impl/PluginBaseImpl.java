@@ -222,6 +222,7 @@ public class PluginBaseImpl implements IPluginBase {
         toolEntity.setType(pluginEntity.getType());
         toolEntity.setIntfType(buildIntfType(pluginEntity.getIntfType(), toolId));
         toolEntity.setMetadata(pluginEntity.getMetadata());
+        toolEntity.setCallMode(pluginEntity.getCallMode());
         toolEntity.setCreator(pluginEntity.getCreator());
         toolEntity.setCreatorId(pluginEntity.getCreatorId());
         toolEntity.setCreatedOn(pluginEntity.getCreatedOn());
@@ -281,7 +282,7 @@ public class PluginBaseImpl implements IPluginBase {
         pluginEntity.setAuthRequired(toolEntity.getAuthRequired());
         pluginEntity.setTraceId(toolEntity.getTraceId());
         pluginEntity.setPublished(toolEntity.getPublished());
-        pluginEntity.setCallMode("api");
+        pluginEntity.setCallMode(toolEntity.getCallMode() == null ? "api" : toolEntity.getCallMode());
         return pluginEntity;
     }
 
@@ -334,6 +335,48 @@ public class PluginBaseImpl implements IPluginBase {
                     .orElse(0)
             );
 
+    }
+
+    /**
+     * 安全解析工具测试状态，兼容历史数据三种格式，解析失败回退 UNKNOWN(2)，不抛异常：
+     * 1. 纯数字："0" / "1" / "2"
+     * 2. 紧凑 JSON 数组：[{"tool_id":"0","test_status":0}]
+     * 3. 带空格 JSON 数组：[{"tool_id":"0", "test_status": 0}]
+     *
+     * @param testStatus test_status 存储值
+     * @param toolId 工具ID，JSON 数组格式时优先取匹配 toolId 的状态
+     * @return 解析后的测试状态码，解析失败或为空时返回 UNKNOWN
+     */
+    private Integer safeParseTestStatus(String testStatus, String toolId) {
+        if (StringUtils.isBlank(testStatus)) {
+            return TestStatus.UNKNOWN.getCode();
+        }
+        String trimmed = testStatus.trim();
+        if (trimmed.startsWith("[")) {
+            try {
+                List<ToolTestStatus> testStatusList = JsonUtils.JSON_MAPPER.readValue(trimmed,
+                    JsonUtils.JSON_MAPPER.getTypeFactory()
+                        .constructCollectionType(List.class, ToolTestStatus.class));
+                return testStatusList.stream()
+                    .filter(target -> target.getToolId() != null && target.getToolId().equals(toolId))
+                    .findFirst()
+                    .map(ToolTestStatus::getTestStatus)
+                    .orElseGet(() -> testStatusList.stream()
+                        .filter(target -> "0".equals(target.getToolId()))
+                        .findFirst()
+                        .map(ToolTestStatus::getTestStatus)
+                        .orElse(TestStatus.UNKNOWN.getCode()));
+            } catch (JsonProcessingException e) {
+                log.warn("Failed to parse test status JSON, fallback to UNKNOWN. testStatus={}", trimmed, e);
+                return TestStatus.UNKNOWN.getCode();
+            }
+        }
+        try {
+            return Integer.parseInt(trimmed);
+        } catch (NumberFormatException e) {
+            log.warn("Failed to parse test status number, fallback to UNKNOWN. testStatus={}", testStatus);
+            return TestStatus.UNKNOWN.getCode();
+        }
     }
 
     private String buildOutputSchema(String outputSchema, String toolId) {
@@ -568,7 +611,7 @@ public class PluginBaseImpl implements IPluginBase {
                     throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
                 }
             }
-        } else {
+        } else if (!"custom".equals(pluginEntity.getCallMode())) {
             // 未知格式
             log.error("request info is null please check plugin {}", pluginEntity.getPluginId());
             throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
@@ -650,7 +693,7 @@ public class PluginBaseImpl implements IPluginBase {
             try {
                 result = fillHeaders(inputSchema, headers);
             } catch (IOException e) {
-                log.error("parse header failed! {}", headers);
+                log.error("parse header failed", e);
             }
         }
         ToolInputSchema toolInputSchema = ToolInputSchema.builder().toolId("0").inputSchema(result).build();
@@ -664,7 +707,7 @@ public class PluginBaseImpl implements IPluginBase {
             try {
                 result = fillHeaders(inputSchema, headers);
             } catch (IOException e) {
-                log.error("parse header failed! {}", headers);
+                log.error("parse header failed", e);
             }
         }
         ToolInputSchema toolInputSchema = ToolInputSchema.builder().toolId("0").inputSchema(result).build();
@@ -1174,9 +1217,7 @@ public class PluginBaseImpl implements IPluginBase {
         // 构建TestStatus字段
         ToolTestStatus toolTestStatus = ToolTestStatus.builder()
                 .toolId(toolId)
-                .testStatus(pluginEntity.getTestStatus() != null
-                        ? Integer.parseInt(pluginEntity.getTestStatus())
-                        : TestStatus.UNKNOWN.getCode())
+                .testStatus(safeParseTestStatus(pluginEntity.getTestStatus(), toolId))
                 .build();
         List<ToolTestStatus> toolTestStatusList = new ArrayList<>();
         toolTestStatusList.add(toolTestStatus);
@@ -1349,10 +1390,13 @@ public class PluginBaseImpl implements IPluginBase {
     private BasicInfo buildBasicInfoOld(PluginEntity pluginEntity, ToolInfo toolInfo, String toolId) {
         // 构建requestInfo字段，包括BasicInfo和tool_info
         UrlInfo urlInfo = null;
-        if (toolInfo.getUrl().contains("{")) {
-            urlInfo = parseVariableUrl(toolInfo.getUrl());
+        String url = toolInfo.getUrl();
+        if (StringUtils.isBlank(url)) {
+            urlInfo = new UrlInfo();
+        } else if (url.contains("{")) {
+            urlInfo = parseVariableUrl(url);
         } else {
-            urlInfo = parseUrl(toolInfo.getUrl());
+            urlInfo = parseUrl(url);
         }
         BasicInfo basicInfo = BasicInfo.builder()
                 .host(urlInfo.getHost())

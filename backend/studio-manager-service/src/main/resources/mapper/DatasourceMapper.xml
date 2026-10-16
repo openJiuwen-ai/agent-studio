@@ -86,7 +86,7 @@
         WHERE project_id = #{projectId,jdbcType=VARCHAR}
         AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
         <if test="name != null and name != ''">
-            AND name LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%')
+            AND name LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%') ESCAPE '/'
         </if>
         <if test="type != null and type != ''">
             AND type = #{type,jdbcType=VARCHAR}
@@ -104,7 +104,7 @@
         WHERE project_id = #{projectId,jdbcType=VARCHAR}
         AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
         <if test="name != null and name != ''">
-            AND name LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%')
+            AND name LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%') ESCAPE '/'
         </if>
         <if test="type != null and type != ''">
             AND type = #{type,jdbcType=VARCHAR}

@@ -205,6 +205,10 @@ public class WorkflowUtils {
         if (urlString == null || urlString.trim().isEmpty()) {
             return urlString;
         }
+        // URL 含环境变量占位符 ${_env.plugin_url_params.VAR} 时跳过 URI 解析，真实地址由运行期解析
+        if (urlString.contains("${_env.")) {
+            return urlString;
+        }
         try {
             URI uri = new URI(urlString);
             // 要移除查询参数，只需在构建新URI时将 query 参数设置为 null
@@ -229,6 +233,10 @@ public class WorkflowUtils {
     public static Map<String, String> extractQueryParamsFromUrl(String urlString) {
         // 健壮性检查：如果 URL 是 null 或空白，直接返回空 Map
         if (urlString == null || urlString.trim().isEmpty()) {
+            return Collections.emptyMap();
+        }
+        // URL 含环境变量占位符时跳过 URI 解析，真实地址由运行期解析
+        if (urlString.contains("${_env.")) {
             return Collections.emptyMap();
         }
         try {

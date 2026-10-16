@@ -1,0 +1,75 @@
+<meta-acc-block class="block" [title]="'auth' | i18nextEager">
+  <ng-template #content>
+    <div class="mb-2 mt-4">
+      <div class="flex items-center gap-[4px] text-sm">
+        <span>{{ 'request_auth' | i18nextEager }}</span>
+        <span nz-icon nzType="question-circle" nzTheme="outline"
+          nz-tooltip [nzTooltipTitle]="'request_auth_tip' | i18nextEager"
+          style="font-size: 14px; color: #808080; cursor: pointer;"></span>
+      </div>
+    </div>
+    <nz-radio-group [(ngModel)]="auth" (ngModelChange)="changeAuth($event)">
+      <label *ngFor="let m of authMethods" nz-radio [nzValue]="m.value">{{ m.label }}</label>
+    </nz-radio-group>
+
+    <ng-container *ngIf="auth === 'api'">
+      <div class="mt-3">
+        <div class="mb-2 text-sm">{{ 'afferent_way' | i18nextEager }}</div>
+        <nz-radio-group [(ngModel)]="configs.auth_info.domain" (ngModelChange)="onValueChange()">
+          <label *ngFor="let d of authDomains" nz-radio [nzValue]="d.value">{{ d.label }}</label>
+        </nz-radio-group>
+      </div>
+
+      <div class="mt-3 flex items-center gap-2 w-[calc(100%-16px)]">
+        <div class="w-[48%] text-sm text-label">{{ 'param_name' | i18nextEager }}</div>
+        <div class="w-[48%] text-sm text-label">{{ 'param_value' | i18nextEager }}</div>
+      </div>
+      <form #authkeyForm="ngForm">
+        <div *ngFor="let param of apiKeyAuthArgs; index as i" class="mt-2 flex gap-2">
+          <div class="w-[48%]">
+            <input nz-input
+              [name]="'authkeyFormName' + i"
+              [maxlength]="100"
+              [(ngModel)]="param.target_name"
+              (ngModelChange)="onParamsChange()"
+              [placeholder]="'input_placeholder' | i18nextEager"
+              (blur)="onInputSave()"
+              [valueValidityValidator]="getKeyNames(i)"
+              [class.input-error]="authkeyForm?.controls['authkeyFormName' + i]?.invalid && (authkeyForm?.controls['authkeyFormName' + i]?.dirty || authkeyForm?.controls['authkeyFormName' + i]?.touched)"
+            />
+            <div *ngIf="authkeyForm?.controls['authkeyFormName' + i]?.invalid && (authkeyForm?.controls['authkeyFormName' + i]?.dirty || authkeyForm?.controls['authkeyFormName' + i]?.touched)" class="error-tip">
+              {{authkeyForm?.controls['authkeyFormName' + i]?.errors?.serviceName?.tiErrorMessage}}
+            </div>
+          </div>
+          <div class="w-[48%]">
+            <input nz-input
+              type="password"
+              [name]="'authkeyFormVal' + i"
+              [maxlength]="20000"
+              [(ngModel)]="param.auth_key"
+              (ngModelChange)="onParamsChange()"
+              [placeholder]="'input_placeholder' | i18nextEager"
+              (blur)="onInputSave()"
+              noCn
+              [class.input-error]="authkeyForm?.controls['authkeyFormVal' + i]?.invalid && (authkeyForm?.controls['authkeyFormVal' + i]?.dirty || authkeyForm?.controls['authkeyFormVal' + i]?.touched)"
+            />
+            <div *ngIf="authkeyForm?.controls['authkeyFormVal' + i]?.invalid && (authkeyForm?.controls['authkeyFormVal' + i]?.dirty || authkeyForm?.controls['authkeyFormVal' + i]?.touched)" class="error-tip">
+              {{authkeyForm?.controls['authkeyFormVal' + i]?.errors?.serviceName?.tiErrorMessage}}
+            </div>
+          </div>
+          <span nz-icon nzType="delete" nzTheme="outline"
+            *ngIf="i > 0"
+            style="font-size: 16px; cursor: pointer; padding-top: 6px;"
+            (click)="deleteArgs(i)"></span>
+          <div *ngIf="i === 0" class="h-[16px] w-[16px]"></div>
+        </div>
+      </form>
+
+      <button nz-btn nzType="link" class="mt-2"
+        [disabled]="apiKeyAuthArgs?.length === apiAuthArgsLimit"
+        (click)="addArgs()">
+        + {{ 'add_params' | i18nextEager }}
+      </button>
+    </ng-container>
+  </ng-template>
+</meta-acc-block>

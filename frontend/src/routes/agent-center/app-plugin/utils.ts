@@ -171,6 +171,7 @@ export const schema2View = (
       validate_rule,
       validate_type,
       validated,
+      env_var_ref: (property as any).env_var_ref,
     };
 
     if (isArraySchema(property)) {
@@ -241,6 +242,10 @@ export const view2Schema = (view: IRequestArgsView[]): IReqSchema => {
       type,
       description,
     };
+
+    if (item.env_var_ref) {
+      (property as any).env_var_ref = item.env_var_ref;
+    }
 
     if (property?.default === '') {
       delete property.default;
@@ -492,17 +497,27 @@ export const reqSchema2Field = (schema: IReqSchema): IWorkflowField[] => {
       }
     }
 
+    const envVarRef = (property as any).env_var_ref;
+
     const field: IWorkflowField = {
       name: key,
       required: schema.required?.includes(key),
       description,
       type: type as IWorkflowFieldType,
-      value: {
+      value: envVarRef ? {
+        type: 'ref',
+        content: {
+          source: 'environment',
+          ref_var_name: envVarRef,
+          ref_node_id: 'envParams',
+        },
+        hint: '',
+      } : {
         type: 'literal',
         content,
         hint: '',
       },
-      source: 'user',
+      source: envVarRef ? 'environment' : 'user',
     };
 
     if (isArraySchema(property)) {

@@ -77,9 +77,6 @@ public class SyncAgentWorkflowObsTask implements CommandLineRunner {
     private ReleaseChannelMapper releaseChannelMapper;
 
     @Autowired
-    private McpUpdateService mcpUpdateService;
-
-    @Autowired
     private UpdatePromptService updatePromptService;
 
     @Value("${isHcs:false}")
@@ -138,10 +135,6 @@ public class SyncAgentWorkflowObsTask implements CommandLineRunner {
                     taskExecutor.execute(() -> {
                         log.info("Start sync platform agent workflow obs to obs.");
                         uploadPreObsFiles(OBS_PATH);
-                    });
-                    taskExecutor.execute(() -> {
-                        log.info("Start sync update platform mcp");
-                        mcpUpdateService.updateMcp();
                     });
                     taskExecutor.execute(() -> {
                         log.info("Start sync update platform prompt");

@@ -1,6 +1,7 @@
 # !/usr/bin/env python
 # coding: utf-8
 # Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+import re
 from typing import Any
 
 from jiuwen.common.llm_service.base import BaseChatModel
@@ -99,7 +100,7 @@ async def _semantic_validate(
         )
         message = [{"role": "user", "content": prompt}]
         response = await base_chat_model.ainvoke(message)
-        if "CORRECT" in response.content and "WRONG" not in response.content:
+        if re.search(r'\bCORRECT\b', response.content) and not re.search(r'\bWRONG\b', response.content):
             logger.debug(
                 f"semantic_validate result: old_memory:{old_memory}, obtained_memory:{obtained_memory['mem']},"
                 f" result: CORRECT"

@@ -126,16 +126,21 @@
               <div class="flex flex-col gap-[12px]  w-full">
                 <div class="answer-cards" *ngIf="item.thinkValue">
                   <div class="flex justify-between gap-[48px]">
-                    <div class="flex gap-[12px]">
+                    <div class="flex items-center gap-[12px]">
                       <ng-container *ngIf="item.thinking; else completed">
-                        <img alt=""
-                          [src]="
-                            changeUrl(
-                              'assets/agent-center/icons/deep-loading-icon.svg'
-                            )
-                          "
-                        />
-                        <span>{{ 'thinking_deeply' | i18nextEager }}</span>
+                        <ng-container *ngIf="item.terminate === true">
+                          <span>{{ 'stopped_thinking' | i18nextEager }}</span>
+                        </ng-container>
+                        <ng-container *ngIf="item.terminate !== true">
+                          <img alt=""
+                            [src]="
+                              changeUrl(
+                                'assets/agent-center/icons/deep-loading-icon.svg'
+                              )
+                            "
+                          />
+                          <span>{{ 'thinking_deeply' | i18nextEager }}</span>
+                        </ng-container>
                       </ng-container>
                     </div>
 
@@ -231,17 +236,14 @@
                           class="bottom-container"
                           *ngIf="
                             last &&
-                            (item.latency || !isRequesting) &&
+                            (item.latency || item !== chatLoop[chatLoop.length - 1] || !isRequesting) &&
                             !(answer.isError && !answer.loading)
                           "
                         >
                           <div class="left-area">
-                            <ng-container *ngIf="item.latency">
-                              {{ 'run_time' | i18nextEager }}
-                              <span style="color: #191919">{{ item.latency }}</span>
-                            </ng-container>
+                            <span *ngIf="item.terminate" class="text-[#808080]">{{ 'stopped_generating' | i18nextEager }}</span>
                             <div
-                              *ngIf="!isRequesting && !answer.loading && answer.text?.trim()"
+                              *ngIf="(item !== chatLoop[chatLoop.length - 1] || !isRequesting) && !answer.loading && !answer.isShowInputParams && answer.text?.trim()"
                               class="chat-footer-icon"
                               nz-tooltip
                               [nzTooltipTitle]="'copy' | i18nextEager"

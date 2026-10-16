@@ -640,6 +640,7 @@ export interface ISqlNode extends INodeBase {
     name: string;
     sql: string;
     type?: string;
+    output_format?: 'json' | 'table';
     descriptionText?: string;
     isDefaultName?: boolean;
   };
@@ -658,6 +659,7 @@ export interface IDataQueryNode extends INodeBase {
     select_query?: any;
     limit?: Number;
     orders?: Array<any>;
+    output_format?: 'json' | 'table';
     descriptionText?: string;
     isDefaultName?: boolean;
   };

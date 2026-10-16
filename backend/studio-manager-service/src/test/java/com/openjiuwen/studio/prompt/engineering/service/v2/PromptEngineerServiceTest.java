@@ -697,21 +697,6 @@ class PromptEngineerServiceTest {
     }
 
     /**
-     * 测试 startPromptTask：当前返回null，验证返回值
-     */
-    @Test
-    void test_startPromptTask() {
-        String projectId = "proj1";
-        String taskId = "task1";
-        String workspaceId = "ws1";
-        // 执行启动任务（当前实现返回null）
-        PromptBaseInfo result = promptEngineerService.startPromptTask(projectId, taskId, workspaceId);
-
-        // 验证返回值为null（若后续实现逻辑，需更新测试）
-        assertNull(result);
-    }
-
-    /**
      * 测试正常流程：更新存在的草稿任务
      */
     @Test

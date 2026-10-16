@@ -240,12 +240,26 @@ public class ControllerManagementServiceTest extends BaseTest {
         controllerVO.setName("agentName");
         controllerVO.setDescription("Intent test");
         controllerVO.setProjectId("project_mock");
+        controllerVO.setWorkspaceId("workspace_mock");
         controllerVO.setUpdateTime(String.valueOf(System.currentTimeMillis()));
 
         ReleaseVersion releaseVersion = new ReleaseVersion();
         releaseVersion.setDslPath("controller_intent_dsl_path");
         when(releaseVersionMapper.selectByAppIdAndVersionId("afbd1b1b-74de-43d0-a8d3-147256740906",
             "1754273140406")).thenReturn(releaseVersion);
+
+        // 业务子工作流（node_4ad0c897，type=Normal）版本存在性校验的 mock：
+        // 版本表命中 + 工作流属于本空间（project_id + workspace_id 双维度，同保存链路），
+        // 即可通过可见性判定
+        ReleaseVersion businessReleaseVersion = new ReleaseVersion();
+        when(releaseVersionMapper.selectByAppIdAndVersionId("83a951bc-27d7-4ccc-9131-268e93267365",
+            "1753499008637")).thenReturn(businessReleaseVersion);
+        mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("workspace_mock");
+        mockedStatic.when(RequestContextUtils::getRequestProjectId).thenReturn("project_mock");
+        WorkflowEntity businessWorkflow = new WorkflowEntity();
+        businessWorkflow.setWorkspaceId("workspace_mock");
+        businessWorkflow.setProjectId("project_mock");
+        when(workflowMapper.getWorkflowById("83a951bc-27d7-4ccc-9131-268e93267365")).thenReturn(businessWorkflow);
 
         String intentWorkflowDsl = TestUtil.getStringFromFile("classpath:flow_dsl/intent_for_controller_dsl.json");
         when(obsService.downloadObsFile("controller_intent_dsl_path")).thenReturn(intentWorkflowDsl);

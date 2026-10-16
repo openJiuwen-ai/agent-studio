@@ -17,5 +17,10 @@ public enum TriggerType {
     /**
      * 事件触发器
      */
-    EVENT
+    EVENT,
+
+    /**
+     * 轮询触发器
+     */
+    POLLING,
 }

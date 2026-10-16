@@ -204,6 +204,12 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
 
   public toolsInputParams = null;
 
+  /** 创建插件时绑定环境变量的属性名集合（来自插件 input_schema 的 env_var_ref） */
+  public envVarRefNames: Set<string> = new Set();
+
+  /** 渲染用入参（过滤掉创建时已绑定环境变量的入参），与 toolsInputParams 共享同一对象引用 */
+  public displayToolsInputParams: any[] = [];
+
   constructor(
     private i18n: I18NextEagerPipe,
     protected override appFlowServ: AppFlowService,
@@ -312,6 +318,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     if (this.isInit) {
       this.setInputSchema().then(() => {
         this.inputSchema = JSON.parse(this.inputSchema);
+        this.buildEnvVarRefNames();
         this.inputParams = NodeUtils.initInputs(this.nodeInfo.inputs, this.nameRefOptions);
         setTimeout(() => {
           this.inputParams.forEach((param, index) => {
@@ -335,6 +342,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
             }
           });
           this.toolsInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location !== 'Headers')), 0);
+          this.displayToolsInputParams = this.toolsInputParams.filter(item => !this.isHiddenInputParam(item));
         });
         this.inputParams.forEach(v => {
           v.options = [
@@ -353,8 +361,39 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
         ];
       });
       this.toolsInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location !== 'Headers')), 0);
+      this.displayToolsInputParams = this.toolsInputParams.filter(item => !this.isHiddenInputParam(item));
       this.isInit = false;
     }
+  }
+
+  /**
+   * 收集插件创建时绑定环境变量的属性名（工具入参与 Path 参数），
+   * 用于在节点配置面板隐藏这些入参。
+   */
+  private buildEnvVarRefNames(): void {
+    const set = new Set<string>();
+    NodeUtils.collectEnvVarRefNames(this.inputSchema, set);
+    const rawSchemas: any[] = [
+      this.pluginInfo?.input_schema,
+      this.pluginInfo?.request_info?.basic_info?.input_schema,
+      this.pluginInfo?.request_info?.input_schema,
+    ];
+    rawSchemas.forEach(raw => {
+      if (!raw) {
+        return;
+      }
+      try {
+        NodeUtils.collectEnvVarRefNames(typeof raw === 'string' ? JSON.parse(raw) : raw, set);
+      } catch (e) {
+        // 忽略非法 schema，按未绑定处理
+      }
+    });
+    this.envVarRefNames = set;
+  }
+
+  /** 是否为创建时已绑定环境变量、需要在面板隐藏的入参 */
+  public isHiddenInputParam(param: IWorkflowField): boolean {
+    return NodeUtils.isEnvVarRefField(param) && this.envVarRefNames.has(param.name ?? '');
   }
 
   private setQuotaConfig(plugin) {

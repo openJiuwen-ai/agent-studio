@@ -16,7 +16,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖（临时安装编译工具链，编译完成后卸载）
@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev
     && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
+
+# 变更频率极低，放在应用代码之前以充分利用 Docker 缓存
+COPY extensions/ $SERVICE_HOME/app/extensions/
 
 # 再复制应用代码（变更频率高，放在依赖安装之后）
 # 注：agent_builder 已从 studio-runtime 镜像剥离，独立构建为 studio-builder 镜像
@@ -68,7 +71,7 @@ USER root
 RUN chmod 700 /opt/cloud/logs \
     && echo service >> /etc/cron.allow \
     && chmod u+s /usr/sbin/cron \
-    && touch /var/run/crond.pid && chmod 760 /var/run/crond.pid \
+    && touch /var/run/crond.pid && chown service:service /var/run/crond.pid && chmod 760 /var/run/crond.pid \
     && mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi \
     && chown -R service:service /var/lib/nginx \
     && mkdir -p /var/log/nginx \
@@ -76,6 +79,6 @@ RUN chmod 700 /opt/cloud/logs \
     && touch /run/nginx.pid \
     && chown service:service /run/nginx.pid
 
-USER service
+USER 1000:1000
 
 CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]

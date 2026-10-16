@@ -1,82 +1,54 @@
-.memory-lib-creation {
-  padding: 16px 0;
-
-  .memory-lib-creation-content {
+.memory-lib-creation-content {
+  .section-header {
     display: flex;
-    flex-direction: column;
-    gap: 32px;
+    align-items: center;
   }
 
-  .creation-section {
-    .section-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+  .link-tip-class {
+    font-size: 14px;
+    color: #808080;
+    cursor: help;
+    display: inline-flex;
+    align-items: center;
+  }
 
-      span[nz-icon] {
-        font-size: 14px;
-        color: #8c8c8c;
-        cursor: help;
-      }
-    }
-
-    .section-description {
-      color: #8c8c8c;
-      font-size: 12px;
-      margin-top: -12px;
-      margin-bottom: 16px;
-    }
-
-    .extraction-frequency-row {
-      display: flex;
-      gap: 24px;
-
-      .extraction-frequency-item {
-        flex: 1;
-
-        .input-with-unit {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-
-          nz-input-number {
-            width: 120px;
-          }
-
-          .input-unit {
-            color: #595959;
-            font-size: 14px;
-            white-space: nowrap;
-          }
-        }
-      }
-    }
+  .section-description {
+    color: #808080;
+    font-size: 12px;
+    line-height: 18px;
   }
 
   .tip-text {
     color: #808080;
     font-size: 12px;
   }
-}
 
-.nz-modal-custom-header {
-  font-size: 16px;
-  font-weight: 600;
-}
+  .extraction-frequency-row {
+    display: flex;
+    gap: 24px;
 
-.nz-modal-custom-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 24px;
-}
+    .extraction-frequency-item {
+      flex: 1;
 
-.error-message-container {
-  color: #ff4d4f;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
+      .input-with-unit {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        nz-input-number {
+          width: 120px;
+        }
+
+        .input-unit {
+          color: #595959;
+          font-size: 14px;
+          white-space: nowrap;
+        }
+      }
+    }
+  }
+
+  ::ng-deep .ant-form-item {
+    margin-bottom: 16px;
+  }
 }

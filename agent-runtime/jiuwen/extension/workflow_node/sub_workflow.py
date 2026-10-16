@@ -58,8 +58,6 @@ from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.workflow import Workflow
 from pydantic import BaseModel, Field, ValidationError
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 USER_FIELDS = "userFields"
 SYSTEM_FIELDS = "systemFields"
 PRE_DEFINE_FIELDS = "preDefineFields"
@@ -296,9 +294,7 @@ class SubWorkflow(WorkflowComponent):
         except ValidationError as e:
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.CONFIG_VALIDATION_ERROR,
-                error_msg=format_pydantic_validation_error_message(e)
-                if LOG_VERBOSE_MODE
-                else str(type(e).__name__),
+                error_msg=str(type(e).__name__),
             ) from e
 
     def _get_timeout(self, session: Session) -> int:
@@ -1059,7 +1055,7 @@ class SubWorkflow(WorkflowComponent):
             )
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.EXECUTION_ERROR,
-                error_msg=str(e) if LOG_VERBOSE_MODE else str(type(e).__name__),
+                error_msg=str(type(e).__name__),
                 cause=e,
             ) from e
         finally:
@@ -1289,7 +1285,7 @@ class SubWorkflow(WorkflowComponent):
             )
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.STREAM_ERROR,
-                error_msg=str(e) if LOG_VERBOSE_MODE else str(type(e).__name__),
+                error_msg=str(type(e).__name__),
                 cause=e,
             ) from e
         finally:
@@ -1343,7 +1339,7 @@ class SubWorkflow(WorkflowComponent):
                 safe_msg = sanitize_message(raw_msg)
                 raise build_sub_workflow_error(
                     SubWorkflowStatusCode.STREAM_ERROR,
-                    error_msg=raw_msg if LOG_VERBOSE_MODE else safe_msg,
+                    error_msg=safe_msg,
                 )
 
             if chunk_type == "workflow_exception":
@@ -1564,6 +1560,9 @@ from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
     apply_loop_state_cleanup_patch,
 )
+from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
+    apply_global_memory_ref_resolution_patch,
+)
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
 )
@@ -1571,3 +1570,4 @@ from jiuwen.extension.patches.workflow_sub_stream_patch import (
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
+apply_global_memory_ref_resolution_patch()

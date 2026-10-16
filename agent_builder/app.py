@@ -78,6 +78,9 @@ def after_request(response):
     response.headers["Content-Security-Policy"] = csp
     # 防止跨站脚本攻击（XSS）
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    # COM-05: 回写本次 X-Request-Id（mounted 形态外层 FastAPI 会再写相同值）
+    from agent_builder.adapter.request_context_bridge import get_request_id
+    response.headers["X-Request-Id"] = get_request_id()
     return response
 
 

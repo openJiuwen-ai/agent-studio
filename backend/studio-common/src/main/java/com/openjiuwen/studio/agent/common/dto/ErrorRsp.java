@@ -44,6 +44,10 @@ public class ErrorRsp {
     @Size()
     private List<ErrorDetail> details = null;
 
+    @JsonProperty("request_id")
+    @Schema(description = "请求追踪ID", example = "a1b2c3d4")
+    private String requestId = null;
+
     public String getErrorCode() {
         return errorCode;
     }
@@ -89,6 +93,15 @@ public class ErrorRsp {
         return this;
     }
 
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public ErrorRsp setRequestId(String requestId) {
+        this.requestId = requestId;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -99,6 +112,7 @@ public class ErrorRsp {
         sb.append("    errorReason: ").append(toIndentedString(errorReason)).append("\n");
         sb.append("    errorSuggestion: ").append(toIndentedString(errorSuggestion)).append("\n");
         sb.append("    details: ").append(toIndentedString(details)).append("\n");
+        sb.append("    requestId: ").append(toIndentedString(requestId)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -114,12 +128,13 @@ public class ErrorRsp {
         ErrorRsp errorRsp = (ErrorRsp) o;
         return Objects.equals(this.errorCode, errorRsp.errorCode) && Objects.equals(this.errorMsg, errorRsp.errorMsg)
             && Objects.equals(this.errorReason, errorRsp.errorReason) && Objects.equals(this.errorSuggestion,
-            errorRsp.errorSuggestion) && Objects.equals(this.details, errorRsp.details);
+            errorRsp.errorSuggestion) && Objects.equals(this.details, errorRsp.details)
+            && Objects.equals(this.requestId, errorRsp.requestId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(errorCode, errorMsg, errorReason, errorSuggestion, details);
+        return Objects.hash(errorCode, errorMsg, errorReason, errorSuggestion, details, requestId);
     }
 
     /**

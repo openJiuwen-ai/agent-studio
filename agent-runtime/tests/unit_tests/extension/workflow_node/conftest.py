@@ -10,6 +10,8 @@ sys.path，agent_runtime.common 才能正常 init。
 import os
 import sys
 
+import openjiuwen.core.workflow  # noqa: F401
+
 _REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
 )

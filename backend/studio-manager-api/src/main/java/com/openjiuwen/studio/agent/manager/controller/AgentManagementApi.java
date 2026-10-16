@@ -14,6 +14,8 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsRequestBody;
+import com.openjiuwen.studio.agent.manager.dto.BatchDeleteVersionsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -28,6 +30,7 @@ import com.openjiuwen.studio.agent.manager.dto.InlineResponse404;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentApplicationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentChannelsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentLastVersionsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionReferencesQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentVersionsV1Qo;
 import com.openjiuwen.studio.agent.manager.dto.ListAgentsQo;
@@ -36,6 +39,8 @@ import com.openjiuwen.studio.agent.manager.dto.ModifyChannelReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionChannelListRsp;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
+import com.openjiuwen.studio.agent.manager.dto.VersionReferenceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -108,6 +113,29 @@ import java.util.Map;
         @PathVariable("agent_id") String agentId,
         @NotNull @ApiParam(value = "智能添加资源请求体。", required = true) @Valid @RequestBody
         AutoAddStudioResourceRequestBody body);
+
+    @ApiOperation(value = "批量删除智能体版本", nickname = "batchDeleteAgentVersions", notes = "批量删除智能体版本。",
+        response = BatchDeleteVersionsResponseBody.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "批量删除智能体版本响应。", response = BatchDeleteVersionsResponseBody.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/versions/batch-delete",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<BatchDeleteVersionsResponseBody> batchDeleteAgentVersions(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
+        @PathVariable("agent_id") String agentId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "批量删除智能体版本请求。", required = true) @Valid @RequestBody
+        BatchDeleteVersionsRequestBody body);
 
     @ApiOperation(value = "复制一个智能体", nickname = "copyAgent", notes = "复制一个智能体。",
         response = AgentInfo.class, tags = {"AgentManagement"})
@@ -462,7 +490,10 @@ import java.util.Map;
         GetAgentVersionQo getAgentVersionQo);
 
     @ApiOperation(value = "获取指定角色的权限列表", nickname = "getPermissionsByRole",
-        notes = "根据角色名称返回该角色对应的权限列表。", response = List.class, responseContainer = "Map",
+        notes = "根据角色名称返回该角色对应的权限列表。响应 Map 的 key 为角色名(如 DEVELOPER)，"
+            + "另有特殊 key: creatorCheckPermissions(需创建人校验的 METHOD#URI 列表)、"
+            + "currentUserId(当前用户 userId)、currentUserName(当前用户 userName)。",
+        response = List.class, responseContainer = "Map",
         tags = {"AgentManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "成功获取权限列表。", response = List.class, responseContainer = "Map"),
@@ -565,6 +596,26 @@ import java.util.Map;
         @PathVariable("project_id") String projectId,
         @ApiParam(value = "ListAgentLastVersionsQo: converted from multi query params") @Valid
         ListAgentLastVersionsQo listAgentLastVersionsQo);
+
+    @ApiOperation(value = "查询智能体各版本引用数量", nickname = "listAgentVersionReferences",
+        notes = "查询智能体各版本引用数量。", response = VersionReferenceListRsp.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "版本引用数量列表。", response = VersionReferenceListRsp.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/versions/references",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<VersionReferenceListRsp> listAgentVersionReferences(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
+        @PathVariable("agent_id") String agentId,
+        @ApiParam(value = "ListAgentVersionReferencesQo: converted from multi query params") @Valid
+        ListAgentVersionReferencesQo listAgentVersionReferencesQo);
 
     @ApiOperation(value = "查询智能体版本列表", nickname = "listAgentVersions", notes = "查询智能体版本列表。",
         response = VersionListRsp.class, tags = {"AgentManagement"})
@@ -716,6 +767,27 @@ import java.util.Map;
     @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}", produces = {"application/json"},
         method = RequestMethod.GET)
     ResponseEntity<AgentInfo> retrieveAgent(
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())
+        @PathVariable("agent_id") String agentId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema()) @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId);
+
+    @ApiOperation(value = "校验智能体", nickname = "validateAgent",
+        notes = "智能体试运行前预校验。多智能体校验下挂子工作流引用的版本是否存在。",
+        response = WorkflowValidationVO.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "校验结果。", response = WorkflowValidationVO.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/validate",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<WorkflowValidationVO> validateAgent(
         @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "资源ID。", required = true, schema = @Schema())

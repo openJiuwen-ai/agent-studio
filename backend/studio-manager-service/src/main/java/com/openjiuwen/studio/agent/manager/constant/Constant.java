@@ -358,17 +358,6 @@ public interface Constant {
     String AGENT_ERROR_CONTENT = "Agent运行失败，错误码：%s，错误信息：%s，请参考产品文档解决或联系系统管理员。";
 
     /**
-     * request-id
-     */
-    String REQUEST_ID = "request-id";
-
-    String X_REQUEST_ID = "X-Request-Id";
-
-    String TASK_ID = "task-id";
-
-    String X_TASK_ID = "X-Execution-Id";
-
-    /**
      * 字符串：file
      */
     String FILE = "file";
@@ -651,4 +640,13 @@ public interface Constant {
          */
         int KNOWLEDGE_MAX_PAGE_SIZE = 100;
     }
+
+    /**
+     * request-id（0922 insight 归并用；sync_01 P4.2 删除，E1 保留 0922 insight 归并需补回）
+     */
+    String REQUEST_ID = "request-id";
+
+    String X_REQUEST_ID = "X-Request-Id";
+
+    String TASK_ID = "task-id";
 }

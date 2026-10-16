@@ -232,6 +232,27 @@ class IamServiceUtilsTest {
     }
 
     @Test
+    void testQueryDomainToken_NullDomainName_shouldNotThrow() throws Exception {
+        Response response = new Response.Builder()
+            .request(new Request.Builder().url("https://iam.test.com/v3/auth/tokens").build())
+            .protocol(Protocol.HTTP_1_1)
+            .code(201)
+            .message("Created")
+            .header("X-Subject-Token", "domain-token-123")
+            .body(ResponseBody.create("{}", okhttp3.MediaType.parse("application/json")))
+            .build();
+
+        when(okHttpClientUtils.getHttpClient()).thenReturn(okHttpClient);
+        when(okHttpClient.newCall(any())).thenReturn(call);
+        when(call.execute()).thenReturn(response);
+
+        // domainName 为 null 时不得抛空指针（issue #1514）
+        String result = iamServiceUtils.queryDomainToken("project-token", null);
+
+        assertEquals("domain-token-123", result);
+    }
+
+    @Test
     void testSendPost_Success() throws Exception {
         Response response = new Response.Builder()
             .request(new Request.Builder().url("https://iam.test.com").build())

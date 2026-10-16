@@ -67,8 +67,9 @@ A request URI consists of the following parts:
 | query-string | Query parameters (optional), joined by `&`, e.g., `version=latest&workspace_id=xxx` |
 
 > **Note**:
-> - `project_id`: Required path parameter in all Manager and Runtime API paths. See [5.4 Obtain Project ID](#54-obtain-project-id).
-> - `workspace_id`: Required query parameter for some Manager APIs; optional for Runtime APIs. See [5.5 Obtain Workspace ID](#55-obtain-workspace-id).
+> - `project_id`: Required path parameter for Manager service APIs and Runtime conversation/debugging APIs (e.g., workflow/agent conversation run, `node_execute`, `variables`, `releases`); paths under `/internal/v1/*`, `/v1/inner-tools/*`, `/v1/agents/chat/*`, `/v1/workflows/chat/*`, `/v1/orchestration/*`, `/v1/health` do not include this parameter. See [5.4 Obtain Project ID](#54-obtain-project-id).
+> - `workspace_id`: Required per contract for Manager service APIs; for Runtime APIs, required only by the two `additional-questions` APIs, optional for the rest. See [5.5 Obtain Workspace ID](#55-obtain-workspace-id).
+> - Internal APIs (login callback `/saml/login`, local storage download `/api/storage/download`) are not part of the external contract; APIs under `/v1/agentspace/*` and `/agentspace/*` are not included in the open-source distribution external contract.
 
 ### 2.2 Request Methods
 

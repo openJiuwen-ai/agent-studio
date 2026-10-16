@@ -65,6 +65,9 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   // 传入一个订阅，触发时显示或关闭变量选择列表
   @Input() variantsTrigger?: Observable<boolean>;
 
+  // 传入一个订阅，触发时以内联模式（{{{var}}}）显示变量选择列表
+  @Input() inlineVariantsTrigger?: Observable<boolean>;
+
   @Input() placeholder = '';
 
   @Input() maxHeight = '480px';
@@ -82,6 +85,9 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   @ViewChild('list') list: ElementRef<HTMLDivElement>;
 
   isTriggerClick = false; //判断是否由点击生成list,是的话替换时不需要扣除 触发命令的长度，比如'{'
+
+  // 当前插入模式：'double' = {{var}} 参数化，'triple' = {{{var}}} 内联
+  private insertMode: 'double' | 'triple' = 'double';
 
   content = '';
 
@@ -133,6 +139,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   private varTriggerSubscribe = undefined;
 
+  private inlineVarTriggerSubscribe = undefined;
+
   private editorObserver: MutationObserver;
 
   get range() {
@@ -157,8 +165,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   ngOnInit() {
     this.varTriggerSubscribe = this.variantsTrigger?.subscribe((show) => {
       if (show) {
+        this.insertMode = 'double';
         this.checkAndRestoreCursorPosition();
-        // 滚动到光标可见位置
         this.scrollCursorToVisible();
         this.showVarList();
         this.isTriggerClick = true;
@@ -166,6 +174,19 @@ export class CmdTextareaComponent implements ControlValueAccessor {
         this.showList = false;
       }
     });
+    this.inlineVarTriggerSubscribe = this.inlineVariantsTrigger?.subscribe(
+      (show) => {
+        if (show) {
+          this.insertMode = 'triple';
+          this.checkAndRestoreCursorPosition();
+          this.scrollCursorToVisible();
+          this.showVarList();
+          this.isTriggerClick = true;
+        } else {
+          this.showList = false;
+        }
+      },
+    );
   }
 
   ngAfterViewInit() {
@@ -226,6 +247,7 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   ngOnDestroy() {
     this.varTriggerSubscribe?.unsubscribe();
+    this.inlineVarTriggerSubscribe?.unsubscribe();
     document.removeEventListener('selectionchange', this.processCursorPosition);
   }
 
@@ -267,6 +289,27 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     return Math.max(content.length, 0);
   }
 
+  /**
+   * 计算当前选区内容的长度，口径与 getLength() 一致：
+   * 克隆选区内容到离屏容器后取 innerText（<br> 计为换行），去除零宽字符与末尾换行
+   */
+  private getSelectionLength(): number {
+    if (!this.range) {
+      return 0;
+    }
+    const tempDiv = document.createElement('div');
+    // 离屏但保持渲染：脱离文档时 innerText 会退化为 textContent，丢失 <br> 换行；
+    // white-space 与 .editor 保持一致（pre-wrap），避免空格折叠导致计数偏差
+    tempDiv.style.cssText =
+      'position:absolute; visibility:hidden; left:-9999px; top:0; white-space:pre-wrap;';
+    tempDiv.appendChild(this.range.cloneContents());
+    document.body.appendChild(tempDiv);
+    let content = tempDiv.innerText.replaceAll('\u200B', '');
+    tempDiv.remove();
+    content = content.replace(/\n$/, '');
+    return Math.max(content.length, 0);
+  }
+
   handlePaste(event: ClipboardEvent) {
     event.preventDefault();
 
@@ -282,9 +325,12 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       return;
     }
 
-    // 超过最大长度截断
+    // 超过最大长度截断（粘贴会替换选区内容，需补回选区长度）
     if (this.maxLength) {
-      const leaveLength = this.maxLength - this.getLength();
+      const leaveLength = Math.max(
+        this.maxLength - this.getLength() + this.getSelectionLength(),
+        0,
+      );
       if (clipboardContent.length > leaveLength) {
         clipboardContent = clipboardContent.slice(0, leaveLength);
       }
@@ -293,10 +339,13 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     // 创建文本节点
     const textNode = document.createTextNode(clipboardContent);
 
+    // 先删除选区内容再插入（光标处粘贴时选区为空，删除无影响）
+    this.range.deleteContents();
     // 插入文本到光标位置
     this.range.insertNode(textNode);
     // 移动光标到插入内容之后
     this.range.setStartAfter(textNode);
+    this.range.collapse(true);
 
     // 触发内容更新
     this.emit();
@@ -401,7 +450,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       startContainer.previousSibling.remove();
       event.preventDefault();
     } else if (
-      startContainer.parentElement.className === 'highlight'
+      startContainer.parentElement.className === 'highlight' ||
+      startContainer.parentElement.className === 'highlight-inline'
 
     ) {
       if( range.startOffset === startContainer.parentElement.innerText.length){
@@ -427,7 +477,7 @@ export class CmdTextareaComponent implements ControlValueAccessor {
         }
         return;
       }
-      if (targetNode.classList.contains('highlight')) {
+      if (targetNode.classList.contains('highlight') || targetNode.classList.contains('highlight-inline')) {
         targetNode.remove();
         event.preventDefault();
         this.onContentChange();
@@ -584,22 +634,32 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   }
 
   insertSelectedTemplate(item: CmdTextareaVariableItem) {
-    const preStartOffset = this.range?.startOffset;
-    const startNode = this.range?.startContainer;
-    if (!this.isTriggerClick) {
-      startNode.textContent = startNode.textContent
-        .slice(0, Math.max(preStartOffset - 1, 0))
-        .concat(startNode.textContent.slice(preStartOffset));
-      this.range?.setStart(startNode, Math.max(preStartOffset - 1, 0));
+    const editor = this.editor?.nativeElement;
+    if (!editor || !item) {
+      return;
     }
-
-    const node = this.getTmplNode(item.value);
-    this.range?.deleteContents();
-    this.range?.insertNode(node);
-    this.selection?.removeAllRanges();
-    this.selection?.collapse(node, 1);
-    this.showList = false;
+    // FB-4 修复：放弃 range/文本节点手术，改为基于字符偏移的纯文本模型插入。
+    // 旧实现（对 startNode.textContent 做 slice、deleteContents+insertNode）在光标
+    // 落在已 highlight 包裹的 {{var}} 块上/旁时，startContainer 会是元素节点而非干净
+    // 文本节点，textContent 切片会把整棵子树拍平，拼出坏模板（占位符落到引号外、逗号
+    // 重复），保存后过不了运行时 literal_eval 门 → body 静默丢失。
+    let { text, offset } = this.getCleanTextAndOffset();
+    if (!this.isTriggerClick) {
+      // 删除打开变量列表的触发字符（如 '{' 或 '/'）
+      const removeAt = Math.max(offset - 1, 0);
+      text = text.slice(0, removeAt) + text.slice(offset);
+      offset = removeAt;
+    }
+    const token =
+      this.insertMode === 'triple'
+        ? `{{{${item.value}}}}`
+        : `{{${item.value}}}`;
+    text = text.slice(0, offset) + token + text.slice(offset);
+    // 直接置内部标志关闭列表，绕过 setter 避免二次 processContent；
+    // renderFromText 是唯一权威渲染，随后 emit 触发 CD 隐藏列表。
+    this._showList = false;
     this.isTriggerClick = false;
+    this.renderFromText(text, offset + token.length);
     this.emit();
   }
 
@@ -622,11 +682,95 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     this.blur.emit();
   }
 
-  private getTmplNode(content: string) {
-    const node = document.createElement('span');
-    node.textContent = `{{${content}}}`;
+  /**
+   * 取编辑器纯文本（剥零宽字符）及光标在其内的字符偏移。
+   * saveCursorPosition 返回的原始偏移把 \u200B 计入、<br> 记 1，与 innerText 前缀
+   * 一一对应；这里把落在 \u200B 上的计数扣除，换算成"剥零宽后 innerText"的偏移，
+   * 供 insertSelectedTemplate 做纯文本字符串拼接。
+   * 光标不在编辑器内时（saveCursorPosition 不回调）回退到文本末尾。
+   */
+  private getCleanTextAndOffset(): { text: string; offset: number } {
+    const editor = this.editor?.nativeElement;
+    if (!editor) {
+      return { text: '', offset: 0 };
+    }
+    const compute = (): number => {
+      let raw = -1;
+      this.saveCursorPosition(editor, (o: number) => {
+        raw = o;
+      });
+      return raw;
+    };
+    let rawOffset = compute();
+    if (rawOffset < 0) {
+      this.moveCursorToEnd();
+      rawOffset = compute();
+    }
+    const rawText = editor.innerText;
+    const text = rawText.replaceAll('\u200B', '');
+    if (rawOffset < 0) {
+      // 极端兜底：仍拿不到光标，置于纯文本末尾（去掉结尾换行）
+      return { text, offset: text.replace(/\n$/, '').length };
+    }
+    let offset = 0;
+    const limit = Math.min(rawOffset, rawText.length);
+    for (let i = 0; i < limit; i++) {
+      if (rawText[i] !== '\u200B') {
+        offset++;
+      }
+    }
+    return { text, offset };
+  }
 
-    return node;
+  /**
+   * 以纯文本为唯一数据源重渲染整个编辑区，遵循 processContent 的渲染约定：
+   * escapeHTML → {{var}} 包 highlight span 并尾随 \u200B → \n 转 <br> → 末尾补 <br>。
+   * 渲染后把光标恢复到 cursorOffset（纯文本字符偏移），不依赖 DOM 现状，
+   * 因此规避了 processContent 里那套针对光标读回的脆弱启发式补偿。
+   */
+  private renderFromText(plainText: string, cursorOffset: number): void {
+    const editor = this.editor?.nativeElement;
+    if (!editor) {
+      return;
+    }
+    this.editorObserver.disconnect();
+
+    let processed = this.escapeHTML(plainText);
+    const regex2 = new RegExp(
+      `(\\{\\{\\{[^{}\\n\\r]+?\\}\\}\\})|({{[^{}\\n\\r]+?}})`,
+      'gi',
+    );
+    processed = processed.replace(
+      regex2,
+      (match, triple, dbl) => {
+        if (triple) {
+          return `<span class="highlight-inline">${triple}</span>\u200B`;
+        }
+        return `<span class="highlight">${dbl}</span>\u200B`;
+      },
+    );
+    processed = processed.replace(/\n/g, '<br>');
+    if (!processed.endsWith('<br>')) {
+      processed = `${processed}<br>`;
+    }
+    editor.innerHTML = processed;
+
+    // restoreCursorPosition 的偏移空间 = 纯文本字符 + 每个 highlight 尾随的 1 个 \u200B；
+    // 光标前的完整变量块数即需补的零宽字符数，换算成原始偏移。
+    const before = plainText.slice(0, cursorOffset);
+    const zwCount = (
+      before.match(/\{\{\{[^{}\n\r]+?\}\}\}|{{[^{}\n\r]+?}}/g) || []
+    ).length;
+    this.reRenderTimes++;
+    this.restoreCursorPosition(editor, cursorOffset + zwCount);
+    this.updateSelection();
+    this.scrollCursorToVisible();
+
+    this.editorObserver.observe(editor, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
   }
 
   private getEditorTextContent() {
@@ -693,12 +837,15 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     });
 
     const regex1 = new RegExp(`\n`, 'gi');
-    const regex2 = new RegExp(`(?<var>{{[^{}\\n\\r]+?}})`, 'gi');
-    const regex3 = new RegExp(`{{[^}]*}}$`);
+    const regex2 = new RegExp(
+      `(\\{\\{\\{[^{}\\n\\r]+?\\}\\}\\})|({{[^{}\\n\\r]+?}})`,
+      'gi',
+    );
+    const regex3 = new RegExp(`(\\{\\{\\{[^}]*\\}\\}\\}|{{[^}]*}})$`);
     let processedText = this.editor.nativeElement.innerText;
     const subProcessedText=processedText.substring(0, charOffset);
     if (regex3.test(subProcessedText)) {
-      // 如果光标在{{var}}后面，将charOffset+1
+      // 如果光标在 {{var}} 或 {{{var}}} 后面，将charOffset+1
       charOffset++;
     }
     if(subProcessedText.length>=1&&subProcessedText[0]==='\u200B'){
@@ -713,7 +860,12 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     processedText = this.escapeHTML(processedText);
     processedText = processedText.replace(
       regex2,
-      '<span class="highlight">$<var></span>\u200B',
+      (match, triple, dbl) => {
+        if (triple) {
+          return `<span class="highlight-inline">${triple}</span>\u200B`;
+        }
+        return `<span class="highlight">${dbl}</span>\u200B`;
+      },
     );
     processedText = processedText.replace(regex1, '<br>');
     if (!processedText.endsWith('<br>')) {
@@ -1007,8 +1159,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     // 截取光标前的文本（从文本节点开头到光标位置）
     const prefix = text.slice(0, offset);
 
-    // 判断光标是否在 {{var}} 的末尾之后
-    const regex = /{{[^}]*}}$/; // 匹配以 }} 结尾的 {{var}} 结构
+    // 判断光标是否在 {{var}} 或 {{{var}}} 的末尾之后
+    const regex = /\{\{\{[^}]*\}\}\}$|{{[^}]*}}$/;
 
     if (regex.test(prefix)) {
       // 不能停留在这个位置，根据上一次按键向前或向后偏移一位

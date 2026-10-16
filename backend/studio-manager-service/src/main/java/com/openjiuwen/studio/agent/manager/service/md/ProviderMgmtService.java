@@ -33,6 +33,7 @@ import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthMetadataMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.SysModelServiceProviderMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.UserModelServiceProviderMapper;
 import com.openjiuwen.studio.agent.manager.service.IProviderMgmtService;
+import com.openjiuwen.studio.agent.manager.service.WorkspacePermissionValidator;
 import com.openjiuwen.studio.prompt.engineering.utils.HttpUtil;
 
 import lombok.extern.slf4j.Slf4j;
@@ -87,6 +88,9 @@ public class ProviderMgmtService implements IProviderMgmtService {
 
     @Autowired
     private UrlCheckUtils urlCheckUtils;
+
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
 
     @Value("${model.platform.provider:100}")
     private String platformProviderId;
@@ -224,7 +228,8 @@ public class ProviderMgmtService implements IProviderMgmtService {
         resourceName = ""
     )
     public Void deleteModelServiceProvider(String projectId, String workspaceId, String id) {
-        queryAndAuthCheck(projectId, workspaceId, id, false);
+        ModelServiceProvider provider = queryAndAuthCheck(projectId, workspaceId, id, false);
+        workspacePermissionValidator.validateProvider(projectId, workspaceId, provider.getCreatedByUser(), "delete", "SYSTEM".equals(provider.getWorkspaceId()));
         // 仅统计当前工作空间下引用该供应商的模型：跨空间的模型行引用的是其他空间的同 UUID 供应商，
         // 不应阻塞本空间供应商删除；同时避免历史孤儿行（auth_metadata_id 悬空等）阻挡删除。
         int count = modelServiceMapper.countByProviderId(projectId, workspaceId, id);
@@ -488,6 +493,7 @@ public class ProviderMgmtService implements IProviderMgmtService {
     public Void updateModelServiceProvider(String projectId, String workspaceId, String id, Boolean availableCheck,
         ModelServiceProviderReq body) {
         ModelServiceProvider provider = queryAndAuthCheck(projectId, workspaceId, id, false);
+        workspacePermissionValidator.validateProvider(projectId, workspaceId, provider.getCreatedByUser(), "edit", "SYSTEM".equals(provider.getWorkspaceId()));
 
         ProviderAuth authCfg = null;
         List<ProviderAuthMetadata> authMetadataList = null;
@@ -575,6 +581,15 @@ public class ProviderMgmtService implements IProviderMgmtService {
     )
     public Void updateModelServiceProviderAuthInfo(String projectId, String workspaceId, String id,
         Boolean availableCheck, ProviderAuthInfoReq body) {
+        // 平台/系统供应商不在用户供应商表(userModelServiceProviderMapper.selectById 返回 null)，
+        // 需查系统供应商表；若仍 null 跳过校验(与 ProviderAuthMgmtService.validateProviderAuth 的 null-skip 对齐)
+        ModelServiceProvider provider = userModelServiceProviderMapper.selectById(id);
+        if (provider == null) {
+            provider = sysProviderMapper.selectById(id);
+        }
+        if (provider != null && !"SYSTEM".equals(provider.getWorkspaceId())) {
+            workspacePermissionValidator.validateProvider(projectId, workspaceId, provider.getCreatedByUser(), "auth-info", "SYSTEM".equals(provider.getWorkspaceId()));
+        }
         ProviderAuthData providerAuthData = queryAuthInfoAndCheck(projectId, workspaceId, id);
         ProviderAuth authCfg = null;
         if (!StringUtils.isEmpty(body.getAuthInfo())) {

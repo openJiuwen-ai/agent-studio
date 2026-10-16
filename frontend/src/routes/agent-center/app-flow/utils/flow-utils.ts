@@ -1342,11 +1342,94 @@ export const FlowUtils = {
     graph,
     updateRefType,
     self,
+    renameList: { oldRef: string; newRef: string }[] = [],
   ) {
     const oldMemory = cloneDeep(oldConfigs?.memory);
     const newMemory = cloneDeep(configs?.memory);
+
+    // Rewrite ref_var_name across all graph nodes using the precise rename
+    // list captured by global-config (WeakMap-based, no index inference).
+    // A recursive walker replaces the need to manually traverse each node
+    // type's specific structure (inputs, branches, settings, outputs, etc.).
+    if (renameList.length > 0) {
+      // Sort by oldRef length descending so the most specific (longest) rule
+      // matches first. Combined with the break in the inner loop, a parent
+      // prefix rule can never overwrite a child path rule when both the
+      // parent variable and a child field are renamed in the same save.
+      const renameMap: Map<string, string> = new Map(
+        [...renameList]
+          .sort((a, b) => b.oldRef.length - a.oldRef.length)
+          .map((r) => [r.oldRef, r.newRef]),
+      );
+
+      // Recursively walk an object tree and rewrite any ref_var_name property
+      // that matches a renamed memory variable. Handles exact match
+      // (memory.oldName), object nesting (memory.oldName.field), and
+      // array element access (memory.oldName[0].field).
+      // WeakSet guards against circular references.
+      const rewrite = (
+        obj: any,
+        visited: WeakSet<any> = new WeakSet(),
+      ): boolean => {
+        if (!obj || typeof obj !== 'object') {
+          return false;
+        }
+        if (visited.has(obj)) {
+          return false;
+        }
+        visited.add(obj);
+
+        let changed = false;
+        if (Array.isArray(obj)) {
+          for (const item of obj) {
+            if (rewrite(item, visited)) {
+              changed = true;
+            }
+          }
+          return changed;
+        }
+
+        for (const key of Object.keys(obj)) {
+          const val = obj[key];
+          if (key === 'ref_var_name' && typeof val === 'string') {
+            for (const [oldRef, newRef] of renameMap) {
+              if (val === oldRef || val.startsWith(oldRef + '.') || val.startsWith(oldRef + '[')) {
+                obj[key] = newRef + val.substring(oldRef.length);
+                changed = true;
+                // renameMap is sorted longest-oldRef-first, so the first
+                // match is the most specific rule; stop here.
+                break;
+              }
+            }
+          } else if (val && typeof val === 'object') {
+            if (rewrite(val, visited)) {
+              changed = true;
+            }
+          }
+        }
+        return changed;
+      };
+
+      graph.getNodes().forEach((node) => {
+        const nodeInfo = node.getData()?.ngArguments?.nodeInfo;
+        if (!nodeInfo) {
+          return;
+        }
+        const updated = cloneDeep(nodeInfo);
+        if (rewrite(updated)) {
+          node.setData(
+            { ngArguments: { nodeInfo: updated } },
+            { ignoreHistory: true },
+          );
+        }
+      });
+    }
+
+    // Existing logic: update type/schema for items that still match by name
+    // or were renamed (included via renameList).
     const updateMemory = newMemory?.filter((newItem) =>
-      oldMemory?.some((oldItem) => oldItem.name === newItem.name),
+      oldMemory?.some((oldItem) => oldItem.name === newItem.name) ||
+      renameList.some((r) => r.newRef === `memory.${newItem.name}`),
     );
     const initialNodeIds = [];
     const nodes = graph.getNodes();
@@ -1996,19 +2079,45 @@ export const FlowUtils = {
     const currentPath = path[0];
     const arr = currentPath.split('[');
     const currentName = arr[0];
+    const hasIndex = arr.length > 1;
 
     const currentItem = data.find(item => item.name === currentName);
     if (!currentItem) {
       return false;
     }
 
+    // Callers pass either raw DSL fields (type 'array') or view tree nodes
+    // (type 'array<object>' / 'array<string>' from fields2RefParams);
+    // accept both shapes.
+    const itemType = currentItem.type;
+    const isArrayType =
+      itemType === 'array' ||
+      (typeof itemType === 'string' && itemType.startsWith('array<'));
+
+    // A segment carrying an array index (e.g. "foo[0]") requires the item
+    // to actually be an array; conversely an array item descended into
+    // without an index segment (e.g. "foo.bar" on array foo) is a stale
+    // reference left over from a type change and is invalid.
+    if (hasIndex && !isArrayType) {
+      return false;
+    }
+
+    // Referencing the item itself (or one of its elements) is valid
+    if (path.length === 1) {
+      return true;
+    }
+
     let nextData: any;
-    if (currentItem.type === 'object') {
+    if (itemType === 'object') {
       nextData = currentItem.schema;
-    } else if (currentItem.type === 'array') {
-      nextData = currentItem.schema.schema;
+    } else if (isArrayType) {
+      if (!hasIndex) {
+        return false;
+      }
+      nextData = currentItem.schema?.schema;
     } else {
-      return currentItem.name === currentName;
+      // Simple types cannot have nested paths
+      return false;
     }
 
     if (Array.isArray(nextData)) {
@@ -2031,13 +2140,11 @@ export const FlowUtils = {
           const ref_source = v.value?.content?.source || '';
           const refNode = cloneDeep(outputsMap[v.value?.content?.ref_node_id]);
           if (ref_var_name.includes('memory.')) {
-            // 对比记忆变量
+            // Validate memory variable ref against schema using checkPath
             if (memory.length) {
               let memos = cloneDeep(memory);
-              let memosNames = memos.map(m => {
-                return `memory.${m.name}`;
-              });
-              v.refWithout = !memosNames.includes(ref_var_name);
+              const subPath = ref_var_name.substring('memory.'.length);
+              v.refWithout = !this.checkPath(memos, subPath.split('.'));
             } else {
               v.refWithout = true;
             }

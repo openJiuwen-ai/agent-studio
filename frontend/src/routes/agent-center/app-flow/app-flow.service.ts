@@ -385,6 +385,8 @@ export class AppFlowService {
     cron?: string;
     hook_url?: string;
     invocation?: string;
+    poll_url?: string;
+    poll_interval_seconds?: number;
   }) {
     let updatedTrigger: any = {
       trigger_id: trigger.trigger_id,
@@ -398,6 +400,10 @@ export class AppFlowService {
     }
     if (trigger.type === 'EVENT') {
       updatedTrigger.hook_url = trigger.hook_url ?? '';
+    }
+    if (trigger.type === 'POLLING') {
+      updatedTrigger.poll_url = trigger.poll_url ?? '';
+      updatedTrigger.poll_interval_seconds = trigger.poll_interval_seconds ?? 0;
     }
     this.triggerAdded$.next(updatedTrigger);
   }
@@ -1783,6 +1789,83 @@ export class AppFlowService {
     };
   }
 
+  /**
+   * HTTP 节点的 query/headers 容器条目（Lite 原厂形态，各含一行空白行）。
+   * 双层结构说明：query/headers 是 pre_defined 容器，用户行存于 schema；
+   * 与用户自定义输入参数（source:user 平铺条目）语义不同，且允许
+   * query 与 header 同名共存，故不可摊平为单层。
+   * 该方法同时供 getInitHttpNodeData（新建）与 http-modal 的容器自愈
+   * （ensureHttpInputContainers，修复存量 inputs 损坏节点）复用。
+   */
+  public getInitHttpContainerInputs(): IWorkflowField[] {
+    return [
+      {
+        name: 'query',
+        type: 'object',
+        description: this.i18n.transform('http_node_request_parameters'),
+        required: true,
+        source: 'pre_defined',
+        value: {
+          type: 'nested',
+          hint: '',
+          content: null,
+          default: '',
+        },
+        schema: [
+          {
+            name: '',
+            type: 'string',
+            description: '',
+            source: 'pre_defined',
+            required: true,
+            value: {
+              type: 'ref',
+              content: {
+                ref_node_id: '',
+                ref_var_name: '',
+                source: '',
+              },
+              hint: '',
+            },
+          },
+        ],
+      },
+      {
+        name: 'headers',
+        type: 'object',
+        description: this.i18n.transform(
+          'http_node_header_configuration_parameters',
+        ),
+        required: true,
+        source: 'pre_defined',
+        value: {
+          type: 'nested',
+          content: null,
+          hint: '',
+          default: '',
+        },
+        schema: [
+          {
+            name: '',
+            type: 'string',
+            description: '',
+            required: true,
+            value: {
+              type: 'ref',
+              content: {
+                ref_node_id: '',
+                ref_var_name: '',
+                source: '',
+              },
+              hint: '',
+            },
+            source: 'pre_defined',
+          },
+        ],
+      },
+    ];
+  }
+
   public getInitHttpNodeData(): IHttpRepo {
     const id = `node_${Date.now()}`;
 
@@ -1790,71 +1873,7 @@ export class AppFlowService {
       id,
       name: this.nodeDefaultNameMap.get('Http'),
       type: 'Http',
-      inputs: [
-        {
-          name: 'query',
-          type: 'object',
-          description: this.i18n.transform('http_node_request_parameters'),
-          required: true,
-          source: 'pre_defined',
-          value: {
-            type: 'nested',
-            hint: '',
-            content: null,
-            default: '',
-          },
-          schema: [
-            {
-              name: '',
-              type: 'string',
-              description: '',
-              source: 'pre_defined',
-              required: true,
-              value: {
-                type: 'ref',
-                content: {
-                  ref_node_id: '',
-                  ref_var_name: '',
-                  source: '',
-                },
-                hint: '',
-              },
-            },
-          ],
-        },
-        {
-          name: 'headers',
-          type: 'object',
-          description: this.i18n.transform(
-            'http_node_header_configuration_parameters',
-          ),
-          required: true,
-          source: 'pre_defined',
-          value: {
-            type: 'nested',
-            content: null,
-            hint: '',
-            default: '',
-          },
-          schema: [
-            {
-              name: '',
-              type: 'string',
-              description: '',
-              required: true,
-              value: {
-                type: 'ref',
-                content: {
-                  ref_node_id: '',
-                  ref_var_name: '',
-                  source: '',
-                },
-                hint: '',
-              },
-              source: 'pre_defined',
-            },
-          ],
-        },
+      inputs: this.getInitHttpContainerInputs().concat([
         {
           name: '',
           required: true,
@@ -1871,7 +1890,7 @@ export class AppFlowService {
           },
           source: 'user',
         },
-      ],
+      ]),
       outputs: [
         {
           name: 'body',
@@ -2342,6 +2361,7 @@ export class AppFlowService {
         id: '',
         name: '',
         sql: '',
+        output_format: 'json',
       },
     };
   }
@@ -2407,6 +2427,7 @@ export class AppFlowService {
         id: '',
         name: '',
         sql: '',
+        output_format: 'json',
       },
     };
   }

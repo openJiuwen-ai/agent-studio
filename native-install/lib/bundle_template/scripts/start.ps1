@@ -162,7 +162,7 @@ if (-not (Is-PidAlive $MgrPid)) {
   $ja = @("-Xms${heapMin}m","-Xmx${heapMax}m","-XX:MaxDirectMemorySize=${direct}m","-Dfile.encoding=UTF-8","-jar","$(Join-Path $BundleRoot 'app\manager\studio-manager.jar')","--spring.config.additional-location=file:$BundleRoot\config\","--spring.profiles.active=manager","--logging.config=file:$BundleRoot\config\log4j2-manager.xml")
   $p = Start-Bg (Join-Path $env:JAVA_HOME 'bin\java.exe') $ja (Join-Path $Log 'manager.log'); $p.Id | Set-Content $MgrPid
 }
-Wait-Http "http://127.0.0.1:$($env:MANAGER_PORT)/health" 'studio-manager' 180 | Out-Null
+if (-not (Wait-Http "http://127.0.0.1:$($env:MANAGER_PORT)/health" 'studio-manager' 180)) { W-Die "studio-manager 启动失败，见 $Log\manager.log" }
 
 # ════════════════════════════════════════════════════════════════════════════
 # [5/7] studio-runtime (Python, agent_runtime/EIStart)
@@ -202,7 +202,7 @@ if (-not (Is-PidAlive $RtPid)) {
   $env:host = '127.0.0.1'; $env:PORT = $env:RUNTIME_PORT
   $p = Start-Bg $VenvPy @('-u',"$(Join-Path $BundleRoot 'app\agent_runtime\EIStart.py')",'--host','0.0.0.0','--port',"$($env:RUNTIME_PORT)") (Join-Path $Log 'runtime.log'); $p.Id | Set-Content $RtPid
 }
-Wait-Http "http://127.0.0.1:$($env:RUNTIME_PORT)/v1/health" 'studio-runtime' 180 | Out-Null
+if (-not (Wait-Http "http://127.0.0.1:$($env:RUNTIME_PORT)/v1/health" 'studio-runtime' 180)) { W-Die "studio-runtime 启动失败，见 $Log\runtime.log" }
 
 # ════════════════════════════════════════════════════════════════════════════
 # [6/7] studio-builder (Python, agent_builder/EIBuilder)
@@ -220,7 +220,7 @@ if (-not (Is-PidAlive $BdrPid)) {
   $p = Start-Bg $VenvPy @('-u','-m','agent_builder.EIBuilder','--host','0.0.0.0','--port',"$($env:BUILDER_PORT)") (Join-Path $Log 'builder.log'); $p.Id | Set-Content $BdrPid
   Pop-Location
 }
-Wait-Http "http://127.0.0.1:$($env:BUILDER_PORT)/v1/health" 'studio-builder' 180 | Out-Null
+if (-not (Wait-Http "http://127.0.0.1:$($env:BUILDER_PORT)/v1/health" 'studio-builder' 180)) { W-Die "studio-builder 启动失败，见 $Log\builder.log" }
 
 # ════════════════════════════════════════════════════════════════════════════
 # [7/7] console (nginx)
@@ -255,7 +255,7 @@ if (Is-PidAlive $NginxPid) {
   Start-Process -FilePath $NginxBin -ArgumentList @('-c',$NginxConfFw,'-p',$NginxPrefixFw) -WindowStyle Hidden -PassThru | Out-Null
   Start-Sleep -Seconds 1
 }
-Wait-Http "http://127.0.0.1:$($env:CONSOLE_PORT)/openjiuwen/" 'console' 60 | Out-Null
+if (-not (Wait-Http "http://127.0.0.1:$($env:CONSOLE_PORT)/openjiuwen/" 'console' 60)) { W-Die "console(nginx) 启动失败，见 $Log\error.log（nginx 错误日志）" }
 
 # ── 完成 ──────────────────────────────────────────────────────────────────────
 $consoleUrl = "http://localhost:$($env:CONSOLE_PORT)/openjiuwen/"
