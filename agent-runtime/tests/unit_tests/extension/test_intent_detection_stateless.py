@@ -94,6 +94,19 @@ def _session_arg_condition(func):
     return _SessionArgFuncCondition(func)
 
 
+def _original_router_call():
+    """原版 ``BranchRouter.__call__``（降级模式的真实读侧）。
+
+    Patch C 已安装时从补丁模块取保存的原版引用；未安装（apply 未触发）时
+    类属性本身即原版——两态下返回的都是"读 self._session"的实现。
+    """
+    from jiuwen.extension.patches import static_graph_patch
+    from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+
+    orig = static_graph_patch._original_branch_router_call
+    return orig if orig is not None else BranchRouter.__call__
+
+
 class TestIntentDetectionStateless:
     @staticmethod
     def test_no_exec_state_instance_fields():
@@ -147,8 +160,44 @@ class TestIntentDetectionStateless:
         assert seen["exec"] == (session, context)
         # 返回后未 reset（同 task 的 dispatch 需要读到组件级 session）
         assert ctx.current_component_exec() == (session, context)
-        # 不再写死共享 router 的 session（Patch C 读侧改走 ContextVar）
+        # 测试桩非 Session/BaseSession → 降级兼容写入（类型守卫）跳过；
+        # 真实包装器下的兼容写入由
+        # test_router_session_compat_write_feeds_original_read_path 钉住
         assert comp._router._session is None
+
+    @pytest.mark.asyncio
+    async def test_router_session_compat_write_feeds_original_read_path(self):
+        """降级模式路由保真：真实 Session 下兼容写入落 router，原版读侧可解析。
+
+        结构断言失败时四补丁均不安装（apply_static_graph_patch 降级分支），
+        原版 ``BranchRouter.__call__`` 直接读 ``self._session``（唯一写入方
+        set_session）——组件侧不写则路由 session 恒 None，分支条件
+        （ExpressionCondition 需 NodeSession.state()）直接失败。本用例以真实
+        Session 包装器驱动 invoke，钉住（1）兼容写入已落（解包到 NodeSession，
+        与原版一致）；（2）原版 ``__call__``（降级模式的真实读侧）经该字段
+        解析出目标分支。
+        """
+        from openjiuwen.core.session import NodeSession, WorkflowSession
+        from openjiuwen.core.session.node import Session
+
+        comp = IntentDetection(_conf())
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+        wf_session = WorkflowSession(workflow_id="wf-compat", session_id="sess-compat")
+        node_session = NodeSession(wf_session, "intent_node")
+        session = Session(node_session, False)
+
+        await comp.invoke({"input": "你好"}, session, MagicMock())
+
+        # set_session 写入端解包：与原版 self._router.set_session(session) 同物
+        assert comp._router._session is node_session
+
+        # 原版读侧（降级模式）：session = self._session → 条件求值需 NodeSession
+        comp._router.add_branch(
+            _session_arg_condition(lambda s: s is node_session), ["hit"]
+        )
+        assert await _original_router_call()(comp._router) == ["hit"]
 
     @pytest.mark.asyncio
     async def test_routed_intent_full_path_keeps_component_exec(self, monkeypatch):

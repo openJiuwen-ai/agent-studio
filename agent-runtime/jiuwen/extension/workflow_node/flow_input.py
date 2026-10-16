@@ -552,6 +552,12 @@ class FlowInput(WorkflowComponent):
                 error_msg="flow_input stream failed",
                 cause=e,
             ) from e
+        finally:
+            # 入口 set、出口 finally reset（token 栈式）——与 invoke 及组件状态
+            # 通道契约一致；不 reset 时本执行状态会残留在消费该生成器的节点
+            # task 上下文中（同 task 的嵌套执行读到错误状态）。生成器耗尽/
+            # 关闭（含异常路径）时触发；末帧通道不在此列（出口不 reset）。
+            reset_component_state(token)
 
     # -------------------------------------------------------------------------
     # 内部方法
