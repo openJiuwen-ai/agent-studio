@@ -152,6 +152,9 @@ spec:
             # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
             - name: auth_sso_validate_url
               value: ''
+            # 系统用户 ID（逗号分隔），SSO 返回的 userId 匹配后跳过空间成员校验和权限校验
+            - name: auth_system_user_ids
+              value: ''
             # ======== [选填] 知识库模式（CUSTOM 模式对接外部 LakeSearch）========
             # 知识库来源模式：LakeSearch（默认，内置 LakeSearch 服务）/ CUSTOM（对接外部 LakeSearch）
             - name: knowledge_source

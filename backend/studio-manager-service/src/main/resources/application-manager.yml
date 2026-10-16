@@ -926,6 +926,11 @@ auth:
       domain-id: ${user_info_defaults_domain_id:0}
       domain-name: ${user_info_defaults_domain_name:0}
       project-id: ${user_info_defaults_project_id:0}
+  # 系统用户配置
+  system-user:
+    # 系统用户 ID 列表（逗号分隔），SSO 校验返回的 userId 匹配后跳过空间成员校验和权限校验
+    # 环境变量：auth_system_user_ids
+    ids: ${auth_system_user_ids:}
 
 task:
   async:

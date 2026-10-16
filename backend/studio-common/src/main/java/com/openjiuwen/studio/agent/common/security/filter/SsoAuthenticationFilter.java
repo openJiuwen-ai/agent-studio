@@ -52,6 +52,8 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
+    private final AuthProperties authProperties;
+
     private AuthenticationEntryPoint authenticationEntryPoint;
 
     /**
@@ -64,6 +66,7 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
         this.headerName = headerName;
         this.ssoAuthenticationService = ssoAuthenticationService;
         this.excludePaths = authProperties.getPath().getExcluded();
+        this.authProperties = authProperties;
     }
 
     /**
@@ -114,6 +117,12 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
                 userInfo.setToken(accessToken);
                 request.setAttribute("CURRENT_USER", userInfo);
                 RequestContextUtils.setContext(userInfo);
+
+                if (authProperties.getSystemUser().isSystemUser(userInfo.getUserId())) {
+                    request.setAttribute(Constants.SYSTEM_USER_SKIP_ATTR, Boolean.TRUE);
+                    log.debug("System user skip enabled: SSO userId={} matches auth_system_user_ids",
+                        userInfo.getUserId());
+                }
             } else {
                 log.warn("SSO authentication failed: invalid token");
                 SecurityContextHolder.clearContext();

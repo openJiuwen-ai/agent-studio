@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -29,6 +30,8 @@ public class AuthProperties {
     private UserInfoConfig userInfo = new UserInfoConfig();
 
     private SsoConfig sso = new SsoConfig();
+
+    private SystemUserConfig systemUser = new SystemUserConfig();
 
     /**
      * SSO 远程鉴权配置
@@ -139,6 +142,39 @@ public class AuthProperties {
              * 配置项: auth.user-info.defaults.project-id
              */
             private String projectId = "0";
+        }
+    }
+
+    /**
+     * 系统用户配置
+     */
+    @Data
+    public static class SystemUserConfig {
+        /**
+         * 系统用户 ID 列表（逗号分隔），匹配后跳过空间成员校验和权限校验
+         * 配置项: auth.system-user.ids
+         * 环境变量: auth_system_user_ids
+         */
+        private String ids = "";
+
+        /**
+         * 解析 ids 为列表
+         */
+        public List<String> getIdList() {
+            if (ids == null || ids.isBlank()) {
+                return Collections.emptyList();
+            }
+            return Arrays.stream(ids.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+        }
+
+        /**
+         * 判断 userId 是否为系统用户
+         */
+        public boolean isSystemUser(String userId) {
+            return getIdList().contains(userId);
         }
     }
 }

@@ -232,6 +232,21 @@ byte[] genIV(String cipherName)
 
 2. **配置 `auth_sso_validate_url` 启用 SSO 鉴权**：将 `auth_sso_validate_url` 设置为 SSO Server 的鉴权接口 URL，步骤 1 中不一致项的环境变量同步修改，重启 studio-manager / studio-runtime 服务生效。
 
+### 系统用户配置（可选）
+
+配置 `auth_system_user_ids` 后，SSO 校验返回的 userId 与配置值匹配时，将跳过空间成员校验和角色权限校验，适用于流水线/自动化场景下使用固定身份调用管理类接口。
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `auth_system_user_ids` | 空（不启用） | 系统用户 ID 列表，逗号分隔。SSO 返回的 userId 匹配后跳过空间成员校验和权限校验 |
+
+> **运维安全须知**：
+> - 配置的 userId 将获得**所有已存在工作区**的无限制访问能力，跳过全部角色与权限校验，等同于全局管理员
+> - Token 仅限流水线/自动化系统持有，**不下发前端用户**，建议存储于 CI/CD 密钥管理或 K8s Secret
+> - **严禁**将 `auth_system_user_ids` 设为 `unknown`（SSO 未返回 userId 时的默认值），否则所有未返回 userId 的请求都会获得免校验权限
+> - 系统用户仍需携带有效 SSO Token（token 失效则 401），仍需通过 workspaceId 格式校验和空间存在性校验
+> - 系统用户操作已由 `@OperationLog` 和 `@DistributedLock` 记录，可通过日志追溯
+
 ### 回退与关闭
 
 清除环境变量 `auth_sso_validate_url` 并重启 studio-manager / studio-runtime 服务，即可回退到 Simple 本地认证模式。

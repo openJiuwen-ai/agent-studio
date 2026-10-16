@@ -232,6 +232,21 @@ Client → sends request with auth Token to platform → platform extracts Token
 
 2. **Configure `auth_sso_validate_url` to enable SSO auth**: Set `auth_sso_validate_url` to the SSO Server's auth interface URL; modify environment variables for any inconsistent items in Step 1; restart studio-manager / studio-runtime services to take effect.
 
+### System User Configuration (Optional)
+
+When `auth_system_user_ids` is configured, if the userId returned by SSO matches the configured value, workspace member checks and role permission checks will be skipped. This is suitable for pipeline/automation scenarios where a fixed identity is used to call management APIs.
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `auth_system_user_ids` | Empty (disabled) | System user ID list, comma-separated. When SSO-returned userId matches, workspace member checks and permission checks are skipped |
+
+> **Operations Security Notice**:
+> - The configured userId will gain **unrestricted access to all existing workspaces**, bypassing all role and permission checks, equivalent to a global administrator
+> - Tokens must be held only by pipeline/automation systems, **not issued to frontend users**. Store in CI/CD secret management or K8s Secret
+> - **Never** set `auth_system_user_ids` to `unknown` (the default value when SSO does not return a userId), otherwise all requests without a userId will gain skip-permission access
+> - System users still need a valid SSO Token (token expiration returns 401), and still pass workspaceId format validation and workspace existence checks
+> - System user operations are recorded by `@OperationLog` and `@DistributedLock`, traceable via logs
+
 ### Rollback and Disable
 
 Clear the `auth_sso_validate_url` environment variable and restart the studio-manager / studio-runtime services to roll back to Simple local auth mode.

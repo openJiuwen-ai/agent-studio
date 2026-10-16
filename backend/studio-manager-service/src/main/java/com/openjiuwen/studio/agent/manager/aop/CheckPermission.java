@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.aop;
 
 import com.openjiuwen.studio.agent.common.annotation.ValidPermission;
+import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
@@ -23,6 +24,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ObjectUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +52,14 @@ public class CheckPermission {
 
     @Before("check()")
     public void checkPermission(JoinPoint joinPoint) {
+        // 系统用户免校验：跳过权限校验
+        ServletRequestAttributes requestAttributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (requestAttributes != null
+            && Boolean.TRUE.equals(requestAttributes.getRequest().getAttribute(Constants.SYSTEM_USER_SKIP_ATTR))) {
+            log.info("System user skip permission check");
+            return;
+        }
+
         List<String> actions = new ArrayList<>();
 
         log.info("start to check permission!");
