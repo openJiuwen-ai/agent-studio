@@ -104,13 +104,15 @@ def _structure_assertions() -> list:
     failures = []
 
     # A1/A2: PregelGraph 源码模式——Patch A 的改写基础
+    # 函数内重导入一律用独立别名绑定，避免遮蔽模块级类引用（模块级引用
+    # 在 _compile_pregel_fresh / apply_static_graph_patch 中仍被使用）
     try:
-        from openjiuwen.core.graph.graph import PregelGraph
+        from openjiuwen.core.graph.graph import PregelGraph as pregel_graph_cls
     except (ImportError, OSError) as e:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
-        PregelGraph = None
-    if PregelGraph is not None:
-        compile_fn = getattr(PregelGraph, "compile", None)
+        pregel_graph_cls = None
+    if pregel_graph_cls is not None:
+        compile_fn = getattr(pregel_graph_cls, "compile", None)
         if compile_fn is None:
             failures.append("PregelGraph.compile 不存在（结构断言失败，自动降级）")
         else:
@@ -127,7 +129,7 @@ def _structure_assertions() -> list:
                 failures.append("PregelGraph.compile 不再写/读 self._session（after_step 竞态改写点缺失）")
 
         # A2: _compile 读取 self.nodes——shadow-copy 方案的注入点
-        compile_internal_fn = getattr(PregelGraph, "_compile", None)
+        compile_internal_fn = getattr(pregel_graph_cls, "_compile", None)
         if compile_internal_fn is None:
             failures.append("PregelGraph._compile 不存在（结构断言失败，自动降级）")
         else:
@@ -143,16 +145,16 @@ def _structure_assertions() -> list:
     # Patch B 包装版（其包装链最内层仍须是 sub_stream 补丁版）——Task 6
     # 接线后进程内 import 即应用，_structure_assertions 常态看到已包装态。
     try:
-        from openjiuwen.core.graph.graph import CompiledGraph
+        from openjiuwen.core.graph.graph import CompiledGraph as compiled_graph_cls
         from jiuwen.extension.patches import workflow_sub_stream_patch
     except (ImportError, OSError) as e:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
-        CompiledGraph = workflow_sub_stream_patch = None
-    if CompiledGraph is not None and workflow_sub_stream_patch is not None:
+        compiled_graph_cls = workflow_sub_stream_patch = None
+    if compiled_graph_cls is not None and workflow_sub_stream_patch is not None:
         patched_invoke = getattr(
             workflow_sub_stream_patch, "_patched_compiled_invoke", None
         )
-        current_invoke = getattr(CompiledGraph, "_invoke", None)
+        current_invoke = getattr(compiled_graph_cls, "_invoke", None)
         if patched_invoke is None:
             failures.append(
                 "workflow_sub_stream_patch._patched_compiled_invoke 不存在"
@@ -173,12 +175,14 @@ def _structure_assertions() -> list:
 
     # C1: BranchRouter.__call__ 以 self._session 解析——Patch C 的替换基础
     try:
-        from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+        from openjiuwen.core.workflow.components.flow.branch_router import (
+            BranchRouter as branch_router_cls,
+        )
     except (ImportError, OSError) as e:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
-        BranchRouter = None
-    if BranchRouter is not None:
-        call_fn = getattr(BranchRouter, "__call__", None)
+        branch_router_cls = None
+    if branch_router_cls is not None:
+        call_fn = getattr(branch_router_cls, "__call__", None)
         # 类上无 __call__ 时 getattr 回退到元类的 type.__call__（method-wrapper），
         # isfunction 区分"真实实现缺失"与元类回退——缺失即跳过该组断言。
         if call_fn is None or not inspect.isfunction(call_fn):
@@ -190,7 +194,7 @@ def _structure_assertions() -> list:
                     failures.append("BranchRouter.__call__ 不再读取 self._session")
             except (OSError, TypeError, ValueError) as e:
                 failures.append(f"BranchRouter.__call__ 源码不可内省: {e}")
-        if not hasattr(BranchRouter, "set_session"):
+        if not hasattr(branch_router_cls, "set_session"):
             failures.append("BranchRouter.set_session 不存在")
 
     # C2: BranchComponent.invoke 的 set_session 写入点（Patch D 包装基础）。
@@ -216,17 +220,17 @@ def _structure_assertions() -> list:
 
     # D1: Vertex 实例属性与签名——fresh-vertex 包装依赖
     try:
-        from openjiuwen.core.graph.vertex import Vertex
+        from openjiuwen.core.graph.vertex import Vertex as vertex_cls
     except (ImportError, OSError) as e:
         failures.append(f"引擎导入失败（视为断言失败，自动降级）: {e}")
-        Vertex = None
-    if Vertex is not None:
+        vertex_cls = None
+    if vertex_cls is not None:
         try:
-            vertex_src = inspect.getsource(Vertex.__init__)
+            vertex_src = inspect.getsource(vertex_cls.__init__)
             for attr in ("_stream_done", "_call_count", "_stream_call_count"):
                 if attr not in vertex_src:
                     failures.append(f"Vertex.__init__ 不再初始化 {attr}")
-            params = tuple(inspect.signature(Vertex.__init__).parameters)
+            params = tuple(inspect.signature(vertex_cls.__init__).parameters)
             if params != ("self", "node_id", "executable"):
                 failures.append(f"Vertex.__init__ 签名变化: {params}（期望 (self, node_id, executable)）")
         except (OSError, TypeError, ValueError) as e:
@@ -298,17 +302,20 @@ async def _patched_branch_router_call(self, *args, **kwargs) -> list:
     共享 ProxySession._stub 的竞态也经此封堵（执行期间 ContextVar 恒有
     值，racy 的 _stub 永不被读到）。其余逻辑与原版一致。
     """
-    session = _session_ctx.resolve_routing_session(self._session)
+    # 上游 BranchRouter 未提供 session 的公开读取入口，本补丁须原样代理该字段
+    session = _session_ctx.resolve_routing_session(self._session)  # pylint: disable=protected-access
     if self.report_trace:
         branches = []
-        for branch in self._branches:
+        # 分支集合是上游 BranchRouter 的内部实现细节，无公开读取入口
+        for branch in self._branches:  # pylint: disable=protected-access
             branches.append({
                 "branch_id": branch.branch_id,
                 "condition": branch.trace_info(session)
             })
         await TracerWorkflowUtils.trace_component_begin(session)
         await TracerWorkflowUtils.trace_component_inputs(session, {"branches": branches})
-    for branch in self._branches:
+    # 分支集合无公开读取入口，本补丁须原样遍历其私有字段
+    for branch in self._branches:  # pylint: disable=protected-access
         if branch.evaluate(session):
             if self.report_trace:
                 await TracerWorkflowUtils.trace_component_outputs(session, {"branch_id": branch.branch_id})
@@ -357,7 +364,10 @@ def _compile_pregel_fresh(graph, fresh_nodes, graph_store, step_callback):
     """
     shadow = copy.copy(graph)
     shadow.nodes = fresh_nodes
-    return PregelGraph._compile(shadow, graph_store=graph_store, step_callback=step_callback)
+    # 上游 _compile 无公开入口，shadow-copy 方案须直接调用其原版实现
+    return PregelGraph._compile(  # pylint: disable=protected-access
+        shadow, graph_store=graph_store, step_callback=step_callback
+    )
 
 
 def _patched_pregel_graph_compile(self, session, **kwargs):
@@ -424,7 +434,8 @@ def _patched_pregel_graph_compile(self, session, **kwargs):
     # 首次 compile 本来就执行等价赋值（异常路径时序差异见 docstring 第 4 点）。
     self.pregel = pregel
     self.checkpointer = checkpointer
-    self._session = session
+    # 原版编译期即写该私有属性，保留写入以兼容潜在读取方（读取方为零，M6）
+    self._session = session  # pylint: disable=protected-access
     return CompiledGraph(pregel, checkpointer)
 
 
@@ -457,7 +468,8 @@ def apply_static_graph_patch() -> bool:
     if _original_pregel_graph_compile is None:
         _original_pregel_graph_compile = PregelGraph.compile
     if _original_compiled_invoke is None:
-        _original_compiled_invoke = CompiledGraph._invoke
+        # 上游 _invoke 无公开入口，补丁须保存其私有方法引用作基线
+        _original_compiled_invoke = CompiledGraph._invoke  # pylint: disable=protected-access
     if _original_branch_router_call is None:
         _original_branch_router_call = BranchRouter.__call__
 
@@ -472,7 +484,8 @@ def apply_static_graph_patch() -> bool:
 
     # 四件安装：A（PregelGraph.compile）/ B（CompiledGraph._invoke）/ C（BranchRouter.__call__）
     # / D（BranchComponent.invoke）
-    CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)
+    # 补丁的安装点即该私有方法本身，上游未提供公开的替换入口
+    CompiledGraph._invoke = _wrap_compiled_invoke(CompiledGraph._invoke)  # pylint: disable=protected-access
     PregelGraph.compile = _patched_pregel_graph_compile
     BranchRouter.__call__ = _patched_branch_router_call
     if BranchComponent is not None:

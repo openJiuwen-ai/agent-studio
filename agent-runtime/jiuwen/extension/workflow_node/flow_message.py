@@ -207,8 +207,9 @@ class Message(WorkflowComponent):
         （参照 end.py ``_prepare_render_state``）。入口不改共享属性（I1 不变量）。
         """
         renderer = copy.copy(self._processor)
-        renderer._lock = asyncio.Lock()
-        renderer._condition = asyncio.Condition()
+        # 同步原语为上游处理器的私有字段，按调用重建只能直接替换
+        renderer._lock = asyncio.Lock()  # pylint: disable=protected-access
+        renderer._condition = asyncio.Condition()  # pylint: disable=protected-access
         renderer.reset()
         return renderer
 

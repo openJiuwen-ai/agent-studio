@@ -1,5 +1,9 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是循环执行期状态隔离的白盒回归测试：断言观测面即补丁模块的执行期
+# ContextVar（_LOOP_EXEC_SESSION）与引擎实例的 _post_body——二者都没有公开
+# 访问入口，只能直接读写以模拟并发执行窗口、验证 A/B 会话状态互不可见。
+# pylint: disable=protected-access
 """AdvancedLoopComponent 执行期状态会话隔离单测（10 并发压测第 3~5 轮失败回归）。
 
 背景（issue：静态图复用 10 并发压测 round3 失败率 ~70%）：
@@ -40,10 +44,15 @@ def _make_loop_session(tag: str):
     """最小循环 session mock：state() 具备真实 dict 语义（get/update/commit）。"""
     store: dict = {}
     state = MagicMock()
-    state.get.side_effect = lambda key=None: (
-        store.get(key) if key is not None else dict(store)
-    )
-    state.update.side_effect = lambda data: store.update(data)
+
+    def _get_state(key=None):
+        return store.get(key) if key is not None else dict(store)
+
+    def _update_state(data):
+        store.update(data)
+
+    state.get.side_effect = _get_state
+    state.update.side_effect = _update_state
     state.commit = MagicMock()
     state.set_outputs = MagicMock()
     session = MagicMock()

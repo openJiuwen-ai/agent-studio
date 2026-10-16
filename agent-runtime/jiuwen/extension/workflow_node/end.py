@@ -461,8 +461,9 @@ class End(BaseEnd):
             if self._template_source is None:
                 return
             st.template = copy.copy(self._template_source)
-            st.template._lock = asyncio.Lock()
-            st.template._condition = asyncio.Condition()
+            # 浅拷贝共享的同步原语须按执行重建，上游模板对象未提供公开替换入口
+            st.template._lock = asyncio.Lock()  # pylint: disable=protected-access
+            st.template._condition = asyncio.Condition()  # pylint: disable=protected-access
             st.template.reset()
 
     @staticmethod

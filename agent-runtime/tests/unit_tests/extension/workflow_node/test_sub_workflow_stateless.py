@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是 SubWorkflow 组件跨执行隔离的白盒验收：判据的观测面就是组件的执行期私有
+# 状态与私有辅助方法（_store/_updates/_raise_user_interact_from_chunk/
+# _build_invoke_params/_collect_updated_memory 等），这些成员没有公开入口可读，
+# 断言必须直接钉住“执行期状态不落组件实例”这一内部不变量，故按测试需要直接访问。
+# pylint: disable=protected-access
 """SubWorkflow 组件跨执行隔离测试（静态图复用前提，issue #1555 / Task 10）。
 
 审计发现：实例复用后，`_interrupt_child_node_id` / `_last_child_completed` 等
@@ -141,7 +146,8 @@ async def _drain(agen):
 
 
 class TestSubWorkflowStatelessAttrs:
-    def test_instance_has_no_execution_state_attrs(self):
+    @staticmethod
+    def test_instance_has_no_execution_state_attrs():
         """执行期字段不再落在实例属性上（复用实例的共享面）。"""
         component = SubWorkflow(_conf())
         for attr in _EXEC_ATTRS:
@@ -335,7 +341,8 @@ class TestStreamCompletionClearsInterruptMarker:
 
 
 class TestStreamFinalOutputChannel:
-    def test_stream_output_via_contextvar(self):
+    @staticmethod
+    def test_stream_output_via_contextvar():
         """get_stream_output 读 ContextVar 通道（引擎 Vertex._post_stream 读）。"""
         component = SubWorkflow.__new__(SubWorkflow)  # 跳过重构造，仅测方法
         ctx.set_stream_final_output({"frame": 1})
@@ -375,7 +382,8 @@ class TestStreamFinalOutputChannel:
 
 
 class TestLocalizedExecutionState:
-    def test_global_var_names_not_stored_on_instance(self):
+    @staticmethod
+    def test_global_var_names_not_stored_on_instance():
         """_global_var_names 局部化：经返回值传递，不落实例。"""
         component = SubWorkflow(_conf())
         session = MagicMock()
@@ -389,12 +397,17 @@ class TestLocalizedExecutionState:
         assert global_var_names is None
         assert not hasattr(component, "_global_var_names")
 
-    def test_collect_updated_memory_takes_names_parameter(self):
+    @staticmethod
+    def test_collect_updated_memory_takes_names_parameter():
         """_collect_updated_memory 经参数接收变量名列表。"""
         component = SubWorkflow(_conf())
         session = MagicMock()
         values = {"MEMORY_VARIABLE.parent_mem_one": "8272", "parent_mem_one": None}
-        session.get_global_state.side_effect = lambda key=None: values.get(key)
+
+        def _get_global_value(key=None):
+            return values.get(key)
+
+        session.get_global_state.side_effect = _get_global_value
 
         assert component._collect_updated_memory(session, ["parent_mem_one"]) == {
             "parent_mem_one": "8272"
@@ -407,9 +420,11 @@ class TestLocalizedExecutionState:
         child = _FakeChildWorkflow(result={"answer": "done", "user_fields": {}})
         component = SubWorkflow(_conf())  # 未构造传入 → 走 session 降级路径
         session = _mock_session()
-        session.get_global_state.side_effect = lambda key=None: (
-            {"sub_node": child} if key == "workflow_instance_dict" else {}
-        )
+
+        def _get_global_state(key=None):
+            return {"sub_node": child} if key == "workflow_instance_dict" else {}
+
+        session.get_global_state.side_effect = _get_global_state
 
         assert await component._get_workflow_instance(session) is child
         await component.invoke(_inputs(), session, None)

@@ -1,5 +1,8 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 白盒断言：编译产物挂在 Workflow 实例的内部字段上，引擎没有公开访问器，
+# "compile 已绑定 pregel"这一判据只能经内部字段读取，无其它观测面。
+# pylint: disable=protected-access
 """静态图复用真实引擎集成测试（spec §9.2；issue #1555 验收标准 2/3/5）。
 
 真实 openjiuwen 引擎 + 真实 IR 构建（三个无 LLM fixture：
@@ -475,16 +478,18 @@ class TestConcurrentParallelJoin:
         shapes = []
         for i, (query, chunks) in enumerate(zip(queries, results)):
             # 双并行分支均真实执行：两路 message 帧都产出
-            left_frames = [
-                c for c in chunks
-                if getattr(c, "type", None) == "partial_content"
-                and (getattr(c, "data", None) or {}).get("node_id") == "node_left"
-            ]
-            right_frames = [
-                c for c in chunks
-                if getattr(c, "type", None) == "partial_content"
-                and (getattr(c, "data", None) or {}).get("node_id") == "node_right"
-            ]
+            left_frames = []
+            for c in chunks:
+                if getattr(c, "type", None) == "partial_content" and (
+                    getattr(c, "data", None) or {}
+                ).get("node_id") == "node_left":
+                    left_frames.append(c)
+            right_frames = []
+            for c in chunks:
+                if getattr(c, "type", None) == "partial_content" and (
+                    getattr(c, "data", None) or {}
+                ).get("node_id") == "node_right":
+                    right_frames.append(c)
             assert left_frames, f"执行 {i} 左分支未执行——并行分支缺失"
             assert right_frames, f"执行 {i} 右分支未执行——并行分支缺失"
 

@@ -494,7 +494,10 @@ class ComplexIntentDetection(WorkflowComponent):
             if isinstance(e, GraphInterrupt):
                 state.status = ExecutionStatus.USER_INTERACT
                 if hasattr(sub_workflow, '_interrupt_child_node_id'):
-                    state.interrupt_child_node_id = sub_workflow._interrupt_child_node_id
+                    # 中断节点标识是上游子工作流的私有字段，恢复时须原样透传
+                    state.interrupt_child_node_id = (
+                        sub_workflow._interrupt_child_node_id  # pylint: disable=protected-access
+                    )
                 raise
             workflow_logger.error(f"Sub-workflow invoke failed: {e}\n{traceback.format_exc()}")
             raise

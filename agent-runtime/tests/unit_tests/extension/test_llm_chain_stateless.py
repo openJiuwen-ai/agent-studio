@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件以白盒方式钉住实例不再挂执行期 session/context/末帧字段、通道读写与
+# 懒初始化加锁语义，观测面（_initialized/_llm/_get_chat_history/_create_llm_instance
+# /_initialize_if_needed 等）与用例前置（注入 _llm、置 _initialized）均落在受保护
+# 成员上；这些内部状态没有公开入口可读，故必须直接访问。
+# pylint: disable=protected-access
 """LLMChain 组件跨执行隔离测试（静态图复用前提，issue #1555 / Task 11）。
 
 审计发现：实例复用后，执行期状态落在组件实例上——
@@ -67,7 +72,8 @@ class _FakeLLMOutput:
 
 
 class TestLLMChainStateless:
-    def test_no_exec_state_instance_fields(self):
+    @staticmethod
+    def test_no_exec_state_instance_fields():
         """实例不再持有执行期 session/context/末帧字段（死代码 _state 亦删除）。"""
         chain = LLMChain({"name": "llm"})
         assert not hasattr(chain, "_session")
@@ -75,7 +81,8 @@ class TestLLMChainStateless:
         assert not hasattr(chain, "_stream_final_output")
         assert not hasattr(chain, "_state")
 
-    def test_stream_final_output_via_contextvar(self):
+    @staticmethod
+    def test_stream_final_output_via_contextvar():
         chain = LLMChain({"name": "llm"})
         ctx.set_stream_final_output({"userFields": "a"})
         assert chain.get_stream_output() == {"userFields": "a"}
@@ -102,7 +109,8 @@ class TestLLMChainStateless:
         )
         assert chain._create_llm_instance.call_count == 1
 
-    def test_get_chat_history_reads_component_exec_channel(self):
+    @staticmethod
+    def test_get_chat_history_reads_component_exec_channel():
         """辅助方法经 ContextVar 读 context：设通道有历史，复位后为空。"""
         chain = LLMChain(_conf())
         context = MagicMock()
@@ -156,8 +164,11 @@ class TestLLMChainStateless:
             )
         assert ctx.current_component_exec() == (None, None)
 
+    # docstring 缩进与函数体一致（8 空格），是本文件全部用例的统一写法。
     @pytest.mark.asyncio
-    async def test_stream_json_mode_nested_invoke_keeps_channel(self):
+    async def test_stream_json_mode_nested_invoke_keeps_channel(  # pylint: disable=function-docstring-indents-four
+        self
+    ):
         """JSON 模式 stream 内嵌 invoke（嵌套 set/reset 同值幂等）：
         末帧写入 ContextVar 通道，generator 耗尽后通道复位。"""
         chain = LLMChain(_conf(response_type="json"))

@@ -372,11 +372,11 @@ class SubWorkflow(WorkflowComponent):
         """使用 Pydantic 校验配置"""
         try:
             SubWorkflowConfig.model_validate(self._conf)
-        except ValidationError as e:
+        except ValidationError as exc:
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.CONFIG_VALIDATION_ERROR,
-                error_msg=str(type(e).__name__),
-            ) from e
+                error_msg=str(type(exc).__name__),
+            ) from exc
 
     def _get_timeout(self, session: Session) -> int:
         """获取子工作流执行超时时间（秒）"""
@@ -1186,19 +1186,19 @@ class SubWorkflow(WorkflowComponent):
                 partial_state.get(USER_FIELDS, {}),
             )
             raise
-        except Exception as e:
+        except Exception as exc:
             self._write_last_child_completed(session, False)
             workflow_logger.error(
                 "SubWorkflow invoke error",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
-                metadata={"node_id": self._node_id, "error": str(e)},
+                metadata={"node_id": self._node_id, "error": str(exc)},
             )
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.EXECUTION_ERROR,
-                error_msg=str(type(e).__name__),
-                cause=e,
-            ) from e
+                error_msg=str(type(exc).__name__),
+                cause=exc,
+            ) from exc
         finally:
             # 子工作流异常 / 中断退出时也要还原父 _REQUEST，否则后续父节点读到的
             # 是子工作流的 _request，会导致变量解析错误
@@ -1435,19 +1435,19 @@ class SubWorkflow(WorkflowComponent):
                 session, final_res, final_val
             )
             raise
-        except Exception as e:
+        except Exception as exc:
             self._write_last_child_completed(session, False)
             workflow_logger.error(
                 "SubWorkflow stream error",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
-                metadata={"node_id": self._node_id, "error": str(e)},
+                metadata={"node_id": self._node_id, "error": str(exc)},
             )
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.STREAM_ERROR,
-                error_msg=str(type(e).__name__),
-                cause=e,
-            ) from e
+                error_msg=str(type(exc).__name__),
+                cause=exc,
+            ) from exc
         finally:
             # 流式异常 / 中断 / generator 提前 close 时也要还原父 _REQUEST，
             # 否则父工作流后续节点读到的是子工作流残留的 _request
@@ -1633,9 +1633,9 @@ class SubWorkflow(WorkflowComponent):
                     component_type_str="SubWorkflow",
                     metadata={"updated_keys": list(updated.keys())},
                 )
-        except Exception as e:
+        except Exception as exc:
             workflow_logger.warning(
-                f"Failed to restore parent request scope after sub-workflow: {e}",
+                f"Failed to restore parent request scope after sub-workflow: {exc}",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
             )
@@ -1688,9 +1688,9 @@ class SubWorkflow(WorkflowComponent):
                     metadata={"updated_keys": list(updated.keys())},
                 )
 
-        except Exception as e:
+        except Exception as exc:
             workflow_logger.warning(
-                f"Failed to sync sub-workflow request variables: {e}",
+                f"Failed to sync sub-workflow request variables: {exc}",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
             )
@@ -1716,8 +1716,8 @@ class SubWorkflow(WorkflowComponent):
                     USER_FIELDS: user_fields,
                 },
             })
-        except Exception as e:
-            workflow_logger.warning(f"_trace_interrupt_marker error: {e}")
+        except Exception as exc:
+            workflow_logger.warning(f"_trace_interrupt_marker error: {exc}")
 
     def get_stream_output(self) -> Output:
         """Get the cached stream output for batch retrieval.

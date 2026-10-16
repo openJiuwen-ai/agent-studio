@@ -88,11 +88,12 @@ def _frame_data(chunk) -> dict:
 
 def _interaction_frames(chunks):
     """交互中断帧（`__interaction__` 类型，交互组件产出后图中断）。"""
-    return [
-        c for c in chunks
-        if isinstance(getattr(c, "type", None), str)
-        and "__interaction__" in str(getattr(c, "type", None))
-    ]
+    frames = []
+    for c in chunks:
+        chunk_type = getattr(c, "type", None)
+        if isinstance(chunk_type, str) and "__interaction__" in chunk_type:
+            frames.append(c)
+    return frames
 
 
 class TestFlowQAConcurrentInteract:

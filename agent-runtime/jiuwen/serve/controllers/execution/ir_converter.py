@@ -982,9 +982,9 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
             tool = Runner.resource_mgr.get_tool(tool_id, tag=node_id)
             if tool is not None:
                 tools.append(tool)
-        except Exception as e:
+        except Exception as exc:
             logger.error(
-                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {e}"
+                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {exc}"
             )
 
     # ③ 映射 camelCase → FlowAgentConfig
@@ -1168,11 +1168,11 @@ class IRConverter:
             supported_ir_version_lst = safe_json_loads_raise_exception(
                 supported_ir_version
             )
-        except ValueError as e:
+        except ValueError as exc:
             raise JiuWenBaseException(
                 error_code=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.code,
                 message=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.errmsg,
-            ) from e
+            ) from exc
         if not isinstance(supported_ir_version_lst, list):
             raise JiuWenBaseException(
                 error_code=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.code,
@@ -1219,10 +1219,10 @@ class IRConverter:
                             f"[PluginLoad] create_agent_config: "
                             f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
                         )
-                except Exception as e:
+                except Exception as exc:
                     plugin_name = plugin_ir.get("name", plugin_ir.get("id", f"index_{idx}"))
                     logger.error(
-                        f"[PluginLoad] create_agent_config: Failed to convert plugin '{plugin_name}': {e}. "
+                        f"[PluginLoad] create_agent_config: Failed to convert plugin '{plugin_name}': {exc}. "
                         f"Skipping. IR keys: {list(plugin_ir.keys())}"
                     )
 
@@ -1280,13 +1280,13 @@ class IRConverter:
             """for each agent, return its child AgentConfig"""
             try:
                 AgentIrValidator(**current_ir_data)
-            except ValidationError as e:
+            except ValidationError as exc:
                 raise JiuWenBaseException(
                     StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
                     StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
-                        error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(e)}"
+                        error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(exc)}"
                     ),
-                ) from e
+                ) from exc
             # R-04: intent 覆盖写到 per-config metadata,不写缓存 IR 对象(避免污染 cache_ir_queue)
             _intent_name, _intent_description = _resolve_intent_fields(
                 current_ir_data, parent_intent
@@ -2276,8 +2276,8 @@ class IRConverter:
             return None
         try:
             child_ir = await async_ir_load(child_path)
-        except Exception as e:
-            raise IRBuildException(f"从缓存或存储读取 IR 文件失败: {child_path}, {e}") from e
+        except Exception as exc:
+            raise IRBuildException(f"从缓存或存储读取 IR 文件失败: {child_path}, {exc}") from exc
         # First convert old refs to new format
         converted_child_ir = _convert_global_variable_refs_in_ir(child_ir)
         if logger.isEnabledFor(logging.DEBUG):
@@ -3564,14 +3564,14 @@ class IRConverter:
         """验证 Agent IR 数据"""
         try:
             AgentIrValidator(**ir_data)
-        except ValidationError as e:
-            error_message = format_pydantic_validation_error_message(e)
+        except ValidationError as exc:
+            error_message = format_pydantic_validation_error_message(exc)
             raise JiuWenBaseException(
                 StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
                 StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
                     error_msg=f"Agent_ir validate failed, root_case={error_message}"
                 ),
-            ) from e
+            ) from exc
 
     @staticmethod
     async def _create_llm_model(
@@ -3709,13 +3709,13 @@ class IRConverter:
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
-        except Exception as e:
+        except Exception as exc:
             logger.error(
                 f"Failed to create agent-core model resource: model_id={model_id}, "
-                f"model_name={model_name}, error={e}",
+                f"model_name={model_name}, error={exc}",
                 simple_log=(
                     f"failed to create agent-core model resource: "
-                    f"model_id={model_id}, model_name={model_name}, error={e}"
+                    f"model_id={model_id}, model_name={model_name}, error={exc}"
                 ),
             )
             raise

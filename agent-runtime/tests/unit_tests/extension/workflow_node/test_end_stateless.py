@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件是 End 组件跨执行隔离的白盒验收：判据的观测面就是组件的执行期私有状态
+# （_exec_state/_exec_states/_template/_mix_coordinate 等）与模块级执行键通道，
+# 这些成员没有公开入口可读，断言必须直接钉住“状态按执行容器隔离”这一内部不变量，
+# 故按测试需要直接访问。
+# pylint: disable=protected-access
 """End 组件跨执行隔离测试（静态图复用前提，issue #1555 / Task 9）。
 
 End 在 wait_for_all=False 下会被 Pregel 引擎按入边多次触发，组件用四个能力
@@ -61,7 +66,8 @@ def _mock_session(node_session=None) -> MagicMock:
 
 
 class TestEndExecStateIsolation:
-    def test_exec_state_keyed_by_session(self):
+    @staticmethod
+    def test_exec_state_keyed_by_session():
         end = End(_end_conf())
         s1, s2 = _FakeSession(), _FakeSession()
         st1 = end._exec_state(s1)
@@ -70,7 +76,8 @@ class TestEndExecStateIsolation:
         assert st1 is not st2
         assert end._exec_state(s1) is st1  # 同 session 复用同一容器
 
-    def test_engine_wrappers_normalize_to_same_container(self):
+    @staticmethod
+    def test_engine_wrappers_normalize_to_same_container():
         """引擎每次能力调用新建的包装器 → 归一底层 NodeSession（C1）。"""
         end = End(_end_conf())
         node = _node_session()
@@ -80,7 +87,8 @@ class TestEndExecStateIsolation:
         assert end._exec_state(batch) is end._exec_state(stream)
         assert end._exec_state(node) is end._exec_state(batch)  # 裸 NodeSession 亦同键
 
-    def test_flags_do_not_leak_across_executions(self):
+    @staticmethod
+    def test_flags_do_not_leak_across_executions():
         end = End(_end_conf())
         s1, s2 = _FakeSession(), _FakeSession()
         st1 = end._exec_state(s1)
@@ -104,7 +112,8 @@ class TestEndExecStateIsolation:
         assert st2.mix_data == {}
         assert st2.mix_condition is None
 
-    def test_weakref_releases_with_session(self):
+    @staticmethod
+    def test_weakref_releases_with_session():
         end = End(_end_conf())
         s = _FakeSession()
         end._exec_state(s)
@@ -113,7 +122,8 @@ class TestEndExecStateIsolation:
         gc.collect()
         assert len(end._exec_states) == 0
 
-    def test_instance_has_no_shared_exec_attrs(self):
+    @staticmethod
+    def test_instance_has_no_shared_exec_attrs():
         """执行期字段不再落在实例属性上（复用实例的共享面）。"""
         end = End(_end_conf())
         for attr in (
@@ -130,7 +140,8 @@ class TestEndExecStateIsolation:
         ):
             assert not hasattr(end, attr), attr
 
-    def test_stream_output_via_contextvar(self):
+    @staticmethod
+    def test_stream_output_via_contextvar():
         """get_stream_output 读 ContextVar 通道，两次执行互不串扰。"""
         end = End(_end_conf())
         ctx.set_stream_final_output({"userFields": "first"})
@@ -138,7 +149,8 @@ class TestEndExecStateIsolation:
         ctx.set_stream_final_output({"userFields": "second"})
         assert end.get_stream_output() == {"userFields": "second"}
 
-    def test_reset_stream_output_delegates_to_contextvar(self):
+    @staticmethod
+    def test_reset_stream_output_delegates_to_contextvar():
         """_reset_stream_output 保留（外部 patch 调用方）但改走 ContextVar。"""
         end = End(_end_conf())
         ctx.set_stream_final_output({"userFields": "stale"})
@@ -220,7 +232,8 @@ class TestEndCapabilityIsolation:
 
 
 class TestEndRenderIsolation:
-    def test_template_cloned_per_execution(self):
+    @staticmethod
+    def test_template_cloned_per_execution():
         end = End(_end_conf())
         pristine = end._template_source
         st1 = end._exec_state(_FakeSession())
@@ -233,7 +246,8 @@ class TestEndRenderIsolation:
         # 执行外：解析回 build 期原对象（永不触碰）
         assert end._template is pristine
 
-    def test_template_resolves_to_exec_clone_inside_execution(self):
+    @staticmethod
+    def test_template_resolves_to_exec_clone_inside_execution():
         end = End(_end_conf())
         s1 = _FakeSession()
         st1 = end._exec_state(s1)
@@ -246,7 +260,8 @@ class TestEndRenderIsolation:
             end_module._current_exec_key.reset(token)
         assert end._template is end._template_source
 
-    def test_template_clone_shared_within_execution(self):
+    @staticmethod
+    def test_template_clone_shared_within_execution():
         """同一执行内 batch/stream 两路必须共用同一克隆（mix 依赖共享位置推进）。"""
         end = End(_end_conf())
         st = end._exec_state(_FakeSession())
@@ -255,7 +270,8 @@ class TestEndRenderIsolation:
         end._prepare_render_state(st)
         assert st.template is t1
 
-    def test_template_clone_starts_at_zero_position(self):
+    @staticmethod
+    def test_template_clone_starts_at_zero_position():
         """克隆复位渲染位置（等价父类 set_mix 的 reset 语义）。"""
         end = End(_end_conf())
         end._template_source._current_position = 5
@@ -266,7 +282,8 @@ class TestEndRenderIsolation:
         assert st.template._current_position == 0
         assert st.template._chunk_index == 0
 
-    def test_template_clone_has_own_sync_primitives(self):
+    @staticmethod
+    def test_template_clone_has_own_sync_primitives():
         """克隆不共享 _lock/_condition（跨执行队头阻塞防护）。
 
         父类 _render_stream 在持有 _lock 期间逐帧 yield（模板变量为上游流式
@@ -288,7 +305,8 @@ class TestEndRenderIsolation:
         end._prepare_render_state(st1)
         assert st1.template._lock is lock1
 
-    def test_capability_entry_does_not_mutate_shared_attrs(self):
+    @staticmethod
+    def test_capability_entry_does_not_mutate_shared_attrs():
         """能力入口不得变更共享属性（I1 不变量）。
 
         原实现入口做 `self._template = 克隆` + `self._batch_template = None`：
@@ -304,7 +322,8 @@ class TestEndRenderIsolation:
         assert end._batch_template_source is None
         assert end._batch_template is None
 
-    def test_batch_template_latch_resolves_per_execution(self):
+    @staticmethod
+    def test_batch_template_latch_resolves_per_execution():
         """父类 _render 的 batch 渲染器 latch 按执行隔离（不落共享属性）。"""
         end = End(_end_conf())
         s1, s2 = _FakeSession(), _FakeSession()

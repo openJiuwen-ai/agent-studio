@@ -1,5 +1,10 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件以白盒方式钉住各组件实例不再挂执行期状态、通道读写与懒初始化加锁语义，
+# 观测面本身就是受保护成员（_conf/_api/_initialized/_react_agent/_tools 等），
+# 用例前置注入（构造执行上下文、桩掉内部协程）也只能落在这些成员上；
+# 组件没有公开入口暴露"实例上无残留状态"与并发去重计数，故必须直接访问。
+# pylint: disable=protected-access
 """FlowApi / FlowQA / Questioner / FlowAgent / FlowMcp / ComplexIntentDetection
 执行期状态清理测试（issue #1555 / Task 14）。
 
@@ -59,7 +64,8 @@ def _clean_exec_channels():
 
 
 class TestFlowApiStateless:
-    def test_no_instance_final_output_field(self):
+    @staticmethod
+    def test_no_instance_final_output_field():
         """实例不再持有流式末帧字段（源码级 + 实例级双断言）。"""
         from jiuwen.extension.workflow_node.flow_api import FlowApi
 
@@ -67,7 +73,8 @@ class TestFlowApiStateless:
         assert "self._final_stream_output" not in src
         assert not hasattr(FlowApi(), "_final_stream_output")
 
-    def test_final_stream_output_via_contextvar(self):
+    @staticmethod
+    def test_final_stream_output_via_contextvar():
         """get_stream_output 读 ContextVar 通道（引擎 _post_stream 消费）。"""
         from jiuwen.extension.workflow_node.flow_api import FlowApi
 
@@ -140,7 +147,8 @@ class TestFlowApiStateless:
 
 
 class TestFlowQAStateless:
-    def test_no_dead_stream_output_field(self):
+    @staticmethod
+    def test_no_dead_stream_output_field():
         """INVOKE-only 组件不再持有引擎不可达的 _stream_output 死状态。"""
         from jiuwen.extension.workflow_node.flow_qa import FlowQA
 
@@ -150,7 +158,8 @@ class TestFlowQAStateless:
         qa = FlowQA({"name": "qa", "options": ["a"], "needReply": False})
         assert not hasattr(qa, "_stream_output")
 
-    def test_get_stream_output_reads_contextvar(self):
+    @staticmethod
+    def test_get_stream_output_reads_contextvar():
         from jiuwen.extension.workflow_node.flow_qa import FlowQA
 
         qa = FlowQA({"name": "qa", "options": ["a"], "needReply": False})
@@ -241,7 +250,9 @@ class TestQuestionerStateless:
 
         captured = {}
 
-        async def _fake_direct_reply(
+        # 该桩替换生产方法 _handle_questioner_direct_reply_safe：生产调用点按位置
+        # 传入 5 个实参并另传 metadata 关键字，参数个数由被替换方法的调用契约决定。
+        async def _fake_direct_reply(  # pylint: disable=huawei-too-many-arguments
             inputs, session, context, current_state, is_resuing=False, metadata=None
         ):
             captured["metadata"] = metadata
@@ -302,7 +313,8 @@ class TestFlowAgentInitLock:
         assert len(created) == 1
         assert agent._react_agent.register_rail.await_count == 1
 
-    def test_register_tools_adds_with_skip_if_exists(self, monkeypatch):
+    @staticmethod
+    def test_register_tools_adds_with_skip_if_exists(monkeypatch):
         """构建期工具注册幂等：add_tool 带 skip_if_exists=True。"""
         from openjiuwen.core.runner import Runner
         from jiuwen.extension.workflow_node import flow_agent as fa
@@ -353,7 +365,8 @@ def _flow_mcp(params):
 
 
 class TestFlowMcpStateless:
-    def test_format_api_inputs_returns_header_params(self):
+    @staticmethod
+    def test_format_api_inputs_returns_header_params():
         """header 参数随返回值传递，不再写实例字段。"""
         mcp = _flow_mcp(
             [
@@ -432,7 +445,8 @@ def _complex_component():
 
 
 class TestComplexIntentDetectionStateless:
-    def test_no_exec_state_instance_fields(self):
+    @staticmethod
+    def test_no_exec_state_instance_fields():
         """实例不再持有 _session / _context / 子工作流缓存 / 错误字段。"""
         from agent_runtime.extension.workflow_node.complex_intent_detection import (
             ComplexIntentDetection,
@@ -493,7 +507,8 @@ class TestComplexIntentDetectionStateless:
         assert seen["exec"] == (session, context)
         assert ctx.current_component_exec() == (None, None)
 
-    def test_resume_read_points_use_component_exec_session(self, monkeypatch):
+    @staticmethod
+    def test_resume_read_points_use_component_exec_session(monkeypatch):
         """恢复读点经通道取 session（不再是实例字段）。"""
         from agent_runtime.extension.workflow_node import complex_intent_detection as cidm
 
@@ -521,7 +536,8 @@ class TestComplexIntentDetectionStateless:
 
         assert seen["session"] is session
 
-    def test_resume_read_points_work_with_real_session_wrapper(self):
+    @staticmethod
+    def test_resume_read_points_work_with_real_session_wrapper():
         """逃逸面：真实 Session 包装器入通道时读点不抛 AttributeError 且读到状态。
 
         写入端存**组件面包装器**（与旧 ``self._session = session`` 同物）——
