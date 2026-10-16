@@ -354,3 +354,13 @@ env:
 2. [第三步] Service日志 → 搜 "JiuWen request param" 查看转发给 Runtime 的请求体
 3. [第四步] 设置 WORKFLOW_LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
 ```
+
+### 提示词评估返回错误的 JSON 类型
+
+使用 LLM 评估提示词优化结果时，评估模型需要在 `json` 代码块中返回 JSON 对象：
+
+```json
+{"result": true, "reason": "回答与参考答案一致。"}
+```
+
+如果评估模型返回数组、字符串、数字或布尔值而非对象，该样例将得到 `0` 分，并记录 `Parse JSON error` 原因，其他样例仍可继续评估。出现此类错误时，请检查评估模型输出和评估指令；评估模型输出无效并不代表助手回答错误。

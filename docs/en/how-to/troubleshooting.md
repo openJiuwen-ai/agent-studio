@@ -354,3 +354,13 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+### Invalid JSON Type in Prompt Evaluation
+
+For LLM-based prompt optimization evaluation, the judge must return a JSON object in a `json` code block:
+
+```json
+{"result": true, "reason": "The answer matches the reference."}
+```
+
+If the judge returns an array, string, number, or boolean instead of an object, that example receives a score of `0` with a `Parse JSON error` reason. Other examples can still be evaluated. Check the judge model's output and evaluation instructions if these errors occur; an invalid judge response does not establish that the assistant's answer is incorrect.
