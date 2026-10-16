@@ -27,7 +27,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from jiuwen.extension.workflow import execution_session_ctx as ctx
+from openjiuwen.core.session import execution_session_ctx as ctx
 from jiuwen.extension.workflow_node.intent_detection import (
     ExecutionStatus,
     IntentDetection,
@@ -116,8 +116,11 @@ class TestIntentDetectionStateless:
         result = await comp.invoke({"input": "你好"}, session, context)
 
         assert result["result"] == "分类1"
-        # 路由属主组件：值须存活到同一 NodeTask 的 dispatch（Patch C 优先级 1）
-        assert ctx.current_component_exec() == (session, context)
+        # 路由属主组件：值须存活到同一 NodeTask 的 dispatch（组件级优先级），
+        # owner 为本组件 router（读取侧按 owner 做归属校验）
+        stored = ctx.current_component_exec()
+        assert stored[:2] == (session, context)
+        assert stored[2] is comp._router
         # 无执行期字段残留
         assert not hasattr(comp, "_session")
         assert not hasattr(comp, "conversation_id")
@@ -144,10 +147,12 @@ class TestIntentDetectionStateless:
 
         assert result == {"result": "ok"}
         # super 执行期间可见
-        assert seen["exec"] == (session, context)
+        assert seen["exec"][:2] == (session, context)
         # 返回后未 reset（同 task 的 dispatch 需要读到组件级 session）
-        assert ctx.current_component_exec() == (session, context)
-        # 不再写死共享 router 的 session（Patch C 读侧改走 ContextVar）
+        stored = ctx.current_component_exec()
+        assert stored[:2] == (session, context)
+        assert stored[2] is comp._router
+        # 不再写死共享 router 的 session（读侧改走 ContextVar）
         assert comp._router._session is None
 
     @pytest.mark.asyncio
@@ -167,7 +172,9 @@ class TestIntentDetectionStateless:
         result = await comp.invoke({"input": "你好"}, session, context)
 
         assert result["result"] == "分类1"
-        assert ctx.current_component_exec() == (session, context)
+        stored = ctx.current_component_exec()
+        assert stored[:2] == (session, context)
+        assert stored[2] is comp._router
 
     @pytest.mark.asyncio
     async def test_faq_result_keeps_few_shot_example_local(self):
@@ -251,11 +258,11 @@ class TestIntentDetectionStateless:
 
 
 class TestComponentExecSessionTypeContract:
-    """Critical-1：component_exec 值的类型契约（Patch C 消费方）。
+    """Critical-1：component_exec 值的类型契约（引擎路由消费方）。
 
     引擎 `WorkflowComponent.on_invoke`（component.py:95-99）以
     `Session(node_session, False)` 包装器调 invoke——包装器**不是** BaseSession、
-    无 state()、无 __getattr__ 委托；dispatch 同 NodeTask → patched
+    无 state()、无 __getattr__ 委托；dispatch 同 NodeTask → 引擎
     BranchRouter.__call__ → `resolve_routing_session` **读取端解包**
     （通道存包装器，路由解析返回 NodeSession）→ 分支条件
     Condition.__call__ → AtomicNode._validate_session_and_state
@@ -279,20 +286,15 @@ class TestComponentExecSessionTypeContract:
     async def test_component_exec_unwraps_session_wrapper_for_router_conditions(
         self, monkeypatch
     ):
-        """双契约分离：通道存包装器（组件自身读点），解析链解包 NodeSession（Patch C 消费方）。"""
+        """双契约分离：通道存包装器（组件自身读点），解析链解包 NodeSession（路由消费方）。"""
         from openjiuwen.core.session import BaseSession
         from openjiuwen.core.workflow.components.flow.branch_router import (
             BranchRouter,
-        )
-        from jiuwen.extension.patches.static_graph_patch import (
-            _patched_branch_router_call,
         )
         from jiuwen.serve.controllers.execution.ir_converter import (
             _RoutedIntentDetection,
         )
         import jiuwen.extension.workflow_node.intent_detection as idm
-
-        monkeypatch.setattr(BranchRouter, "__call__", _patched_branch_router_call)
 
         node_session, wrapper = self._engine_session()
         assert not isinstance(wrapper, BaseSession)  # 包装器不满足条件求值契约
@@ -306,25 +308,34 @@ class TestComponentExecSessionTypeContract:
         await comp.invoke({}, wrapper, None)
 
         # 契约 1（组件自身读点）：通道内存组件面包装器（NodeSession 无
-        # trace/get_global_state/interact，解包存储会打断组件主路径）
-        stored, _ = ctx.current_component_exec()
+        # trace/get_global_state/interact，解包存储会打断组件主路径），
+        # owner 为本组件 router（读取侧据此做归属校验）
+        stored, _, owner = ctx.current_component_exec()
         assert stored is wrapper
+        assert owner is comp._router
 
-        # 契约 2（Patch C 消费方）：解析链返回解包后的 NodeSession（BaseSession）
-        assert ctx.resolve_routing_session() is node_session
-        assert isinstance(ctx.resolve_routing_session(), BaseSession)
+        # 契约 2（路由消费方）：解析链返回解包后的 NodeSession（BaseSession）
+        assert ctx.resolve_routing_session(owner=comp._router) is node_session
+        assert isinstance(
+            ctx.resolve_routing_session(owner=comp._router), BaseSession
+        )
 
-        # 消费端：patched BranchRouter → 条件求值不抛类型错，收到 NodeSession
+        # 消费端：真实 BranchRouter → 条件求值不抛类型错，收到 NodeSession
         seen = {}
 
         def _record(session):
             seen["session"] = session
             return True
 
-        router = BranchRouter(report_trace=False)
-        router.add_branch(_session_arg_condition(_record), ["node_a"])
-        assert await router() == ["node_a"]
+        comp._router.report_trace = False
+        comp._router.add_branch(_session_arg_condition(_record), ["node_a"])
+        assert await comp._router() == ["node_a"]
         assert seen["session"] is node_session
+
+        # 归属校验：无关 router 不采信本组件写入的组件级值（回退 workflow 级 /
+        # 自身 fallback，此处均无）——避免同 task 内旧值被误读
+        other = BranchRouter(report_trace=False)
+        assert ctx.resolve_routing_session(owner=other) is None
 
     @pytest.mark.asyncio
     async def test_base_invoke_stores_session_wrapper(self):
@@ -338,7 +349,7 @@ class TestComponentExecSessionTypeContract:
         result = await comp.invoke({"input": "你好"}, wrapper, None)
 
         assert result["result"] == "分类1"
-        stored, _ = ctx.current_component_exec()
+        stored, _, _ = ctx.current_component_exec()
         assert stored is wrapper
 
     @pytest.mark.asyncio
@@ -364,7 +375,7 @@ class TestComponentExecSessionTypeContract:
         result = await comp.invoke({"input": "你好"}, wrapper, None)
 
         assert result["result"] == "分类1"
-        stored, _ = ctx.current_component_exec()
+        stored, _, _ = ctx.current_component_exec()
         assert stored is wrapper
 
         # 中断路径：wrapper.interact 可达（NodeSession 无 interact → AttributeError）；

@@ -38,7 +38,6 @@ from jiuwen.controller.agent.agent import Agent
 from jiuwen.controller.common.config import AgentConfig, AgentMetaData
 from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
-    apply_loop_exec_state_isolation_patch,
     apply_loop_state_cleanup_patch,
 )
 from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
@@ -76,7 +75,6 @@ from jiuwen.extension.workflow_node.loop_set_variable import LoopSetVariable
 from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.sub_workflow import SubWorkflow
 from jiuwen.extension.workflow.lazy_workflow import LazyWorkflow
-from jiuwen.extension.workflow.execution_session_ctx import set_component_exec
 from jiuwen.extension.wrapper.single_component_debug_wrapper import SingleComponentInfo
 from jiuwen.multi_agent.agent_group.config import AgentGroupConfig, GroupSettings
 from jiuwen.multi_agent.agent_group.hierarchical_group.agent_group import (
@@ -101,6 +99,7 @@ from jiuwen.serve.controllers.execution.utils import AgentIrUtils, PluginIRConve
 from openjiuwen.core.common.exception.errors import (
     ValidationError as OpenjiuwenValidationError,
 )
+from openjiuwen.core.session.execution_session_ctx import set_component_exec
 from openjiuwen.core.workflow import Workflow, WorkflowCard
 from openjiuwen.core.workflow.components.base import ComponentAbility
 from openjiuwen.core.workflow.components.component import WorkflowComponent
@@ -117,9 +116,8 @@ from pydantic import ValidationError
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
-apply_loop_exec_state_isolation_patch()
 apply_global_memory_ref_resolution_patch()
-# 四件套（含 Patch D）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
+# Patch B 必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
 # apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
 # 确保静态图复用降级而非拖垮 ir_converter 的 import。
 try:
@@ -908,13 +906,13 @@ class _RoutedIntentDetection(IntentDetection):
     async def invoke(
         self, inputs: Any, session: Any, context: Any, **kwargs: Any
     ) -> Any:
-        # 路由属主组件：session/context 走 component_exec ContextVar（**不
+        # 路由属主组件：session/context 走引擎 execution_session_ctx 通道（**不
         # reset**——路由 dispatch 在 invoke 返回后的同一 NodeTask 里执行，
         # 需读到组件级 session；super().invoke 入口同值再 set，幂等）。
+        # owner 传本组件 router：读取侧做归属校验，避免同 task 内旧值误读。
         # 存组件面包装器（与旧 `self._session = session` 同物，组件自身读点
-        # 依赖包装器 API）；Patch C 消费方的 BaseSession 契约由
-        # resolve_routing_session 读取端解包满足。
-        set_component_exec(session, context)
+        # 依赖包装器 API）；BaseSession 契约由 resolve_routing_session 读取端解包满足。
+        set_component_exec(session, context, owner=self._router)
         return await super().invoke(inputs, session, context, **kwargs)
 
     def add_component(

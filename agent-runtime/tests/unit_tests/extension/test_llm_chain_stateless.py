@@ -26,6 +26,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.foundation.llm import UserMessage
+from openjiuwen.core.session import execution_session_ctx as engine_ctx
 
 from jiuwen.extension.workflow import execution_session_ctx as ctx
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
@@ -34,10 +35,10 @@ from jiuwen.extension.workflow_node.llm_chain import LLMChain
 @pytest.fixture(autouse=True)
 def _clean_exec_channels():
     """两个执行期 ContextVar 通道进程内共享，用例前后复位避免互相串扰。"""
-    ctx.set_component_exec(None, None)
+    engine_ctx.set_component_exec(None, None)
     ctx.set_stream_final_output(None)
     yield
-    ctx.set_component_exec(None, None)
+    engine_ctx.set_component_exec(None, None)
     ctx.set_stream_final_output(None)
 
 
@@ -116,11 +117,11 @@ class TestLLMChainStateless:
         context = MagicMock()
         context.get_messages = MagicMock(return_value=[UserMessage(content="u1")])
 
-        token = ctx.set_component_exec(None, context)
+        token = engine_ctx.set_component_exec(None, context)
         try:
             assert chain._get_chat_history() == [{"role": "user", "content": "u1"}]
         finally:
-            ctx.reset_component_exec(token)
+            engine_ctx.reset_component_exec(token)
         assert chain._get_chat_history() == []
 
     @pytest.mark.asyncio
@@ -136,7 +137,7 @@ class TestLLMChainStateless:
         seen = {}
 
         async def _capture(**kwargs):
-            seen["exec"] = ctx.current_component_exec()
+            seen["exec"] = engine_ctx.current_component_exec()
             return _FakeLLMOutput()
 
         chain._llm.invoke = AsyncMock(side_effect=_capture)
@@ -144,9 +145,9 @@ class TestLLMChainStateless:
             {"userFields": {"query": "q"}}, session=session, context=context
         )
 
-        assert seen["exec"] == (session, context)
+        assert seen["exec"] == (session, context, None)
         assert result["userFields"] == {"raw_output": "hi"}
-        assert ctx.current_component_exec() == (None, None)
+        assert engine_ctx.current_component_exec() == (None, None, None)
 
     @pytest.mark.asyncio
     async def test_invoke_resets_component_exec_on_error(self):
@@ -162,7 +163,7 @@ class TestLLMChainStateless:
                 session=MagicMock(),
                 context=MagicMock(),
             )
-        assert ctx.current_component_exec() == (None, None)
+        assert engine_ctx.current_component_exec() == (None, None, None)
 
     # docstring 缩进与函数体一致（8 空格），是本文件全部用例的统一写法。
     @pytest.mark.asyncio
@@ -187,7 +188,7 @@ class TestLLMChainStateless:
 
         assert len(frames) == 1
         assert chain.get_stream_output() == frames[0]
-        assert ctx.current_component_exec() == (None, None)
+        assert engine_ctx.current_component_exec() == (None, None, None)
 
     @pytest.mark.asyncio
     async def test_stream_entry_reset_clears_stale_final_output_on_failure(self):
@@ -214,7 +215,7 @@ class TestLLMChainStateless:
                 pass
 
         assert chain.get_stream_output() is None
-        assert ctx.current_component_exec() == (None, None)
+        assert engine_ctx.current_component_exec() == (None, None, None)
 
     @pytest.mark.asyncio
     async def test_stream_aclose_resets_component_exec(self):
@@ -233,6 +234,6 @@ class TestLLMChainStateless:
         )
         assert await gen.__anext__() is not None
         # 迭代期间通道生效（generator 体与消费者同 context）
-        assert ctx.current_component_exec() == (session, context)
+        assert engine_ctx.current_component_exec() == (session, context, None)
         await gen.aclose()
-        assert ctx.current_component_exec() == (None, None)
+        assert engine_ctx.current_component_exec() == (None, None, None)

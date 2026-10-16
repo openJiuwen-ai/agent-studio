@@ -32,17 +32,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from openjiuwen.core.session import execution_session_ctx as engine_ctx
 from jiuwen.extension.workflow import execution_session_ctx as ctx
 
 
 @pytest.fixture(autouse=True)
 def _clean_exec_channels():
     """执行期 ContextVar 通道进程内共享，用例前后复位避免互相串扰。"""
-    ctx.set_component_exec(None, None)
+    engine_ctx.set_component_exec(None, None)
     ctx.set_component_state(None)
     ctx.set_stream_final_output(None)
     yield
-    ctx.set_component_exec(None, None)
+    engine_ctx.set_component_exec(None, None)
     ctx.set_component_state(None)
     ctx.set_stream_final_output(None)
 

@@ -40,10 +40,6 @@ from enum import Enum
 from typing import Any, Optional
 from typing import Callable, Union
 
-from jiuwen.extension.workflow.execution_session_ctx import (
-    current_component_exec,
-    set_component_exec,
-)
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
 from openjiuwen.core.context_engine import ModelContext
@@ -56,6 +52,10 @@ from openjiuwen.core.foundation.llm import (
 from openjiuwen.core.foundation.prompt import PromptTemplate
 from openjiuwen.core.graph.base import Graph
 from openjiuwen.core.graph.executable import Input, Output
+from openjiuwen.core.session.execution_session_ctx import (
+    current_component_exec,
+    set_component_exec,
+)
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.components.condition.condition import Condition
@@ -454,15 +454,18 @@ class IntentDetection(WorkflowComponent):
         start_time = time.perf_counter()
         conversation_id = session.get_session_id()
 
-        # 执行期 session/context 走 ContextVar 通道（实例跨执行复用，不落实例）。
-        # **不 reset**：本组件是分支路由属主，路由 dispatch 发生在 invoke 返回
-        # 之后的同一 NodeTask 里（引擎先跑节点函数再 dispatch），组件级 session
-        # 必须存活到 dispatch（Patch C 的组件级优先解析）。
+        # 执行期 session/context 走引擎的 execution_session_ctx 通道（实例跨执行
+        # 复用，不落实例）。**不 reset**：本组件是分支路由属主，路由 dispatch
+        # 发生在 invoke 返回之后的同一 NodeTask 里（引擎先跑节点函数再 dispatch），
+        # 组件级 session 必须存活到 dispatch——引擎 BranchRouter.__call__ 经
+        # resolve_routing_session 优先读该通道的组件级值。
+        # owner 传本组件的 router：读取侧做归属校验，同一 NodeTask 内前一个组件
+        # 遗留的旧值不会被本 router 误读（无 owner 时无条件采信）。
         # 存入**组件面包装器**（与旧 `self._session = session` 同物）：本组件自身
         # 读点（trace / get_global_state / interact 等）只有 Session 包装器提供
-        # （NodeSession 无这些方法）；Patch C 消费方的 BaseSession 契约由
+        # （NodeSession 无这些方法）；消费方的 BaseSession 契约由
         # resolve_routing_session 读取端解包满足（双契约分离）。
-        set_component_exec(session, context)
+        set_component_exec(session, context, owner=self._router)
         # node_state 为遗留接口（引擎不读写），入口重建复位避免跨执行残留。
         self.node_state = IntentDetectionState()
 
@@ -818,8 +821,8 @@ class IntentDetection(WorkflowComponent):
     async def get_llm_result(
         self, current_inputs: dict, conversation_id: str = ""
     ) -> str:
-        # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
-        session, _ = current_component_exec()
+        # 执行期 session 经引擎 ContextVar 通道读取（实例跨执行复用，不落实例）
+        session, _, _ = current_component_exec()
         # Lazy initialization of LLM (cannot await in __init__)
         # 双检加锁：并发首调只建一次 Model（实例跨执行复用）
         if self.llm is None:
@@ -935,7 +938,7 @@ class IntentDetection(WorkflowComponent):
             "intent": result,
         }
         self.node_state.status = ExecutionStatus.USER_INTERACT
-        session, _ = current_component_exec()
+        session, _, _ = current_component_exec()
         return session.interact(interrupt_message)
 
     def _handle_global_other_intent(self) -> Any:
@@ -945,7 +948,7 @@ class IntentDetection(WorkflowComponent):
             "intent": result,
         }
         self.node_state.status = ExecutionStatus.USER_INTERACT
-        session, _ = current_component_exec()
+        session, _, _ = current_component_exec()
         return session.interact(interrupt_message)
 
     # --------------------------------------------------------------------------
