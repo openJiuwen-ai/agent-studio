@@ -35,6 +35,10 @@ from agent_runtime.common.session_state_access import (
     get_state_info,
 )
 from jiuwen.extension.patches.workflow_sub_stream_patch import _interrupt_output_schema
+from jiuwen.extension.workflow.execution_session_ctx import (
+    get_stream_final_output,
+    set_stream_final_output,
+)
 from jiuwen.extension.workflow_node.utils import (
     JiuWenBaseException,
     WorkflowAbortException,
@@ -66,6 +70,13 @@ GLOBAL_VARIABLES = "global_variables"
 REQUEST_VARIABLES = "_request"
 MESSAGE_NODE_END = "message_end"
 
+# SubWorkflow 执行期状态私有 session state key（静态图复用配套，issue #1555）。
+# 中断-恢复语义天然跨请求：标记写 session state 后由 checkpoint 承载，下一请求
+# （同 session）可见；不同 session 互不可见，实例复用不串台。成功完成后清空，
+# 避免上一执行的残留把下一执行误导向 resume 路径。
+SUB_WF_INTERRUPT_CHILD_KEY = "__sub_wf_interrupt_child"
+SUB_WF_LAST_CHILD_COMPLETED_KEY = "__sub_wf_last_child_completed"
+
 DEFAULT_SUB_WORKFLOW_TIMEOUT = 300
 DEFAULT_STREAM_FRAME_TIMEOUT = 120
 DEFAULT_FIRST_FRAME_TIMEOUT = 10
@@ -74,15 +85,6 @@ DEFAULT_FIRST_FRAME_TIMEOUT = 10
 QUESTIONER_STATE_KEY = "questioner_state"
 FLOW_QA_STATE_KEY = "flow_qa_state"
 FLOW_INPUT_STATE_KEY = "flow_input_state"
-
-# 子工作流 stream 结束时 comp_state 兜底扫描：需 session.update_state 写入
-# {key: {status, question, ...}} 且 status=user_interact 的组件 state key。
-# 新增同类中断组件时，在此 tuple 追加一项即可。
-CHILD_INTERRUPT_STATE_KEYS: tuple[str, ...] = (
-    QUESTIONER_STATE_KEY,
-    FLOW_QA_STATE_KEY,
-    FLOW_INPUT_STATE_KEY,
-)
 
 # 子工作流 stream 结束时 comp_state 兜底扫描：需 session.update_state 写入
 # {key: {status, question, ...}} 且 status=user_interact 的组件 state key。
@@ -227,13 +229,80 @@ class SubWorkflow(WorkflowComponent):
         self._conf = conf
         self._validate_config()
         self.node_state = SubWorkflowState()
+        # 构造传入的子工作流（LazyWorkflow）为构建期字段；None 降级路径的
+        # per-execution 实例不再缓存到本属性（见 _get_workflow_instance）。
         self._workflow_instance = sub_workflow
         self._node_id = conf.get("node_id", "")
-        self._stream_state = None
-        self._interrupt_child_node_id: Optional[str] = None
-        self._pending_interact_prompt: str = ""
-        self._global_var_names = None
-        self._last_child_completed = False
+
+    @staticmethod
+    def _read_session_exec_state(session: Session, key: str) -> Any:
+        """读 SubWorkflow 私有执行标记（session state 通道）。
+
+        执行期状态不再落在可复用组件实例上：中断子节点 ID / 上次子工作流完成
+        标记写 session state，跨请求由 checkpoint 承载、跨 session 天然隔离。
+        """
+        if session is None:
+            return None
+        try:
+            getter = getattr(session, "get_state", None)
+            if not callable(getter):
+                return None
+            return getter(key)
+        except Exception:
+            workflow_logger.debug(
+                "Failed to read sub-workflow session state key %s", key, exc_info=True
+            )
+            return None
+
+    @staticmethod
+    def _write_session_exec_state(session: Session, key: str, value: Any) -> None:
+        """写 SubWorkflow 私有执行标记（value 为 None 表示清空该标记）。"""
+        if session is None:
+            return
+        try:
+            updater = getattr(session, "update_state", None)
+            if not callable(updater):
+                return
+            updater({key: value})
+        except Exception:
+            workflow_logger.debug(
+                "Failed to write sub-workflow session state key %s", key, exc_info=True
+            )
+
+    def _read_interrupt_child_node_id(self, session: Session) -> Optional[str]:
+        """读中断子节点 ID（session state 通道）。"""
+        value = self._read_session_exec_state(session, SUB_WF_INTERRUPT_CHILD_KEY)
+        return value if isinstance(value, str) and value else None
+
+    def _write_interrupt_child_node_id(
+        self, session: Session, node_id: Optional[str]
+    ) -> None:
+        """写/清空中断子节点 ID（成功完成后清空，避免污染下一执行）。"""
+        self._write_session_exec_state(session, SUB_WF_INTERRUPT_CHILD_KEY, node_id)
+
+    def _read_last_child_completed(self, session: Session) -> bool:
+        """读上次子工作流是否正常完成（决定 reset_sub_outputs）。"""
+        return (
+            self._read_session_exec_state(session, SUB_WF_LAST_CHILD_COMPLETED_KEY)
+            is True
+        )
+
+    def _write_last_child_completed(self, session: Session, value: bool) -> None:
+        self._write_session_exec_state(session, SUB_WF_LAST_CHILD_COMPLETED_KEY, value)
+
+    def _resolve_interrupt_child_node_id(self, session: Session) -> Optional[str]:
+        """本次执行中断子节点 ID 的局部镜像（执行入口调用一次，参数下传）。
+
+        读点不能每次回读 session state：`_detect_child_interrupt` 的写入只入
+        comp_state._updates（staged），`get_state` 读的是已提交 `_state`，同请求内
+        「首次检测到中断」后立即可见性丢失。旧实例属性模型下检测结果立即可见，
+        故此处「session state（上一请求已提交）优先，其次本次检测结果」与旧行为等价。
+        """
+        child_node_id = self._read_interrupt_child_node_id(session)
+        if child_node_id:
+            return child_node_id
+        detected = self._detect_child_interrupt(session)
+        return detected[0] if detected else None
 
     @staticmethod
     def _collect_global_refs_from_schema(schema, inputs, result, global_var_names):
@@ -255,32 +324,44 @@ class SubWorkflow(WorkflowComponent):
                     schema_value, nested_inputs, result, global_var_names,
                 )
 
-    def _collect_global_vars(self, inputs: Input, session: Session) -> dict | None:
-        """从 inputs 中提取全局变量值，用于调试信息记录。支持嵌套 input_schema。"""
+    def _collect_global_vars(
+        self, inputs: Input, session: Session
+    ) -> tuple[Optional[dict], Optional[list]]:
+        """从 inputs 中提取全局变量值，用于调试信息记录。支持嵌套 input_schema。
+
+        Returns:
+            tuple[Optional[dict], Optional[list]]: (全局变量值, 变量名列表)。
+            变量名由静态 schema 决定，随返回值经调用方局部变量传递给
+            ``_collect_updated_memory``，不再落在可复用实例上。
+        """
         if not isinstance(session, Session):
-            return None
+            return None, None
         node_config = session.get_node_config()
         if not node_config or not node_config.io_configs:
-            return None
+            return None, None
         input_schema = node_config.io_configs.inputs_schema
         if not isinstance(input_schema, dict):
-            return None
+            return None, None
         if not isinstance(inputs, dict):
-            return None
+            return None, None
 
         result = {}
         global_var_names = []
         self._collect_global_refs_from_schema(input_schema, inputs, result, global_var_names)
 
-        self._global_var_names = global_var_names if global_var_names else None
-        return result if result else None
+        return (
+            result if result else None,
+            global_var_names if global_var_names else None,
+        )
 
-    def _collect_updated_memory(self, session: Session) -> dict | None:
-        if not self._global_var_names:
+    def _collect_updated_memory(
+        self, session: Session, global_var_names: Optional[list]
+    ) -> dict | None:
+        if not global_var_names:
             return None
 
         updated_memory = {}
-        for var_name in self._global_var_names:
+        for var_name in global_var_names:
             val = session.get_global_state(f"{GLOBAL_REF_PREFIX}{var_name}")
             if val is None:
                 val = session.get_global_state(var_name)
@@ -291,11 +372,11 @@ class SubWorkflow(WorkflowComponent):
         """使用 Pydantic 校验配置"""
         try:
             SubWorkflowConfig.model_validate(self._conf)
-        except ValidationError as e:
+        except ValidationError as exc:
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.CONFIG_VALIDATION_ERROR,
-                error_msg=str(type(e).__name__),
-            ) from e
+                error_msg=str(type(exc).__name__),
+            ) from exc
 
     def _get_timeout(self, session: Session) -> int:
         """获取子工作流执行超时时间（秒）"""
@@ -471,16 +552,26 @@ class SubWorkflow(WorkflowComponent):
                 continue
         return None
 
-    def _extract_parent_resume_query(self, session: Session) -> Optional[str]:
-        """提取父工作流恢复时本次用户输入，优先于 Start 节点 checkpoint 中的 query。"""
+    def _extract_parent_resume_query(
+        self, session: Session, child_node_id: Optional[str] = None
+    ) -> Optional[str]:
+        """提取父工作流恢复时本次用户输入，优先于 Start 节点 checkpoint 中的 query。
+
+        Args:
+            child_node_id: 本次执行的中断子节点 ID 局部镜像（执行入口解析后下传）。
+                为 None 时回退读 session state（兼容直接调用）。
+        """
         workflow_query = self._read_workflow_interactive_input(session)
         if workflow_query is not None:
             return workflow_query
 
-        if self._interrupt_child_node_id:
+        # 中断子节点 ID：优先用下传的局部镜像（同请求内首次检测结果对 staged 写不可见）
+        if child_node_id is None:
+            child_node_id = self._read_interrupt_child_node_id(session)
+        if child_node_id:
             messages = (
                 session.get_state(
-                    f"{self._interrupt_child_node_id}.{INTERACTIVE_INPUT}"
+                    f"{child_node_id}.{INTERACTIVE_INPUT}"
                 )
                 or []
             )
@@ -492,9 +583,9 @@ class SubWorkflow(WorkflowComponent):
         # comp_state[顶层作用域][目标node_id][__interactive_input__] 嵌套路径，
         # 点分查找无法穿透，递归扫描 comp_state 树取值。
         _comp_state = get_state_info(session, "comp_state")
-        if _comp_state and self._interrupt_child_node_id:
+        if _comp_state and child_node_id:
             found = self._find_interactive_input_in_state_tree(
-                _comp_state, self._interrupt_child_node_id
+                _comp_state, child_node_id
             )
             if found is not None:
                 found_node_id, found_raw = found
@@ -532,11 +623,10 @@ class SubWorkflow(WorkflowComponent):
     def _should_resume_child_workflow(self, session: Session) -> bool:
         """是否应向子工作流传递 InteractiveInput 以恢复 checkpoint。
 
-        SubWorkflow 组件每次请求都会重新实例化，node_state 不会从中断自动恢复；
-        需从 session / comp_state 识别子交互组件仍处于 USER_INTERACT。
+        判定全部来自 session 通道（组件实例不承载跨执行状态，复用实例下
+        上一执行的残留不得影响本次判定）：子交互组件仍处于 USER_INTERACT /
+        父工作流中断标记 / 本次请求携带 InteractiveInput。
         """
-        if self.node_state.status == ExecutionStatus.USER_INTERACT:
-            return True
         if self._detect_child_interrupt(session):
             return True
         inner_session = getattr(session, "_inner", None)
@@ -551,13 +641,27 @@ class SubWorkflow(WorkflowComponent):
         context: ModelContext,
         *,
         for_stream: bool,
+        params: Optional[dict] = None,
+        interrupt_child_node_id: Optional[str] = None,
     ) -> Any:
-        """构建子工作流输入：恢复场景使用 InteractiveInput，否则使用普通 dict。"""
+        """构建子工作流输入：恢复场景使用 InteractiveInput，否则使用普通 dict。
+
+        Args:
+            params: ``_build_invoke_params`` 的结果；调用方以局部变量传入，便于
+                query 在本次执行内传递（不再经组件实例属性）。
+            interrupt_child_node_id: 本次执行中断子节点 ID 局部镜像（执行入口
+                经 ``_resolve_interrupt_child_node_id`` 解析后下传）。
+        """
         is_resume = self._should_resume_child_workflow(session)
-        params = await self._build_invoke_params(inputs, session, context)
+        if params is None:
+            params = await self._build_invoke_params(
+                inputs, session, context,
+                interrupt_child_node_id=interrupt_child_node_id,
+            )
         if is_resume:
-            self.node_state.status = ExecutionStatus.USER_INTERACT
-            resume_query = self._extract_parent_resume_query(session)
+            resume_query = self._extract_parent_resume_query(
+                session, interrupt_child_node_id
+            )
             if resume_query is None:
                 # 兜底：尝试从 inputs（InteractiveInput）中直接提取用户最新输入，
                 # 避免回退到 Start 节点 checkpoint 中的陈旧 query。
@@ -568,7 +672,7 @@ class SubWorkflow(WorkflowComponent):
                 workflow_logger.warning(
                     "SubWorkflow resume: failed to extract user reply for child %s, "
                     "falling back to Start-node query=%r (may be stale)",
-                    self._interrupt_child_node_id,
+                    interrupt_child_node_id,
                     params.get("query"),
                 )
             query = resume_query if resume_query is not None else params["query"]
@@ -586,24 +690,29 @@ class SubWorkflow(WorkflowComponent):
         }
         return child_inputs
 
-    def _detect_child_interrupt(self, session: Session) -> Optional[tuple[str, str]]:
+    def _detect_child_interrupt(
+        self, session: Session, pending_interact_prompt: str = ""
+    ) -> Optional[tuple[str, str]]:
         """从 session 状态检测子工作流内交互组件是否处于 USER_INTERACT。
 
         子工作流 stream(is_sub=True) 的中断信号会写入父 StreamEmitter，但不会出现在
         子 stream 迭代器中；需要通过 comp_state 中 CHILD_INTERRUPT_STATE_KEYS 兜底识别。
+
+        命中的子节点 ID 写入 session state（本次执行内为局部变量镜像，下一请求
+        恢复时仍从 session state 可见），不再落在组件实例上。
         """
-        if self._pending_interact_prompt:
+        if pending_interact_prompt:
             return (
-                self._interrupt_child_node_id or session.get_component_id(),
-                self._pending_interact_prompt,
+                self._read_interrupt_child_node_id(session)
+                or session.get_component_id(),
+                pending_interact_prompt,
             )
 
-        self._interrupt_child_node_id = None
         comp_state = get_state_info(session, "comp_state")
         if comp_state:
             found = self._find_interrupt_in_state_tree(comp_state)
             if found:
-                self._interrupt_child_node_id = found[0]
+                self._write_interrupt_child_node_id(session, found[0])
                 return found
 
         sub_session_state = session.get_state() or {}
@@ -612,14 +721,14 @@ class SubWorkflow(WorkflowComponent):
                 session.get_component_id(), sub_session_state
             )
             if matched:
-                self._interrupt_child_node_id = matched[0]
+                self._write_interrupt_child_node_id(session, matched[0])
                 return matched
             for node_id, node_state in sub_session_state.items():
                 if not isinstance(node_state, dict):
                     continue
                 matched = self._match_interrupt_in_node_state(node_id, node_state)
                 if matched:
-                    self._interrupt_child_node_id = matched[0]
+                    self._write_interrupt_child_node_id(session, matched[0])
                     return matched
 
         return None
@@ -695,7 +804,6 @@ class SubWorkflow(WorkflowComponent):
     async def _raise_user_interact_from_chunk(
         self, session: Session, chunk: OutputSchema
     ) -> None:
-        self.node_state.status = ExecutionStatus.USER_INTERACT
         payload = chunk.payload
         child_node_id = None
         if hasattr(payload, "id"):
@@ -703,7 +811,7 @@ class SubWorkflow(WorkflowComponent):
         elif isinstance(payload, dict):
             child_node_id = payload.get("id")
         if child_node_id:
-            self._interrupt_child_node_id = child_node_id
+            self._write_interrupt_child_node_id(session, child_node_id)
         await session.interact(self._resolve_interact_value(payload))
 
     @staticmethod
@@ -720,13 +828,17 @@ class SubWorkflow(WorkflowComponent):
         return payload
 
     def _resolve_interact_prompt(
-        self, session: Session, final_res: str, inner_session: Any
+        self,
+        session: Session,
+        final_res: str,
+        inner_session: Any,
+        pending_interact_prompt: str = "",
     ) -> str:
-        if self._pending_interact_prompt:
-            return self._pending_interact_prompt
+        if pending_interact_prompt:
+            return pending_interact_prompt
         if final_res:
             return final_res
-        detected = self._detect_child_interrupt(session)
+        detected = self._detect_child_interrupt(session, pending_interact_prompt)
         if detected:
             return detected[1]
         if self._is_parent_workflow_interrupted(inner_session):
@@ -741,29 +853,29 @@ class SubWorkflow(WorkflowComponent):
         final_val: dict,
         *,
         log_reason: str,
+        pending_interact_prompt: str = "",
     ) -> AsyncIterator[Output]:
         """统一处理子工作流用户交互中断：更新状态、yield 摘要并触发父级 interact。"""
-        self.node_state.status = ExecutionStatus.USER_INTERACT
         workflow_logger.info(
             "SubWorkflow detected child user interact",
             event_type=LogEventType.WORKFLOW_COMPONENT_END,
             component_type_str="SubWorkflow",
             metadata={
                 "node_id": self._node_id,
-                "child_node_id": self._interrupt_child_node_id,
+                "child_node_id": self._read_interrupt_child_node_id(session),
                 "reason": log_reason,
             },
         )
-        self._stream_state = {
+        set_stream_final_output({
             "responseContent": final_res,
             USER_FIELDS: final_val,
-        }
+        })
         if inner_session:
             inner_session.state().update_and_commit_workflow_state(
                 {"__interrupted": True}
             )
         interact_prompt = self._resolve_interact_prompt(
-            session, final_res, inner_session
+            session, final_res, inner_session, pending_interact_prompt
         )
         yield {
             "responseContent": final_res,
@@ -809,7 +921,11 @@ class SubWorkflow(WorkflowComponent):
         self.node_state.status = ExecutionStatus.END
 
     async def _get_workflow_instance(self, session: Session):
-        """从全局状态获取子工作流实例
+        """获取子工作流实例
+
+        构造传入（LazyWorkflow）为构建期字段，直接复用；None 降级路径每次从
+        session global_state 取 per-execution 实例并**不写回组件实例**——否则
+        复用组件会把某次执行的子工作流实例缓存到共享属性上（跨 session 串台）。
 
         Args:
             session: 工作流会话
@@ -842,7 +958,11 @@ class SubWorkflow(WorkflowComponent):
         return workflow_instance
 
     async def _build_invoke_params(
-        self, inputs: dict, session: Session, context: ModelContext
+        self,
+        inputs: dict,
+        session: Session,
+        context: ModelContext,
+        interrupt_child_node_id: Optional[str] = None,
     ) -> dict:
         """构建子工作流调用参数，并将 query 作为用户消息写入对话历史。
 
@@ -854,6 +974,8 @@ class SubWorkflow(WorkflowComponent):
             inputs: 输入数据
             session: 工作流会话
             context: 模型上下文
+            interrupt_child_node_id: 本次执行中断子节点 ID 局部镜像；None 时
+                回退读 session state（兼容直接调用）
 
         Returns:
             dict: 调用参数，包含 query、global_variables、conversation_history
@@ -865,8 +987,12 @@ class SubWorkflow(WorkflowComponent):
             memory_fields = {}
 
         query = system_fields.get("query", "")
-        if self._interrupt_child_node_id:
-            resume_query = self._extract_parent_resume_query(session)
+        if interrupt_child_node_id is None:
+            interrupt_child_node_id = self._read_interrupt_child_node_id(session)
+        if interrupt_child_node_id:
+            resume_query = self._extract_parent_resume_query(
+                session, interrupt_child_node_id
+            )
             if resume_query is not None:
                 query = resume_query
 
@@ -886,8 +1012,7 @@ class SubWorkflow(WorkflowComponent):
         else:
             conversation_history = []
 
-        self._current_query = query
-
+        # query 经返回值携带，调用方以局部变量传递（不再写组件实例属性）
         return {
             "query": query,
             "global_variables": global_variables,
@@ -946,13 +1071,26 @@ class SubWorkflow(WorkflowComponent):
             metadata={"node_id": self._node_id},
         )
 
-        self._workflow_instance = await self._get_workflow_instance(session)
+        # 执行入口复位末帧通道：上一执行的末帧不得串到本执行
+        set_stream_final_output(None)
 
+        workflow_instance = await self._get_workflow_instance(session)
+        # 中断子节点 ID 局部镜像：同请求内首次检测结果对 staged 写不可见，须下传
+        interrupt_child_node_id = self._resolve_interrupt_child_node_id(session)
+        params = await self._build_invoke_params(
+            inputs, session, context,
+            interrupt_child_node_id=interrupt_child_node_id,
+        )
         child_inputs = await self._prepare_child_inputs(
-            inputs, session, context, for_stream=False
+            inputs,
+            session,
+            context,
+            for_stream=False,
+            params=params,
+            interrupt_child_node_id=interrupt_child_node_id,
         )
         # 记录传入的全局变量值（调试信息）
-        global_vars = self._collect_global_vars(inputs, session)
+        global_vars, global_var_names = self._collect_global_vars(inputs, session)
         if global_vars:
             await session.trace(data={"memory": global_vars})
         # 进入子工作流前：父子 _REQUEST 隔离，避免父值覆盖子 Start 的输入
@@ -961,12 +1099,12 @@ class SubWorkflow(WorkflowComponent):
         try:
             invoke_timeout = self._get_timeout(session)
             result = await asyncio.wait_for(
-                self._workflow_instance.invoke(
+                workflow_instance.invoke(
                     inputs=child_inputs,
                     session=session,
                     context=context,
                     is_sub=True,
-                    reset_sub_outputs=self._last_child_completed,
+                    reset_sub_outputs=self._read_last_child_completed(session),
                 ),
                 timeout=invoke_timeout,
             )
@@ -975,7 +1113,7 @@ class SubWorkflow(WorkflowComponent):
             self._exit_sub_request_scope(session, parent_request_snapshot)
             scope_active = False
             # 获取更新后的全局变量值
-            updated_memory = self._collect_updated_memory(session)
+            updated_memory = self._collect_updated_memory(session, global_var_names)
 
             if isinstance(result, dict):
                 if "error_code" in result and "error_message" in result:
@@ -995,8 +1133,9 @@ class SubWorkflow(WorkflowComponent):
                 response_content = str(result)
                 user_fields = {}
 
-            self.node_state.status = ExecutionStatus.END
-            self._last_child_completed = True
+            # 成功完成：清空上一轮中断标记 + 记录完成标记（session state 通道）
+            self._write_last_child_completed(session, True)
+            self._write_interrupt_child_node_id(session, None)
 
             workflow_logger.info(
                 "SubWorkflow invoke completed",
@@ -1004,10 +1143,10 @@ class SubWorkflow(WorkflowComponent):
                 component_type_str="SubWorkflow",
                 metadata={"node_id": self._node_id},
             )
-            self._stream_state = {
+            set_stream_final_output({
                 "responseContent": response_content,
                 USER_FIELDS: user_fields,
-            }
+            })
             return {
                 "responseContent": response_content,
                 USER_FIELDS: user_fields,
@@ -1015,49 +1154,51 @@ class SubWorkflow(WorkflowComponent):
             }
 
         except asyncio.TimeoutError:
-            self.node_state.status = ExecutionStatus.USER_INTERACT
-            self._last_child_completed = False
+            self._write_last_child_completed(session, False)
             workflow_logger.info(
                 "SubWorkflow stream timed out, likely interactive sub-workflow",
                 event_type=LogEventType.WORKFLOW_COMPONENT_END,
                 component_type_str="SubWorkflow",
                 metadata={"node_id": self._node_id, "timeout": invoke_timeout},
             )
+            interrupt_child_node_id = None
             sub_session_state = session.get_state() or {}
             for key, value in sub_session_state.items():
                 for k, v in value.items():
                     status = v.get("status")
                     if status.value == ExecutionStatus.USER_INTERACT.value:
-                        self._interrupt_child_node_id = key
+                        interrupt_child_node_id = key
                         break
-                if self._interrupt_child_node_id:
+                if interrupt_child_node_id:
                     break
+            if interrupt_child_node_id:
+                self._write_interrupt_child_node_id(session, interrupt_child_node_id)
             await session.interact(child_inputs.get("query", ""))
         except JiuWenBaseException:
-            self._last_child_completed = False
+            self._write_last_child_completed(session, False)
             raise
         except GraphInterrupt:
-            self._last_child_completed = False
-            partial_state = getattr(self, '_stream_state', {}) or {}
+            self._write_last_child_completed(session, False)
+            partial_state = get_stream_final_output() or {}
             await self._trace_interrupt_marker(
                 session,
                 partial_state.get("responseContent", ""),
                 partial_state.get(USER_FIELDS, {}),
             )
             raise
-        except Exception as e:
-            self._last_child_completed = False
+        except Exception as exc:
+            self._write_last_child_completed(session, False)
             workflow_logger.error(
                 "SubWorkflow invoke error",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
-                metadata={"node_id": self._node_id, "error": str(e)},
+                metadata={"node_id": self._node_id, "error": str(exc)},
             )
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.EXECUTION_ERROR,
-                error_msg=str(type(e).__name__),
-                cause=e,
-            ) from e
+                error_msg=str(type(exc).__name__),
+                cause=exc,
+            ) from exc
         finally:
             # 子工作流异常 / 中断退出时也要还原父 _REQUEST，否则后续父节点读到的
             # 是子工作流的 _request，会导致变量解析错误
@@ -1085,7 +1226,8 @@ class SubWorkflow(WorkflowComponent):
             metadata={"node_id": self._node_id},
         )
 
-        self._pending_interact_prompt = ""
+        # 执行入口复位末帧通道：上一执行的末帧不得串到本执行
+        set_stream_final_output(None)
 
         inner_session = getattr(session, "_inner", None)
         is_child_resume = self._should_resume_child_workflow(session)
@@ -1095,13 +1237,26 @@ class SubWorkflow(WorkflowComponent):
                 {"__interrupted": False}
             )
 
-        self._workflow_instance = await self._get_workflow_instance(session)
-
-        child_inputs = await self._prepare_child_inputs(
-            inputs, session, context, for_stream=True
+        workflow_instance = await self._get_workflow_instance(session)
+        # 中断子节点 ID 局部镜像：同请求内首次检测结果对 staged 写不可见，须下传
+        interrupt_child_node_id = self._resolve_interrupt_child_node_id(session)
+        params = await self._build_invoke_params(
+            inputs, session, context,
+            interrupt_child_node_id=interrupt_child_node_id,
         )
+        child_inputs = await self._prepare_child_inputs(
+            inputs,
+            session,
+            context,
+            for_stream=True,
+            params=params,
+            interrupt_child_node_id=interrupt_child_node_id,
+        )
+        # 本次执行的局部状态：query / 待交互 prompt / 中断子节点 ID
+        current_query = params.get("query", "")
+        pending_interact_prompt = ""
         # 记录传入的全局变量值（调试信息）
-        global_vars = self._collect_global_vars(inputs, session)
+        global_vars, global_var_names = self._collect_global_vars(inputs, session)
         if global_vars:
             await session.trace(data={"memory": global_vars})
         final_res = ""
@@ -1120,12 +1275,12 @@ class SubWorkflow(WorkflowComponent):
         parent_request_snapshot = self._enter_sub_request_scope(session, child_inputs)
         scope_active = True
         try:
-            stream_iter = self._workflow_instance.stream(
+            stream_iter = workflow_instance.stream(
                 inputs=child_inputs,
                 session=session,
                 context=context,
                 is_sub=True,
-                reset_sub_outputs=self._last_child_completed,
+                reset_sub_outputs=self._read_last_child_completed(session),
             ).__aiter__()
 
             first_chunk = True
@@ -1141,13 +1296,24 @@ class SubWorkflow(WorkflowComponent):
                 first_chunk = False
 
                 processed = await self._process_stream_chunk(
-                    chunk, session, context, inputs
+                    chunk,
+                    session,
+                    context,
+                    inputs,
+                    interrupt_child_node_id=interrupt_child_node_id,
+                    pending_interact_prompt=pending_interact_prompt,
                 )
 
                 if processed is None:
                     continue
 
                 last_processed = processed
+
+                # 局部镜像本次执行的中断子节点 ID / 待交互 prompt
+                if processed.get("interrupt_child_node_id"):
+                    interrupt_child_node_id = processed["interrupt_child_node_id"]
+                if "pending_interact_prompt" in processed:
+                    pending_interact_prompt = processed["pending_interact_prompt"]
 
                 if processed.get("is_final"):
                     final_val = processed.get("user_fields", {})
@@ -1159,23 +1325,14 @@ class SubWorkflow(WorkflowComponent):
                     continue
 
                 if processed.get("is_interaction"):
-                    self.node_state.status = ExecutionStatus.USER_INTERACT
-                    self._last_child_completed = False
+                    self._write_last_child_completed(session, False)
                     payload = processed.get("payload", {})
-                    child_node_id = None
-                    if hasattr(payload, "id"):
-                        child_node_id = payload.id
-                    elif isinstance(payload, dict):
-                        child_node_id = payload.get("id")
-                    if child_node_id:
-                        self._interrupt_child_node_id = child_node_id
                     if inner_session:
                         inner_session.state().update_and_commit_workflow_state(
                             {"__interrupted": True}
                         )
                     # 中断时也写入 sub_workflow_query，避免恢复时丢失
                     interact_value = self._resolve_interact_value(payload)
-                    current_query = getattr(self, '_current_query', '')
                     if current_query:
                         interact_payload = {
                             "sub_workflow_query": current_query,
@@ -1198,15 +1355,16 @@ class SubWorkflow(WorkflowComponent):
 
             # 子 stream 迭代结束：Questioner 中断时往往无 INTERACTION chunk，需读 session 兜底
             if self._detect_child_interrupt(
-                session
+                session, pending_interact_prompt
             ) or self._is_parent_workflow_interrupted(inner_session):
-                self._last_child_completed = False
+                self._write_last_child_completed(session, False)
                 async for item in self._emit_sub_workflow_user_interact(
                     session,
                     inner_session,
                     final_res,
                     final_val,
                     log_reason="child_stream_end_with_interrupt_state",
+                    pending_interact_prompt=pending_interact_prompt,
                 ):
                     yield item
                 return
@@ -1217,9 +1375,10 @@ class SubWorkflow(WorkflowComponent):
 
             final_res = messages[-1] if messages else final_res
             # 获取更新后的全局变量值
-            updated_memory = self._collect_updated_memory(session)
-            self.node_state.status = ExecutionStatus.END
-            self._last_child_completed = True
+            updated_memory = self._collect_updated_memory(session, global_var_names)
+            # 成功完成：清空上一轮中断标记 + 记录完成标记（session state 通道）
+            self._write_last_child_completed(session, True)
+            self._write_interrupt_child_node_id(session, None)
 
             workflow_logger.info(
                 "SubWorkflow stream completed",
@@ -1227,14 +1386,14 @@ class SubWorkflow(WorkflowComponent):
                 component_type_str="SubWorkflow",
                 metadata={"node_id": self._node_id},
             )
-            self._stream_state = {
+            set_stream_final_output({
                 "responseContent": final_res,
                 USER_FIELDS: final_val,
-            }
+            })
             end_payload = dict(last_processed or {})
             end_payload["is_sub"] = True
             end_payload["parentNodeId"] = session.get_component_id()
-            end_payload["sub_workflow_query"] = getattr(self, '_current_query', '')
+            end_payload["sub_workflow_query"] = current_query
             await session.write_custom_stream(
                 CustomSchema(type=MESSAGE_NODE_END, index=1, data=end_payload)
             )
@@ -1247,9 +1406,9 @@ class SubWorkflow(WorkflowComponent):
             yield result
 
         except asyncio.TimeoutError:
-            self._last_child_completed = False
+            self._write_last_child_completed(session, False)
             # 首帧/帧超时：子 _sub_stream 可能阻塞在 sub_workflow_stream.receive，用 session 识别中断
-            self._detect_child_interrupt(session)
+            self._detect_child_interrupt(session, pending_interact_prompt)
             timed_out = first_frame_timeout if first_chunk else frame_timeout
             workflow_logger.info(
                 "SubWorkflow stream timed out, likely interactive sub-workflow",
@@ -1263,31 +1422,32 @@ class SubWorkflow(WorkflowComponent):
                 final_res,
                 final_val,
                 log_reason="stream_frame_timeout",
+                pending_interact_prompt=pending_interact_prompt,
             ):
                 yield item
             return
         except JiuWenBaseException:
-            self._last_child_completed = False
+            self._write_last_child_completed(session, False)
             raise
         except GraphInterrupt:
-            self._last_child_completed = False
+            self._write_last_child_completed(session, False)
             await self._trace_interrupt_marker(
                 session, final_res, final_val
             )
             raise
-        except Exception as e:
-            self._last_child_completed = False
+        except Exception as exc:
+            self._write_last_child_completed(session, False)
             workflow_logger.error(
                 "SubWorkflow stream error",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
-                metadata={"node_id": self._node_id, "error": str(e)},
+                metadata={"node_id": self._node_id, "error": str(exc)},
             )
             raise build_sub_workflow_error(
                 SubWorkflowStatusCode.STREAM_ERROR,
-                error_msg=str(type(e).__name__),
-                cause=e,
-            ) from e
+                error_msg=str(type(exc).__name__),
+                cause=exc,
+            ) from exc
         finally:
             # 流式异常 / 中断 / generator 提前 close 时也要还原父 _REQUEST，
             # 否则父工作流后续节点读到的是子工作流残留的 _request
@@ -1301,14 +1461,22 @@ class SubWorkflow(WorkflowComponent):
         session: Session,
         context: ModelContext,
         inputs: dict,
+        *,
+        interrupt_child_node_id: Optional[str] = None,
+        pending_interact_prompt: str = "",
     ) -> Optional[dict]:
         """处理流式数据块
+
+        执行期状态不落实例属性：中断子节点 ID 写 session state（跨请求恢复）并在
+        返回值中回传，待交互 prompt 经返回值交回调用方局部变量。
 
         Args:
             chunk: 流式数据块
             session: 工作流会话
             context: 模型上下文
             inputs: 输入数据
+            interrupt_child_node_id: 本次执行已记录的中断子节点 ID（局部镜像）
+            pending_interact_prompt: 本次执行已记录的待交互 prompt（局部镜像）
 
         Returns:
             Optional[dict]: 处理后的数据，None 表示需要跳过
@@ -1321,18 +1489,19 @@ class SubWorkflow(WorkflowComponent):
                 return None
 
             if chunk_type == INTERACTION:
-                self.node_state.status = ExecutionStatus.USER_INTERACT
                 child_node_id = (
                     getattr(chunk.payload, "id", None) if chunk.payload else None
                 )
                 if child_node_id is None and isinstance(chunk.payload, dict):
                     child_node_id = chunk.payload.get("id")
+                result = {"is_interaction": True, "payload": chunk.payload}
                 if child_node_id:
-                    self._interrupt_child_node_id = child_node_id
+                    self._write_interrupt_child_node_id(session, child_node_id)
+                    result["interrupt_child_node_id"] = child_node_id
                 interact_value = getattr(chunk.payload, "value", None)
                 if interact_value:
-                    self._pending_interact_prompt = str(interact_value)
-                return {"is_interaction": True, "payload": chunk.payload}
+                    result["pending_interact_prompt"] = str(interact_value)
+                return result
 
             if chunk_type == "error":
                 raw_msg = payload.get("error_message") or payload.get("message", "")
@@ -1349,31 +1518,35 @@ class SubWorkflow(WorkflowComponent):
                 return {"is_final": True, "user_fields": payload.get("user_fields", {})}
 
             if chunk_type == "message_end":
+                result = {"is_message_end": True}
                 if payload.get("should_interrupt"):
-                    self._pending_interact_prompt = (
+                    result["pending_interact_prompt"] = (
                         payload.get("answer") or payload.get("result") or ""
                     )
-                    # 仅在 INTERACTION chunk 未设置时更新 _interrupt_child_node_id，
+                    # 仅在 INTERACTION chunk 未设置时更新中断子节点 ID，
                     # 避免不含 loop 前缀的 componentId 覆盖 INTERACTION 设置的
                     # 含 loop 前缀的 executableId
-                    if not self._interrupt_child_node_id:
+                    if not interrupt_child_node_id:
                         node_id = payload.get("node_id")
                         if node_id:
-                            self._interrupt_child_node_id = node_id
-                return {"is_message_end": True}
+                            self._write_interrupt_child_node_id(session, node_id)
+                            result["interrupt_child_node_id"] = node_id
+                return result
 
             if chunk_type in ["end node stream", "partial_content"]:
                 content = payload.get("answer", "")
+                result = {"content": content}
                 if payload.get("should_interrupt"):
-                    self._pending_interact_prompt = (
+                    result["pending_interact_prompt"] = (
                         payload.get("answer") or payload.get("result") or ""
                     )
-                    if not self._interrupt_child_node_id:
+                    if not interrupt_child_node_id:
                         node_id = payload.get("node_id")
                         if node_id:
-                            self._interrupt_child_node_id = node_id
+                            self._write_interrupt_child_node_id(session, node_id)
+                            result["interrupt_child_node_id"] = node_id
                 await session.write_stream(chunk)
-                return {"content": content}
+                return result
 
             return {"type": chunk_type, "payload": payload}
 
@@ -1460,9 +1633,9 @@ class SubWorkflow(WorkflowComponent):
                     component_type_str="SubWorkflow",
                     metadata={"updated_keys": list(updated.keys())},
                 )
-        except Exception as e:
+        except Exception as exc:
             workflow_logger.warning(
-                f"Failed to restore parent request scope after sub-workflow: {e}",
+                f"Failed to restore parent request scope after sub-workflow: {exc}",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
             )
@@ -1515,9 +1688,9 @@ class SubWorkflow(WorkflowComponent):
                     metadata={"updated_keys": list(updated.keys())},
                 )
 
-        except Exception as e:
+        except Exception as exc:
             workflow_logger.warning(
-                f"Failed to sync sub-workflow request variables: {e}",
+                f"Failed to sync sub-workflow request variables: {exc}",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                 component_type_str="SubWorkflow",
             )
@@ -1543,14 +1716,16 @@ class SubWorkflow(WorkflowComponent):
                     USER_FIELDS: user_fields,
                 },
             })
-        except Exception as e:
-            workflow_logger.warning(f"_trace_interrupt_marker error: {e}")
+        except Exception as exc:
+            workflow_logger.warning(f"_trace_interrupt_marker error: {exc}")
 
     def get_stream_output(self) -> Output:
-        """Get the cached stream output for batch retrieval."""
-        if self._stream_state:
-            return self._stream_state
-        return None
+        """Get the cached stream output for batch retrieval.
+
+        末帧输出经 ContextVar 通道（引擎 Vertex._post_stream 流耗尽后读取），
+        不再落在可复用组件实例上。
+        """
+        return get_stream_final_output()
 
     def component_type(self) -> str:
         return "sub_workflow"
@@ -1558,6 +1733,7 @@ class SubWorkflow(WorkflowComponent):
 
 from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
+    apply_loop_exec_state_isolation_patch,
     apply_loop_state_cleanup_patch,
 )
 from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
@@ -1566,8 +1742,23 @@ from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
 )
+from jiuwen.extension.patches import static_graph_patch
+from jiuwen.extension.patches.static_graph_patch import (
+    apply_static_graph_patch,
+)
 
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
+apply_loop_exec_state_isolation_patch()
 apply_global_memory_ref_resolution_patch()
+# 三件套（静态图复用）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
+# apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
+# 确保静态图复用降级而非拖垮 sub_workflow 的 import。
+try:
+    apply_static_graph_patch()
+except Exception as e:  # pylint: disable=broad-except
+    static_graph_patch.STATIC_GRAPH_DOWNGRADED = True
+    workflow_logger.error(
+        f"[static_graph_patch] apply 异常，自动降级（实例缓存强制关闭）: {e}"
+    )

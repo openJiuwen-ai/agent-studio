@@ -23,7 +23,6 @@ from __future__ import annotations
 import copy
 import time
 import traceback
-from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -38,6 +37,11 @@ from openjiuwen.core.workflow.components.component import WorkflowComponent
 from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 from pydantic import BaseModel, Field, ValidationError
 
+from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_exec,
+    reset_component_exec,
+    set_component_exec,
+)
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 
@@ -174,15 +178,9 @@ class ComplexIntentDetection(WorkflowComponent):
         self._intent_detection: Optional[IntentDetection] = None
         self._init_intent_detection()
 
-        self._state = ComplexIntentState()
-        self._state_retry = ComplexIntentState()
-        self._sub_workflows: Dict[str, Any] = {}
         self._branch2group: Dict[str, Dict[str, List[List[str]]]] = {}
         self._build_branch_to_group()
 
-        self._sub_workflow_error: Optional[Exception] = None
-        self._session: Optional[Session] = None
-        self._context: Optional[ModelContext] = None
         self._router = BranchRouter()
 
     def _parse_configs(self) -> None:
@@ -248,76 +246,6 @@ class ComplexIntentDetection(WorkflowComponent):
                         group_name, []
                     ).append(desc[1:])
 
-    def reset(self) -> bool:
-        """重置组件状态"""
-        self._state = deepcopy(self._state_retry)
-        self._sub_workflows.clear()
-        self._sub_workflow_error = None
-        return True
-
-    def get_state(self) -> ComplexIntentState:
-        """获取当前执行状态"""
-        return self._state
-
-    async def load_state(self, state: ComplexIntentState) -> None:
-        """从输入状态恢复
-
-        恢复状态后，需要同时恢复子工作流的实例。
-        """
-        self._state = deepcopy(state)
-
-        if self._state.sub_workflows and self._state.workflow_id:
-            workflow_id = self._state.workflow_id
-            if workflow_id in self._state.sub_workflows:
-                recover_data = self._state.sub_workflows[workflow_id]
-                await self._recover_sub_workflow(workflow_id, recover_data)
-
-    async def _recover_sub_workflow(self, workflow_id: str, recover_data: dict) -> None:
-        """恢复子工作流实例"""
-        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
-        from storage import get_storage_provider
-        from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
-
-        try:
-            recover_config = recover_data.get("configs")
-            instance_data = recover_data.get("instance_data")
-            if not recover_config:
-                workflow_logger.warning(f"No recover config for workflow {workflow_id}")
-                return
-
-            branch_config = BranchWorkflowConfig(**recover_config)
-
-            ir_path = branch_config.ir_path
-            if not ir_path:
-                return
-
-            provider = get_storage_provider()
-            ir_json_str = await provider.get_content(ir_path)
-            import json
-            child_ir = json.loads(ir_json_str)
-            child_workflow = await IRConverter.async_ir_to_workflow(child_ir)
-
-            sub_workflow_comp = SubWorkflowComponentWrapper(
-                workflow=child_workflow,
-                node_id=workflow_id,
-                node_name=f"{self._node_name}-sub",
-            )
-
-            if instance_data and hasattr(sub_workflow_comp, 'load_state'):
-                await sub_workflow_comp.load_state(instance_data)
-
-            self._sub_workflows[workflow_id] = {
-                "instance": sub_workflow_comp,
-                "sub_instance": child_workflow,
-                "configs": recover_config,
-            }
-
-            workflow_logger.info(f"Recovered sub-workflow {workflow_id}")
-        except (StorageConfigError, StorageReadError) as e:
-            workflow_logger.error(f"Failed to load sub-workflow IR for recovery: {e}")
-        except Exception as e:
-            workflow_logger.error(f"Failed to recover sub-workflow {workflow_id}: {e}")
-
     def add_component(self, graph: Graph, node_id: str, wait_for_all: bool = False) -> None:
         """将组件添加到工作流图"""
         graph.add_node(node_id, self.to_executable(), wait_for_all=wait_for_all)
@@ -331,21 +259,40 @@ class ComplexIntentDetection(WorkflowComponent):
     ) -> Output:
         """同步执行入口"""
         start_time = time.perf_counter()
-        self._session = session
-        self._context = context
+        # 执行期 session/context 走 component_exec ContextVar 通道（实例跨执行
+        # 复用，不落实例）。非路由属主组件（add_component 不加条件边），
+        # 参照 LLMChain 模式 set + finally reset；读点经 current_component_exec()
+        # 取回，存入值为**组件面 Session 包装器**（与迁移前的实例字段同物，
+        # 组件自身读点 get_state / get_state_info(_inner) 依赖包装器 API）。
+        token = set_component_exec(session, context)
+        # 执行期状态局部变量（PR #1 评审 Critical-2）：实例跨执行复用，
+        # _state 落实例时入口重建/同步链写入都会被并发执行互踩。状态经
+        # 调用链显式传递（_get_intent_result / _execute_branch_workflow /
+        # _invoke_sub_workflow / _get_aggregate_result）。off 模式每请求
+        # 新建实例，局部状态与该模式语义等价（中断续跑依赖 session 侧信号：
+        # _check_child_workflow_needs_resume / sub_checkpoint_exists /
+        # __interactive_input__，不依赖状态对象本身）。
+        state = ComplexIntentState()
+        # 子工作流实例缓存为执行期状态：本次 invoke 局部持有（含中断续跑窗口），
+        # 不落实例（缓存中的 wrapper 自带 per-execution 状态，跨执行复用会串）
+        sub_workflows: Dict[str, Any] = {}
 
         try:
             inputs_dict = convert_input(inputs)
 
-            intent_result, intent_branch = await self._get_intent_result(inputs_dict, **kwargs)
+            intent_result, intent_branch = await self._get_intent_result(
+                inputs_dict, state, **kwargs
+            )
             # 单节点执行仅返回意图
             if inputs_dict.get("__single_debug_recovery__", False):
                 return intent_result
 
-            wf_id, wf_result = await self._execute_branch_workflow(inputs_dict, intent_branch, **kwargs)
+            wf_id, wf_result = await self._execute_branch_workflow(
+                inputs_dict, intent_branch, sub_workflows, state, **kwargs
+            )
 
             intent_result[_RESPONSE_CONTENT] = wf_result.get(_RESPONSE_CONTENT, "") if wf_result else ""
-            result = self._get_aggregate_result(wf_id, wf_result, intent_result)
+            result = self._get_aggregate_result(wf_id, wf_result, intent_result, state)
 
             duration = round((time.perf_counter() - start_time) * 1000)
             workflow_logger.info(
@@ -372,54 +319,67 @@ class ComplexIntentDetection(WorkflowComponent):
                 "result": self._get_default_result(),
                 "error": str(e),
             }
+        finally:
+            reset_component_exec(token)
 
-    async def _get_intent_result(self, inputs: dict, **kwargs) -> tuple[dict, str]:
-        """获取意图识别结果"""
-        if self._state.status == ExecutionStatus.START:
+    async def _get_intent_result(
+        self, inputs: dict, state: ComplexIntentState, **kwargs
+    ) -> tuple[dict, str]:
+        """获取意图识别结果（state：本次执行的执行期状态，调用链显式传递）"""
+        if state.status == ExecutionStatus.START:
             if self._intent_detection is None:
                 self._init_intent_detection()
 
+            # 执行期 session/context 经 ContextVar 通道读取（实例跨执行复用，
+            # 不落实例）
+            session, context = current_component_exec()
             intent_result = await self._intent_detection.invoke(
-                inputs, self._session, self._context, **kwargs
+                inputs, session, context, **kwargs
             )
 
-            self._state.intent_result = intent_result
+            state.intent_result = intent_result
             classification_id = intent_result.get(_KEY_CLASSIFICATION_ID, 0)
             intent_branch = f"branch_{classification_id}"
-            self._state.branch_id = intent_branch
+            state.branch_id = intent_branch
         else:
-            intent_result = self._state.intent_result
-            classification_id = self._state.intent_result.get(_KEY_CLASSIFICATION_ID, 0)
+            intent_result = state.intent_result
+            classification_id = state.intent_result.get(_KEY_CLASSIFICATION_ID, 0)
             intent_branch = f"branch_{classification_id}"
 
         return intent_result, intent_branch
 
     async def _execute_branch_workflow(
-        self, inputs: dict, intent_branch: str, **kwargs
+        self,
+        inputs: dict,
+        intent_branch: str,
+        sub_workflows: Dict[str, Any],
+        state: ComplexIntentState,
+        **kwargs,
     ) -> tuple[Optional[str], Optional[dict]]:
-        """执行分支工作流"""
+        """执行分支工作流（sub_workflows：本次 invoke 的子工作流实例缓存）"""
         branch_config = self._branches.get(intent_branch)
         if not branch_config:
             workflow_logger.warning(f"Branch {intent_branch} not found in configuration")
-            self._state.status = ExecutionStatus.END
+            state.status = ExecutionStatus.END
             return None, None
 
         if not branch_config.configs or not branch_config.configs.workflow_id:
-            self._state.status = ExecutionStatus.END
+            state.status = ExecutionStatus.END
             return None, None
 
         workflow_id = branch_config.configs.workflow_id
-        self._state.workflow_id = workflow_id
+        state.workflow_id = workflow_id
 
         try:
-            wf_result = await self._invoke_sub_workflow(inputs, branch_config.configs, **kwargs)
+            wf_result = await self._invoke_sub_workflow(
+                inputs, branch_config.configs, sub_workflows, state, **kwargs
+            )
             return workflow_id, wf_result
         except Exception as e:
             from openjiuwen.core.graph.pregel import GraphInterrupt
             if isinstance(e, GraphInterrupt):
                 raise
-            self._state.status = ExecutionStatus.END
-            self._sub_workflow_error = e
+            state.status = ExecutionStatus.END
             workflow_logger.error(
                 f"Sub-workflow execution failed: {e}\n{traceback.format_exc()}",
                 event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
@@ -427,7 +387,12 @@ class ComplexIntentDetection(WorkflowComponent):
             raise
 
     async def _invoke_sub_workflow(
-        self, inputs: dict, branch_config: BranchWorkflowConfig, **kwargs
+        self,
+        inputs: dict,
+        branch_config: BranchWorkflowConfig,
+        sub_workflows: Dict[str, Any],
+        state: ComplexIntentState,
+        **kwargs,
     ) -> dict:
         """调用子工作流
 
@@ -436,6 +401,9 @@ class ComplexIntentDetection(WorkflowComponent):
         2. 如果需要恢复，使用 InteractiveInput 包装用户输入
         3. 调用子工作流的 invoke 方法（SubWorkflow 会自动处理中断）
         4. 保存子工作流状态，以便下次恢复
+
+        sub_workflows 为本次 invoke 局部持有的子工作流实例缓存（不落实例）。
+        state 为本次执行的执行期状态（调用链显式传递，不落实例）。
         """
         from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 
@@ -443,10 +411,14 @@ class ComplexIntentDetection(WorkflowComponent):
         if not workflow_id:
             return {}
 
-        if workflow_id not in self._sub_workflows:
-            await self._init_sub_workflow(workflow_id, branch_config)
+        # 执行期 session/context 经 ContextVar 通道读取（实例跨执行复用，
+        # 不落实例；值为组件面 Session 包装器）
+        session, context = current_component_exec()
 
-        sub_workflow_info = self._sub_workflows.get(workflow_id)
+        if workflow_id not in sub_workflows:
+            await self._init_sub_workflow(workflow_id, branch_config, sub_workflows)
+
+        sub_workflow_info = sub_workflows.get(workflow_id)
         if not sub_workflow_info:
             return {}
 
@@ -455,20 +427,20 @@ class ComplexIntentDetection(WorkflowComponent):
         if not sub_workflow:
             return {}
 
-        is_resuming = self._state.status == ExecutionStatus.USER_INTERACT
+        is_resuming = state.status == ExecutionStatus.USER_INTERACT
         is_child_resuming = self._check_child_workflow_needs_resume()
 
-        sub_checkpoint_exists = False
-        if self._session and workflow_id:
-            inner_session = getattr(self._session, '_inner', None)
-            if inner_session:
-                try:
-                    checkpointer = inner_session.checkpointer()
-                    sub_checkpoint_exists = await checkpointer.session_exists(inner_session.session_id())
-                except (KeyError, AttributeError, RuntimeError):
-                    pass
-
-        should_resume = is_resuming or is_child_resuming or sub_checkpoint_exists
+        # 恢复判定只依赖显式信号（issue #1 修复）：此处不得以外层 session 做
+        # checkpoint 存在性判定——inner_session.session_id() 与外层主工作流
+        # 同 ID，外层执行期间 pre_workflow_execute 已写入，session_exists
+        # 恒 True，会把子工作流 fresh 执行误判为恢复（子图输入被替换为
+        # InteractiveInput 通道，子图 start 节点拿不到输入）。对齐
+        # SubWorkflow._should_resume_child_workflow 模式：判定全部来自
+        # session 通道（state 中断状态 / __interactive_input__ 显式信号）；
+        # 标准恢复链路（InteractiveInput 透传 / __interactive_input__ 信号）
+        # 已覆盖，子图 scope 级 checkpoint 由引擎 checkpointer 在
+        # pre_workflow_execute 自行校验兜底。
+        should_resume = is_resuming or is_child_resuming
 
         if isinstance(inputs, InteractiveInput):
             sub_inputs = inputs
@@ -477,7 +449,7 @@ class ComplexIntentDetection(WorkflowComponent):
 
             if should_resume:
                 resume_query = self._extract_resume_query() or ""
-                child_node_id = self._state.interrupt_child_node_id
+                child_node_id = state.interrupt_child_node_id
                 if child_node_id:
                     sub_inputs = InteractiveInput()
                     sub_inputs.update(child_node_id, resume_query)
@@ -485,33 +457,47 @@ class ComplexIntentDetection(WorkflowComponent):
                     sub_inputs = InteractiveInput(raw_inputs=resume_query)
 
         try:
-            result = await sub_workflow.invoke(
-                sub_inputs, self._session, self._context, is_resuming=should_resume, **kwargs
-            )
+            # 嵌套子执行窗口内组件级通道置空：子工作流经 is_sub 路径 inline await
+            # 在本节点 task 内执行，其子图各节点 task 由 TaskExecutorPool.submit
+            # 的 asyncio.create_task（graph/pregel/task.py:29）从本节点 task
+            # 派生，会继承组件级值——子图内分支节点的路由解析（Patch C 优先级 1）
+            # 若读到本组件 session 即遮蔽子图自身 session（分支条件对错误
+            # io_state 求值 → 恒 False → 分支未命中报错）。置空使子图回退到
+            # workflow 级解析（与迁移前行为一致），窗口外恢复本组件级值。
+            nested_token = set_component_exec(None, None)
+            try:
+                result = await sub_workflow.invoke(
+                    sub_inputs, session, context, is_resuming=should_resume, **kwargs
+                )
+            finally:
+                reset_component_exec(nested_token)
 
             sub_workflow_state = sub_workflow.get_state()
             if isinstance(sub_workflow_state, dict):
                 status_str = sub_workflow_state.get("status", "END")
                 status_str_upper = status_str.upper() if isinstance(status_str, str) else status_str
-                self._state.status = ExecutionStatus(status_str_upper) if isinstance(status_str, str) else status_str
+                state.status = ExecutionStatus(status_str_upper) if isinstance(status_str, str) else status_str
             else:
-                self._state.status = getattr(sub_workflow_state, 'status', ExecutionStatus.END)
+                state.status = getattr(sub_workflow_state, 'status', ExecutionStatus.END)
 
-            if self._state.status != ExecutionStatus.END and workflow_id in self._sub_workflows:
+            if state.status != ExecutionStatus.END and workflow_id in sub_workflows:
                 if sub_instance and hasattr(sub_instance, 'get_state'):
-                    self._state.sub_workflows.setdefault(workflow_id, {})["sub_instance_data"] = \
+                    state.sub_workflows.setdefault(workflow_id, {})["sub_instance_data"] = \
                         sub_instance.get_state()
                 if hasattr(sub_workflow, 'get_state'):
-                    self._state.sub_workflows.setdefault(workflow_id, {})["instance_data"] = \
+                    state.sub_workflows.setdefault(workflow_id, {})["instance_data"] = \
                         sub_workflow.get_state()
 
             return result if isinstance(result, dict) else {_RESPONSE_CONTENT: result}
         except Exception as e:
             from openjiuwen.core.graph.pregel import GraphInterrupt
             if isinstance(e, GraphInterrupt):
-                self._state.status = ExecutionStatus.USER_INTERACT
+                state.status = ExecutionStatus.USER_INTERACT
                 if hasattr(sub_workflow, '_interrupt_child_node_id'):
-                    self._state.interrupt_child_node_id = sub_workflow._interrupt_child_node_id
+                    # 中断节点标识是上游子工作流的私有字段，恢复时须原样透传
+                    state.interrupt_child_node_id = (
+                        sub_workflow._interrupt_child_node_id  # pylint: disable=protected-access
+                    )
                 raise
             workflow_logger.error(f"Sub-workflow invoke failed: {e}\n{traceback.format_exc()}")
             raise
@@ -520,8 +506,11 @@ class ComplexIntentDetection(WorkflowComponent):
         """检查子工作流是否需要从中断恢复"""
         from openjiuwen.core.common.constants.constant import INTERACTIVE_INPUT
 
+        # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
+        session, _ = current_component_exec()
+
         try:
-            session_state = self._session.get_state() if self._session else {}
+            session_state = session.get_state() if session else {}
             if isinstance(session_state, dict):
                 workflow_state = session_state.get("workflow_state", {})
                 if isinstance(workflow_state, dict):
@@ -548,9 +537,12 @@ class ComplexIntentDetection(WorkflowComponent):
         """从 session 中提取恢复查询"""
         from openjiuwen.core.common.constants.constant import INTERACTIVE_INPUT
 
+        # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
+        session, _ = current_component_exec()
+
         try:
-            if self._session:
-                workflow_state = get_state_info(self._session, "workflow_state")
+            if session:
+                workflow_state = get_state_info(session, "workflow_state")
                 if isinstance(workflow_state, dict):
                     # 优先从 __interactive_input__ (双下划线) 读取恢复输入
                     interactive_input = workflow_state.get("__interactive_input__")
@@ -582,9 +574,12 @@ class ComplexIntentDetection(WorkflowComponent):
         return None
 
     async def _init_sub_workflow(
-        self, workflow_id: str, branch_config: BranchWorkflowConfig
+        self,
+        workflow_id: str,
+        branch_config: BranchWorkflowConfig,
+        sub_workflows: Dict[str, Any],
     ) -> None:
-        """初始化子工作流"""
+        """初始化子工作流（实例写入本次 invoke 局部缓存 sub_workflows）"""
         from jiuwen.serve.controllers.execution.ir_converter import IRConverter
         from storage import get_storage_provider
         from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
@@ -608,7 +603,7 @@ class ComplexIntentDetection(WorkflowComponent):
                 node_name=f"{self._node_name}-sub",
             )
 
-            self._sub_workflows[workflow_id] = {
+            sub_workflows[workflow_id] = {
                 "instance": sub_workflow_comp,
                 "sub_instance": child_workflow,
                 "configs": branch_config.model_dump() if hasattr(branch_config, "model_dump") else {},
@@ -629,10 +624,14 @@ class ComplexIntentDetection(WorkflowComponent):
         return sub_inputs
 
     def _get_aggregate_result(
-        self, wf_id: Optional[str], wf_result: Optional[dict], intent_result: dict
+        self,
+        wf_id: Optional[str],
+        wf_result: Optional[dict],
+        intent_result: dict,
+        state: ComplexIntentState,
     ) -> dict:
-        """获取聚合结果"""
-        if self._state.status != ExecutionStatus.END:
+        """获取聚合结果（state：本次执行的执行期状态，调用链显式传递）"""
+        if state.status != ExecutionStatus.END:
             return {"workflow_result": wf_result} | intent_result
 
         if wf_id is None or wf_result is None:

@@ -192,6 +192,11 @@ class WorkflowLogSettings(BaseSettings):
     level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
     graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
     llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
+    # 性能埋点级别（workflow_cache|hit/miss、ir_convert|、agent_group_stream| 等）。
+    # 缺省 WARNING 保持静默；排查性能问题时设为 INFO 打开埋点。
+    performance_level: str = Field(
+        default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -289,6 +294,13 @@ class CacheSettings(BaseSettings):
     )
     workflow_cache_ttl_seconds: int = Field(
         default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
+    )
+    # Workflow 实例复用（issue #1555）：恒为静态图复用（patch 四件套 +
+    # LazyWorkflow 保留制缓存）；结构断言失败时进程级自动降级为直建。
+    # 注意与 MAX_WORKFLOW_CACHE_NUM 区分：后者是 BPMN spec 缓存队列（jiuwen
+    # orchestration 路径）的容量，本配置是 openjiuwen Workflow 实例缓存的容量。
+    workflow_instance_cache_num: int = Field(
+        default=100, ge=1, validation_alias="WORKFLOW_INSTANCE_CACHE_NUM"
     )
     agent_cache_ttl_seconds: int = Field(
         default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1

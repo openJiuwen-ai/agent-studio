@@ -274,17 +274,28 @@ class TestErrorBranchEdgeExcluded:
         assert len(plan.joins) == 1
 
 
-class TestAmbiguousLaneOverlapsFallBack:
-    """terminal 归属冲突（重叠 lanes）时整个 join_target 放弃 lane 接管。"""
+class TestEquivalentLaneOverlapsMerged:
+    """lane 结构等价（同一批 terminal）的多方案合并为单 spec 接管（issue #1558）。
+
+    历史上此场景整体放弃 lane 接管并"回退 wait_for_all 兜底"，但该兜底在
+    循环边场景不成立：collect_parallel_join_nodes 过滤循环入边
+    （_is_reachable(target, source)），汇聚点不被识别为 join 点、
+    wait_for_all 从未设置 → 各入边独立触发、汇聚节点重复执行。
+    done 节点只由 terminals 决定（terminal_to_done 的 key 不含 parallel_id，
+    与 fork_source 无关），合并取第一个后单套 barrier 的 AND 语义不变。
+    """
 
     @staticmethod
-    def test_conflicting_lane_specs_rejected():
+    def test_equivalent_lane_specs_merged():
         node_by_id = _conditional_fork_node_by_id()
         node_by_id["node_c"] = _branch_node("node_c", "node_c-if")
         plan = build_parallel_join_plan(_dual_fork_connections(), node_by_id)
-        # 两套方案对同一批 terminal 声领不同 done 节点 → 全部丢弃，回退 wait_for_all
-        assert plan.joins == {}
-        assert plan.terminal_to_done == {}
+        # 两套方案 lane 结构等价（相同 lane_start + 同一批 terminal）→ 合并
+        assert len(plan.joins) == 1
+        (_pid, join_target), spec = next(iter(plan.joins.items()))
+        assert join_target == "node_code"
+        assert len(spec.lanes) >= 2
+        assert plan.terminal_to_done
 
 
 def _disjoint_dual_group_connections() -> list[dict]:
@@ -388,8 +399,12 @@ class TestExclusiveDualForkMerged:
         assert ("node_llm2", "node_code", None) in plan.terminal_to_done
 
     @staticmethod
-    def test_non_exclusive_dual_fork_still_falls_back():
-        """fork 源无必经分支条件（start 直达，波可能同时触发）时不合并。"""
+    def test_non_exclusive_dual_fork_merged():
+        """fork 源无必经分支条件（波可能同时触发）时仍合并（issue #1558）。
+
+        lane 结构等价（相同 lane_start + 同一批 terminal）时运行时被触发的
+        始终是同一批物理节点/边，波是否互斥不影响单套 barrier 的 AND 语义。
+        """
         # 把 u1 的 fork 源换成 start 直达（无入边分支条件，与 u2 不互斥）：
         # 删除 node_llm 的扇出边与 node_neg 的 if 入边
         filtered: list[dict] = []
@@ -411,6 +426,8 @@ class TestExclusiveDualForkMerged:
         node_by_id = _conditional_fork_node_by_id()
         node_by_id["node_neg"] = _branch_node("node_neg", "node_neg-if")
         plan = build_parallel_join_plan(connections, node_by_id)
-        # 两波可能同时触发 → 保持多 spec → 整体回退 wait_for_all
-        assert plan.joins == {}
-        assert plan.terminal_to_done == {}
+        # lane 结构等价 → 合并为单 spec（与波是否互斥无关）
+        assert len(plan.joins) == 1
+        (_pid, join_target), spec = next(iter(plan.joins.items()))
+        assert len(spec.lanes) >= 2
+        assert plan.terminal_to_done

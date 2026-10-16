@@ -20,6 +20,7 @@ Extractor - 信息提取组件
 - 初始化流程：__init__() -> init() -> invoke()
 """
 
+import asyncio
 import json
 import re
 from copy import deepcopy
@@ -154,15 +155,6 @@ class ExtractorStatusCode(Enum):
         101816,
         "extractor invoke llm failed, reason: {error_msg}",
     )
-
-
-@dataclass
-class ExtractorField:
-    """Extractor 组件内部状态"""
-
-    extracted_key_fields: dict = field(default_factory=dict)
-    user_response: str = ""
-    inputs: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -368,14 +360,19 @@ class Extractor(WorkflowComponent):
         self.component_config = None
         self._workflow_llm_extra_configs = {}
         self.model_map = {}
-        self.inputs = dict()
-        self.user_response = ""
         self.extractor_config = ExtractorConfig()
         self.chat_manager = None
         self.llm = None
         self.prompt: Optional[PromptTemplate] = None
-        self.node_field = ExtractorField()
         self.error_message = DEFAULT_ERROR_INFO
+        # 懒初始化双检锁：init 名为初始化、实为 invoke 首调的懒初始化
+        # （实例跨执行复用，并发首调只建一次 Model）。
+        self._init_lock: asyncio.Lock = asyncio.Lock()
+        # 执行期状态（inputs / user_response / extracted_key_fields）不落实例：
+        # user_response 随调用链参数传递（invoke → reply_key_fields →
+        # update_key_fields → extract_key_fields → create_prompt_template_input）；
+        # extracted_key_fields 随返回值传递（update_key_fields → reply_key_fields），
+        # 不再经实例字段跨执行累积。
 
     @staticmethod
     def camel_to_snake(text: str) -> str:
@@ -433,7 +430,6 @@ class Extractor(WorkflowComponent):
             session: 工作流会话
             context: 模型上下文
         """
-        self.node_field = ExtractorField()
         self.component_config = deepcopy(conf)
         conf = self.dict_keys_camel_to_snake(conf)
         self.check_config(conf)
@@ -443,18 +439,29 @@ class Extractor(WorkflowComponent):
         )
         self.model_map = self._workflow_llm_extra_configs.get("model_map", {})
 
-        self.inputs = dict()
-        self.user_response = ""
-
         self.extractor_config = ExtractorConfig(**format_extractor_configs(conf))
 
         self.chat_manager = session.get_global_state(WORKFLOW_CHAT_MANAGER)
 
         self.llm = self._create_llm_instance()
 
-        self.node_field = ExtractorField()
-
         self.initial_prompt()
+
+    async def _ensure_initialized(
+        self, conf: dict, session: Session, context: ModelContext
+    ) -> None:
+        """懒初始化双检加锁：并发首调只执行一次 init。
+
+        实例跨执行复用（静态图复用）后，invoke 首调的 ``if not self.llm``
+        守卫与 ``init`` 之间若无互斥，并发首调会重复建 Model（旧实例泄漏、
+        后者覆盖前者）。``init`` 自身保持同步实现（兼容遗留两阶段初始化）。
+        """
+        if self.llm:
+            return
+        async with self._init_lock:
+            if self.llm:
+                return
+            self.init(conf, session, context)
 
     def check_config(self, conf: dict):
         """
@@ -607,7 +614,7 @@ class Extractor(WorkflowComponent):
 
         return Model(client_config, model_config)
 
-    async def create_prompt_template_input(self, chat_history: list) -> dict:
+    async def create_prompt_template_input(self, chat_history: list, user_response: str) -> dict:
         """
         create input for prompt template
         """
@@ -626,12 +633,8 @@ class Extractor(WorkflowComponent):
             + f"{len(self.extractor_config.cn_fields_name.items())}个必要信息"
         )
 
-        if self.user_response:
-            user_response = self.user_response
-        elif chat_history:
+        if not user_response and chat_history:
             user_response = chat_history[-1].get(ExtractorKeyword.CONTENT)
-        else:
-            user_response = ""
 
         required_params_list = []
         for _, param in enumerate(self.extractor_config.key_fields):
@@ -666,11 +669,15 @@ class Extractor(WorkflowComponent):
             "required_params_list": required_params_list,
         }
 
-    async def extract_key_fields(self, chat_history: list, session: Session) -> dict:
+    async def extract_key_fields(
+        self, chat_history: list, session: Session, user_response: str
+    ) -> dict:
         """
         extract key fields from chat history
         """
-        prompt_template_input = await self.create_prompt_template_input(chat_history)
+        prompt_template_input = await self.create_prompt_template_input(
+            chat_history, user_response
+        )
 
         messages = self._format_prompt(prompt_template_input)
 
@@ -777,30 +784,39 @@ class Extractor(WorkflowComponent):
 
         return chat_history
 
-    async def update_key_fields(self, context: ModelContext, session: Session):
+    async def update_key_fields(
+        self, context: ModelContext, session: Session, user_response: str
+    ) -> dict:
         """
         updating key fields
+
+        返回本次提取并过滤后的 key fields（执行期状态随返回值传递，不写共享
+        实例——实例跨执行复用后，实例级累积会把上一执行的提取值并入本执行输出）。
         """
         chat_history = self.get_latest_chat_history(
             context, k=self.extractor_config.chat_history_max_rounds
         )
-        cur_extracted_key_fields = await self.extract_key_fields(chat_history, session)
+        cur_extracted_key_fields = await self.extract_key_fields(
+            chat_history, session, user_response
+        )
         cur_extracted_key_fields = {
             k: v
             for k, v in cur_extracted_key_fields.items()
             if k in self.extractor_config.cn_fields_name
         }
-        self.node_field.extracted_key_fields.update(cur_extracted_key_fields)
+        return cur_extracted_key_fields
 
     async def reply_key_fields(
-        self, context: ModelContext, session: Session
+        self, context: ModelContext, session: Session, user_response: str
     ) -> ExtractorOutput:
         """
         Reply key fields output.
         """
-        extractor_output = ExtractorOutput(user_response=self.user_response)
-        await self.update_key_fields(context, session)
-        extractor_output.update_key_field(self.node_field.extracted_key_fields)
+        extractor_output = ExtractorOutput(user_response=user_response)
+        cur_extracted_key_fields = await self.update_key_fields(
+            context, session, user_response
+        )
+        extractor_output.update_key_field(cur_extracted_key_fields)
         return extractor_output
 
     async def invoke(
@@ -819,7 +835,7 @@ class Extractor(WorkflowComponent):
         """
         if not self.llm:
             conf = inputs.get("config", {})
-            self.init(conf, session, context)
+            await self._ensure_initialized(conf, session, context)
 
         workflow_logger.info(
             "Extractor start invoke",
@@ -829,8 +845,6 @@ class Extractor(WorkflowComponent):
                 "session_id": session.get_session_id(),
             },
         )
-
-        inputs_data = inputs.get(USER_FIELDS)
 
         conv_history = self.get_latest_chat_history(context)
 
@@ -843,14 +857,13 @@ class Extractor(WorkflowComponent):
             },
         )
 
-        self.user_response = (
+        # 执行期状态走局部变量 + 参数传递，不写共享实例（实例跨执行复用）。
+        user_response = (
             conv_history[-1].get(ExtractorKeyword.CONTENT) if conv_history else ""
         )
 
-        await session.trace({"user": self.user_response})
+        await session.trace({"user": user_response})
 
-        self.inputs = inputs_data or {}
-
-        res = await self.reply_key_fields(context, session)
+        res = await self.reply_key_fields(context, session, user_response)
 
         return {USER_FIELDS: res.as_dict()}

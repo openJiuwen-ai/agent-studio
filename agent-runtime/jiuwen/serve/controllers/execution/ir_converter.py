@@ -31,13 +31,14 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.llm_service.base import ModelFactory
 from jiuwen.common.llm_service.model_util import ModelUtil
 from jiuwen.common.log.base import logger, get_x_execution_id
-from openjiuwen.core.common.logging import performance_logger
+from openjiuwen.core.common.logging import performance_logger, workflow_logger
 from jiuwen.common.utils.utils import safe_json_loads_raise_exception, timed_cache_op
 from jiuwen.context.memory_engine.config.memory_ir_config import MemoryIrConfig
 from jiuwen.controller.agent.agent import Agent
 from jiuwen.controller.common.config import AgentConfig, AgentMetaData
 from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
+    apply_loop_exec_state_isolation_patch,
     apply_loop_state_cleanup_patch,
 )
 from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
@@ -45,6 +46,10 @@ from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
 )
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
+)
+from jiuwen.extension.patches import static_graph_patch
+from jiuwen.extension.patches.static_graph_patch import (
+    apply_static_graph_patch,
 )
 from jiuwen.extension.workflow_node.end import End
 from jiuwen.extension.workflow_node.exception_handler import (
@@ -72,6 +77,7 @@ from jiuwen.extension.workflow_node.loop_set_variable import LoopSetVariable
 from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.sub_workflow import SubWorkflow
 from jiuwen.extension.workflow.lazy_workflow import LazyWorkflow
+from jiuwen.extension.workflow.execution_session_ctx import set_component_exec
 from jiuwen.extension.wrapper.single_component_debug_wrapper import SingleComponentInfo
 from jiuwen.multi_agent.agent_group.config import AgentGroupConfig, GroupSettings
 from jiuwen.multi_agent.agent_group.hierarchical_group.agent_group import (
@@ -112,7 +118,18 @@ from pydantic import ValidationError
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
+apply_loop_exec_state_isolation_patch()
 apply_global_memory_ref_resolution_patch()
+# 四件套（含 Patch D）必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
+# apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
+# 确保静态图复用降级而非拖垮 ir_converter 的 import。
+try:
+    apply_static_graph_patch()
+except Exception as e:  # pylint: disable=broad-except
+    static_graph_patch.STATIC_GRAPH_DOWNGRADED = True
+    workflow_logger.error(
+        f"[static_graph_patch] apply 异常，自动降级（实例缓存强制关闭）: {e}"
+    )
 from jiuwen.extension.workflow_node.utils import WorkflowMetadata
 
 from jiuwen.serve.controllers.execution.ir_parallel_utils import (
@@ -892,7 +909,13 @@ class _RoutedIntentDetection(IntentDetection):
     async def invoke(
         self, inputs: Any, session: Any, context: Any, **kwargs: Any
     ) -> Any:
-        self._router.set_session(session)
+        # 路由属主组件：session/context 走 component_exec ContextVar（**不
+        # reset**——路由 dispatch 在 invoke 返回后的同一 NodeTask 里执行，
+        # 需读到组件级 session；super().invoke 入口同值再 set，幂等）。
+        # 存组件面包装器（与旧 `self._session = session` 同物，组件自身读点
+        # 依赖包装器 API）；Patch C 消费方的 BaseSession 契约由
+        # resolve_routing_session 读取端解包满足。
+        set_component_exec(session, context)
         return await super().invoke(inputs, session, context, **kwargs)
 
     def add_component(
@@ -960,9 +983,9 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
             tool = Runner.resource_mgr.get_tool(tool_id, tag=node_id)
             if tool is not None:
                 tools.append(tool)
-        except Exception as e:
+        except Exception as exc:
             logger.error(
-                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {e}"
+                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {exc}"
             )
 
     # ③ 映射 camelCase → FlowAgentConfig
@@ -1146,11 +1169,11 @@ class IRConverter:
             supported_ir_version_lst = safe_json_loads_raise_exception(
                 supported_ir_version
             )
-        except ValueError as e:
+        except ValueError as exc:
             raise JiuWenBaseException(
                 error_code=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.code,
                 message=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.errmsg,
-            ) from e
+            ) from exc
         if not isinstance(supported_ir_version_lst, list):
             raise JiuWenBaseException(
                 error_code=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.code,
@@ -1197,10 +1220,10 @@ class IRConverter:
                             f"[PluginLoad] create_agent_config: "
                             f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
                         )
-                except Exception as e:
+                except Exception as exc:
                     plugin_name = plugin_ir.get("name", plugin_ir.get("id", f"index_{idx}"))
                     logger.error(
-                        f"[PluginLoad] create_agent_config: Failed to convert plugin '{plugin_name}': {e}. "
+                        f"[PluginLoad] create_agent_config: Failed to convert plugin '{plugin_name}': {exc}. "
                         f"Skipping. IR keys: {list(plugin_ir.keys())}"
                     )
 
@@ -1258,13 +1281,13 @@ class IRConverter:
             """for each agent, return its child AgentConfig"""
             try:
                 AgentIrValidator(**current_ir_data)
-            except ValidationError as e:
+            except ValidationError as exc:
                 raise JiuWenBaseException(
                     StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
                     StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
-                        error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(e)}"
+                        error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(exc)}"
                     ),
-                ) from e
+                ) from exc
             # R-04: intent 覆盖写到 per-config metadata,不写缓存 IR 对象(避免污染 cache_ir_queue)
             _intent_name, _intent_description = _resolve_intent_fields(
                 current_ir_data, parent_intent
@@ -2266,8 +2289,8 @@ class IRConverter:
             return None
         try:
             child_ir = await async_ir_load(child_path)
-        except Exception as e:
-            raise IRBuildException(f"从缓存或存储读取 IR 文件失败: {child_path}, {e}") from e
+        except Exception as exc:
+            raise IRBuildException(f"从缓存或存储读取 IR 文件失败: {child_path}, {exc}") from exc
         # First convert old refs to new format
         converted_child_ir = _convert_global_variable_refs_in_ir(child_ir)
         if logger.isEnabledFor(logging.DEBUG):
@@ -3557,14 +3580,14 @@ class IRConverter:
         """验证 Agent IR 数据"""
         try:
             AgentIrValidator(**ir_data)
-        except ValidationError as e:
-            error_message = format_pydantic_validation_error_message(e)
+        except ValidationError as exc:
+            error_message = format_pydantic_validation_error_message(exc)
             raise JiuWenBaseException(
                 StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
                 StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
                     error_msg=f"Agent_ir validate failed, root_case={error_message}"
                 ),
-            ) from e
+            ) from exc
 
     @staticmethod
     async def _create_llm_model(
@@ -3702,13 +3725,13 @@ class IRConverter:
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
-        except Exception as e:
+        except Exception as exc:
             logger.error(
                 f"Failed to create agent-core model resource: model_id={model_id}, "
-                f"model_name={model_name}, error={e}",
+                f"model_name={model_name}, error={exc}",
                 simple_log=(
                     f"failed to create agent-core model resource: "
-                    f"model_id={model_id}, model_name={model_name}, error={e}"
+                    f"model_id={model_id}, model_name={model_name}, error={exc}"
                 ),
             )
             raise

@@ -28,6 +28,13 @@ from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error, ExecutionError
 from jiuwen.common.exception.status_code import StatusCode as JiuWenStatusCode
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.extension.workflow.execution_session_ctx import (
+    current_component_exec,
+    get_stream_final_output,
+    reset_component_exec,
+    set_component_exec,
+    set_stream_final_output,
+)
 from jiuwen.prompt.agent.common.utils import convert_json_schema
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
@@ -76,14 +83,6 @@ class LLMChainConfig(BaseModel):
     user_fields: dict = Field(alias="userFields")
 
 
-class LLMChainState:
-    """LLMChain 状态管理"""
-
-    def __init__(self):
-        self.initialized = False
-        self.llm = None
-
-
 class ValidationUtils:
     """验证工具类"""
 
@@ -104,12 +103,14 @@ class LLMChain(WorkflowComponent):
         self._runtime_context = None
         self._llm = None
         self._metadata = None
-        self._state = LLMChainState()
-        self._session = None
-        self._context = None
+        # 懒初始化双检锁：实例跨执行复用，并发首调只建一次 Model
+        self._init_lock: asyncio.Lock = asyncio.Lock()
         self._initialized = False
-        self._stream_final_output: dict | None = None
         self.mem_conf = None
+        # 执行期状态（session / context / 末帧输出）不落实例：
+        # session/context 走 execution_session_ctx 的 component_exec 通道
+        # （invoke/stream 入口 set、finally reset），末帧走 stream_final_output
+        # 通道（引擎 Vertex._post_stream 经 get_stream_output 读取）。
 
     def init(self, conf: dict, **kwargs):
         """初始化组件配置"""
@@ -120,8 +121,12 @@ class LLMChain(WorkflowComponent):
         self._validate_config()
 
     async def _initialize_if_needed(self):
-        """按需初始化模型"""
-        if not self._initialized:
+        """按需初始化模型（双检加锁：并发首调只建一次 Model）"""
+        if self._initialized:
+            return
+        async with self._init_lock:
+            if self._initialized:
+                return
             try:
                 self._llm = await self._create_llm_instance()
                 self._initialized = True
@@ -161,41 +166,44 @@ class LLMChain(WorkflowComponent):
     async def invoke(self, inputs: dict[str, Any], session, context):
         """LLM 组件非流式调用接口"""
         await self._initialize_if_needed()
-        self._session = session
-        self._context = context
-
-        inputs_data = inputs.get(USER_FIELDS, {})
-        self._process_inputs(inputs_data)
-        await self._resolve_vision_urls(inputs_data)
-
-        language_model_inputs = self._get_model_input(inputs=inputs_data)
-
+        # 执行期 session/context 走 ContextVar 通道（实例跨执行复用，不落实例）；
+        # 同值幂等：stream 的 JSON 分支内嵌调 invoke 会再 set/reset 一次。
+        token = set_component_exec(session, context)
         try:
-            llm_output = await self._llm.invoke(messages=language_model_inputs)
+            inputs_data = inputs.get(USER_FIELDS, {})
+            self._process_inputs(inputs_data)
+            await self._resolve_vision_urls(inputs_data)
 
-            formatted_res = self._format_response(
-                llm_output.content,
-                self._get_response_format().get("type"),
-                (
-                    llm_output.reasoning_content
-                    if hasattr(llm_output, "reasoning_content")
-                    else None
-                ),
-            )
+            language_model_inputs = self._get_model_input(inputs=inputs_data)
 
-            final_output = {USER_FIELDS: formatted_res}
-            self._append_usage_metadata(llm_output, final_output)
-            return final_output
+            try:
+                llm_output = await self._llm.invoke(messages=language_model_inputs)
 
-        except Exception as e:
-            raise build_error(
-                StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
-                error_msg=f"LLM invoke failed: {_format_llm_error_detail(e)}",
-            ) from e
+                formatted_res = self._format_response(
+                    llm_output.content,
+                    self._get_response_format().get("type"),
+                    (
+                        llm_output.reasoning_content
+                        if hasattr(llm_output, "reasoning_content")
+                        else None
+                    ),
+                )
+
+                final_output = {USER_FIELDS: formatted_res}
+                self._append_usage_metadata(llm_output, final_output)
+                return final_output
+
+            except Exception as e:
+                raise build_error(
+                    StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
+                    error_msg=f"LLM invoke failed: {_format_llm_error_detail(e)}",
+                ) from e
+        finally:
+            reset_component_exec(token)
 
     def get_stream_output(self) -> dict | None:
         """Return final batch output after stream completes for downstream ${node_llm...} refs."""
-        return self._stream_final_output
+        return get_stream_final_output()
 
     async def stream(self, inputs: dict[str, Any], session, context):
         """LLM 组件流式调用接口 - 支持思考模式
@@ -206,82 +214,87 @@ class LLMChain(WorkflowComponent):
           disabled → _is_thinking_enabled()=False 且 type=disabled → content 真流式，丢弃 reasoning
         """
         await self._initialize_if_needed()
-        self._session = session
-        node_id = session.get_component_id()
-        self._context = context
-        self._stream_final_output = None
+        # 执行期 session/context 走 ContextVar 通道（实例跨执行复用，不落实例）；
+        # 末帧输出走 stream_final_output 通道（不 reset：引擎 Vertex._post_stream
+        # 在 generator 耗尽后读取），入口复位避免上一执行的末帧串入。
+        token = set_component_exec(session, context)
+        try:
+            node_id = session.get_component_id()
+            set_stream_final_output(None)
 
-        inputs_data = inputs.get(USER_FIELDS, {})
-        self._process_inputs(inputs_data)
+            inputs_data = inputs.get(USER_FIELDS, {})
+            self._process_inputs(inputs_data)
 
-        # 三态判断：enabled / None / disabled
-        thinking_config = (
-            self._conf.get("model", {}).get("hyperParameters", {}).get("thinking", {})
-        )
-        thinking_type = thinking_config.get("type")
-        is_enabled = self._is_thinking_enabled()
-        # type 未设置（None/空值）时为 None 状态，其余非 enabled 都是 disabled
-        is_none = not thinking_type
-        output_reasoning = is_enabled or is_none
+            # 三态判断：enabled / None / disabled
+            thinking_config = (
+                self._conf.get("model", {}).get("hyperParameters", {}).get("thinking", {})
+            )
+            thinking_type = thinking_config.get("type")
+            is_enabled = self._is_thinking_enabled()
+            # type 未设置（None/空值）时为 None 状态，其余非 enabled 都是 disabled
+            is_none = not thinking_type
+            output_reasoning = is_enabled or is_none
 
-        if self._get_response_format().get("type") == "json":
-            # JSON 模式：非流式调用后一次性输出
-            result = await self.invoke(inputs, session, context)
-            custom_data = {
-                "node_id": node_id,
-                "node_name": self._conf.get("name") or node_id,
-                "node_type": JIUWEN_LLM_TYPE,
-                "componentType": "LLM",
-                "should_interrupt": False,
-                "userFields": result.get(USER_FIELDS, {}),
-                "model_stats": result.get("metadata", {}),
-                "status": "finish",
-            }
-            if output_reasoning:
-                custom_data["think"] = result.get(USER_FIELDS, {}).get("reasoning_content")
-            await session.write_custom_stream(
-                CustomSchema(type=PARTIAL_CONTENT, index=0, data=custom_data))
-            self._stream_final_output = result
-            yield result
-        else:
-            await self._resolve_vision_urls(inputs_data)
-            language_model_inputs = self._get_model_input(inputs=inputs_data)
+            if self._get_response_format().get("type") == "json":
+                # JSON 模式：非流式调用后一次性输出
+                result = await self.invoke(inputs, session, context)
+                custom_data = {
+                    "node_id": node_id,
+                    "node_name": self._conf.get("name") or node_id,
+                    "node_type": JIUWEN_LLM_TYPE,
+                    "componentType": "LLM",
+                    "should_interrupt": False,
+                    "userFields": result.get(USER_FIELDS, {}),
+                    "model_stats": result.get("metadata", {}),
+                    "status": "finish",
+                }
+                if output_reasoning:
+                    custom_data["think"] = result.get(USER_FIELDS, {}).get("reasoning_content")
+                await session.write_custom_stream(
+                    CustomSchema(type=PARTIAL_CONTENT, index=0, data=custom_data))
+                set_stream_final_output(result)
+                yield result
+            else:
+                await self._resolve_vision_urls(inputs_data)
+                language_model_inputs = self._get_model_input(inputs=inputs_data)
 
-            # Multi-agent path: the sub-workflow LLM node's own ``memory.enable``
-            # is False, and the jiuwen ``Workflow._update_runtime_context``
-            # retrieval hook is bypassed (sub-workflows run via the agent-core
-            # engine). Retrieve memory here when the multi-agent-level switch
-            # ``enable_memory_retrieve`` is on, so the LLM can use long-term
-            # memory in controller mode just like in direct-workflow mode.
-            await self._inject_retrieved_memory(language_model_inputs, inputs_data)
+                # Multi-agent path: the sub-workflow LLM node's own ``memory.enable``
+                # is False, and the jiuwen ``Workflow._update_runtime_context``
+                # retrieval hook is bypassed (sub-workflows run via the agent-core
+                # engine). Retrieve memory here when the multi-agent-level switch
+                # ``enable_memory_retrieve`` is on, so the LLM can use long-term
+                # memory in controller mode just like in direct-workflow mode.
+                await self._inject_retrieved_memory(language_model_inputs, inputs_data)
 
-            try:
-                outputs_list = self._get_outputs_list_from_conf()
-                output_id = "raw_output"
-                if outputs_list and len(outputs_list) > 0:
-                    output_id = outputs_list[0].get("id", "raw_output")
+                try:
+                    outputs_list = self._get_outputs_list_from_conf()
+                    output_id = "raw_output"
+                    if outputs_list and len(outputs_list) > 0:
+                        output_id = outputs_list[0].get("id", "raw_output")
 
-                if is_enabled:
-                    # ── enabled: reasoning 真流式, content 假流式 ──
-                    async for item in self._stream_thinking_enabled(
-                        language_model_inputs, output_id, node_id, session
-                    ):
-                        yield item
-                else:
-                    # ── disabled / None: content 真流式 ──
-                    # disabled → output_reasoning=False → 丢弃 reasoning
-                    # None     → output_reasoning=True  → 输出 reasoning
-                    async for item in self._stream_real_time(
-                        language_model_inputs, output_id, node_id, session,
-                        output_reasoning=output_reasoning,
-                    ):
-                        yield item
+                    if is_enabled:
+                        # ── enabled: reasoning 真流式, content 假流式 ──
+                        async for item in self._stream_thinking_enabled(
+                            language_model_inputs, output_id, node_id, session
+                        ):
+                            yield item
+                    else:
+                        # ── disabled / None: content 真流式 ──
+                        # disabled → output_reasoning=False → 丢弃 reasoning
+                        # None     → output_reasoning=True  → 输出 reasoning
+                        async for item in self._stream_real_time(
+                            language_model_inputs, output_id, node_id, session,
+                            output_reasoning=output_reasoning,
+                        ):
+                            yield item
 
-            except Exception as e:
-                raise build_error(
-                    StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
-                    error_msg=f"LLM stream failed: {_format_llm_error_detail(e)}",
-                ) from e
+                except Exception as e:
+                    raise build_error(
+                        StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
+                        error_msg=f"LLM stream failed: {_format_llm_error_detail(e)}",
+                    ) from e
+        finally:
+            reset_component_exec(token)
 
     async def _process_thinking_stream(
         self, model_result, llm_inputs: dict
@@ -338,7 +351,7 @@ class LLMChain(WorkflowComponent):
             self._get_response_format().get("type"),
             reasoning_content,
         )
-        self._stream_final_output = {USER_FIELDS: formatted_res}
+        set_stream_final_output({USER_FIELDS: formatted_res})
 
         async def raw_output_generator():
             """基于缓存的 content_chunks 重放生成流式数据"""
@@ -375,7 +388,8 @@ class LLMChain(WorkflowComponent):
         self, content_chunks, reasoning_content, result_iter, state
     ):
         """消费 LLM 流，分离 content 和 reasoning_content，并收集 usage_metadata"""
-        node_id = self._session.get_component_id() if self._session else ""
+        session, _ = current_component_exec()
+        node_id = session.get_component_id() if session else ""
         node_name = self._conf.get("name") or node_id
         index = 0
 
@@ -392,8 +406,8 @@ class LLMChain(WorkflowComponent):
 
             if hasattr(item, "reasoning_content") and item.reasoning_content:
                 reasoning_content += item.reasoning_content
-                if self._session:
-                    await self._session.write_custom_stream(
+                if session:
+                    await session.write_custom_stream(
                         CustomSchema(
                             type=PARTIAL_CONTENT,
                             index=index,
@@ -459,7 +473,7 @@ class LLMChain(WorkflowComponent):
                     "first_token<llm>": thinking_state.get("first_token_ms"),
                     "total_token<llm>": thinking_state.get("total_token_ms"),
                 }})
-                self._stream_final_output = custom_data
+                set_stream_final_output(custom_data)
                 # 调试信息走 yield（最后一帧，含 reasoning_content + usage）
                 usage_dict = usage_metadata.model_dump() if usage_metadata else {}
                 yield {
@@ -570,7 +584,7 @@ class LLMChain(WorkflowComponent):
             "first_token<llm>": stream_state["first_token_ms"],
             "total_token<llm>": total_token_ms,
         }})
-        self._stream_final_output = custom_data
+        set_stream_final_output(custom_data)
         # 最后一帧
         usage_dict = (
             stream_state["usage_metadata"].model_dump()
@@ -723,10 +737,11 @@ class LLMChain(WorkflowComponent):
 
     def _get_chat_history(self) -> list[dict]:
         """从 context 获取对话历史"""
-        if not self._context:
+        _, context = current_component_exec()
+        if not context:
             return []
         try:
-            messages = self._context.get_messages(with_history=True)
+            messages = context.get_messages(with_history=True)
             return [self._message_to_dict(msg) for msg in messages]
         except Exception:
             return []
@@ -907,11 +922,12 @@ class LLMChain(WorkflowComponent):
             return
 
         memory_msg = inputs.get(MEMORY_MESSAGE) if isinstance(inputs, dict) else None
-        if memory_msg is None and self._session:
-            memory_msg = self._session.get_global_state(MEMORY_MESSAGE)
-        if memory_msg is None and self._session:
+        session, _ = current_component_exec()
+        if memory_msg is None and session:
+            memory_msg = session.get_global_state(MEMORY_MESSAGE)
+        if memory_msg is None and session:
             try:
-                state = self._session.dump_state()
+                state = session.dump_state()
                 memory_msg = (state or {}).get(MEMORY_MESSAGE)
                 if memory_msg is None:
                     memory_msg = ((state or {}).get("global_state") or {}).get(
@@ -977,17 +993,18 @@ class LLMChain(WorkflowComponent):
         ``_insert_memory_message``) is unaffected.
         """
         try:
-            if not (self._session and hasattr(self._session, "get_global_state")):
+            session, _ = current_component_exec()
+            if not (session and hasattr(session, "get_global_state")):
                 return
-            emr = self._session.get_global_state("enable_memory_retrieve")
+            emr = session.get_global_state("enable_memory_retrieve")
             if not emr:
                 return
-            scope_id = self._session.get_global_state("memory_repo_id")
+            scope_id = session.get_global_state("memory_repo_id")
             if not scope_id:
                 return
             # Read full memory_config for backend_type dispatch (EXTERNAL → ExternalMemoryClient)
-            memory_config = self._session.get_global_state("memory_config") or {}
-            gv = self._session.get_global_state("global_variables") or {}
+            memory_config = session.get_global_state("memory_config") or {}
+            gv = session.get_global_state("global_variables") or {}
             user_id = ""
             if isinstance(gv, dict):
                 user_id = gv.get("userId", "") or ""
