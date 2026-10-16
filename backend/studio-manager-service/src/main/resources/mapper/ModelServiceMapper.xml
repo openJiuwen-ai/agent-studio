@@ -113,7 +113,7 @@
 
     <select id="queryByNames" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase">
         select * from t_model_service where PROJECT_ID = #{projectId} and WORKSPACE_ID = #{workspaceId}
-        <if test="serviceNames != null">
+        <if test="serviceNames != null and serviceNames.size() > 0">
             and SERVICE_NAME IN
             <foreach item="name" collection="serviceNames" open="(" separator="," close=")">
                 #{name}

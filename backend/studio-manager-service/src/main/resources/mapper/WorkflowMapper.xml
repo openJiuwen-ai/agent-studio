@@ -413,7 +413,7 @@
         <include refid="Base_Column_List"/>
         from t_agent_workflow
         where project_id = #{projectId,jdbcType=VARCHAR} and deleted = false
-        <if test="workflowSearchCriteria != null and workflowSearchCriteria.id != null">
+        <if test="workflowSearchCriteria != null and workflowSearchCriteria.id != null and workflowSearchCriteria.id.size() > 0">
             and id in
             <foreach collection="workflowSearchCriteria.id" item="workflow_id" index="index" open="(" close=")"
                      separator=",">

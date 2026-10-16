@@ -93,7 +93,7 @@
                 and (project_id = #{opSvcProjectId,jdbcType=VARCHAR} and scope = 'public')
             </when>
         </choose>
-        <if test="depIds != null">
+        <if test="depIds != null and depIds.size() > 0">
             and id IN
             <foreach item="depId" collection="depIds" open="(" separator="," close=")">
                 #{depId,jdbcType=VARCHAR}
