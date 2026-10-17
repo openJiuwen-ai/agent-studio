@@ -28,7 +28,7 @@ import { NzDropDownModule } from 'ng-zorro-antd/dropdown';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzMessageService } from 'ng-zorro-antd/message';
-import { NzDrawerModule, NzDrawerService } from 'ng-zorro-antd/drawer';
+import { NzDrawerModule, NzDrawerRef, NzDrawerService } from 'ng-zorro-antd/drawer';
 
 @Component({
   selector: 'intent-package',
@@ -157,12 +157,23 @@ export class IntentPackageComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** 导出抽屉引用，用于防止连点重复打开导出抽屉 */
+  private exportDrawerRef: NzDrawerRef | null = null;
+
   /** 导出意图包 */
   public exportTool() {
-    this.nzDrawerService.create({
+    // 防止连点打开多个导出抽屉
+    if (this.exportDrawerRef) {
+      return;
+    }
+    const drawerRef = this.nzDrawerService.create({
       nzContent: ExportPackageModalComponent,
       nzWidth: '700px',
       nzPlacement: 'right'
+    });
+    this.exportDrawerRef = drawerRef;
+    drawerRef.afterClose.subscribe(() => {
+      this.exportDrawerRef = null;
     });
   }
 
