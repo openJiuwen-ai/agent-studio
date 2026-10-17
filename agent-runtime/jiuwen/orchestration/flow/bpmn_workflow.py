@@ -2279,11 +2279,16 @@ class BpmnWorkflow(BaseWorkflow):
                 f"Failed to parse IR as BPMNWorkflow, details: {e}",
                 simple_log="Failed to parse IR as BPMNWorkflow.",
             )
+            # 若内层已是带 error_code 的 JiuWenBaseException（如分支表达式校验
+            # 抛出的 101623），直接透传，避免被外层 101902 覆盖而丢失原始错误码
+            if isinstance(e, JiuWenBaseException):
+                raise
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.code,
-                message=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.errmsg.format(
-                    reason=str(type(e).__name__)
-                ),
+                message=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.errmsg.format(reason=str(e)),
+                node_id=getattr(e, "node_id", None),
+                node_name=getattr(e, "node_name", None),
+                node_type=getattr(e, "node_type", None),
             ) from e
 
         self.runtime_context.update(dict(node_variable=self.workflow.data))
