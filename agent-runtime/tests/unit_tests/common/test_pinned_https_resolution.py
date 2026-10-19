@@ -359,7 +359,8 @@ class TestPinnedMultiAddress:
             finally:
                 self._remove(self.HOST)
 
-    def test_multi_socktype_resolution_deduped(self):
+    @staticmethod
+    def test_multi_socktype_resolution_deduped():
         """同 IP 多 socktype 形态（glibc 字面量返回 STREAM/DGRAM/RAW 三条，
         Windows 仅 1 条）按 (family, ip) 去重——不去重则连接期解析返回
         重复条目（Linux CI 上 len==1 断言炸）。
