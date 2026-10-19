@@ -305,6 +305,9 @@ class WorkflowStreamDataWrapper:
         self._loop_iter_count: dict[str, int] = {}
         # 子工作流中断 trace 缓存列表
         self._interrupt_trace_cache: list[TraceSchema] = []
+        # 恢复请求中首个 pre_invoke 帧属于被中断恢复的节点；其后的节点
+        # （如恢复请求中首次执行的第二个提问器）都是新执行，正常发 start
+        self._resumed_node_seen = False
 
     @staticmethod
     def _serialize_datetime(value: Any) -> Any:
@@ -899,8 +902,18 @@ class WorkflowStreamDataWrapper:
             computed_status = "running"
         else:
             computed_status = "start"
-            if self._is_resuming and payload.get("componentType", "") == "Questioner":
-                computed_status = "running"
+            # 仅恢复请求中首个执行的组件节点（被中断恢复的节点）保持 running，
+            # 避免画布上已显示等待中的节点重发 start；否则其 node_started
+            # 帧会被下方"提问器无用帧"过滤吞掉，第二个提问器节点状态
+            # 直接从未开始跳到等待输入。无 componentId 的总帧不消耗该标记。
+            if (
+                self._is_resuming
+                and not self._resumed_node_seen
+                and payload.get("componentId", "")
+            ):
+                self._resumed_node_seen = True
+                if payload.get("componentType", "") == "Questioner":
+                    computed_status = "running"
 
         end_time_override = None
         if inner_error is not None:

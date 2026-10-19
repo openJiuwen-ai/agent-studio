@@ -1924,19 +1924,25 @@ class Questioner(WorkflowComponent):
             ) from e
 
     @staticmethod
-    def _find_questioner_state_in_tree(state_root: Any) -> Optional[dict]:
-        if not isinstance(state_root, dict):
+    def _find_questioner_state_in_tree(state_root: Any, owner_id: str) -> Optional[dict]:
+        """在 comp_state 树中查找 owner_id 自身的 USER_INTERACT 提问器状态。
+
+        仅接受 key 等于 owner_id（组件 executable_id）的条目，避免误恢复
+        其他提问器节点残留的状态（如首个提问器完成后 comp_state 快照中的
+        USER_INTERACT 遗留导致第二个提问器不再提问）。
+        """
+        if not owner_id or not isinstance(state_root, dict):
             return None
         for key, value in state_root.items():
             if not isinstance(value, dict):
                 continue
             q_state = value.get(QUESTIONER_STATE_KEY)
-            if isinstance(q_state, dict):
+            if key == owner_id and isinstance(q_state, dict):
                 status = q_state.get("status")
                 status_val = status.value if hasattr(status, "value") else str(status)
                 if status_val == ExecutionStatus.USER_INTERACT.value:
                     return q_state
-            nested = Questioner._find_questioner_state_in_tree(value)
+            nested = Questioner._find_questioner_state_in_tree(value, owner_id)
             if nested:
                 return nested
         return None
@@ -1946,6 +1952,13 @@ class Questioner(WorkflowComponent):
         session_id = session.get_session_id()
         node_id = (
             session.get_component_id() if hasattr(session, "get_component_id") else None
+        )
+        # comp_state/comp_state_updates 树中组件状态的键为 executable_id
+        # （子工作流节点为 "parent.node" 复合键），主工作流节点等于 node_id
+        owner_id = (
+            session.get_executable_id()
+            if hasattr(session, "get_executable_id")
+            else node_id
         )
         # 延迟导入避免循环依赖
         from jiuwen.serve.controllers.execution.manager import AsyncStateManager
@@ -1989,7 +2002,7 @@ class Questioner(WorkflowComponent):
                         return result
             comp_state = restored_state.get("comp_state")
             if comp_state:
-                state_dict = Questioner._find_questioner_state_in_tree(comp_state)
+                state_dict = Questioner._find_questioner_state_in_tree(comp_state, owner_id)
                 if state_dict:
                     return QuestionerState.deserialize(state_dict)
 
@@ -2014,7 +2027,7 @@ class Questioner(WorkflowComponent):
                         return result
         comp_state = get_state_info(session, "comp_state")
         if comp_state:
-            state_dict = Questioner._find_questioner_state_in_tree(comp_state)
+            state_dict = Questioner._find_questioner_state_in_tree(comp_state, owner_id)
             if state_dict:
                 return QuestionerState.deserialize(state_dict)
 
