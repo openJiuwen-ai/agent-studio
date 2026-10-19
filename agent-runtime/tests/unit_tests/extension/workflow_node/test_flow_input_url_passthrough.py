@@ -41,26 +41,30 @@ URL_DATA = "data:image/png;base64,iVBORw0KGgo="
 class TestValidateInputsUrlPassthrough:
     """URL 值经 validate_inputs 后原样透传（锁行为）。"""
 
-    def test_string_url_passthrough_unchanged(self):
+    @staticmethod
+    def test_string_url_passthrough_unchanged():
         config = _config([{"id": "photo", "required": True, "type": "string"}])
         inputs = {"photo": URL_HTTPS}
         FlowInputUtils.validate_inputs(inputs, config)
         assert inputs["photo"] == URL_HTTPS
 
-    def test_string_data_uri_passthrough_unchanged(self):
+    @staticmethod
+    def test_string_data_uri_passthrough_unchanged():
         config = _config([{"id": "photo", "required": False, "type": "string"}])
         inputs = {"photo": URL_DATA}
         FlowInputUtils.validate_inputs(inputs, config)
         assert inputs["photo"] == URL_DATA
 
-    def test_array_real_list_passthrough_unchanged(self):
+    @staticmethod
+    def test_array_real_list_passthrough_unchanged():
         config = _config([{"id": "photos", "required": True, "type": "array"}])
         urls = [URL_HTTPS, "http://example.com/a.mp4", URL_DATA]
         inputs = {"photos": list(urls)}
         FlowInputUtils.validate_inputs(inputs, config)
         assert inputs["photos"] == urls
 
-    def test_array_json_string_form_parsed_to_list(self):
+    @staticmethod
+    def test_array_json_string_form_parsed_to_list():
         config = _config([{"id": "photos", "required": True, "type": "array"}])
         urls = [URL_HTTPS, URL_DATA]
         inputs = {"photos": json.dumps(urls)}
@@ -71,12 +75,14 @@ class TestValidateInputsUrlPassthrough:
 class TestValidateInputsRequiredSemanticsUnchanged:
     """必填校验语义不受 URL 录入影响（锁行为）。"""
 
-    def test_required_missing_still_raises(self):
+    @staticmethod
+    def test_required_missing_still_raises():
         config = _config([{"id": "photo", "required": True, "type": "string"}])
         with pytest.raises(Exception):
             FlowInputUtils.validate_inputs({}, config)
 
-    def test_required_empty_still_raises(self):
+    @staticmethod
+    def test_required_empty_still_raises():
         config = _config([{"id": "photo", "required": True, "type": "string"}])
         with pytest.raises(Exception):
             FlowInputUtils.validate_inputs({"photo": ""}, config)
