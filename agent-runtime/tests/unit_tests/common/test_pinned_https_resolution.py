@@ -21,7 +21,9 @@ from jiuwen.common.utils.utils import (
     pinned_https_resolution,
 )
 
-PUBLIC_HOST = "example.com"  # 解析到公网 IP
+# 确定性公网 IP 字面量——不用 example.com：它有多条 A 记录且 DNS 轮询返回顺序不定，
+# 不同 getaddrinfo 调用会拿到不同 IP，比较绝对 IP 必然 flaky
+PUBLIC_HOST = "8.8.8.8"
 PUBLIC_V6 = "2001:4860:4860::8888"  # 公网 IPv6（Google DNS）
 
 
