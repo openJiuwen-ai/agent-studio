@@ -2,7 +2,9 @@
  * file 类型参数 URL 录入的校验与工具函数（特性：开始节点支持URL方式）。
  *
  * URL 模式仅对 file/image、file/video（含 array 形态）开放；
- * 校验规则：协议头 ∈ {http:, https:, data:}，扩展名白名单复用上传口径
+ * 校验规则：协议头 ∈ {http:, https:}（与运行时下载入口
+ * validate_and_keep_https_url 的 ^https?:// 契约一致——data: 等其它
+ * 协议运行时会拒收，前端不得放行），扩展名白名单复用上传口径
  * （pipes/upload-file.pipe.ts 的 fileUploadAcc，单一来源不复制）。
  * 校验仅在前端录入时阻断，不做连通性/大小/内容探测。
  */
@@ -10,23 +12,6 @@
 import { v4 as uuidV4 } from 'uuid';
 import { fileUploadAcc } from 'src/pipes/upload-file.pipe';
 import type { FileItem } from './multiUpload.utils';
-
-/** data: URI mediatype → 扩展名映射（对齐 fileUploadAcc 白名单口径） */
-const DATA_MEDIA_TYPE_MAP: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/svg+xml': 'svg',
-  'video/mp4': 'mp4',
-  'video/x-msvideo': 'avi',
-  'video/x-ms-wmv': 'wmv',
-  'video/x-flv': 'flv',
-  'video/x-f4v': 'f4v',
-  'video/3gpp': '3gp',
-  'video/x-matroska': 'mkv',
-  'application/vnd.rn-realmedia': 'rmvb',
-};
 
 /** 是否为支持 URL 录入的 file 类型（image/video 子类型，含 array 形态） */
 export function isSupportedUrlType(type: string): boolean {
@@ -56,14 +41,6 @@ export function checkFileUrl(
     return 'url_invalid_format';
   }
 
-  if (parsed.protocol === 'data:') {
-    const extension = getDataUriExtension(trimmed);
-    if (!extension || !isExtensionAllowed(extension, type)) {
-      return 'url_invalid_extension';
-    }
-    return null;
-  }
-
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return 'url_invalid_protocol';
   }
@@ -87,31 +64,22 @@ export function getUrlExtension(parsed: URL): string | null {
   return lastSegment.slice(dotIndex + 1).toLowerCase();
 }
 
-/** 从 data: URI 提取 mediatype 对应的白名单扩展名 */
-export function getDataUriExtension(url: string): string | null {
-  const matched = /^data:([^;,]+)/i.exec((url || '').trim());
-  if (!matched) {
-    return null;
-  }
-  return DATA_MEDIA_TYPE_MAP[matched[1].toLowerCase()] ?? null;
-}
-
-/** 扩展名是否在指定 file 类型的上传白名单内 */
+/** 扩展名是否在指定 file 类型的上传白名单内（两侧均忽略前导点与大小写） */
 export function isExtensionAllowed(extension: string, type: string): boolean {
+  const normalized = (extension || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\./, '');
   const whitelist = (fileUploadAcc[type] || '')
     .split(',')
     .map((item) => item.trim().toLowerCase().replace(/^\./, ''))
     .filter(Boolean);
-  return whitelist.includes((extension || '').trim().toLowerCase());
+  return whitelist.includes(normalized);
 }
 
-/** URL 显示名：path 末段（去 query）；data: URI 以 mediatype 合成 */
+/** URL 显示名：path 末段（去 query） */
 export function getUrlDisplayName(url: string): string {
   const trimmed = (url || '').trim();
-  if (trimmed.startsWith('data:')) {
-    const extension = getDataUriExtension(trimmed) || 'bin';
-    return `data.${extension}`;
-  }
   try {
     const parsed = new URL(trimmed);
     const lastSegment =

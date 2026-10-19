@@ -261,6 +261,12 @@ public class JsonSchemaUtils {
             if (StringUtils.isBlank(defaultNode.asText())) {
                 return;
             }
+            // FEAT-073：file/<子类型>（file/image 等）不在 JsonSchemaType 枚举内，
+            // valueOf 会抛 IllegalArgumentException 使接口 500 而非受控错误；
+            // 其默认值为文件 URL 字符串，无 number/integer/boolean 格式校验，直接放行
+            if (type.startsWith("file/")) {
+                return;
+            }
             switch (JsonSchemaType.valueOf(type.toUpperCase(Locale.ROOT))) {
                 case NUMBER:
                     if (!isNumber(defaultNode.asText())) {

@@ -1,7 +1,6 @@
 import {
   checkFileUrl,
   createUrlFileItem,
-  getDataUriExtension,
   getUrlDisplayName,
   getUrlExtension,
   isExtensionAllowed,
@@ -10,7 +9,9 @@ import {
 } from '../../routes/agent-center/file-url.utils';
 
 // 特性「开始节点支持URL方式」：URL 校验纯函数。
-// 规则：协议头 ∈ {http:, https:, data:}；扩展名白名单复用上传口径
+// 规则：协议头 ∈ {http:, https:}（与运行时 validate_and_keep_https_url
+// 的 ^https?:// 契约一致，data: 等其它协议前后端一致拒收）；
+// 扩展名白名单复用上传口径
 // （image: png/jpg/jpeg/gif/webp/svg；video: mp4/avi/rmvb/mkv/flv/f4v/wmv/3gp）；
 // 仅 image/video 子类型（含 array 形态）开放 URL 模式。
 
@@ -67,6 +68,13 @@ describe('file-url.utils — URL 录入校验', () => {
       expect(checkFileUrl('file:///etc/passwd.png', 'file/image')).toBe(
         'url_invalid_protocol',
       );
+      // data: 与运行时下载入口（仅 ^https?://）契约一致拒收
+      expect(
+        checkFileUrl('data:image/png;base64,iVBORw0KGgo=', 'file/image'),
+      ).toBe('url_invalid_protocol');
+      expect(checkFileUrl('data:video/mp4;base64,AAAA', 'file/video')).toBe(
+        'url_invalid_protocol',
+      );
     });
 
     it('格式非法被拦截', () => {
@@ -110,40 +118,19 @@ describe('file-url.utils — URL 录入校验', () => {
     });
 
     it('data: URI 按 mediatype 映射白名单', () => {
-      expect(
-        checkFileUrl('data:image/png;base64,iVBORw0KGgo=', 'file/image'),
-      ).toBeNull();
-      expect(
-        checkFileUrl('data:image/svg+xml;base64,PHN2Zy8+', 'file/image'),
-      ).toBeNull();
-      expect(
-        checkFileUrl('data:video/mp4;base64,AAAA', 'file/video'),
-      ).toBeNull();
-      // 白名单外 mediatype / 缺失 mediatype 均拦截
-      expect(
-        checkFileUrl('data:image/bmp;base64,AAAA', 'file/image'),
-      ).toBe('url_invalid_extension');
+      // data: 协议整体拒收（见「非法协议头被拦截」），不再有 mediatype 分支
       expect(checkFileUrl('data:,hello', 'file/image')).toBe(
-        'url_invalid_extension',
+        'url_invalid_protocol',
       );
-      expect(
-        checkFileUrl('data:image/png;base64,AAAA', 'file/video'),
-      ).toBe('url_invalid_extension');
     });
   });
 
-  describe('getUrlExtension / getDataUriExtension', () => {
+  describe('getUrlExtension', () => {
     it('取 path 末段扩展名（自动剥离 query）', () => {
       const parsed = new URL(
         'https://example.com/bucket/a/b/photo.jpeg?sig=1&x=2',
       );
       expect(getUrlExtension(parsed)).toBe('jpeg');
-    });
-
-    it('data: URI mediatype 映射', () => {
-      expect(getDataUriExtension('data:image/png;base64,x')).toBe('png');
-      expect(getDataUriExtension('data:IMAGE/JPEG;base64,x')).toBe('jpg');
-      expect(getDataUriExtension('data:application/pdf,x')).toBeNull();
     });
   });
 
@@ -158,10 +145,6 @@ describe('file-url.utils — URL 录入校验', () => {
       expect(
         getUrlDisplayName('https://example.com/%E6%8A%93%E6%8B%8D.png'),
       ).toBe('抓拍.png');
-    });
-
-    it('data: URI 以 mediatype 合成显示名', () => {
-      expect(getUrlDisplayName('data:image/png;base64,x')).toBe('data.png');
     });
 
     it('非法输入回退 unknown', () => {

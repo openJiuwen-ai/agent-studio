@@ -4,10 +4,14 @@
 
 """pinned_https_resolution 回归测试。
 
-覆盖三处 code review 修复：
+覆盖多处 code review 修复：
 1. 同 hostname 并发/嵌套使用时先退出者不得移除后退出者的钉死记录
 2. IPv6 地址不因 inet_aton（仅 IPv4）抛 OSError 导致合法下载失败
 3. AF_INET6 钉死解析返回四元组 sockaddr（协议约定）
+4. 169.254.0.0/16（链路本地/云元数据 169.254.169.254）拦截——与
+   Java 侧 urlCheckUtils.isInternalIp（isLinkLocalAddress）口径对齐
+5. 多地址钉死：连接期保留全部校验地址（双栈主机多地址回退），
+   显式异族 TCP 查询 fail-closed
 """
 
 import socket
@@ -18,7 +22,11 @@ import pytest
 from jiuwen.common.utils.utils import (
     _is_inner_ipaddr_v6,
     _orig_getaddrinfo,
+    _pinned_entries,
+    _pinned_resolution_lock,
+    is_inner_ipaddress,
     pinned_https_resolution,
+    url_to_ip_with_protocol_and_port,
     validate_and_keep_https_url,
 )
 
@@ -193,6 +201,145 @@ class TestValidateHttpsUrlIpv6:
             infos = socket.getaddrinfo(PUBLIC_V6, 443)
             assert infos[0][4][0] == PUBLIC_V6
         assert socket.getaddrinfo is _orig_getaddrinfo
+
+
+class TestInnerIp169LinkLocal:
+    """169.254.0.0/16（链路本地/云元数据）拦截（H 项回归）。
+
+    修复前 Python 侧只拦 10/8、172.16/12、192.168/16、127/8、0.0.0.0，
+    云元数据 169.254.169.254 可穿透气体检——Java 侧 isInternalIp 经
+    isLinkLocalAddress 早已拦截，两侧口径不一致。
+    """
+
+    @staticmethod
+    def test_is_inner_ipaddress_link_local():
+        assert is_inner_ipaddress("169.254.169.254") is True
+        assert is_inner_ipaddress("169.254.0.1") is True
+        assert is_inner_ipaddress("169.254.255.255") is True
+        # 段外不误伤
+        assert is_inner_ipaddress("169.255.0.1") is False
+        assert is_inner_ipaddress("8.8.8.8") is False
+
+    @staticmethod
+    def test_https_metadata_url_blocked():
+        with pytest.raises(ValueError):
+            validate_and_keep_https_url(
+                "https://169.254.169.254/latest/meta-data/"
+            )
+
+    @staticmethod
+    def test_http_metadata_url_blocked():
+        with pytest.raises(ValueError):
+            url_to_ip_with_protocol_and_port(
+                "http://169.254.169.254/latest/meta-data/"
+            )
+
+    @staticmethod
+    def test_pinned_metadata_blocked():
+        with pytest.raises(ValueError):
+            with pinned_https_resolution("169.254.169.254"):
+                pass
+
+    @staticmethod
+    def test_v4_mapped_link_local_blocked():
+        # IPv4 映射 IPv6（::ffff:a.b.c.d）按映射的 IPv4 判定
+        assert _is_inner_ipaddr_v6("::ffff:169.254.169.254") is True
+        assert _is_inner_ipaddr_v6("::ffff:8.8.8.8") is False
+
+
+class TestPinnedMultiAddress:
+    """多地址钉死（L 项回归）：连接期保留多地址回退。
+
+    修复前只钉死 getaddrinfo 返回的 infos[0]——双栈主机首个 AAAA/A
+    不可达时 https 下载失败，而校验阶段本能看到全部地址。
+    """
+
+    HOST = "multi.pinned.test"
+
+    @staticmethod
+    def _inject(host, entries):
+        with _pinned_resolution_lock:
+            _pinned_entries[host] = entries
+
+    @staticmethod
+    def _remove(host):
+        with _pinned_resolution_lock:
+            _pinned_entries.pop(host, None)
+
+    def test_all_addresses_pinned_and_returned(self):
+        v6 = "2001:4860:4860::8888"
+        with pinned_https_resolution(PUBLIC_HOST):
+            self._inject(
+                self.HOST,
+                [
+                    (socket.AF_INET, ("93.184.216.34", 0)),
+                    (socket.AF_INET6, (v6, 0, 0, 0)),
+                ],
+            )
+            try:
+                # AF_UNSPEC（默认）返回全部钉死地址，保序——连接层可逐个尝试
+                infos = socket.getaddrinfo(self.HOST, 443)
+                assert [i[4][0] for i in infos] == ["93.184.216.34", v6]
+                assert infos[0][0] == socket.AF_INET
+                assert infos[1][0] == socket.AF_INET6
+                # AF_INET6 sockaddr 四元组
+                assert len(infos[1][4]) == 4
+                assert infos[1][4][1] == 443
+            finally:
+                self._remove(self.HOST)
+
+    def test_family_filter_returns_only_matching(self):
+        v6 = "2001:4860:4860::8888"
+        with pinned_https_resolution(PUBLIC_HOST):
+            self._inject(
+                self.HOST,
+                [
+                    (socket.AF_INET, ("93.184.216.34", 0)),
+                    (socket.AF_INET6, (v6, 0, 0, 0)),
+                ],
+            )
+            try:
+                v4_only = socket.getaddrinfo(
+                    self.HOST, 443, socket.AF_INET, socket.SOCK_STREAM
+                )
+                assert len(v4_only) == 1
+                assert v4_only[0][0] == socket.AF_INET
+                assert v4_only[0][4][0] == "93.184.216.34"
+                v6_only = socket.getaddrinfo(self.HOST, 443, socket.AF_INET6)
+                assert len(v6_only) == 1
+                assert v6_only[0][4][0] == v6
+            finally:
+                self._remove(self.HOST)
+
+    def test_family_mismatch_fails_closed(self):
+        # 钉死记录只有 AF_INET6，显式 AF_INET 的 TCP 查询 fail-closed
+        # （gaierror）——回退原解析会在钉死窗口内重新引入未校验地址，
+        # DNS rebinding 可经家族切换绕过校验
+        with pinned_https_resolution(PUBLIC_HOST):
+            self._inject(
+                self.HOST, [(socket.AF_INET6, ("2001:4860:4860::8888", 0, 0, 0))]
+            )
+            try:
+                with pytest.raises(socket.gaierror):
+                    socket.getaddrinfo(self.HOST, 443, socket.AF_INET)
+            finally:
+                self._remove(self.HOST)
+
+    def test_udp_query_still_delegates(self):
+        # 多地址形态下 UDP 查询仍回退原解析（非受保护连接）。注入的
+        # 假主机名真实解析必然 gaierror——这正是"已回退原解析"的证明：
+        # 若被钉死逻辑接管，会返回注入的 sockaddr 而不抛错
+        with pinned_https_resolution(PUBLIC_HOST):
+            self._inject(
+                self.HOST, [(socket.AF_INET, ("93.184.216.34", 0))]
+            )
+            try:
+                with pytest.raises(socket.gaierror):
+                    socket.getaddrinfo(
+                        self.HOST, 53, socket.AF_INET, socket.SOCK_DGRAM
+                    )
+            finally:
+                self._remove(self.HOST)
 
 
 class TestPinnedGetaddrinfoParamCompat:

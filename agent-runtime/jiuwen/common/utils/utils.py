@@ -131,13 +131,20 @@ def ip2long(ip_addr):
 
 
 def is_inner_ipaddress(ip):
-    """judge inner ip"""
+    """judge inner ip
+
+    内网段与 Java 侧 urlCheckUtils.isInternalIp 对齐：
+    isSiteLocalAddress（10/8、172.16/12、192.168/16）+ loopback（127/8）
+    + anyLocal（0.0.0.0）+ isLinkLocalAddress（169.254/16，含云元数据
+    169.254.169.254——此前 Python 侧未拦截，SSRF 口径与 Java 不一致）。
+    """
     ip_long = ip2long(ip)
     is_inner_ip = (
         ip2long("10.0.0.0") <= ip_long <= ip2long("10.255.255.255")
         or ip2long("172.16.0.0") <= ip_long <= ip2long("172.31.255.255")
         or ip2long("192.168.0.0") <= ip_long <= ip2long("192.168.255.255")
         or ip2long("127.0.0.0") <= ip_long <= ip2long("127.255.255.255")
+        or ip2long("169.254.0.0") <= ip_long <= ip2long("169.254.255.255")
         or ip_long == ip2long("0.0.0.0")
     )
     return is_inner_ip
@@ -214,6 +221,11 @@ def _is_inner_ipaddr_v6(ip: str) -> bool:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return True  # 不可解析按内网处理（fail-safe）
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        # IPv4 映射 IPv6（::ffff:a.b.c.d）按其映射的 IPv4 判定——
+        # 169.254/16 等内网段的映射形态与 IPv4 口径一致拦截，
+        # 不依赖各 Python 版本 is_private 对映射段分类的差异
+        return is_inner_ipaddress(addr.ipv4_mapped.exploded)
     return (
         addr.is_private
         or addr.is_loopback
@@ -271,55 +283,46 @@ def validate_and_keep_https_url(url):
 # 并发下载时先退出的线程不会移除其他线程仍在使用的记录。
 _pinned_resolution_lock = threading.Lock()
 _pinned_resolution_depth = 0
-_pinned_entries = {}  # hostname -> (family, sockaddr) 完整形态（IPv6 sockaddr 为四元组）
+_pinned_entries = {}  # hostname -> [(family, sockaddr)] 校验时全部解析地址（IPv6 sockaddr 为四元组）
 _pinned_refcounts = {}  # hostname -> 并发使用计数
 _orig_getaddrinfo = socket.getaddrinfo
 
 
-def _is_inner_ipaddr_v6(ip: str) -> bool:
-    """IPv6 内网判定——is_inner_ipaddress 基于 inet_aton 仅支持 IPv4。"""
-    import ipaddress
-
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return True  # 不可解析按内网处理（fail-safe）
-    return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_reserved
-        or addr.is_multicast
-        or addr.is_unspecified
-    )
-
-
 def _pinned_getaddrinfo(host, port, *args, **kwargs):
-    entry = _pinned_entries.get(host)
-    if entry is None:
+    entries = _pinned_entries.get(host)
+    if entries is None:
         return _orig_getaddrinfo(host, port, *args, **kwargs)
-    family, sockaddr = entry
-    req_family = args[0] if len(args) > 0 else kwargs.get("family", 0)
-    req_type = args[1] if len(args) > 1 else kwargs.get("type", 0)
-    req_proto = args[2] if len(args) > 2 else kwargs.get("proto", 0)
-    # 仅接管与钉死记录同族的 TCP 解析（受保护的下载连接）。
-    # 调用方显式要求其它 family（如钉死 IPv6 而请求 AF_INET）或
-    # 其它 type（如 UDP 的 SOCK_DGRAM）时回退原解析——那些查询
-    # 不是本钉死保护的 TCP 连接，不能返回不匹配的 sockaddr
-    if req_family not in (0, socket.AF_UNSPEC, family) or req_type not in (
-        0,
-        socket.SOCK_STREAM,
-    ):
+    req_family = (args[0] if len(args) > 0 else kwargs.get("family", 0)) or 0
+    req_type = (args[1] if len(args) > 1 else kwargs.get("type", 0)) or 0
+    req_proto = (args[2] if len(args) > 2 else kwargs.get("proto", 0)) or 0
+    # 仅接管 TCP 解析（受保护的下载连接）。UDP（SOCK_DGRAM）等查询不是
+    # 本钉死保护的连接，回退原解析
+    if req_type not in (0, socket.SOCK_STREAM):
         return _orig_getaddrinfo(host, port, *args, **kwargs)
+    # 家族过滤：AF_UNSPEC（0）返回全部钉死地址（保留多地址回退——双栈
+    # 主机首个地址不可达时连接层可逐个尝试，与原 getaddrinfo 行为一致）；
+    # 显式 AF_INET/AF_INET6 仅返回同族钉死地址。钉死记录无同族地址时
+    # 抛 gaierror（fail-closed）——若回退原解析，DNS rebinding 可在钉死
+    # 窗口内经家族切换返回未校验地址，破坏 TOCTOU 防护
+    if req_family not in (0, socket.AF_UNSPEC):
+        entries = [entry for entry in entries if entry[0] == req_family]
+    if not entries:
+        raise socket.gaierror(
+            socket.EAI_NONAME, "pinned resolution has no address of the requested family"
+        )
     port_num = port if isinstance(port, int) else 0
-    if family == socket.AF_INET6:
-        # AF_INET6 sockaddr 约定为四元组 (host, port, flowinfo, scope_id)
-        pinned_sockaddr = (sockaddr[0], port_num, sockaddr[2], sockaddr[3])
-    else:
-        pinned_sockaddr = (sockaddr[0], port_num)
     out_type = req_type or socket.SOCK_STREAM
     out_proto = req_proto or socket.IPPROTO_TCP
-    return [(family, out_type, out_proto, "", pinned_sockaddr)]
+    results = []
+    for family, sockaddr in entries:
+        if family == socket.AF_INET6:
+            # AF_INET6 sockaddr 约定为四元组 (host, port, flowinfo, scope_id)
+            results.append(
+                (family, out_type, out_proto, "", (sockaddr[0], port_num, sockaddr[2], sockaddr[3]))
+            )
+        else:
+            results.append((family, out_type, out_proto, "", (sockaddr[0], port_num)))
+    return results
 
 
 @contextlib.contextmanager
@@ -328,24 +331,24 @@ def pinned_https_resolution(hostname):
 
     进入时重新解析并按 url_to_ip_with_protocol_and_port 同口径复校验
     （拦截校验后才 rebinding 到内网的场景；IPv4 走 is_inner_ipaddress，
-    IPv6 走 _is_inner_ipaddr_v6——inet_aton 不支持 IPv6）；期间 urllib3
-    对该主机名的全部解析返回钉死地址（SNI/证书校验仍按主机名，不受
-    影响），TOCTOU 完全消除；退出时按 hostname 引用计数还原（同一
-    主机名并发下载时，先退出的线程不会移除其他线程仍在使用的记录）。
+    IPv6 走 _is_inner_ipaddr_v6——inet_aton 不支持 IPv6）。**全部**解析
+    地址逐一校验并整体钉死（不只首个——双栈主机首个地址不可达时连接层
+    保留多地址回退能力）；期间 urllib3 对该主机名的 TCP 解析返回全部
+    钉死地址（SNI/证书校验仍按主机名，不受影响），TOCTOU 完全消除；
+    退出时按 hostname 引用计数还原（同一主机名并发下载时，先退出的
+    线程不会移除其他线程仍在使用的记录）。
     """
     global _pinned_resolution_depth
     infos = socket.getaddrinfo(hostname, None)
-    family, _, _, _, sockaddr = infos[0]
-    pinned_ip = sockaddr[0]
-    if (
-        os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]
-        and not shot_plugin_white_urls(pinned_ip)
-        and _is_inner_ipaddr_any(pinned_ip)
-    ):
-        raise ValueError("illegal ip address")
+    pinned = [(info[0], info[4]) for info in infos]
+    if os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]:
+        for _, sockaddr in pinned:
+            ip = sockaddr[0]
+            if not shot_plugin_white_urls(ip) and _is_inner_ipaddr_any(ip):
+                raise ValueError("illegal ip address")
     with _pinned_resolution_lock:
         _pinned_refcounts[hostname] = _pinned_refcounts.get(hostname, 0) + 1
-        _pinned_entries[hostname] = (family, sockaddr)
+        _pinned_entries[hostname] = pinned
         if _pinned_resolution_depth == 0:
             socket.getaddrinfo = _pinned_getaddrinfo
         _pinned_resolution_depth += 1
