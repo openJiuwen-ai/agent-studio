@@ -213,8 +213,16 @@ def url_to_ip_with_protocol_and_port(url):
     return new_url, hostname
 
 
-def _is_inner_ipaddr_v6(ip: str) -> bool:
-    """IPv6 内网判定——is_inner_ipaddress 基于 inet_aton 仅支持 IPv4。"""
+def _is_inner_ipaddr_strict(ip: str) -> bool:
+    """FEAT-073 新校验路径的内网判定（IPv4+IPv6 统一走 ipaddress，fail-safe）。
+
+    比 is_inner_ipaddress（旧 http 路径，Java isInternalIp 对齐口径）更严：
+    额外覆盖组播 224/4、保留 240/4、0.0.0.0/8 全段与文档段（is_private）；
+    CGNAT 100.64/10 两口径均放行（Java/Python 一致）。FEAT-073 把用户
+    任意 URL 变成一等输入，validate_and_keep_https_url/pinned_https_resolution
+    走本口径；旧路径（illegal_url/url_to_ip_with_protocol_and_port）维持
+    Java 对齐口径不动，避免影响既有插件集成。
+    """
     import ipaddress
 
     try:
@@ -225,7 +233,7 @@ def _is_inner_ipaddr_v6(ip: str) -> bool:
         # IPv4 映射 IPv6（::ffff:a.b.c.d）按其映射的 IPv4 判定——
         # 169.254/16 等内网段的映射形态与 IPv4 口径一致拦截，
         # 不依赖各 Python 版本 is_private 对映射段分类的差异
-        return is_inner_ipaddress(addr.ipv4_mapped.exploded)
+        return _is_inner_ipaddr_strict(addr.ipv4_mapped.exploded)
     return (
         addr.is_private
         or addr.is_loopback
@@ -234,11 +242,6 @@ def _is_inner_ipaddr_v6(ip: str) -> bool:
         or addr.is_multicast
         or addr.is_unspecified
     )
-
-
-def _is_inner_ipaddr_any(ip: str) -> bool:
-    """按字符串分派内网判定（IPv4: inet_aton；IPv6: ipaddress）。"""
-    return _is_inner_ipaddr_v6(ip) if ":" in ip else is_inner_ipaddress(ip)
 
 
 def validate_and_keep_https_url(url):
@@ -250,6 +253,8 @@ def validate_and_keep_https_url(url):
     url_to_ip_with_protocol_and_port：其 gethostbyname 仅解析 A 记录，
     纯 IPv6 主机名/IPv6 字面量会在进入钉死解析前就误报
     resolving IP address failed，IPv6 文件 URL 无法下载。
+    内网判定统一走 _is_inner_ipaddr_strict（ipaddress 全家桶，
+    严于旧 http 路径的 Java 对齐口径）。
 
     http：维持 url_to_ip_with_protocol_and_port 的 IP 重写（防
     DNS rebinding；其 IPv4-only 限制为既有行为，不在本函数范围）。
@@ -270,7 +275,7 @@ def validate_and_keep_https_url(url):
         if os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]:
             for info in infos:
                 ip = info[4][0]
-                if not shot_plugin_white_urls(ip) and _is_inner_ipaddr_any(ip):
+                if not shot_plugin_white_urls(ip) and _is_inner_ipaddr_strict(ip):
                     raise ValueError("illegal ip address")
         return url, hostname
     valid_url, hostname = url_to_ip_with_protocol_and_port(url)
@@ -329,9 +334,9 @@ def _pinned_getaddrinfo(host, port, *args, **kwargs):
 def pinned_https_resolution(hostname):
     """连接期间把 hostname 的 DNS 解析钉死为校验时通过的地址。
 
-    进入时重新解析并按 url_to_ip_with_protocol_and_port 同口径复校验
-    （拦截校验后才 rebinding 到内网的场景；IPv4 走 is_inner_ipaddress，
-    IPv6 走 _is_inner_ipaddr_v6——inet_aton 不支持 IPv6）。**全部**解析
+    进入时重新解析并同口径复校验（拦截校验后才 rebinding 到内网的
+    场景；统一走 _is_inner_ipaddr_strict——ipaddress 全家桶，IPv4/IPv6
+    同口径且严于旧 http 路径）。**全部**解析
     地址逐一校验并整体钉死（不只首个——双栈主机首个地址不可达时连接层
     保留多地址回退能力）；期间 urllib3 对该主机名的 TCP 解析返回全部
     钉死地址（SNI/证书校验仍按主机名，不受影响），TOCTOU 完全消除；
@@ -344,7 +349,7 @@ def pinned_https_resolution(hostname):
     if os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]:
         for _, sockaddr in pinned:
             ip = sockaddr[0]
-            if not shot_plugin_white_urls(ip) and _is_inner_ipaddr_any(ip):
+            if not shot_plugin_white_urls(ip) and _is_inner_ipaddr_strict(ip):
                 raise ValueError("illegal ip address")
     with _pinned_resolution_lock:
         _pinned_refcounts[hostname] = _pinned_refcounts.get(hostname, 0) + 1

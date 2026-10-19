@@ -47,6 +47,7 @@ import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.OkHttpUtils;
+import com.openjiuwen.studio.agent.manager.utils.PinnedDns;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 
 import inet.ipaddr.IPAddressString;
@@ -643,6 +644,9 @@ public class PluginAdapterImpl implements IPlugin {
                             continue;
                         }
                         final int idx = i;
+                        // 多文件字段的表单命名约定为括号索引形态（key[0]、key[1]），
+                        // 非 RFC 7578 的重复同名字段形态——接收方（插件服务端）按此
+                        // 约定解析；若某插件后端只认重复同名字段，需调整此处命名
                         downloadFileAsMultipartFile(projectId, elementUrl)
                             .ifPresent(f -> fileParams.put(key + "[" + idx + "]", f));
                     }
@@ -811,47 +815,63 @@ public class PluginAdapterImpl implements IPlugin {
     @SneakyThrows
     public Optional<MultipartFile> downloadFileAsMultipartFile(String projectId, String fileUrl) {
         // URL 查询串可能携带 OBS 预签名 AccessKeyId/Signature，日志脱敏（与 Python 侧 _redact_urls 同语义）
-        log.info("downloadFileAsMultipartFile: {}", redactUrlQuery(fileUrl));
+        log.info("downloadFileAsMultipartFile: {}", UrlCheckUtils.redactUrlQuery(fileUrl));
 
         if (!VALID_URL_PATTERN.matcher(fileUrl).matches()) {
             return Optional.empty();
         }
         // SSRF 防护：与工具基址 URL 同源校验（黑名单/白名单/内网 IP 拦截）——
-        // 此前仅格式正则，内网地址（127.0.0.1/169.254.169.254 等）可直接下载
-        urlCheckUtils.checkUrl(projectId, fileUrl);
+        // 此前仅格式正则，内网地址（127.0.0.1/169.254.169.254 等）可直接下载；
+        // 返回校验阶段解析到的主机地址（开关关闭/白名单等未做 IP 校验的
+        // 放行场景为 null）
+        InetAddress[] validated = urlCheckUtils.checkUrlAndResolve(projectId, fileUrl);
 
-        long startTime = System.currentTimeMillis();
-        InputStream inputStream = obsService.getByUrl(fileUrl);
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        // DNS 钉死：把校验阶段地址按主机名钉入本线程，OkHttp 连接期解析
+        // 固定返回它们——消除校验/连接两次解析的 TOCTOU（DNS rebinding 可
+        // 在校验后换址），与 Python 侧 pinned_https_resolution 对齐。
+        // 多地址全量钉死，保留连接层逐地址回退
+        String pinnedHost = validated == null ? null : hostOf(fileUrl);
+        if (pinnedHost != null) {
+            PinnedDns.pin(pinnedHost, Arrays.asList(validated));
+        }
         try {
-            // 将输入流读取到字节数组
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, length);
-            }
-            byte[] fileBytes = outputStream.toByteArray();
+            long startTime = System.currentTimeMillis();
+            InputStream inputStream = obsService.getByUrl(fileUrl);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try {
+                // 将输入流读取到字节数组
+                byte[] buffer = new byte[1024];
+                int length;
+                while ((length = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, length);
+                }
+                byte[] fileBytes = outputStream.toByteArray();
 
-            // 创建MultipartFile对象
-            String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
-            log.info("downloadFileAsMultipartFile:{}, cost: {} ms", redactUrlQuery(fileUrl),
-                System.currentTimeMillis() - startTime);
-            return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
+                // 创建MultipartFile对象
+                String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
+                log.info("downloadFileAsMultipartFile:{}, cost: {} ms", UrlCheckUtils.redactUrlQuery(fileUrl),
+                    System.currentTimeMillis() - startTime);
+                return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
+            } finally {
+                closeResources(inputStream, outputStream);
+            }
         } finally {
-            closeResources(inputStream, outputStream);
+            if (pinnedHost != null) {
+                PinnedDns.unpin();
+            }
         }
     }
 
     /**
-     * URL 查询串脱敏：保留 scheme://host/path，查询串替换为 ?***
-     * （OBS 预签名查询串含 AccessKeyId/Signature 等凭据）
+     * 取 URL 的主机名——仅在 checkUrl 已成功解析过该 URL 后调用
+     * （理论不可达 URISyntaxException 按 null 处理，走系统解析不钉死）
      */
-    private String redactUrlQuery(String url) {
-        if (url == null) {
+    private String hostOf(String url) {
+        try {
+            return new URL(url).getHost();
+        } catch (MalformedURLException e) {
             return null;
         }
-        int queryIdx = url.indexOf('?');
-        return queryIdx >= 0 ? url.substring(0, queryIdx) + "?***" : url;
     }
 
     /**

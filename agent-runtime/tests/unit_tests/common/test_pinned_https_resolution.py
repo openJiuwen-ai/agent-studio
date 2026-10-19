@@ -12,6 +12,8 @@
    Java 侧 urlCheckUtils.isInternalIp（isLinkLocalAddress）口径对齐
 5. 多地址钉死：连接期保留全部校验地址（双栈主机多地址回退），
    显式异族 TCP 查询 fail-closed
+6. 新校验路径 IPv4/IPv6 统一走 _is_inner_ipaddr_strict（ipaddress
+   全家桶：组播/保留/0.0.0.0/8/文档段；CGNAT 100.64/10 两侧一致放行）
 """
 
 import socket
@@ -20,7 +22,7 @@ import threading
 import pytest
 
 from jiuwen.common.utils.utils import (
-    _is_inner_ipaddr_v6,
+    _is_inner_ipaddr_strict,
     _orig_getaddrinfo,
     _pinned_entries,
     _pinned_resolution_lock,
@@ -136,11 +138,11 @@ class TestPinnedResolutionIpv6:
 
     @staticmethod
     def test_inner_v6_classifier():
-        assert _is_inner_ipaddr_v6("::1") is True  # 回环
-        assert _is_inner_ipaddr_v6("fe80::1") is True  # 链路本地
-        assert _is_inner_ipaddr_v6("fc00::1") is True  # 私有
+        assert _is_inner_ipaddr_strict("::1") is True  # 回环
+        assert _is_inner_ipaddr_strict("fe80::1") is True  # 链路本地
+        assert _is_inner_ipaddr_strict("fc00::1") is True  # 私有
         assert _is_inner_v6_public()
-        assert _is_inner_ipaddr_v6("not-an-ip") is True  # fail-safe
+        assert _is_inner_ipaddr_strict("not-an-ip") is True  # fail-safe
 
     @staticmethod
     def test_ipv6_public_not_oserror():
@@ -161,7 +163,7 @@ class TestPinnedResolutionIpv6:
 
 
 def _is_inner_v6_public():
-    return _is_inner_ipaddr_v6("2001:4860:4860::8888") is False
+    return _is_inner_ipaddr_strict("2001:4860:4860::8888") is False
 
 
 class TestValidateHttpsUrlIpv6:
@@ -243,8 +245,24 @@ class TestInnerIp169LinkLocal:
     @staticmethod
     def test_v4_mapped_link_local_blocked():
         # IPv4 映射 IPv6（::ffff:a.b.c.d）按映射的 IPv4 判定
-        assert _is_inner_ipaddr_v6("::ffff:169.254.169.254") is True
-        assert _is_inner_ipaddr_v6("::ffff:8.8.8.8") is False
+        assert _is_inner_ipaddr_strict("::ffff:169.254.169.254") is True
+        assert _is_inner_ipaddr_strict("::ffff:8.8.8.8") is False
+
+    @staticmethod
+    def test_strict_ipv4_full_family():
+        """新校验路径 IPv4 统一走 ipaddress 全家桶（严于 Java 对齐口径）。"""
+        # 旧口径（is_inner_ipaddress，Java isInternalIp 对齐）不拦的段
+        assert _is_inner_ipaddr_strict("224.0.0.1") is True  # 组播 224/4
+        assert _is_inner_ipaddr_strict("239.255.255.255") is True
+        assert _is_inner_ipaddr_strict("240.0.0.1") is True  # 保留 240/4
+        assert _is_inner_ipaddr_strict("0.1.2.3") is True  # 0.0.0.0/8 全段
+        assert _is_inner_ipaddr_strict("192.0.2.1") is True  # 文档段 TEST-NET-1
+        # 公网与 CGNAT 放行（100.64/10 与 Java/旧口径一致不拦）
+        assert _is_inner_ipaddr_strict("8.8.8.8") is False
+        assert _is_inner_ipaddr_strict("100.64.1.1") is False
+        # 旧口径的既有拦截在新口径同样成立
+        assert _is_inner_ipaddr_strict("10.1.1.1") is True
+        assert _is_inner_ipaddr_strict("169.254.169.254") is True
 
 
 class TestPinnedMultiAddress:

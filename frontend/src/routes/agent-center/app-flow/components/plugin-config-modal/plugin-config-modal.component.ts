@@ -19,6 +19,8 @@ import { ParamTreeComponent } from '../param-tree/param-tree.component';
 import { NodeUtils } from '../utils';
 import { IRefInfo } from '../../app-flow.types';
 import { IRequestArgsView } from '@routes/agent-center/app-plugin/app-plugin.interface';
+import { checkFileTypeAndSize } from '@routes/agent-center/utils';
+import { isExtensionAllowed } from '@routes/agent-center/file-url.utils';
 import { cloneDeep } from 'lodash';
 import { NewCommonNoDataWithBtnComponent } from '@shared/components/new-common-no-data-with-btn/new-common-no-data-with-btn.component';
 import { NzDrawerModule, NzDrawerRef } from 'ng-zorro-antd/drawer';
@@ -271,6 +273,16 @@ export class PluginConfigModalComponent implements OnInit, OnDestroy {
     }
 
     const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    // 口径对齐其他上传路径：类型白名单（fileUploadAcc，与 URL 录入/开始节点
+    // 本地上传同源；accept 属性只是选择器提示可绕过，须服务端式复核）+
+    // 大小校验（checkFileTypeAndSize：图片 5MB、其余 maxFileSizeKb）
+    if (
+      !isExtensionAllowed(extension, param.type) ||
+      !checkFileTypeAndSize(extension, file.size, this.i18n)
+    ) {
+      input.value = '';
+      return;
+    }
     const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(extension);
 
     const formData = new FormData();

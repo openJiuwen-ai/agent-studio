@@ -156,6 +156,9 @@ public class OkHttpUtils {
                 .followSslRedirects(false)
                 .connectionPool(new ConnectionPool(maxIdleConnections, keepAliveDuration, TimeUnit.MINUTES))
                 .dispatcher(dispatcher)
+                // SSRF 校验/连接 DNS TOCTOU 防护：下载等校验通过的主机名经
+                // PinnedDns ThreadLocal 钉死为校验阶段地址，未钉死一律透传系统解析
+                .dns(new PinnedDns())
                 .build();
             asyncHttpClient = new OkHttpClient.Builder().sslSocketFactory(
                     new TcpNoDelaySSLSocketFactory(SSLSocketClient.getSSLSocketFactory()),
@@ -190,6 +193,9 @@ public class OkHttpUtils {
                 .followSslRedirects(false)
                 .connectionPool(new ConnectionPool(maxIdleConnections, keepAliveDuration, TimeUnit.MINUTES))
                 .dispatcher(dispatcher)
+                // SSRF 校验/连接 DNS TOCTOU 防护：下载等校验通过的主机名经
+                // PinnedDns ThreadLocal 钉死为校验阶段地址，未钉死一律透传系统解析
+                .dns(new PinnedDns())
                 .build();
             asyncHttpClient = new OkHttpClient.Builder().connectTimeout(connectTimeOut, TimeUnit.SECONDS)
                 .writeTimeout(waitTimeOut, TimeUnit.SECONDS)
