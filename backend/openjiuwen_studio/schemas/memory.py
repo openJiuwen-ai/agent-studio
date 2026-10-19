@@ -44,4 +44,5 @@ class UpdateVariable(BaseModel):
 
 
 class DeleteScopeLongtermMem(BaseModel):
+    user_id: str = Field(..., description="用户ID")
     scope_id: str = Field(..., description="作用域ID")
