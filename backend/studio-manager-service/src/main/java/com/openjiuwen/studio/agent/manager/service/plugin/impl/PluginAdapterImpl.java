@@ -53,6 +53,8 @@ import inet.ipaddr.IPAddressString;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.parser.OpenAPIV3Parser;
@@ -622,18 +624,40 @@ public class PluginAdapterImpl implements IPlugin {
             log.info("[runTool] Handling multipart/form-data request (hasFileParam={}).", hasFileParam);
             Map<String, String> formParams = new HashMap<>();
             Map<String, MultipartFile> fileParams = new HashMap<>();
-            // 下载url数据（可选 body 参数可能为 null——不填不传语义，
-            // 跳过下载与表单填充，避免 VALID_URL_PATTERN.matcher(null) NPE）
+            // FEAT-073: schema 感知的参数分发——仅 file/<子类型> 参数走 URL 下载
+            // （非 file 参数值恰似 URL 也不误下载）；array<file/*> 逐元素下载；
+            // 其余按值进 formParams（multipart 表单本为字符串域）。
+            // schema 不可读时（header 强制 multipart 的存量工具）保持旧的值试探行为。
+            Map<String, Schema> bodyProps = getMultipartBodyProps(operation);
             for (String key : requestBody.keySet()) {
-                String value = requestBody.getString(key);
-                if (value == null) {
+                Object raw = requestBody.get(key);
+                if (raw == null) {
+                    // 可选参数不填不传（VALID_URL_PATTERN.matcher(null) NPE 防护）
                     continue;
                 }
-                Optional<MultipartFile> file = downloadFileAsMultipartFile(value);
-                if (file.isPresent()) {
-                    fileParams.put(key, file.get());
+                if (isFileArrayParam(bodyProps, key) && raw instanceof JSONArray) {
+                    JSONArray urls = (JSONArray) raw;
+                    for (int i = 0; i < urls.size(); i++) {
+                        String elementUrl = urls.getString(i);
+                        if (elementUrl == null) {
+                            continue;
+                        }
+                        final int idx = i;
+                        downloadFileAsMultipartFile(projectId, elementUrl)
+                            .ifPresent(f -> fileParams.put(key + "[" + idx + "]", f));
+                    }
+                } else if (raw instanceof String) {
+                    String value = (String) raw;
+                    boolean shouldDownload = bodyProps == null || isFileParam(bodyProps, key);
+                    if (shouldDownload) {
+                        downloadFileAsMultipartFile(projectId, value)
+                            .ifPresentOrElse(f -> fileParams.put(key, f), () -> formParams.put(key, value));
+                    } else {
+                        formParams.put(key, value);
+                    }
                 } else {
-                    formParams.put(key, value);
+                    // 数值/对象/非文件数组：按序列化文本进表单域
+                    formParams.put(key, requestBody.getString(key));
                 }
             }
             requestResult = okHttpUtils.callFormData(url, method, headers, urlParamsMap, formParams, fileParams);
@@ -780,16 +804,21 @@ public class PluginAdapterImpl implements IPlugin {
     /**
      * 从指定URL下载文件并转换为MultipartFile对象
      *
+     * @param projectId 项目 ID（SSRF 内网拦截按项目配置）
      * @param fileUrl 文件下载地址
      * @return MultipartFile对象
      */
     @SneakyThrows
-    public Optional<MultipartFile> downloadFileAsMultipartFile(String fileUrl) {
-        log.info("downloadFileAsMultipartFile: {}", fileUrl);
+    public Optional<MultipartFile> downloadFileAsMultipartFile(String projectId, String fileUrl) {
+        // URL 查询串可能携带 OBS 预签名 AccessKeyId/Signature，日志脱敏（与 Python 侧 _redact_urls 同语义）
+        log.info("downloadFileAsMultipartFile: {}", redactUrlQuery(fileUrl));
 
         if (!VALID_URL_PATTERN.matcher(fileUrl).matches()) {
             return Optional.empty();
         }
+        // SSRF 防护：与工具基址 URL 同源校验（黑名单/白名单/内网 IP 拦截）——
+        // 此前仅格式正则，内网地址（127.0.0.1/169.254.169.254 等）可直接下载
+        urlCheckUtils.checkUrl(projectId, fileUrl);
 
         long startTime = System.currentTimeMillis();
         InputStream inputStream = obsService.getByUrl(fileUrl);
@@ -805,11 +834,63 @@ public class PluginAdapterImpl implements IPlugin {
 
             // 创建MultipartFile对象
             String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
-            log.info("downloadFileAsMultipartFile:{}, cost: {} ms", fileUrl, System.currentTimeMillis() - startTime);
+            log.info("downloadFileAsMultipartFile:{}, cost: {} ms", redactUrlQuery(fileUrl),
+                System.currentTimeMillis() - startTime);
             return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
         } finally {
             closeResources(inputStream, outputStream);
         }
+    }
+
+    /**
+     * URL 查询串脱敏：保留 scheme://host/path，查询串替换为 ?***
+     * （OBS 预签名查询串含 AccessKeyId/Signature 等凭据）
+     */
+    private String redactUrlQuery(String url) {
+        if (url == null) {
+            return null;
+        }
+        int queryIdx = url.indexOf('?');
+        return queryIdx >= 0 ? url.substring(0, queryIdx) + "?***" : url;
+    }
+
+    /**
+     * 读取 multipart 请求体的 schema 属性表（key -> 参数 schema）
+     */
+    private Map<String, Schema> getMultipartBodyProps(Operation operation) {
+        try {
+            if (operation.getRequestBody() != null && operation.getRequestBody().getContent() != null) {
+                MediaType mediaType = operation.getRequestBody().getContent().get(Constant.MULTIPART_FORM_DATA);
+                if (mediaType != null && mediaType.getSchema() != null
+                    && mediaType.getSchema().getProperties() != null) {
+                    return mediaType.getSchema().getProperties();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("read multipart body schema failed, fallback to value-based download", e);
+        }
+        return null;
+    }
+
+    /**
+     * 判断参数是否为 file/<子类型>（单文件）
+     */
+    private boolean isFileParam(Map<String, Schema> props, String key) {
+        Schema paramSchema = props != null ? props.get(key) : null;
+        return paramSchema != null && paramSchema.getType() != null && paramSchema.getType().startsWith("file/");
+    }
+
+    /**
+     * 判断参数是否为 array&lt;file/&gt;（多文件，元素 schema 为 file/&lt;子类型&gt;）
+     */
+    private boolean isFileArrayParam(Map<String, Schema> props, String key) {
+        Schema paramSchema = props != null ? props.get(key) : null;
+        if (paramSchema == null || !"array".equals(paramSchema.getType())
+            || !(paramSchema.getItems() instanceof Schema)) {
+            return false;
+        }
+        Schema items = (Schema) paramSchema.getItems();
+        return items.getType() != null && items.getType().startsWith("file/");
     }
 
     private void parseParams(Operation operation, JSONObject requestBody, Map<String, String> urlParams,
