@@ -864,6 +864,11 @@ export class NodeExeComponent implements OnChanges {
       this.repoServ
         .uploadFile(formData)
         .then((res: { url: string }) => {
+          // 删除竞态防护：上传期间条目被删除（uploadData 已重置为 {}）时
+          // 不再回填，避免已删除文件的 URL 复活到 val
+          if (inputItem.uploadData?.progress !== 'loading') {
+            return;
+          }
           inputItem.uploadData.progress = 'succeeded';
           inputItem.val = res.url;
           this.cdr.detectChanges();
@@ -1252,10 +1257,11 @@ export class NodeExeComponent implements OnChanges {
 
   removeFile(inputItem, fileItem?) {
     if (!fileItem) {
-      // URL 条目删除后同步清空值，避免运行时残留已删除的 URL
-      if (inputItem.uploadData?.url) {
-        inputItem.val = '';
-      }
+      // 单文件条目删除后必须清空值：本地上传路径 val 直接持有 OBS URL
+      // （onUploadFile single 分支只设置 val，不设置 uploadData.url），
+      // URL 条目同样以 val 持有——两类来源删除时都要清空，
+      // 否则 getInputParams 会继续提交已删除文件的 URL（删除无效）
+      inputItem.val = '';
       inputItem.file = '';
       inputItem.uploadData = {};
       return;

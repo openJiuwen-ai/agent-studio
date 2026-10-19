@@ -19,6 +19,7 @@ from jiuwen.common.utils.utils import (
     _is_inner_ipaddr_v6,
     _orig_getaddrinfo,
     pinned_https_resolution,
+    validate_and_keep_https_url,
 )
 
 # 确定性公网 IP 字面量——不用 example.com：它有多条 A 记录且 DNS 轮询返回顺序不定，
@@ -153,3 +154,65 @@ class TestPinnedResolutionIpv6:
 
 def _is_inner_v6_public():
     return _is_inner_ipaddr_v6("2001:4860:4860::8888") is False
+
+
+class TestValidateHttpsUrlIpv6:
+    """validate_and_keep_https_url 的 https 分支双栈可达性（M 项回归）。
+
+    修复前：https 分支经 url_to_ip_protocol_and_port 的 gethostbyname
+    （仅 A 记录）——纯 IPv6 字面量在进入钉死解析前就抛
+    resolving IP address failed，IPv6 文件 URL 无法下载。
+    """
+
+    @staticmethod
+    def test_https_ipv6_literal_passes_gate():
+        url = f"https://[{PUBLIC_V6}]/file/x.png?sig=abc"
+        valid, hostname = validate_and_keep_https_url(url)
+        assert valid == url
+        assert hostname == PUBLIC_V6
+
+    @staticmethod
+    def test_https_ipv6_inner_blocked():
+        with pytest.raises(ValueError):
+            validate_and_keep_https_url("https://[::1]/file/x.png")
+
+    @staticmethod
+    def test_https_ipv4_still_works():
+        url = f"https://{PUBLIC_HOST}/file/x.png?sig=abc"
+        valid, hostname = validate_and_keep_https_url(url)
+        assert valid == url
+        assert hostname == PUBLIC_HOST
+
+    @staticmethod
+    def test_https_ipv6_full_chain_validate_then_pin():
+        """全链：validate（前置闸）→ pinned（钉死）均可达 IPv6。"""
+        url = f"https://[{PUBLIC_V6}]/file/x.png"
+        valid, hostname = validate_and_keep_https_url(url)
+        assert hostname == PUBLIC_V6
+        with pinned_https_resolution(hostname):
+            infos = socket.getaddrinfo(PUBLIC_V6, 443)
+            assert infos[0][4][0] == PUBLIC_V6
+        assert socket.getaddrinfo is _orig_getaddrinfo
+
+
+class TestPinnedGetaddrinfoParamCompat:
+    """_pinned_getaddrinfo 对调用方参数的兼容（L 项回归）。"""
+
+    @staticmethod
+    def test_udp_query_delegates_to_original():
+        with pinned_https_resolution(PUBLIC_HOST):
+            # UDP 查询（type=SOCK_DGRAM）不是受保护的 TCP 连接，回退原解析
+            udp_infos = socket.getaddrinfo(
+                PUBLIC_HOST, 53, socket.AF_INET, socket.SOCK_DGRAM
+            )
+            assert all(i[1] == socket.SOCK_DGRAM for i in udp_infos)
+
+    @staticmethod
+    def test_matching_tcp_query_uses_pin():
+        with pinned_https_resolution(PUBLIC_HOST):
+            # 默认（AF_UNSPEC/SOCK_STREAM）解析返回钉死地址
+            infos = socket.getaddrinfo(PUBLIC_HOST, 443)
+            assert len(infos) == 1
+            assert infos[0][0] == socket.AF_INET
+            assert infos[0][1] == socket.SOCK_STREAM
+            assert infos[0][4][0] == PUBLIC_HOST
