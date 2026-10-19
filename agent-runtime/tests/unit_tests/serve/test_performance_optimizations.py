@@ -72,12 +72,13 @@ def test_openjiuwen_direct_commit_does_not_alias_mutable_payload():
         pytest.skip("openjiuwen core does not expose InMemoryCommitState")
 
     state = InMemoryCommitState()
-    commit = getattr(state, "update_by_id_and_commit", None)
-    if commit is None:
+    update_by_id = getattr(state, "update_by_id", None)
+    if update_by_id is None:
         pytest.skip("openjiuwen core does not expose direct commit API")
 
     payload = {"loop-node": {"items": []}}
-    commit("loop-node", payload)
+    update_by_id("loop-node", payload)
+    state.commit()
 
     payload["loop-node"]["items"].append("mutated-after-commit")
 

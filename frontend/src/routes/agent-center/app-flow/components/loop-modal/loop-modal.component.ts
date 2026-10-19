@@ -1172,6 +1172,11 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
     if (this.tagCompareNoChange()) {
       return;
     }
+    // 保存前重建一次引用树：名称框的变更登记不再依赖 blur，部分关闭路径
+    // 不产生失焦、onMidRefChange() 不会执行，下游 output / 中断条件会残留
+    // intermediate_loop_var.<旧名> 引用，落库后形成悬空引用。
+    // 传 init=true 仅重建引用树与条件 ops，不触发 onSave，避免递归保存。
+    this.onMidRefChange(true);
     const nodeData: ILoopNode = this.getNodeData();
 
     if (this.conditionConf.conditions.length) {

@@ -14,8 +14,6 @@ import asyncio
 import json
 import re
 from types import SimpleNamespace
-import shutil
-import subprocess
 from pathlib import Path
 
 
@@ -29,18 +27,68 @@ from jiuwen.serve.controllers.execution import utils as exec_utils
 
 
 _RUNTIME_ROOT = Path(__file__).resolve().parents[3]
-_GREP = shutil.which("grep")
+
+_BINARY_EXTS = {".pyc", ".so", ".dll", ".png", ".jpg", ".jpeg", ".gif",
+                ".pdf", ".zip", ".gz", ".tar", ".class", ".jar", ".lock"}
 
 
-def _run_grep(*args: str) -> subprocess.CompletedProcess[str]:
-    assert _GREP is not None, "grep is required by the governance tests"
-    result = subprocess.run(
-        [_GREP, *args],
-        cwd=_RUNTIME_ROOT,
-        capture_output=True, text=True, check=False,
-    )
-    assert result.returncode in (0, 1), result.stderr
-    return result
+class _GrepResult:
+    """Mimics subprocess.CompletedProcess[str] for grep-like search results."""
+
+    def __init__(self, stdout: str = "", returncode: int = 1, stderr: str = ""):
+        self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def _run_grep(*args: str) -> _GrepResult:
+    """Python-native grep replacement using pathlib + re.
+
+    Supports the argument patterns used by the governance tests:
+    -rn <pattern> <path>  (recursive search with line numbers)
+    -r <pattern> <path>
+    """
+    flags: set[str] = set()
+    pattern: str | None = None
+    path: str | None = None
+    for arg in args:
+        if arg.startswith("-"):
+            flags.update(c for c in arg[1:])
+        elif pattern is None:
+            pattern = arg
+        else:
+            path = arg
+
+    if pattern is None:
+        return _GrepResult(returncode=1)
+
+    search_path = _RUNTIME_ROOT / (path or ".")
+    if not search_path.exists():
+        return _GrepResult(returncode=1)
+
+    files: list[Path] = []
+    if search_path.is_file():
+        files = [search_path]
+    else:
+        files = sorted(
+            f for f in search_path.rglob("*")
+            if f.is_file() and f.suffix not in _BINARY_EXTS
+        )
+
+    matches: list[str] = []
+    for py_file in files:
+        try:
+            content = py_file.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for lineno, line in enumerate(content.splitlines(), 1):
+            if pattern in line:
+                rel = py_file.relative_to(_RUNTIME_ROOT).as_posix()
+                matches.append(f"{rel}:{lineno}:{line}")
+
+    if matches:
+        return _GrepResult(stdout="\n".join(matches), returncode=0)
+    return _GrepResult(returncode=1)
 
 
 _SENTINEL = "SECRET-TOKEN-abc-123-sensitivedetail"

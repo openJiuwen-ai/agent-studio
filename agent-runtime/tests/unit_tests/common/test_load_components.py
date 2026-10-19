@@ -17,22 +17,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# model_service 是 monorepo 本地包，在测试环境中可能未安装，预注入 mock 避免导入链断裂。
-# 注意：mock 仅在本模块 import 期间生效，import 完成后立即还原——
-# 模块级持久污染 sys.modules 会让 pytest 收集其它测试目录时
-# `model_service` 解析为 MagicMock 而非真实包（collection ImportError）。
-_injected_mocks = []
-for _mod_name in ("model_service", "model_service.env_resolver"):
-    if _mod_name not in sys.modules:
-        sys.modules[_mod_name] = MagicMock()
-        _injected_mocks.append(_mod_name)
-
+# model_service 是 monorepo 本地包（editable install），预导入确保注册链完整；
+# 若确实未安装则 fallback 为 mock 避免导入链断裂
 try:
-    from jiuwen.common.init import load_components, _load_single_component
-    from jiuwen.common.exception.base import JiuWenBaseException
-finally:
-    for _mod_name in _injected_mocks:
-        sys.modules.pop(_mod_name, None)
+    import model_service  # noqa: F401
+except ImportError:
+    for _mod_name in ("model_service", "model_service.env_resolver"):
+        if _mod_name not in sys.modules:
+            sys.modules[_mod_name] = MagicMock()
+
+from jiuwen.common.init import load_components, _load_single_component
+from jiuwen.common.exception.base import JiuWenBaseException
 
 
 # --------------------------------------------------------------------------- #

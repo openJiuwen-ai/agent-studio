@@ -109,7 +109,8 @@ def test_io_state_value_not_overridden():
     seed.state().commit()
     # 向 io_state 写入同路径的值（模拟异常场景）
     io_state = wf_session.state()._io_state  # pylint: disable=protected-access
-    io_state.update_by_id_and_commit("MEMORY_VARIABLE", {"MEMORY_VARIABLE": {"dup": "from_io"}})
+    io_state.update_by_id("MEMORY_VARIABLE", {"MEMORY_VARIABLE": {"dup": "from_io"}})
+    io_state.commit()
 
     node = NodeSession(wf_session, "node_z")
     schema = {"userFields": {"v": "${" + GLOBAL_REF_PREFIX + "dup}"}}
