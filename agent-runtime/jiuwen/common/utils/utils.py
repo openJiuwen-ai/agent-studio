@@ -228,42 +228,76 @@ def validate_and_keep_https_url(url):
 
 # https 文件下载的 DNS 解析钉死（消除校验/连接 TOCTOU）。
 # getaddrinfo 补丁按 hostname 精确匹配，未钉死的主机名走原解析；
-# 引用计数 + 锁保证多线程嵌套进出时补丁正确装卸。
+# 补丁装卸按全局引用计数，钉死记录按 hostname 引用计数——同一主机名
+# 并发下载时先退出的线程不会移除其他线程仍在使用的记录。
 _pinned_resolution_lock = threading.Lock()
 _pinned_resolution_depth = 0
-_pinned_entries = {}
+_pinned_entries = {}  # hostname -> (family, sockaddr) 完整形态（IPv6 sockaddr 为四元组）
+_pinned_refcounts = {}  # hostname -> 并发使用计数
 _orig_getaddrinfo = socket.getaddrinfo
 
 
+def _is_inner_ipaddr_v6(ip: str) -> bool:
+    """IPv6 内网判定——is_inner_ipaddress 基于 inet_aton 仅支持 IPv4。"""
+    import ipaddress
+
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return True  # 不可解析按内网处理（fail-safe）
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
+
+
 def _pinned_getaddrinfo(host, port, *args, **kwargs):
-    ip = _pinned_entries.get(host)
-    if ip is None:
+    entry = _pinned_entries.get(host)
+    if entry is None:
         return _orig_getaddrinfo(host, port, *args, **kwargs)
-    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    family, sockaddr = entry
     port_num = port if isinstance(port, int) else 0
-    return [(family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, port_num))]
+    if family == socket.AF_INET6:
+        # AF_INET6 sockaddr 约定为四元组 (host, port, flowinfo, scope_id)
+        pinned_sockaddr = (sockaddr[0], port_num, sockaddr[2], sockaddr[3])
+    else:
+        pinned_sockaddr = (sockaddr[0], port_num)
+    return [(family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", pinned_sockaddr)]
 
 
 @contextlib.contextmanager
 def pinned_https_resolution(hostname):
-    """连接期间把 hostname 的 DNS 解析钉死为校验时通过的 IP。
+    """连接期间把 hostname 的 DNS 解析钉死为校验时通过的地址。
 
     进入时重新解析并按 url_to_ip_with_protocol_and_port 同口径复校验
-    （拦截校验后才 rebinding 到内网的场景）；期间 urllib3 对该主机名的
-    全部解析返回钉死 IP（SNI/证书校验仍按主机名，不受影响），TOCTOU
-    完全消除；退出时还原。
+    （拦截校验后才 rebinding 到内网的场景；IPv4 走 is_inner_ipaddress，
+    IPv6 走 _is_inner_ipaddr_v6——inet_aton 不支持 IPv6）；期间 urllib3
+    对该主机名的全部解析返回钉死地址（SNI/证书校验仍按主机名，不受
+    影响），TOCTOU 完全消除；退出时按 hostname 引用计数还原（同一
+    主机名并发下载时，先退出的线程不会移除其他线程仍在使用的记录）。
     """
     global _pinned_resolution_depth
     infos = socket.getaddrinfo(hostname, None)
-    pinned_ip = infos[0][4][0]
+    family, _, _, _, sockaddr = infos[0]
+    pinned_ip = sockaddr[0]
     if (
         os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]
-        and is_inner_ipaddress(pinned_ip)
         and not shot_plugin_white_urls(pinned_ip)
     ):
-        raise ValueError("illegal ip address")
+        is_inner = (
+            _is_inner_ipaddr_v6(pinned_ip)
+            if ":" in pinned_ip
+            else is_inner_ipaddress(pinned_ip)
+        )
+        if is_inner:
+            raise ValueError("illegal ip address")
     with _pinned_resolution_lock:
-        _pinned_entries[hostname] = pinned_ip
+        _pinned_refcounts[hostname] = _pinned_refcounts.get(hostname, 0) + 1
+        _pinned_entries[hostname] = (family, sockaddr)
         if _pinned_resolution_depth == 0:
             socket.getaddrinfo = _pinned_getaddrinfo
         _pinned_resolution_depth += 1
@@ -272,7 +306,12 @@ def pinned_https_resolution(hostname):
     finally:
         with _pinned_resolution_lock:
             _pinned_resolution_depth -= 1
-            _pinned_entries.pop(hostname, None)
+            remaining = _pinned_refcounts.get(hostname, 0) - 1
+            if remaining > 0:
+                _pinned_refcounts[hostname] = remaining
+            else:
+                _pinned_refcounts.pop(hostname, None)
+                _pinned_entries.pop(hostname, None)
             if _pinned_resolution_depth == 0:
                 socket.getaddrinfo = _orig_getaddrinfo
 

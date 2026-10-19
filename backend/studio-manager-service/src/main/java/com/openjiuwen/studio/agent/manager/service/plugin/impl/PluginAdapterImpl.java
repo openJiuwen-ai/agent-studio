@@ -622,9 +622,13 @@ public class PluginAdapterImpl implements IPlugin {
             log.info("[runTool] Handling multipart/form-data request (hasFileParam={}).", hasFileParam);
             Map<String, String> formParams = new HashMap<>();
             Map<String, MultipartFile> fileParams = new HashMap<>();
-            // 下载url数据
+            // 下载url数据（可选 body 参数可能为 null——不填不传语义，
+            // 跳过下载与表单填充，避免 VALID_URL_PATTERN.matcher(null) NPE）
             for (String key : requestBody.keySet()) {
                 String value = requestBody.getString(key);
+                if (value == null) {
+                    continue;
+                }
                 Optional<MultipartFile> file = downloadFileAsMultipartFile(value);
                 if (file.isPresent()) {
                     fileParams.put(key, file.get());
