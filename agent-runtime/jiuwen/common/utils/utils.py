@@ -345,7 +345,18 @@ def pinned_https_resolution(hostname):
     """
     global _pinned_resolution_depth
     infos = socket.getaddrinfo(hostname, None)
-    pinned = [(info[0], info[4]) for info in infos]
+    # 按 (family, ip) 去重保序——glibc 对字面量的 port=None 解析会返回
+    # STREAM/DGRAM/RAW 多条同 IP 形态（Windows 仅 1 条），不去重会让
+    # 连接期解析返回重复条目
+    pinned = []
+    seen = set()
+    for info in infos:
+        family, sockaddr = info[0], info[4]
+        key = (family, sockaddr[0])
+        if key in seen:
+            continue
+        seen.add(key)
+        pinned.append((family, sockaddr))
     if os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]:
         for _, sockaddr in pinned:
             ip = sockaddr[0]

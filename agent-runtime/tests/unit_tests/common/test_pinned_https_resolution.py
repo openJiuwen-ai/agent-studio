@@ -359,6 +359,35 @@ class TestPinnedMultiAddress:
             finally:
                 self._remove(self.HOST)
 
+    def test_multi_socktype_resolution_deduped(self):
+        """同 IP 多 socktype 形态（glibc 字面量返回 STREAM/DGRAM/RAW 三条，
+        Windows 仅 1 条）按 (family, ip) 去重——不去重则连接期解析返回
+        重复条目（Linux CI 上 len==1 断言炸）。
+        """
+        real_getaddrinfo = socket.getaddrinfo
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            # 模拟 glibc 对 IPv4 字面量的 port=None 解析
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "",
+                 ("93.184.216.34", 0)),
+                (socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP, "",
+                 ("93.184.216.34", 0)),
+                (socket.AF_INET, socket.SOCK_RAW, 0, "",
+                 ("93.184.216.34", 0)),
+            ]
+
+        socket.getaddrinfo = fake_getaddrinfo
+        try:
+            with pinned_https_resolution("multi-socktype.test"):
+                infos = socket.getaddrinfo("multi-socktype.test", 443)
+                assert len(infos) == 1, infos
+                assert infos[0][0] == socket.AF_INET
+                assert infos[0][1] == socket.SOCK_STREAM
+                assert infos[0][4][0] == "93.184.216.34"
+        finally:
+            socket.getaddrinfo = real_getaddrinfo
+
 
 class TestPinnedGetaddrinfoParamCompat:
     """_pinned_getaddrinfo 对调用方参数的兼容（L 项回归）。"""
