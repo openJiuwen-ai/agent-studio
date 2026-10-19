@@ -1003,8 +1003,10 @@ public class ToolManagementService implements IToolManagementService {
         // 创建content对象
         Content content = null;
         if (CommonConstant.Plugin.INTF_TYPE_BLOCKING.equals(toolEntity.getIntfType())) {
-            // 非流式
-            content = new Content().addMediaType(contentType,
+            // 非流式——响应体按输出 schema 声明为 application/json；
+            // contentType 仅描述请求体（FEAT-073 含 file 入参时为 multipart/form-data），
+            // 不能复用为响应 mediaType（会误导 OpenAPI 消费方与运行时解析）
+            content = new Content().addMediaType(CommonConstant.APPLICATION_JSON,
                     new MediaType().schema(JsonUtils.json2ObjQuietly(toolEntity.getOutputSchema(), Schema.class)));
         } else if (CommonConstant.Plugin.INTF_TYPE_STREAMING.equals(toolEntity.getIntfType())) {
             // 流式

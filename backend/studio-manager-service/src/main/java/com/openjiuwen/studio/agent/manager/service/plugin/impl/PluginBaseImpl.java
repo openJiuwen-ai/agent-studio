@@ -1137,8 +1137,16 @@ public class PluginBaseImpl implements IPluginBase {
         JsonNode requiredNode = rootNode.path("required");
         ArrayNode arrayNode;
         // FEAT-073: required 字段可能缺失（file 类型参数的 required 存于属性级 boolean
-        // 而非顶层数组），path() 返回 MissingNode 不能强转 ArrayNode
-        arrayNode = requiredNode instanceof ArrayNode ? (ArrayNode) requiredNode : mapper.createArrayNode();
+        // 而非顶层数组），path() 返回 MissingNode 不能强转 ArrayNode；
+        // 新建的数组须回写回 rootNode，否则后续 add 进脱离树的新数组，序列化后丢失
+        if (requiredNode instanceof ArrayNode) {
+            arrayNode = (ArrayNode) requiredNode;
+        } else {
+            arrayNode = mapper.createArrayNode();
+            if (rootNode instanceof ObjectNode) {
+                ((ObjectNode) rootNode).set("required", arrayNode);
+            }
+        }
 
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             Map<String, Object> propertiesEntry = new HashMap<>();

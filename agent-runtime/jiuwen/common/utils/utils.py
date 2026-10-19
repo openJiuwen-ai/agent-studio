@@ -2,11 +2,13 @@
 """util module"""
 
 import base64
+import contextlib
 import io
 import json
 import os
 import re
 import socket
+import threading
 import time
 from socket import inet_aton
 from struct import unpack
@@ -212,11 +214,67 @@ def validate_and_keep_https_url(url):
     返回**原始 URL**：IP 重写会丢失 SNI，导致证书主机名校验失败
     （OBS 预签名等 https 文件地址全部 SSLError）。http 场景维持
     IP 重写（防 DNS rebinding）。
+
+    https 返回原始 URL 意味着 requests.get 会再次解析 DNS——校验与
+    连接之间存在 TOCTOU（DNS rebinding 可校验时解析公网、连接时解析
+    内网）。调用方须以 pinned_https_resolution(hostname) 包裹实际请求
+    以钉死解析（见 handler_manager.FileHandler.handle）。
     """
     valid_url, hostname = url_to_ip_with_protocol_and_port(url)
     if urlparse(url).scheme == "https":
         return url, hostname
     return valid_url, hostname
+
+
+# https 文件下载的 DNS 解析钉死（消除校验/连接 TOCTOU）。
+# getaddrinfo 补丁按 hostname 精确匹配，未钉死的主机名走原解析；
+# 引用计数 + 锁保证多线程嵌套进出时补丁正确装卸。
+_pinned_resolution_lock = threading.Lock()
+_pinned_resolution_depth = 0
+_pinned_entries = {}
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _pinned_getaddrinfo(host, port, *args, **kwargs):
+    ip = _pinned_entries.get(host)
+    if ip is None:
+        return _orig_getaddrinfo(host, port, *args, **kwargs)
+    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    port_num = port if isinstance(port, int) else 0
+    return [(family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, port_num))]
+
+
+@contextlib.contextmanager
+def pinned_https_resolution(hostname):
+    """连接期间把 hostname 的 DNS 解析钉死为校验时通过的 IP。
+
+    进入时重新解析并按 url_to_ip_with_protocol_and_port 同口径复校验
+    （拦截校验后才 rebinding 到内网的场景）；期间 urllib3 对该主机名的
+    全部解析返回钉死 IP（SNI/证书校验仍按主机名，不受影响），TOCTOU
+    完全消除；退出时还原。
+    """
+    global _pinned_resolution_depth
+    infos = socket.getaddrinfo(hostname, None)
+    pinned_ip = infos[0][4][0]
+    if (
+        os.environ.get(CLOSE_URL_JUDGE_SWITCH_KEY) not in ["True", "true"]
+        and is_inner_ipaddress(pinned_ip)
+        and not shot_plugin_white_urls(pinned_ip)
+    ):
+        raise ValueError("illegal ip address")
+    with _pinned_resolution_lock:
+        _pinned_entries[hostname] = pinned_ip
+        if _pinned_resolution_depth == 0:
+            socket.getaddrinfo = _pinned_getaddrinfo
+        _pinned_resolution_depth += 1
+    try:
+        yield
+    finally:
+        with _pinned_resolution_lock:
+            _pinned_resolution_depth -= 1
+            _pinned_entries.pop(hostname, None)
+            if _pinned_resolution_depth == 0:
+                socket.getaddrinfo = _orig_getaddrinfo
 
 
 def illegal_logo_type(agent_logo):
