@@ -19,7 +19,7 @@
   "skill.import_zip_error_tip": "本地网络连接异常导致{{name}}文件导入失败，您可以尝试重新导入或检查本地网络和配置是否异常。",
   "skill.import_obs_error_tip": "本地网络连接异常导致OBS资源导入失败，您可以尝试重新导入或检查本地网络和配置是否异常。",
   "skill.import_download_zip": "下载模板",
-  "skill.import.docoument.link": "详细查看Skill制品包规范",
+  "skill.import.document.link": "详细查看Skill制品包规范",
   "skill.import_add_file": "添加文件",
   "skill.import.reselect.file": "重新选择",
   "skill.import_obs_tip": "将Skill ZIP文件上传至对象存储OBS服务，获取文件URL并在此传入，文件大小≤ 10MB。",
