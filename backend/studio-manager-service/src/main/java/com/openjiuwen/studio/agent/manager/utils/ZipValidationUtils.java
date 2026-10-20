@@ -67,28 +67,13 @@ public class ZipValidationUtils {
 
 
     /**
-     * 存储解析后的SKILL.md文件frontmatter
-     */
-    private static Map<String, Object> frontmatter = new LinkedHashMap<>();
-
-
-    /**
-     * 获取解析后的frontmatter
-     *
-     * @return frontmatter数据
-     */
-    public static Map<String, Object> getFrontmatter() {
-        return new LinkedHashMap<>(frontmatter);
-    }
-
-
-    /**
      * 校验ZIP包
      *
      * @param zipFile ZIP文件
+     * @return 当前ZIP包解析出的frontmatter
      * @throws AgentStudioException 校验失败时抛出异常
      */
-    public static void validateZipFile(File zipFile) {
+    public static Map<String, Object> validateZipFile(File zipFile) {
         // 1. 文件格式检查
         validateFileFormat(zipFile);
 
@@ -99,7 +84,7 @@ public class ZipValidationUtils {
         validateZipSecurity(zipFile);
 
         // 4. 解压后内容检查
-        validateExtractedContent(zipFile);
+        return validateExtractedContent(zipFile);
     }
 
     /**
@@ -271,7 +256,7 @@ public class ZipValidationUtils {
     /**
      * 验证解压后的内容
      */
-    private static void validateExtractedContent(File zipFile) {
+    private static Map<String, Object> validateExtractedContent(File zipFile) {
         Path tempDir = null;
         Path tempDirForValidation = null;
         String zipFileName;
@@ -290,7 +275,7 @@ public class ZipValidationUtils {
             validateDirectoryStructure(tempDirForValidation);
 
             // 验证SKILL.md文件
-            validateSkillMdFile(tempDirForValidation);
+            return validateSkillMdFile(tempDirForValidation);
 
         } catch (IOException e) {
             log.error("Failed to verify the decompressed content: {}", e.getMessage(), e);
@@ -381,7 +366,7 @@ public class ZipValidationUtils {
     /**
      * 验证SKILL.md文件
      */
-    private static void validateSkillMdFile(Path baseDir) throws IOException {
+    private static Map<String, Object> validateSkillMdFile(Path baseDir) throws IOException {
         try (Stream<Path> paths = Files.walk(baseDir)) {
             Path skillMdFile = paths.filter(p ->
                     p.getFileName() != null &&
@@ -401,6 +386,7 @@ public class ZipValidationUtils {
 
             // 验证frontmatterYaml字段
             validateFrontmatter(frontmatterYaml, skillMdFile);
+            return frontmatterYaml;
         }
     }
 
@@ -409,9 +395,6 @@ public class ZipValidationUtils {
      */
     private static Map<String, Object> parseYamlFrontmatter(String content) {
         Map<String, Object> result = new LinkedHashMap<>();
-
-        // 重置frontmatter，避免多次调用时的数据残留
-        ZipValidationUtils.frontmatter = new LinkedHashMap<>();
 
         // YAML frontmatter解析
         if (content.startsWith("---")) {
@@ -444,8 +427,6 @@ public class ZipValidationUtils {
                         }
 
                         result.put(key, value);
-                        // 同时保存到静态变量中
-                        ZipValidationUtils.frontmatter.put(key, value);
                     }
                 }
             }

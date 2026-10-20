@@ -224,7 +224,9 @@ public class ZipValidationUtilsTest {
             }
 
             // 验证有效ZIP文件不会抛出异常
-            assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(validZip));
+            assertDoesNotThrow(() -> {
+                ZipValidationUtils.validateZipFile(validZip);
+            });
         } catch (IOException e) {
             fail("创建测试文件失败: " + e.getMessage());
         }
@@ -561,18 +563,14 @@ public class ZipValidationUtilsTest {
         assertEquals(StudioError.COMPATIBILITY_LENGTH_EXCEED, exception.getErrorCode());
     }
 
-    // ==================== getFrontmatter 方法测试用例 ====================
+    // ==================== frontmatter 返回值测试用例 ====================
 
     /**
      * 测试获取frontmatter
      */
     @Test
-    public void testGetFrontmatter_AfterValidZip() {
-        // 先验证一个有效的ZIP文件
-        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(validZipFile));
-
-        // 验证frontmatter不为空
-        Map<String, Object> frontmatter = ZipValidationUtils.getFrontmatter();
+    public void testValidateZipFile_ReturnsFrontmatter() {
+        Map<String, Object> frontmatter = ZipValidationUtils.validateZipFile(validZipFile);
         assertNotNull(frontmatter);
         assertEquals("valid", frontmatter.get("name"));
         assertEquals("A valid skill", frontmatter.get("description"));
@@ -689,11 +687,8 @@ public class ZipValidationUtilsTest {
             zos.closeEntry();
         }
 
-        // 应该验证通过
-        assertDoesNotThrow(() -> ZipValidationUtils.validateZipFile(edgeCaseFile));
-
-        // 验证frontmatter
-        Map<String, Object> frontmatter = ZipValidationUtils.getFrontmatter();
+        // 应该验证通过并返回frontmatter
+        Map<String, Object> frontmatter = ZipValidationUtils.validateZipFile(edgeCaseFile);
         assertEquals("edge-skill", frontmatter.get("name"));
         assertEquals(499, frontmatter.get("compatibility").toString().length());
     }
