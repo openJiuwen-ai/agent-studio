@@ -157,7 +157,6 @@ public class SAMLUtil {
 
         // 新增安全配置
         dbf.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-        dbf.setFeature("http://xml.sax/features/resolve-dtd-entities", false);
         dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         dbf.setXIncludeAware(false);
         dbf.setExpandEntityReferences(false);

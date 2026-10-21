@@ -12,6 +12,8 @@ import com.openjiuwen.studio.agent.manager.saml.ServiceProvider;
 import com.openjiuwen.studio.agent.manager.saml.UserInfoBean;
 
 import org.apache.jcp.xml.dsig.internal.dom.XMLDSigRI;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;
 
 import java.security.PublicKey;
@@ -29,13 +31,23 @@ import javax.xml.crypto.dsig.dom.DOMValidateContext;
 
 public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
 
+    private static final Logger logger = LoggerFactory.getLogger(SAMLResponseValidatorImpl.class);
+
     private final SAMLResponse response;
 
     private final ServiceProvider provider;
 
-    public SAMLResponseValidatorImpl(String response) throws SAMLException {
+    private final String expectedIdpIssuer;
+
+    public SAMLResponseValidatorImpl(String response, String expectedIdpIssuer) throws SAMLException {
+        this(response, expectedIdpIssuer, ServiceProviderImpl.getInstance());
+    }
+
+    public SAMLResponseValidatorImpl(String response, String expectedIdpIssuer, ServiceProvider provider)
+        throws SAMLException {
         this.response = new SAMLResponseImpl(response);
-        this.provider = ServiceProviderImpl.getInstance();
+        this.provider = provider;
+        this.expectedIdpIssuer = expectedIdpIssuer;
     }
 
     // 静态代码检查G.OTH.01：实现接口方法应加@Override注解，确保编译期校验方法签名一致性
@@ -63,7 +75,10 @@ public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
     }
 
     private boolean validServiceProvider() {
-        return response.getIssuer().equalsIgnoreCase("www.demo.com");
+        String actualIssuer = response.getIssuer();
+        return expectedIdpIssuer != null && !expectedIdpIssuer.isBlank()
+            && actualIssuer != null
+            && actualIssuer.trim().equalsIgnoreCase(expectedIdpIssuer.trim());
     }
 
     private boolean timeNoReache() {
