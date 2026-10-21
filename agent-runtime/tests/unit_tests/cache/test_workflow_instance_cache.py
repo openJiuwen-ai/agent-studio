@@ -108,30 +108,40 @@ class TestHitMissAndEviction:
         assert a2 is not a
 
     @pytest.mark.asyncio
-    async def test_content_hash_key_republish_invalidates(self, monkeypatch):
-        """同 path 不同内容 → 不同 key（重新发布即刻 miss，无旧图窗口）。"""
+    async def test_same_path_reuses_new_path_misses(self, monkeypatch):
+        """path key：同 path 恒复用；重新发布 = 新 versionId 路径 → miss。
+
+        正确性依据（模块 docstring）：backend 发布强制 versionId=毫秒时间戳
+        入文件名（ControllerAdapter），重新发布必然新路径；会被覆盖写的
+        无版本路径不满足 is_published 门控，进不了本缓存。
+        """
 
         async def build(ir_data, **kwargs):
             return object()
 
-        v1 = _published_ir()
-        r1 = await wic.aget_or_create_workflow_instance("p", v1, build)
-        v2 = _published_ir()
-        v2["nodes"] = [{"id": "n1"}]  # 内容变化
-        r2 = await wic.aget_or_create_workflow_instance("p", v2, build)
-        assert r2 is not r1
+        r1 = await wic.aget_or_create_workflow_instance("wf/pub_100.json", _published_ir(), build)
+        ir_v2 = _published_ir()
+        ir_v2["nodes"] = [{"id": "n1"}]  # 同 path 内容变化：仍复用
+        r2 = await wic.aget_or_create_workflow_instance("wf/pub_100.json", ir_v2, build)
+        assert r2 is r1
+
+        # 重新发布产生新 versionId 路径 → 新 key → miss
+        r3 = await wic.aget_or_create_workflow_instance("wf/pub_200.json", ir_v2, build)
+        assert r3 is not r1
 
     @pytest.mark.asyncio
-    async def test_evict_by_path_prefix(self, monkeypatch):
+    async def test_evict_by_exact_path(self, monkeypatch):
+        """精确 path 驱逐：path-only key 下每 path 恰一条；相近路径不误伤。"""
 
         async def build(ir_data, **kwargs):
             return object()
 
         await wic.aget_or_create_workflow_instance("wf/ir/a.json", _published_ir(), build)
+        await wic.aget_or_create_workflow_instance("wf/ir/a.json.bak", _published_ir(), build)
         await wic.aget_or_create_workflow_instance("wf/ir/b.json", _published_ir(), build)
         evicted = await wic.evict_workflow_instances_by_path("wf/ir/a.json")
         assert evicted == 1
-        assert len(wic._cache) == 1
+        assert len(wic._cache) == 2
 
     @pytest.mark.asyncio
     async def test_build_kwargs_forwarded_on_miss(self, monkeypatch):

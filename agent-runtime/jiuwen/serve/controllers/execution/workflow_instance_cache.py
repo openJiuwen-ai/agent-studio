@@ -4,11 +4,17 @@
 
 - 缓存对象为 LazyWorkflow（构建时机不变：仍发生在首次 stream，
   LazyWorkflow._instantiate_lock 双检锁天然去重并发首调构建）；
-- key = ir_path + IR 内容 hash（canonical JSON 的 sha256 前 16 位）——
-  重新发布即刻 miss，不存在旧图窗口；key 不含 build_kwargs（构建期 IO
-  参数，如 cust_headers/project_id 不影响产物图）——白名单
-  ``_BUILD_KWARGS_NOT_AFFECTING_GRAPH`` 显式枚举不影响的键，非白名单键
-  绕过缓存直建（防御：未来新增影响图结构的参数时宁可少缓存也不误共享）；
+- key = ir_path——"重新发布即刻 miss"的依据是发布路径版本化：backend
+  发布链路强制 versionId（毫秒时间戳）拼入 OBS 文件名（ControllerAdapter/
+  WorkflowAdapter），重新发布必然产生新路径新 key；会被覆盖写的无版本
+  路径（调试/试运行）不满足 is_published 门控，进不了本缓存。同 path
+  内容漂移（OBS 人工覆盖等异常场景）的兜底为 LRU 容量驱逐/进程重启/
+  evict 端点，不设 TTL 与内容 hash 防御——换来热路径零序列化开销
+  （此前每次请求对全量 IR 做 canonical dumps + sha256）；key 不含
+  build_kwargs（构建期 IO 参数，如 cust_headers/project_id 不影响产物
+  图）——白名单 ``_BUILD_KWARGS_NOT_AFFECTING_GRAPH`` 显式枚举不影响
+  图结构的键，非白名单键绕过缓存直建（防御：未来新增影响图结构的参数
+  时宁可少缓存也不误共享）；
 - 仅进程内 memory LRU：Workflow 实例含 Future/Lock/闭包不可序列化，
   不进 Redis，不复用 cache_workflow_queue（BPMN spec 专用）；
 - 资格：static_graph 模式 + 未降级 + is_published（跟随 IR 缓存惯例）。
@@ -26,8 +32,6 @@ static_graph_patch 模块属性的重绑定，故门控同时 OR 读活属性—
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 from collections import OrderedDict
 from typing import Any, Awaitable, Callable, Optional
 
@@ -50,15 +54,9 @@ _DOWNGRADE_METRIC_LOGGED = False
 # build_kwargs 白名单：不影响产物图结构的构建期 IO 参数（模型配置拉取的
 # 请求头 / 项目上下文），故不入缓存 key（PR #1 评审 Suggestion 防漏项）。
 # **新增键时须先评估**：若参数开始影响图结构（节点/边/组件配置），必须把
-# 其纳入 _cache_key，否则不同结构的产物会被误共享。非白名单键走防御
+# 其纳入缓存 key，否则不同结构的产物会被误共享。非白名单键走防御
 # 路径——绕过缓存直建，宁可少缓存也不误共享（fail-safe）。
 _BUILD_KWARGS_NOT_AFFECTING_GRAPH = frozenset({"cust_headers", "project_id"})
-
-
-def _cache_key(ir_path: str, ir_data: dict) -> str:
-    canonical = json.dumps(ir_data, sort_keys=True, ensure_ascii=False, default=str)
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
-    return f"{ir_path}:{digest}"
 
 
 async def aget_or_create_workflow_instance(
@@ -88,17 +86,16 @@ async def aget_or_create_workflow_instance(
     if set(build_kwargs or {}) - _BUILD_KWARGS_NOT_AFFECTING_GRAPH:
         return await build(ir_data, **(build_kwargs or {}))
 
-    key = _cache_key(ir_path, ir_data)
     async with _lock:
-        cached = _cache.get(key)
+        cached = _cache.get(ir_path)
         if cached is not None:
-            _cache.move_to_end(key)
+            _cache.move_to_end(ir_path)
             performance_logger.info("workflow_cache|hit")
             return cached
 
         performance_logger.info("workflow_cache|miss")
         workflow = await build(ir_data, **(build_kwargs or {}))
-        _cache[key] = workflow
+        _cache[ir_path] = workflow
         capacity = settings.cache.workflow_instance_cache_num
         while len(_cache) > capacity:
             _cache.popitem(last=False)
@@ -106,13 +103,13 @@ async def aget_or_create_workflow_instance(
 
 
 async def evict_workflow_instances_by_path(ir_path: str) -> int:
-    """按 ir_path 前缀驱逐（删除执行实例端点的内存卫生钩子，非正确性需要）。"""
-    evicted = 0
+    """按精确 path 驱逐（删除执行实例端点的内存卫生钩子，非正确性需要）。
+
+    path-only key 下每个 path 至多一条条目，精确匹配即可——无前缀扫描，
+    相近路径（如 ``a.json`` 与 ``a.json.bak``）不会误伤。
+    """
     async with _lock:
-        for key in [k for k in _cache if k.startswith(f"{ir_path}:")]:
-            _cache.pop(key, None)
-            evicted += 1
-    return evicted
+        return 1 if _cache.pop(ir_path, None) is not None else 0
 
 
 def clear_workflow_instance_cache() -> None:
