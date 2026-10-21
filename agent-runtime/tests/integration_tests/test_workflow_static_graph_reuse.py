@@ -218,7 +218,7 @@ class TestConcurrentIsolationOnSharedInstance:
 
     @pytest.mark.asyncio
     async def test_republish_invalidates_cache(self):
-        """同内容恒命中；重发布（内容 hash 变化）→ miss 并稳定命中新实例。"""
+        """同 path 恒命中；重发布 = 新 versionId 路径 → miss 并稳定命中新实例。"""
         ir_v1 = _load_ir()
         w1 = await wic.aget_or_create_workflow_instance(
             "integration/republish.json", ir_v1, IRConverter.async_ir_to_workflow
@@ -228,20 +228,19 @@ class TestConcurrentIsolationOnSharedInstance:
         )
         assert again is w1  # 未重发布：命中
 
-        # 内容变化 → miss：以 metadata.updatedAt 变更为例。发布流本身只置
-        # status/visibility/publishedAt；IR 重建发生在保存/校验流——"编辑后
-        # 重发布 → 内容变 → miss"成立；纯重发布（未重建 IR、内容不变）时
-        # 命中是正确行为（缓存 key 即内容 hash）
+        # 重新发布：backend 生成新 versionId（毫秒时间戳）拼入新 OBS 路径 →
+        # 新 key → miss（发布链路证据见 backend ControllerAdapter/
+        # WorkflowAdapter；旧版本条目由 LRU 容量驱逐回收）
         ir_v2 = copy.deepcopy(ir_v1)
         ir_v2["metadata"]["updatedAt"] = ir_v1["metadata"]["updatedAt"] + 1
         w2 = await wic.aget_or_create_workflow_instance(
-            "integration/republish.json", ir_v2, IRConverter.async_ir_to_workflow
+            "integration/republish_2.json", ir_v2, IRConverter.async_ir_to_workflow
         )
-        assert w2 is not w1  # 内容变化 → miss
+        assert w2 is not w1  # 新 versionId 路径 → miss
 
-        # 新内容此后稳定命中新实例（不存在旧图窗口）
+        # 新版本此后稳定命中（不存在旧图窗口）
         w2_again = await wic.aget_or_create_workflow_instance(
-            "integration/republish.json", ir_v2, IRConverter.async_ir_to_workflow
+            "integration/republish_2.json", ir_v2, IRConverter.async_ir_to_workflow
         )
         assert w2_again is w2
 
