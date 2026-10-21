@@ -40,6 +40,8 @@ COPY jiuwen/ $SERVICE_HOME/app/jiuwen/
 COPY model_service/ $SERVICE_HOME/app/model_service/
 COPY storage/ $SERVICE_HOME/app/storage/
 COPY common_utils/ $SERVICE_HOME/app/common_utils/
+COPY redis_spi/ $SERVICE_HOME/app/redis_spi/
+COPY redis_native/ $SERVICE_HOME/app/redis_native/
 COPY tests/ $SERVICE_HOME/app/tests/
 COPY bin/ $SERVICE_HOME/bin/
 # Nginx load balancing configuration and scripts

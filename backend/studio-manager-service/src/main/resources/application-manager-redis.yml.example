@@ -1,0 +1,73 @@
+# =============================================================================
+# Redis Provider 配置样例（复制到 application-manager.yml 按需修改；本文件仅为示例）
+#
+# 两段配置的关系：
+#   spring.data.redis 段 —— 驱动 Lettuce/RedisTemplate 第二栈（收口后业务零直用，
+#                            Bean 保留一版兜底，后续版本移除）
+#   redis 段            —— 驱动 RedisClient 主路径（Provider 单栈，业务主路径）
+#   两段共享同一 host/port/password 变量，但连接池相互独立。
+#
+# Provider 切换只改 redis 段；以下三种形态按需取一。
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 形态一（缺省）：原生 Redis 直连（Redisson 实现，零额外配置）
+# -----------------------------------------------------------------------------
+redis:
+  host: ${redis_host:127.0.0.1}
+  port: ${redis_port:6379}
+  password: ${redis_password:}
+  mode-params: single          # single / cluster / sentinel 由下列参数推导
+  cluster_node_list: ${redis_node_addr_list:}
+  master: ${redis_master_name:mymaster}
+  sentinel_ports: ${redis_sentinel_ports:}
+  target_ports: ${redis_target_ports:}
+  client-type: redisson        # 缺省值，可省略
+  enable-log: ${redis_enable_log:false}
+  max-string-length: ${redis_max_string_length:100000000}
+  max-single-message-length: ${redis_max_single_message_length:-1}
+  history-eviction-threshold: ${redis_history_eviction_threshold:0.75}
+
+# -----------------------------------------------------------------------------
+# 形态二：企业自研 Provider（显式类名 + 企业专属参数透传）
+# -----------------------------------------------------------------------------
+# ⚠️ 部署信任配置：redis.provider-class 驱动反射类加载（等价于 logging.config 等
+#    既有运维原语），仅限 operator 管理的配置面，不得暴露给租户级配置入口。
+# -----------------------------------------------------------------------------
+# redis:
+#   host: ${redis_host:127.0.0.1}
+#   port: ${redis_port:6379}
+#   password: ${redis_password:}
+#   client-type: custom
+#   # 全限定类名：实现 RedisProviderFactory（推荐）或 RedisClient + init(RedisProviderContext)
+#   provider-class: com.acme.redis.NosRedisProviderFactory
+#   # 企业专属参数（内联 JSON 或文件路径二选一；框架不解析内部字段，透传 getRawConfig）
+#   provider-config: '{"appId":"xxx","passport":"yyy","maxAttempts":3}'
+#   # provider-config-file: /opt/agent-studio/redis-provider.json
+#
+# Provider jar 放置约定（Docker / 裸机一致）：
+#   - Docker 镜像：/opt/plugins/ 目录，需以 PropertiesLauncher 形态追加
+#     -Dloader.path=/opt/plugins（当前镜像 start.sh 为裸 java -jar，尚未
+#     内置该目录——自行挂载时须同时改启动命令，否则类不可见）
+#   - 裸机部署：放 lib/ 目录随 Spring Boot loader.path 加载（推荐），
+#     或启动命令显式追加 classpath
+#   - 前提：jar 仅依赖 studio-redis-spi（零 Redisson），避免与内置实现冲突
+
+# -----------------------------------------------------------------------------
+# 形态三：ServiceLoader 自动发现（classpath 上仅一个 Provider 工厂时）
+# -----------------------------------------------------------------------------
+# redis:
+#   host: ${redis_host:127.0.0.1}
+#   port: ${redis_port:6379}
+#   password: ${redis_password:}
+#   client-type: custom        # 不指定 provider-class；jar 内须含
+#                               # META-INF/services/com.openjiuwen.studio.agent.common.redis.spi.RedisProviderFactory
+#   provider-config: '{"logCommands":true}'
+#   # 注意：classpath 上出现多个工厂时启动报错并列出全部实现名，须改用形态二显式指定
+
+# -----------------------------------------------------------------------------
+# 存量兼容（过渡期，见设计文档 J3.1 第 4 级）
+# -----------------------------------------------------------------------------
+# classpath 上存在旧 RedisClient3rd 类时自动兼容启用（打迁移 warn 日志）。
+# 迁移路径：将原三参构造逻辑改造为 RedisProviderFactory 实现，配置切到形态二，
+# 然后从 classpath 移除旧类。废弃时间线随下一大版本收口。

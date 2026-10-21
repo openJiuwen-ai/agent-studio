@@ -21,7 +21,7 @@ agent-studio/
 ├── backend/                          # Java后端服务模块
 ├── agent-runtime/                    # Python Agent与工作流运行时
 ├── agent_builder/                    # Python NL2、Prompt与模型调测服务
-├── packages/                         # Python共享模型与存储包
+├── packages/                         # Python共享模型、存储与Redis适配包
 ├── frontend/                         # Angular前端应用模块
 ├── docs/                             # 项目文档模块
 ├── docker/                           # Docker部署配置
@@ -38,7 +38,7 @@ agent-studio/
 | `studio-runtime` | `agent-runtime/` | Agent/工作流执行、发布调用、LLM、MCP 与记忆运行时 |
 | `studio-builder` | `agent_builder/` | NL2、Prompt、模型调测及构建期存储 |
 
-Python 服务通过根目录 `packages/` 复用模型调用和存储能力。原 Java `studio-service` 已在 Beta5 架构整改中从仓库彻底删除，其能力分别迁入 `studio-manager-service`、Python `agent-runtime/` 和 `agent_builder/`，具体说明见 2.1 节。
+Python 服务通过根目录 `packages/` 复用模型调用、存储和 Redis 适配能力。原 Java `studio-service` 已在 Beta5 架构整改中从仓库彻底删除，其能力分别迁入 `studio-manager-service`、Python `agent-runtime/` 和 `agent_builder/`，具体说明见 2.1 节。
 
 ---
 
@@ -60,6 +60,8 @@ backend/
 ├── studio-manager-api/               # Manager API定义模块
 ├── studio-manager-service/           # Manager服务业务实现
 ├── studio-storage/                   # 存储抽象层模块
+├── studio-redis-spi/                 # Redis SPI抽象模块（RedisClient/工厂接口与异常族）
+├── studio-redis-redisson/            # Redis Redisson实现与统一装配模块
 └── studio-space/                     # DeepResearch（独立聚合，未纳入父 POM <modules>）
 ```
 
@@ -122,7 +124,7 @@ studio-common/
 | **exception** | 自定义异常类，统一异常处理 |
 | **filter** | HTTP请求过滤器，用于认证、日志、跨域等处理 |
 | **rce** | 远程调用封装，提供Feign等远程调用工具 |
-| **redis** | Redis相关操作封装 |
+| **redis** | Redis相关操作封装（`RedisClient` 等入口类；实现与装配移至 `studio-redis-spi` / `studio-redis-redisson` 模块，见 2.2.5 / 2.2.6） |
 | **sensitive** | 敏感词过滤功能 |
 | **service** | 通用业务服务 |
 | **utils** | 通用工具类，提供字符串处理、日期转换、JSON序列化等工具方法 |
@@ -264,6 +266,39 @@ studio-space/
 | **studio-space-dao** | 数据访问层，负责与数据库交互 |
 | **studio-space-foundation** | 基础能力层，提供工作空间管理的核心抽象和实现 |
 | **studio-space-service** | 业务服务层，实现工作空间的具体的业务逻辑 |
+
+### 2.2.5 studio-redis-spi（Redis SPI 抽象模块）
+
+**位置**：`backend/studio-redis-spi/`
+
+**功能说明**：Redis 访问的 SPI 抽象层，供企业自研 Provider 与平台各服务对接，与 Python 侧 `packages/redis_spi` 同构。
+
+**关键内容**：
+
+| 类/包 | 功能说明 |
+|-------|----------|
+| `RedisClient` | Redis 客户端接口：字符串/哈希/列表/集合等命令与 `RedisLock` 锁语义；不支持的能力抛 `CapabilityUnsupportedException` |
+| `RedisClientWrapper` | 异常归一包装：访问异常经 `RedisExceptionClassifier` 映射为 `RedisAccessException` 分类族（连接失败/超时/类型错误/命令错误）并接通分类日志 |
+| `spi.RedisProviderFactory` | Provider 工厂接口——企业自研实现的标准入口（`create(RedisProviderContext)`） |
+| `spi.RedisProviderContext` | 装配上下文：连接参数、集群/哨兵配置与企业专属参数透传 |
+| `exception` | `RedisAccessException` 分类异常族与分类器 |
+
+企业自研 Provider 的注册与装配方式见[开发指南 — Redis 适配配置与扩展](../how-to/development-guide.md#redis-适配配置与扩展)。
+
+### 2.2.6 studio-redis-redisson（Redis Redisson 实现与装配模块）
+
+**位置**：`backend/studio-redis-redisson/`
+
+**功能说明**：Redis SPI 的缺省实现与统一装配入口，`studio-manager-service` 经本模块获得 Redis 能力。
+
+**关键内容**：
+
+| 类 | 功能说明 |
+|----|----------|
+| `impl.RedisClientRedisson` | 基于 Redisson 3.x 的缺省实现（单机/集群/哨兵） |
+| `impl.RedisClientMemory` | 内存实现（测试用，`redis.client-type=memory`） |
+| `config.RedisProviderResolver` | 唯一装配入口，解析优先级：`redis.provider-class` 显式指定 > `client-type=custom`（ServiceLoader 自动发现）> `memory` > 显式 `redisson` > 存量 `RedisClient3rd` 兼容 > 缺省 `redisson` |
+| `config.RedisProviderAutoConfig` | Spring 自动配置（排除冲突的 spring-data-redis 依赖） |
 
 ## 2.3 SQL脚本说明
 

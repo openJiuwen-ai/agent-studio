@@ -358,18 +358,6 @@
             <artifactId>jsqlparser</artifactId>
         </dependency>
         <dependency>
-            <artifactId>redisson</artifactId>
-            <groupId>org.redisson</groupId>
-            <version>${redisson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>snakeyaml</artifactId>
-                    <groupId>org.yaml</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi</artifactId>
         </dependency>
@@ -488,6 +476,11 @@
                     <artifactId>avro</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.openjiuwen</groupId>
+            <artifactId>studio-redis-redisson</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>

@@ -21,15 +21,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.io.IOException;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 /**
  * SAML 2.0 认证控制器 - 处理SAML认证流程
@@ -38,13 +35,10 @@ import java.util.Map;
 @RequestMapping("/saml")
 @Slf4j
 @RequiredArgsConstructor
-@SuppressWarnings("unchecked")
 public class SamlController {
 
-    private static final String REDIS_REQUEST_PREFIX = "original_request:";
     private final UserService userService;
     private final SessionService sessionService;
-    private final RedisTemplate<String, Object> redisTemplate;
     @Value("${saml.domainId:0}")
     private String domainId;
     @Value("${saml.projectId:0}")
@@ -121,46 +115,6 @@ public class SamlController {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"error\": \"服务器内部错误\"}");
         }
-    }
-
-    /**
-     * 确定重定向URL
-     */
-    private String determineRedirectUrl(HttpServletRequest request, Map<String, Object> originalRequest) {
-        if (request == null) {
-            return "/";
-        }
-
-        // 优先使用原始请求的URL
-        if (originalRequest != null) {
-            Object urlObj = originalRequest.get("url");
-            if (urlObj instanceof String) {
-                String originalUrl = (String) urlObj;
-                if (originalUrl != null && !originalUrl.trim().isEmpty()) {
-                    return originalUrl;
-                }
-            }
-        }
-
-        // 其次使用session中的relayState
-        try {
-            String sessionRelayState = (String) request.getSession().getAttribute("SAML_RELAY_STATE");
-            if (sessionRelayState != null && !sessionRelayState.trim().isEmpty()) {
-                try {
-                    String decodedUrl = URLDecoder.decode(sessionRelayState, StandardCharsets.UTF_8.name());
-                    // 清除session中的relayState
-                    request.getSession().removeAttribute("SAML_RELAY_STATE");
-                    return decodedUrl;
-                } catch (Exception e) {
-                    log.warn("Decoding relayState failed");
-                }
-            }
-        } catch (IllegalStateException e) {
-            log.warn("Session is invalid, using default redirect URL", e);
-        }
-
-        // 默认重定向到首页
-        return "/";
     }
 
     /**

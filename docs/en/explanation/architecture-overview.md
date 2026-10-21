@@ -21,7 +21,7 @@ agent-studio/
 ├── backend/                          # Java backend service module
 ├── agent-runtime/                    # Python Agent and Workflow runtime
 ├── agent_builder/                    # Python NL2, Prompt and model tuning service
-├── packages/                         # Python shared model and storage packages
+├── packages/                         # Python shared model, storage and Redis adaptation packages
 ├── frontend/                         # Angular frontend application module
 ├── docs/                             # Project documentation module
 ├── docker/                           # Docker deployment configuration
@@ -38,7 +38,7 @@ The current deployment includes four application services:
 | `studio-runtime` | `agent-runtime/` | Agent/Workflow execution, publish invocation, LLM, MCP, and memory runtime |
 | `studio-builder` | `agent_builder/` | NL2, Prompt, model tuning, and build-time storage |
 
-Python services reuse model invocation and storage capabilities through the root-level `packages/` directory. The original Java `studio-service` was completely removed from the repository during the Beta5 architecture refactoring. Its capabilities were migrated to `studio-manager-service`, Python `agent-runtime/`, and `agent_builder/` respectively. See Section 2.1 for details.
+Python services reuse model invocation, storage and Redis adaptation capabilities through the root-level `packages/` directory. The original Java `studio-service` was completely removed from the repository during the Beta5 architecture refactoring. Its capabilities were migrated to `studio-manager-service`, Python `agent-runtime/`, and `agent_builder/` respectively. See Section 2.1 for details.
 
 ---
 
@@ -60,6 +60,8 @@ backend/
 ├── studio-manager-api/               # Manager API definition module
 ├── studio-manager-service/           # Manager service business implementation
 ├── studio-storage/                   # Storage abstraction module
+├── studio-redis-spi/                 # Redis SPI abstraction module (RedisClient/factory interfaces and exception family)
+├── studio-redis-redisson/            # Redis Redisson implementation and unified assembly module
 └── studio-space/                     # DeepResearch (independent aggregation, not included in parent POM <modules>)
 ```
 
@@ -122,7 +124,7 @@ studio-common/
 | **exception** | Custom exception classes for unified exception handling |
 | **filter** | HTTP request filters, for authentication, logging, CORS, etc. |
 | **rce** | Remote call wrappers, providing Feign and other remote call tools |
-| **redis** | Redis-related operation wrappers |
+| **redis** | Redis-related operation wrappers (entry classes such as `RedisClient`; implementation and assembly moved to the `studio-redis-spi` / `studio-redis-redisson` modules, see 2.2.5 / 2.2.6) |
 | **sensitive** | Sensitive word filtering functionality |
 | **service** | Common business services |
 | **utils** | Common utility classes, providing string processing, date conversion, JSON serialization, and other utility methods |
@@ -264,6 +266,39 @@ studio-space/
 | **studio-space-dao** | Data access layer, responsible for database interaction |
 | **studio-space-foundation** | Foundation capability layer, provides core abstractions and implementations for workspace management |
 | **studio-space-service** | Business service layer, implements specific business logic for workspaces |
+
+### 2.2.5 studio-redis-spi (Redis SPI Abstraction Module)
+
+**Location**: `backend/studio-redis-spi/`
+
+**Description**: The SPI abstraction layer for Redis access, targeted at enterprise-custom Providers and platform services; mirrors the Python-side `packages/redis_spi`.
+
+**Key contents**:
+
+| Class / Package | Description |
+|-----------------|-------------|
+| `RedisClient` | Redis client interface: string/hash/list/set commands and `RedisLock` lock semantics; unsupported capabilities raise `CapabilityUnsupportedException` |
+| `RedisClientWrapper` | Exception normalization wrapper: access exceptions are mapped by `RedisExceptionClassifier` into the `RedisAccessException` family (connection failure / timeout / wrong type / command error) with category-aware logging |
+| `spi.RedisProviderFactory` | Provider factory interface — the standard entry point for enterprise-custom implementations (`create(RedisProviderContext)`) |
+| `spi.RedisProviderContext` | Assembly context: connection parameters, cluster/sentinel settings and enterprise-specific parameter pass-through |
+| `exception` | The `RedisAccessException` exception family and classifier |
+
+Registration and assembly of enterprise-custom Providers are described in the [Development Guide — Redis Adaptation Configuration and Extension](../how-to/development-guide.md#redis-adaptation-configuration-and-extension).
+
+### 2.2.6 studio-redis-redisson (Redis Redisson Implementation and Assembly Module)
+
+**Location**: `backend/studio-redis-redisson/`
+
+**Description**: The default implementation and unified assembly entry point of the Redis SPI; `studio-manager-service` obtains Redis capabilities through this module.
+
+**Key contents**:
+
+| Class | Description |
+|-------|-------------|
+| `impl.RedisClientRedisson` | Default implementation based on Redisson 3.x (standalone/cluster/sentinel) |
+| `impl.RedisClientMemory` | In-memory implementation (for tests, `redis.client-type=memory`) |
+| `config.RedisProviderResolver` | Single assembly entry point. Resolution priority: `redis.provider-class` explicit > `client-type=custom` (ServiceLoader auto discovery) > `memory` > explicit `redisson` > legacy `RedisClient3rd` compatibility > default `redisson` |
+| `config.RedisProviderAutoConfig` | Spring auto-configuration (conflicting spring-data-redis dependencies excluded) |
 
 ## 2.3 SQL Script Description
 

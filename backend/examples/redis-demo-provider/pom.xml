@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 独立示例工程：不进产品默认 reactor（根 pom -Pexamples 门控），不出现在任何产品 artifact 与镜像。
+         构建：mvn -Pexamples -pl examples/redis-demo-provider -am package -->
+    <parent>
+        <artifactId>studio</artifactId>
+        <groupId>com.openjiuwen</groupId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>redis-demo-provider</artifactId>
+    <name>redis-demo-provider</name>
+    <packaging>jar</packaging>
+    <description>Redis Provider 接入示例：增强内存后端（真实 TTL / 真实锁竞争 / 日志与延迟注入），演示 ServiceLoader 与 provider-class 两种注入方式</description>
+
+    <properties>
+        <spring-boot.repackage.skip>true</spring-boot.repackage.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.openjiuwen</groupId>
+            <artifactId>studio-redis-spi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openjiuwen</groupId>
+            <artifactId>studio-redis-spi</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.12.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
