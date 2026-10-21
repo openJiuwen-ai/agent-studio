@@ -29,16 +29,18 @@ from openjiuwen.core.common.exception.errors import build_error, ExecutionError
 from jiuwen.common.exception.status_code import StatusCode as JiuWenStatusCode
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.extension.workflow.execution_session_ctx import (
-    current_component_exec,
     get_stream_final_output,
-    reset_component_exec,
-    set_component_exec,
     set_stream_final_output,
 )
 from jiuwen.prompt.agent.common.utils import convert_json_schema
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.foundation.prompt import PromptTemplate
+from openjiuwen.core.session.execution_session_ctx import (
+    current_component_exec,
+    reset_component_exec,
+    set_component_exec,
+)
 from openjiuwen.core.session.stream.base import CustomSchema
 from openjiuwen.core.workflow import WorkflowComponent
 from pydantic import BaseModel, StrictStr, Field, ValidationError
@@ -388,7 +390,7 @@ class LLMChain(WorkflowComponent):
         self, content_chunks, reasoning_content, result_iter, state
     ):
         """消费 LLM 流，分离 content 和 reasoning_content，并收集 usage_metadata"""
-        session, _ = current_component_exec()
+        session, _, _ = current_component_exec()
         node_id = session.get_component_id() if session else ""
         node_name = self._conf.get("name") or node_id
         index = 0
@@ -737,7 +739,7 @@ class LLMChain(WorkflowComponent):
 
     def _get_chat_history(self) -> list[dict]:
         """从 context 获取对话历史"""
-        _, context = current_component_exec()
+        _, context, _ = current_component_exec()
         if not context:
             return []
         try:
@@ -922,7 +924,7 @@ class LLMChain(WorkflowComponent):
             return
 
         memory_msg = inputs.get(MEMORY_MESSAGE) if isinstance(inputs, dict) else None
-        session, _ = current_component_exec()
+        session, _, _ = current_component_exec()
         if memory_msg is None and session:
             memory_msg = session.get_global_state(MEMORY_MESSAGE)
         if memory_msg is None and session:
@@ -993,7 +995,7 @@ class LLMChain(WorkflowComponent):
         ``_insert_memory_message``) is unaffected.
         """
         try:
-            session, _ = current_component_exec()
+            session, _, _ = current_component_exec()
             if not (session and hasattr(session, "get_global_state")):
                 return
             emr = session.get_global_state("enable_memory_retrieve")

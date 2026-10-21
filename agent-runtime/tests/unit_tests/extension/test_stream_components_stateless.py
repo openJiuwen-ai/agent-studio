@@ -45,16 +45,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from openjiuwen.core.session import execution_session_ctx as engine_ctx
 from jiuwen.extension.workflow import execution_session_ctx as ctx
 
 
 @pytest.fixture(autouse=True)
 def _clean_exec_channels():
     """两个执行期 ContextVar 通道进程内共享，用例前后复位避免互相串扰。"""
-    ctx.set_component_exec(None, None)
+    engine_ctx.set_component_exec(None, None)
     ctx.set_stream_final_output(None)
     yield
-    ctx.set_component_exec(None, None)
+    engine_ctx.set_component_exec(None, None)
     ctx.set_stream_final_output(None)
 
 
@@ -474,7 +475,7 @@ class TestComplexIntentDetectionStateless:
         seen = {}
 
         async def _fake_intent(inputs, state, **kwargs):
-            seen["exec"] = ctx.current_component_exec()
+            seen["exec"] = engine_ctx.current_component_exec()
             return {"classificationId": 0}, "branch_0"
 
         comp._get_intent_result = _fake_intent
@@ -482,9 +483,9 @@ class TestComplexIntentDetectionStateless:
 
         result = await comp.invoke({"input": "hi"}, session, context)
 
-        assert seen["exec"] == (session, context)
+        assert seen["exec"][:2] == (session, context)
         assert isinstance(result, dict)
-        assert ctx.current_component_exec() == (None, None)
+        assert engine_ctx.current_component_exec() == (None, None, None)
 
     @pytest.mark.asyncio
     async def test_invoke_resets_component_exec_on_error(self):
@@ -496,7 +497,7 @@ class TestComplexIntentDetectionStateless:
         seen = {}
 
         async def _fail(inputs, state, **kwargs):
-            seen["exec"] = ctx.current_component_exec()
+            seen["exec"] = engine_ctx.current_component_exec()
             raise RuntimeError("boom")
 
         comp._get_intent_result = _fail
@@ -504,8 +505,8 @@ class TestComplexIntentDetectionStateless:
         result = await comp.invoke({"input": "hi"}, session, context)
 
         assert result["error"] == "boom"
-        assert seen["exec"] == (session, context)
-        assert ctx.current_component_exec() == (None, None)
+        assert seen["exec"][:2] == (session, context)
+        assert engine_ctx.current_component_exec() == (None, None, None)
 
     @staticmethod
     def test_resume_read_points_use_component_exec_session(monkeypatch):
@@ -527,12 +528,12 @@ class TestComplexIntentDetectionStateless:
 
         monkeypatch.setattr(cidm, "get_state_info", _fake_get_state_info)
 
-        token = ctx.set_component_exec(session, None)
+        token = engine_ctx.set_component_exec(session, None)
         try:
             assert comp._check_child_workflow_needs_resume() is True
             assert comp._extract_resume_query() == "hello"
         finally:
-            ctx.reset_component_exec(token)
+            engine_ctx.reset_component_exec(token)
 
         assert seen["session"] is session
 
@@ -556,12 +557,12 @@ class TestComplexIntentDetectionStateless:
         get_state_info(wrapper, "workflow_state")["__interactive_input__"] = "hello"
 
         comp = _complex_component()
-        token = ctx.set_component_exec(wrapper, None)
+        token = engine_ctx.set_component_exec(wrapper, None)
         try:
             assert comp._extract_resume_query() == "hello"
             assert comp._check_child_workflow_needs_resume() is False
         finally:
-            ctx.reset_component_exec(token)
+            engine_ctx.reset_component_exec(token)
 
     @pytest.mark.asyncio
     async def test_nested_sub_workflow_invocation_clears_component_exec(self):
@@ -587,7 +588,7 @@ class TestComplexIntentDetectionStateless:
         async def _fake_sub_invoke(
             sub_inputs, sub_session, sub_context, is_resuming=False, **kwargs
         ):
-            seen["exec"] = ctx.current_component_exec()
+            seen["exec"] = engine_ctx.current_component_exec()
             return {"responseContent": "ok"}
 
         sub_workflow = MagicMock()
@@ -597,7 +598,7 @@ class TestComplexIntentDetectionStateless:
             "wf-1": {"instance": sub_workflow, "sub_instance": None, "configs": {}}
         }
 
-        token = ctx.set_component_exec(session, None)
+        token = engine_ctx.set_component_exec(session, None)
         try:
             await comp._invoke_sub_workflow(
                 {"input": "hi"},
@@ -606,11 +607,11 @@ class TestComplexIntentDetectionStateless:
                 ComplexIntentState(),
             )
             # 子执行窗口外：外层组件级值恢复
-            assert ctx.current_component_exec() == (session, None)
+            assert engine_ctx.current_component_exec() == (session, None, None)
         finally:
-            ctx.reset_component_exec(token)
+            engine_ctx.reset_component_exec(token)
 
-        assert seen["exec"] == (None, None)
+        assert seen["exec"] == (None, None, None)
 
 
 # =============================================================================

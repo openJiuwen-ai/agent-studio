@@ -26,17 +26,19 @@ RUN mirror=mirrors.aliyun.com; \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo 'alias ll="ls -alF"' >> /etc/bash.bashrc
 
-# 安装 Python 依赖 + openjiuwen 源码（临时安装编译工具链，编译完成后卸载）
+# 安装 Python 依赖 + openjiuwen 源码（临时安装编译工具链 + git，编译完成后卸载）
+# git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
+# （agent-core 修复分支，见 requirements.txt 注释），装完即卸载不留在镜像里。
 COPY requirements.txt $SERVICE_HOME/app/
 COPY agent-core/ /tmp/agent-core/
-RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev git \
     && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
     && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
     && rm -rf ${PACKAGES_HOME}/future/backports/test \
     && cd /tmp/agent-core && pip3 install . && rm -rf /tmp/agent-core \
-    && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && apt-get remove -y gcc python3-dev git && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 再复制应用代码（变更频率高，放在依赖安装之后）
