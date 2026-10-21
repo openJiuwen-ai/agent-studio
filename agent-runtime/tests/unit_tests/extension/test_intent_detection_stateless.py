@@ -94,6 +94,30 @@ def _session_arg_condition(func):
     return _SessionArgFuncCondition(func)
 
 
+def _downgraded_router_call():
+    """降级模式的等价读侧：清空两级通道后走 ``self._session`` 兜底。
+
+    未含修复的引擎（能力探测降级）其 ``BranchRouter.__call__`` 直接读
+    ``self._session``；本仓 venv 装的是含修复引擎，其解析链第三级
+    （组件级 → workflow 级 → ``self._session``）与之同物——清空前两级
+    通道即等价复现该读路径。
+    """
+    from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+
+    orig_call = BranchRouter.__call__
+
+    async def _downgraded_call(router_self, *args, **kwargs):
+        token_comp = ctx.set_component_exec(None, None)
+        token_wf = ctx.set_workflow_session(None)
+        try:
+            return await orig_call(router_self, *args, **kwargs)
+        finally:
+            ctx.reset_workflow_session(token_wf)
+            ctx.reset_component_exec(token_comp)
+
+    return _downgraded_call
+
+
 class TestIntentDetectionStateless:
     @staticmethod
     def test_no_exec_state_instance_fields():
@@ -152,8 +176,45 @@ class TestIntentDetectionStateless:
         stored = ctx.current_component_exec()
         assert stored[:2] == (session, context)
         assert stored[2] is comp._router
-        # 不再写死共享 router 的 session（读侧改走 ContextVar）
+        # 测试桩非 Session/BaseSession → 降级兼容写入（类型守卫）跳过；
+        # 真实包装器下的兼容写入由
+        # test_router_session_compat_write_feeds_original_read_path 钉住
         assert comp._router._session is None
+
+    @pytest.mark.asyncio
+    async def test_router_session_compat_write_feeds_original_read_path(self):
+        """降级模式路由保真：真实 Session 下兼容写入落 router，兜底读侧可解析。
+
+        能力探测失败时 Patch B 不安装（apply_static_graph_patch 降级分支），
+        workflow 级通道无人写；未含修复引擎的 ``BranchRouter.__call__`` 直接读
+        ``self._session``（唯一写入方 set_session）——组件侧不写则降级模式下
+        路由 session 恒 None，分支条件（ExpressionCondition 需
+        NodeSession.state()）直接失败。本用例以真实 Session 包装器驱动
+        invoke，钉住（1）兼容写入已落（解包到 NodeSession，与原版一致）；
+        （2）兜底读侧（降级等价，见 ``_downgraded_router_call``）经该字段
+        解析出目标分支。
+        """
+        from openjiuwen.core.session import NodeSession, WorkflowSession
+        from openjiuwen.core.session.node import Session
+
+        comp = IntentDetection(_conf())
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+        wf_session = WorkflowSession(workflow_id="wf-compat", session_id="sess-compat")
+        node_session = NodeSession(wf_session, "intent_node")
+        session = Session(node_session, False)
+
+        await comp.invoke({"input": "你好"}, session, MagicMock())
+
+        # set_session 写入端解包：与原版 self._router.set_session(session) 同物
+        assert comp._router._session is node_session
+
+        # 降级等价读侧（通道清空 → self._session 兜底）：条件求值需 NodeSession
+        comp._router.add_branch(
+            _session_arg_condition(lambda s: s is node_session), ["hit"]
+        )
+        assert await _downgraded_router_call()(comp._router) == ["hit"]
 
     @pytest.mark.asyncio
     async def test_routed_intent_full_path_keeps_component_exec(self, monkeypatch):

@@ -54,6 +54,10 @@ class TestStructureAssertions:
         _structure_assertions 对已包装态经包装链最内层校验，仍须等价于
         sub_stream 补丁先行应用。sub_stream 补丁由 ir_converter 的 import
         应用——此处显式 import 保证顺序。
+
+        注：上游分支曾因目标环境引擎 `_compile` 结构变化把本用例标记 skip；
+        本分支依赖已 pin 到含 reentrant compile 的 agent-core 修复分支
+        （requirements.txt），探测恒过，skip 随之移除。
         """
         import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401
 
@@ -277,3 +281,85 @@ class TestApplyAndDowngrade:
 
         # 降级后再次调用不重复告警（幂等守卫）
         assert static_graph_patch.apply_static_graph_patch() is False
+
+    @pytest.mark.asyncio
+    async def test_downgraded_intent_detection_routing_resolves(
+        self, _restore_engine, monkeypatch
+    ):
+        """降级态下意图识别路由可解析：组件兼容写入喂饱兜底读点。
+
+        能力探测失败 → Patch B 不安装（apply_static_graph_patch 降级分支），
+        workflow 级通道无人写；未含修复引擎的 ``BranchRouter.__call__``
+        直接读 ``self._session``（唯一写入方 ``set_session``）——组件 invoke
+        的降级兼容写入保证该字段有值，不写则路由 session=None、分支条件
+        （ExpressionCondition 求值需 NodeSession.state()）直接失败。本仓
+        venv 为含修复引擎，以"清空两级通道"等价复现该兜底读侧（解析链
+        第三级 组件级 → workflow 级 → ``self._session``）。
+        """
+        from unittest.mock import AsyncMock, MagicMock
+
+        from openjiuwen.core.graph.graph import CompiledGraph
+        from openjiuwen.core.session import NodeSession, WorkflowSession
+        from openjiuwen.core.session import execution_session_ctx as engine_ctx
+        from openjiuwen.core.session.node import Session
+        from jiuwen.extension.workflow_node.intent_detection import IntentDetection
+
+        monkeypatch.setattr(
+            static_graph_patch, "_structure_assertions", lambda: ["模拟上游结构变更"]
+        )
+        assert static_graph_patch.apply_static_graph_patch() is False
+        assert static_graph_patch.STATIC_GRAPH_DOWNGRADED is True
+        # 降级态：_invoke 保持原样（Patch B 未包装）；引擎 __call__ 本仓不再
+        # 替换（原 Patch C 已上游化，含修复引擎自带解析链）
+        assert getattr(CompiledGraph._invoke, "__name__", "") != "_invoke_with_session_ctx"
+
+        comp = IntentDetection(
+            {
+                "name": "intent",
+                "branches": [
+                    {"id": "branch_0", "catalog": "其他意图"},
+                    {"id": "branch_1", "catalog": "查天气"},
+                ],
+                "prompt": "test prompt",
+                "enableHistory": False,
+                "enableInput": True,
+                "chatHistoryMaxTurn": 3,
+                "exampleContent": [],
+                "overridable": False,
+            }
+        )
+        comp.get_llm_result = AsyncMock(
+            return_value='{"class": "分类1", "reason": "r"}'
+        )
+        wf_session = WorkflowSession(workflow_id="wf-downgrade", session_id="s-dg")
+        node_session = NodeSession(wf_session, "intent_node")
+
+        await comp.invoke({"input": "你好"}, Session(node_session, False), MagicMock())
+
+        # 兼容写入已落（set_session 解包）→ 清空两级通道后走 self._session
+        # 兜底，条件求值解析出目标分支
+        comp._router.add_branch(
+            _session_arg_condition(lambda s: s is node_session), ["hit"]
+        )
+        token_comp = engine_ctx.set_component_exec(None, None)
+        token_wf = engine_ctx.set_workflow_session(None)
+        try:
+            assert await comp._router() == ["hit"]
+        finally:
+            engine_ctx.reset_workflow_session(token_wf)
+            engine_ctx.reset_component_exec(token_comp)
+
+
+def _session_arg_condition(func):
+    """session 透传条件（测试专用，与 test_intent_detection_stateless 同构）。
+
+    引擎 FuncCondition.invoke 为**无参**调用，条件函数收不到 session；
+    本变体把 session 透传给条件函数，使断言能直接观察解析出的 session 对象。
+    """
+    from openjiuwen.core.workflow.components.condition.condition import FuncCondition
+
+    class _SessionArgFuncCondition(FuncCondition):
+        def invoke(self, inputs, session):
+            return self._func(session)
+
+    return _SessionArgFuncCondition(func)
