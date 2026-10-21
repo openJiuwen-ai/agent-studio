@@ -33,15 +33,15 @@ from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.graph.base import Graph
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session.node import Session
-from openjiuwen.core.workflow.components.component import WorkflowComponent
-from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
-from pydantic import BaseModel, Field, ValidationError
-
-from jiuwen.extension.workflow.execution_session_ctx import (
+from openjiuwen.core.session.execution_session_ctx import (
     current_component_exec,
     reset_component_exec,
     set_component_exec,
 )
+from openjiuwen.core.workflow.components.component import WorkflowComponent
+from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
+from pydantic import BaseModel, Field, ValidationError
+
 from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 
@@ -332,7 +332,7 @@ class ComplexIntentDetection(WorkflowComponent):
 
             # 执行期 session/context 经 ContextVar 通道读取（实例跨执行复用，
             # 不落实例）
-            session, context = current_component_exec()
+            session, context, _ = current_component_exec()
             intent_result = await self._intent_detection.invoke(
                 inputs, session, context, **kwargs
             )
@@ -413,7 +413,7 @@ class ComplexIntentDetection(WorkflowComponent):
 
         # 执行期 session/context 经 ContextVar 通道读取（实例跨执行复用，
         # 不落实例；值为组件面 Session 包装器）
-        session, context = current_component_exec()
+        session, context, _ = current_component_exec()
 
         if workflow_id not in sub_workflows:
             await self._init_sub_workflow(workflow_id, branch_config, sub_workflows)
@@ -460,11 +460,11 @@ class ComplexIntentDetection(WorkflowComponent):
             # 嵌套子执行窗口内组件级通道置空：子工作流经 is_sub 路径 inline await
             # 在本节点 task 内执行，其子图各节点 task 由 TaskExecutorPool.submit
             # 的 asyncio.create_task（graph/pregel/task.py:29）从本节点 task
-            # 派生，会继承组件级值——子图内分支节点的路由解析（Patch C 优先级 1）
+            # 派生，会继承组件级值——子图内分支节点的路由解析（组件级优先级）
             # 若读到本组件 session 即遮蔽子图自身 session（分支条件对错误
             # io_state 求值 → 恒 False → 分支未命中报错）。置空使子图回退到
             # workflow 级解析（与迁移前行为一致），窗口外恢复本组件级值。
-            nested_token = set_component_exec(None, None)
+            nested_token = set_component_exec(None, None, None)
             try:
                 result = await sub_workflow.invoke(
                     sub_inputs, session, context, is_resuming=should_resume, **kwargs
@@ -507,7 +507,7 @@ class ComplexIntentDetection(WorkflowComponent):
         from openjiuwen.core.common.constants.constant import INTERACTIVE_INPUT
 
         # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
-        session, _ = current_component_exec()
+        session, _, _ = current_component_exec()
 
         try:
             session_state = session.get_state() if session else {}
@@ -538,7 +538,7 @@ class ComplexIntentDetection(WorkflowComponent):
         from openjiuwen.core.common.constants.constant import INTERACTIVE_INPUT
 
         # 执行期 session 经 ContextVar 通道读取（实例跨执行复用，不落实例）
-        session, _ = current_component_exec()
+        session, _, _ = current_component_exec()
 
         try:
             if session:

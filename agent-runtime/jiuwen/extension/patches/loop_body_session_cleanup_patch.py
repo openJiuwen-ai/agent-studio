@@ -23,6 +23,15 @@ Loop body session cleanup (jiuwen-side patch, no openjiuwen core edits).
    并复用 get_value_by_nested_path 做路径解析，由本 patch 接管 on_invoke
    整体实现。
 
+   **为何仍接管整体实现**：openjiuwen 的 reentrant-compile 修复
+   (fix/0.1.17.post2-compile-reentrant) 已把 on_invoke 里的
+   ``self._node_id`` / ``self._node_session`` 换成局部变量（并发隔离），
+   但 io_state 仍是引擎原版语义——取 ``_io_state.get_state()`` 后
+   ``set_outputs`` 整棵子树回写，未按 parent_id scope 收窄，也没有
+   ``LOOP_STATE_DIRECT_COMMIT_ENABLED`` 的直提交路径。本 patch 以上游新版
+   on_invoke 为底，仅替换 io_state 处理段；执行期 session 的 ContextVar 通道
+   （``_LOOP_EXEC_SESSION``）由引擎自持，本 patch 原样沿用（不接管该段）。
+
 两个 patch 作用对象不同 (LoopGroup 在外层, AdvancedLoopComponent 在内层),
 各自独立的 _PATCH_APPLIED_* flag, 可按需 apply。
 
@@ -32,18 +41,12 @@ Applied once at import from ir_converter / sub_workflow.
 from __future__ import annotations
 
 import os
-from contextvars import ContextVar
-from typing import Any, Iterable, Optional
+from typing import Iterable
 
-from openjiuwen.core.common.constants.constant import FINISH_INDEX, LOOP_ID
-from openjiuwen.core.common.exception.codes import StatusCode
-from openjiuwen.core.common.exception.errors import BaseError, build_error
+from openjiuwen.core.common.constants.constant import LOOP_ID
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session import BaseSession, NodeSession
 from openjiuwen.core.session.utils import get_value_by_nested_path
-
-# 循环组件执行期状态键（与 openjiuwen loop_comp 的 BROKEN 常量一致）
-_BROKEN_KEY = "_broken"
 
 # --- LoopGroup body round cleanup ---
 _PATCH_APPLIED = False
@@ -154,35 +157,13 @@ _NODE_SESSION_ATTR = "_node_session"
 _IO_STATE_ATTR = "_io_state"
 
 
-# --- AdvancedLoopComponent 执行期状态会话化（静态图复用并发隔离）---
-# 静态图复用后同一 AdvancedLoopComponent 实例被并发执行共享，而引擎把循环
-# 执行期状态放在实例字段上：
-#   - ``self._node_session``：break_loop/is_broken/路由 __call__ 经它读写
-#     ``_broken`` 退出标志；``_condition_invoke`` 经它读写 INDEX；
-#   - ``self._post_body._finish_index``：轮次完成计数。
-# 并发会话互相覆盖：A 的 break 写进「最后进入循环的会话」的 session、B 的
-# is_broken 恒读 False → 循环不退出 → 循环体重跑 → 体内子工作流二次执行
-# （中断恢复场景下 QA 节点以 END 状态重入并重复提问，10 并发复现）。
-# 修复：执行期 session 经 ContextVar 通道按任务解析（on_invoke 设置/复位），
-# ``_broken`` / ``finish_index`` 一律读写该 session 的 state，不再落共享实例；
-# 无执行期上下文（引擎不派生任务等）时回退实例字段，保持旧行为。
-_LOOP_EXEC_SESSION: ContextVar[Optional[BaseSession]] = ContextVar(
-    "jiuwen_loop_exec_session", default=None
-)
-_PATCH_EXEC_STATE_APPLIED = False
+def _advanced_loop_on_invoke_prelude(self, session: BaseSession) -> tuple:
+    """io_state 清理段（引擎原版逻辑的 runtime 变体）。返回 (node_id, io_key)。
 
-
-def _resolve_loop_session(component: Any) -> Optional[BaseSession]:
-    """按执行期上下文解析循环组件当前执行的 session（无上下文回退实例字段）。"""
-    session = _LOOP_EXEC_SESSION.get()
-    if session is not None:
-        return session
-    return getattr(component, _NODE_SESSION_ATTR, None)
-
-
-async def _patched_advanced_loop_on_invoke(
-    self, inputs: Input, session: BaseSession, **kwargs
-) -> Output:
+    与引擎原版的差异：按 parent_id scope 收窄取值（get_value_by_nested_path），
+    并在 ``LOOP_STATE_DIRECT_COMMIT_ENABLED`` 下走 update_by_id_and_commit
+    直提交路径（staged 写不跨 session 对象切换保留）。
+    """
     loop_session = session
     loop_state = loop_session.state()
     node_id = loop_session.node_id()
@@ -221,17 +202,40 @@ async def _patched_advanced_loop_on_invoke(
         loop_state.set_outputs(state)
         loop_state.commit()
 
+    return node_id, node_session, io_key, io_state
+
+
+async def _patched_advanced_loop_on_invoke(
+    self, inputs: Input, session: BaseSession, **kwargs
+) -> Output:
+    """以上游新版 on_invoke 为底，io_state 段换成 runtime scope 变体。
+
+    上游新版已把 node_id / node_session 局部化（并发下不被其他执行覆写），
+    本 patch 保留该点；执行期 session 的 ContextVar 通道沿用引擎自持的
+    ``_LOOP_EXEC_SESSION``（set/reset 原样保留）。
+    """
+    loop_session = session
+    node_id, node_session, io_key, io_state = _advanced_loop_on_invoke_prelude(
+        self, loop_session
+    )
+
     if loop_session.tracer() is not None:
         loop_session.tracer().register_workflow_span_manager(loop_session.executable_id())
     # 执行期 session 上通道：本次循环执行的 break/轮次计数解析到本会话
     # （并发执行各自任务上下文内可见；finally 复位防泄漏到同任务后续代码）
-    token = _LOOP_EXEC_SESSION.set(node_session)
+    from openjiuwen.core.workflow.components.flow.loop import (  # pylint: disable=import-outside-toplevel
+        loop_comp as engine_loop_comp,
+    )
+
+    # 补丁的接管点即该引擎私有 ContextVar，无公开等价入口
+    exec_session_channel = engine_loop_comp._LOOP_EXEC_SESSION  # pylint: disable=protected-access
+    token = exec_session_channel.set(node_session)
     try:
         # 上游内部图对象无公开访问入口，本补丁须沿用其既有编译路径
         compiled = self._graph.compile(loop_session, **kwargs)  # pylint: disable=protected-access
         await compiled.invoke(inputs, loop_session)
     finally:
-        _LOOP_EXEC_SESSION.reset(token)
+        exec_session_channel.reset(token)
     result = node_session.state().get_outputs(node_id)
     if _LOOP_STATE_DIRECT_COMMIT_ENABLED:
         io_state.update_by_id_and_commit(io_key, {io_key: None})
@@ -240,118 +244,16 @@ async def _patched_advanced_loop_on_invoke(
     return result
 
 
-def _patched_advanced_loop_is_broken(self) -> bool:
-    """退出标志按执行期 session 读取（不再读共享实例上的 session）。"""
-    session = _resolve_loop_session(self)
-    if session is None:
-        return False
-    value = session.state().get(_BROKEN_KEY)
-    return value if isinstance(value, bool) else False
-
-
-def _patched_advanced_loop_break(self) -> None:
-    """退出标志写入执行期 session 并提交（未提交的 staged 写会随 session
-    对象切换丢失，并发下 break 标志须落盘）。"""
-    session = _resolve_loop_session(self)
-    if session is None:
-        return
-    session.state().update({_BROKEN_KEY: True})
-    session.state().commit()
-
-
-def _patched_advanced_loop_call(self, *args, **kwargs) -> list[str]:
-    """条件路由：用执行期 session 驱动条件判定（原实现取共享实例字段）。"""
-    return self.atomic_invoke(session=_resolve_loop_session(self))
-
-
-def _patched_advanced_loop_atomic_invoke(self, **kwargs) -> Any:
-    """条件判定入口：尊重调用方传入的 session（原实现强制 self._node_session）。"""
-    session = kwargs.get("session") or _resolve_loop_session(self)
-    try:
-        # 条件判定是上游私有方法，本补丁的接管点即它，无公开等价入口
-        return self._condition_invoke(session=session)  # pylint: disable=protected-access
-    except Exception as e:
-        if isinstance(e, BaseError):
-            raise
-        raise build_error(
-            StatusCode.COMPONENT_LOOP_CONDITION_EXECUTION_ERROR,
-            reason=str(e),
-            # 错误上下文需带节点标识，该标识只存在于上游私有字段
-            comp=self._node_id,  # pylint: disable=protected-access
-            cause=e,
-        ) from e
-
-
-async def _patched_post_body_on_invoke(
-    self, inputs: Input, session: BaseSession, **kwargs
-) -> Output:
-    """轮次计数写执行期 session（原实现读共享实例字段再自增，跨会话串值）。"""
-    loop_session = _LOOP_EXEC_SESSION.get()
-    state = loop_session.state() if loop_session is not None else session.state()
-    finish_index = state.get(FINISH_INDEX)
-    if not isinstance(finish_index, int):
-        finish_index = -1
-    finish_index += 1
-    state.update({FINISH_INDEX: finish_index})
-    state.commit()
-    return None
-
-
-def _patched_post_body_get_finish_index(self) -> int:
-    loop_session = _LOOP_EXEC_SESSION.get()
-    if loop_session is None:
-        # 无执行期会话时回退上游私有字段，保持引擎原有取值行为
-        return self._finish_index  # pylint: disable=protected-access
-    value = loop_session.state().get(FINISH_INDEX)
-    return value if isinstance(value, int) else -1
-
-
-def _patched_post_body_set_finish_index(self, finish_index: int) -> None:
-    loop_session = _LOOP_EXEC_SESSION.get()
-    if loop_session is None:
-        # 无执行期会话时回退上游私有字段，保持引擎原有写入行为
-        self._finish_index = finish_index  # pylint: disable=protected-access
-        return
-    loop_session.state().update({FINISH_INDEX: finish_index})
-    loop_session.state().commit()
-
-
-def apply_loop_exec_state_isolation_patch() -> bool:
-    """Patch AdvancedLoopComponent/PostLoopBody 执行期状态为按会话解析。"""
-    global _PATCH_EXEC_STATE_APPLIED
-    if _PATCH_EXEC_STATE_APPLIED:
-        return False
-
-    from openjiuwen.core.workflow.components.flow.loop.loop_comp import (
-        AdvancedLoopComponent,
-        PostLoopBody,
-    )
-
-    AdvancedLoopComponent.is_broken = _patched_advanced_loop_is_broken
-    AdvancedLoopComponent.break_loop = _patched_advanced_loop_break
-    AdvancedLoopComponent.__call__ = _patched_advanced_loop_call
-    # 补丁的接管点即该私有方法本身，上游未提供公开的替换入口
-    AdvancedLoopComponent._atomic_invoke = _patched_advanced_loop_atomic_invoke  # pylint: disable=protected-access
-    PostLoopBody.on_invoke = _patched_post_body_on_invoke
-    PostLoopBody.get_finish_index = _patched_post_body_get_finish_index
-    PostLoopBody.set_finish_index = _patched_post_body_set_finish_index
-
-    _PATCH_EXEC_STATE_APPLIED = True
-    return True
-
-
 def apply_loop_state_cleanup_patch() -> bool:
     """Patch AdvancedLoopComponent.on_invoke to reset per-round io_state."""
     global _PATCH_STATE_APPLIED, _orig_advanced_loop_on_invoke
     if _PATCH_STATE_APPLIED:
         return False
 
-    from openjiuwen.core.workflow.components.flow.loop.loop_comp import (
-        AdvancedLoopComponent,
-    )
+    from openjiuwen.core.workflow.components.flow.loop import loop_comp
 
-    _orig_advanced_loop_on_invoke = AdvancedLoopComponent.on_invoke
-    AdvancedLoopComponent.on_invoke = _patched_advanced_loop_on_invoke
+    _orig_advanced_loop_on_invoke = loop_comp.AdvancedLoopComponent.on_invoke
+    loop_comp.AdvancedLoopComponent.on_invoke = _patched_advanced_loop_on_invoke
 
     _PATCH_STATE_APPLIED = True
     return True

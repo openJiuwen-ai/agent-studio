@@ -4,9 +4,11 @@
 from unittest.mock import MagicMock
 
 import pytest
+from openjiuwen.core.common.exception.errors import BaseError
+from openjiuwen.core.session import execution_session_ctx as _engine_ctx
+
 from jiuwen.extension.workflow import execution_session_ctx as _exec_ctx
 from jiuwen.extension.workflow_node.llm_chain import LLMChain
-from openjiuwen.core.common.exception.errors import BaseError
 
 
 def _set_context(context):
@@ -15,16 +17,16 @@ def _set_context(context):
     组件实例跨执行复用后不再持有执行期 session/context（issue #1555 / Task 11），
     测试改经 Task 1 的 component_exec 通道注入。
     """
-    _exec_ctx.set_component_exec(None, context)
+    _engine_ctx.set_component_exec(None, context)
 
 
 @pytest.fixture(autouse=True)
 def _clean_exec_channels():
     """component_exec / stream_final_output 通道进程内共享，用例前后复位避免串扰。"""
-    _exec_ctx.set_component_exec(None, None)
+    _engine_ctx.set_component_exec(None, None)
     _exec_ctx.set_stream_final_output(None)
     yield
-    _exec_ctx.set_component_exec(None, None)
+    _engine_ctx.set_component_exec(None, None)
     _exec_ctx.set_stream_final_output(None)
 
 

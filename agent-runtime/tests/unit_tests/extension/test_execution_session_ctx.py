@@ -1,37 +1,17 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-"""execution_session_ctx：执行期 session 的 ContextVar 通道单测。
+"""execution_session_ctx：studio 侧执行期状态 ContextVar 通道单测。
 
-三个通道的写入/读取/隔离语义（模块 docstring 详述"谁写谁读"），
-以及 resolve_routing_session 的三层解析顺序（Patch C 语义）。
+执行期 session/context 通道已归上游（``openjiuwen.core.session.
+execution_session_ctx``），本模块只保留 studio 专用通道，故此处只钉这两个：
+
+- ``_stream_final_output``：流式末帧输出，**不 reset**（引擎
+  ``Vertex._post_stream`` 在 generator 耗尽后读取）；
+- ``_component_state``：组件执行期状态对象，set + token 式 reset。
 """
 import pytest
 
 from jiuwen.extension.workflow import execution_session_ctx as ctx
-
-
-class TestWorkflowSessionChannel:
-    @staticmethod
-    def test_set_and_reset():
-        sentinel = object()
-        token = ctx.set_workflow_session(sentinel)
-        assert ctx.current_workflow_session() is sentinel
-        ctx.reset_workflow_session(token)
-        assert ctx.current_workflow_session() is None
-
-    @staticmethod
-    def test_default_is_none():
-        assert ctx.current_workflow_session() is None
-
-
-class TestComponentExecChannel:
-    @staticmethod
-    def test_set_and_reset():
-        s, c = object(), object()
-        token = ctx.set_component_exec(s, c)
-        assert ctx.current_component_exec() == (s, c)
-        ctx.reset_component_exec(token)
-        assert ctx.current_component_exec() == (None, None)
 
 
 class TestStreamFinalOutputChannel:
@@ -44,24 +24,15 @@ class TestStreamFinalOutputChannel:
         assert ctx.get_stream_final_output() is None
 
 
-class TestResolveRoutingSession:
+class TestComponentStateChannel:
     @staticmethod
-    def test_priority_component_over_workflow_over_fallback():
-        component_s, workflow_s, fallback_s = object(), object(), object()
+    def test_set_and_reset():
+        state = object()
+        token = ctx.set_component_state(state)
+        assert ctx.current_component_state() is state
+        ctx.reset_component_state(token)
+        assert ctx.current_component_state() is None
 
-        # 仅 fallback
-        assert ctx.resolve_routing_session(fallback_s) is fallback_s
-
-        # + workflow 层
-        t1 = ctx.set_workflow_session(workflow_s)
-        assert ctx.resolve_routing_session(fallback_s) is workflow_s
-
-        # + component 层（最高优先级）
-        t2 = ctx.set_component_exec(component_s, None)
-        assert ctx.resolve_routing_session(fallback_s) is component_s
-
-        # 逐层退栈
-        ctx.reset_component_exec(t2)
-        assert ctx.resolve_routing_session(fallback_s) is workflow_s
-        ctx.reset_workflow_session(t1)
-        assert ctx.resolve_routing_session(fallback_s) is fallback_s
+    @staticmethod
+    def test_default_is_none():
+        assert ctx.current_component_state() is None
