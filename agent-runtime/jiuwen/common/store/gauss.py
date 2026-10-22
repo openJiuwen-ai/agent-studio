@@ -65,35 +65,38 @@ class DBUtil:
         """
         get cursor of table
         Args:
-            retry_times:
+            retry_times: 当前已重试次数，由调用方重试循环传入，仅用于决定日志级别
             max_retry_times:
         Returns:
 
         """
         con = None
         cursor = None
+        committed = False
         try:
             # psycopg2 连接池的公开接口为 getconn/putconn，原 get_connection 并不存在
             con = cls.ctx_pool.getconn()
             cursor = con.cursor()
             yield cursor
             con.commit()
+            committed = True
         except psycopg2.OperationalError:
-            if retry_times < max_retry_times:
-                return
-            logger.error(
-                "psycopg2.OperationalError: %s"
-                % str(StatusCode.DATABASE_EXECUTE_ERROR),
-                exc_info=True,
-            )
+            # 注意：@contextmanager 生成器在 yield 之前 return 会抛
+            # RuntimeError: generator didn't yield，掩盖真实异常并使外层重试失效，
+            # 因此所有异常分支必须 re-raise，由调用方捕获后重试
+            if retry_times >= max_retry_times:
+                logger.error(
+                    "psycopg2.OperationalError: %s"
+                    % str(StatusCode.DATABASE_EXECUTE_ERROR),
+                    exc_info=True,
+                )
             raise
         except psycopg2.Error:
-            if retry_times < max_retry_times:
-                return
-            logger.error(
-                "execute sql error: %s" % str(StatusCode.DATABASE_EXECUTE_ERROR),
-                exc_info=True,
-            )
+            if retry_times >= max_retry_times:
+                logger.error(
+                    "execute sql error: %s" % str(StatusCode.DATABASE_EXECUTE_ERROR),
+                    exc_info=True,
+                )
             raise
         except Exception:
             logger.error("get_cursor unknown error", exc_info=True)
@@ -103,6 +106,16 @@ class DBUtil:
                 cursor.close()
             # 连接获取失败时 con 为 None，归还 None 会掩盖原始异常
             if con is not None:
+                # psycopg2 连接池不会自动回滚，异常路径必须回滚，
+                # 否则 aborted 事务状态的连接被复用导致后续 SQL 持续失败
+                if not committed:
+                    try:
+                        con.rollback()
+                    except Exception:
+                        logger.warning(
+                            "rollback failed before returning connection",
+                            exc_info=True,
+                        )
                 cls.ctx_pool.putconn(con)
 
     @classmethod
@@ -111,8 +124,14 @@ class DBUtil:
         多语句批量执行，每个对应args_list中的一组positional arguments
         """
         for times in range(3):
-            with cls.get_cursor(times) as cur:
-                return execute_values(cur, sql, args_list, fetch=fetch)
+            try:
+                with cls.get_cursor(times) as cur:
+                    return execute_values(cur, sql, args_list, fetch=fetch)
+            except psycopg2.Error:
+                # get_cursor 现在正确抛出原始异常（不再 RuntimeError 掩盖），
+                # 重试逻辑在此实现；psycopg2.OperationalError 是 psycopg2.Error 子类，一并重试
+                if times >= 2:
+                    raise
 
     @classmethod
     def execute(cls, sql, args):
@@ -120,8 +139,12 @@ class DBUtil:
         单语句执行，无返回值
         """
         for times in range(3):
-            with cls.get_cursor(times) as cur:
-                return cur.execute(sql, args)
+            try:
+                with cls.get_cursor(times) as cur:
+                    return cur.execute(sql, args)
+            except psycopg2.Error:
+                if times >= 2:
+                    raise
 
     @classmethod
     def query(cls, sql, args=None):
@@ -129,10 +152,14 @@ class DBUtil:
         单语句查询，有返回值
         """
         for times in range(3):
-            with cls.get_cursor(times) as cur:
-                cur.execute(sql, args)
-                rows = cur.fetchall()
-                return rows
+            try:
+                with cls.get_cursor(times) as cur:
+                    cur.execute(sql, args)
+                    rows = cur.fetchall()
+                    return rows
+            except psycopg2.Error:
+                if times >= 2:
+                    raise
 
     @classmethod
     def query_return_cols(cls, sql, args=None):
@@ -140,10 +167,14 @@ class DBUtil:
         单语句查询，返回值和列名
         """
         for times in range(3):
-            with cls.get_cursor(times) as cur:
-                cur.execute(sql, args)
-                rows = cur.fetchall()
-                return rows, [desc[0] for desc in cur.description]
+            try:
+                with cls.get_cursor(times) as cur:
+                    cur.execute(sql, args)
+                    rows = cur.fetchall()
+                    return rows, [desc[0] for desc in cur.description]
+            except psycopg2.Error:
+                if times >= 2:
+                    raise
 
     @classmethod
     def delete(cls, sql, args):
@@ -151,6 +182,10 @@ class DBUtil:
         执行删除操作，返回被删除的行数
         """
         for times in range(3):
-            with cls.get_cursor(times) as cur:
-                cur.execute(sql, args)
-                return cur.rowcount
+            try:
+                with cls.get_cursor(times) as cur:
+                    cur.execute(sql, args)
+                    return cur.rowcount
+            except psycopg2.Error:
+                if times >= 2:
+                    raise
