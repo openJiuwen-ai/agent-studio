@@ -301,8 +301,12 @@ class ModelWrapper:
             data = usage_metadata.model_dump()
             data["errmsg"] = data.pop("err_msg", "")
             data["requests_start_time"] = data.pop("request_start_time", "")
-            data.pop("cache_tokens", None)
             usage_metadata = UsageMetadata(**data)
+            # core 侧 finish_reason 在消息顶层，jiuwen 约定放 usage_metadata 内
+            # （OTel 载荷按此取）；空值与占位值 "null" 不覆盖默认值
+            core_finish_reason = getattr(model_response, "finish_reason", "") or ""
+            if core_finish_reason and core_finish_reason != "null":
+                usage_metadata.finish_reason = core_finish_reason
 
         convert_dict = {"content": model_response.content}
         if usage_metadata is not None:

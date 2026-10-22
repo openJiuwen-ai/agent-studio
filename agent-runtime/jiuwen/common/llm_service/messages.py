@@ -43,6 +43,13 @@ class UsageMetadata(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    # 与 openjiuwen core 模型层 UsageMetadata 对齐：成本 / 缓存 / 思考量此前在
+    # model_wrapper 转换处被 pydantic 默认忽略丢弃，OTel 双写桥拿不到这些数据
+    cache_tokens: int = 0
+    reasoning_tokens: int = 0
+    input_cost: float = 0.0
+    output_cost: float = 0.0
+    total_cost: float = 0.0
 
 
 class BaseMessage(BaseModel):
