@@ -305,6 +305,21 @@ async def lifespan(_app: FastAPI):
                 )
             else:
                 logger.error(f"Failed to register sandbox SysOperation: {sandbox_res}")
+    else:
+        if settings.code_execution.allow_local_exec:
+            logger.warning(
+                "SECURITY_SANDBOX_SERVER is not configured. "
+                "Code nodes will execute locally (ALLOW_LOCAL_CODE_EXEC=true). "
+                "⚠️ This is insecure for public/untrusted networks. "
+                "Configure SECURITY_SANDBOX_SERVER for production deployments."
+            )
+        else:
+            logger.warning(
+                "SECURITY_SANDBOX_SERVER is not configured and "
+                "ALLOW_LOCAL_CODE_EXEC=false. "
+                "Code nodes will refuse to execute until sandbox is configured "
+                "or ALLOW_LOCAL_CODE_EXEC=true is set for trusted networks."
+            )
 
     if settings.server.docs_enabled:
         from agent_runtime.serve.openapi_archiver import archive_openapi_docs

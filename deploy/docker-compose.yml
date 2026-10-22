@@ -292,11 +292,17 @@ services:
       TLS_CERT_KEY_PASSWD: ${TLS_CERT_KEY_PASSWD:-}
       TLS_CERT_KEY_PATH: /opt/cloud/agent-runtime/tls/key.pem
       TLS_CERT_PATH: /opt/cloud/agent-runtime/tls/cert.pem
+      # 沙箱服务地址（生产环境必填，配置后启用沙箱隔离执行）
+      # ⚠️ 未配置时代码节点将拒绝执行，需设 ALLOW_LOCAL_CODE_EXEC=true 才能走本地（不安全）
       SECURITY_SANDBOX_SERVER: ${SECURITY_SANDBOX_SERVER:-}
       SECURITY_SANDBOX_SSL_VERIFY: ${SECURITY_SANDBOX_SSL_VERIFY:-false}
       SECURITY_SANDBOX_IDLE_TTL: ${SECURITY_SANDBOX_IDLE_TTL:-600}
       SECURITY_SANDBOX_TIMEOUT: ${SECURITY_SANDBOX_TIMEOUT:-900}
       SECURITY_SANDBOX_SCOPE: ${SECURITY_SANDBOX_SCOPE:-system}
+      # 代码黑名单关键字
+      CODE_BLACK_LIST: ${CODE_BLACK_LIST:-subprocess,os.system,os.popen,os.exec,os.spawn,os.fork,os.kill,os.remove,os.unlink,os.rmdir,os.rename,os.chmod,os.chown,__import__,importlib,ctypes,socket,shutil,multiprocessing}
+      # 是否允许本地代码执行（默认 false，仅限可信内网设为 true）
+      ALLOW_LOCAL_CODE_EXEC: ${ALLOW_LOCAL_CODE_EXEC:-false}
       OPENSEARCH_HOSTS: ${OPENSEARCH_HOSTS:-}
       OPENSEARCH_USERNAME: ${OPENSEARCH_USERNAME:-admin}
       OPENSEARCH_PASSWORD: ${OPENSEARCH_PASSWORD:-admin}
