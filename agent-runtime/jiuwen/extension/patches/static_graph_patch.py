@@ -2,7 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """静态图复用 patch（仅剩 Patch B，issue #1555 / spec 2026-10-12 §4）。
 
-openjiuwen 自 `fix/0.1.17.post2-compile-reentrant`（commit f58a5e29）起，
+openjiuwen 自 `fix/0.1.17.post2-compile-reentrant`（commit 01e4fa0c）起，
 引擎侧已原生提供"编译纯函数化 + 执行期状态 ContextVar 化"：
 
 - ``PregelGraph.compile`` 每次执行全新 Vertex 壳 / Pregel / channels /
