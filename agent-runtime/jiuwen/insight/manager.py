@@ -49,6 +49,7 @@ class TraceManager(
         parent_invoke_id: Optional[str] = None,
         instance_info: Optional[dict] = None,
         openjiuwen_tracer=None,
+        agent_identity: Optional[dict] = None,
         **kwargs,
     ) -> None:
         """Initialize"""
@@ -62,6 +63,12 @@ class TraceManager(
         self._oj_tracer = openjiuwen_tracer
         self._oj_span_map: Dict[str, Any] = {}  # invoke_id -> TraceAgentSpan
         self._oj_root_span = None
+        # 执行身份（扁平 agent_id/agent_name/agent_description），由所属 agent
+        # 显式提供；转发 openjiuwen 事件时注入 instance_info，handler 以
+        # agent_name 优先于 class_name 盖 gen_ai.agent.name
+        self._oj_agent_identity: Optional[Dict[str, Any]] = (
+            dict(agent_identity) if agent_identity else None
+        )
         if openjiuwen_tracer is not None:
             self._oj_init_root_span()
 
@@ -135,6 +142,11 @@ class TraceManager(
         safe_instance_info = instance_info or {}
         if "class_name" not in safe_instance_info:
             safe_instance_info = {**safe_instance_info, "class_name": "unknown"}
+        # 注入所属 agent 的扁平身份键；payload 已有的键优先（与 handler 的
+        # payload 优先语义一致），LLM manager 的 class_name（如 "Model"）仅作
+        # 模型属性，不再被当作 agent 名
+        if self._oj_agent_identity:
+            safe_instance_info = {**self._oj_agent_identity, **safe_instance_info}
         # 将 inputs 包装为 {"inputs": 原始inputs, "params": kwargs相关信息}
         formatted_inputs = {"inputs": inputs}
         if kwargs:
@@ -166,6 +178,24 @@ class TraceManager(
             await self._oj_trigger(event_name, span=span, error=error, **kwargs)
             self._oj_cleanup_span(invoke_id)
 
+    @property
+    def oj_agent_identity(self) -> Optional[Dict[str, Any]]:
+        """当前携带的 openjiuwen 双写执行身份（未携带时为 None）。
+
+        只读视图，供同类实例间继承读取（避免类外触碰保护成员）。
+        """
+        return self._oj_agent_identity
+
+    def inherit_oj_agent_identity(self, source: "TraceManager") -> None:
+        """从 source 继承 openjiuwen 双写执行身份（带守卫）。
+
+        自身已携带身份时不覆盖：多智能体成员根 manager 自带成员身份，
+        不得被 controller 链 trace_handlers 的身份盖回。
+        """
+        source_identity = source.oj_agent_identity
+        if source_identity and not self._oj_agent_identity:
+            self._oj_agent_identity = source_identity
+
     # ── 公共方法 ────────────────────────────────────────────
 
     @classmethod
@@ -174,9 +204,12 @@ class TraceManager(
         trace_handlers: Optional["TraceManager"] = None,
         instance_info: Optional[dict] = None,
         session=None,
+        agent_identity: Optional[dict] = None,
     ) -> "TraceManager":
         """Return a trace handlers manager"""
-        return _generate_manager(cls, trace_handlers, instance_info, session)
+        return _generate_manager(
+            cls, trace_handlers, instance_info, session, agent_identity
+        )
 
     def add_trace_handler(self, trace_handler: BaseDataHandler) -> None:
         """Add a trace handler to the manager"""
@@ -494,11 +527,13 @@ def _generate_manager(
     trace_handlers: Trace = None,
     instance_info: Optional[dict] = None,
     session=None,
+    agent_identity: Optional[dict] = None,
 ) -> TraceManager:
     """Return a trace manager"""
     trace_manager = trace_manager_cls(
         trace_handlers=[], instance_info=instance_info,
         openjiuwen_tracer=session._inner.tracer() if session else None,
+        agent_identity=agent_identity,
     )
     if trace_handlers:
         if isinstance(trace_handlers, list) or trace_handlers is None:
@@ -513,6 +548,8 @@ def _generate_manager(
                 trace_manager._oj_tracer = trace_handlers._oj_tracer
                 trace_manager._oj_span_map = trace_handlers._oj_span_map
                 trace_manager._oj_root_span = trace_handlers._oj_root_span
+            # 继承执行身份（守卫在方法内：自身已有身份不覆盖）
+            trace_manager.inherit_oj_agent_identity(trace_handlers)
     return trace_manager
 
 
@@ -524,9 +561,10 @@ def get_child_manager(parent_manager: TraceManager, name: str = None) -> TraceMa
     for trace_handler in parent_manager.trace_handlers:
         manager.add_trace_handler(trace_handler)
 
-    # 继承 openjiuwen 双写状态：共享 tracer、span_map、root_span
+    # 继承 openjiuwen 双写状态：共享 tracer、span_map、root_span、执行身份
     manager._oj_tracer = parent_manager._oj_tracer
     manager._oj_span_map = parent_manager._oj_span_map
     manager._oj_root_span = parent_manager._oj_root_span
+    manager.inherit_oj_agent_identity(parent_manager)
 
     return manager
