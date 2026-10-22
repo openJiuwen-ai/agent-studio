@@ -98,6 +98,24 @@ def get_instance_info(instance: object, blacklist: List[str] = None) -> dict:
     return {"class_name": class_name, "instance_attributes": instance_attributes}
 
 
+def get_agent_identity(agent: Any) -> Union[Dict[str, str], None]:
+    """Extract the executing agent's flat identity for openjiuwen telemetry spans.
+
+    Name / description come from AgentMetaData (e.g. the studio app's real
+    display name like "天气预测"), falling back to the agent id. Returns None
+    when the agent carries no id so callers skip identity injection entirely.
+    """
+    agent_id = getattr(agent, "agent_id", None)
+    if not agent_id:
+        return None
+    metadata = getattr(getattr(agent, "agent_config", None), "metadata", None)
+    return {
+        "agent_id": str(agent_id),
+        "agent_name": str(getattr(metadata, "name", None) or agent_id),
+        "agent_description": str(getattr(metadata, "description", None) or ""),
+    }
+
+
 def get_elapsed_time(invoke: Any) -> str:
     """get elapsed time"""
     elapsed_time = invoke.end_time - invoke.start_time
