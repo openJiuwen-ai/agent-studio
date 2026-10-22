@@ -144,6 +144,7 @@ export class ImportSkillModalComponent {
     if (this.selectedFile) {
       this.selectedFile = undefined;
     }
+    this.fileList = [];
     this.isShowResult = false;
     this.skillInfo = { name: '', description: '' };
   }
