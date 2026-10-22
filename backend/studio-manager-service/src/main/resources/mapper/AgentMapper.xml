@@ -974,4 +974,25 @@
         SET memory_config = NULL
         WHERE agent_id = #{agentId}
     </update>
+
+    <select id="selectAllActiveAgents" resultMap="BaseResultMap">
+        SELECT agent_id, project_id, workspace_id, name, description, status, type, sub_type,
+               scheduling_mode, model_name, model_type, model, plan_model_name,
+               creator, creator_id, created_on, updated_on, published_on
+        FROM t_agent
+        WHERE deleted = false
+    </select>
+
+    <select id="selectInventoryStat" resultType="map">
+        SELECT COUNT(*) AS agentCount, MAX(updated_on) AS maxUpdatedOn
+        FROM t_agent
+        WHERE deleted = false
+    </select>
+
+    <select id="selectResourceBindingCounts" resultType="map">
+        SELECT app_id AS agentId, resource_type AS resourceType, COUNT(*) AS cnt
+        FROM t_mapping
+        WHERE app_version IS NULL
+        GROUP BY app_id, resource_type
+    </select>
 </mapper>
