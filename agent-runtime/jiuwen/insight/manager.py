@@ -178,6 +178,24 @@ class TraceManager(
             await self._oj_trigger(event_name, span=span, error=error, **kwargs)
             self._oj_cleanup_span(invoke_id)
 
+    @property
+    def oj_agent_identity(self) -> Optional[Dict[str, Any]]:
+        """当前携带的 openjiuwen 双写执行身份（未携带时为 None）。
+
+        只读视图，供同类实例间继承读取（避免类外触碰保护成员）。
+        """
+        return self._oj_agent_identity
+
+    def inherit_oj_agent_identity(self, source: "TraceManager") -> None:
+        """从 source 继承 openjiuwen 双写执行身份（带守卫）。
+
+        自身已携带身份时不覆盖：多智能体成员根 manager 自带成员身份，
+        不得被 controller 链 trace_handlers 的身份盖回。
+        """
+        source_identity = source.oj_agent_identity
+        if source_identity and not self._oj_agent_identity:
+            self._oj_agent_identity = source_identity
+
     # ── 公共方法 ────────────────────────────────────────────
 
     @classmethod
@@ -530,13 +548,8 @@ def _generate_manager(
                 trace_manager._oj_tracer = trace_handlers._oj_tracer
                 trace_manager._oj_span_map = trace_handlers._oj_span_map
                 trace_manager._oj_root_span = trace_handlers._oj_root_span
-            # 继承执行身份：仅当新 manager 未显式携带身份（成员根 manager 自带
-            # 成员身份，不得被 controller 链 trace_handlers 的身份覆盖）
-            if (
-                trace_handlers._oj_agent_identity
-                and not trace_manager._oj_agent_identity
-            ):
-                trace_manager._oj_agent_identity = trace_handlers._oj_agent_identity
+            # 继承执行身份（守卫在方法内：自身已有身份不覆盖）
+            trace_manager.inherit_oj_agent_identity(trace_handlers)
     return trace_manager
 
 
@@ -552,6 +565,6 @@ def get_child_manager(parent_manager: TraceManager, name: str = None) -> TraceMa
     manager._oj_tracer = parent_manager._oj_tracer
     manager._oj_span_map = parent_manager._oj_span_map
     manager._oj_root_span = parent_manager._oj_root_span
-    manager._oj_agent_identity = parent_manager._oj_agent_identity
+    manager.inherit_oj_agent_identity(parent_manager)
 
     return manager

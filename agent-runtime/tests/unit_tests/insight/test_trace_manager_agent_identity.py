@@ -24,6 +24,11 @@ WEATHER_IDENTITY = {
     "agent_description": "提供未来七日天气预报",
 }
 
+CONTROLLER_IDENTITY = {
+    "agent_id": "controller",
+    "agent_name": "控制器",
+}
+
 
 class _FakeSpan:
     def __init__(self):
@@ -34,14 +39,17 @@ class _FakeSpan:
 class _FakeSpanManager:
     last_span = None
 
-    def create_agent_span(self, parent):
+    @staticmethod
+    def create_agent_span(parent):
         return _FakeSpan()
 
-    def update_span(self, span, data):
+    @staticmethod
+    def update_span(span, data):
         for key, value in data.items():
             setattr(span, key, value)
 
-    def refresh_span_record(self, *args, **kwargs):
+    @staticmethod
+    def refresh_span_record(*args, **kwargs):
         pass
 
 
@@ -72,6 +80,10 @@ def _make_manager(**kwargs):
     return manager, tracer
 
 
+def _last_forwarded_info(tracer):
+    return tracer.events[-1][1]["instance_info"]
+
+
 class TestIdentityInjection:
     @pytest.mark.asyncio
     async def test_start_events_carry_flat_identity(self):
@@ -99,7 +111,7 @@ class TestIdentityInjection:
 
         await manager.on_llm_start({"inputs": "hi"})
 
-        info = tracer.events[-1][1]["instance_info"]
+        info = _last_forwarded_info(tracer)
         assert info["agent_name"] == "payload-name"
 
     @pytest.mark.asyncio
@@ -109,23 +121,27 @@ class TestIdentityInjection:
 
         await manager.on_chain_start({"inputs": "hi"})
 
-        info = tracer.events[-1][1]["instance_info"]
+        info = _last_forwarded_info(tracer)
         assert "agent_name" not in info
         assert info["class_name"] == "Agent"
 
-    def test_identity_dict_copied_not_referenced(self):
+    @pytest.mark.asyncio
+    async def test_identity_dict_copied_not_referenced(self):
         identity = dict(WEATHER_IDENTITY)
-        manager, _ = _make_manager(agent_identity=identity)
+        manager, tracer = _make_manager(agent_identity=identity)
         identity["agent_name"] = "mutated"
-        assert manager._oj_agent_identity["agent_name"] == "天气预测"
+
+        await manager.on_llm_start({"inputs": "hi"})
+
+        # 构造后修改入参字典不影响已持有的身份拷贝
+        assert _last_forwarded_info(tracer)["agent_name"] == "天气预测"
 
 
 class TestIdentityInheritance:
-    def test_explicit_identity_not_overwritten_by_chain(self):
+    @pytest.mark.asyncio
+    async def test_explicit_identity_not_overwritten_by_chain(self):
         """成员根 manager 自带成员身份，不得被 controller 链身份覆盖（守卫）。"""
-        controller, _ = _make_manager(
-            agent_identity={"agent_id": "controller", "agent_name": "控制器"}
-        )
+        controller, tracer = _make_manager(agent_identity=CONTROLLER_IDENTITY)
 
         member_root = TraceManager.generate_manager(
             controller,
@@ -133,22 +149,32 @@ class TestIdentityInheritance:
             agent_identity=WEATHER_IDENTITY,
         )
 
-        assert member_root._oj_agent_identity == WEATHER_IDENTITY
+        await member_root.on_llm_start({"inputs": "hi"})
 
-    def test_generate_manager_inherits_identity_without_explicit(self):
+        info = _last_forwarded_info(tracer)
+        assert info["agent_id"] == "agent-weather-001"
+        assert info["agent_name"] == "天气预测"
+
+    @pytest.mark.asyncio
+    async def test_generate_manager_inherits_identity_without_explicit(self):
         """LLM / prompt 等 derive 出的 manager 继承根身份（真名可达 LLM span）。"""
-        root, _ = _make_manager(agent_identity=WEATHER_IDENTITY)
+        root, tracer = _make_manager(agent_identity=WEATHER_IDENTITY)
 
         llm_manager = TraceManager.generate_manager(root, {"class_name": "Model"})
 
-        assert llm_manager._oj_agent_identity == WEATHER_IDENTITY
+        await llm_manager.on_llm_start({"inputs": "hi"})
 
-    def test_get_child_manager_inherits_identity(self):
-        root, _ = _make_manager(agent_identity=WEATHER_IDENTITY)
+        assert _last_forwarded_info(tracer)["agent_name"] == "天气预测"
+
+    @pytest.mark.asyncio
+    async def test_get_child_manager_inherits_identity(self):
+        root, tracer = _make_manager(agent_identity=WEATHER_IDENTITY)
 
         child = get_child_manager(root, "sub")
 
-        assert child._oj_agent_identity == WEATHER_IDENTITY
+        await child.on_chain_start({"inputs": "hi"})
+
+        assert _last_forwarded_info(tracer)["agent_name"] == "天气预测"
 
     @pytest.mark.asyncio
     async def test_derived_llm_manager_forwards_real_name(self):
@@ -161,13 +187,14 @@ class TestIdentityInheritance:
 
         await llm_manager.on_llm_start({"inputs": "hi"})
 
-        info = tracer.events[-1][1]["instance_info"]
+        info = _last_forwarded_info(tracer)
         assert info["agent_name"] == "天气预测"
         assert info["class_name"] == "Model"
 
 
 class TestGetAgentIdentity:
-    def test_real_name_from_metadata(self):
+    @staticmethod
+    def test_real_name_from_metadata():
         agent = _FakeAgent(agent_id="weather-001", name="天气预测", description="desc")
 
         identity = get_agent_identity(agent)
@@ -178,19 +205,22 @@ class TestGetAgentIdentity:
             "agent_description": "desc",
         }
 
-    def test_name_falls_back_to_agent_id(self):
+    @staticmethod
+    def test_name_falls_back_to_agent_id():
         agent = _FakeAgent(agent_id="weather-001", name=None)
 
         identity = get_agent_identity(agent)
 
         assert identity["agent_name"] == "weather-001"
 
-    def test_missing_agent_id_returns_none(self):
+    @staticmethod
+    def test_missing_agent_id_returns_none():
         agent = _FakeAgent(agent_id=None, name="天气预测")
 
         assert get_agent_identity(agent) is None
 
-    def test_missing_agent_config_uses_agent_id(self):
+    @staticmethod
+    def test_missing_agent_config_uses_agent_id():
         agent = _FakeAgent(agent_id="weather-001", with_config=False)
 
         identity = get_agent_identity(agent)
