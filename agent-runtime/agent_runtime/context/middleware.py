@@ -17,6 +17,7 @@
 
 import hashlib
 import json
+import os
 import uuid
 
 from agent_runtime.context.request_context import RequestContext, _request_ctx
@@ -27,6 +28,7 @@ from openjiuwen.core.common.logging import set_session_id
 from openjiuwen.core.common.logging import workflow_logger
 from opentelemetry import context as otel_context, trace as otel_trace
 from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.trace.span import NonRecordingSpan
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -36,6 +38,16 @@ X_REQUEST_ID = "x-request-id"
 DEFAULT_USER = "testUser"
 
 _HEX_CHARS = set("0123456789abcdefABCDEF")
+
+# W3C TraceContext propagator — 只认领 traceparent/tracestate，不引入 baggage
+_TP_PROPAGATOR = TraceContextTextMapPropagator()
+_TP_EXTRACT_ENV = "AGENT_RUNTIME_TRACE_EXTRACT_ENABLE"
+_TP_TRUE_VALUES = ("1", "true", "on", "yes")
+
+
+def _trace_extract_enabled() -> bool:
+    """是否优先认领入站 traceparent（默认关，关闭时保持原有伪造行为）。"""
+    return os.environ.get(_TP_EXTRACT_ENV, "").strip().lower() in _TP_TRUE_VALUES
 
 
 def _to_otel_trace_id(trace_id_str: str) -> int:
@@ -164,16 +176,24 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         _jiuwen_ctx_token = _jiuwen_request_ctx.set({})
         set_x_request_id(request_id)
         set_x_execution_id(execution_id)
-        # 注入 OTel 上下文，使 openjiuwen 创建的 span 继承我们的 trace_id
-        _otel_span_ctx = SpanContext(
-            trace_id=_to_otel_trace_id(request_id),
-            span_id=int(uuid.uuid4().hex[:16], 16),
-            is_remote=False,
-            trace_flags=TraceFlags(TraceFlags.SAMPLED),
-            trace_state=TraceState(),
-        )
-        _otel_span = NonRecordingSpan(_otel_span_ctx)
-        _otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
+        # 注入 OTel 上下文，使 openjiuwen 创建的 span 继承我们的 trace_id。
+        # 开关开启且请求头携带有效 traceparent 时，优先认领上游真实上下文；
+        # 否则回退原行为：以 X-Request-Id 派生 trace_id 伪造上下文
+        _otel_token = None
+        if _trace_extract_enabled():
+            _remote_ctx = _TP_PROPAGATOR.extract(dict(request.headers))
+            if otel_trace.get_current_span(_remote_ctx).get_span_context().is_valid:
+                _otel_token = otel_context.attach(_remote_ctx)
+        if _otel_token is None:
+            _otel_span_ctx = SpanContext(
+                trace_id=_to_otel_trace_id(request_id),
+                span_id=int(uuid.uuid4().hex[:16], 16),
+                is_remote=False,
+                trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                trace_state=TraceState(),
+            )
+            _otel_span = NonRecordingSpan(_otel_span_ctx)
+            _otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
         token = _request_ctx.set(ctx)
         try:
             response = await call_next(request)
