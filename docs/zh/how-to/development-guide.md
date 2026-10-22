@@ -589,7 +589,7 @@ spec:
 
 Redis 访问在两侧均为 **SPI 抽象 + 可插拔 Provider** 架构：
 
-- **studio-manager（Java）**：`studio-redis-spi` 模块定义 `RedisClient` 接口、`RedisProviderFactory` 工厂接口与 `RedisExceptionClassifier` 异常族；`studio-redis-redisson` 模块提供缺省 Redisson 实现、内存实现（测试用）与统一装配入口 `RedisProviderResolver`
+- **studio-manager（Java）**：`studio-manager-api` 的 `common.redis` 包定义 `RedisClient` 接口、`RedisProviderFactory` 工厂接口与 `RedisExceptionClassifier` 异常族；`studio-manager-service` 的 `common.redis` 包提供缺省 Redisson 实现、内存实现（测试用）与统一装配入口 `RedisProviderResolver`
 - **agent-builder / agent-runtime（Python）**：`packages/redis_spi` 包定义 `RedisProvider` 基类与 `RedisClient` 协议；`packages/redis_native` 包提供基于 redis-py 的缺省实现（native）
 
 装配解析优先级两侧对齐：**显式指定实现 > 自动发现（ServiceLoader / entry_points）> 内置缺省**。缺省装配已通过启动期连接校验（fail-fast），不配置任何 Provider 项即为既有行为。
@@ -712,7 +712,7 @@ class NosProvider(RedisProvider):
 
 ### 接口定义
 
-#### Java 接口（studio-redis-spi）
+#### Java 接口（studio-manager-api 的 common.redis 包）
 
 ```java
 public interface RedisProviderFactory {

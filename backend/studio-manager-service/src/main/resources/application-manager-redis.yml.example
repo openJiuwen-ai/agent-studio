@@ -51,7 +51,7 @@ redis:
 #     内置该目录——自行挂载时须同时改启动命令，否则类不可见）
 #   - 裸机部署：放 lib/ 目录随 Spring Boot loader.path 加载（推荐），
 #     或启动命令显式追加 classpath
-#   - 前提：jar 仅依赖 studio-redis-spi（零 Redisson），避免与内置实现冲突
+#   - 前提：jar 仅依赖 studio-manager-api 的 common.redis 包（零 Redisson），避免与内置实现冲突
 
 # -----------------------------------------------------------------------------
 # 形态三：ServiceLoader 自动发现（classpath 上仅一个 Provider 工厂时）

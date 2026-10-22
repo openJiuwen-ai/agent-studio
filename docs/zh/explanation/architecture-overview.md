@@ -57,11 +57,9 @@ backend/
 │   └── data.sql                      # 业务测试数据
 ├── studio-common/                    # 通用模块
 ├── studio-manager/                   # Manager服务启动模块
-├── studio-manager-api/               # Manager API定义模块
-├── studio-manager-service/           # Manager服务业务实现
+├── studio-manager-api/               # Manager API定义模块（含 Redis SPI 抽象 common.redis 包）
+├── studio-manager-service/           # Manager服务业务实现（含 Redis Redisson 实现与统一装配 common.redis 包）
 ├── studio-storage/                   # 存储抽象层模块
-├── studio-redis-spi/                 # Redis SPI抽象模块（RedisClient/工厂接口与异常族）
-├── studio-redis-redisson/            # Redis Redisson实现与统一装配模块
 └── studio-space/                     # DeepResearch（独立聚合，未纳入父 POM <modules>）
 ```
 
@@ -124,7 +122,7 @@ studio-common/
 | **exception** | 自定义异常类，统一异常处理 |
 | **filter** | HTTP请求过滤器，用于认证、日志、跨域等处理 |
 | **rce** | 远程调用封装，提供Feign等远程调用工具 |
-| **redis** | Redis相关操作封装（`RedisClient` 等入口类；实现与装配移至 `studio-redis-spi` / `studio-redis-redisson` 模块，见 2.2.5 / 2.2.6） |
+| **redis** | Redis相关操作封装（`RedisClientAutoConfig` Lettuce 兜底栈；SPI 契约在 `studio-manager-api`、Redisson 实现与装配在 `studio-manager-service` 的 `common.redis` 包，见 2.2.5 / 2.2.6） |
 | **sensitive** | 敏感词过滤功能 |
 | **service** | 通用业务服务 |
 | **utils** | 通用工具类，提供字符串处理、日期转换、JSON序列化等工具方法 |
@@ -267,11 +265,11 @@ studio-space/
 | **studio-space-foundation** | 基础能力层，提供工作空间管理的核心抽象和实现 |
 | **studio-space-service** | 业务服务层，实现工作空间的具体的业务逻辑 |
 
-### 2.2.5 studio-redis-spi（Redis SPI 抽象模块）
+### 2.2.5 Redis SPI 抽象（studio-manager-api 内 `common.redis` 包）
 
-**位置**：`backend/studio-redis-spi/`
+**位置**：`backend/studio-manager-api/src/main/java/com/openjiuwen/studio/agent/common/redis/`
 
-**功能说明**：Redis 访问的 SPI 抽象层，供企业自研 Provider 与平台各服务对接，与 Python 侧 `packages/redis_spi` 同构。
+**功能说明**：Redis 访问的 SPI 抽象层，供企业自研 Provider 与平台各服务对接，与 Python 侧 `packages/redis_spi` 同构。零 Redisson 依赖，自研厂商仅依赖本模块开发。
 
 **关键内容**：
 
@@ -285,11 +283,11 @@ studio-space/
 
 企业自研 Provider 的注册与装配方式见[开发指南 — Redis 适配配置与扩展](../how-to/development-guide.md#redis-适配配置与扩展)。
 
-### 2.2.6 studio-redis-redisson（Redis Redisson 实现与装配模块）
+### 2.2.6 Redis Redisson 实现与装配（studio-manager-service 内 `common.redis` 包）
 
-**位置**：`backend/studio-redis-redisson/`
+**位置**：`backend/studio-manager-service/src/main/java/com/openjiuwen/studio/agent/common/redis/`
 
-**功能说明**：Redis SPI 的缺省实现与统一装配入口，`studio-manager-service` 经本模块获得 Redis 能力。
+**功能说明**：Redis SPI 的缺省实现与统一装配入口，`studio-manager-service` 由此获得 Redis 能力。
 
 **关键内容**：
 

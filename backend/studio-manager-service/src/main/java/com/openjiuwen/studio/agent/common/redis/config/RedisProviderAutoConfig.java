@@ -25,7 +25,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Redis Provider 单点装配（studio-redis-redisson 默认实现模块）。
+ * Redis Provider 单点装配（Redisson 缺省实现，位于 studio-manager-service；
+ * SPI 契约在 studio-manager-api 的 com.openjiuwen.studio.agent.common.redis）。
  *
  * 解析逻辑全部收敛到 RedisProviderResolver；本类只负责：
  * 1. 从 Spring 配置构建 RedisProviderContext（含企业专属参数透传）

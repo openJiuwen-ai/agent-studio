@@ -1,7 +1,7 @@
 # Redis Provider 适配层 接口契约文档
 
 > 适用范围：`redis_spi` / `redis_native` / `redis_contract_tests` / `redis_demo_provider`（Python）与
-> `studio-redis-spi` / `studio-redis-redisson`（Java manager 侧）。
+> Java manager 侧（SPI 位于 `studio-manager-api`、Redisson 实现与装配位于 `studio-manager-service`）。
 > 读者：企业自研 Redis Provider 开发者、平台维护者、验收测试人员。
 > 实现级设计见 `设计文档/Redis适配层-特性设计.md`。
 
@@ -18,11 +18,11 @@
 
 ### Java（backend Maven reactor）
 
-| 模块 | 角色 | 依赖 |
+| 位置 | 角色 | 依赖 |
 |---|---|---|
-| `studio-redis-spi` | SPI：`RedisClient` 接口（零 Redisson）+ `RedisLock` + `spi/`（Factory/Context/Exception）+ Wrapper + 契约基类（test-jar） | 无 Redisson |
-| `studio-redis-redisson` | 缺省实现（Redisson）+ 单点装配 `RedisProviderAutoConfig` / `RedisProviderResolver` / `RedisClientConfig` | spi + redisson |
-| `examples/redis-demo-provider` | 接入示例（`-Pexamples` 门控，不进产品 reactor） | spi |
+| `studio-manager-api` 内 `common.redis` 包 | SPI：`RedisClient` 接口（零 Redisson）+ `RedisLock` + `spi/`（Factory/Context/Exception）+ Wrapper | 无 Redisson |
+| `studio-manager-service` 内 `common.redis` 包 | 缺省实现（Redisson）+ 单点装配 `RedisProviderAutoConfig` / `RedisProviderResolver` / `RedisClientConfig` + 契约基类 `RedisContractTestBase`（测试树） | api + redisson |
+| `examples/redis-demo-provider` | 接入示例（`-Pexamples` 门控，不进产品 reactor；契约基类为测试源自带副本，与 manager-service 同源） | manager-api |
 
 ## 2. 核心契约（Python 协议面）
 
@@ -75,7 +75,7 @@ manager 02xxxxx / workflow 10xxxx / builder 131xxxx / NL2 100029 谱系）：
 | 260008 | `RedisScriptError` | Lua 脚本运行期 / NOSCRIPT |
 | 260009 | `RedisClusterError` | 集群拓扑类错误 |
 
-Java 侧对应（J4 已交付，`studio-redis-spi` 的 `exception/` 包）：
+Java 侧对应（J4 已交付，`studio-manager-api` 的 `common.redis.exception` 包）：
 `RedisAccessException`（根，携带 redisKey/operation）→ `RedisConnectionFailureException`（可重试可降级）/
 `RedisTimeoutException`（写/计数结果可能未知，禁盲重试）/ `RedisCommandException`（含
 `RedisWrongTypeException` 子类）/ `CapabilityUnsupportedException`；既有异常归族：
@@ -132,7 +132,7 @@ REDIS_CONTRACT_TARGET=native REDIS_HOST=127.0.0.1 REDIS_PORT=6379 REDIS_PASSWORD
   python -m pytest --pyargs redis_contract_tests -q
 ```
 
-### 5.2 Java（studio-redis-spi test-jar：`RedisContractTestBase`，17 用例）
+### 5.2 Java（`RedisContractTestBase`，17 用例；基类位于 studio-manager-service 测试树，demo 工程自带同源副本）
 
 String/Key 语义、真实 TTL 过期、返回哨兵、锁互斥与等待超时、List 边界（负索引/lTrim）、
 计数器、`setAndKeepTtl` 保留剩余 TTL、`getRaw`、每用例独立前缀 + 清理。
@@ -142,7 +142,7 @@ String/Key 语义、真实 TTL 过期、返回哨兵、锁互斥与等待超时�
 mvn -Pexamples -pl examples/redis-demo-provider -am test
 # ② Redisson × 真实 Redis（env 门控）
 REDIS_CONTRACT_TARGET=127.0.0.1:6379 REDIS_CONTRACT_PASSWORD=*** \
-  mvn -pl studio-redis-redisson -am test -Dtest=RedissonRealRedisContractTest
+  mvn -pl studio-manager-service -am test -Dtest=RedissonRealRedisContractTest
 ```
 
 企业验收：实现 `RedisContractTestBase` 子类（Java）或指定 `--backend`（Python）跑同一套语义。

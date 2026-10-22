@@ -27,7 +27,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  * 后续版本移除。
  *
  * RedisClient 主路径（Provider 单栈，缺省 Redisson）的装配在
- * studio-redis-redisson 模块的 RedisProviderAutoConfig。
+ * studio-manager-service 模块的 RedisProviderAutoConfig。
  *
  * <p>注：键/值序列化器的设置调用序列（setKeySerializer 等四连 +
  * afterPropertiesSet）为 Spring Data Redis 的框架惯用形状，任何实现均同形，

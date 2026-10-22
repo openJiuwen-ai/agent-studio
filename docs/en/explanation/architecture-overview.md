@@ -57,11 +57,9 @@ backend/
 │   └── data.sql                      # Business test data
 ├── studio-common/                    # Common module
 ├── studio-manager/                   # Manager service startup module
-├── studio-manager-api/               # Manager API definition module
-├── studio-manager-service/           # Manager service business implementation
+├── studio-manager-api/               # Manager API definition module (includes Redis SPI abstraction in the common.redis package)
+├── studio-manager-service/           # Manager service business implementation (includes Redis Redisson implementation and unified assembly in the common.redis package)
 ├── studio-storage/                   # Storage abstraction module
-├── studio-redis-spi/                 # Redis SPI abstraction module (RedisClient/factory interfaces and exception family)
-├── studio-redis-redisson/            # Redis Redisson implementation and unified assembly module
 └── studio-space/                     # DeepResearch (independent aggregation, not included in parent POM <modules>)
 ```
 
@@ -124,7 +122,7 @@ studio-common/
 | **exception** | Custom exception classes for unified exception handling |
 | **filter** | HTTP request filters, for authentication, logging, CORS, etc. |
 | **rce** | Remote call wrappers, providing Feign and other remote call tools |
-| **redis** | Redis-related operation wrappers (entry classes such as `RedisClient`; implementation and assembly moved to the `studio-redis-spi` / `studio-redis-redisson` modules, see 2.2.5 / 2.2.6) |
+| **redis** | Redis-related operation wrappers (`RedisClientAutoConfig` Lettuce fallback stack; the SPI contract lives in the `common.redis` package of `studio-manager-api`, and the Redisson implementation and assembly live in the `common.redis` package of `studio-manager-service`, see 2.2.5 / 2.2.6) |
 | **sensitive** | Sensitive word filtering functionality |
 | **service** | Common business services |
 | **utils** | Common utility classes, providing string processing, date conversion, JSON serialization, and other utility methods |
@@ -267,11 +265,11 @@ studio-space/
 | **studio-space-foundation** | Foundation capability layer, provides core abstractions and implementations for workspace management |
 | **studio-space-service** | Business service layer, implements specific business logic for workspaces |
 
-### 2.2.5 studio-redis-spi (Redis SPI Abstraction Module)
+### 2.2.5 Redis SPI Abstraction (common.redis package in studio-manager-api)
 
-**Location**: `backend/studio-redis-spi/`
+**Location**: `backend/studio-manager-api/src/main/java/com/openjiuwen/studio/agent/common/redis/`
 
-**Description**: The SPI abstraction layer for Redis access, targeted at enterprise-custom Providers and platform services; mirrors the Python-side `packages/redis_spi`.
+**Description**: The SPI abstraction layer for Redis access, targeted at enterprise-custom Providers and platform services; mirrors the Python-side `packages/redis_spi`. Zero Redisson dependency — enterprise vendors only depend on this module.
 
 **Key contents**:
 
@@ -285,11 +283,11 @@ studio-space/
 
 Registration and assembly of enterprise-custom Providers are described in the [Development Guide — Redis Adaptation Configuration and Extension](../how-to/development-guide.md#redis-adaptation-configuration-and-extension).
 
-### 2.2.6 studio-redis-redisson (Redis Redisson Implementation and Assembly Module)
+### 2.2.6 Redis Redisson Implementation and Assembly (common.redis package in studio-manager-service)
 
-**Location**: `backend/studio-redis-redisson/`
+**Location**: `backend/studio-manager-service/src/main/java/com/openjiuwen/studio/agent/common/redis/`
 
-**Description**: The default implementation and unified assembly entry point of the Redis SPI; `studio-manager-service` obtains Redis capabilities through this module.
+**Description**: The default implementation and unified assembly entry point of the Redis SPI; `studio-manager-service` obtains Redis capabilities through this package.
 
 **Key contents**:
 
