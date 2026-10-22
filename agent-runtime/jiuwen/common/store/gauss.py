@@ -37,8 +37,10 @@ class DBUtil:
         """
         cls.db_config = cls.db_config or GaussDBConfig()
         if cls.ctx_pool is None:
-            from psycopg2.pool import SimpleConnectionPool
-            cls.ctx_pool = SimpleConnectionPool(
+            # ThreadedConnectionPool 线程安全，构造签名与 SimpleConnectionPool 一致；
+            # DBUtil 为公共 store，execute/query 等会被并发调用，不能用非线程安全的 SimpleConnectionPool
+            from psycopg2.pool import ThreadedConnectionPool
+            cls.ctx_pool = ThreadedConnectionPool(
                 minconn=cls.db_config.minconn,
                 maxconn=cls.db_config.maxconn,
                 host=cls.db_config.host,
@@ -71,7 +73,8 @@ class DBUtil:
         con = None
         cursor = None
         try:
-            con = cls.ctx_pool.get_connection()
+            # psycopg2 连接池的公开接口为 getconn/putconn，原 get_connection 并不存在
+            con = cls.ctx_pool.getconn()
             cursor = con.cursor()
             yield cursor
             con.commit()
@@ -98,7 +101,9 @@ class DBUtil:
         finally:
             if cursor:
                 cursor.close()
-            cls.ctx_pool.put_connection(con)
+            # 连接获取失败时 con 为 None，归还 None 会掩盖原始异常
+            if con is not None:
+                cls.ctx_pool.putconn(con)
 
     @classmethod
     def execute_values(cls, sql, args_list, fetch=False):
