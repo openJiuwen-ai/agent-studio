@@ -18,11 +18,11 @@ services:
     ports:
       - "${LOGS_GATEWAY_HTTPS_PORT:-3100}:3100"
     volumes:
-      - ./config/nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./config/write.htpasswd:/etc/nginx/htpasswd/write.htpasswd:ro
-      - ./config/query.htpasswd:/etc/nginx/htpasswd/query.htpasswd:ro
-      - ./config/gateway.crt:/etc/nginx/tls/gateway.crt:ro
-      - ./config/gateway.key:/etc/nginx/tls/gateway.key:ro
+      - ./config/nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro,z
+      - ./config/write.htpasswd:/etc/nginx/htpasswd/write.htpasswd:ro,z
+      - ./config/query.htpasswd:/etc/nginx/htpasswd/query.htpasswd:ro,z
+      - ./config/gateway.crt:/etc/nginx/tls/gateway.crt:ro,z
+      - ./config/gateway.key:/etc/nginx/tls/gateway.key:ro,z
     depends_on:
       victoria-logs:
         condition: service_healthy
@@ -66,7 +66,7 @@ services:
       VECTOR_BUFFER_MAX_SIZE: ${VECTOR_BUFFER_MAX_SIZE:-1073741824}
       MONITOR_PROJECT_NAME: ${MONITOR_PROJECT_NAME:-observability-monitor}
     volumes:
-      - ./config/vector-monitor.yaml:/etc/vector/vector.yaml:ro
+      - ./config/vector-monitor.yaml:/etc/vector/vector.yaml:ro,z
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - monitor_vector_data:/var/lib/vector
     depends_on:
@@ -97,9 +97,9 @@ services:
       - GF_PLUGINS_PLUGIN_ADMIN_ENABLED=false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
-      - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./dashboards:/var/lib/grafana/dashboards:ro
+      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro,z
+      - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro,z
+      - ./dashboards:/var/lib/grafana/dashboards:ro,z
     depends_on:
       victoria-logs:
         condition: service_healthy
