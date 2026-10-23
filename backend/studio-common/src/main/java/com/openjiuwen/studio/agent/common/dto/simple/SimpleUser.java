@@ -26,5 +26,6 @@ public class SimpleUser {
     private String domainId = "0";
 
     // 默认0，可根据业务修改
+    @Builder.Default
     private String domainName = "0";
 }
