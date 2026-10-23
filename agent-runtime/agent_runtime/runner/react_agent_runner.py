@@ -21,6 +21,11 @@ from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
+from agent_runtime.common.background_task import (
+    await_pending,
+    backgrounding_enabled,
+    run_in_background_tracked,
+)
 from openjiuwen.core.session.stream import BaseStreamMode
 from openjiuwen.core.single_agent.agents.react_agent import ReActAgent, ReActAgentConfig
 from openjiuwen.core.single_agent.schema.agent_card import AgentCard
@@ -818,6 +823,11 @@ class ReActAgentRunner:
 
         try:
             session_id = req.conversation_id or "default_session"
+            # 跨轮顺序性（检视意见 2）：session recover 读的是上一轮 post_run
+            # 的落库结果；ir_execute 流式/非流式（run_blocking）等直连入口
+            # 不经过 _load_conversation_data 的 join 点，统一在 session
+            # 创建前做有界等待（conversation_id 为空时 no-op）。
+            await await_pending(req.conversation_id)
             session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:
@@ -893,7 +903,27 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Agent execution failed: {e}")
         finally:
             if session:
-                await session.post_run()
+                if adapter.interaction_pending or not backgrounding_enabled():
+                    # 中断等待用户输入：InterruptionState 只写入内存 session
+                    # （react_agent._commit_interrupt），落 Redis 的唯一途径是
+                    # post_run；下一轮 pre_agent_execute 会 recover 它来恢复
+                    # 中断现场，且恢复轮不重新播种历史。此处必须同步保存。
+                    # 问题文本已随 message_end 先行到达客户端，同步落库不
+                    # 产生新的用户可感延迟。
+                    # PERSIST_BACKGROUND_ENABLE=false 时正常完成轮同样同步
+                    # 保存（平台级回滚开关，行为与后台化之前一致）。
+                    await session.post_run()
+                else:
+                    # 正常完成：post_run 全量序列化并保存 agent 会话状态，
+                    # 移出流收尾关键路径后台执行，避免阻塞终态事件。
+                    # track_key 登记在飞任务（进程内注册表 + 跨进程 Redis
+                    # 计数）：下一轮入口 await_pending 会等它完成，避免
+                    # recover 读到旧会话状态。
+                    await run_in_background_tracked(
+                        session.post_run(),
+                        name=f"react-post-run-{req.conversation_id}",
+                        track_key=req.conversation_id,
+                    )
 
     async def run_blocking(self, req: ExecutionRequest) -> str:
         """运行 ReActAgent 并返回完整的 LLM 响应字符串"""
@@ -911,4 +941,9 @@ class ReActAgentRunner:
             except Exception as e:
                 workflow_logger.error(f"Error processing agent run blocking chunk: {e}")
 
+        # 出口 join（检视意见）：run_streaming 的 finally 把 post_run 后台化，
+        # blocking 调用方拿到响应时 checkpoint 可能仍在飞——「响应返回即已
+        # 持久化」契约在非流式路径回归。有界等待（超时放行记 error），恢复
+        # 后台化前的 blocking 语义；流式路径不受影响（终态不等 post_run）。
+        await await_pending(req.conversation_id)
         return "".join(result_parts)

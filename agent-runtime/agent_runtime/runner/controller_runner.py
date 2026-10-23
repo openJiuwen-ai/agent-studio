@@ -28,6 +28,11 @@ from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
+from agent_runtime.common.background_task import (
+    await_pending,
+    backgrounding_enabled,
+    run_in_background_tracked,
+)
 
 
 def _parse_controller_stream_chunk(chunk) -> dict | None:
@@ -196,6 +201,9 @@ class ControllerRunner:
         # Collect assistant response for memory extraction
         memory_response_parts: list[str] = []
         session: Session | None = None
+        # 本次运行是否以「等待用户输入」收尾（workflow_blocked/agent_interrupted），
+        # 供 finally 决定 post_run 是否可后台化（中断态落库是恢复链的前提）。
+        awaiting_user_input = False
         try:
             t_stream_start = time.perf_counter()
             workflow_logger.info(f"Starting agent_group.astream for query: {req.query}")
@@ -207,6 +215,11 @@ class ControllerRunner:
                 "user_id": req.user_id,
             }
             setup_otel_tracer()
+            # 跨轮顺序性（检视意见 2）：与 react 侧同理——ir_execute
+            # 流式/非流式（run_blocking）等直连入口不经过
+            # _load_conversation_data 的 join 点，session 创建（recover）
+            # 前统一做有界等待（conversation_id 为空时 no-op）。
+            await await_pending(req.conversation_id)
             session = create_agent_session_with_trace(session_id=session_id, card=agent_group.card)
             await session.pre_run(inputs=session_inputs)
 
@@ -233,6 +246,18 @@ class ControllerRunner:
                         import json as _json
                         evt_data = _json.loads(chunk_str[6:])
                         evt_type = evt_data.get("event", "")
+                        # waiting_user_input：当前真实映射（utils.py 的
+                        # item_code_to_conversation_event_type）不产出该名，
+                        # StreamCode 8000 亦无发出点（ControllerStreamDataAdapter
+                        # 的同名映射是死代码）；防御性纳入——未来 8000 被接入
+                        # 或枚举漂移时，误判为中断仅使该轮回退同步落库（恒
+                        # 安全），漏判才会后台化中断轮 post_run（检视意见1）。
+                        if evt_type in (
+                            "workflow_blocked",
+                            "agent_interrupted",
+                            "waiting_user_input",
+                        ):
+                            awaiting_user_input = True
                         if evt_type in ("message", "done"):
                             answer = evt_data.get("data", {}).get("answer", "")
                             if answer:
@@ -272,7 +297,25 @@ class ControllerRunner:
             return
         finally:
             if session is not None:
-                await session.post_run()
+                if awaiting_user_input or not backgrounding_enabled():
+                    # 中断等待用户输入：保持同步保存，确保下一轮恢复链能读到
+                    # 本次 agent 会话状态（pre_agent_execute recover）。中断轮
+                    # 的问题文本已随消息事件先行到达，同步落库不产生新的
+                    # 用户可感延迟。
+                    # PERSIST_BACKGROUND_ENABLE=false 时正常完成轮同样同步
+                    # 保存（平台级回滚开关，行为与后台化之前一致）。
+                    await session.post_run()
+                else:
+                    # 正常完成：agent 会话状态保存移出流收尾关键路径后台
+                    # 执行，避免阻塞终态事件（终态 end 事件在 EventHandler
+                    # 层注入，不再等待此处落库）。track_key 登记在飞任务
+                    # （进程内注册表 + 跨进程 Redis 计数）：下一轮入口
+                    # await_pending 会等它完成，避免 recover 读旧状态。
+                    await run_in_background_tracked(
+                        session.post_run(),
+                        name=f"controller-post-run-{req.conversation_id}",
+                        track_key=req.conversation_id,
+                    )
 
     async def _trigger_memory_extraction(
         self,
@@ -365,4 +408,9 @@ class ControllerRunner:
                 workflow_logger.error(
                     f"Agent group blocking failed with exception: {e}", exc_info=True
                 )
+        # 出口 join（检视意见）：run_streaming 的 finally 把 post_run 后台化，
+        # blocking 调用方拿到响应时 checkpoint 可能仍在飞——「响应返回即已
+        # 持久化」契约在非流式路径回归。有界等待（超时放行记 error），恢复
+        # 后台化前的 blocking 语义；流式路径不受影响（终态不等 post_run）。
+        await await_pending(req.conversation_id)
         return workflow_end_answer or message_end_answer or "".join(message_parts)

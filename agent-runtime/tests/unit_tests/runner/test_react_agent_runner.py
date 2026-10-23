@@ -11,6 +11,7 @@ ReActAgentRunner 单元测试
 
 # pylint: disable=no-self-use
 
+import asyncio
 import inspect
 import sys
 import types
@@ -19,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from agent_runtime.common.background_task import run_in_background
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner, build_skills_prompt, register_skill_tools
 from jiuwen.extension.wrapper.mcp_server_loader import convert_ir_to_server_config
 
@@ -536,6 +538,40 @@ class TestRegisterWorkflows:
         assert built_first is first_call_workflow
         assert built_second is second_call_workflow
         assert built_first is not built_second
+
+
+class TestRunBlockingExitJoin:
+    """run_blocking 出口 join：后台化 post_run 完成前 blocking 响应不得返回。"""
+
+    @pytest.mark.asyncio
+    async def test_run_blocking_waits_inflight_background_task(self):
+        runner = ReActAgentRunner(api_key="test")
+        conv_id = "conv-exit-join-react"
+        release = asyncio.Event()
+        finished = asyncio.Event()
+
+        async def bg_persist():
+            await release.wait()
+            finished.set()
+
+        async def mock_stream(*args, **kwargs):
+            yield {"event": "message", "data": {"answer": "ok"}}
+            # 模拟 run_streaming finally 把 post_run 后台登记（同 track_key）
+            run_in_background(bg_persist(), name="bg-post-run", track_key=conv_id)
+
+        req = MagicMock()
+        req.conversation_id = conv_id
+        with patch.object(runner, "run_streaming", side_effect=mock_stream):
+            task = asyncio.create_task(runner.run_blocking(req))
+            for _ in range(50):
+                await asyncio.sleep(0)
+            assert not task.done(), "run_blocking must not return while persist in flight"
+            assert not finished.is_set()
+            release.set()
+            result = await asyncio.wait_for(task, timeout=2.0)
+
+        assert finished.is_set(), "run_blocking must return only after background task completes"
+        assert "ok" in result
 
 
 if __name__ == "__main__":

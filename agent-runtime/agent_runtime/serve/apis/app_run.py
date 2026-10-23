@@ -38,6 +38,7 @@ from agent_runtime.common.env_variables_loader import (
     load_default_environment_id,
     _SECRET_ENV_KEYS_KEY,
 )
+from agent_runtime.common.background_task import await_pending
 from agent_runtime.common.exception.errors import AgentBuilderError
 from agent_runtime.event_handler.event_handler import EventHandler
 from agent_runtime.event_handler.base.conversation import (
@@ -292,6 +293,11 @@ async def _load_conversation_data(
     Returns:
         (conversation_history, dialogue_count)
     """
+    # 恢复单会话顺序性：终态事件后台化后，上一轮的会话历史落库/agent 状态
+    # 保存可能仍在飞；读取前先有界等待（超时放行并记 error，不无限阻塞）。
+    # 本函数是三个执行入口加载会话数据的唯一通道，且先于 runner 内 session
+    # 创建执行，一个 join 点同时保护历史读取与 session recover。
+    await await_pending(conversation_id)
     try:
         messages, dialogue_count = await _conv_manager.get_conversation_data(
             conversation_id, instance_id, user_id, version_id
@@ -631,6 +637,11 @@ async def _execute_workflow_run(
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
+        # 该分支绕过 _load_conversation_data 及其中的 await_pending join；
+        # workflow 无 runner 级 join（无 session/post_run），上一轮后台落库
+        # 若仍在飞，本轮收尾 update_conversation 的读改写会与之竞态（脏读/
+        # 后写覆盖丢消息），此处补有界等待（检视意见3）。
+        await await_pending(ctx.conversation_id)
         conversation_history = [msg.model_dump(by_alias=True) for msg in body.messages]
         dialogue_count = 1
     else:
