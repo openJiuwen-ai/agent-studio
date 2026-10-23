@@ -280,11 +280,15 @@ class ModelWrapper:
     @staticmethod
     def _post_stream_message(
         model_response: AssistantMessage,
+        copy_finish_reason: bool = False,
     ) -> tuple[AIMessage, list[ToolCall] | None]:
         """将 model.invoke 的返回值转换为 AIMessage。
 
         Args:
             model_response: model.invoke 的返回值，包含 role、content、tool_calls 等属性
+            copy_finish_reason: 是否把消息顶层 finish_reason 复制进 usage_metadata。
+                仅非流式（ainvoke）路径需要；流式路径由 astream 末尾统一置位，
+                中途内容块带上 finish_reason 会被下游当 finish 块提前截断增量输出
 
         Returns:
             AIMessage: 转换后的 AIMessage 对象
@@ -304,9 +308,12 @@ class ModelWrapper:
             usage_metadata = UsageMetadata(**data)
             # core 侧 finish_reason 在消息顶层，jiuwen 约定放 usage_metadata 内
             # （OTel 载荷按此取）；空值与占位值 "null" 不覆盖默认值
-            core_finish_reason = getattr(model_response, "finish_reason", "") or ""
-            if core_finish_reason and core_finish_reason != "null":
-                usage_metadata.finish_reason = core_finish_reason
+            if copy_finish_reason:
+                core_finish_reason = (
+                    getattr(model_response, "finish_reason", "") or ""
+                )
+                if core_finish_reason and core_finish_reason != "null":
+                    usage_metadata.finish_reason = core_finish_reason
 
         convert_dict = {"content": model_response.content}
         if usage_metadata is not None:
@@ -384,7 +391,9 @@ class ModelWrapper:
             error_msg = f"Model invoke failed: {friendly_message(e)}"
             raise ModelError(StatusCode.MODEL_CALL_FAILED, msg=error_msg)
 
-        cur_ai_message, tool_calls = self._post_stream_message(model_response)
+        cur_ai_message, tool_calls = self._post_stream_message(
+            model_response, copy_finish_reason=True
+        )
         tcs = []
         if tool_calls is not None:
             for tc in tool_calls:
