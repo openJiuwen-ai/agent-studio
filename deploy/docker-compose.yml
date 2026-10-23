@@ -52,7 +52,7 @@ services:
 
   minio:
     logging: *default-logging
-    image: ${MINIO_IMAGE:-minio/minio:latest}
+    image: ${MINIO_IMAGE:-pgsty/silo:RELEASE.2026-10-18T00-00-00Z}
     pull_policy: if_not_present
     restart: always
     ports:
@@ -66,7 +66,7 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      # minio/minio 镜像不含 curl/bash（/dev/tcp 是 bash 专有），用镜像内置的 mc 探活。
+      # silo 镜像自带 mc，用其探活（不依赖 bash 的 /dev/tcp）。
       # `local` 是 mc 内置默认别名，指向 http://localhost:9000。
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -82,7 +82,7 @@ services:
 
   minio-init:
     logging: *default-logging
-    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    image: ${MINIO_MC_IMAGE:-pgsty/mc:RELEASE.2026-10-18T00-00-00Z}
     pull_policy: if_not_present
     depends_on:
       minio:

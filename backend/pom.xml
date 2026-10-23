@@ -15,8 +15,6 @@
     <description/>
     <modules>
         <module>studio-storage</module>
-        <module>studio-redis-spi</module>
-        <module>studio-redis-redisson</module>
         <module>studio-common</module>
         <module>studio-manager</module>
         <module>studio-manager-api</module>

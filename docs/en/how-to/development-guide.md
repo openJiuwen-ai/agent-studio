@@ -589,7 +589,7 @@ This section describes the agent-studio Redis adaptation layer: connection param
 
 Redis access follows a **SPI abstraction + pluggable Provider** architecture on both sides:
 
-- **studio-manager (Java)**: the `studio-redis-spi` module defines the `RedisClient` interface, the `RedisProviderFactory` factory interface and the `RedisExceptionClassifier` exception family; the `studio-redis-redisson` module provides the default Redisson implementation, an in-memory implementation (for tests) and the single assembly entry point `RedisProviderResolver`
+- **studio-manager (Java)**: the `common.redis` package in `studio-manager-api` defines the `RedisClient` interface, the `RedisProviderFactory` factory interface and the `RedisExceptionClassifier` exception family; the `common.redis` package in `studio-manager-service` provides the default Redisson implementation, an in-memory implementation (for tests) and the single assembly entry point `RedisProviderResolver`
 - **agent-builder / agent-runtime (Python)**: the `packages/redis_spi` package defines the `RedisProvider` base class and the `RedisClient` protocols; the `packages/redis_native` package provides the default redis-py based implementation (native)
 
 Assembly resolution priority is aligned on both sides: **explicit implementation > auto discovery (ServiceLoader / entry_points) > built-in default**. The default assembly is connection-checked at startup (fail-fast); leaving all Provider settings unset preserves existing behavior.
@@ -714,7 +714,7 @@ After assembly a ping fail-fast applies: an unreachable connection raises immedi
 
 ### Interface Definitions
 
-#### Java interface (studio-redis-spi)
+#### Java interface (common.redis package in studio-manager-api)
 
 ```java
 public interface RedisProviderFactory {

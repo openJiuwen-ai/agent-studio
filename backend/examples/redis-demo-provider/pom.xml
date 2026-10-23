@@ -22,17 +22,12 @@
     </properties>
 
     <dependencies>
+        <!-- Redis Provider SPI（studio-manager-api 的 common.redis 包，零 Redisson）；
+             契约测试基类 RedisContractTestBase 为本工程测试源自带副本（与 manager-service 同源） -->
         <dependency>
             <groupId>com.openjiuwen</groupId>
-            <artifactId>studio-redis-spi</artifactId>
+            <artifactId>studio-manager-api</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.openjiuwen</groupId>
-            <artifactId>studio-redis-spi</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

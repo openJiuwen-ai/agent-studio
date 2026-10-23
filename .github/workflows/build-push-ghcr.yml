@@ -82,6 +82,12 @@ jobs:
           rm -rf docker/studio-runtime/common_utils
           test -d packages/common_utils/common_utils
           cp -rf packages/common_utils/common_utils docker/studio-runtime/common_utils
+          rm -rf docker/studio-runtime/redis_spi
+          test -d packages/redis_spi/redis_spi
+          cp -rf packages/redis_spi/redis_spi docker/studio-runtime/redis_spi
+          rm -rf docker/studio-runtime/redis_native
+          test -d packages/redis_native/redis_native
+          cp -rf packages/redis_native/redis_native docker/studio-runtime/redis_native
           rm -rf docker/studio-runtime/tests
           cp -rf agent-runtime/tests docker/studio-runtime/tests
           cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
@@ -92,11 +98,13 @@ jobs:
 
       - name: Prepare studio-builder artifacts
         run: |
-          rm -rf docker/studio-builder/agent_builder docker/studio-builder/model_service docker/studio-builder/storage docker/studio-builder/common_utils
+          rm -rf docker/studio-builder/agent_builder docker/studio-builder/model_service docker/studio-builder/storage docker/studio-builder/common_utils docker/studio-builder/redis_spi docker/studio-builder/redis_native
           cp -rf agent_builder docker/studio-builder/agent_builder
           cp -rf packages/model_service/model_service docker/studio-builder/model_service
           cp -rf packages/storage/storage docker/studio-builder/storage
           cp -rf packages/common_utils/common_utils docker/studio-builder/common_utils
+          cp -rf packages/redis_spi/redis_spi docker/studio-builder/redis_spi
+          cp -rf packages/redis_native/redis_native docker/studio-builder/redis_native
 
       - name: Use official package repositories in CI
         shell: bash
@@ -320,7 +328,7 @@ jobs:
             echo "     并将 STUDIO_*_IMAGE 填为已加载镜像的完整名称 (docker images 可查)"
             echo "  4. 执行 ./deploy.sh all"
             echo
-            echo "注意: 基础设施镜像 (mysql/redis/minio/minio-mc) 不在本包内, 完全离线部署需自行准备到 deploy/dep-images/"
+            echo "注意: 基础设施镜像 (mysql/redis/pgsty-silo/pgsty-mc) 不在本包内, 完全离线部署需自行准备到 deploy/dep-images/"
           } > README.txt
 
           EXPORTED=0
