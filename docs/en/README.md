@@ -35,6 +35,7 @@ Guides for solving specific tasks, using semantic names.
 Factual, structured, searchable reference material.
 
 - [REST API Reference](reference/rest-api.md) — API specifications and request/response examples
+- [Skill Error Codes](reference/skill-error-codes.md) — Skill error codes and suggested handling
 
 ### Explanation (I want to understand)
 
