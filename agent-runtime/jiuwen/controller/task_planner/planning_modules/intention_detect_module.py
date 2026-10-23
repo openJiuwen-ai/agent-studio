@@ -39,11 +39,15 @@ from jiuwen.orchestration.common.perf_log import wf_performance_buffer
 from jiuwen.orchestration.flow.stream.base import StreamCode
 from jiuwen.planner.common.exception import LLMInvocationFailedException
 from jiuwen.planner.common.stream_post_utils import (
+    build_finish_reason,
+    build_usage_metadata,
     convert_ai_message_to_llm_output,
     create_trace_manager,
     MODEL_STAT,
     MODEL_USAGE,
     LATENCY,
+    USAGE_METADATA,
+    FINISH_REASON,
 )
 from jiuwen.plugin import Param
 from jiuwen.plugin.models.function import Function
@@ -254,6 +258,14 @@ class IntentionDetectModule:
                 MODEL_USAGE: result.model_usage,
             }
         )
+        # OTel 双写：按 core handler 约定键名补用量/成本/时延（缺数据时为空，跳过注入）
+        usage_metadata = getattr(result.llm_message, "usage_metadata", None)
+        usage_dict = build_usage_metadata(usage_metadata)
+        if usage_dict:
+            output_on_insights[USAGE_METADATA] = usage_dict
+        finish_reason = build_finish_reason(usage_metadata)
+        if finish_reason:
+            output_on_insights[FINISH_REASON] = finish_reason
 
         return output_on_insights
 
