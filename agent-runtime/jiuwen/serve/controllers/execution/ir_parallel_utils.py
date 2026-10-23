@@ -226,6 +226,12 @@ def build_parallel_join_plan(
         # 可能提前或重复执行。
         if branch_id and "@@" in branch_id:
             continue
+        # 循环回流汇聚点的入边（join → loop → … → join）不能计入并行 lane
+        # 终端：与 collect_parallel_join_nodes 的过滤保持一致，否则互斥的循环
+        # 续跑入边会被误当成并行 lane 终端，多轮中断恢复时下游子工作流被
+        # 再次调度并重置为 START，最终响应错乱。
+        if target_parallel_ids and _is_reachable(adjacency, target, source):
+            continue
         for parallel_id in target_parallel_ids:
             join_groups[parallel_id][target].append((source, branch_id))
 
