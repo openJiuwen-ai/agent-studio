@@ -113,8 +113,9 @@ spec:
               value: '/opt/cloud/agent-runtime/tls/key.pem'
             - name: TLS_CERT_PATH
               value: '/opt/cloud/agent-runtime/tls/cert.pem'
-            # ======== [选填] 沙箱配置 ========
-            # 远程沙箱地址（配置后启用沙箱模式，为空则沙箱不可用自动走 local）
+            # ======== [生产环境必填] 沙箱配置 ========
+            # 远程沙箱地址（配置后启用沙箱隔离执行）
+            # ⚠️ 未配置时代码节点将拒绝执行，需设 ALLOW_LOCAL_CODE_EXEC=true 才能走本地（不安全）
             - name: SECURITY_SANDBOX_SERVER
               value: ''
             # 沙箱类型：aio / jiuwenbox
@@ -128,6 +129,12 @@ spec:
               value: '900'
             - name: SECURITY_SANDBOX_SCOPE
               value: 'system'
+            # 代码黑名单关键字
+            - name: CODE_BLACK_LIST
+              value: 'subprocess,os.system,os.popen,os.exec,os.spawn,os.fork,os.kill,os.remove,os.unlink,os.rmdir,os.rename,os.chmod,os.chown,__import__,importlib,ctypes,socket,shutil,multiprocessing'
+            # 是否允许本地代码执行（默认 false，仅限可信内网设为 true）
+            - name: ALLOW_LOCAL_CODE_EXEC
+              value: 'false'
             # ======== [选填] OpenSearch（启用记忆库时必填） ========
             # 格式: host:port，多节点用逗号分隔
             - name: OPENSEARCH_HOSTS

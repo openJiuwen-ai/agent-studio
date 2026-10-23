@@ -412,11 +412,19 @@ class CodeExecutionSettings(BaseSettings):
     LOCAL_CODE_EXEC_MODE 环境变量控制代码节点的本地执行方式：
     - inprocess: 进程内 exec() 执行（默认，高性能，无隔离）
     - subprocess: 子进程执行（有进程级隔离，但启动开销约 50-200ms）
+
+    ALLOW_LOCAL_CODE_EXEC 控制是否允许本地代码执行：
+    - false（默认）: 拒绝本地执行，必须使用沙箱模式
+    - true: 允许本地执行（⚠️ 仅限可信内网环境，无安全隔离）
     """
 
     local_exec_mode: Literal["inprocess", "subprocess"] = Field(
         default="inprocess",
         validation_alias="LOCAL_CODE_EXEC_MODE",
+    )
+    allow_local_exec: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LOCAL_CODE_EXEC",
     )
 
     model_config = SettingsConfigDict(

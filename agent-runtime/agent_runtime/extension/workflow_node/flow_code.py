@@ -230,7 +230,7 @@ class FlowCodeConfig:
 
     code: str = ""
     user_fields: dict = field(default_factory=dict)
-    exec_env: str = "local"
+    exec_env: str = "sandbox"
 
 
 class FlowCode(WorkflowComponent):
@@ -263,7 +263,7 @@ class FlowCode(WorkflowComponent):
                 self._conf = FlowCodeConfig(
                     code=conf.get("code", ""),
                     user_fields=conf.get("userFields", {}),
-                    exec_env=conf.get("exec_env", "local"),
+                    exec_env=conf.get("exec_env", "sandbox"),
                 )
             else:
                 self._conf = conf
@@ -335,19 +335,29 @@ class FlowCode(WorkflowComponent):
             A new InprocessCodeRunner 或 LocalCodeRunner instance.
 
         Raises:
-            BuildError: If SysOperation not found (subprocess 模式).
+            BuildError: If ALLOW_LOCAL_CODE_EXEC is false or SysOperation not found.
         """
         from agent_runtime.common.config import settings
         from agent_runtime.extension.workflow_node.code_runner.runner import (
             CodeRunnerFactory,
         )
 
-        # inprocess 模式不需要 sys_operation
+        if not settings.code_execution.allow_local_exec:
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                comp_id="flow_code",
+                reason=(
+                    "Local code execution is disabled (ALLOW_LOCAL_CODE_EXEC=false). "
+                    "Configure SECURITY_SANDBOX_SERVER to use sandbox mode, "
+                    "or set ALLOW_LOCAL_CODE_EXEC=true for trusted internal networks only."
+                ),
+                workflow="n/a",
+            )
+
         if settings.code_execution.local_exec_mode == "inprocess":
             from agent_runtime.extension.workflow_node.code_runner.inprocess_code_runner import InprocessCodeRunner
             return InprocessCodeRunner()
 
-        # subprocess 模式需要 sys_operation
         from openjiuwen.core.runner import Runner
 
         sys_op_id = "flow_code_sys_op"
@@ -367,26 +377,37 @@ class FlowCode(WorkflowComponent):
     def _ensure_code_runner(self):
         """Lazy-load CodeRunner instance using Runner pattern.
 
-        Selects the appropriate CodeRunner based on exec_env configuration and LOCAL_CODE_EXEC_MODE:
-        - 'local' + inprocess: InprocessCodeRunner（进程内 exec，不依赖 sys_operation）
-        - 'local' + subprocess: LocalCodeRunner（子进程执行，依赖 sys_operation）
-        - 'sandbox': SandboxCodeRunner (with fallback to local if not configured)
+        Selects the appropriate CodeRunner based on exec_env configuration:
+        - 'sandbox'（默认）: SandboxCodeRunner，需配置 SECURITY_SANDBOX_SERVER
+        - 'local' + inprocess: InprocessCodeRunner（需 ALLOW_LOCAL_CODE_EXEC=true）
+        - 'local' + subprocess: LocalCodeRunner（需 ALLOW_LOCAL_CODE_EXEC=true）
 
         Raises:
-            BuildError: SysOperation not found or critical failure.
+            BuildError: SysOperation not found, sandbox not configured, or local exec disabled.
         """
         if self._code_runner is not None:
             return
 
         from agent_runtime.common.config import settings
 
-        exec_env = self._conf.exec_env or "local"
+        exec_env = self._conf.exec_env or "sandbox"
 
-        # inprocess 模式直接创建，不依赖 sys_operation
-        if exec_env == "local" and settings.code_execution.local_exec_mode == "inprocess":
-            from agent_runtime.extension.workflow_node.code_runner.inprocess_code_runner import InprocessCodeRunner
-            self._code_runner = InprocessCodeRunner()
-            return
+        if exec_env == "local":
+            if not settings.code_execution.allow_local_exec:
+                raise build_error(
+                    StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                    comp_id="flow_code",
+                    reason=(
+                        "Local code execution is disabled (ALLOW_LOCAL_CODE_EXEC=false). "
+                        "Configure SECURITY_SANDBOX_SERVER to use sandbox mode, "
+                        "or set ALLOW_LOCAL_CODE_EXEC=true for trusted internal networks only."
+                    ),
+                    workflow="n/a",
+                )
+            if settings.code_execution.local_exec_mode == "inprocess":
+                from agent_runtime.extension.workflow_node.code_runner.inprocess_code_runner import InprocessCodeRunner
+                self._code_runner = InprocessCodeRunner()
+                return
 
         # 原有逻辑：subprocess/sandbox 需要依赖 sys_operation
         from openjiuwen.core.runner import Runner
@@ -410,10 +431,17 @@ class FlowCode(WorkflowComponent):
             runner_strategy = CodeRunnerFactory.get_runner(exec_env)
             self._code_runner = runner_strategy.create(code_op)
         except Exception as e:
-            workflow_logger.debug(
-                f"Failed to create runner for '{exec_env}': {e}, fallback to local"
-            )
-            self._code_runner = self._get_local_runner()
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                comp_id="flow_code",
+                reason=(
+                    f"Failed to create runner for '{exec_env}': {e}. "
+                    "Fallback to local is disabled for security. "
+                    "Check SECURITY_SANDBOX_SERVER configuration or "
+                    "set ALLOW_LOCAL_CODE_EXEC=true for trusted networks."
+                ),
+                workflow="n/a",
+            ) from e
 
     async def invoke(
         self, inputs: Input, session: Session, context: ModelContext
@@ -454,7 +482,7 @@ class FlowCode(WorkflowComponent):
             if inputs_schema:
                 user_fields = _coerce_inputs(user_fields, inputs_schema)
 
-            # 4. 执行代码（带 sandbox 失败 fallback 到 local）
+            # 4. 执行代码（沙箱失败时拒绝执行，不自动回退到本地）
             from agent_runtime.common.config import settings
 
             # 沙箱内层超时，与代码节点异常处理外层超时（exceptionProcess.timeout）取小生效：
@@ -472,26 +500,26 @@ class FlowCode(WorkflowComponent):
                     timeout=exec_timeout,
                 )
             except Exception as e:
-                # Sandbox execution failed, fallback to local
-                exec_env = self._conf.exec_env or "local"
+                exec_env = self._conf.exec_env or "sandbox"
                 if exec_env == "sandbox":
                     if "timeout" in str(e).lower():
-                        # 超时不应 fallback 到本地，否则同样的代码会再次超时
                         raise RuntimeError(
                             f"代码执行超时（已超过 {exec_timeout} 秒限制），"
                             f"请优化代码或调整 SECURITY_SANDBOX_TIMEOUT 配置"
                         ) from e
-                    workflow_logger.warning(
-                        f"Sandbox execution failed: {e}, fallback to local"
-                    )
-                    active_runner = self._get_local_runner()
-                    result_dict = await active_runner.run(
-                        user_code=self._conf.code,
-                        inputs=user_fields,
-                        timeout=exec_timeout,
-                    )
+                    raise build_error(
+                        StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                        comp_id="flow_code",
+                        reason=(
+                            f"Sandbox execution failed: {e}. "
+                            "Local fallback is disabled for security. "
+                            "Check SECURITY_SANDBOX_SERVER configuration or "
+                            "set ALLOW_LOCAL_CODE_EXEC=true for trusted networks."
+                        ),
+                        workflow="n/a",
+                    ) from e
                 else:
-                    raise  # Re-raise for non-sandbox environments
+                    raise
 
             # 4.5 将 function_log（用户 print 输出）通过 tracer 发送到 onInvokeData
             function_log = getattr(active_runner, "function_log", "")

@@ -331,6 +331,10 @@ class CodeExecutionSettings(BaseSettings):
         default="inprocess",
         validation_alias="LOCAL_CODE_EXEC_MODE",
     )
+    allow_local_exec: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LOCAL_CODE_EXEC",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
