@@ -35,12 +35,15 @@ class AgentEventsProcessor(BaseEventsProcessor):
         if not super()._initialized:
             super()._initialize_handlers()
 
-        cls._handler_methods.update({
+        # 拷贝语义（与 ControllerEventsProcessor/WorkflowEventsProcessor 一致），
+        # 避免就地 update 污染基类共享的 _handler_methods
+        cls._handler_methods = {
+            **cls._handler_methods,
             ConversationEvent.START.value: cls.process_start_event,
             ConversationEvent.MESSAGE.value: cls.process_message_event,
             ConversationEvent.SUMMARY_RESPONSE.value: cls.process_summary_response_event,
             ConversationEvent.AGENT_NODE_MSG.value: cls.process_agent_node_message,
-        })
+        }
 
         cls._initialized = True
 
