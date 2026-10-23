@@ -19,18 +19,18 @@
     <div id="fullContent" style="margin: 0 auto !important">
       <div class="h-100p detail-container">
         <div class="info-box">
-          <div class="section-title">基础信息</div>
+          <div class="section-title">{{ 'skill.detail.basicInfo.title' | i18n }}</div>
           <div class="info-row">
             <div class="info-item">
-              <div class="info-label">名称</div>
+              <div class="info-label">{{ 'skill.detail.basicInfo.name' | i18n }}</div>
               <div class="info-value">{{ this.skillDetail?.skillName }}</div>
             </div>
             <div class="info-item">
-              <div class="info-label">更新时间</div>
+              <div class="info-label">{{ 'skill.detail.basicInfo.updateTime' | i18n }}</div>
               <div class="info-value">{{ paseData(this.skillDetail?.updatedTime) }}</div>
             </div>
             <div class="info-item">
-              <div class="info-label">描述</div>
+              <div class="info-label">{{ 'skill.detail.basicInfo.describe' | i18n }}</div>
               <div class="info-value">{{ this.skillDetail?.description }}</div>
             </div>
           </div>
