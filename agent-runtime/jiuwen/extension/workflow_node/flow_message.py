@@ -12,6 +12,8 @@ Workflow message node: template-based user-visible message, aligned with jiuwen 
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import datetime
 import inspect
 from collections.abc import AsyncIterable
@@ -191,6 +193,26 @@ class Message(WorkflowComponent):
         if ev and ev.get("type", "") == MESSAGE_EVENT_TASK_COMPLETION:
             self.end_interrupt = True
 
+    def _new_renderer(self) -> TemplateProcessor:
+        """按调用克隆 TemplateProcessor，隔离渲染位置（issue #1555 审计）。
+
+        共享实例的 ``render_stream`` 逐段推进 ``_current_position/_chunk_index/
+        _count``：复用组件实例下并发执行会互踩渲染位置（顺序复用可经
+        render_stream finally 的 reset 自愈，并发不行；Message 无 set_mix，
+        引擎不会帮它复位）。浅拷贝足以隔离位置字段（int），模板 split 结果
+        ``_segments`` 只读共享；但浅拷贝会连 ``_lock/_condition`` 一起共享——
+        父类 ``_render_stream``（end_comp.py:399-441）在持有 ``_lock`` 期间逐帧
+        yield（变量为上游 AsyncGenerator 时可长时间挂起），跨执行共享同步原语
+        会让执行 B 阻塞在执行 A 的在途帧上（队头阻塞），故按调用重建同步原语
+        （参照 end.py ``_prepare_render_state``）。入口不改共享属性（I1 不变量）。
+        """
+        renderer = copy.copy(self._processor)
+        # 同步原语为上游处理器的私有字段，按调用重建只能直接替换
+        renderer._lock = asyncio.Lock()  # pylint: disable=protected-access
+        renderer._condition = asyncio.Condition()  # pylint: disable=protected-access
+        renderer.reset()
+        return renderer
+
     @classmethod
     def from_fields(
         cls,
@@ -312,7 +334,8 @@ class Message(WorkflowComponent):
         chunks: list[str] = []
         frame_count = 0
         try:
-            async for frame in self._processor.render_stream(user, session, timeout):
+            renderer = self._new_renderer()
+            async for frame in renderer.render_stream(user, session, timeout):
                 frame_count += 1
                 piece = self._extract_stream_piece(frame.get("data"))
                 chunks.append(piece)
@@ -416,7 +439,8 @@ class Message(WorkflowComponent):
         chunks: list[str] = []
         frame_count = 0
         try:
-            async for frame in self._processor.render_stream(user, session, timeout):
+            renderer = self._new_renderer()
+            async for frame in renderer.render_stream(user, session, timeout):
                 frame_count += 1
                 piece = self._extract_stream_piece(frame.get("data"))
                 chunks.append(piece)

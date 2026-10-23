@@ -170,10 +170,11 @@ Fail to run agent because [{}]
 
 Focus on the detailed process and errors of the underlying execution engine:
 
-**Performance phase logs** (`performance_logger`, INFO level, visible by default):
+**Performance phase logs** (`performance_logger`, requires `PERFORMANCE_LOG_LEVEL=INFO`, silent at the default `WARNING`):
 
 ```
 ir_convert|{ms}              # IR conversion duration
+ir_build_total|{ms}          # Total IR -> Workflow graph build duration
 node_id_mapping|{ms}         # IR to node mapping duration
 context_creation|{ms}        # Context creation duration
 session_creation|{ms}        # Session creation duration
@@ -182,7 +183,12 @@ pre_exec_total|{ms}          # Total pre-execution duration
 first_chunk_latency|{ms}     # First token latency
 workflow_stream|{ms}         # Total streaming output duration
 total_chunks|{count}         # Total output chunks
+workflow_cache|hit|miss|downgrade   # Workflow instance cache outcome
 ```
+
+> Performance instrumentation is off by default to avoid inflating normal-run
+> log volume. Set `PERFORMANCE_LOG_LEVEL=INFO` when diagnosing performance
+> issues (e.g. whether the workflow cache is hit, graph build cost).
 
 **Request body logs** (requires `WORKFLOW_LOG_LEVEL=DEBUG`):
 

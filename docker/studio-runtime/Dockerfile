@@ -19,14 +19,16 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python 依赖（临时安装编译工具链，编译完成后卸载）
+# 安装 Python 依赖（临时安装编译工具链 + git，编译完成后卸载）
+# git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
+# （agent-core 修复分支，见 requirements.txt 注释），装完即卸载不留在镜像里。
 COPY requirements.txt $SERVICE_HOME/app/
-RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev git \
     && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
     && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
-    && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && apt-get remove -y gcc python3-dev git && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 

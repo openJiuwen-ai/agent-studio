@@ -56,6 +56,7 @@ agent-runtime/jiuwen/test/cases/
 /agent-runtime/logs
 /agent-runtime/agent_builder/nl_to_agent/adapter/logs/*
 /agent-runtime/agent_builder/serve/logs/*
+/agent-runtime/tests/integration_tests/logs/
 /agent-runtime/open_agentBuilder_engine.egg-info
 *.mmap
 
@@ -88,3 +89,7 @@ docker/image/
 docker/AgentBuilder.tar.gz
 docker/.source-build-hash
 docker/.last-build.env
+
+# superpowers SDD workspaces
+.superpowers/
+docs/superpowers/

@@ -49,6 +49,9 @@ from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_workflow_queue
+from jiuwen.serve.controllers.execution.workflow_instance_cache import (
+    evict_workflow_instances_by_path,
+)
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
 
@@ -758,9 +761,10 @@ async def delete_ir_execution_instance(req: DeleteExecutionInstanceRequest):
     """
     try:
         await AsyncStateManager().delete_state(key=req.conversation_id)
-        # 清除 WorkFlow spec缓存
+        # 清除 WorkFlow spec缓存 + 静态图实例缓存（内存卫生，非正确性需要）
         if req.ir_path:
             await cache_workflow_queue.apop(req.ir_path)
+            await evict_workflow_instances_by_path(req.ir_path)
     except JiuWenBaseException:
         raise
     except Exception as e:

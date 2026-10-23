@@ -306,28 +306,22 @@ def build_parallel_join_plan(
         for item in items:
             clusters.setdefault(item[1], []).append(item)
 
-        # 类内多成员仅当两两波互斥时合并为一个 spec：互斥（如同一判断节点
-        # if/default 各自扇出到相同子图，或分支锚点扇出与该分支另一条件链内
-        # 节点扇出）意味着运行时至多一组波触发，单套 lane-done barrier 的
-        # AND 等待语义不变；不互斥（如兄弟分支节点可同时触发两波）时保持
-        # 多 spec —— 由下方整体回退 wait_for_all 兜底。
+        # 结构签名相同（同一 cluster）的 members 描述同一物理 lane 结构：
+        # lane_start → terminals 完全一致，done 节点名仅差 parallel_id 前缀
+        # （terminal_to_done 的 key 为 (source, join_target, branch_id)，不含
+        # parallel_id）。terminals 相同意味着运行时被触发的始终是同一批物理
+        # 节点/边，单套 lane-done barrier 的 AND 等待语义不变——无条件合并取
+        # 第一个（逗号拼接 parallelBranchId 拆分出的多个并行组正属此类）。
+        #
+        # 历史教训（issue #1558）：曾要求类内成员两两波互斥才合并，不互斥时
+        # 保持多 spec 并"回退 wait_for_all 兜底"。但该兜底在循环边场景不成立：
+        # collect_parallel_join_nodes 过滤循环入边（_is_reachable(target,
+        # source)），汇聚点不被识别为 join 点、wait_for_all 从未设置；多 spec
+        # 触发的整体放弃（len(specs) != 1 → continue）使 lane 完全不接管，
+        # 汇聚点各入边独立触发 → 重复执行。
         merged: list[tuple[str, frozenset, str, list]] = []
         for members in clusters.values():
-            mutually_exclusive = True
-            for i, member_i in enumerate(members):
-                for member_j in members[i + 1:]:
-                    if not _waves_mutually_exclusive(
-                        _conditions_for(member_i[0], member_i[2]),
-                        _conditions_for(member_j[0], member_j[2]),
-                    ):
-                        mutually_exclusive = False
-                        break
-                if not mutually_exclusive:
-                    break
-            if len(members) == 1 or mutually_exclusive:
-                merged.append(members[0])
-            else:
-                merged.extend(members)
+            merged.append(members[0])
 
         for parallel_id, _signature, first_fork_source, selected in merged:
             lanes: list[ParallelLane] = []

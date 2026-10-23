@@ -20,6 +20,7 @@ import copy
 from enum import Enum
 import json
 import re
+from typing import Tuple
 
 from agent_runtime.context.request_context import _request_ctx
 from jiuwen.common.exception.status_code import StatusCode
@@ -151,7 +152,6 @@ class FlowMcp(WorkflowComponent):
         self._client = None
         self.api: MCPTool = None
         self._is_older_version: bool = False
-        self._header_params: dict = {}
         self._init_lock: asyncio.Lock = asyncio.Lock()
         if conf:
             self.init(conf)
@@ -320,8 +320,11 @@ class FlowMcp(WorkflowComponent):
 
         inputs_data = inputs.get(USER_FIELDS, {})
         schema_patches = {}
+        header_params = {}
         if not self._is_older_version:
-            api_inputs, schema_patches = self._format_api_inputs(inputs_data)
+            api_inputs, schema_patches, header_params = self._format_api_inputs(
+                inputs_data
+            )
         else:
             api_inputs = inputs_data
 
@@ -335,8 +338,8 @@ class FlowMcp(WorkflowComponent):
         if runtime_context_header:
             jiuwen_kwargs["runtime_context"] = runtime_context_header
 
-        # 合并 header_params 到 runtime_auth headers
-        header_params = getattr(self, "_header_params", {})
+        # 合并 header_params 到 runtime_auth headers（随 _format_api_inputs
+        # 返回值传递，不落实例字段——实例跨执行复用）
         if header_params:
             if "runtime_auth" not in jiuwen_kwargs:
                 jiuwen_kwargs["runtime_auth"] = {"headers": {}}
@@ -361,17 +364,20 @@ class FlowMcp(WorkflowComponent):
         outputs = self._format_api_outputs(api_outputs)
         return {USER_FIELDS: outputs}
 
-    def _format_api_inputs(self, inputs: dict) -> tuple:
+    def _format_api_inputs(self, inputs: dict) -> Tuple[dict, dict, dict]:
         """格式化 API 输入参数（基于 client._tool_params 的类型转换）
 
-        注意：method=Headers 的参数会被提取到 _header_params，不作为 call_tool 的 arguments
+        注意：method=Headers 的参数会被提取到返回值 header_params，不作为
+        call_tool 的 arguments
 
         Returns:
-            tuple: (api_inputs, schema_patches)
+            tuple: (api_inputs, schema_patches, header_params)
                 - api_inputs: 格式化后的调用参数
                 - schema_patches: {参数名: "object"/"array"}，记录 JSON 字符串被
                   解析成 dict/list 的参数，供调用方按 card 副本生成 schema，
                   不就地修改共享的 tool card
+                - header_params: method=Headers 的参数（随返回值传递，不写
+                  实例字段——实例跨执行复用）
         """
         tool_params = getattr(self._client, "_tool_params", None)
         api_params_dict = {param.name: param for param in tool_params}
@@ -438,9 +444,8 @@ class FlowMcp(WorkflowComponent):
                     FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
                     param=name,
                 )
-        # 保存 header_params 到实例变量，供后续 invoke 使用
-        self._header_params = header_params
-        return api_inputs, schema_patches
+        # header_params 随返回值交给调用方（不写实例字段）
+        return api_inputs, schema_patches, header_params
 
     @staticmethod
     def _is_json_like_string(value) -> bool:
