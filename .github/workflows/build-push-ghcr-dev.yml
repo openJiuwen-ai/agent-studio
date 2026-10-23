@@ -320,7 +320,8 @@ jobs:
               echo "ERROR: required image ${IMAGE} unavailable"
               exit 1
             fi
-            docker save -o "images/${SERVICE}-${ARCH_SUFFIX}.tar" "${IMAGE}"
+            # containerd image store 下 docker save 默认导出宿主平台内容，跨架构拉取后必须显式指定 --platform
+            docker save --platform "linux/${ARCH}" -o "images/${SERVICE}-${ARCH_SUFFIX}.tar" "${IMAGE}"
             docker image rm "${IMAGE}" >/dev/null 2>&1 || true
             zip -q "${ARCHIVE}" "images/${SERVICE}-${ARCH_SUFFIX}.tar"
             rm -f "images/${SERVICE}-${ARCH_SUFFIX}.tar"
