@@ -73,6 +73,9 @@ export class ExportModalComponent implements OnInit {
     controller: 'agent_id',
   };
 
+  /** 导出进行中标记，防止连点导致重复导出 */
+  public submitting = false;
+
   public get allChecked(): boolean {
     return this.listOfData.length > 0 && this.listOfData.every((item) =>
       this.setOfCheckedId.has(item[this.selectedType.rowKey])
@@ -316,6 +319,10 @@ export class ExportModalComponent implements OnInit {
   }
 
   public handleExport(): void {
+    if (this.submitting) {
+      return;
+    }
+    this.submitting = true;
     this.confirm.emit({
       type: this.exportType,
       rows: Array.from(this.selectedRowsMap.values())

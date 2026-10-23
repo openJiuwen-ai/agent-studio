@@ -32,6 +32,7 @@ import { agentCommonLogic } from '@routes/agent-center/app-agent/common-logic-ag
 export class ExportPackageModalComponent implements OnInit {
   public displayData: any[] = [];
   public loading = false;
+  public submitting = false;
   public totalNumber = 0;
   public currentPage = 1;
   public pageSize = 10;
@@ -128,6 +129,11 @@ export class ExportPackageModalComponent implements OnInit {
 
   /** 导出 */
   public exportIntentPackage(): void {
+    // 防止连点导致重复导出
+    if (this.submitting) {
+      return;
+    }
+    this.submitting = true;
     const params = {
       ids: Array.from(this.setOfCheckedId),
     };
@@ -139,6 +145,8 @@ export class ExportPackageModalComponent implements OnInit {
         `${this.commonLogic.getFormattedDateTime()}.xlsx`
       );
       this.dismiss();
+    }).finally(() => {
+      this.submitting = false;
     });
   }
 

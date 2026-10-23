@@ -66,7 +66,7 @@
     <button *nzSpaceItem type="button" nz-button (click)="dismiss()">
       {{ 'cancel' | i18nextEager }}
     </button>
-    <button *nzSpaceItem type="button" nz-button nzType="primary" [disabled]="!setOfCheckedId.size" (click)="handleExport()">
+    <button *nzSpaceItem type="button" nz-button nzType="primary" [disabled]="submitting || !setOfCheckedId.size" [nzLoading]="submitting" (click)="handleExport()">
       {{ 'export' | i18nextEager }}
     </button>
   </nz-space>

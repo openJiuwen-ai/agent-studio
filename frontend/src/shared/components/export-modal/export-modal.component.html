@@ -124,7 +124,8 @@
       type="button"
       nz-button
       nzType="primary"
-      [disabled]="!setOfCheckedId.size"
+      [disabled]="submitting || !setOfCheckedId.size"
+      [nzLoading]="submitting"
       (click)="handleExport()"
     >
       {{ 'export' | i18nextEager }}
