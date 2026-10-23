@@ -26,6 +26,29 @@
     button {
       margin-left: 8px;
     }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 4px 8px;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      width: fit-content;
+
+      .file-name {
+        color: #595959;
+      }
+
+      .file-remove {
+        cursor: pointer;
+        color: #999;
+        &:hover {
+          color: #ff4d4f;
+        }
+      }
+    }
   }
 
   .parse-result {
