@@ -354,3 +354,7 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+### Placeholder Text in Prompt Evaluation Data
+
+When testing prompts that discuss template syntax, questions, candidate answers and reference answers may contain literal `{{question}}`, `{{answer_match}}` or `{{actual_answer}}` text. LLM-based prompt evaluation preserves these field values as data. Only the corresponding markers in the original judge prompt template are substituted, in one pass; inserted values are not interpreted as additional template fields. This prevents a candidate answer containing `{{actual_answer}}` from being replaced with the reference answer before judging. This behavior applies to both objective and subjective evaluation templates.
