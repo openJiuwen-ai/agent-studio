@@ -33,7 +33,7 @@
         <h2.version>2.2.224</h2.version>
         <plexus-archiver.version>4.11.0</plexus-archiver.version>
         <log4j2.version>2.25.5</log4j2.version>
-        <mariadb-java-client.version>3.5.6</mariadb-java-client.version>
+        <mariadb-java-client.version>3.5.9</mariadb-java-client.version>
         <swaggerV2.version>1.6.14</swaggerV2.version>
         <springdoc-openapi.version>2.8.8</springdoc-openapi.version>
         <jacoco.version>0.8.11</jacoco.version>
@@ -56,7 +56,7 @@
         <jose4j.version>0.9.6</jose4j.version>
         <redisson.version>3.39.0</redisson.version>
         <mcp.sdk.version>0.16.0</mcp.sdk.version>
-        <tomcat-embed-core.version>10.1.57</tomcat-embed-core.version>
+        <tomcat-embed-core.version>10.1.60</tomcat-embed-core.version>
         <hadoop.version>3.4.2</hadoop.version>
         <http.version>4.5.14</http.version>
         <org.jetbrains.version>26.0.1</org.jetbrains.version>
@@ -74,7 +74,7 @@
         <kotlin.version>2.0.21</kotlin.version>
         <avro.version>1.12.1</avro.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
-        <httpclient5.version>5.6.3</httpclient5.version>
+        <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
         <nimbus-jose-jwt.version>10.3</nimbus-jose-jwt.version>
         <mapstruct.version>1.6.3</mapstruct.version>
@@ -90,28 +90,38 @@
         <dependency>
             <artifactId>jackson-databind</artifactId>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <version>2.22.1</version>
+            <version>2.22.3</version>
+        </dependency>
+        <dependency>
+            <artifactId>jackson-core</artifactId>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <version>2.22.3</version>
         </dependency>
         <dependency>
             <artifactId>jackson-annotations</artifactId>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <version>2.21</version>
+            <version>2.22</version>
         </dependency>
         <dependency>
             <artifactId>jackson-dataformat-yaml</artifactId>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
-            <version>2.20.2</version>
+            <version>2.22.3</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>2.20.2</version>
+            <version>2.22.3</version>
             <exclusions>
                 <exclusion>
                     <artifactId>jackson-databind</artifactId>
                     <groupId>com.fasterxml.jackson.core</groupId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk8</artifactId>
+            <version>2.22.3</version>
         </dependency>
         <!--Hdt 使用离线模式依赖。-->
         <dependency>
@@ -162,6 +172,23 @@
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
                 <version>${httpclient5.version}</version>
+            </dependency>
+            <!-- 统一 mariadb-java-client 版本 -->
+            <dependency>
+                <groupId>org.mariadb.jdbc</groupId>
+                <artifactId>mariadb-java-client</artifactId>
+                <version>${mariadb-java-client.version}</version>
+            </dependency>
+            <!-- 统一 zookeeper 版本 -->
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>3.9.6</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper-jute</artifactId>
+                <version>3.9.6</version>
             </dependency>
             <dependency>
                 <groupId>com.github.pagehelper</groupId>

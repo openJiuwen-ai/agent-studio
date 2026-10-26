@@ -14,7 +14,7 @@ dependencies = [
     "aiohttp",
     "httpx",
     "requests",
-    "urllib3",
+    "urllib3==2.8.0",
     "psycopg2-binary",
     "redis>=5.0.0",
     "sqlalchemy>=2.0.0",
