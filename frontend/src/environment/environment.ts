@@ -26,6 +26,25 @@ export function resolveLargeDslBytesThreshold(raw: unknown): number {
     : DEFAULT_LARGE_DSL_BYTES_THRESHOLD;
 }
 
+/** .staging/index.html 中的占位符字面量；start.sh 未替换（如本地 ng serve）时视为未配置。 */
+export const IFRAME_SSO_TOKEN_PARAM_PLACEHOLDER = 'iframe_sso_token_placeholder';
+
+/**
+ * iframe SSO 桥接单参数严格解析：非空字符串、非占位符残留、且仅含
+ * ^[A-Za-z0-9_-]+$（URL 参数名/Cookie 名/头名合法字符，且无正则元字符，
+ * 可安全内嵌 RegExp）时返回原值，否则返回 null（= 定制关闭，行为与现状一致）。
+ */
+export function resolveIframeSsoTokenParam(raw: unknown): string | null {
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const text = raw.trim();
+  if (!text || text === IFRAME_SSO_TOKEN_PARAM_PLACEHOLDER || !/^[A-Za-z0-9_-]+$/.test(text)) {
+    return null;
+  }
+  return text;
+}
+
 export const environment: IEnvironment = {
   prefixPath: window.location.origin,
   jumpObsPath: '/console/#obs',
@@ -35,4 +54,5 @@ export const environment: IEnvironment = {
   toolAPIName: 'rest-api-test',
   serviceName: 'jiuwen-agent',
   largeDslBytesThreshold: resolveLargeDslBytesThreshold(window.largeDslBytesThreshold),
+  iframeSsoTokenParam: resolveIframeSsoTokenParam(window.iframeSsoTokenParam),
 };
