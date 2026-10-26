@@ -768,3 +768,104 @@ def test_dual_fork_join_executes_once(neg_if, _event_loop):
     assert len(EXEC_LOG.get("MSG", [])) == 1
     assert len(EXEC_LOG.get("D1", [])) == 1
     assert len(EXEC_LOG.get("D2", [])) == 1
+
+
+# ---------------------------------------------------------------------------
+# 互斥分支下 Message 混合引用 start 字段（线上『判断-消息』58ec2759 拓扑）：
+# start → 判断；if → end；default → LLM(stream) → 消息 → end。
+# 消息同时引用 LLM 流式输出（sd）与 start.query（批量源）。修复前 schema
+# 自动补边给出 start → 消息 的批量直达边（独立触发边）：if 命中时 LLM 不执行，
+# 消息仍被 INVOKE 触发且无流数据可收，抛 GRAPH_VERTEX_STREAM_CALL_ERROR
+#（"no stream data in"）。修复后：目标已有触发入边时不再补批量直达边。
+# ---------------------------------------------------------------------------
+
+
+def _build_branch_message_ir() -> dict:
+    """『判断-消息』拓扑：消息混合引用流式 LLM 输出与 start.query。"""
+    components = [
+        {
+            "id": "node_start",
+            "type": "jiuwen.start",
+            "inputs": {
+                "userFields": {},
+                "systemFields": {"query": "", "sys": {}},
+            },
+            "configs": {"userFields": {"inputs": [], "outputs": []}},
+        },
+        {"id": "node_br", "type": "jiuwen.branch", "configs": _branch_configs("node_br-if")},
+        {
+            "id": "node_llm",
+            "type": "jiuwen.llm",
+            "configs": {"stream": True, "responseFormat": {"type": "text"}},
+            "inputs": {"userFields": {"query": "${node_start.systemFields.query}"}},
+        },
+        {
+            "id": "node_msg",
+            "type": "jiuwen.message",
+            "configs": {"template": "1221 {{sd}}"},
+            "inputs": {
+                "userFields": {
+                    "sd": "${node_llm.userFields.raw_output}",
+                    "query": "${node_start.systemFields.query}",
+                }
+            },
+        },
+        {
+            "id": "node_end",
+            "type": "jiuwen.end",
+            "configs": {"responseTemplate": "{{result}}", "isStreamOut": False},
+            "inputs": {"userFields": {"result": "${node_msg.result}"}},
+        },
+    ]
+    connections = [
+        _edge("node_start", "node_br"),
+        _edge("node_br", "node_end", branch_id="node_br-if"),
+        _edge("node_br", "node_llm", branch_id="node_br-default"),
+        _edge("node_llm", "node_msg"),
+        _edge("node_msg", "node_end"),
+    ]
+    return {"components": components, "connections": connections}
+
+
+@pytest.mark.asyncio
+async def test_mixed_ref_message_not_pulled_by_auto_batch_edge():
+    """混合引用的消息节点：不再补 start → 消息 批量直达边，流式投递与分支路由不变。"""
+    workflow = await _build_workflow(_build_branch_message_ir())
+    internal = _get_internal(workflow)
+    spec = internal.config().spec
+    graph = _get_graph(internal)
+
+    # 修复核心：不补出 start → 消息 的独立触发边
+    assert "node_msg" not in (spec.edges.get("node_start") or [])
+    assert ("node_start", "node_msg") not in graph.edges
+    # 消息仍由 LLM 的流式边投递（COLLECT 路径）
+    assert "node_msg" in (spec.stream_edges.get("node_llm") or [])
+    # 分支路由不受影响：if → end，default → LLM
+    targets = _collect_branch_targets(graph, "node_br")
+    assert targets.get("node_br-if") == ["node_end"]
+    assert targets.get("node_br-default") == ["node_llm"]
+    # 消息 → end 的原有边保持
+    assert "node_end" in (spec.edges.get("node_msg") or [])
+
+
+@pytest.mark.asyncio
+async def test_auto_batch_edge_kept_for_end_mixed_ref():
+    """守卫不扩大化：End（wait_for_all barrier，非流式消费注册）混合引用时补边保留。"""
+    ir = _build_branch_message_ir()
+    # End 同时引用流式 LLM 输出与 start.query（batch 源）
+    end_node = next(c for c in ir["components"] if c["id"] == "node_end")
+    end_node["inputs"] = {
+        "userFields": {
+            "result": "${node_llm.userFields.raw_output}",
+            "q": "${node_start.systemFields.query}",
+        }
+    }
+    workflow = await _build_workflow(ir)
+    internal = _get_internal(workflow)
+    spec = internal.config().spec
+
+    # End 不在 stream_input_target_ids（isStreamOut=False），
+    # start → end 的 batch 补边保留（barrier 场景行为不变）
+    assert "node_end" in (spec.edges.get("node_start") or [])
+    # 修复核心同时成立：消息不被补独立触发边
+    assert "node_msg" not in (spec.edges.get("node_start") or [])
