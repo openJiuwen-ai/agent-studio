@@ -163,6 +163,7 @@ class FlowStreamTransform(WorkflowComponent):
                 self._output_field = first_output["id"]
                 self._direct_assign_output = False
 
+        self._is_pure_placeholder = False
         if not isinstance(self._transformer_conf, dict):
             raise build_flow_stream_transform_error(
                 error_code=FlowStreamTransformStatusCode.CONFIG_ERROR[0],
@@ -198,6 +199,9 @@ class FlowStreamTransform(WorkflowComponent):
             else v
             for v in cfg.variables
         ]
+        self._is_pure_placeholder = any(
+            v.src_path == "" and v.name == self._source_field for v in new_vars
+        )
         return _dc_replace(cfg, variables=new_vars)
 
     async def invoke(
@@ -393,7 +397,11 @@ class FlowStreamTransform(WorkflowComponent):
 
         async for frame in out_stream:
             if prev is not None:
-                answer = self._format_answer(prev)
+                if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                    _val = list(prev.values())[0]
+                    answer = self._format_answer(_val)
+                else:
+                    answer = self._format_answer(prev)
                 await session.write_stream(
                     OutputSchema(
                         type=STREAM_TYPE_PARTIAL_CONTENT,
@@ -407,7 +415,11 @@ class FlowStreamTransform(WorkflowComponent):
             prev = frame
 
         if prev is not None:
-            answer = self._format_answer(prev)
+            if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                _val = list(prev.values())[0]
+                answer = self._format_answer(_val)
+            else:
+                answer = self._format_answer(prev)
             await session.write_stream(
                 OutputSchema(
                     type=STREAM_TYPE_MESSAGE_END,
@@ -485,7 +497,11 @@ class FlowStreamTransform(WorkflowComponent):
         prev = None
         async for frame in out_stream:
             if prev is not None:
-                answer = self._format_answer(prev)
+                if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                    _val = list(prev.values())[0]
+                    answer = self._format_answer(_val)
+                else:
+                    answer = self._format_answer(prev)
                 yield OutputSchema(
                     type=STREAM_TYPE_PARTIAL_CONTENT,
                     index=idx,
@@ -497,7 +513,11 @@ class FlowStreamTransform(WorkflowComponent):
             prev = frame
 
         if prev is not None:
-            answer = self._format_answer(prev)
+            if self._is_pure_placeholder and isinstance(prev, dict) and len(prev) == 1:
+                _val = list(prev.values())[0]
+                answer = self._format_answer(_val)
+            else:
+                answer = self._format_answer(prev)
             yield OutputSchema(
                 type=STREAM_TYPE_MESSAGE_END,
                 index=idx,
