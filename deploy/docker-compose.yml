@@ -191,6 +191,8 @@ services:
       agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-runtime:31014}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
+      # manager 出站 header 跳过名单定制（默认空 = 不过滤/全量透传）；逗号分隔、大小写不敏感
+      manager_skip_outbound_header_list: ${MANAGER_SKIP_OUTBOUND_HEADER_LIST:-}
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}

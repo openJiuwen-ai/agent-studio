@@ -149,6 +149,19 @@ if (withDist) {
   }
 }
 
+// ---- 5b. manager 出站 header 名单部署声明（单参数定制，默认关）----
+// compose/k8s 为显式白名单：不声明则 .env 值进不了容器，名单静默不生效（无日志无报错）。
+const k8sManager = read('deploy/k8s/studio-manager.yaml');
+if (envTpl && !/^MANAGER_SKIP_OUTBOUND_HEADER_LIST=$/m.test(envTpl)) {
+  fail('[FAIL] deploy/.env.template 未声明 MANAGER_SKIP_OUTBOUND_HEADER_LIST=（默认空）');
+}
+if (compose && !/manager_skip_outbound_header_list:\s*\$\{MANAGER_SKIP_OUTBOUND_HEADER_LIST:-\}/.test(compose)) {
+  fail('[FAIL] docker-compose studio-manager 未定义 ${MANAGER_SKIP_OUTBOUND_HEADER_LIST:-} 透传');
+}
+if (k8sManager && !/name:\s*manager_skip_outbound_header_list/.test(k8sManager)) {
+  fail('[FAIL] k8s studio-manager.yaml 未定义 manager_skip_outbound_header_list env');
+}
+
 if (failures.length) {
   console.error(failures.join('\n'));
   console.error('\n常量漂移：请同步调整 environment.ts / start.sh / .staging/index.html / 部署文件（压测后调值时）。');
@@ -159,5 +172,5 @@ console.log(
   `[OK] 常量一致：DEFAULT=${tsDefault} (${(tsDefault / 1024 / 1024).toFixed(0)}MB), ` +
     `MAX=${tsMax} (${(tsMax / 1024 / 1024).toFixed(0)}MB)，构建入口与部署默认值一致` +
     (withDist ? '，构建产物含占位符' : '') +
-    '，iframe SSO 占位符在位',
+    '，iframe SSO 占位符在位，出站名单声明在位',
 );
