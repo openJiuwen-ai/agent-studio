@@ -105,6 +105,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         # WorkflowRunner.run_streaming 的 workflow_start 帧 data 携带
         # workflow_id/workflow_name；写入 trace 供后续 message/end/error 帧复用。
         # trace.instance_id（= 路径 workflow_id）兜底，确保 resume 等无 start 帧场景也能返回。
+        # 多控制器/子工作流场景下 data 中显式带的 id 优先于 trace 兜底。
         src_data = full_data.get("data", {}) or {}
         workflow_id = cls._resolve_workflow_id(src_data, trace)
         workflow_name = cls._resolve_workflow_name(src_data, trace)

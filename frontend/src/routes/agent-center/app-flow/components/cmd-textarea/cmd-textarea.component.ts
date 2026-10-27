@@ -71,6 +71,9 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   @Input() minHeight = '200px';
 
+  /** 开启后仅高亮 variants 中已声明的 {{var}} / {{{var}}}，其余花括号按普通文本展示 */
+  @Input() highlightKnownOnly = false;
+
   @Output() compositionstart = new EventEmitter<CompositionEvent>();
 
   @Output() compositionend = new EventEmitter<CompositionEvent>();
@@ -180,6 +183,10 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   }
 
   ngOnChanges(changes: SimpleChanges) {
+    if (changes.highlightKnownOnly && !changes.highlightKnownOnly.firstChange) {
+      // 开关切换后按新策略重渲染高亮
+      setTimeout(() => this.processContent());
+    }
     if (changes.variants) {
       const newVariants: CmdTextareaVariableGroup[] = [
         { label: '', items: [] },
@@ -428,7 +435,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       startContainer.previousSibling.remove();
       event.preventDefault();
     } else if (
-      startContainer.parentElement.className === 'highlight'
+      startContainer.parentElement.className === 'highlight' ||
+      startContainer.parentElement.className === 'highlight-inline'
 
     ) {
       if( range.startOffset === startContainer.parentElement.innerText.length){
@@ -454,7 +462,7 @@ export class CmdTextareaComponent implements ControlValueAccessor {
         }
         return;
       }
-      if (targetNode.classList.contains('highlight')) {
+      if (targetNode.classList.contains('highlight') || targetNode.classList.contains('highlight-inline')) {
         targetNode.remove();
         event.preventDefault();
         this.onContentChange();
@@ -696,6 +704,33 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     return { text, offset };
   }
 
+  /** 判断 {{var}} / {{{var}}} 是否落在已声明 variants 中 */
+  private isKnownVariantToken(token: string): boolean {
+    let inner = token;
+    if (inner.startsWith('{{{') && inner.endsWith('}}}')) {
+      inner = inner.slice(3, -3);
+    } else if (inner.startsWith('{{') && inner.endsWith('}}')) {
+      inner = inner.slice(2, -2);
+    }
+    const name = inner.trim();
+    return this.innerVariantsItems.some((v) => v.value === name);
+  }
+
+  /** 将匹配到的花括号包成高亮；highlightKnownOnly 时未知变量保持字面量 */
+  private wrapBraceToken(triple: string | undefined, dbl: string | undefined): string {
+    const token = triple || dbl;
+    if (!token) {
+      return '';
+    }
+    if (this.highlightKnownOnly && !this.isKnownVariantToken(token)) {
+      return token;
+    }
+    if (triple) {
+      return `<span class="highlight-inline">${triple}</span>\u200B`;
+    }
+    return `<span class="highlight">${dbl}</span>\u200B`;
+  }
+
   /**
    * 以纯文本为唯一数据源重渲染整个编辑区，遵循 processContent 的渲染约定：
    * escapeHTML → {{var}} 包 highlight span 并尾随 \u200B → \n 转 <br> → 末尾补 <br>。
@@ -710,10 +745,12 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     this.editorObserver.disconnect();
 
     let processed = this.escapeHTML(plainText);
-    const regex2 = new RegExp(`(?<var>{{[^{}\\n\\r]+?}})`, 'gi');
-    processed = processed.replace(
-      regex2,
-      '<span class="highlight">$<var></span>\u200B',
+    const regex2 = new RegExp(
+      `(\\{\\{\\{[^{}\\n\\r]+?\\}\\}\\})|({{[^{}\\n\\r]+?}})`,
+      'gi',
+    );
+    processed = processed.replace(regex2, (match, triple, dbl) =>
+      this.wrapBraceToken(triple, dbl),
     );
     processed = processed.replace(/\n/g, '<br>');
     if (!processed.endsWith('<br>')) {
@@ -724,7 +761,11 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     // restoreCursorPosition 的偏移空间 = 纯文本字符 + 每个 highlight 尾随的 1 个 \u200B；
     // 光标前的完整变量块数即需补的零宽字符数，换算成原始偏移。
     const before = plainText.slice(0, cursorOffset);
-    const zwCount = (before.match(/{{[^{}\n\r]+?}}/g) || []).length;
+    const braceMatches =
+      before.match(/\{\{\{[^{}\n\r]+?\}\}\}|{{[^{}\n\r]+?}}/g) || [];
+    const zwCount = this.highlightKnownOnly
+      ? braceMatches.filter((m) => this.isKnownVariantToken(m)).length
+      : braceMatches.length;
     this.reRenderTimes++;
     this.restoreCursorPosition(editor, cursorOffset + zwCount);
     this.updateSelection();
@@ -801,12 +842,15 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     });
 
     const regex1 = new RegExp(`\n`, 'gi');
-    const regex2 = new RegExp(`(?<var>{{[^{}\\n\\r]+?}})`, 'gi');
-    const regex3 = new RegExp(`{{[^}]*}}$`);
+    const regex2 = new RegExp(
+      `(\\{\\{\\{[^{}\\n\\r]+?\\}\\}\\})|({{[^{}\\n\\r]+?}})`,
+      'gi',
+    );
+    const regex3 = new RegExp(`(\\{\\{\\{[^}]*\\}\\}\\}|{{[^}]*}})$`);
     let processedText = this.editor.nativeElement.innerText;
     const subProcessedText=processedText.substring(0, charOffset);
     if (regex3.test(subProcessedText)) {
-      // 如果光标在{{var}}后面，将charOffset+1
+      // 如果光标在 {{var}} 或 {{{var}}} 后面，将charOffset+1
       charOffset++;
     }
     if(subProcessedText.length>=1&&subProcessedText[0]==='\u200B'){
@@ -819,9 +863,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     }
     processedText = processedText.replaceAll('\u200B', '');
     processedText = this.escapeHTML(processedText);
-    processedText = processedText.replace(
-      regex2,
-      '<span class="highlight">$<var></span>\u200B',
+    processedText = processedText.replace(regex2, (match, triple, dbl) =>
+      this.wrapBraceToken(triple, dbl),
     );
     processedText = processedText.replace(regex1, '<br>');
     if (!processedText.endsWith('<br>')) {

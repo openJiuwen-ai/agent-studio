@@ -1299,8 +1299,12 @@ async def post_process_workflow_streaming_output(
             error_flag = True
         elif item.code == StreamCode.WORKFLOW_EXCEPTION.value:
             error_flag = True
-        if item.code in [StreamCode.PARTIAL_CONTENT.value, StreamCode.ERROR.value]:
-            if "workflow_id" not in item.data:
+        if item.code in [
+            StreamCode.PARTIAL_CONTENT.value,
+            StreamCode.ERROR.value,
+            StreamCode.WORKFLOW_START.value,
+        ]:
+            if item.data is not None and "workflow_id" not in item.data:
                 item.data.update(dict(workflow_id=workflow_id))
         if item.code == StreamCode.FINISH.value:
             # 更新或者删除存储介质中的workflow state

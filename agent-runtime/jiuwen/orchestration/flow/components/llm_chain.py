@@ -863,6 +863,10 @@ class LLMChain(Invokable):
         """
         在 invoke 之前校验模板源，拦截危险占位符（如 query.__class__、表达式等）。
         只依赖模板字符串，不依赖运行时 inputs。
+
+        注意：allowLiteralBraces 仅在 openjiuwen extension LLM 路径完整生效
+        （校验 + 渲染保留字面量）。本 legacy 路径不做半吊子放宽，避免校验通过后
+        assembler 静默抹掉未声明占位符。
         """
         template = getattr(prompt_instance, "template", None)
         if template is None:

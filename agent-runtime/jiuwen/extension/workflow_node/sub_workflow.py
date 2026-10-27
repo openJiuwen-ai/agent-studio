@@ -1120,6 +1120,8 @@ class SubWorkflow(WorkflowComponent):
         parent_request_snapshot = self._enter_sub_request_scope(session, child_inputs)
         scope_active = True
         try:
+            # 多控制器诉求：只透出「挂在控制器上的工作流」那一条 workflow_start + workflow_id。
+            # 图内嵌套 SubWorkflow 的 lifecycle（含 workflow_start）继续过滤，不向外冒泡子 id。
             stream_iter = self._workflow_instance.stream(
                 inputs=child_inputs,
                 session=session,
@@ -1317,6 +1319,7 @@ class SubWorkflow(WorkflowComponent):
             chunk_type = chunk.type
             payload = chunk.payload if isinstance(chunk.payload, dict) else {}
 
+            # 嵌套子图 lifecycle 全部过滤，避免多控制器 SSE 冒出「挂载工作流内部的」子 id
             if chunk_type in ["start", "workflow_start", "workflow_end"]:
                 return None
 

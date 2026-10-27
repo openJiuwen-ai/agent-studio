@@ -404,6 +404,8 @@ export interface ILLMNode extends INodeBase {
     exception_process?: IExceptionProcess;
     enable_thinking?: boolean; //模型是否输出深度思考
     enable_memory?: boolean; // 是否启用记忆
+    /** 开启后仅已声明入参被当作变量，其余 {{...}} 按字面量保留 */
+    allow_literal_braces?: boolean;
     descriptionText?: string;
     isDefaultName?: boolean;
   };

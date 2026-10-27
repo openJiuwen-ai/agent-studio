@@ -11,6 +11,13 @@ import { NodeUtils } from 'src/routes/agent-center/app-flow/components/utils';
 import { WORKFLOW_SVGS } from 'src/routes/agent-center/app-flow/flow.const';
 import type { INodeType, IWorkflowFieldType } from 'src/routes/agent-center/app-flow/node.type';
 import { CdkConnectedOverlay, CdkOverlayOrigin, ConnectedPosition } from '@angular/cdk/overlay';
+import {
+  cloneTreeWithSelection,
+  getCompatibleTypes,
+  isNodeRefSelectable,
+  isNodeSelected as matchSelectedRef,
+  setDifferentTypeDisabledEacl,
+} from './input-tree-select.utils';
 
 @Component({
   selector: 'input-tree-select',
@@ -60,6 +67,8 @@ export class InputTreeSelect implements ControlValueAccessor {
     tr: '',
   };
   searchVal = '';
+  /** 二级树当前选中 key，避免污染共享 options 上的 checked/selected */
+  selectedTreeKeys: string[] = [];
   @ViewChild('selectDivDom') selectDivDom: ElementRef;
   @ViewChild('selectTreeDom') selectTreeDom: ElementRef;
   @ViewChild('inputDom') inputDom: ElementRef;
@@ -146,39 +155,68 @@ export class InputTreeSelect implements ControlValueAccessor {
   selectClick(event: Event) {
     event.stopPropagation();
     if (this.showSelectDiv) {
-      this.showSelectDiv = false;
-      this.treeSelectIndexList = [];
-      this.treeSelectIndex = -1;
+      this.closeSelectPanel();
       this.control?.controls?.[this.name]?.markAsDirty();
       this.vInvalid = !!this.control?.controls?.[this.name]?.errors && this.control?.controls?.[this.name]?.dirty;
     } else {
       this.showSelectDiv = true;
       this.searchVal = '';
       this.setDifferentTypeDisabled();
+      // 先按当前值算 path，再定位高亮（重开页面 / 多次换引用后必走）
+      this.setShowValRoute();
       setTimeout(() => {
         this.findTreeSelectIndex();
       }, 0);
     }
   }
 
+  /** 当前节点是否为已选引用（按 ref_node_id + ref_var_name，不依赖对象引用） */
+  isNodeSelected(node: any): boolean {
+    return matchSelectedRef(this._value, node);
+  }
+
+  private closeSelectPanel() {
+    this.showSelectDiv = false;
+    this.treeSelectIndexList = [];
+    this.treeSelectIndex = -1;
+    this.selectedTreeKeys = [];
+  }
+
+  /** 仅计算二级面板滚动位置，不写共享 options */
+  private collectScrollOffset(list: any[]) {
+    if (!list?.length || !this.path?.[0] || !this._value?.[0]) {
+      return;
+    }
+    for (const value of list) {
+      if (this.path[0].ref_node_id === value.ref_node_id && this.path[0].ref_var_name === value.ref_var_name) {
+        this.cScrollStartCt = true;
+        this.cScrollTop = 0;
+      }
+      if (
+        this.cScrollStartCt &&
+        (this.path[0].ref_node_id !== value.ref_node_id || this.path[0].ref_var_name !== value.ref_var_name)
+      ) {
+        this.cScrollTop += 1;
+      }
+      if (this.isNodeSelected(value)) {
+        this.cScrollStartCt = false;
+      }
+      if (value.children?.length) {
+        this.collectScrollOffset(value.children);
+      }
+    }
+  }
+
   setDifferentTypeDisabled() {
-    let type: string = this.specifyType;
+    const type: string = this.specifyType;
     if (type) {
+      const compatible = getCompatibleTypes(type);
       this.options.forEach(item => {
         if (item.children) {
-          item.children = this.setDifferentTypeDisabledEacl(item.children, type);
+          item.children = setDifferentTypeDisabledEacl(item.children, compatible);
         }
       });
     }
-  }
-  setDifferentTypeDisabledEacl(list, type) {
-    return list.map(item => {
-      item.disabled = item.type !== type;
-      if (item.children) {
-        item.children = this.setDifferentTypeDisabledEacl(item.children, type);
-      }
-      return item;
-    });
   }
 
   onSearch(val) {
@@ -198,8 +236,8 @@ export class InputTreeSelect implements ControlValueAccessor {
         this.cdr.markForCheck();
       }, 200);
     } else {
-      this.treeSelectIndexList = [];
-      this.treeSelectIndex = -1;
+      // 清空搜索后恢复当前值的一二级高亮
+      this.findTreeSelectIndex();
     }
   }
 
@@ -215,7 +253,13 @@ export class InputTreeSelect implements ControlValueAccessor {
     }
     const i = this.path[0].treeIndex;
     this.treeSelectIndex = i;
-    this.treeSelectIndexList = this.options[i]?.children || [];
+    this.selectedTreeKeys = [];
+    this.cScrollStartCt = false;
+    this.cScrollTop = 0;
+    this.collectScrollOffset(this.options);
+    // 用副本渲染二级树，并带上 selected / nzSelectedKeys
+    const cloned = cloneTreeWithSelection(this.options[i]?.children || [], this._value, this.selectedTreeKeys);
+    this.treeSelectIndexList = cloned.tree;
     this.selectDivDom.nativeElement.scrollTop = i * 32;
 
     const searchItems = this.selectDivDom.nativeElement.querySelectorAll('.search-item');
@@ -239,32 +283,13 @@ export class InputTreeSelect implements ControlValueAccessor {
         tr: 'translateY(0%)',
       };
     }
-    this.options.forEach(this.foreachOption);
     setTimeout(() => {
-      this.selectTreeDom.nativeElement.scrollTop = (this.cScrollTop - 3) * 32;
+      if (this.selectTreeDom?.nativeElement) {
+        this.selectTreeDom.nativeElement.scrollTop = Math.max(0, (this.cScrollTop - 3) * 32);
+      }
+      this.cdr.markForCheck();
     }, 10);
-    return;
   }
-
-  foreachOption = (value, index) => {
-    if (this.path[0].ref_node_id === value.ref_node_id && this.path[0].ref_var_name === value.ref_var_name) {
-      this.cScrollStartCt = true;
-      this.cScrollTop = 0;
-    }
-    if (this.cScrollStartCt && (this.path[0].ref_node_id !== value.ref_node_id || this.path[0].ref_var_name !== value.ref_var_name)) {
-      this.cScrollTop += 1;
-    }
-    if (this._value[0].ref_node_id === value.ref_node_id && this._value[0].ref_var_name === value.ref_var_name) {
-      value.checked = true;
-      this.cScrollStartCt = false;
-    } else {
-      value.checked = false;
-    }
-    value.expanded = true;
-    if (value.children) {
-      value.children.forEach(this.foreachOption);
-    }
-  };
 
   @HostListener('document:click', ['$event'])
   onClick(event: MouseEvent) {
@@ -277,9 +302,7 @@ export class InputTreeSelect implements ControlValueAccessor {
     if (!isInside && !isOwnOverlay) {
       this.control?.controls?.[this.name]?.markAsDirty();
       this.vInvalid = !!this.control?.controls?.[this.name]?.errors && this.control?.controls?.[this.name]?.dirty;
-      this.showSelectDiv = false;
-      this.treeSelectIndexList = [];
-      this.treeSelectIndex = -1;
+      this.closeSelectPanel();
     }
   }
 
@@ -372,7 +395,7 @@ export class InputTreeSelect implements ControlValueAccessor {
         childItem = this.treeToList(tree[i].children, treeItemText, val);
       }
 
-      if (index >= 0 && tree[i].disabled !== true && text.length > 0) {
+      if (index >= 0 && isNodeRefSelectable(tree[i]) && text.length > 0) {
         list.push({ item: tree[i], text: treeItemText });
       }
       list = [...list, ...childItem];
@@ -382,9 +405,10 @@ export class InputTreeSelect implements ControlValueAccessor {
   }
 
   selectItem(item) {
-    this.showSelectDiv = false;
-    this.treeSelectIndexList = [];
-    this.treeSelectIndex = -1;
+    if (!isNodeRefSelectable(item?.item)) {
+      return;
+    }
+    this.closeSelectPanel();
     this.value = [item.item];
     setTimeout(() => {
       this.select.emit();
@@ -393,7 +417,10 @@ export class InputTreeSelect implements ControlValueAccessor {
 
   treeNodeEnter(e, i) {
     this.treeSelectIndex = i;
-    this.treeSelectIndexList = this.options[i].children || [];
+    this.selectedTreeKeys = [];
+    // 悬停切换一级时也用副本 + 当前值高亮，避免多个引用字段残留 checked
+    const cloned = cloneTreeWithSelection(this.options[i]?.children || [], this._value, this.selectedTreeKeys);
+    this.treeSelectIndexList = cloned.tree;
     const isTop = window.innerHeight - e.clientY < 300;
     if (isTop) {
       this.treeDivPosition = {
@@ -413,12 +440,11 @@ export class InputTreeSelect implements ControlValueAccessor {
   treeNodeLeave(e) {}
 
   onTreeSelect(e) {
-    if (e.node.origin?.disabled) {
+    // 中间节点可展开但类型不兼容时 selectDisabled=true，禁止选中（仍可展开嵌套）
+    if (!isNodeRefSelectable(e.node.origin)) {
       return;
     }
-    this.showSelectDiv = false;
-    this.treeSelectIndexList = [];
-    this.treeSelectIndex = -1;
+    this.closeSelectPanel();
     this.value = [e.node.origin];
     setTimeout(() => {
       this.select.emit();

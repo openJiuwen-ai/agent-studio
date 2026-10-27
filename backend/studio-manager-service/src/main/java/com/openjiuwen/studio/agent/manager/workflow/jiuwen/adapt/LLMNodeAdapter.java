@@ -84,6 +84,11 @@ public class LLMNodeAdapter extends AbstractIRNodeAdapter {
      */
     private static final String VISION = "vision";
 
+    /**
+     * 允许提示词中未声明入参的 {{...}} 按字面量保留
+     */
+    private static final String ALLOW_LITERAL_BRACES = "allow_literal_braces";
+
     @Override
     public Map<String, Object> adaptConfig(WorkflowNodeVO workflowNodeVo) {
         Map<String, Object> configs = new HashMap<>();
@@ -97,6 +102,10 @@ public class LLMNodeAdapter extends AbstractIRNodeAdapter {
         if (nodeConfigs.get(STREAM) != null) {
             configs.put(STREAM, nodeConfigs.get(STREAM));
         }
+        // 默认 false：与历史行为一致，未声明 {{...}} 仍会报错
+        Object allowLiteralBraces = nodeConfigs.getOrDefault(ALLOW_LITERAL_BRACES, false);
+        configs.put(IRUtils.adaptKey(ALLOW_LITERAL_BRACES),
+                Boolean.parseBoolean(String.valueOf(allowLiteralBraces)));
 
         // 适配多模态理解模型支持图片
         if (nodeConfigs.get(VISION) != null) {

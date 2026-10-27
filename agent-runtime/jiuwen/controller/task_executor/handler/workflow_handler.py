@@ -1302,10 +1302,14 @@ class WorkflowHandler(BaseHandler):
                         workflow_status,
                         from_pe=from_pe,
                     )
-                # 流式输出添加workflow_id和workflow_name字段
+                # 流式输出补齐 workflow_id/name；子工作流帧若已自带 id 则不覆盖
                 if output.data:
-                    output.data["workflow_id"] = workflow_context.workflow_id
-                    output.data["workflow_name"] = workflow_context.workflow_name
+                    output.data.setdefault(
+                        "workflow_id", workflow_context.workflow_id
+                    )
+                    output.data.setdefault(
+                        "workflow_name", workflow_context.workflow_name
+                    )
                 # 转发所有输出
                 yield output
 

@@ -185,6 +185,7 @@
                           refSelectedRequire
                           [placeholder]="'select_placeholder' | i18nextEager"
                           (select)="treeSelect()"
+                          [specifyType]="getDifferentType(param)"
                         ></input-tree-select>
 
                         <div class="w-full" #valueWrapper></div>
@@ -338,6 +339,7 @@
                             refSelectedRequire
                             [placeholder]="'select_placeholder' | i18nextEager"
                             (select)="treeSelect()"
+                            [specifyType]="getDifferentType(origin)"
                           ></input-tree-select>
   
                           <div class="w-full" #valueWrapper></div>

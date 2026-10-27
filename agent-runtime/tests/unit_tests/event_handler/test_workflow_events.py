@@ -73,6 +73,25 @@ class TestProcessWorkflowStart:
         assert result.data["workflow_id"] == "wf-from-path"
         assert "workflow_name" not in result.data
 
+    @staticmethod
+    def test_preserves_workflow_id_and_name():
+        trace = Trace(handler_type="Workflow")
+        result = WorkflowEventsProcessor.process_event(
+            {
+                "event": "workflow_start",
+                "createdTime": 1784279771000,
+                "data": {
+                    "workflow_id": "child-wf-1",
+                    "workflow_name": "子工作流",
+                },
+            },
+            trace,
+        )
+        assert result.event == "workflow_started"
+        assert result.data["start_time"] == 1784279771000
+        assert result.data["workflow_id"] == "child-wf-1"
+        assert result.data["workflow_name"] == "子工作流"
+
 
 class TestProcessMessage:
     """Workflow message event."""

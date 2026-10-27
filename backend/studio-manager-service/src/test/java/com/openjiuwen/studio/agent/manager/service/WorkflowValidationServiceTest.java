@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashMap;
@@ -20,6 +21,7 @@ import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
+import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -426,5 +428,174 @@ class WorkflowValidationServiceTest {
         elementSchema.put("type", "object");
         elementSchema.put("schema", subFields);
         return elementSchema;
+    }
+
+    // ===== 插件引用类型兼容（bug 5142740）=====
+
+    @Test
+    void isRefTypeCompatible_integerVsString_shouldBeFalse() {
+        Boolean ok = (Boolean) invoke("isRefTypeCompatible", "integer", "string");
+        assertFalse(ok, "integer 入参不可引用 string");
+    }
+
+    @Test
+    void isRefTypeCompatible_stringVsFileImage_shouldBeTrue() {
+        Boolean ok = (Boolean) invoke("isRefTypeCompatible", "string", "file/image");
+        assertTrue(ok, "string 入参可兼容 file/image");
+    }
+
+    @Test
+    void isRefTypeCompatible_stringVsFileVideo_shouldBeTrue() {
+        Boolean ok = (Boolean) invoke("isRefTypeCompatible", "string", "file/video");
+        assertTrue(ok, "string 入参可兼容 file/video");
+    }
+
+    @Test
+    void normalizeWorkflowFieldType_arrayWithSchema_shouldExpand() {
+        WorkflowFieldVO field = buildField("array", Map.of("type", "string"));
+        String normalized = (String) invoke("normalizeWorkflowFieldType", field);
+        assertEquals("array<string>", normalized);
+    }
+
+    @Test
+    void validateRefTypeMatch_pluginIntegerRefQuery_shouldAddError() {
+        WorkflowFieldVO startQuery = new WorkflowFieldVO();
+        startQuery.setName("query");
+        startQuery.setType("string");
+
+        WorkflowNodeVO startInfo = new WorkflowNodeVO();
+        startInfo.setId("node_start");
+        startInfo.setType("Start");
+        startInfo.setOutputs(List.of(startQuery));
+
+        WorkflowFieldVO pluginInput = new WorkflowFieldVO();
+        pluginInput.setName("count");
+        pluginInput.setType("integer");
+
+        WorkflowNodeVO pluginInfo = new WorkflowNodeVO();
+        pluginInfo.setId("node_plugin");
+        pluginInfo.setType("Plugin");
+        pluginInfo.setInputs(List.of(pluginInput));
+
+        WorkflowValidationService.Node startNode = new WorkflowValidationService.Node(startInfo);
+        WorkflowValidationService.Node pluginNode = new WorkflowValidationService.Node(pluginInfo);
+
+        Map<String, WorkflowValidationService.Node> nodeMap = new HashMap<>();
+        nodeMap.put("node_start", startNode);
+        nodeMap.put("node_plugin", pluginNode);
+
+        Map<String, String> refMap = new HashMap<>();
+        refMap.put("ref_node_id", "node_start");
+        refMap.put("ref_var_name", "query");
+        refMap.put("source", "system");
+
+        java.util.Set<WorkflowValidationVOErrors> errors = new java.util.HashSet<>();
+        ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
+            errors);
+        assertFalse(errors.isEmpty(), "插件 integer 引用 start.query(string) 应报类型不一致");
+    }
+
+    @Test
+    void resolveOutputFieldByRefPath_nestedObject_shouldResolveLeafType() {
+        WorkflowFieldVO userId = new WorkflowFieldVO();
+        userId.setName("user_id");
+        userId.setType("string");
+
+        WorkflowFieldVO sys = new WorkflowFieldVO();
+        sys.setName("sys");
+        sys.setType("object");
+        sys.setSchema(List.of(userId));
+
+        WorkflowFieldVO resolved = (WorkflowFieldVO) invoke("resolveOutputFieldByRefPath", List.of(sys), "sys.user_id");
+        assertNotNull(resolved);
+        assertEquals("user_id", resolved.getName());
+        assertEquals("string", resolved.getType());
+    }
+
+    @Test
+    void validateRefTypeMatch_pluginIntegerRefNestedString_shouldAddError() {
+        WorkflowFieldVO userId = new WorkflowFieldVO();
+        userId.setName("user_id");
+        userId.setType("string");
+
+        WorkflowFieldVO sys = new WorkflowFieldVO();
+        sys.setName("sys");
+        sys.setType("object");
+        sys.setSchema(List.of(userId));
+
+        WorkflowNodeVO startInfo = new WorkflowNodeVO();
+        startInfo.setId("node_start");
+        startInfo.setType("Start");
+        startInfo.setOutputs(List.of(sys));
+
+        WorkflowFieldVO pluginInput = new WorkflowFieldVO();
+        pluginInput.setName("count");
+        pluginInput.setType("integer");
+
+        WorkflowNodeVO pluginInfo = new WorkflowNodeVO();
+        pluginInfo.setId("node_plugin");
+        pluginInfo.setType("Plugin");
+        pluginInfo.setInputs(List.of(pluginInput));
+
+        WorkflowValidationService.Node startNode = new WorkflowValidationService.Node(startInfo);
+        WorkflowValidationService.Node pluginNode = new WorkflowValidationService.Node(pluginInfo);
+
+        Map<String, WorkflowValidationService.Node> nodeMap = new HashMap<>();
+        nodeMap.put("node_start", startNode);
+        nodeMap.put("node_plugin", pluginNode);
+
+        Map<String, String> refMap = new HashMap<>();
+        refMap.put("ref_node_id", "node_start");
+        refMap.put("ref_var_name", "sys.user_id");
+        refMap.put("source", "system");
+
+        java.util.Set<WorkflowValidationVOErrors> errors = new java.util.HashSet<>();
+        ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
+            errors);
+        assertFalse(errors.isEmpty(), "插件 integer 引用 sys.user_id(string) 应报类型不一致");
+    }
+
+    @Test
+    void validateRefTypeMatch_pluginIntegerRefNestedObject_shouldAddError() {
+        WorkflowFieldVO nested = new WorkflowFieldVO();
+        nested.setName("sub");
+        nested.setType("object");
+        nested.setSchema(List.of());
+
+        WorkflowFieldVO sys = new WorkflowFieldVO();
+        sys.setName("sys");
+        sys.setType("object");
+        sys.setSchema(List.of(nested));
+
+        WorkflowNodeVO startInfo = new WorkflowNodeVO();
+        startInfo.setId("node_start");
+        startInfo.setType("Start");
+        startInfo.setOutputs(List.of(sys));
+
+        WorkflowFieldVO pluginInput = new WorkflowFieldVO();
+        pluginInput.setName("count");
+        pluginInput.setType("integer");
+
+        WorkflowNodeVO pluginInfo = new WorkflowNodeVO();
+        pluginInfo.setId("node_plugin");
+        pluginInfo.setType("Plugin");
+        pluginInfo.setInputs(List.of(pluginInput));
+
+        WorkflowValidationService.Node startNode = new WorkflowValidationService.Node(startInfo);
+        WorkflowValidationService.Node pluginNode = new WorkflowValidationService.Node(pluginInfo);
+
+        Map<String, WorkflowValidationService.Node> nodeMap = new HashMap<>();
+        nodeMap.put("node_start", startNode);
+        nodeMap.put("node_plugin", pluginNode);
+
+        Map<String, String> refMap = new HashMap<>();
+        refMap.put("ref_node_id", "node_start");
+        refMap.put("ref_var_name", "sys.sub");
+        refMap.put("source", "system");
+
+        java.util.Set<WorkflowValidationVOErrors> errors = new java.util.HashSet<>();
+        ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
+            errors);
+        assertFalse(errors.isEmpty(), "插件 integer 引用嵌套 object sys.sub 应报类型不一致");
     }
 }
