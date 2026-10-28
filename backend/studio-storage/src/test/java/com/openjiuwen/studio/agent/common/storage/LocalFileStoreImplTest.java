@@ -55,6 +55,20 @@ class LocalFileStoreImplTest {
     }
 
     @Test
+    void leading_slash_key_is_kept_within_base() {
+        // 兼容空 bucket 配置：调用方会拼出 "/bucket/..." 形式的键
+        fileStore.write("/bucket/ok.txt", "content");
+
+        assertTrue(Files.exists(baseDir.resolve("bucket/ok.txt")));
+    }
+
+    @Test
+    void leading_slash_key_cannot_escape_base() {
+        assertThrows(IllegalArgumentException.class,
+            () -> fileStore.write("/bucket/../../../../evil.txt", "pwned"));
+    }
+
+    @Test
     void write_rejects_path_traversal() {
         assertThrows(IllegalArgumentException.class,
             () -> fileStore.write("bucket/dir/../../../../evil.txt", "pwned"));
