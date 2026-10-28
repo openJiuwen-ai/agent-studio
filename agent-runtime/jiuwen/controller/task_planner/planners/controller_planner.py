@@ -765,7 +765,9 @@ class ControllerPlanner(TaskPlanner):
                     if global_intent.handler_type:
                         task_id = getattr(message, "task_id", "task")
                         return self.rule_module.create_global_intent_task(
-                            global_intent, task_id
+                            global_intent,
+                            task_id,
+                            message.runtime_data.get("trace_handlers"),
                         )
                     break
 
