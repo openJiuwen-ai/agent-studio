@@ -22,19 +22,34 @@ import java.util.stream.Stream;
 public class LocalFileStoreImpl implements FileStore {
 
     private final String basePath;
+    private final Path normalizedBasePath;
     private final String defaultNamespace;
     private final String stagingNamespace;
     private final String serverUrl;
 
     public LocalFileStoreImpl(StorageProperties.Local localConfig) {
         this.basePath = localConfig.getBasePath();
+        if (this.basePath == null || this.basePath.isBlank()) {
+            throw new IllegalArgumentException("storage.local.base-path must be configured when storage.type=LOCAL");
+        }
+        this.normalizedBasePath = Paths.get(this.basePath).toAbsolutePath().normalize();
         this.defaultNamespace = localConfig.getBucket();
         this.stagingNamespace = localConfig.getStagingBucket();
         this.serverUrl = localConfig.getServerUrl() != null ? localConfig.getServerUrl().replaceAll("/+$", "") : "";
     }
 
+    /**
+     * 将存储键解析为绝对路径，并确保结果仍位于存储根目录内，防止 {@code ../} 路径穿越。
+     *
+     * <p>保留 {@code Paths.get(basePath, path)} 的字符串拼接语义：空 bucket 配置下调用方会拼出
+     * {@code /xxx} 形式的键，若改用 {@link Path#resolve(Path)} 会被当作绝对路径而误判为越界。</p>
+     */
     private Path resolve(String path) {
-        return Paths.get(basePath, path);
+        Path resolved = Paths.get(normalizedBasePath.toString(), path).normalize();
+        if (!resolved.startsWith(normalizedBasePath)) {
+            throw new IllegalArgumentException("path escapes storage root: " + path);
+        }
+        return resolved;
     }
 
     private String extractKeyPrefix(String prefix) {

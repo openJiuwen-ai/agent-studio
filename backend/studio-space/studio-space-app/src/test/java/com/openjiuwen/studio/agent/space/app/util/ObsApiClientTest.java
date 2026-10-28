@@ -67,6 +67,18 @@ class ObsApiClientTest {
     }
 
     @Test
+    void test_uploadFile_sanitizes_path_traversal_filename() {
+        FileTransferUtils.AgentBuilderFile file = mock(FileTransferUtils.AgentBuilderFile.class);
+        when(file.getOriginalFilename()).thenReturn("../../../../tmp/evil.png");
+        when(file.getInputStream()).thenReturn(new ByteArrayInputStream("test".getBytes()));
+
+        String result = obsApiClient.uploadFile("bucket", "dir/", file);
+
+        assertEquals("dir/.._.._.._.._tmp_evil.png", result);
+        assertFalse(result.contains("../"));
+    }
+
+    @Test
     void test_uploadFile_throw_AgentSpaceException_on_failure() {
         doThrow(new RuntimeException("fail")).when(fileStore).write(anyString(), any(InputStream.class));
 
