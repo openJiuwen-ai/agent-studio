@@ -75,6 +75,13 @@ export class MCPService {
     })
   }
 
+  // 重载MCP工具列表（不卸载、不重装，同步拉取并返回差异）
+  public refreshMcpTools(serviceId: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/service/tools/refresh/${serviceId}`,
+    })
+  }
+
   // MCP评分接口
   public updateMcpRate(params: any): Promise<any> {
     return this.http.postAsync({

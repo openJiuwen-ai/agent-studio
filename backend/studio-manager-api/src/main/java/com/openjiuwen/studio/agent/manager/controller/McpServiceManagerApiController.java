@@ -23,6 +23,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServiceModifyReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceSkinnyEntity;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceStatisticResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsEntity;
+import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsRefreshResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsTestReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServicesCesLineChartQo;
 import com.openjiuwen.studio.agent.manager.dto.McpServicesCesSuccessRateLineChartQo;
@@ -150,6 +151,12 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     public ResponseEntity<McpServiceToolsEntity> mcpServicesToolsListWithFlow(String projectId, String workspaceId,
         String id) {
         return ResponseModel.success(mcpServiceManagerService.mcpServicesToolsListWithFlow(projectId, workspaceId, id));
+    }
+
+    @Override
+    public ResponseEntity<McpServiceToolsRefreshResp> refreshMcpServicesTools(String projectId, String workspaceId,
+        String id) {
+        return ResponseModel.success(mcpServiceManagerService.refreshMcpServicesTools(projectId, workspaceId, id));
     }
 
     @Override

@@ -2933,6 +2933,11 @@ public enum StudioError {
     PLUGIN_AUTH_KEY_DOMAIN_NOT_NULL(BAD_REQUEST, COMPONENT, "1181"),
 
     /**
+     * MCP服务引用的工具已从服务端下线，请重新选择工具
+     */
+    MCP_SERVER_TOOL_OFFLINE(BAD_REQUEST, COMPONENT, "1182"),
+
+    /**
      * ============================== 提示词工程 ==============================
      */
     /**

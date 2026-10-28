@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, QueryList, ViewChild, ViewChildren } from '@angular/core';
+import { Component, OnDestroy, OnInit, QueryList, TemplateRef, ViewChild, ViewChildren } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
@@ -11,7 +11,7 @@ import { MessageComponent } from '@shared/services/cfdata.service';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { ContextService } from '@services/context.service';
 import { MCPService } from '@services/agent-center/mcp.service';
-import { McpInterfaces, McpTool, McpToolProperties } from '@interfaces/mcp/mcp.interfaces';
+import { McpInterfaces, McpTool, McpToolDiffItem, McpToolProperties, McpToolsRefreshResult } from '@interfaces/mcp/mcp.interfaces';
 import { CommonUtils } from '../../../../utils/common.util';
 import { MarkdownComponent } from 'ngx-markdown';
 import { MonacoEditorConstructionOptions, MonacoEditorModule } from '@materia-ui/ngx-monaco-editor';
@@ -52,6 +52,7 @@ enum mapKeys {
 export class MCPServiceDetailComponent implements OnInit, OnDestroy {
   @ViewChildren('runForm') runForm!: QueryList<NgForm>;
   @ViewChild(CustomStarComponent) starComponent: CustomStarComponent;
+  @ViewChild('refreshResultTpl') refreshResultTpl: TemplateRef<any>;
   public currentPermissions: any;
   private permissionSubscription: Subscription;
   private readonly destroy$ = new Subject<void>();
@@ -103,6 +104,10 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
   public type: string = '';
   public recommendMCPList: McpInterfaces[] = [];
   public testMcpLoading: boolean = false;
+  // 工具列表重载中
+  public refreshToolsLoading: boolean = false;
+  // 工具列表重载差异结果
+  public refreshResult: McpToolsRefreshResult = null;
   protected readonly MCP_DEFAULT_ICON_BASE64_STR = MCP_DEFAULT_ICON_BASE64_STR;
   private isFromDevelopSpace: boolean = false;
   private isFromOverview: boolean = false;
@@ -501,6 +506,70 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
     this.selectedMcpTool = this.mcpServiceDetail.tools[0];
     this.setDefaultData();
     this.getSelectedMcpToolParams();
+  }
+
+  /**
+   * 重载工具列表：不卸载、不重装，同步拉取 MCP server 最新工具清单并展示差异。
+   * 失败时后端保留旧清单与服务状态，错误提示由全局拦截器统一处理。
+   */
+  public refreshMcpTools() {
+    if (this.refreshToolsLoading) {
+      return;
+    }
+    this.refreshToolsLoading = true;
+    this.api
+      .refreshMcpTools(this.serviceId)
+      .then((res: McpToolsRefreshResult) => {
+        this.refreshResult = res;
+        this.applyRefreshedTools(res);
+        this.nzModal.info({
+          nzTitle: this.i18n.transform('mcp_tools_refresh_result'),
+          nzContent: this.refreshResultTpl,
+          nzOkText: this.i18n.transform('ok'),
+        });
+      })
+      .catch(() => {
+        // 后端已保证失败时旧清单与服务状态不变，这里无需额外处理
+      })
+      .finally(() => {
+        this.refreshToolsLoading = false;
+      });
+  }
+
+  private applyRefreshedTools(res: McpToolsRefreshResult) {
+    if (!res) {
+      return;
+    }
+    let tools: any = res.tools;
+    if (typeof tools === 'string') {
+      try {
+        tools = JSON.parse(tools);
+      } catch (e) {
+        tools = null;
+      }
+    }
+    if (Array.isArray(tools)) {
+      this.mcpServiceDetail.tools = tools;
+      this.selectedMcpTool = tools[0] || null;
+      this.selectedMcpToolParams = [];
+      // 仅当工具均具备 inputSchema 时复用完整初始化，避免脏数据导致页面异常
+      if (tools.every(item => item && item.inputSchema)) {
+        this.commonTools();
+      } else {
+        this.getSelectedMcpToolParams();
+      }
+    }
+    if (res.fc_instance_status) {
+      this.mcpServiceDetail.fc_instance_status = res.fc_instance_status;
+      this.setStatus();
+    }
+  }
+
+  /**
+   * 重载结果中仍被引用的下线工具，需要在弹窗中单独高亮告警
+   */
+  public referencedRemovedTools(): McpToolDiffItem[] {
+    return (this.refreshResult && this.refreshResult.removed ? this.refreshResult.removed : []).filter(item => item.referenced);
   }
 
   getMcpRecommendation() {

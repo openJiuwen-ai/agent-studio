@@ -9,12 +9,14 @@ import static com.openjiuwen.studio.agent.manager.enums.EnumMcpStatus.DELETING;
 import static com.openjiuwen.studio.agent.manager.enums.EnumMcpStatus.SUCCESS;
 import static com.openjiuwen.studio.agent.manager.utils.WorkflowUtils.removeQueryParamsFromUrl;
 
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.annotation.OperationLog;
 import com.openjiuwen.studio.agent.common.enums.OperationType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.enums.NodeType;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.service.CommonService;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
@@ -47,6 +49,9 @@ import com.openjiuwen.studio.agent.manager.dto.McpServiceModifyReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceSkinnyEntity;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceStatisticResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsEntity;
+import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsRefreshResp;
+import com.openjiuwen.studio.agent.manager.dto.McpToolDiffItem;
+import com.openjiuwen.studio.agent.manager.dto.McpToolReferenceItem;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsTestReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsTestResp;
@@ -61,12 +66,18 @@ import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerRatingEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
+import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.ServerScore;
 import com.openjiuwen.studio.agent.manager.enums.EnumMcpStatus;
 import com.openjiuwen.studio.agent.manager.enums.EnumOrgType;
 import com.openjiuwen.studio.agent.manager.enums.McpNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
+import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.IMcpServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.ApiMcpService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigRequsetDto;
@@ -83,6 +94,7 @@ import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
 import com.openjiuwen.studio.agent.manager.utils.IamServiceUtils;
 import com.openjiuwen.studio.agent.manager.utils.ImageBase64Utils;
 import com.openjiuwen.studio.agent.manager.utils.McpJsonUtils;
+import com.openjiuwen.studio.agent.manager.utils.McpToolDiffUtils;
 import com.openjiuwen.studio.agent.manager.utils.McpServiceExceptionUtils;
 import com.openjiuwen.studio.agent.manager.utils.McpUtil;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
@@ -130,9 +142,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Queue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -263,6 +278,15 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
     @Autowired
     private MappingMapper mappingMapper;
+
+    @Autowired
+    private WorkflowMapper workflowMapper;
+
+    @Autowired
+    private ReleaseVersionMapper releaseVersionMapper;
+
+    @Autowired
+    private MgObsService obsService;
 
     @Autowired
     private WorkspaceMappingService workspaceMappingService;
@@ -1673,10 +1697,56 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         if (StringUtils.isNotBlank(mcpServiceToolList)) {
             log.info("Tool list is not empty. Updating database for service ID: {}", serviceEntity.getId());
-            serviceDao.updateTools(serviceEntity.getId(), mcpServiceToolList, serviceEntity.getTenantId());
+            serviceDao.updateTools(serviceEntity.getId(),
+                mergeReferencedOfflineTools(serviceEntity, mcpServiceToolList), serviceEntity.getTenantId());
         } else {
             log.warn("Tool list is empty. No update performed for service ID: {}", serviceEntity.getId());
         }
+    }
+
+    /**
+     * 合并本次拉取到的工具清单与仍被引用的已下线工具，避免异步刷新把下线工具的保留标记覆盖掉。
+     *
+     * @param serviceEntity MCP服务实体（tools 为库中旧清单）
+     * @param latestToolsJson 本次拉取到的工具清单
+     * @return 合并后的工具清单，无变化时返回本次拉取结果
+     */
+    private String mergeReferencedOfflineTools(McpServiceEntity serviceEntity, String latestToolsJson) {
+        try {
+            return mergeReferencedOfflineToolsSafely(serviceEntity, latestToolsJson);
+        } catch (Exception e) {
+            // 工具已成功拉取，历史数据解析失败不能被误判为部署失败。
+            // 无法安全合并时保留旧快照，避免删除尚未确认引用状态的工具。
+            log.warn("Failed to merge MCP tools for service {}, keep cached tools.", serviceEntity.getId(), e);
+            return StringUtils.isNotBlank(serviceEntity.getTools()) ? serviceEntity.getTools() : latestToolsJson;
+        }
+    }
+
+    private String mergeReferencedOfflineToolsSafely(McpServiceEntity serviceEntity, String latestToolsJson) {
+        JSONArray oldTools = McpToolDiffUtils.parseToolArray(serviceEntity.getTools());
+        JSONArray latestTools = McpToolDiffUtils.parseToolArray(latestToolsJson);
+        if (oldTools.isEmpty() || latestTools.isEmpty()) {
+            return latestToolsJson;
+        }
+        McpToolDiffUtils.DiffResult diff = McpToolDiffUtils.diff(oldTools, latestTools);
+        if (diff.getRemoved().isEmpty()) {
+            return latestToolsJson;
+        }
+        Set<String> offlineToolNames = new LinkedHashSet<>();
+        try {
+            Map<String, List<McpToolReferenceItem>> toolReferences =
+                collectMcpToolReferences(serviceEntity.getId(), oldTools);
+            for (String removedToolName : diff.getRemoved()) {
+                if (toolReferences.containsKey(removedToolName)) {
+                    offlineToolNames.add(removedToolName);
+                }
+            }
+        } catch (Exception e) {
+            // 引用查询暂时失败时，保守保留全部已下线工具，仍发布成功拉取的新清单。
+            log.warn("Failed to collect MCP references for service {}, retain removed tools.", serviceEntity.getId(), e);
+            offlineToolNames.addAll(diff.getRemoved());
+        }
+        return McpToolDiffUtils.mergeWithOfflineTools(latestTools, oldTools, offlineToolNames);
     }
 
     /**
@@ -1691,7 +1761,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
             if (StringUtils.isNotBlank(mcpServiceToolList)) {
                 log.info("Tool list obtained. Updating status to SUCCESS.");
                 serviceDao.updateToolsAndStatus(serviceEntity.getId(), serviceEntity.getTenantId(),
-                    EnumMcpStatus.SUCCESS.getValue(), mcpServiceToolList);
+                    EnumMcpStatus.SUCCESS.getValue(), mergeReferencedOfflineTools(serviceEntity, mcpServiceToolList));
             } else {
                 log.warn("Tool list is empty.");
                 serviceDao.updateStatusWithReason(serviceEntity.getId(),
@@ -2306,6 +2376,207 @@ public class McpServiceManager implements IMcpServiceManagerService {
         String tools = McpJsonUtils.toJson(toolList);
         log.info("Fetched tools success. Service ID: {}", serviceEntity.getId());
         return tools;
+    }
+
+    /**
+     * 同步重载 MCP 服务工具列表。
+     *
+     * <p>不卸载、不重装、不破坏已有绑定关系，原地重新向 MCP server 拉取 tools/list，
+     * 计算差异并落库。失败时保留旧清单与服务状态，只返回明确错误。
+     *
+     * @param projectId 租户项目ID
+     * @param workspaceId 项目空间ID
+     * @param id MCP服务ID
+     * @return 重载结果与工具清单差异
+     */
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "McpService",
+        description = "重载MCP服务工具列表",
+        resourceId = "id"
+    )
+    @Override
+    public McpServiceToolsRefreshResp refreshMcpServicesTools(String projectId, String workspaceId, String id) {
+        log.info("Operation log: start to refresh MCP service tools. Project ID: {}, service ID: {}", projectId, id);
+        CommonUtil.validateProjectAndWorkspaceId(projectId, workspaceId);
+        String tenantId = RequestContextUtils.getRequestUserDomainId();
+        McpServiceEntity serviceEntity = serviceDao.getMcpServiceById(id, tenantId, CommonUtil.getDeptCode(),
+            projectId, workspaceId);
+        if (ObjectUtils.isEmpty(serviceEntity)) {
+            log.error("Refresh MCP tools rejected, service not found or not in current workspace. Service ID: {}", id);
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
+        }
+        if (EnumMcpStatus.CREATING_STACK.getValue().equals(serviceEntity.getFcInstanceStatus())
+            || EnumMcpStatus.DELETING.getValue().equals(serviceEntity.getFcInstanceStatus())
+            || EnumMcpStatus.DELETION_FAIL.getValue().equals(serviceEntity.getFcInstanceStatus())) {
+            log.warn("Refresh MCP tools rejected, service is busy. Service ID: {}, status: {}", id,
+                serviceEntity.getFcInstanceStatus());
+            throw new AgentStudioException(StudioError.MCP_SERVICE_BUSY, id);
+        }
+
+        String oldToolsJson = serviceEntity.getTools();
+        String latestToolsJson;
+        try {
+            // 同步拉取，复用现有的占位符解析、鉴权与重试逻辑；失败时不落库
+            latestToolsJson = this.getMcpServiceToolList(serviceEntity);
+        } catch (AgentStudioException e) {
+            log.error("Refresh MCP tools failed, keep old tools. Service ID: {}, errorCode: {}", id, e.getErrorCode());
+            throw e;
+        } catch (Exception e) {
+            log.error("Refresh MCP tools failed unexpectedly, keep old tools. Service ID: {}", id, e);
+            throw new AgentStudioException(StudioError.MCP_FETCH_TOOLS_SERVER_ERROR, e, id);
+        }
+
+        JSONArray oldTools = McpToolDiffUtils.parseToolArray(oldToolsJson);
+        JSONArray latestTools = McpToolDiffUtils.parseToolArray(latestToolsJson);
+        if (latestTools.isEmpty()) {
+            // 空列表不覆盖旧清单，避免服务端异常返回导致工具配置被清空
+            log.warn("Refresh MCP tools got empty tool list, keep old tools. Service ID: {}", id);
+            throw new AgentStudioException(StudioError.MCP_FETCH_TOOLS_SERVER_ERROR, id);
+        }
+
+        McpToolDiffUtils.DiffResult diff = McpToolDiffUtils.diff(oldTools, latestTools);
+        Map<String, List<McpToolReferenceItem>> toolReferences = collectMcpToolReferences(id, oldTools);
+        Set<String> offlineToolNames = new LinkedHashSet<>();
+        for (String removedToolName : diff.getRemoved()) {
+            if (toolReferences.containsKey(removedToolName)) {
+                offlineToolNames.add(removedToolName);
+            }
+        }
+        String mergedToolsJson = McpToolDiffUtils.mergeWithOfflineTools(latestTools, oldTools, offlineToolNames);
+
+        if (EnumMcpStatus.SUCCESS.getValue().equals(serviceEntity.getFcInstanceStatus())) {
+            serviceDao.updateTools(serviceEntity.getId(), mergedToolsJson, serviceEntity.getTenantId());
+        } else {
+            // pendingTools/stackFail 场景下重载成功即视为恢复可用
+            serviceDao.updateToolsAndStatus(serviceEntity.getId(), serviceEntity.getTenantId(),
+                EnumMcpStatus.SUCCESS.getValue(), mergedToolsJson);
+        }
+        log.info("Refresh MCP tools success. Service ID: {}, added: {}, removed: {}, updated: {}, offline: {}", id,
+            diff.getAdded().size(), diff.getRemoved().size(), diff.getUpdated().size(), offlineToolNames.size());
+
+        return new McpServiceToolsRefreshResp().setId(serviceEntity.getId())
+            .setName(serviceEntity.getName())
+            .setFcInstanceStatus(EnumMcpStatus.SUCCESS.getValue())
+            .setTools(mergedToolsJson)
+            .setTotal(latestTools.size() + offlineToolNames.size())
+            .setAddedCount(diff.getAdded().size())
+            .setRemovedCount(diff.getRemoved().size())
+            .setUpdatedCount(diff.getUpdated().size())
+            .setAdded(buildToolDiffItems(diff.getAdded(), false, toolReferences))
+            .setRemoved(buildToolDiffItems(diff.getRemoved(), true, toolReferences))
+            .setUpdated(buildToolDiffItems(diff.getUpdated(), false, toolReferences));
+    }
+
+    /**
+     * 查询仍引用本 MCP 服务的智能体/工作流，并按工具名汇总引用方
+     *
+     * <p>智能体使用 resource_choose_tools，未指定列表的旧版智能体默认选择全部工具；
+     * 工作流从对应草稿或发布版本的 DSL 中读取 MCP 节点的工具名。
+     */
+    private Map<String, List<McpToolReferenceItem>> collectMcpToolReferences(String serviceId, JSONArray oldTools) {
+        Map<String, List<McpToolReferenceItem>> referencesByTool = new LinkedHashMap<>();
+        List<MappingEntity> mappings = mappingMapper.selectByResourceId(serviceId);
+        if (CollectionUtils.isEmpty(mappings)) {
+            return referencesByTool;
+        }
+        List<String> oldToolNames = new ArrayList<>(McpToolDiffUtils.indexByName(oldTools).keySet());
+        for (MappingEntity mapping : mappings) {
+            if (mapping == null || !mapping.isValid()) {
+                continue;
+            }
+            List<String> chooseTools = parseMcpChooseTools(mapping.getResourceChooseTools());
+            if (chooseTools == null) {
+                chooseTools = CommonConstant.WORKFLOW_TYPE.equals(mapping.getAppType())
+                    ? collectWorkflowMcpTools(mapping, serviceId, oldToolNames) : oldToolNames;
+            }
+            if (CollectionUtils.isEmpty(chooseTools)) {
+                continue;
+            }
+            McpToolReferenceItem reference = new McpToolReferenceItem().setAppId(mapping.getAppId())
+                .setAppName(mapping.getAppName())
+                .setAppType(mapping.getAppType());
+            for (String toolName : chooseTools) {
+                if (StringUtils.isBlank(toolName)) {
+                    continue;
+                }
+                referencesByTool.computeIfAbsent(toolName, key -> new ArrayList<>()).add(reference);
+            }
+        }
+        return referencesByTool;
+    }
+
+    /** 未配置（含 JSON null）表示旧版全选，显式空数组表示未选择任何工具。 */
+    private List<String> parseMcpChooseTools(String resourceChooseTools) {
+        if (StringUtils.isBlank(resourceChooseTools)) {
+            return null;
+        }
+        try {
+            JSONArray chooseTools = JSONArray.parseArray(resourceChooseTools);
+            return chooseTools == null ? null
+                : chooseTools.stream().filter(Objects::nonNull).map(String::valueOf)
+                    .filter(StringUtils::isNotBlank).toList();
+        } catch (Exception e) {
+            log.warn("Failed to parse mcp choose tools, retain potentially referenced tools.");
+            return null;
+        }
+    }
+
+    private List<String> collectWorkflowMcpTools(MappingEntity mapping, String serviceId,
+        List<String> oldToolNames) {
+        try {
+            String dslPath;
+            if (StringUtils.isNotBlank(mapping.getAppVersion())) {
+                ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(
+                    mapping.getAppId(), mapping.getAppVersion());
+                dslPath = version == null ? null : version.getDslPath();
+            } else {
+                List<WorkflowEntity> workflows = workflowMapper.getWorkflowEntityByIds(null,
+                    StringUtils.defaultIfBlank(mapping.getAppWorkspaceId(), null), List.of(mapping.getAppId()));
+                dslPath = CollectionUtils.isEmpty(workflows) ? null : workflows.get(0).getDslPath();
+            }
+            if (StringUtils.isBlank(dslPath)) {
+                throw new IllegalStateException("Referenced workflow DSL path is missing");
+            }
+            JSONObject workflow = JSONObject.parseObject(obsService.downloadObsFile(dslPath));
+            JSONArray nodes = workflow == null ? null : workflow.getJSONArray("nodes");
+            if (nodes == null) {
+                throw new IllegalStateException("Referenced workflow DSL nodes are missing");
+            }
+            Set<String> toolNames = new LinkedHashSet<>();
+            for (int i = 0; i < nodes.size(); i++) {
+                JSONObject node = nodes.getJSONObject(i);
+                if (node == null || !NodeType.MCP.getType().equals(node.getString("type"))) {
+                    continue;
+                }
+                JSONObject configs = node.getJSONObject("configs");
+                if (configs != null && serviceId.equals(configs.getString("id"))) {
+                    String toolName = configs.getString(CommonConstant.TOOL_NAME);
+                    if (StringUtils.isBlank(toolName)) {
+                        return oldToolNames;
+                    }
+                    toolNames.add(toolName);
+                }
+            }
+            return new ArrayList<>(toolNames);
+        } catch (Exception e) {
+            log.warn("Cannot resolve MCP tool references for workflow {}, version {}; retain old tools.",
+                mapping.getAppId(), mapping.getAppVersion(), e);
+            return oldToolNames;
+        }
+    }
+
+    private List<McpToolDiffItem> buildToolDiffItems(List<String> toolNames, boolean withReferences,
+        Map<String, List<McpToolReferenceItem>> toolReferences) {
+        List<McpToolDiffItem> items = new ArrayList<>();
+        for (String toolName : toolNames) {
+            List<McpToolReferenceItem> references = toolReferences.get(toolName);
+            boolean referenced = !CollectionUtils.isEmpty(references);
+            items.add(new McpToolDiffItem().setName(toolName)
+                .setReferenced(referenced)
+                .setReferences(withReferences && referenced ? references : Collections.emptyList()));
+        }
+        return items;
     }
 
     /**
