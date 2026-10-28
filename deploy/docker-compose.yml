@@ -335,6 +335,10 @@ services:
       GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-1}
       SECURITY_SANDBOX_TYPE: ${SECURITY_SANDBOX_TYPE:-jiuwenbox}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      # SQL 工作流节点经 HTTP 调 manager 执行；未注入时 runtime 恒报 101755（#1293）。
+      # 用 ${VAR-default}（无冒号）：.env 显式置空时保留 fail-closed；未设置时用 compose 默认。
+      AGENT_MANAGER_ENDPOINT: ${AGENT_MANAGER_ENDPOINT-http://studio-manager:31111}
+      DATASOURCE_EXECUTE_TIMEOUT: ${DATASOURCE_EXECUTE_TIMEOUT:-25}
       # Nginx 负载均衡模式（与 k8s studio-runtime.yaml 对齐）。
       # 开启后 worker 监听 SERVER_PORT+1..+N，nginx 监听 SERVER_PORT。
       NGINX_LOAD_BALANCING: ${NGINX_LOAD_BALANCING:-false}
