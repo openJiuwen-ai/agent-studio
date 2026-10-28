@@ -362,23 +362,50 @@ def _process_time_info_by_llm_output(llm_output, time_dict):
     yield dict(time_consumption=time_dict)
 
 
-def create_trace_manager(llm: BaseChatModel, functions, trace_handlers):
+def _build_request_params(llm: BaseChatModel) -> dict:
+    """从模型对象提取 GenAI 请求参数（供 handler 盖 gen_ai.request.*）。
+
+    与 core OtelRail._extract_request_params 同构：handler 读扁平
+    request_params dict 并逐键投影，仅产出模型对象实际携带的参数
+    （None 不产出），stop 归一为 stop_sequences 列表。
+    """
+    params: dict = {}
+    for key in ("temperature", "top_p", "top_k", "max_tokens"):
+        value = getattr(llm, key, None)
+        if value is not None:
+            params[key] = value
+    stop = getattr(llm, "stop", None)
+    if stop:
+        stops = stop if isinstance(stop, (list, tuple)) else [stop]
+        params["stop_sequences"] = [str(item) for item in stops]
+    return params
+
+
+def create_trace_manager(
+    llm: BaseChatModel, functions, trace_handlers, messages: Optional[List[dict]] = None
+):
     """create trace manager"""
     model_class = type(llm).__name__
     model_name = llm.model_name if hasattr(llm, "model_name") else "undefined"
-
-    return TraceManager.generate_manager(
-        trace_handlers,
-        {
-            "class_name": model_class,
-            "instance_attributes": dict(
-                model=model_name,
-                temperature=llm.temperature if hasattr(llm, "temperature") else 1.0,
-                top_p=llm.top_p if hasattr(llm, "top_p") else 0.95,
-                functions=functions,
-            ),
-        },
-    )
+    instance_info = {
+        "class_name": model_class,
+        "instance_attributes": dict(
+            model=model_name,
+            temperature=llm.temperature if hasattr(llm, "temperature") else 1.0,
+            top_p=llm.top_p if hasattr(llm, "top_p") else 0.95,
+            functions=functions,
+        ),
+    }
+    # OTel 双写补扁平键：request_params 供 handler 盖 gen_ai.request.*，
+    # message_count 盖 openjiuwen.llm.prev_message_count。统计口径为实际
+    # 送入 LLM 的消息数（含上下文注入后）；insights 侧只读嵌套
+    # instance_attributes，新增扁平键不影响其原有展示
+    request_params = _build_request_params(llm)
+    if request_params:
+        instance_info["request_params"] = request_params
+    if messages is not None:
+        instance_info["message_count"] = len(messages)
+    return TraceManager.generate_manager(trace_handlers, instance_info)
 
 
 def create_trace_manager_safely(llm: BaseChatModel, functions, trace_handlers):
@@ -451,7 +478,7 @@ async def stream_function_call(
     """Get llm stream output with functions"""
     if contexts:
         messages = insert_contexts_before_user_query(contexts, messages)
-    trace_manager = create_trace_manager(llm, functions, trace_handlers)
+    trace_manager = create_trace_manager(llm, functions, trace_handlers, messages)
     await trace_manager.on_llm_start(messages)
 
     # Combined output dictionary to reduce local variables

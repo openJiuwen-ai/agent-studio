@@ -38,7 +38,10 @@ from jiuwen.common.utils.utils import (
     url_to_ip_with_protocol_and_port,
 )
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.orchestration.flow.stream.base import SseStreamData
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import constant, exception
@@ -451,9 +454,11 @@ class RestfulApiToolNew(Tool):
 
     def _create_tracer_manager(self, **kwargs) -> TraceManager:
         """创建追踪管理器"""
+        instance_info = get_instance_info(self, blacklist=["auth", "headers"])
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
+        instance_info.update(extract_tool_trace_info(kwargs))
         return TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers"]),
+            kwargs.pop("trace_handlers", None), instance_info
         )
 
     def _create_error_invoke_response(self, error: Exception) -> dict:

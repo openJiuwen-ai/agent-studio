@@ -24,7 +24,11 @@ from jiuwen.controller.task_planner.planners.plan_execute_planner import (
 )
 from jiuwen.controller.utils.utils import AgentUtils, WorkspaceUtils
 from jiuwen.insight.manager import NO_AGENT_IDENTITY, TraceManager, get_child_manager
-from jiuwen.insight.utils import get_agent_identity, get_instance_info
+from jiuwen.insight.utils import (
+    get_agent_identity,
+    get_conversation_facts,
+    get_instance_info,
+)
 from jiuwen.orchestration import Invokable
 from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import serialize_object
@@ -608,6 +612,7 @@ class Agent(BaseAgent):
 
     async def _setup_trace_manager(self, kwargs):
         """设置并初始化追踪管理器"""
+        session = kwargs.pop("session", None)
         trace_manager = TraceManager.generate_manager(
             kwargs.pop("trace_handlers", None),
             get_instance_info(
@@ -621,11 +626,15 @@ class Agent(BaseAgent):
                     "workflows",
                 ],
             ),
-            session=kwargs.pop("session", None),
+            session=session,
             # 本 agent 自身身份（AgentMetaData.id + 真实名）：openjiuwen 双写
             # 转发时注入扁平键，span 盖真实 agent 名而非组件类名；确无身份时
             # 传哨兵（终态），防止成员根 manager 被 controller 链身份继承补齐
             agent_identity=get_agent_identity(self) or NO_AGENT_IDENTITY,
+            # 会话事实（conversation_id / user_id）：与 core OtelRail 同一取值
+            # 口径（session_id 即 conversation id），随身份同一机制注入并沿
+            # 继承链携带；无 session / 会话无事实时不注入
+            conversation_facts=get_conversation_facts(session),
         )
         await trace_manager.on_chain_start(kwargs.get("inputs"))  # 使用原始inputs
         return trace_manager

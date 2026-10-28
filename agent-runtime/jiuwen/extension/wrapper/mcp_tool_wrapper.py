@@ -15,7 +15,10 @@ from typing import Any, Dict, Optional
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.plugin.common import constant
 from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.foundation.tool import MCPTool
@@ -136,7 +139,13 @@ class McpToolWrapper:
             jiuwen_kwargs = {
                 k: v
                 for k, v in kwargs.items()
-                if k not in ("skip_none_value", "skip_inputs_validate")
+                if k
+                not in (
+                    "skip_none_value",
+                    "skip_inputs_validate",
+                    "tool_call_id",
+                    "tool_type",
+                )
             }
             if jiuwen_kwargs:
                 inputs = dict(inputs)
@@ -190,7 +199,10 @@ class McpToolWrapper:
 
     def _create_tracer_manager(self, **kwargs):
         """创建追踪管理器"""
+        instance_info = get_instance_info(self, blacklist=["auth", "headers"])
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*），
+        # 同时从 kwargs 摘出，避免流入工具运行时入参
+        instance_info.update(extract_tool_trace_info(kwargs))
         return TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers"]),
+            kwargs.pop("trace_handlers", None), instance_info
         )

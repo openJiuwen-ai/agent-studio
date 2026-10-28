@@ -219,7 +219,14 @@ class ControllerRunner:
             # _load_conversation_data 的 join 点，session 创建（recover）
             # 前统一做有界等待（conversation_id 为空时 no-op）。
             await await_pending(req.conversation_id)
-            session = create_agent_session_with_trace(session_id=session_id, card=agent_group.card)
+            # 会话事实源头：user_id 经 source_metadata 随 session 携带
+            # （core OtelRail 与本仓双写桥的同一取值口径），供遥测桥供给
+            # openjiuwen.gen_ai.user.id
+            session = create_agent_session_with_trace(
+                session_id=session_id,
+                card=agent_group.card,
+                source_metadata={"user_id": req.user_id or ""},
+            )
             await session.pre_run(inputs=session_inputs)
 
             streaming_output = agent_group.astream(

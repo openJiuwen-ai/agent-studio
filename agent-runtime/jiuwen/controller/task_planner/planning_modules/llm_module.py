@@ -278,7 +278,10 @@ class LLMModule:
     ):
         """Get llm stream output with functions"""
         trace_manager = create_trace_manager(
-            self.llm, functions, runtime_data.get("trace_handlers")
+            self.llm,
+            functions,
+            runtime_data.get("trace_handlers"),
+            messages=messages,
         )
         await trace_manager.on_llm_start(messages)
 
