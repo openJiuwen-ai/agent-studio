@@ -23,12 +23,15 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 from typing import Any, List, Optional, AsyncGenerator
 
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error, ExecutionError
 from jiuwen.common.exception.status_code import StatusCode as JiuWenStatusCode
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.insight.manager import TraceManager
+from jiuwen.insight.workflow_trace_scope import current_workflow_trace_manager
 from jiuwen.prompt.agent.common.utils import convert_json_schema
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
@@ -41,6 +44,11 @@ USER_FIELDS = "userFields"
 PARTIAL_CONTENT = "partial_content"
 JIUWEN_LLM_TYPE = "jiuwen.LLMComponent"
 MEMORY_MESSAGE = "memory_message"
+# OTel 双写载荷键：与 planner 侧 stream_post_utils 的同名常量取值一致
+# （handler 按这两个键取用量/结束原因）。此处本地定义，避免工作流节点
+# 模块背上 planner 的导入链（psycopg2 等原生依赖）；一致性由单测守护
+USAGE_METADATA = "usage_metadata"
+FINISH_REASON = "finish_reason"
 
 CHAT_HISTORY_MAX_TURN_DEFAULT = 3
 _ROLE = "role"
@@ -59,6 +67,68 @@ def _format_llm_error_detail(exc: Exception) -> str:
     """
     from model_service.env_resolver import friendly_message
     return friendly_message(exc)
+
+
+def _oj_iso_delta_ms(end_iso: str, start_iso: str) -> Optional[float]:
+    """core UsageMetadata 双时间戳（ISO 串）的毫秒差；缺失/解析失败返回 None。
+
+    与 planner 侧 _iso_delta_ms 同构（core schema 的字段名为
+    request_start_time，无 s）。
+    """
+    if not end_iso or not start_iso:
+        return None
+    try:
+        delta = datetime.fromisoformat(end_iso) - datetime.fromisoformat(start_iso)
+    except (ValueError, TypeError):
+        return None
+    return delta.total_seconds() * 1000.0
+
+
+def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
+    """core UsageMetadata → OTel handler 约定键名的用量载荷。
+
+    handler 的 _set_llm_response_attrs 只消费这些扁平键；core UsageMetadata
+    的 junk 字段（code/err_msg/task_id/total_latency，prompt 为提示词全文）
+    绝不入载荷——on_llm_end 会把整个载荷序列化进 gen_ai.completion。与
+    planner 侧 build_usage_metadata 语义对齐：全零 usage 不产出 token 键，
+    时延信号独立判活（token 未上报但时延可算时仍产出时延键）。
+    """
+    has_ttft = ttft_ms is not None and ttft_ms >= 0
+    if usage is None:
+        return {"first_token_time": round(ttft_ms / 1000, 6)} if has_ttft else {}
+    has_usage = any(
+        (
+            usage.input_tokens,
+            usage.output_tokens,
+            usage.model_name,
+            usage.cache_tokens,
+            usage.reasoning_tokens,
+            usage.input_cost,
+            usage.output_cost,
+            usage.total_cost,
+        )
+    )
+    if not has_usage and not has_ttft:
+        return {}
+    usage_dict: dict = {}
+    if has_usage:
+        usage_dict = {
+            "input_tokens": usage.input_tokens or 0,
+            "output_tokens": usage.output_tokens or 0,
+            "model_name": usage.model_name or "",
+            "total_cost": usage.total_cost or 0.0,
+            "input_cost": usage.input_cost or 0.0,
+            "output_cost": usage.output_cost or 0.0,
+        }
+        if usage.cache_tokens:
+            usage_dict["cache_tokens"] = usage.cache_tokens
+        if usage.reasoning_tokens:
+            usage_dict["reasoning_tokens"] = usage.reasoning_tokens
+    if has_ttft:
+        # 毫秒差 /1000 换算秒值 float：handler 直传 float 解析
+        # gen_ai.response.time_to_first_chunk，GenAI semconv 为秒（double）
+        usage_dict["first_token_time"] = round(ttft_ms / 1000, 6)
+    return usage_dict
 
 
 class LLMChainModelConfig(BaseModel):
@@ -171,6 +241,12 @@ class LLMChain(WorkflowComponent):
 
         language_model_inputs = self._get_model_input(inputs=inputs_data)
 
+        # OTel 双写：工作流链路下从作用域派生节点遥测（独立工作流无
+        # 作用域则跳过，行为不变）
+        oj_telemetry = self._oj_telemetry_manager(language_model_inputs)
+        if oj_telemetry is not None:
+            await oj_telemetry.on_llm_start(language_model_inputs)
+
         try:
             llm_output = await self._llm.invoke(messages=language_model_inputs)
 
@@ -186,9 +262,24 @@ class LLMChain(WorkflowComponent):
 
             final_output = {USER_FIELDS: formatted_res}
             self._append_usage_metadata(llm_output, final_output)
+            if oj_telemetry is not None:
+                usage = getattr(llm_output, "usage_metadata", None)
+                await oj_telemetry.on_llm_end(
+                    self._oj_end_payload(
+                        usage,
+                        _oj_iso_delta_ms(
+                            getattr(usage, "first_token_time", ""),
+                            getattr(usage, "request_start_time", ""),
+                        ),
+                        getattr(llm_output, "finish_reason", "") or "",
+                    )
+                    or None
+                )
             return final_output
 
         except Exception as e:
+            if oj_telemetry is not None:
+                await oj_telemetry.on_llm_error(e)
             raise build_error(
                 StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
                 error_msg=f"LLM invoke failed: {_format_llm_error_detail(e)}",
@@ -197,6 +288,59 @@ class LLMChain(WorkflowComponent):
     def get_stream_output(self) -> dict | None:
         """Return final batch output after stream completes for downstream ${node_llm...} refs."""
         return self._stream_final_output
+
+    def _oj_telemetry_manager(self, messages) -> Optional[TraceManager]:
+        """从工作流遥测作用域派生 LLM 节点遥测 manager（无作用域返回 None）。
+
+        作用域由 task_executor 在工作流 astream 消费点经 workflow_trace_scope
+        绑定（controller 链 child TraceManager，随任务 input_data 下发）；
+        derive 继承 handlers、oj 双写状态、agent 身份与会话事实，工作流
+        LLM 节点 span 因此带上与 planner LLM 同源的属性。独立工作流无
+        作用域，返回 None，调用方跳过遥测。
+        """
+        scope = current_workflow_trace_manager()
+        if scope is None:
+            return None
+        model_conf = (
+            self._conf.get("model", {}) if isinstance(self._conf, dict) else {}
+        )
+        model_name = model_conf.get("modelName") or "LLMChain"
+        instance_info = {
+            # class_name 口径取模型名：handler 以此盖 gen_ai.request.model
+            # 与 span 名（planner 侧为模型类名，工作流节点仅有配置名）
+            "class_name": model_name,
+            "instance_attributes": {"model": model_name},
+        }
+        hyper = model_conf.get("hyperParameters") or {}
+        request_params = {
+            key: hyper[key]
+            for key in ("temperature", "top_p", "top_k", "max_tokens")
+            if hyper.get(key) is not None
+        }
+        stop = hyper.get("stop")
+        if stop:
+            stops = stop if isinstance(stop, (list, tuple)) else [stop]
+            request_params["stop_sequences"] = [str(item) for item in stops]
+        # OTel 双写补扁平键：request_params 供 handler 盖 gen_ai.request.*，
+        # message_count 盖 openjiuwen.llm.prev_message_count（统计口径为
+        # 实际送入 LLM 的消息数，含模板/历史拼装后）
+        if request_params:
+            instance_info["request_params"] = request_params
+        if messages is not None:
+            instance_info["message_count"] = len(messages)
+        return TraceManager.generate_manager(scope, instance_info)
+
+    @staticmethod
+    def _oj_end_payload(usage, ttft_ms: Optional[float], finish_reason) -> dict:
+        """构造 on_llm_end 载荷（handler 约定键名；缺数据为空 dict）"""
+        payload = {}
+        usage_dict = _build_workflow_usage_payload(usage, ttft_ms)
+        if usage_dict:
+            payload[USAGE_METADATA] = usage_dict
+        finish = finish_reason or ""
+        if finish and finish != "null":
+            payload[FINISH_REASON] = finish
+        return payload
 
     async def stream(self, inputs: dict[str, Any], session, context):
         """LLM 组件流式调用接口 - 支持思考模式
@@ -256,6 +400,12 @@ class LLMChain(WorkflowComponent):
             # memory in controller mode just like in direct-workflow mode.
             await self._inject_retrieved_memory(language_model_inputs, inputs_data)
 
+            # OTel 双写：工作流链路下从作用域派生节点遥测（JSON 模式经
+            # invoke 自带插桩，不在此重复）
+            oj_telemetry = self._oj_telemetry_manager(language_model_inputs)
+            if oj_telemetry is not None:
+                await oj_telemetry.on_llm_start(language_model_inputs)
+
             try:
                 outputs_list = self._get_outputs_list_from_conf()
                 output_id = "raw_output"
@@ -265,7 +415,8 @@ class LLMChain(WorkflowComponent):
                 if is_enabled:
                     # ── enabled: reasoning 真流式, content 假流式 ──
                     async for item in self._stream_thinking_enabled(
-                        language_model_inputs, output_id, node_id, session
+                        language_model_inputs, output_id, node_id, session,
+                        oj_telemetry=oj_telemetry,
                     ):
                         yield item
                 else:
@@ -275,10 +426,13 @@ class LLMChain(WorkflowComponent):
                     async for item in self._stream_real_time(
                         language_model_inputs, output_id, node_id, session,
                         output_reasoning=output_reasoning,
+                        oj_telemetry=oj_telemetry,
                     ):
                         yield item
 
             except Exception as e:
+                if oj_telemetry is not None:
+                    await oj_telemetry.on_llm_error(e)
                 raise build_error(
                     StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
                     error_msg=f"LLM stream failed: {_format_llm_error_detail(e)}",
@@ -310,6 +464,7 @@ class LLMChain(WorkflowComponent):
             "usage_metadata": None,
             "first_token_ms": None,
             "total_token_ms": None,
+            "finish_reason": None,
         }
 
         try:
@@ -391,6 +546,11 @@ class LLMChain(WorkflowComponent):
             if hasattr(item, "usage_metadata") and item.usage_metadata:
                 state["usage_metadata"] = item.usage_metadata
 
+            # OTel 双写：finish 块的 finish_reason（schema 占位 "null" 不算）
+            finish = getattr(item, "finish_reason", "")
+            if finish and finish != "null":
+                state["finish_reason"] = finish
+
             if hasattr(item, "reasoning_content") and item.reasoning_content:
                 reasoning_content += item.reasoning_content
                 if self._session:
@@ -416,7 +576,8 @@ class LLMChain(WorkflowComponent):
         return reasoning_content
 
     async def _stream_thinking_enabled(
-        self, language_model_inputs, output_id, node_id, session
+        self, language_model_inputs, output_id, node_id, session,
+        oj_telemetry: Optional[TraceManager] = None,
     ):
         """思考开关 enabled: reasoning 真流式 + content 假流式（预消费）"""
         (
@@ -463,6 +624,17 @@ class LLMChain(WorkflowComponent):
                 self._stream_final_output = custom_data
                 # 调试信息走 yield（最后一帧，含 reasoning_content + usage）
                 usage_dict = usage_metadata.model_dump() if usage_metadata else {}
+                # OTel 双写：流末按 handler 约定键名补用量/TTFT/finish_reason
+                # （载荷为空也要 on_llm_end 收尾 span）
+                if oj_telemetry is not None:
+                    await oj_telemetry.on_llm_end(
+                        self._oj_end_payload(
+                            thinking_state.get("usage_metadata"),
+                            thinking_state.get("first_token_ms"),
+                            thinking_state.get("finish_reason"),
+                        )
+                        or None
+                    )
                 yield {
                     USER_FIELDS: {"reasoning_content": reasoning_content},
                     **usage_dict,
@@ -473,6 +645,7 @@ class LLMChain(WorkflowComponent):
     async def _stream_real_time(
         self, language_model_inputs, output_id, node_id, session,
         output_reasoning=True,
+        oj_telemetry: Optional[TraceManager] = None,
     ):
         """真流式路径 — thinking 非 enabled 时走此路径
 
@@ -494,6 +667,7 @@ class LLMChain(WorkflowComponent):
             "is_first_token": True,
             "first_token_ms": None,
             "usage_metadata": None,
+            "finish_reason": None,
         }
         think_index = 0
 
@@ -505,6 +679,11 @@ class LLMChain(WorkflowComponent):
                 model_stats = getattr(chunk.usage_metadata, 'model_stats', {}) or {}
             if hasattr(chunk, 'metadata') and chunk.metadata:
                 model_stats.update(chunk.metadata)
+
+            # OTel 双写：finish 块的 finish_reason（schema 占位 "null" 不算）
+            finish = getattr(chunk, "finish_reason", "")
+            if finish and finish != "null":
+                stream_state["finish_reason"] = finish
 
             # first_token 性能统计
             if stream_state["is_first_token"]:
@@ -572,6 +751,17 @@ class LLMChain(WorkflowComponent):
             "total_token<llm>": total_token_ms,
         }})
         self._stream_final_output = custom_data
+        # OTel 双写：流末按 handler 约定键名补用量/TTFT/finish_reason
+        # （载荷为空也要 on_llm_end 收尾 span）
+        if oj_telemetry is not None:
+            await oj_telemetry.on_llm_end(
+                self._oj_end_payload(
+                    stream_state.get("usage_metadata"),
+                    stream_state.get("first_token_ms"),
+                    stream_state.get("finish_reason"),
+                )
+                or None
+            )
         # 最后一帧
         usage_dict = (
             stream_state["usage_metadata"].model_dump()
