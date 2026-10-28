@@ -365,3 +365,18 @@ class TestUsagePayloadSemantics:
             "2026-10-28T10:00:02", "2026-10-28T10:00:00"
         )
         assert delta == 2000.0
+
+    @staticmethod
+    def test_request_start_iso_accepts_both_dialects():
+        """起始时间戳双拼写：core（request_start_time，无 s）与 studio
+        模型包装层（requests_start_time，带 s）任一存在即取，缺失为空。"""
+        from types import SimpleNamespace
+
+        ts = "2026-10-28T10:00:00"
+        assert llm_chain_module._oj_request_start_iso(
+            SimpleNamespace(request_start_time=ts)
+        ) == ts
+        assert llm_chain_module._oj_request_start_iso(
+            SimpleNamespace(requests_start_time=ts)
+        ) == ts
+        assert llm_chain_module._oj_request_start_iso(SimpleNamespace()) == ""

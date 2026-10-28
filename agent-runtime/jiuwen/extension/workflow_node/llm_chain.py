@@ -72,8 +72,8 @@ def _format_llm_error_detail(exc: Exception) -> str:
 def _oj_iso_delta_ms(end_iso: str, start_iso: str) -> Optional[float]:
     """core UsageMetadata 双时间戳（ISO 串）的毫秒差；缺失/解析失败返回 None。
 
-    与 planner 侧 _iso_delta_ms 同构（core schema 的字段名为
-    request_start_time，无 s）。
+    与 planner 侧 _iso_delta_ms 同构（起始时间戳的两种字段名拼写见
+    _oj_request_start_iso）。
     """
     if not end_iso or not start_iso:
         return None
@@ -82,6 +82,19 @@ def _oj_iso_delta_ms(end_iso: str, start_iso: str) -> Optional[float]:
     except (ValueError, TypeError):
         return None
     return delta.total_seconds() * 1000.0
+
+
+def _oj_request_start_iso(usage) -> str:
+    """请求起始时间戳（ISO 串）；兼容 core/studio 两种字段名拼写。
+
+    本节点经 core Model 调用，usage 为 core UsageMetadata
+    （request_start_time，无 s）；studio 模型包装层的同名时间戳为
+    requests_start_time（带 s）。任一存在即取，缺失返回空串（TTFT
+    跳过，不虚构）。
+    """
+    return getattr(usage, "request_start_time", "") or getattr(
+        usage, "requests_start_time", ""
+    )
 
 
 def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
@@ -269,7 +282,7 @@ class LLMChain(WorkflowComponent):
                         usage,
                         _oj_iso_delta_ms(
                             getattr(usage, "first_token_time", ""),
-                            getattr(usage, "request_start_time", ""),
+                            _oj_request_start_iso(usage),
                         ),
                         getattr(llm_output, "finish_reason", "") or "",
                     )
