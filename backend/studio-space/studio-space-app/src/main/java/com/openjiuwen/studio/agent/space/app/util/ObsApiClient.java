@@ -15,6 +15,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -37,19 +38,30 @@ public class ObsApiClient {
     }
 
     public String uploadFile(String bucketName, String directory, FileTransferUtils.AgentBuilderFile file) {
-        String obsKey = directory + file.getOriginalFilename();
+        String fileName = safeFileName(file.getOriginalFilename());
+        String obsKey = directory + fileName;
         if (!directory.endsWith(StringUtil.SLASHES_STRING)) {
-            obsKey = directory + StringUtil.SLASHES_STRING + file.getOriginalFilename();
+            obsKey = directory + StringUtil.SLASHES_STRING + fileName;
         }
         try {
             fileStore.write(bucketName + "/" + obsKey, file.getInputStream());
         } catch (Exception ex) {
-            log.error("file {} upload failed, error detail is: {}", file.getOriginalFilename(),
-                ex.getMessage() + ex.getCause());
+            log.error("file {} upload failed, error detail is: {}", fileName, ex.getMessage() + ex.getCause());
             throw new AgentSpaceException(AgentSpaceErrorCodes.AGENT_BUILDER_OBS_EXECUTE_ERROR,
                 "file upload failed");
         }
         return obsKey;
+    }
+
+    /**
+     * 客户端文件名不可直接拼入存储键：剔除路径分隔符等非法字符，避免 {@code ../} 或绝对路径注入。
+     */
+    private static String safeFileName(String originalFilename) {
+        String safeName = AppCommonUtils.sanitizeFilename(originalFilename);
+        if (safeName.isBlank() || ".".equals(safeName) || "..".equals(safeName)) {
+            return UUID.randomUUID().toString();
+        }
+        return safeName;
     }
 
     public String getTemporaryGetRsp(String bucketName, String objectName, long expires) {
