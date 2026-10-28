@@ -84,11 +84,10 @@ class IrAdapterServiceTest {
     }
 
     @Test
-    void testLegacyAgentAllToolsRejectsOfflineTool() {
+    void testLegacyAgentUsesCurrentServerToolsDespiteRetainedOfflineTool() {
         McpServiceEntity service = serviceWithOfflineTool();
-        AgentStudioException error = assertThrows(AgentStudioException.class,
-            () -> ReflectionTestUtils.invokeMethod(irAdapterService, "checkOfflineMcpTools", service, null));
-        assertEquals(StudioError.MCP_SERVER_TOOL_OFFLINE, error.getErrorCode());
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(irAdapterService,
+            "checkOfflineMcpTools", service, null));
     }
 
     @Test

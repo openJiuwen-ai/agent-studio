@@ -1712,6 +1712,17 @@ public class McpServiceManager implements IMcpServiceManagerService {
      * @return 合并后的工具清单，无变化时返回本次拉取结果
      */
     private String mergeReferencedOfflineTools(McpServiceEntity serviceEntity, String latestToolsJson) {
+        try {
+            return mergeReferencedOfflineToolsSafely(serviceEntity, latestToolsJson);
+        } catch (Exception e) {
+            // 工具已成功拉取，历史数据解析失败不能被误判为部署失败。
+            // 无法安全合并时保留旧快照，避免删除尚未确认引用状态的工具。
+            log.warn("Failed to merge MCP tools for service {}, keep cached tools.", serviceEntity.getId(), e);
+            return StringUtils.isNotBlank(serviceEntity.getTools()) ? serviceEntity.getTools() : latestToolsJson;
+        }
+    }
+
+    private String mergeReferencedOfflineToolsSafely(McpServiceEntity serviceEntity, String latestToolsJson) {
         JSONArray oldTools = McpToolDiffUtils.parseToolArray(serviceEntity.getTools());
         JSONArray latestTools = McpToolDiffUtils.parseToolArray(latestToolsJson);
         if (oldTools.isEmpty() || latestTools.isEmpty()) {
@@ -1721,12 +1732,19 @@ public class McpServiceManager implements IMcpServiceManagerService {
         if (diff.getRemoved().isEmpty()) {
             return latestToolsJson;
         }
-        Map<String, List<McpToolReferenceItem>> toolReferences = collectMcpToolReferences(serviceEntity.getId(), oldTools);
         Set<String> offlineToolNames = new LinkedHashSet<>();
-        for (String removedToolName : diff.getRemoved()) {
-            if (toolReferences.containsKey(removedToolName)) {
-                offlineToolNames.add(removedToolName);
+        try {
+            Map<String, List<McpToolReferenceItem>> toolReferences =
+                collectMcpToolReferences(serviceEntity.getId(), oldTools);
+            for (String removedToolName : diff.getRemoved()) {
+                if (toolReferences.containsKey(removedToolName)) {
+                    offlineToolNames.add(removedToolName);
+                }
             }
+        } catch (Exception e) {
+            // 引用查询暂时失败时，保守保留全部已下线工具，仍发布成功拉取的新清单。
+            log.warn("Failed to collect MCP references for service {}, retain removed tools.", serviceEntity.getId(), e);
+            offlineToolNames.addAll(diff.getRemoved());
         }
         return McpToolDiffUtils.mergeWithOfflineTools(latestTools, oldTools, offlineToolNames);
     }

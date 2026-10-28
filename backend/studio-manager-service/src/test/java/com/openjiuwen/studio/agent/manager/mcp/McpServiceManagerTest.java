@@ -1088,4 +1088,49 @@ class McpServiceManagerTest {
             McpToolDiffUtils.indexByName(McpToolDiffUtils.parseToolArray(result.getTools())).get("gone")));
     }
 
+
+    @Test
+    void testAsyncRefreshStatus_ReferenceQueryFailureKeepsSuccessAndOfflineTools() {
+        McpServiceEntity service = mockMcpService("pendingTools", OLD_TOOLS);
+        when(mappingMapper.selectByResourceId("mcp-1")).thenThrow(new IllegalStateException("database unavailable"));
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn(LATEST_TOOLS).when(spyManager).getMcpServiceToolList(service);
+
+        spyManager.getMcpServiceToolListAndUpdateStatus(service);
+
+        ArgumentCaptor<String> tools = ArgumentCaptor.forClass(String.class);
+        verify(serviceDao).updateToolsAndStatus(eq("mcp-1"), eq(TENANT_ID), eq("success"), tools.capture());
+        var index = McpToolDiffUtils.indexByName(McpToolDiffUtils.parseToolArray(tools.getValue()));
+        Assertions.assertTrue(index.containsKey("fresh"));
+        Assertions.assertTrue(McpToolDiffUtils.isOffline(index.get("gone")));
+        Mockito.verifyNoMoreInteractions(serviceDao);
+    }
+
+    @Test
+    void testAsyncRefreshStatus_InvalidOldToolDefinitionDoesNotFailDeployment() {
+        McpServiceEntity service = mockMcpService("pendingTools", "[\"invalid-tool\"]");
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn(LATEST_TOOLS).when(spyManager).getMcpServiceToolList(service);
+
+        spyManager.getMcpServiceToolListAndUpdateStatus(service);
+
+        verify(serviceDao).updateToolsAndStatus("mcp-1", TENANT_ID, "success", service.getTools());
+        Mockito.verifyNoMoreInteractions(serviceDao);
+    }
+
+    @Test
+    void testAsyncRefresh_ReferenceQueryFailureStillUpdatesTools() {
+        McpServiceEntity service = mockMcpService("success", OLD_TOOLS);
+        when(mappingMapper.selectByResourceId("mcp-1")).thenThrow(new IllegalStateException("database unavailable"));
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn(LATEST_TOOLS).when(spyManager).getMcpServiceToolList(service);
+
+        spyManager.getMcpServiceToolListAndUpdate(service);
+
+        ArgumentCaptor<String> tools = ArgumentCaptor.forClass(String.class);
+        verify(serviceDao).updateTools(eq("mcp-1"), tools.capture(), eq(TENANT_ID));
+        var index = McpToolDiffUtils.indexByName(McpToolDiffUtils.parseToolArray(tools.getValue()));
+        Assertions.assertTrue(index.containsKey("fresh"));
+        Assertions.assertTrue(McpToolDiffUtils.isOffline(index.get("gone")));
+    }
 }

@@ -13,6 +13,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
@@ -173,5 +175,15 @@ class McpJsonUtilsTest {
     void testParseToolFromString_InvalidJson() {
         assertThrows(AgentStudioException.class,
             () -> McpJsonUtils.parseToolFromString("not json", "testMcp"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"missing,false", "null,false", "false,false", "true,true"})
+    void testParseToolFromString_NormalizesOffline(String offline, boolean expected) {
+        String tool = "{\"name\":\"tool\",\"outputSchema\":{\"type\":\"object\",\"properties\":{}}"
+            + ("missing".equals(offline) ? "" : ",\"offline\":" + offline) + "}";
+        var result = McpJsonUtils.parseToolFromString("[" + tool + "]", "testMcp");
+        assertEquals(1, result.size());
+        assertEquals(Boolean.valueOf(expected), result.get(0).getOffline());
     }
 }

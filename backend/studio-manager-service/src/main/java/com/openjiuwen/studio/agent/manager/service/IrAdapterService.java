@@ -1893,7 +1893,7 @@ public class IrAdapterService {
                 || Strings.CI.equals(mcpServerInfo.getAuthType(), "USE-IAM-TOKEN"))) {
             result.put("auth_type", "IAM-TOKEN");
         }
-        // 未配置工具列表的旧版智能体默认选择全部工具，也需要检查下线状态。
+        // 未配置工具列表时，运行时使用服务端当前工具；仅检查显式选择的下线工具。
         List<String> mcpToolNames = mcpChooseTools == null ? null : mcpChooseTools.get(mcpId);
         checkOfflineMcpTools(mcpServerInfo, mcpToolNames);
         if (mcpToolNames != null) {
@@ -1912,7 +1912,7 @@ public class IrAdapterService {
      * 避免调用到 MCP server 上已不存在的工具而出现难以理解的连接级异常。
      */
     private void checkOfflineMcpTools(McpServiceEntity mcpServerInfo, List<String> chosenToolNames) {
-        if (mcpServerInfo == null || (chosenToolNames != null && chosenToolNames.isEmpty())
+        if (mcpServerInfo == null || CollectionUtils.isEmpty(chosenToolNames)
             || StringUtils.isBlank(mcpServerInfo.getTools())) {
             return;
         }
@@ -1921,7 +1921,7 @@ public class IrAdapterService {
             .stream()
             .filter(tool -> Boolean.TRUE.equals(tool.getOffline()))
             .map(McpServiceToolEntity::getName)
-            .filter(name -> chosenToolNames == null || chosenToolNames.contains(name))
+            .filter(chosenToolNames::contains)
             .toList();
         if (!offlineToolNames.isEmpty()) {
             log.error("Agent chooses offline MCP tools, service ID: {}, tools: {}", mcpServerInfo.getId(),

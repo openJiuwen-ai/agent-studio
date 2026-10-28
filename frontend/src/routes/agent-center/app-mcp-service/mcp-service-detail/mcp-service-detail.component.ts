@@ -550,11 +550,13 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
     }
     if (Array.isArray(tools)) {
       this.mcpServiceDetail.tools = tools;
+      this.selectedMcpTool = tools[0] || null;
+      this.selectedMcpToolParams = [];
       // 仅当工具均具备 inputSchema 时复用完整初始化，避免脏数据导致页面异常
       if (tools.every(item => item && item.inputSchema)) {
         this.commonTools();
       } else {
-        this.selectedMcpTool = tools[0] || null;
+        this.getSelectedMcpToolParams();
       }
     }
     if (res.fc_instance_status) {
