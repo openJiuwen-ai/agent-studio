@@ -23,6 +23,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServiceModifyReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceSkinnyEntity;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceStatisticResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsEntity;
+import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsRefreshResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsTestReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServicesCesLineChartQo;
 import com.openjiuwen.studio.agent.manager.dto.McpServicesCesSuccessRateLineChartQo;
@@ -203,6 +204,15 @@ public interface IMcpServiceManagerService {
      * @param id id
      */
     McpServiceToolsEntity mcpServicesToolsListWithFlow(String projectId, String workspaceId, String id);
+
+    /**
+     * refreshMcpServicesTools
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param id id
+     */
+    McpServiceToolsRefreshResp refreshMcpServicesTools(String projectId, String workspaceId, String id);
 
     /**
      * modifyService

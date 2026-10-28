@@ -2,6 +2,10 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
+import java.util.List;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
@@ -77,5 +81,37 @@ class IrAdapterServiceTest {
     @Test
     void testServiceCreation() {
         assertNotNull(irAdapterService);
+    }
+
+    @Test
+    void testLegacyAgentAllToolsRejectsOfflineTool() {
+        McpServiceEntity service = serviceWithOfflineTool();
+        AgentStudioException error = assertThrows(AgentStudioException.class,
+            () -> ReflectionTestUtils.invokeMethod(irAdapterService, "checkOfflineMcpTools", service, null));
+        assertEquals(StudioError.MCP_SERVER_TOOL_OFFLINE, error.getErrorCode());
+    }
+
+    @Test
+    void testExplicitSelectionChecksOnlyChosenTools() {
+        McpServiceEntity service = serviceWithOfflineTool();
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(irAdapterService,
+            "checkOfflineMcpTools", service, List.of()));
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(irAdapterService,
+            "checkOfflineMcpTools", service, List.of("keep")));
+        AgentStudioException error = assertThrows(AgentStudioException.class,
+            () -> ReflectionTestUtils.invokeMethod(irAdapterService, "checkOfflineMcpTools", service, List.of("gone")));
+        assertEquals(StudioError.MCP_SERVER_TOOL_OFFLINE, error.getErrorCode());
+    }
+
+    private McpServiceEntity serviceWithOfflineTool() {
+        McpServiceEntity service = new McpServiceEntity();
+        service.setId("mcp-1");
+        service.setName("mcp-service");
+        service.setTools("""
+            [{"name":"gone","offline":true,
+              "inputSchema":{"type":"object","properties":{}},
+              "outputSchema":{"type":"object","properties":{}}}]
+            """);
+        return service;
     }
 }

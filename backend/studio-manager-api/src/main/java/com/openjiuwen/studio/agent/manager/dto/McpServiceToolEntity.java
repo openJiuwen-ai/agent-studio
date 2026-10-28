@@ -44,6 +44,10 @@ public class McpServiceToolEntity implements Serializable {
     @Schema(description = "配置信息", example = "{}")
     private String config = null;
 
+    @JsonProperty("offline")
+    @Schema(description = "工具是否已从MCP服务下线（仍被引用时保留）", example = "false")
+    private Boolean offline = false;
+
     public String getName() {
         return name;
     }
@@ -89,6 +93,15 @@ public class McpServiceToolEntity implements Serializable {
         return this;
     }
 
+    public Boolean getOffline() {
+        return offline;
+    }
+
+    public McpServiceToolEntity setOffline(Boolean offline) {
+        this.offline = offline;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -99,6 +112,7 @@ public class McpServiceToolEntity implements Serializable {
         sb.append("    input: ").append(toIndentedString(input)).append("\n");
         sb.append("    output: ").append(toIndentedString(output)).append("\n");
         sb.append("    config: ").append(toIndentedString(config)).append("\n");
+        sb.append("    offline: ").append(toIndentedString(offline)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -115,12 +129,12 @@ public class McpServiceToolEntity implements Serializable {
         return Objects.equals(this.name, mcpServiceToolEntity.name) && Objects.equals(this.description,
             mcpServiceToolEntity.description) && Objects.equals(this.input, mcpServiceToolEntity.input)
             && Objects.equals(this.output, mcpServiceToolEntity.output) && Objects.equals(this.config,
-            mcpServiceToolEntity.config);
+            mcpServiceToolEntity.config) && Objects.equals(this.offline, mcpServiceToolEntity.offline);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description, input, output, config);
+        return Objects.hash(name, description, input, output, config, offline);
     }
 
     /**

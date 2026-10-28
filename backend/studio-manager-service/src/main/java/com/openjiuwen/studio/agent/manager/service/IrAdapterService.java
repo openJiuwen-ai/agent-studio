@@ -1390,6 +1390,10 @@ public class IrAdapterService {
             if (serverTool == null) {
                 throw new AgentStudioException(StudioError.MCP_SERVER_TOOL_NOT_EXIST, serverId, toolName);
             }
+            if (Boolean.TRUE.equals(serverTool.getOffline())) {
+                // 工具已从 MCP server 下线但仍被当前工作流引用，给出明确错误而非调用失败
+                throw new AgentStudioException(StudioError.MCP_SERVER_TOOL_OFFLINE, serverId, toolName);
+            }
         }
         Map<String, Object> result = new HashMap<>();
         result.put(ID, serverId);
@@ -1889,15 +1893,42 @@ public class IrAdapterService {
                 || Strings.CI.equals(mcpServerInfo.getAuthType(), "USE-IAM-TOKEN"))) {
             result.put("auth_type", "IAM-TOKEN");
         }
-        // mcp选择的工具
-        if (mcpChooseTools != null && mcpChooseTools.containsKey(mcpId)) {
-            List<String> mcpToolNames = mcpChooseTools.get(mcpId);
+        // 未配置工具列表的旧版智能体默认选择全部工具，也需要检查下线状态。
+        List<String> mcpToolNames = mcpChooseTools == null ? null : mcpChooseTools.get(mcpId);
+        checkOfflineMcpTools(mcpServerInfo, mcpToolNames);
+        if (mcpToolNames != null) {
             log.info("user choose agent mcp tools, tools size is {}", mcpToolNames.size());
             result.put(MCP_CHOOSE_TOOLS, mcpToolNames);
         }
         // 支持hook function自定义鉴权
         result.put(PLUGIN_DEPENDENCY, parseMcpParamsWrapper(mcpServerInfo.getAuthInfo()));
         return result;
+    }
+
+    /**
+     * 校验智能体选择的 MCP 工具中是否存在已从服务端下线的工具。
+     *
+     * <p>重载工具列表时，被引用的下线工具会保留并标记 offline，运行时在此处显式拦截，
+     * 避免调用到 MCP server 上已不存在的工具而出现难以理解的连接级异常。
+     */
+    private void checkOfflineMcpTools(McpServiceEntity mcpServerInfo, List<String> chosenToolNames) {
+        if (mcpServerInfo == null || (chosenToolNames != null && chosenToolNames.isEmpty())
+            || StringUtils.isBlank(mcpServerInfo.getTools())) {
+            return;
+        }
+        List<String> offlineToolNames = McpJsonUtils
+            .parseToolFromString(mcpServerInfo.getTools(), mcpServerInfo.getName())
+            .stream()
+            .filter(tool -> Boolean.TRUE.equals(tool.getOffline()))
+            .map(McpServiceToolEntity::getName)
+            .filter(name -> chosenToolNames == null || chosenToolNames.contains(name))
+            .toList();
+        if (!offlineToolNames.isEmpty()) {
+            log.error("Agent chooses offline MCP tools, service ID: {}, tools: {}", mcpServerInfo.getId(),
+                offlineToolNames);
+            throw new AgentStudioException(StudioError.MCP_SERVER_TOOL_OFFLINE, mcpServerInfo.getId(),
+                String.join(",", offlineToolNames));
+        }
     }
 
     public String getServiceConfig(McpServiceEntity mcpServerInfo) {

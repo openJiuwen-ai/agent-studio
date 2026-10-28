@@ -411,3 +411,79 @@
     font-size: 16px;
   }
 }
+
+// 已下线的 MCP 工具：灰显并禁止交互
+.mcp-tool-accordion-item.mcp-tool-offline {
+  opacity: 0.6;
+  cursor: not-allowed;
+
+  .mcp-tool-accordion-header {
+    cursor: not-allowed;
+
+    &:hover {
+      background-color: transparent;
+    }
+  }
+}
+
+.mcp-tool-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-tool-offline-tag {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #8c8c8c;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+// 工具列表重载结果弹窗
+.mcp-refresh-result {
+  .mcp-refresh-summary {
+    display: flex;
+    gap: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+  }
+
+  .mcp-refresh-section {
+    margin-top: 12px;
+  }
+
+  .mcp-refresh-section-title {
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .mcp-refresh-tool {
+    padding: 2px 0;
+    color: #191919;
+    word-break: break-all;
+  }
+
+  .mcp-refresh-tool-warning {
+    color: #d96900;
+  }
+
+  .mcp-refresh-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #fff7e6;
+    color: #d96900;
+    font-size: 13px;
+  }
+
+  .mcp-refresh-empty {
+    margin-top: 12px;
+    color: #8c8c8c;
+  }
+}

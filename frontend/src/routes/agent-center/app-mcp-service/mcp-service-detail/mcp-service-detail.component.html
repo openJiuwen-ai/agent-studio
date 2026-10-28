@@ -201,18 +201,35 @@
             <app-common-no-data-with-btn [noDataStr]="'no_data' | i18nextEager" />
           </div>
           <div class="left" *ngIf="mcpServiceDetail.tools && mcpServiceDetail.tools.length > 0">
-            <div style="margin: 0 0 16px; font-size: 18px; font-weight: 600">
-              {{ 'Tools' | i18nextEager }}
+            <div style="margin: 0 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span style="font-size: 18px; font-weight: 600">{{ 'Tools' | i18nextEager }}</span>
+              <button
+                *ngIf="mcpServiceDetail.fc_instance_status === 'success' && !mcpServiceDetail.third_resource"
+                type="button"
+                nz-button
+                nzType="default"
+                [nzLoading]="refreshToolsLoading"
+                nz-tooltip
+                [nzTooltipTitle]="'mcp_tools_refresh_tip' | i18nextEager"
+                (click)="refreshMcpTools()"
+              >
+                {{ 'mcp_tools_refresh' | i18nextEager }}
+              </button>
             </div>
             <!-- 折叠面板 -->
-            <div class="mcp-tool-accordion-item" (click)="handleClickTools(item)"
+            <div class="mcp-tool-accordion-item" [class.mcp-tool-offline]="item.offline"
+                 (click)="!item.offline && handleClickTools(item)"
                  *ngFor="let item of mcpServiceDetail.tools; let i = index"
             >
               <button
                 class="mcp-tool-accordion-header"
+                [disabled]="item.offline"
                 [ngStyle]="{'border-radius': item.isCollapsed ? '16px' : '16px 16px 0 0'}"
               >
-                <span>{{ item.name }}</span>
+                <span class="mcp-tool-name">
+                  {{ item.name }}
+                  <span class="mcp-tool-offline-tag" *ngIf="item.offline">{{ 'mcp_tool_offline' | i18nextEager }}</span>
+                </span>
                 <nz-icon nzType="right" nzTheme="outline" [ngClass]="{isRotate: item.isCollapsed}" />
               </button>
               <div
@@ -279,7 +296,7 @@
                       />
                     </div>
                   </div>
-                  <button nz-button  nzType="primary" style="margin: 8px 0 8px 0" (click)="testMcpTool()" [nzLoading]="testMcpLoading">
+                  <button nz-button  nzType="primary" style="margin: 8px 0 8px 0" (click)="testMcpTool()" [nzLoading]="testMcpLoading" [disabled]="selectedMcpTool?.offline">
                     {{ 'test' | i18nextEager }}
                   </button>
                 </div>
@@ -423,6 +440,44 @@
       <button type="button" nz-button nzType="default" nzDanger autofocus (click)="updateMCPRatingFunc(context)">
         {{ 'ok' | i18nextEager}}
       </button>
+    </div>
+  </ng-template>
+  <ng-template #refreshResultTpl>
+    <div class="mcp-refresh-result">
+      <div class="mcp-refresh-summary">
+        <span>{{ 'mcp_tools_added' | i18nextEager }}: <strong>{{ refreshResult?.added_count || 0 }}</strong></span>
+        <span>{{ 'mcp_tools_removed' | i18nextEager }}: <strong>{{ refreshResult?.removed_count || 0 }}</strong></span>
+        <span>{{ 'mcp_tools_updated' | i18nextEager }}: <strong>{{ refreshResult?.updated_count || 0 }}</strong></span>
+      </div>
+      <div class="mcp-refresh-section" *ngIf="refreshResult?.added?.length">
+        <div class="mcp-refresh-section-title">{{ 'mcp_tools_added' | i18nextEager }}</div>
+        <div class="mcp-refresh-tool" *ngFor="let item of refreshResult.added">{{ item.name }}</div>
+      </div>
+      <div class="mcp-refresh-section" *ngIf="refreshResult?.removed?.length">
+        <div class="mcp-refresh-section-title">{{ 'mcp_tools_removed' | i18nextEager }}</div>
+        <div
+          class="mcp-refresh-tool"
+          [class.mcp-refresh-tool-warning]="item.referenced"
+          *ngFor="let item of refreshResult.removed"
+        >
+          {{ item.name }}
+          <span *ngIf="item.referenced">{{ 'mcp_tool_offline_retained' | i18nextEager }}</span>
+        </div>
+      </div>
+      <div class="mcp-refresh-section" *ngIf="refreshResult?.updated?.length">
+        <div class="mcp-refresh-section-title">{{ 'mcp_tools_updated' | i18nextEager }}</div>
+        <div class="mcp-refresh-tool" *ngFor="let item of refreshResult.updated">{{ item.name }}</div>
+      </div>
+      <div class="mcp-refresh-warning" *ngIf="referencedRemovedTools().length">
+        <nz-icon nzType="exclamation-circle" nzTheme="outline" />
+        <span>{{ 'mcp_tool_offline_referenced_tip' | i18nextEager }}</span>
+      </div>
+      <div
+        class="mcp-refresh-empty"
+        *ngIf="!refreshResult?.added?.length && !refreshResult?.removed?.length && !refreshResult?.updated?.length"
+      >
+        {{ 'mcp_tools_no_change' | i18nextEager }}
+      </div>
     </div>
   </ng-template>
 

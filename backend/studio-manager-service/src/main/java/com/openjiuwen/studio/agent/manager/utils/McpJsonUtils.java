@@ -176,6 +176,7 @@ public class McpJsonUtils {
                     tool.setConfig(metaObj.getOrDefault("config_schema", meta).toString());
                 }
                 tool.setOutput(getOutputSchema(json.getString("outputSchema")));
+                tool.setOffline(json.getBoolean("offline"));
 
                 return tool;
             }).toList();

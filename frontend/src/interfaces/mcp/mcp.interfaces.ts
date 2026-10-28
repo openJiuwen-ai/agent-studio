@@ -51,6 +51,34 @@ export interface McpTool {
     additionalProperties: boolean;
   }
   isCollapsed: boolean;
+  // 该工具已从 MCP 服务端下线，仍被引用时保留展示
+  offline?: boolean;
+}
+
+export interface McpToolReferenceItem {
+  app_id: string;
+  app_name: string;
+  app_type: string;
+}
+
+export interface McpToolDiffItem {
+  name: string;
+  referenced: boolean;
+  references: McpToolReferenceItem[];
+}
+
+export interface McpToolsRefreshResult {
+  id: string;
+  name: string;
+  fc_instance_status: string;
+  tools: string | McpTool[];
+  total: number;
+  added_count: number;
+  removed_count: number;
+  updated_count: number;
+  added: McpToolDiffItem[];
+  removed: McpToolDiffItem[];
+  updated: McpToolDiffItem[];
 }
 
 interface AuthKey {

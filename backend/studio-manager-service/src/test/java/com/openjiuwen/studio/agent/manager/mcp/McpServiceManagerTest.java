@@ -6,7 +6,10 @@ package com.openjiuwen.studio.agent.manager.mcp;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,13 +21,26 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
+import com.openjiuwen.studio.agent.manager.dto.McpServiceToolsRefreshResp;
+import com.openjiuwen.studio.agent.manager.dto.McpToolDiffItem;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariable;
 import com.openjiuwen.studio.agent.manager.dto.EnvironmentVariableValue;
 import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServerEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
+import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.utils.McpToolDiffUtils;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import com.openjiuwen.studio.agent.manager.entity.ServerScore;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
+import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
 import com.openjiuwen.studio.agent.manager.service.mcp.McpClientService;
 import com.openjiuwen.studio.agent.manager.service.mcp.McpServiceManager;
@@ -45,6 +61,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -108,6 +125,18 @@ class McpServiceManagerTest {
 
     @Mock
     private EnvironmentManagerMapper environmentManagerMapper;
+
+    @Mock
+    private MappingMapper mappingMapper;
+
+    @Mock
+    private WorkflowMapper workflowMapper;
+
+    @Mock
+    private ReleaseVersionMapper releaseVersionMapper;
+
+    @Mock
+    private MgObsService obsService;
 
     @Mock
     private EnvironmentCacheUtil environmentCacheUtil;
@@ -825,6 +854,238 @@ class McpServiceManagerTest {
 
         Assertions.assertNotNull(result);
         Assertions.assertEquals("server-private", result.getId());
+    }
+
+    private static final String OLD_TOOLS = "[{\"name\":\"keep\",\"description\":\"same\",\"inputSchema\":{\"type\":\"object\"}},"
+        + "{\"name\":\"gone\",\"description\":\"old\",\"inputSchema\":{\"type\":\"object\"}}]";
+
+    private static final String LATEST_TOOLS = "[{\"name\":\"keep\",\"description\":\"same\",\"inputSchema\":{\"type\":\"object\"}},"
+        + "{\"name\":\"fresh\",\"description\":\"new\",\"inputSchema\":{\"type\":\"object\"}}]";
+
+    private McpServiceEntity mockMcpService(String status, String tools) {
+        McpServiceEntity serviceEntity = new McpServiceEntity();
+        serviceEntity.setId("mcp-1");
+        serviceEntity.setTenantId(TENANT_ID);
+        serviceEntity.setName("demo-service");
+        serviceEntity.setFcInstanceStatus(status);
+        serviceEntity.setTools(tools);
+        return serviceEntity;
+    }
+
+    /**
+     * 用例描述：重载工具列表成功，新增/下线/变更差异正确，被引用的下线工具保留并标记 offline
+     * 预制条件：服务状态 success，旧清单包含被智能体引用的 gone 工具
+     * 输入参数：projectId=p1, workspaceId=ws1, id=mcp-1
+     * 预期结果：返回差异结果，落库清单包含 offline 标记的 gone 工具
+     */
+    @Test
+    void testRefreshMcpServicesTools_SuccessWithReferencedOfflineTool() {
+        McpServiceEntity serviceEntity = mockMcpService("success", OLD_TOOLS);
+        MappingEntity mapping = new MappingEntity();
+        mapping.setAppId("agent-1").setAppName("agent-one").setAppType("agent").setValid(true)
+            .setResourceChooseTools("[\"gone\"]");
+        when(serviceDao.getMcpServiceById(eq("mcp-1"), eq(TENANT_ID), isNull(), eq("p1"), eq("ws1")))
+            .thenReturn(serviceEntity);
+        when(mappingMapper.selectByResourceId("mcp-1")).thenReturn(List.of(mapping));
+
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn(LATEST_TOOLS).when(spyManager).getMcpServiceToolList(any(McpServiceEntity.class));
+
+        McpServiceToolsRefreshResp result = spyManager.refreshMcpServicesTools("p1", "ws1", "mcp-1");
+
+        Assertions.assertEquals(1, result.getAddedCount());
+        Assertions.assertEquals("fresh", result.getAdded().get(0).getName());
+        Assertions.assertEquals(1, result.getRemovedCount());
+        Assertions.assertEquals("gone", result.getRemoved().get(0).getName());
+        Assertions.assertTrue(result.getRemoved().get(0).getReferenced());
+        Assertions.assertEquals(1, result.getRemoved().get(0).getReferences().size());
+        Assertions.assertEquals(0, result.getUpdatedCount());
+        Assertions.assertEquals(3, result.getTotal());
+
+        ArgumentCaptor<String> toolsCaptor = ArgumentCaptor.forClass(String.class);
+        verify(serviceDao).updateTools(eq("mcp-1"), toolsCaptor.capture(), eq(TENANT_ID));
+        Assertions.assertTrue(toolsCaptor.getValue().contains("\"offline\":true"));
+    }
+
+    /**
+     * 用例描述：重载工具时拉取失败，保留旧清单和服务状态，直接抛出明确错误
+     * 预制条件：getMcpServiceToolList 抛出 MCP_FETCH_TOOLS_SERVER_ERROR
+     * 输入参数：projectId=p1, workspaceId=ws1, id=mcp-1
+     * 预期结果：抛出异常且不更新数据库
+     */
+    @Test
+    void testRefreshMcpServicesTools_FetchFailedKeepOldTools() {
+        McpServiceEntity serviceEntity = mockMcpService("success", OLD_TOOLS);
+        when(serviceDao.getMcpServiceById(eq("mcp-1"), eq(TENANT_ID), isNull(), eq("p1"), eq("ws1")))
+            .thenReturn(serviceEntity);
+
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doThrow(new AgentStudioException(StudioError.MCP_FETCH_TOOLS_SERVER_ERROR, "mcp-1"))
+            .when(spyManager).getMcpServiceToolList(any(McpServiceEntity.class));
+
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> spyManager.refreshMcpServicesTools("p1", "ws1", "mcp-1"));
+
+        Assertions.assertEquals(StudioError.MCP_FETCH_TOOLS_SERVER_ERROR, exception.getErrorCode());
+        verify(serviceDao, never()).updateTools(anyString(), anyString(), anyString());
+        verify(serviceDao, never()).updateToolsAndStatus(anyString(), anyString(), anyString(), anyString());
+    }
+
+    /**
+     * 用例描述：服务端返回空工具列表时不覆盖旧清单
+     * 预制条件：getMcpServiceToolList 返回空数组
+     * 输入参数：projectId=p1, workspaceId=ws1, id=mcp-1
+     * 预期结果：抛出 MCP_FETCH_TOOLS_SERVER_ERROR 且不更新数据库
+     */
+    @Test
+    void testRefreshMcpServicesTools_EmptyToolsKeepOldTools() {
+        McpServiceEntity serviceEntity = mockMcpService("success", OLD_TOOLS);
+        when(serviceDao.getMcpServiceById(eq("mcp-1"), eq(TENANT_ID), isNull(), eq("p1"), eq("ws1")))
+            .thenReturn(serviceEntity);
+
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn("[]").when(spyManager).getMcpServiceToolList(any(McpServiceEntity.class));
+
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> spyManager.refreshMcpServicesTools("p1", "ws1", "mcp-1"));
+
+        Assertions.assertEquals(StudioError.MCP_FETCH_TOOLS_SERVER_ERROR, exception.getErrorCode());
+        verify(serviceDao, never()).updateTools(anyString(), anyString(), anyString());
+    }
+
+    /**
+     * 用例描述：服务创建中不允许重载工具
+     * 预制条件：服务状态 creatingStack
+     * 输入参数：projectId=p1, workspaceId=ws1, id=mcp-1
+     * 预期结果：抛出 MCP_SERVICE_BUSY 且不拉取工具
+     */
+    @Test
+    void testRefreshMcpServicesTools_ServiceBusy() {
+        McpServiceEntity serviceEntity = mockMcpService("creatingStack", OLD_TOOLS);
+        when(serviceDao.getMcpServiceById(eq("mcp-1"), eq(TENANT_ID), isNull(), eq("p1"), eq("ws1")))
+            .thenReturn(serviceEntity);
+
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+
+        AgentStudioException exception = Assertions.assertThrows(AgentStudioException.class,
+            () -> spyManager.refreshMcpServicesTools("p1", "ws1", "mcp-1"));
+
+        Assertions.assertEquals(StudioError.MCP_SERVICE_BUSY, exception.getErrorCode());
+        Mockito.verify(spyManager, never()).getMcpServiceToolList(any(McpServiceEntity.class));
+    }
+
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"null", " "})
+    void testRefreshMcpServicesTools_LegacyAgentRetainsOfflineTool(String chosenTools) {
+        MappingEntity mapping = new MappingEntity().setAppId("agent-1").setAppType("agent")
+            .setValid(true).setResourceChooseTools(chosenTools);
+        McpServiceToolsRefreshResp result = refreshWithMapping(mapping, LATEST_TOOLS);
+        Assertions.assertTrue(result.getRemoved().get(0).getReferenced());
+        Assertions.assertTrue(McpToolDiffUtils.isOffline(
+            McpToolDiffUtils.indexByName(McpToolDiffUtils.parseToolArray(result.getTools())).get("gone")));
+    }
+
+    @Test
+    void testRefreshMcpServicesTools_ExplicitEmptySelectionDoesNotRetainTool() {
+        MappingEntity mapping = new MappingEntity().setAppId("agent-1").setAppType("agent")
+            .setValid(true).setResourceChooseTools("[]");
+        McpServiceToolsRefreshResp result = refreshWithMapping(mapping, LATEST_TOOLS);
+        Assertions.assertFalse(result.getRemoved().get(0).getReferenced());
+        Assertions.assertFalse(result.getTools().contains("gone"));
+    }
+
+    @Test
+    void testRefreshMcpServicesTools_InvalidMappingDoesNotRetainTool() {
+        MappingEntity mapping = new MappingEntity().setAppId("agent-1").setAppType("agent").setValid(false);
+        McpServiceToolsRefreshResp result = refreshWithMapping(mapping, LATEST_TOOLS);
+        Assertions.assertFalse(result.getRemoved().get(0).getReferenced());
+        Assertions.assertFalse(result.getTools().contains("gone"));
+    }
+
+    private static final String WORKFLOW_DSL = """
+        {"nodes":[
+          {"type":"Mcp","configs":{"id":"mcp-1","tool_name":"gone"}},
+          {"type":"Mcp","configs":{"id":"mcp-1","tool_name":"gone"}},
+          {"type":"Mcp","configs":{"id":"another-mcp","tool_name":"keep"}},
+          {"type":"Plugin","configs":{"id":"mcp-1","tool_name":"keep"}}
+        ]}
+        """;
+
+    @Test
+    void testRefreshMcpServicesTools_WorkflowRetainsOnlyReferencedTool() {
+        MappingEntity mapping = new MappingEntity().setAppId("workflow-1").setAppType("workflow")
+            .setAppName("workflow-one").setAppWorkspaceId("shared-workspace").setValid(true);
+        WorkflowEntity workflow = new WorkflowEntity();
+        workflow.setDslPath("workflow-draft.json");
+        when(workflowMapper.getWorkflowEntityByIds(null, "shared-workspace", List.of("workflow-1")))
+            .thenReturn(List.of(workflow));
+        when(obsService.downloadObsFile("workflow-draft.json")).thenReturn(WORKFLOW_DSL);
+        assertWorkflowToolProtection(refreshWithMapping(mapping, "[{\"name\":\"fresh\"}]"));
+    }
+
+    @Test
+    void testRefreshMcpServicesTools_ReleasedWorkflowUsesReferencedVersion() {
+        MappingEntity mapping = new MappingEntity().setAppId("workflow-1").setAppType("workflow")
+            .setAppVersion("v1").setValid(true);
+        ReleaseVersion version = new ReleaseVersion();
+        version.setDslPath("workflow-v1.json");
+        when(releaseVersionMapper.selectByAppIdAndVersionId("workflow-1", "v1")).thenReturn(version);
+        when(obsService.downloadObsFile("workflow-v1.json")).thenReturn(WORKFLOW_DSL);
+        assertWorkflowToolProtection(refreshWithMapping(mapping, "[{\"name\":\"fresh\"}]"));
+        Mockito.verifyNoInteractions(workflowMapper);
+    }
+
+    @Test
+    void testRefreshMcpServicesTools_UnreadableWorkflowRetainsPotentialReferences() {
+        MappingEntity mapping = new MappingEntity().setAppId("workflow-1").setAppType("workflow")
+            .setAppVersion("v1").setValid(true);
+        ReleaseVersion version = new ReleaseVersion();
+        version.setDslPath("workflow-v1.json");
+        when(releaseVersionMapper.selectByAppIdAndVersionId("workflow-1", "v1")).thenReturn(version);
+        when(obsService.downloadObsFile("workflow-v1.json")).thenThrow(new IllegalStateException("storage unavailable"));
+        Assertions.assertTrue(refreshWithMapping(mapping, LATEST_TOOLS).getRemoved().get(0).getReferenced());
+    }
+
+    @Test
+    void testAsyncRefreshRetainsLegacyAgentOfflineTool() {
+        McpServiceEntity service = mockMcpService("success", OLD_TOOLS);
+        MappingEntity mapping = new MappingEntity().setAppId("agent-1").setAppType("agent").setValid(true);
+        when(mappingMapper.selectByResourceId("mcp-1")).thenReturn(List.of(mapping));
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn(LATEST_TOOLS).when(spyManager).getMcpServiceToolList(service);
+        spyManager.getMcpServiceToolListAndUpdate(service);
+        ArgumentCaptor<String> tools = ArgumentCaptor.forClass(String.class);
+        verify(serviceDao).updateTools(eq("mcp-1"), tools.capture(), eq(TENANT_ID));
+        Assertions.assertTrue(McpToolDiffUtils.isOffline(
+            McpToolDiffUtils.indexByName(McpToolDiffUtils.parseToolArray(tools.getValue())).get("gone")));
+    }
+
+    private McpServiceToolsRefreshResp refreshWithMapping(MappingEntity mapping, String latestTools) {
+        McpServiceEntity service = mockMcpService("success", OLD_TOOLS);
+        when(serviceDao.getMcpServiceById(eq("mcp-1"), eq(TENANT_ID), isNull(), eq("p1"), eq("ws1")))
+            .thenReturn(service);
+        when(mappingMapper.selectByResourceId("mcp-1")).thenReturn(List.of(mapping));
+        McpServiceManager spyManager = Mockito.spy(mcpServiceManager);
+        Mockito.doReturn(latestTools).when(spyManager).getMcpServiceToolList(service);
+        McpServiceToolsRefreshResp result = spyManager.refreshMcpServicesTools("p1", "ws1", "mcp-1");
+        verify(serviceDao).updateTools("mcp-1", result.getTools(), TENANT_ID);
+        return result;
+    }
+
+    private void assertWorkflowToolProtection(McpServiceToolsRefreshResp result) {
+        McpToolDiffItem gone = result.getRemoved().stream().filter(item -> "gone".equals(item.getName()))
+            .findFirst().orElseThrow();
+        McpToolDiffItem keep = result.getRemoved().stream().filter(item -> "keep".equals(item.getName()))
+            .findFirst().orElseThrow();
+        Assertions.assertTrue(gone.getReferenced());
+        Assertions.assertEquals(1, gone.getReferences().size());
+        Assertions.assertEquals("workflow-1", gone.getReferences().get(0).getAppId());
+        Assertions.assertFalse(keep.getReferenced());
+        Assertions.assertFalse(result.getTools().contains("keep"));
+        Assertions.assertTrue(McpToolDiffUtils.isOffline(
+            McpToolDiffUtils.indexByName(McpToolDiffUtils.parseToolArray(result.getTools())).get("gone")));
     }
 
 }
