@@ -63,7 +63,7 @@ public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
     }
 
     private boolean validServiceProvider() {
-        return response.getIssuer().equalsIgnoreCase("www.demo.com");
+        return response.getIssuer().equalsIgnoreCase(provider.getIssuer());
     }
 
     private boolean timeNoReache() {
