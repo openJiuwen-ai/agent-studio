@@ -589,8 +589,11 @@ public class AgentCommonService {
         try (BufferedReader bufferedReader = new BufferedReader(
             new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            // 逐行读取文件中的jsonl配置
-            while (StringUtils.isNotEmpty(line = bufferedReader.readLine())) {
+            // 逐行读取文件中的jsonl配置，readLine仅在文件末尾返回null，需跳过空行
+            while ((line = bufferedReader.readLine()) != null) {
+                if (StringUtils.isBlank(line)) {
+                    continue;
+                }
                 Map<String, Object> jsonMap = jacksonObjectMapper.readValue(line, new TypeReference<>() {});
                 if (jsonMap.get("schema_version") != null) {
                     return true;
