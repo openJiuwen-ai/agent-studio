@@ -41,11 +41,13 @@ class WorkflowValidationServiceTest {
     @BeforeEach
     void setUp() {
         // 注入 i18nUtil mock，避免 validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时 NPE。
-        // 被测代码调 getMessage(key) 单参数(varargs 空)与 getMessage(key, args) 两参数两种形式，
-        // any(Object[].class) 匹配 varargs 数组(含空数组)，两个 stub 覆盖两种调用形式。
+        // 返回带 {0}/{1} 占位符的模板串：被测代码外层用 MessageFormat.format 把
+        // 节点 ID/字段名替换进 reason（validateSchemaFieldNames_arrayObjectNested_shouldRecurse
+        // 断言错误原因含违规字段名 123）。Mockito 会把单参 varargs 调用归入两参存根，
+        // 两个存根必须给同一模板才一致。
         I18nUtil i18nUtil = mock(I18nUtil.class);
-        when(i18nUtil.getMessage(anyString())).thenReturn("mocked message");
-        when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message");
+        when(i18nUtil.getMessage(anyString())).thenReturn("mocked message {0} {1}");
+        when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message {0} {1}");
         ReflectionTestUtils.setField(service, "i18nUtil", i18nUtil);
     }
 

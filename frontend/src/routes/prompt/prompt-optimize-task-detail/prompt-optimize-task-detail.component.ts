@@ -401,7 +401,13 @@ export class PromptOptimizeTaskDetailComponent {
 
     this.originPrompt = task.pt_text;
 
-    const iterationInfoList = task.iteration_results.iteration_info_list.slice(1);
+    const iterationInfoList0 = task.iteration_results.iteration_info_list.slice(1);
+    // 兜底：折叠相邻候选文本完全相同的版本（修复前任务可能登记了重复版本）
+    const iterationInfoList = iterationInfoList0.filter(
+      (promptInfo, index) =>
+        index === 0 ||
+        promptInfo.optimized_prompt !== iterationInfoList0[index - 1].optimized_prompt,
+    );
     this.originAcc = task.iteration_results?.iteration_info_list[0]?.success_rate;
 
     if (iterationInfoList.length > 0) {

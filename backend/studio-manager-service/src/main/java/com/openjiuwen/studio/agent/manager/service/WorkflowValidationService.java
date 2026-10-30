@@ -600,7 +600,7 @@ public class WorkflowValidationService {
                     continue;
                 }
                 if (NodeType.STREAM_TRANSFORM.getType().equals(node.getType())) {
-                    validateStreamTransformNodeConfig(node, errors);
+                    validateStreamTransformNodeConfig(nodeMap, node, errors);
                 }
                 for (IRConfig irConfig : irConfigs.get(node.getType())) {
                     String id = irConfig.getId();
@@ -2548,18 +2548,20 @@ public class WorkflowValidationService {
      * 校验流式输出节点 configs
      */
     @SuppressWarnings("unchecked")
-    private void validateStreamTransformNodeConfig(Node node, List<WorkflowValidationVOErrors> errors) {
+    private void validateStreamTransformNodeConfig(Map<String, Node> nodeMap, Node node,
+        List<WorkflowValidationVOErrors> errors) {
         if (node == null || node.getNodeInfo() == null) {
             return;
         }
 
         // 校验一定存在frame_template
         Map<String, Object> transformer =  (Map<String, Object>) node.getNodeInfo().getConfigs().get("transformer");
-        String frame_template = (String) transformer.get("frame_template");
+        String frame_template = transformer == null ? null : (String) transformer.get("frame_template");
         if (StringUtils.isEmpty(frame_template)) {
             errors.add(new WorkflowValidationVOErrors().setId(node.getId())
                 .setType(node.getType())
                 .setReason(i18nUtil.getMessage("openjiuwen.02201094")));
+            return;
         }
 
         // 校验 frame_template 的格式：支持纯占位符（如 {{raw_output}}）或有效 JSON
@@ -2586,6 +2588,161 @@ public class WorkflowValidationService {
             }
         }
 
+        // 校验流式消息内容中引用的变量必须为本节点输入参数及其有效字段
+        validateStreamTransformReferencedVariables(nodeMap, node, frame_template, errors);
+    }
+
+    /**
+     * 流式消息内容中的双大括号模板变量匹配，如 {{raw_output}}、{{raw_output.data}}
+     */
+    private static final Pattern TEMPLATE_VAR_PATTERN = Pattern.compile("\\{\\{([^}]+)\\}\\}");
+
+    /**
+     * 输入参数引用中的分组前缀（userFields./systemFields.）在解析上游输出字段时需剔除
+     */
+    private static final List<String> STREAM_REF_GROUP_PREFIXES = List.of("userFields.", "systemFields.");
+
+    /**
+     * 校验流式消息内容引用的变量存在性。
+     *
+     * <p>占位符必须引用本节点输入参数（支持整体引用如 {{raw_output}} 与字段引用如
+     * {{raw_output.data}}）；字段引用还要求对应子路径存在于输入参数（上游输出字段）的
+     * schema 中。无法确认的场景（上游节点缺失、schema 缺失、引用解析失败）放行不误报。
+     */
+    private void validateStreamTransformReferencedVariables(Map<String, Node> nodeMap, Node node,
+        String frameTemplate, List<WorkflowValidationVOErrors> errors) {
+        if (StringUtils.isBlank(frameTemplate) || node == null || node.getNodeInfo() == null) {
+            return;
+        }
+        List<WorkflowFieldVO> inputs = node.getNodeInfo().getInputs();
+        if (CollectionUtils.isEmpty(inputs) || inputs.size() != 1) {
+            return;
+        }
+        WorkflowFieldVO input = inputs.get(0);
+        if (input == null || StringUtils.isBlank(input.getName())) {
+            return;
+        }
+        String inputName = input.getName();
+        WorkflowFieldVO refOutput = nodeMap == null ? null
+            : resolveStreamTransformInputOutputField(nodeMap, input);
+        Matcher matcher = TEMPLATE_VAR_PATTERN.matcher(frameTemplate);
+        while (matcher.find()) {
+            String varPath = matcher.group(1).trim();
+            if (StringUtils.isBlank(varPath)) {
+                continue;
+            }
+            // 占位符必须指向本节点输入参数
+            if (!varPath.equals(inputName)
+                && !varPath.startsWith(inputName + ".")
+                && !varPath.startsWith(inputName + "[")) {
+                errors.add(buildStreamTransformRefError(node, varPath));
+                continue;
+            }
+            // 字段级引用：子路径必须存在于输入参数 schema 中（无法确认时放行）
+            if (!varPath.equals(inputName) && refOutput != null) {
+                String subPath = varPath.startsWith(inputName + ".")
+                    ? varPath.substring(inputName.length() + 1) : varPath.substring(inputName.length());
+                if (!isStreamTransformFieldPathPresent(refOutput, subPath)) {
+                    errors.add(buildStreamTransformRefError(node, varPath));
+                }
+            }
+        }
+    }
+
+    /**
+     * 解析流式消息节点输入参数引用的上游输出字段，用于子路径校验。
+     *
+     * <p>与 IR 构建侧 StreamTransformNodeAdapter 保持一致：输入参数值须为 ref 类型，
+     * ref_var_name 可能带 userFields./systemFields. 分组前缀，解析时剔除。
+     */
+    private WorkflowFieldVO resolveStreamTransformInputOutputField(Map<String, Node> nodeMap, WorkflowFieldVO input) {
+        if (input == null || input.getValue() == null
+            || !WorkflowFieldVOValue.TypeEnum.REF.equals(input.getValue().getType())) {
+            return null;
+        }
+        Object content = input.getValue().getContent();
+        if (content == null) {
+            return null;
+        }
+        Map<String, String> refMap;
+        try {
+            refMap = new ObjectMapper().convertValue(content, new TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            return null;
+        }
+        if (refMap == null) {
+            return null;
+        }
+        String refNodeId = refMap.get(CommonConstant.Workflow.REF_NODE_ID);
+        String refVarName = refMap.get(CommonConstant.Workflow.REF_VAR_NAME);
+        if (StringUtils.isAnyBlank(refNodeId, refVarName)) {
+            return null;
+        }
+        Node refNode = nodeMap.get(refNodeId);
+        if (refNode == null || refNode.getNodeInfo() == null
+            || CollectionUtils.isEmpty(refNode.getNodeInfo().getOutputs())) {
+            return null;
+        }
+        String strippedVarName = refVarName;
+        for (String groupPrefix : STREAM_REF_GROUP_PREFIXES) {
+            if (strippedVarName.startsWith(groupPrefix)) {
+                strippedVarName = strippedVarName.substring(groupPrefix.length());
+                break;
+            }
+        }
+        return resolveOutputFieldByRefPath(refNode.getNodeInfo().getOutputs(), strippedVarName);
+    }
+
+    /**
+     * 判断子路径（如 data、items[0].name）是否存在于输入参数字段的 schema 中。
+     * schema 缺失或路径无法解析时返回 true 放行，避免误报。
+     */
+    private boolean isStreamTransformFieldPathPresent(WorkflowFieldVO field, String subPath) {
+        if (StringUtils.isBlank(subPath)) {
+            return true;
+        }
+        List<WorkflowFieldVO> currentLevel = schemaAsFieldList(field.getSchema());
+        if (currentLevel == null) {
+            return true;
+        }
+        String[] segments = subPath.split("\\.");
+        for (int i = 0; i < segments.length; i++) {
+            Matcher matcher = REF_PATH_SEGMENT.matcher(segments[i]);
+            if (!matcher.matches()) {
+                return true;
+            }
+            String fieldName = matcher.group(1);
+            boolean hasIndex = matcher.group(2) != null;
+            WorkflowFieldVO current = findFieldByName(currentLevel, fieldName);
+            if (current == null) {
+                return false;
+            }
+            boolean isLast = i == segments.length - 1;
+            if (hasIndex) {
+                WorkflowFieldVO elementField = arrayElementAsField(current);
+                if (elementField == null) {
+                    return false;
+                }
+                if (isLast) {
+                    return true;
+                }
+                currentLevel = schemaAsFieldList(elementField.getSchema());
+            } else if (!isLast) {
+                currentLevel = schemaAsFieldList(current.getSchema());
+            } else {
+                return true;
+            }
+            if (currentLevel == null) {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    private WorkflowValidationVOErrors buildStreamTransformRefError(Node node, String varPath) {
+        return new WorkflowValidationVOErrors().setId(node.getId())
+            .setType(node.getType())
+            .setReason(MessageFormat.format(i18nUtil.getMessage("openjiuwen.02201100"), varPath));
     }
 
     /**
