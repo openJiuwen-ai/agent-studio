@@ -9,6 +9,7 @@ usage 载荷按 handler 约定键名过滤（junk 键绝不入载荷）、JSON �
 invoke 单次插桩不重复、无作用域（独立工作流）行为不变。
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -479,6 +480,29 @@ class TestTelemetryIsolation:
 
         assert result["userFields"]["raw_output"] == "答案"
         assert len(_events_by_name(tracer, "on_llm_start")) == 1
+
+    @pytest.mark.asyncio
+    async def test_invoke_cancellation_finalizes_span(self):
+        """invoke 被取消（CancelledError 绕过 except Exception）：finally 补收尾。
+
+        CancelledError 继承 BaseException，仅靠 except Exception 捕不到；
+        span 悬挂在共享 _oj_span_map 中（检视意见）。
+        """
+        tracer = _FakeTracer()
+        llm = MagicMock()
+        llm.invoke = AsyncMock(side_effect=asyncio.CancelledError())
+        chain = _make_chain(llm, _make_conf())
+
+        with workflow_trace_scope(_scope_manager(tracer)):
+            with pytest.raises(asyncio.CancelledError):
+                await chain.invoke(
+                    {"userFields": {"query": "你好"}}, _FakeSession(), None
+                )
+
+        assert len(_events_by_name(tracer, "on_llm_start")) == 1
+        end = _events_by_name(tracer, "on_llm_end")
+        assert len(end) == 1  # finally 兜底收尾，恰好一次
+        assert end[0]["outputs"] is None
 
     @pytest.mark.asyncio
     async def test_stream_early_close_finalizes_span(self):

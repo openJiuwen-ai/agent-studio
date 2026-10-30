@@ -354,6 +354,13 @@ class LLMChain(WorkflowComponent):
                 StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
                 error_msg=f"LLM invoke failed: {_format_llm_error_detail(e)}",
             ) from e
+        finally:
+            # CancelledError / GeneratorExit 继承 BaseException，不经
+            # except Exception——与 stream 路径同款 finally 兜底收尾，
+            # 不留悬挂 llm.* span（检视意见）；正常/失败路径已收尾，
+            # guard 的恰好一次标志使此处 no-op
+            if oj_telemetry is not None:
+                await oj_telemetry.close_span()
 
     def get_stream_output(self) -> dict | None:
         """Return final batch output after stream completes for downstream ${node_llm...} refs."""
