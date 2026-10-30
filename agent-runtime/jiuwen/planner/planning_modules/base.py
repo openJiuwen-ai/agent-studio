@@ -201,7 +201,7 @@ class LlmPlanningModule(PlanningModuleBase, ABC):
         functions = kwargs.get("functions")
         functions = self.format_tools(functions, **kwargs) if functions else []
         trace_manager = create_trace_manager(
-            self.llm, functions, kwargs.get("trace_handlers", None)
+            self.llm, functions, kwargs.get("trace_handlers", None), messages=prompt
         )
         await trace_manager.on_llm_start(prompt)
 

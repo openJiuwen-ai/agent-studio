@@ -15,7 +15,10 @@ from typing import Any, Dict, Optional
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.plugin.common import constant
 from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.foundation.tool import MCPTool
@@ -128,7 +131,15 @@ class McpToolWrapper:
 
         保持与旧版 McpAPI.ainvoke() 完全相同的行为
         """
-        trace_manager = self._create_tracer_manager(**kwargs)
+        # 弹出须发生在调用方作用域：_create_tracer_manager(**kwargs) 的形参
+        # 是副本，helper 内弹出不影响本方法 kwargs。tool_call_id/tool_type
+        # 与 trace_handlers 同理摘出——不可序列化的 TraceManager 不得随
+        # **kwargs 泄入 JIUWEN_RUNTIME_KWARGS 与 _get_tool().invoke 入参
+        tool_trace_info = extract_tool_trace_info(kwargs)
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        trace_manager = self._create_tracer_manager(
+            tool_trace_info, trace_handlers=trace_handlers, **kwargs
+        )
 
         try:
             await trace_manager.on_plugin_start(inputs)
@@ -136,7 +147,13 @@ class McpToolWrapper:
             jiuwen_kwargs = {
                 k: v
                 for k, v in kwargs.items()
-                if k not in ("skip_none_value", "skip_inputs_validate")
+                if k
+                not in (
+                    "skip_none_value",
+                    "skip_inputs_validate",
+                    "tool_call_id",
+                    "tool_type",
+                )
             }
             if jiuwen_kwargs:
                 inputs = dict(inputs)
@@ -188,9 +205,15 @@ class McpToolWrapper:
             constant.RESTFUL_DATA: "",
         }
 
-    def _create_tracer_manager(self, **kwargs):
+    def _create_tracer_manager(
+        self, tool_trace_info=None, trace_handlers=None, **kwargs
+    ):
         """创建追踪管理器"""
-        return TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers"]),
-        )
+        instance_info = get_instance_info(self, blacklist=["auth", "headers"])
+        # 工具标识与 handlers 均由调用方从自身 kwargs 摘出后显式传入：
+        # 工具标识入扁平键供 core handler 盖 gen_ai.tool.call.id /
+        # gen_ai.tool.type；handlers 形参化后不再从副本 kwargs 里 pop
+        # （副本内 pop 不影响调用方，形参化后调用方无从漏传）
+        if tool_trace_info:
+            instance_info.update(tool_trace_info)
+        return TraceManager.generate_manager(trace_handlers, instance_info)

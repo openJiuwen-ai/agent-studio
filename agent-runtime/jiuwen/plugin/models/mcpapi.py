@@ -17,7 +17,10 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.controller.common.constants import WorkflowConstants
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.orchestration import Invokable
 from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
@@ -113,9 +116,13 @@ class McpAPI(Invokable, ABC):
         """
         异步调用
         """
+        instance_info = get_instance_info(
+            self, blacklist=["auth", "headers", "query_params"]
+        )
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
+        instance_info.update(extract_tool_trace_info(kwargs))
         trace_manager = TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers", "query_params"]),
+            kwargs.pop("trace_handlers", None), instance_info
         )
         await trace_manager.on_plugin_start(inputs)
 
@@ -337,9 +344,11 @@ class McpServer(McpAPI, ABC):
         """
         异步调用
         """
+        instance_info = get_instance_info(self, blacklist=["auth", "headers"])
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
+        instance_info.update(extract_tool_trace_info(kwargs))
         trace_manager = TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers"]),
+            kwargs.pop("trace_handlers", None), instance_info
         )
         await trace_manager.on_plugin_start(inputs)
         try:

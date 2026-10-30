@@ -212,6 +212,13 @@ class RuleModule:
             input_data = {
                 "query": self.context_manager.get_latest_user_content(),  # 使用消息内容作为查询
                 "workflow_req_params": workflow_req_params,
+                # OTel 双写：当前消息的 trace_handlers（controller 链 child
+                # TraceManager）随任务下发，workflow_handler 在工作流执行时
+                # 绑定作用域供 LLM 节点遥测派生；持久化时 filter_input_data
+                # 会剥掉该键，无则 None（行为不变）
+                "runtime_data": {
+                    "trace_handlers": msg.runtime_data.get("trace_handlers")
+                },
             }
 
             workflow_context = self.context_manager.get_workflow_context_by_id(
@@ -256,7 +263,9 @@ class RuleModule:
                 if intent_config.intent_id == intent_id:
                     global_intent = intent_config
                     break
-            return self.create_global_intent_task(global_intent, task_id)
+            return self.create_global_intent_task(
+                global_intent, task_id, msg.runtime_data.get("trace_handlers")
+            )
         except Exception as e:
             logger.error(
                 f"Error creating intent workflow task: {str(e)}",
@@ -264,8 +273,13 @@ class RuleModule:
             )
             return None
 
-    def create_global_intent_task(self, global_intent, task_id):
-        """为全局意图创建工作流开始任务"""
+    def create_global_intent_task(self, global_intent, task_id, trace_handlers=None):
+        """为全局意图创建工作流开始任务
+
+        Args:
+            trace_handlers: 当前消息的 trace_handlers，随任务下发供工作流
+                LLM 节点遥测派生（OTel 双写）；缺省 None 不注入
+        """
         intent_id = global_intent.intent_id
         if global_intent.handler_type == HandlerType.WORKFLOW.value:
             workflow_config_name = global_intent.handler.get("name", None)
@@ -280,6 +294,9 @@ class RuleModule:
                 input_data = {
                     "query": self.context_manager.get_latest_user_content(),
                     "workflow_req_params": workflow_req_params,
+                    # OTel 双写：trace_handlers 随任务下发（来源见调用方），
+                    # 持久化时 filter_input_data 剥掉该键
+                    "runtime_data": {"trace_handlers": trace_handlers},
                 }
                 workflow_context = (
                     self.context_manager.get_workflow_context_by_config_name(

@@ -46,6 +46,7 @@ from jiuwen.extension.wrapper.workflow_loader import (
     ensure_openjiuwen_workflow_registered,
 )
 from jiuwen.insight.handlers.data import NAME
+from jiuwen.insight.workflow_trace_scope import scoped_astream
 from jiuwen.orchestration.flow.constant import (
     WORKFLOW_STATE,
     WORKFLOW_STATE_ERROR,
@@ -965,13 +966,23 @@ class WorkflowHandler(BaseHandler):
             user_id,
         )
         try:
-            async for exec_res in self._stream_handle_workflow_execute(
-                workflow_input,
-                workflow_context,
-                workflow_instance,
-                workflow_status,
-                current_node,
-                from_pe=from_pe,
+            # OTel 双写：任务携带的 trace_handlers（controller 链 child
+            # TraceManager）绑定到工作流执行作用域，engine 的组件任务继承
+            # 该协程上下文，LLM 节点内经 current_workflow_trace_manager 取用
+            # 派生 span；无则不产出（独立工作流行为不变）。经 scoped_astream
+            # 消费：作用域只在步进内层流期间绑定——直接 with 包住含 yield
+            # 的 async for 会让绑定滞留在两次 yield 之间的消费方 Task 上下
+            # 文，兄弟任务 create_task 继承后错误归属遥测（检视意见）
+            async for exec_res in scoped_astream(
+                lambda: self._stream_handle_workflow_execute(
+                    workflow_input,
+                    workflow_context,
+                    workflow_instance,
+                    workflow_status,
+                    current_node,
+                    from_pe=from_pe,
+                ),
+                (task.input_data.get("runtime_data") or {}).get("trace_handlers"),
             ):
                 yield exec_res
 
@@ -1743,9 +1754,18 @@ class WorkflowHandler(BaseHandler):
             )
 
         self._prepare_workflow_kwargs(inputs_dict, kwargs)
+        # OTel 双写：react 任务的 runtime_data（含 trace_handlers）随 kwargs
+        # 透传到此，绑定工作流执行作用域供 LLM 节点遥测派生。该对象须先
+        # 摘出再绑定（与插件侧 kwargs.pop 同一约定）：TraceManager 持有
+        # tracer/span 表/insight 队列，不可序列化，随 **kwargs 流入
+        # astream 会污染执行入参、遇 checkpoint 落库直接报错。经
+        # scoped_astream 消费：作用域只在建立与步进内层流期间绑定，跨
+        # yield 零残留（检视意见，同 _stream_execute_workflow）
+        trace_handlers = kwargs.pop("trace_handlers", None)
         try:
-            res_generator = await workflow.astream(query, **kwargs)
-            async for func_res in res_generator:
+            async for func_res in scoped_astream(
+                lambda: workflow.astream(query, **kwargs), trace_handlers
+            ):
                 self._check_questioner_interrupt(workflow, func_res)
                 func_res = self.process_stream_output(func_res)
                 if (

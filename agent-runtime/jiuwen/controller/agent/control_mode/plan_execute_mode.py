@@ -119,7 +119,8 @@ class PlanExecuteMode(BaseMode):
             # 保存当前请求上下文，便于工具执行时使用
             self._current_query = request.query
             self._runtime_context = request.runtime_context
-            # OTel：保留 trace_handlers 引用，供 StepExecute LLM 调用补遥测载荷
+            # OTel 双写：当前请求的 trace_handlers（controller 链 child
+            # TraceManager），工作流工具任务下发时随 input_data 携带
             self._trace_handlers = request.trace_handlers
             self._workflow_req_params = {}
             self._conversation_id = None
@@ -1514,6 +1515,12 @@ class PlanExecuteMode(BaseMode):
             "tool_call_id": tool_call_id,
             "conversation_id": self._conversation_id,
             "runtime_context": self._runtime_context,
+            # OTel 双写：trace_handlers 随任务下发，workflow_handler 在工作流
+            # 执行时绑定作用域供 LLM 节点遥测派生；持久化时
+            # filter_input_data 剥掉该键，无则 None（行为不变）
+            "runtime_data": {
+                "trace_handlers": getattr(self, "_trace_handlers", None)
+            },
         }
 
         # 增加工作流意图标签，便于状态恢复
