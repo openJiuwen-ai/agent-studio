@@ -354,3 +354,9 @@ env:
 2. [第三步] Service日志 → 搜 "JiuWen request param" 查看转发给 Runtime 的请求体
 3. [第四步] 设置 WORKFLOW_LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
 ```
+
+### 提示词优化早停阈值校验
+
+文本和多模态提示词优化任务请求中的 `optimizeInfo.early_stop_score` 是可选数值，取值范围为闭区间 `[0, 1]`。JSON 整数 `0` 和 `1` 与 `0.0` 和 `1.0` 一样有效，也支持 `0.65` 等小数。省略该字段时保留默认目标值；显式传入 `null` 时保留现有的可选值行为。
+
+如果旧版本将 `0` 或 `1` 拒绝并返回 `early_stop_score must be <class 'float'>-type`，请更新至包含数值校验修复的版本，或临时使用 `0.0` / `1.0`。布尔值、字符串、非有限数值和超出 `[0, 1]` 的数值均不是有效阈值。

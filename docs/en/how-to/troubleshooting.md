@@ -354,3 +354,9 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+### Prompt Optimization Early-stop Threshold Validation
+
+For text and multimodal prompt optimization task requests, `optimizeInfo.early_stop_score` is an optional numeric target in the inclusive range `[0, 1]`. JSON integers `0` and `1` are accepted just like `0.0` and `1.0`; fractional values such as `0.65` are also valid. Omitting the field retains the default target, and explicit `null` retains the existing optional behavior.
+
+If an older version rejects `0` or `1` with `early_stop_score must be <class 'float'>-type`, update to a version containing the numeric validation fix, or send `0.0` / `1.0` as a workaround. Booleans, strings, non-finite values and numbers outside `[0, 1]` are invalid thresholds.

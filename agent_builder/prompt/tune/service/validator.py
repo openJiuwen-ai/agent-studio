@@ -128,15 +128,20 @@ class OptimizeInfoValidator:
 
     @classmethod
     def _validate_early_stop_score(cls, optimize_info: Dict[str, Any]) -> None:
-        """validate iteration num"""
+        """Validate a numeric early-stop threshold in the inclusive score range."""
         early_stop_score = validate_parameter(
-            optimize_info, "early_stop_score", float, required=False
+            optimize_info, "early_stop_score", (int, float), required=False
         )
         if early_stop_score is None:
             return
-        if (
-            early_stop_score < TuneConstant.MIN_EARLY_STOPPING_SCORE
-            or early_stop_score > TuneConstant.MAX_EARLY_STOPPING_SCORE
+        if isinstance(early_stop_score, bool):
+            raise TaskParamsValidationException(
+                "'early_stop_score' must be a number, not a boolean"
+            )
+        if not (
+            TuneConstant.MIN_EARLY_STOPPING_SCORE
+            <= early_stop_score
+            <= TuneConstant.MAX_EARLY_STOPPING_SCORE
         ):
             raise TaskParamsValidationException(
                 f"early_stop_score must be in range "
