@@ -6,10 +6,6 @@ import {
   HostListener,
   Output,
   EventEmitter,
-  ViewChild,
-  ElementRef,
-  Injector,
-  Renderer2,
   SimpleChanges,
   OnChanges,
 } from '@angular/core';
@@ -20,31 +16,19 @@ import { TmplVariantTagComponent } from '@shared/components/tmpl-variant-tag/tmp
 import { PromptEditorService } from '@services/prompt-editor.service';
 import { I18nNamespace } from '@i18n';
 import * as angularI18next from 'angular-i18next';
-import {
-  FileItem,
-  IPromptChunk,
-} from '@interfaces/prompt/prompt-editor.interface';
+import { IPromptChunk } from '@interfaces/prompt/prompt-editor.interface';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NzModalRef, NzModalService, NzModalModule } from 'ng-zorro-antd/modal';
-import { SaveTmplLibraryModalComponent } from '../save-tmpl-library-modal/save-tmpl-library-modal.component';
 import * as candidateTemplateListInterface from '@interfaces/prompt/candidate-template-list.interface';
 import { CandidateTemplateListService } from '@services/candidate-template-list.service';
-import {
-  GETVARIANT_REG,
-  TEMPLATENAME_REG,
-} from '@constants/exp-tmpl-config.const';
+import { GETVARIANT_REG } from '@constants/exp-tmpl-config.const';
 import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
 import { MessageComponent } from '@shared/services/cfdata.service';
 import { RouteParamsService } from '@services/routeParams.service';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
-import { CommonValidation } from '@shared/validation/commonValidation';
 import { PromptWritingService } from '@services/prompt-writing.service';
 import { ECandSaveType } from '@enums/prompt-writing.enum';
 import { isNil } from 'lodash';
-
-interface FileItemSize extends FileItem {
-  shape: number;
-}
 
 @Component({
   selector: 'meta-single-template',
@@ -74,12 +58,6 @@ export class SingleTemplateComponent implements OnInit, OnChanges {
   @Input() promptTmplIds: string[];
 
   @Output() deleteCurrentTmpl = new EventEmitter<void>();
-  @Output() isExistEvaluation = new EventEmitter<boolean>();
-
-  @ViewChild('currentCandidateTmpl', { static: true })
-  currentTmplRef: ElementRef;
-
-  @ViewChild('labelEditor', { static: true }) labelEditor: ElementRef;
 
   public isMoveToCard = false;
   public singleTmplContent: IPromptChunk[];
@@ -88,10 +66,6 @@ export class SingleTemplateComponent implements OnInit, OnChanges {
   public isShowEvaluation = false;
   public changeUrl = cdnAssetUrl;
   public isEditing: boolean = false;
-  public validation: any = {
-    type: 'changeAlert',
-  };
-  public validationRules: any = [CommonValidation.templateNameVerify('')];
 
   private task_id: string;
 
@@ -101,9 +75,7 @@ export class SingleTemplateComponent implements OnInit, OnChanges {
     private nzModal: NzModalService,
     private candidateTemplateListServe: CandidateTemplateListService,
     private route: ActivatedRoute,
-    private injector: Injector,
     private routeParamsServe: RouteParamsService,
-    private rd2: Renderer2,
     private promptWritingServ: PromptWritingService,
     private i18n: angularI18next.I18NextEagerPipe,
   ) {
@@ -245,43 +217,6 @@ export class SingleTemplateComponent implements OnInit, OnChanges {
       },
     });
     this.isEditing = false;
-  }
-
-  public cancelTitleChange() {
-    this.isEditing = false;
-    const errorMsgIcon = document.getElementsByClassName('cf-message-close');
-    if (errorMsgIcon[0]) {
-      this.rd2.selectRootElement(errorMsgIcon[0]).click();
-    }
-  }
-
-  public editTitle() {
-    const cardTitleRow = Array.from(
-      document.getElementsByClassName('card-title-row'),
-    );
-    if (cardTitleRow.length) {
-      document.addEventListener('input', (event) => {
-        const regex = new RegExp(TEMPLATENAME_REG);
-        const isEditTmplTitle = cardTitleRow.some((element) =>
-          element.contains(event.target as HTMLInputElement),
-        );
-        if (
-          !regex.test((event.target as HTMLInputElement).value) &&
-          isEditTmplTitle
-        ) {
-          MessageComponent.showError(
-            this.i18n.transform('prompt_writing_verifyNameInput'),
-            4000,
-          );
-        } else {
-          const errorMsgIcon =
-            document.getElementsByClassName('cf-message-close');
-          if (errorMsgIcon[0]) {
-            this.rd2.selectRootElement(errorMsgIcon[0]).click();
-          }
-        }
-      });
-    }
   }
 
   public isNotNil(val: any): boolean {
