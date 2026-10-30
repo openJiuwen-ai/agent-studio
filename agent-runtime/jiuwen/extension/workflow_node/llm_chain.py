@@ -105,20 +105,32 @@ def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
     绝不入载荷——on_llm_end 会把整个载荷序列化进 gen_ai.completion。与
     planner 侧 build_usage_metadata 语义对齐：全零 usage 不产出 token 键，
     时延信号独立判活（token 未上报但时延可算时仍产出时延键）。
+
+    字段一律 getattr 兜底：生产镜像经 requirements.txt 装 openjiuwen，
+    版本可能早于 core 的 cache_tokens / 成本字段波次，裸属性访问会在
+    流末遥测位抛 AttributeError。判活只看 token/成本（model_name 全零
+    回填不构成真实用量，与 planner 口径一致），model_name 仅在真实
+    用量在场时随带输出。
     """
     has_ttft = ttft_ms is not None and ttft_ms >= 0
     if usage is None:
         return {"first_token_time": round(ttft_ms / 1000, 6)} if has_ttft else {}
+    input_tokens = getattr(usage, "input_tokens", 0) or 0
+    output_tokens = getattr(usage, "output_tokens", 0) or 0
+    cache_tokens = getattr(usage, "cache_tokens", 0) or 0
+    reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
+    input_cost = getattr(usage, "input_cost", 0.0) or 0.0
+    output_cost = getattr(usage, "output_cost", 0.0) or 0.0
+    total_cost = getattr(usage, "total_cost", 0.0) or 0.0
     has_usage = any(
         (
-            usage.input_tokens,
-            usage.output_tokens,
-            usage.model_name,
-            usage.cache_tokens,
-            usage.reasoning_tokens,
-            usage.input_cost,
-            usage.output_cost,
-            usage.total_cost,
+            input_tokens,
+            output_tokens,
+            cache_tokens,
+            reasoning_tokens,
+            input_cost,
+            output_cost,
+            total_cost,
         )
     )
     if not has_usage and not has_ttft:
@@ -126,22 +138,63 @@ def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
     usage_dict: dict = {}
     if has_usage:
         usage_dict = {
-            "input_tokens": usage.input_tokens or 0,
-            "output_tokens": usage.output_tokens or 0,
-            "model_name": usage.model_name or "",
-            "total_cost": usage.total_cost or 0.0,
-            "input_cost": usage.input_cost or 0.0,
-            "output_cost": usage.output_cost or 0.0,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "model_name": getattr(usage, "model_name", "") or "",
+            "total_cost": total_cost,
+            "input_cost": input_cost,
+            "output_cost": output_cost,
         }
-        if usage.cache_tokens:
-            usage_dict["cache_tokens"] = usage.cache_tokens
-        if usage.reasoning_tokens:
-            usage_dict["reasoning_tokens"] = usage.reasoning_tokens
+        if cache_tokens:
+            usage_dict["cache_tokens"] = cache_tokens
+        if reasoning_tokens:
+            usage_dict["reasoning_tokens"] = reasoning_tokens
     if has_ttft:
         # 毫秒差 /1000 换算秒值 float：handler 直传 float 解析
         # gen_ai.response.time_to_first_chunk，GenAI semconv 为秒（double）
         usage_dict["first_token_time"] = round(ttft_ms / 1000, 6)
     return usage_dict
+
+
+class _OjTelemetryGuard:
+    """节点遥测 manager 的安全包装：发射只告警不抛 + span 恰好收尾一次。
+
+    遥测异常不得改判业务结果——裸 await 在业务 try 内，on_llm_end 载荷
+    序列化 / handler 抛错会把已成功的 LLM 调用转成 COMPONENT_LLM_INVOKE_
+    CALL_FAILED。流被提前关闭（GeneratorExit / 任务取消 / 上层提前
+    break）时子生成器走不到流末 on_llm_end，finally 须补发一次 end 收尾，
+    避免 trace 里悬挂 llm.* span、span 对象在 manager 的 span 表里滞留。
+    """
+
+    def __init__(self, manager: "TraceManager"):
+        self._manager = manager
+        self._finalized = False
+
+    async def on_llm_start(self, messages):
+        await self._emit("on_llm_start", messages)
+
+    async def on_llm_end(self, payload=None):
+        self._finalized = True
+        await self._emit("on_llm_end", payload)
+
+    async def on_llm_error(self, error):
+        self._finalized = True
+        await self._emit("on_llm_error", error)
+
+    async def close_span(self):
+        """提前关闭补发空载荷收尾；正常 end / 异常 error 已收尾时 no-op。"""
+        if self._finalized:
+            return
+        self._finalized = True
+        await self._emit("on_llm_end", None)
+
+    async def _emit(self, method: str, arg):
+        try:
+            await getattr(self._manager, method)(arg)
+        except Exception as e:
+            workflow_logger.warning(
+                f"workflow llm telemetry {method} failed, skip: {e}"
+            )
 
 
 class LLMChainModelConfig(BaseModel):
@@ -255,8 +308,12 @@ class LLMChain(WorkflowComponent):
         language_model_inputs = self._get_model_input(inputs=inputs_data)
 
         # OTel 双写：工作流链路下从作用域派生节点遥测（独立工作流无
-        # 作用域则跳过，行为不变）
-        oj_telemetry = self._oj_telemetry_manager(language_model_inputs)
+        # 作用域则跳过，行为不变）。guard 保证发射只告警不抛——遥测异常
+        # 不得把已成功的调用改判为节点失败
+        oj_manager = self._oj_telemetry_manager(language_model_inputs)
+        oj_telemetry = (
+            _OjTelemetryGuard(oj_manager) if oj_manager is not None else None
+        )
         if oj_telemetry is not None:
             await oj_telemetry.on_llm_start(language_model_inputs)
 
@@ -345,15 +402,24 @@ class LLMChain(WorkflowComponent):
 
     @staticmethod
     def _oj_end_payload(usage, ttft_ms: Optional[float], finish_reason) -> dict:
-        """构造 on_llm_end 载荷（handler 约定键名；缺数据为空 dict）"""
-        payload = {}
-        usage_dict = _build_workflow_usage_payload(usage, ttft_ms)
-        if usage_dict:
-            payload[USAGE_METADATA] = usage_dict
-        finish = finish_reason or ""
-        if finish and finish != "null":
-            payload[FINISH_REASON] = finish
-        return payload
+        """构造 on_llm_end 载荷（handler 约定键名；缺数据为空 dict）。
+
+        构造器承诺不抛：求值点在发射实参位（guard._emit 的 try 之外），
+        抛错会落入业务 except 把成功调用改判失败——异常只告警并降级为
+        空载荷。
+        """
+        try:
+            payload = {}
+            usage_dict = _build_workflow_usage_payload(usage, ttft_ms)
+            if usage_dict:
+                payload[USAGE_METADATA] = usage_dict
+            finish = finish_reason or ""
+            if finish and finish != "null":
+                payload[FINISH_REASON] = finish
+            return payload
+        except Exception as e:
+            workflow_logger.warning(f"workflow llm end payload failed, skip: {e}")
+            return {}
 
     async def stream(self, inputs: dict[str, Any], session, context):
         """LLM 组件流式调用接口 - 支持思考模式
@@ -414,8 +480,13 @@ class LLMChain(WorkflowComponent):
             await self._inject_retrieved_memory(language_model_inputs, inputs_data)
 
             # OTel 双写：工作流链路下从作用域派生节点遥测（JSON 模式经
-            # invoke 自带插桩，不在此重复）
-            oj_telemetry = self._oj_telemetry_manager(language_model_inputs)
+            # invoke 自带插桩，不在此重复）。guard 见 invoke 侧注释；子
+            # 生成器流末的 on_llm_end 经 guard 标记收尾，提前关闭
+            # （GeneratorExit / 取消 / 上层 break）由 finally 补发收尾
+            oj_manager = self._oj_telemetry_manager(language_model_inputs)
+            oj_telemetry = (
+                _OjTelemetryGuard(oj_manager) if oj_manager is not None else None
+            )
             if oj_telemetry is not None:
                 await oj_telemetry.on_llm_start(language_model_inputs)
 
@@ -450,6 +521,11 @@ class LLMChain(WorkflowComponent):
                     StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
                     error_msg=f"LLM stream failed: {_format_llm_error_detail(e)}",
                 ) from e
+            finally:
+                # 提前关闭也收尾 span（正常 end / 异常 error 已收尾时 no-op），
+                # 避免 trace 里悬挂 llm.* span
+                if oj_telemetry is not None:
+                    await oj_telemetry.close_span()
 
     async def _process_thinking_stream(
         self, model_result, llm_inputs: dict

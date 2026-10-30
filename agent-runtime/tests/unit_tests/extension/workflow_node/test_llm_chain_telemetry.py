@@ -199,9 +199,23 @@ class TestInvokeTelemetry:
         assert errors[0]["error"] is boom
 
     @pytest.mark.asyncio
-    async def test_no_scope_behavior_unchanged(self):
-        """独立工作流（无作用域）：不派生遥测，输出行为不变。"""
-        tracer = _FakeTracer()  # 不绑定作用域
+    async def test_no_scope_behavior_unchanged(self, monkeypatch):
+        """独立工作流（无作用域）：不派生遥测 manager，输出行为不变。
+
+        可失败观测点锁 _oj_telemetry_manager 的派生调用本身：断言一个
+        从未上链的 fake tracer 事件列表为空是恒真断言——即便回归成
+        「无作用域时从全局/兜底 manager 派生发射」也依然全绿。
+        """
+        generate_calls = []
+        original_generate = TraceManager.generate_manager
+
+        def _recording_generate(handlers, instance_info=None, **kwargs):
+            generate_calls.append(instance_info)
+            return original_generate(handlers, instance_info, **kwargs)
+
+        monkeypatch.setattr(
+            llm_chain_module.TraceManager, "generate_manager", _recording_generate
+        )
         llm = MagicMock()
         llm.invoke = AsyncMock(
             return_value=AssistantMessage(content="答案", finish_reason="stop")
@@ -211,7 +225,13 @@ class TestInvokeTelemetry:
         result = await chain.invoke({"userFields": {"query": "你好"}}, _FakeSession(), None)
 
         assert result["userFields"]["raw_output"] == "答案"
-        assert tracer.events == []
+        assert generate_calls == []  # 无作用域 ⇒ 不派生遥测 manager
+
+        # 对照：作用域在场时同一链路恰好派生一次（观测点本身有效）
+        tracer = _FakeTracer()
+        with workflow_trace_scope(_scope_manager(tracer)):
+            await chain.invoke({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        assert len(generate_calls) == 1
 
 
 class TestStreamTelemetry:
@@ -227,8 +247,24 @@ class TestStreamTelemetry:
         return llm
 
     @pytest.mark.asyncio
-    async def test_real_time_path_usage_ttft_finish(self):
-        """真流式：流末载荷含用量、实测 TTFT（秒值）与 finish_reason。"""
+    async def test_real_time_path_usage_ttft_finish(self, monkeypatch):
+        """真流式：流末载荷含用量、实测 TTFT（秒值）与 finish_reason。
+
+        TTFT 断言须具判别力（检视意见）：假钟每次调用前进 0.2s，首块
+        实测 200ms → 秒值 0.2；若回归成直写毫秒（200）或恒 0，断言即败。
+        """
+
+        class _StepClock:
+            def __init__(self):
+                self._now = 1000.0
+
+            def perf_counter(self):
+                self._now += 0.2
+                return self._now
+
+        monkeypatch.setattr(
+            llm_chain_module.time, "perf_counter", _StepClock().perf_counter
+        )
         tracer = _FakeTracer()
         items = [
             AssistantMessage(content="你"),
@@ -259,9 +295,8 @@ class TestStreamTelemetry:
         usage_dict = outputs["usage_metadata"]
         assert usage_dict["input_tokens"] == 8
         assert usage_dict["output_tokens"] == 4
-        # TTFT：first_token_ms 实测毫秒 → 秒值 float（替身流瞬时到达，
-        # 0.0 是合法实测值，键在即证明换算链路接通）
-        assert usage_dict["first_token_time"] >= 0
+        # TTFT：首块实测 200ms → 秒值 0.2（毫秒直写/恒 0 均无法通过）
+        assert usage_dict["first_token_time"] == pytest.approx(0.2)
         assert outputs["finish_reason"] == "stop"
 
     @pytest.mark.asyncio
@@ -380,3 +415,91 @@ class TestUsagePayloadSemantics:
             SimpleNamespace(requests_start_time=ts)
         ) == ts
         assert llm_chain_module._oj_request_start_iso(SimpleNamespace()) == ""
+
+    @staticmethod
+    def test_model_name_alone_is_not_usage():
+        """model_name 不计入判活（与 planner 口径一致，检视意见）。
+
+        模型名被回填但 token/成本全零时产出全零用量载荷，handler 会把
+        全零 token 落成 gen_ai.usage 属性；model_name 仅在真实用量在场
+        时随带输出。
+        """
+        result = llm_chain_module._build_workflow_usage_payload(
+            UsageMetadata(model_name="qwen-max"), None
+        )
+        assert result == {}
+        with_usage = llm_chain_module._build_workflow_usage_payload(
+            UsageMetadata(model_name="qwen-max", input_tokens=1), None
+        )
+        assert with_usage["model_name"] == "qwen-max"
+
+    @staticmethod
+    def test_usage_missing_optional_fields_no_raise():
+        """旧版 core UsageMetadata 缺 cache/成本字段：getattr 兜底不抛。
+
+        生产镜像的 openjiuwen 可能早于 core 字段波次，裸属性访问会在
+        流末遥测位 AttributeError（检视意见）。
+        """
+        from types import SimpleNamespace
+
+        usage = SimpleNamespace(input_tokens=5, output_tokens=2, model_name="m")
+        result = llm_chain_module._build_workflow_usage_payload(usage, None)
+        assert result["input_tokens"] == 5
+        assert result["total_cost"] == 0.0
+
+
+class TestTelemetryIsolation:
+    """遥测故障不改变业务语义；流提前关闭 span 恰好收尾一次。"""
+
+    @pytest.mark.asyncio
+    async def test_end_emit_failure_keeps_success(self):
+        """on_llm_end 发射抛错：成功调用不被改判失败（guard 只告警）。
+
+        裸 await 在业务 try 内时，遥测桥故障会把已成功的 LLM 调用转成
+        COMPONENT_LLM_INVOKE_CALL_FAILED（检视意见）。
+        """
+
+        class _EndBoomTracer(_FakeTracer):
+            async def trigger(self, source, event_name, **kwargs):
+                if event_name == "on_llm_end":
+                    raise RuntimeError("遥测桥故障")
+                await super().trigger(source, event_name, **kwargs)
+
+        tracer = _EndBoomTracer()
+        llm = MagicMock()
+        llm.invoke = AsyncMock(
+            return_value=AssistantMessage(content="答案", finish_reason="stop")
+        )
+        chain = _make_chain(llm, _make_conf())
+
+        with workflow_trace_scope(_scope_manager(tracer)):
+            result = await chain.invoke(
+                {"userFields": {"query": "你好"}}, _FakeSession(), None
+            )
+
+        assert result["userFields"]["raw_output"] == "答案"
+        assert len(_events_by_name(tracer, "on_llm_start")) == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_early_close_finalizes_span(self):
+        """流提前关闭（GeneratorExit / 上层 break）：finally 补发一次 end。
+
+        子生成器流末的 on_llm_end 走不到，不补发会留下悬挂 llm.* span
+        （检视意见）；恰好收尾一次，不与正常路径叠加。
+        """
+        tracer = _FakeTracer()
+        items = [
+            AssistantMessage(content="你"),
+            AssistantMessage(content="好"),
+        ]
+        chain = _make_chain(TestStreamTelemetry._stream_llm(items), _make_conf())
+
+        gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        with workflow_trace_scope(_scope_manager(tracer)):
+            await gen.__anext__()  # 消费首帧后提前关闭
+            await gen.aclose()
+
+        assert len(_events_by_name(tracer, "on_llm_start")) == 1
+        end = _events_by_name(tracer, "on_llm_end")
+        assert len(end) == 1  # finally 补发的收尾，恰好一次
+        assert end[0]["outputs"] is None
