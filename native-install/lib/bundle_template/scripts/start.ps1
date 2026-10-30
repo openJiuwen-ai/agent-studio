@@ -124,7 +124,11 @@ W-Log "MySQL 就绪"
 W-Log "[2/7] Redis"
 $RedisPid = Join-Path $Run 'redis.pid'
 if (-not (Is-PidAlive $RedisPid)) {
-  Start-Bg $RedisSrv @("--port","$($env:REDIS_EXTERNAL_PORT)","--dir","$Data\redis","--pidfile","$RedisPid","--logfile","$(Join-Path $Log 'redis.log')") (Join-Path $Log 'redis.out') | Out-Null
+  # pid 由我们自己记录：本包 Redis 为 cygwin 移植版，--pidfile 写出的是 cygwin pid 命名空间，
+  # Windows 侧查无此进程（status 误报 DOWN、重启时重复拉起撞端口）。同 minio，记录
+  # Start-Process -PassThru 返回的 Windows pid；故不再向 redis 传 --pidfile（其自写会覆盖）。
+  $p = Start-Bg $RedisSrv @("--port","$($env:REDIS_EXTERNAL_PORT)","--dir","$Data\redis","--logfile","$(Join-Path $Log 'redis.log')") (Join-Path $Log 'redis.out')
+  $p.Id | Set-Content $RedisPid
 }
 if (-not (Test-Port $env:REDIS_EXTERNAL_PORT 30)) { W-Die "Redis 启动失败" }
 W-Log "Redis 就绪"
@@ -179,15 +183,18 @@ if (-not (Test-Path $venvFlag)) {
   # 一个包都装不上。改为 --find-links（优先本地 wheel）+ aliyun index 兜底补缺；本地命中的走本地（快且离线友好）。
   # 仅当装成功（openjiuwen 可导入）才写 .venv_ready，否则下次启动重试。
   $req = Join-Path $BundleRoot 'app\requirements.txt'
+  # PS5.1 下原生命令的 stderr 会被包装成 ErrorRecord，`2>&1 | Out-Host` 将其渲染成红色
+  # NativeCommandError 块（pip 的 [notice] 升级提醒等普通提示也会），观感如同致命错误。
+  # ForEach-Object { "$_" } 把 ErrorRecord 拍平为字符串，保留实时输出与真实内容。
   if (Test-Path $wheelsDir) {
-    & $VenvPip install --find-links "$wheelsDir" -i "https://mirrors.aliyun.com/pypi/simple/" --trusted-host "mirrors.aliyun.com" -r $req 2>&1 | Out-Host
+    & $VenvPip install --find-links "$wheelsDir" -i "https://mirrors.aliyun.com/pypi/simple/" --trusted-host "mirrors.aliyun.com" -r $req 2>&1 | ForEach-Object { "$_" } | Out-Host
   } else {
-    & $VenvPip install -i "https://mirrors.aliyun.com/pypi/simple/" --trusted-host "mirrors.aliyun.com" -r $req 2>&1 | Out-Host
+    & $VenvPip install -i "https://mirrors.aliyun.com/pypi/simple/" --trusted-host "mirrors.aliyun.com" -r $req 2>&1 | ForEach-Object { "$_" } | Out-Host
   }
   $ok = $false
   try { & $VenvPy -c "import openjiuwen" 2>$null; if ($LASTEXITCODE -eq 0) { $ok = $true } } catch {}
   if ($ok) {
-    & $VenvPy (Join-Path $BundleRoot 'scripts\runtime_patches.py') 2>&1 | Out-Host
+    & $VenvPy (Join-Path $BundleRoot 'scripts\runtime_patches.py') 2>&1 | ForEach-Object { "$_" } | Out-Host
     New-Item -ItemType File -Path $venvFlag | Out-Null
   } else {
     W-Warn "  依赖安装不完整（openjiuwen 不可导入）。不写 .venv_ready，下次启动重试。请检查网络或 deps/wheels 完整性。"
