@@ -43,8 +43,13 @@ class PluginHandler(BaseHandler):
             tool_arguments = json.dumps(tool_arguments_dict, ensure_ascii=False)
         start_time = time.time()
         if tool_name == plugin.name or plugin.name.startswith(tool_name + "#*"):
+            # planner tool_call 标识经 ainvoke kwargs 透传给插件侧 tracer，
+            # 供 OTel 双写盖 gen_ai.tool.call.id / gen_ai.tool.type
             plugin_res = await plugin.ainvoke(
-                inputs=json.loads(tool_arguments), **kwargs
+                inputs=json.loads(tool_arguments),
+                tool_call_id=function_call.get("tool_call_id", ""),
+                tool_type="plugin",
+                **kwargs,
             )
             function_exec_res = self.function_filter(plugin, plugin_res)
             exec_latency = round(time.time() - start_time, 2)  # 工具执行耗时

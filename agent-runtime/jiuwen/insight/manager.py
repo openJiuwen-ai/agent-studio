@@ -68,6 +68,7 @@ class TraceManager(
         instance_info: Optional[dict] = None,
         openjiuwen_tracer=None,
         agent_identity: Optional[Union[dict, "_NoAgentIdentity"]] = None,
+        conversation_facts: Optional[dict] = None,
         **kwargs,
     ) -> None:
         """Initialize"""
@@ -94,6 +95,13 @@ class TraceManager(
         else:
             self._oj_agent_identity = None
             self._oj_identity_final = False
+        # 会话事实（扁平 conversation_id/user_id），取值口径与 core OtelRail
+        # 一致（session_id 即 conversation id、user_id 走 source_metadata）；
+        # 与身份不同：会话是整次运行共享的，成员/派生 manager 缺席时由
+        # 继承补齐是正确语义，无需哨兵终态
+        self._oj_conversation_facts: Optional[Dict[str, Any]] = (
+            dict(conversation_facts) if conversation_facts else None
+        )
         if openjiuwen_tracer is not None:
             self._oj_init_root_span()
 
@@ -169,8 +177,14 @@ class TraceManager(
         # 注入所属 agent 的扁平身份键；payload 已有的键优先（与 handler 的
         # payload 优先语义一致），LLM manager 的 class_name（如 "Model"）仅作
         # 模型属性，不再被当作 agent 名
-        if self._oj_agent_identity:
-            safe_instance_info = {**self._oj_agent_identity, **safe_instance_info}
+        if self._oj_agent_identity or self._oj_conversation_facts:
+            # 会话事实在最底层（gen_ai.conversation.id / user.id），身份键
+            # 其次，payload 已有键始终优先
+            safe_instance_info = {
+                **(self._oj_conversation_facts or {}),
+                **(self._oj_agent_identity or {}),
+                **safe_instance_info,
+            }
         # 将 inputs 包装为 {"inputs": 原始inputs, "params": kwargs相关信息}
         formatted_inputs = {"inputs": inputs}
         if kwargs:
@@ -206,9 +220,21 @@ class TraceManager(
     def oj_agent_identity(self) -> Optional[Dict[str, Any]]:
         """当前携带的 openjiuwen 双写执行身份（未携带时为 None）。
 
-        只读视图，供同类实例间继承读取（避免类外触碰保护成员）。
+        只读视图：返回拷贝——外部改写不回写内部状态、不污染后续
+        span 转发（检视意见）；同类实例间继承读取见 inherit_*。
         """
-        return self._oj_agent_identity
+        identity = self._oj_agent_identity
+        return dict(identity) if identity else identity
+
+    @property
+    def oj_conversation_facts(self) -> Optional[Dict[str, Any]]:
+        """当前携带的 openjiuwen 双写会话事实（未携带时为 None）。
+
+        只读视图：返回拷贝——外部改写不回写内部状态、不污染后续
+        span 转发（检视意见）；同类实例间继承读取见 inherit_*。
+        """
+        facts = self._oj_conversation_facts
+        return dict(facts) if facts else facts
 
     def inherit_oj_agent_identity(self, source: "TraceManager") -> None:
         """从 source 继承 openjiuwen 双写执行身份（带守卫）。
@@ -224,6 +250,19 @@ class TraceManager(
         if source_identity:
             self._oj_agent_identity = dict(source_identity)
 
+    def inherit_oj_conversation_facts(self, source: "TraceManager") -> None:
+        """从 source 继承 openjiuwen 双写会话事实（set-once）。
+
+        与身份继承不同：会话事实描述整次运行（同一 conversation 贯穿
+        controller 与成员 agent），本 manager 未携带而 source 携带时补齐
+        是正确语义；已携带时不覆盖。继承取拷贝，与身份继承同一不变量。
+        """
+        if self._oj_conversation_facts:
+            return
+        source_facts = source.oj_conversation_facts
+        if source_facts:
+            self._oj_conversation_facts = dict(source_facts)
+
     # ── 公共方法 ────────────────────────────────────────────
 
     @classmethod
@@ -233,10 +272,12 @@ class TraceManager(
         instance_info: Optional[dict] = None,
         session=None,
         agent_identity: Optional[Union[dict, "_NoAgentIdentity"]] = None,
+        conversation_facts: Optional[dict] = None,
     ) -> "TraceManager":
         """Return a trace handlers manager"""
         return _generate_manager(
-            cls, trace_handlers, instance_info, session, agent_identity
+            cls, trace_handlers, instance_info, session, agent_identity,
+            conversation_facts,
         )
 
     def add_trace_handler(self, trace_handler: BaseDataHandler) -> None:
@@ -556,12 +597,14 @@ def _generate_manager(
     instance_info: Optional[dict] = None,
     session=None,
     agent_identity: Optional[Union[dict, "_NoAgentIdentity"]] = None,
+    conversation_facts: Optional[dict] = None,
 ) -> TraceManager:
     """Return a trace manager"""
     trace_manager = trace_manager_cls(
         trace_handlers=[], instance_info=instance_info,
         openjiuwen_tracer=session._inner.tracer() if session else None,
         agent_identity=agent_identity,
+        conversation_facts=conversation_facts,
     )
     if trace_handlers:
         if isinstance(trace_handlers, list) or trace_handlers is None:
@@ -578,6 +621,8 @@ def _generate_manager(
                 trace_manager._oj_root_span = trace_handlers._oj_root_span
             # 继承执行身份（守卫在方法内：自身已有身份不覆盖）
             trace_manager.inherit_oj_agent_identity(trace_handlers)
+            # 继承会话事实（set-once：同一 conversation 贯穿派生 manager）
+            trace_manager.inherit_oj_conversation_facts(trace_handlers)
     return trace_manager
 
 
@@ -589,10 +634,11 @@ def get_child_manager(parent_manager: TraceManager, name: str = None) -> TraceMa
     for trace_handler in parent_manager.trace_handlers:
         manager.add_trace_handler(trace_handler)
 
-    # 继承 openjiuwen 双写状态：共享 tracer、span_map、root_span、执行身份
+    # 继承 openjiuwen 双写状态：共享 tracer、span_map、root_span、执行身份、会话事实
     manager._oj_tracer = parent_manager._oj_tracer
     manager._oj_span_map = parent_manager._oj_span_map
     manager._oj_root_span = parent_manager._oj_root_span
     manager.inherit_oj_agent_identity(parent_manager)
+    manager.inherit_oj_conversation_facts(parent_manager)
 
     return manager

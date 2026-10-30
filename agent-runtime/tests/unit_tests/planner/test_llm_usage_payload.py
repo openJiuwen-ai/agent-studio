@@ -198,6 +198,59 @@ class TestBuildUsageMetadata:
         )
         assert "first_token_time" not in result
 
+    @staticmethod
+    def test_core_reported_latency_fields_passthrough():
+        """core 流式生产者直报的时延字段透传，且计入判活。
+
+        本地 UsageMetadata 缺字段时 wrapper 重建会静默丢弃（!2524 检视）；
+        补齐后 token 全零、仅时延直报也构成有效遥测——判活漏计会让载荷
+        整体缺席，handler 落不了 time_to_first_chunk 等属性。
+        """
+        result = build_usage_metadata(
+            UsageMetadata(
+                ttft_seconds=0.35,
+                inter_token_latency_ms=15.0,
+                reasoning_duration_ms=120.0,
+            )
+        )
+        assert result == {
+            "ttft_seconds": 0.35,
+            "inter_token_latency_ms": 15.0,
+            "reasoning_duration_ms": 120.0,
+        }
+
+    @staticmethod
+    def test_ttft_seconds_coexists_with_iso_pair():
+        """双来源 TTFT 各自成键：取值次序交给 handler（ttft_seconds 优先）。
+
+        core 直报的是真实首 chunk 相对延迟，本地双时间戳换算的是 wrapper
+        级近似；core tracer_otel 先读 ttft_seconds、first_token_time 仅
+        legacy 兜底——两键并存不冲突，无需在此择一。
+        """
+        result = build_usage_metadata(_usage(ttft_seconds=0.5))
+        assert result["first_token_time"] == pytest.approx(0.2)
+        assert result["ttft_seconds"] == 0.5
+
+    @staticmethod
+    def test_measured_tpot_wins_over_core_reported():
+        """TPOT 本地掐表优先：覆盖整条链路的实测权威于 core 直报值。"""
+        result = build_usage_metadata(
+            _usage(inter_token_latency_ms=15.0), tpot_ms=8.0
+        )
+        assert result["inter_token_latency_ms"] == 8.0
+
+    @staticmethod
+    def test_core_latency_negative_or_zero_omitted():
+        """core 直报的负值（时钟回拨）与零值时长不产出（与本地口径一致）。"""
+        result = build_usage_metadata(
+            UsageMetadata(
+                ttft_seconds=-0.5,
+                inter_token_latency_ms=0.0,
+                reasoning_duration_ms=-1.0,
+            )
+        )
+        assert result == {}
+
 
 class TestBuildFinishReason:
     @staticmethod

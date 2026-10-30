@@ -120,6 +120,53 @@ def get_agent_identity(agent: Any) -> Union[Dict[str, str], None]:
     }
 
 
+def get_conversation_facts(session: Any) -> Union[Dict[str, str], None]:
+    """Extract flat conversation facts (conversation_id / user_id) from a session.
+
+    openjiuwen core 的 OtelRail 以 session 为会话事实源（conversation_id =
+    session_id，user_id 走 session 携带的 source_metadata），双写桥按同一
+    取值口径供给，两种模式的 gen_ai.conversation.id / user.id 才可对齐。
+    Returns None when the session carries no facts so callers skip injection.
+    """
+    if session is None:
+        return None
+    facts: Dict[str, str] = {}
+    get_session_id = getattr(session, "get_session_id", None)
+    session_id = get_session_id() if callable(get_session_id) else None
+    if session_id:
+        facts["conversation_id"] = str(session_id)
+    # core Session 的公开访问器优先（get_source_metadata 返回副本），
+    # 旧版底层无访问器时退回 _source_metadata 私有名——与 core
+    # react_agent 取 source_metadata 的探测口径一致，私有名仅作兜底
+    source_metadata_getter = getattr(session, "get_source_metadata", None)
+    source_metadata = (
+        source_metadata_getter()
+        if callable(source_metadata_getter)
+        else getattr(session, "_source_metadata", None)
+    )
+    user_id = source_metadata.get("user_id", "") if isinstance(source_metadata, dict) else ""
+    if user_id:
+        facts["user_id"] = str(user_id)
+    return facts or None
+
+
+def extract_tool_trace_info(kwargs: Dict[str, Any]) -> Dict[str, str]:
+    """Pop flat tool-trace keys (tool_call_id / tool_type) out of invoke kwargs.
+
+    插件调用方（task_executor handlers）把 planner tool_call 的标识放进
+    ainvoke kwargs 透传进来；本助手将其从 kwargs 中摘出（调用方的 kwargs
+    不再残留，避免泄入工具运行时入参），返回可直接并入 instance_info 的
+    扁平键——core handler 的 on_plugin_start 按这两个键盖
+    gen_ai.tool.call.id / gen_ai.tool.type。空值不产出。
+    """
+    trace_info: Dict[str, str] = {}
+    for key in ("tool_call_id", "tool_type"):
+        value = kwargs.pop(key, None)
+        if value:
+            trace_info[key] = str(value)
+    return trace_info
+
+
 def get_elapsed_time(invoke: Any) -> str:
     """get elapsed time"""
     elapsed_time = invoke.end_time - invoke.start_time

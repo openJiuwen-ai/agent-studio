@@ -232,6 +232,29 @@ class TestPostStreamMessageFinishReason:
         )
         assert ai_message.usage_metadata.finish_reason == "length"
 
+    @staticmethod
+    def test_core_latency_fields_survive_rebuild():
+        """core 直报的流式时延字段经 pydantic 重建保留（!2524 检视补齐）。
+
+        core UsageMetadata 的 ttft_seconds / inter_token_latency_ms /
+        reasoning_duration_ms 由流式生产者按调用回填；本地模型缺字段时
+        UsageMetadata(**dump) 会静默丢弃这些键。测试环境安装的 core 版本
+        可能尚无这些字段，故按重建现场同款 dump 字典注入锁边界契约：
+        凡 core dump 携带的键，本地重建一律保留。
+        """
+        data = _core_response("stop").usage_metadata.model_dump()
+        data.update(
+            ttft_seconds=0.35,
+            inter_token_latency_ms=15.0,
+            reasoning_duration_ms=120.0,
+        )
+        data["errmsg"] = data.pop("err_msg", "")
+        data["requests_start_time"] = data.pop("request_start_time", "")
+        rebuilt = _model_wrapper.UsageMetadata(**data)
+        assert rebuilt.ttft_seconds == 0.35
+        assert rebuilt.inter_token_latency_ms == 15.0
+        assert rebuilt.reasoning_duration_ms == 120.0
+
 
 class TestAInvokeTimestampFallback:
     """ainvoke 批式兜底打戳（#1583）：core 未自报时间戳时代打、自报时不覆盖。"""

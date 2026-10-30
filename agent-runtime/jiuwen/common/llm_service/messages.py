@@ -50,6 +50,11 @@ class UsageMetadata(BaseModel):
     input_cost: float = 0.0
     output_cost: float = 0.0
     total_cost: float = 0.0
+    # 同上对齐：core 流式生产者（ReAct 引擎）按调用回填的时延字段，本地
+    # 模型缺字段时 model_wrapper 的 pydantic 重建会静默丢弃（None = 未上报）
+    ttft_seconds: Optional[float] = None
+    inter_token_latency_ms: Optional[float] = None
+    reasoning_duration_ms: Optional[float] = None
 
 
 class BaseMessage(BaseModel):

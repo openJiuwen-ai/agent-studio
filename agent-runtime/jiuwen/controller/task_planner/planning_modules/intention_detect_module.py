@@ -813,6 +813,7 @@ class IntentionDetectModule:
             llm=self.llm,
             functions=[],
             trace_handlers=runtime_data.get("trace_handlers"),
+            messages=messages,
         )
 
         await trace_manager.on_llm_start(messages)

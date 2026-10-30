@@ -63,6 +63,12 @@ def build_usage_metadata(
     ISO 串）换算，消费端 gen_ai.response.time_to_first_chunk 按 GenAI semconv
     为秒（double），故直接给出 float 秒值。
 
+    core 流式生产者直报的时延字段（ttft_seconds / inter_token_latency_ms /
+    reasoning_duration_ms，经 wrapper 重建透传）一并消费：TTFT 与本地双时间戳
+    换算各自成键、取值次序交给 handler（显式语义的 ttft_seconds 优先，与
+    core tracer_otel 一致）；TPOT 以本地掐表为准（覆盖整条链路的实测），
+    未掐表（批式路径）才回退 core 直报值。
+
     构造器承诺不抛：发射点的求值位置（emit_trace_event 实参位、业务 try
     内、发射器尾部）形态各异，边界输入（usage_metadata 类型异常等）抛错
     会把遥测故障灌进业务分支——异常只告警并降级为空载荷（缺数据不注入）。
@@ -90,6 +96,14 @@ def _build_usage_metadata_impl(
         return {}
     ttft_ms = _iso_delta_ms(usage.first_token_time, usage.requests_start_time)
     has_ttft = ttft_ms is not None and ttft_ms >= 0
+    # core 流式生产者直报的时延字段：负值（时钟回拨）不产出，与本地换算口径
+    # 一致；ttft 允许 0（与 has_ttft 同为 >= 0），两档毫秒时长 0 无意义不产出
+    core_ttft_s = usage.ttft_seconds
+    has_core_ttft = core_ttft_s is not None and core_ttft_s >= 0
+    core_tpot_ms = usage.inter_token_latency_ms
+    has_core_tpot = core_tpot_ms is not None and core_tpot_ms > 0
+    reasoning_ms = usage.reasoning_duration_ms
+    has_reasoning = reasoning_ms is not None and reasoning_ms > 0
     # 真实用量判活只看 token/成本字段：qwen 成功路径总会回填 model_name，
     # 若计入判活，上游缺 usage 字段（token 全 0）时仍会产出全零用量载荷，
     # 违背「缺数据路径不注入键」契约；model_name 仅在有真实用量时随带输出
@@ -106,10 +120,13 @@ def _build_usage_metadata_impl(
     has_usage = any(usage_signals)
     # 全空 usage（模型错误 / 未上报用量的默认构造）且无任何可算时延 → 视为
     # 缺数据：不产出全零载荷，维持「缺数据路径不注入键」契约。时延信号
-    # 独立判活：token 未上报但时间戳在（model_wrapper 无条件打点）或掐表
-    # 可算（tpot）时，仍产出仅含时延键的载荷，不虚构 token 键
+    # 独立判活：token 未上报但时间戳在（model_wrapper 无条件打点）、掐表
+    # 可算（tpot）或 core 流式生产者直报时延字段时，仍产出仅含时延键的
+    # 载荷，不虚构 token 键
     if not has_usage:
-        if not has_ttft and not has_tpot:
+        if not any(
+            (has_ttft, has_tpot, has_core_ttft, has_core_tpot, has_reasoning)
+        ):
             return {}
     usage_dict: dict = {}
     if has_usage:
@@ -132,8 +149,17 @@ def _build_usage_metadata_impl(
     if has_ttft:
         # 毫秒差须 /1000 换算为秒值 float，否则 span 属性被放大 1000 倍
         usage_dict["first_token_time"] = round(ttft_ms / 1000, 6)
+    if has_core_ttft:
+        # core 直报的显式秒值单独成键：handler 先读 ttft_seconds（真实首
+        # chunk 相对延迟），first_token_time 仅 legacy 兜底，两键并存不冲突
+        usage_dict["ttft_seconds"] = round(core_ttft_s, 6)
     if has_tpot:
         usage_dict["inter_token_latency_ms"] = round(tpot_ms, 2)
+    elif has_core_tpot:
+        # 本地掐表覆盖整条链路、权威于 core 直报；未掐表（批式路径）才回退
+        usage_dict["inter_token_latency_ms"] = round(core_tpot_ms, 2)
+    if has_reasoning:
+        usage_dict["reasoning_duration_ms"] = round(reasoning_ms, 2)
     return usage_dict
 
 
@@ -362,23 +388,50 @@ def _process_time_info_by_llm_output(llm_output, time_dict):
     yield dict(time_consumption=time_dict)
 
 
-def create_trace_manager(llm: BaseChatModel, functions, trace_handlers):
+def _build_request_params(llm: BaseChatModel) -> dict:
+    """从模型对象提取 GenAI 请求参数（供 handler 盖 gen_ai.request.*）。
+
+    与 core OtelRail._extract_request_params 同构：handler 读扁平
+    request_params dict 并逐键投影，仅产出模型对象实际携带的参数
+    （None 不产出），stop 归一为 stop_sequences 列表。
+    """
+    params: dict = {}
+    for key in ("temperature", "top_p", "top_k", "max_tokens"):
+        value = getattr(llm, key, None)
+        if value is not None:
+            params[key] = value
+    stop = getattr(llm, "stop", None)
+    if stop:
+        stops = stop if isinstance(stop, (list, tuple)) else [stop]
+        params["stop_sequences"] = [str(item) for item in stops]
+    return params
+
+
+def create_trace_manager(
+    llm: BaseChatModel, functions, trace_handlers, messages: Optional[List[dict]] = None
+):
     """create trace manager"""
     model_class = type(llm).__name__
     model_name = llm.model_name if hasattr(llm, "model_name") else "undefined"
-
-    return TraceManager.generate_manager(
-        trace_handlers,
-        {
-            "class_name": model_class,
-            "instance_attributes": dict(
-                model=model_name,
-                temperature=llm.temperature if hasattr(llm, "temperature") else 1.0,
-                top_p=llm.top_p if hasattr(llm, "top_p") else 0.95,
-                functions=functions,
-            ),
-        },
-    )
+    instance_info = {
+        "class_name": model_class,
+        "instance_attributes": dict(
+            model=model_name,
+            temperature=llm.temperature if hasattr(llm, "temperature") else 1.0,
+            top_p=llm.top_p if hasattr(llm, "top_p") else 0.95,
+            functions=functions,
+        ),
+    }
+    # OTel 双写补扁平键：request_params 供 handler 盖 gen_ai.request.*，
+    # message_count 盖 openjiuwen.llm.prev_message_count。统计口径为实际
+    # 送入 LLM 的消息数（含上下文注入后）；insights 侧只读嵌套
+    # instance_attributes，新增扁平键不影响其原有展示
+    request_params = _build_request_params(llm)
+    if request_params:
+        instance_info["request_params"] = request_params
+    if messages is not None:
+        instance_info["message_count"] = len(messages)
+    return TraceManager.generate_manager(trace_handlers, instance_info)
 
 
 def create_trace_manager_safely(llm: BaseChatModel, functions, trace_handlers):
@@ -451,7 +504,7 @@ async def stream_function_call(
     """Get llm stream output with functions"""
     if contexts:
         messages = insert_contexts_before_user_query(contexts, messages)
-    trace_manager = create_trace_manager(llm, functions, trace_handlers)
+    trace_manager = create_trace_manager(llm, functions, trace_handlers, messages)
     await trace_manager.on_llm_start(messages)
 
     # Combined output dictionary to reduce local variables
