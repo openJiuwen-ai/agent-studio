@@ -354,3 +354,7 @@ env:
 2. [第三步] Service日志 → 搜 "JiuWen request param" 查看转发给 Runtime 的请求体
 3. [第四步] 设置 WORKFLOW_LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
 ```
+
+### 提示词评估数据中的占位符文本
+
+测试涉及模板语法的提示词时，问题、模型回答和参考答案中可能包含字面量 `{{question}}`、`{{answer_match}}` 或 `{{actual_answer}}`。LLM 提示词评估会将这些字段内容作为数据原样保留，只对原始评估模板中的对应占位符进行一次替换，不会再次解析已插入的内容。这可避免模型回答中的 `{{actual_answer}}` 在评估前被参考答案覆盖。该行为同时适用于客观评估和主观评估模板。
