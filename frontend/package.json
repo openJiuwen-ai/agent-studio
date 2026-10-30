@@ -28,7 +28,6 @@
     "@angular/elements": "20.3.27",
     "@angular/forms": "20.3.27",
     "@angular/platform-browser": "20.3.27",
-    "@angular/platform-browser-dynamic": "20.3.27",
     "@angular/router": "20.3.27",
     "@ant-design/icons-angular": "^20.0.0",
     "@antv/hierarchy": "0.6.14",
