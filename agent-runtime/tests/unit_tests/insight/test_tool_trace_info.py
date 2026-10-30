@@ -99,6 +99,24 @@ class TestHandlerToolFactsWiring:
 class TestPluginTracerWiring:
     """五处插件 tracer 构造点把工具标识并入 instance_info 扁平键。"""
 
+    TRACER_HELPER_SITES = [
+        ("jiuwen/extension/wrapper/mcp_tool_wrapper.py", "McpToolWrapper", ["ainvoke"]),
+        ("jiuwen/extension/wrapper/restful_api_new.py", "RestfulApiToolNew",
+         ["ainvoke", "astream"]),
+        ("jiuwen/plugin/models/restfulapi.py", "RestFulAPI", ["ainvoke", "astream"]),
+    ]
+
+    @staticmethod
+    def _extract_calls(method):
+        """method 内 extract_tool_trace_info 调用列表。"""
+        return [
+            node
+            for node in ast.walk(method)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "extract_tool_trace_info"
+        ]
+
     @staticmethod
     def _assert_extract_call(method, where):
         for node in ast.walk(method):
@@ -111,18 +129,62 @@ class TestPluginTracerWiring:
         raise AssertionError(f"{where} 不再合并 extract_tool_trace_info")
 
     def test_tracer_manager_merges_tool_facts(self):
-        cases = [
-            ("jiuwen/extension/wrapper/mcp_tool_wrapper.py", "McpToolWrapper",
-             "_create_tracer_manager"),
-            ("jiuwen/extension/wrapper/restful_api_new.py", "RestfulApiToolNew",
-             "_create_tracer_manager"),
-            ("jiuwen/plugin/models/restfulapi.py", "RestFulAPI",
-             "_create_tracer_manager"),
-        ]
-        for rel_path, cls, method_name in cases:
-            method = _method_of(_load_tree(rel_path), cls, method_name)
-            assert method is not None, f"{cls}.{method_name} 缺失"
-            self._assert_extract_call(method, f"{rel_path}::{cls}.{method_name}")
+        """helper 接收调用方摘出的标识并入扁平键，自身不再直接弹出。"""
+        for rel_path, cls, _ in self.TRACER_HELPER_SITES:
+            helper = _method_of(_load_tree(rel_path), cls, "_create_tracer_manager")
+            assert helper is not None, f"{cls}._create_tracer_manager 缺失"
+            params = [arg.arg for arg in helper.args.args]
+            assert "tool_trace_info" in params, (
+                f"{rel_path}::_create_tracer_manager 未接收调用方摘出的 tool_trace_info"
+            )
+            # helper 形参 **kwargs 是调用方 kwargs 的副本，在其内弹出不影响
+            # 调用方——直接 extract 形同虚设（检视意见），不得回潮
+            assert not self._extract_calls(helper), (
+                f"{rel_path}::_create_tracer_manager 不应对自身 **kwargs 副本 extract"
+            )
+            merged = any(
+                isinstance(node, ast.Call)
+                and getattr(node.func, "attr", None) == "update"
+                for node in ast.walk(helper)
+            )
+            assert merged, f"{rel_path}::instance_info 不再合并工具标识"
+
+    def test_tracer_caller_pops_before_helper(self):
+        """弹出必须发生在调用方作用域、且先于 helper 调用（检视意见）。
+
+        `self._create_tracer_manager(**kwargs)` 展开成 helper 内的新副本，
+        在 helper 内弹出后调用方 kwargs 仍带 tool_call_id / tool_type，
+        会随后续 `invoke(**kwargs)` / `create(**kwargs)` 泄入工具运行时
+        入参与发往第三方接口的请求参数。
+        """
+        for rel_path, cls, methods in self.TRACER_HELPER_SITES:
+            tree = _load_tree(rel_path)
+            for method_name in methods:
+                method = _method_of(tree, cls, method_name)
+                assert method is not None, f"{cls}.{method_name} 缺失"
+                extracts = [
+                    call
+                    for call in self._extract_calls(method)
+                    # 直传本方法 kwargs 字典（Name），而非 **kwargs 展开（Starred）
+                    if call.args
+                    and isinstance(call.args[0], ast.Name)
+                    and call.args[0].id == "kwargs"
+                ]
+                helper_calls = _call_names(method, "_create_tracer_manager")
+                assert extracts and helper_calls, (
+                    f"{cls}.{method_name} 缺少调用方作用域的 extract / helper 调用"
+                )
+                assert extracts[0].lineno < helper_calls[0].lineno, (
+                    f"{cls}.{method_name} 的 extract 须先于 _create_tracer_manager"
+                )
+                passed = (
+                    helper_calls[0].args
+                    or [kw.value for kw in helper_calls[0].keywords
+                        if kw.arg == "tool_trace_info"]
+                )
+                assert passed, (
+                    f"{cls}.{method_name} 未把摘出的标识传入 _create_tracer_manager"
+                )
 
     def test_direct_generate_manager_sites_merge_tool_facts(self):
         tree = _load_tree("jiuwen/plugin/models/function.py")

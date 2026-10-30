@@ -164,7 +164,10 @@ class RestFulAPI(Invokable, ABC):
         """
         异步调用
         """
-        trace_manager = self._create_tracer_manager(**kwargs)
+        # 弹出须发生在调用方作用域（helper **kwargs 形参是副本），否则
+        # 遥测键随 create(**kwargs) 泄入发往第三方接口的请求参数
+        tool_trace_info = extract_tool_trace_info(kwargs)
+        trace_manager = self._create_tracer_manager(tool_trace_info, **kwargs)
         try:
             await trace_manager.on_plugin_start(inputs)
             request_params = self.request_params_creator.create(
@@ -207,7 +210,9 @@ class RestFulAPI(Invokable, ABC):
         """
         异步流式输出接口
         """
-        trace_manager = self._create_tracer_manager(**kwargs)
+        # 同 ainvoke：调用方作用域弹出，遥测键不随 create(**kwargs) 外发
+        tool_trace_info = extract_tool_trace_info(kwargs)
+        trace_manager = self._create_tracer_manager(tool_trace_info, **kwargs)
         try:
             await trace_manager.on_plugin_start(inputs)
             request_params = self.request_params_creator.create(inputs, **kwargs)
@@ -277,10 +282,12 @@ class RestFulAPI(Invokable, ABC):
             request["headers"] = request_params.headers
         return request
 
-    def _create_tracer_manager(self, **kwargs):
+    def _create_tracer_manager(self, tool_trace_info=None, **kwargs):
         instance_info = get_instance_info(self, blacklist=["auth", "headers"])
-        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
-        instance_info.update(extract_tool_trace_info(kwargs))
+        # 工具标识由调用方从自身 kwargs 摘出后传入，入扁平键供 core
+        # handler 盖 gen_ai.tool.call.id / gen_ai.tool.type
+        if tool_trace_info:
+            instance_info.update(tool_trace_info)
         return TraceManager.generate_manager(
             kwargs.pop("trace_handlers", None), instance_info
         )

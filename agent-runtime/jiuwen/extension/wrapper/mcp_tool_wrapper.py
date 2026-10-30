@@ -131,7 +131,11 @@ class McpToolWrapper:
 
         保持与旧版 McpAPI.ainvoke() 完全相同的行为
         """
-        trace_manager = self._create_tracer_manager(**kwargs)
+        # 弹出须发生在调用方作用域：_create_tracer_manager(**kwargs) 的形参
+        # 是副本，helper 内弹出不影响本方法 kwargs，遥测键仍会随
+        # **kwargs 泄入 _get_tool().invoke 的运行时入参
+        tool_trace_info = extract_tool_trace_info(kwargs)
+        trace_manager = self._create_tracer_manager(tool_trace_info, **kwargs)
 
         try:
             await trace_manager.on_plugin_start(inputs)
@@ -197,12 +201,13 @@ class McpToolWrapper:
             constant.RESTFUL_DATA: "",
         }
 
-    def _create_tracer_manager(self, **kwargs):
+    def _create_tracer_manager(self, tool_trace_info=None, **kwargs):
         """创建追踪管理器"""
         instance_info = get_instance_info(self, blacklist=["auth", "headers"])
-        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*），
-        # 同时从 kwargs 摘出，避免流入工具运行时入参
-        instance_info.update(extract_tool_trace_info(kwargs))
+        # 工具标识由调用方从自身 kwargs 摘出后传入，入扁平键供 core
+        # handler 盖 gen_ai.tool.call.id / gen_ai.tool.type
+        if tool_trace_info:
+            instance_info.update(tool_trace_info)
         return TraceManager.generate_manager(
             kwargs.pop("trace_handlers", None), instance_info
         )
