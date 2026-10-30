@@ -15,9 +15,9 @@ import { OperatorWithSpaceComponent, OperatorWithSpaceParams } from '@agentcore/
 import { SimpleModalComponent } from '@agentcore/shared/components/simple-modal/simple-modal.component';
 import { I18nPipe } from '@agentcore/shared/pipes/i18n.pipe';
 import { CustomEditorService } from '@agentcore/shared/services/custom-editor.service';
-import { LayoutPageComponent } from '@shared/components/layout-page/layout-page.component';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 import { MODULES } from '@shared/modules';
+import { NzLayoutModule } from 'ng-zorro-antd/layout';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { SkillReferenceHalfmodalComponent } from './skill-reference-halfmodal/skill-reference-halfmodal.component';
 import { SkillSingleEditorComponent } from './skill-single-editor/skill-single-editor.component';
@@ -31,7 +31,6 @@ import { NzDrawerService } from 'ng-zorro-antd/drawer';
     I18NextModule,
     CommonModule,
     SkillSingleEditorComponent,
-    LayoutPageComponent,
     I18nPipe,
     OperatorWithSpaceComponent,
     HeaderButtonOperator,
@@ -39,6 +38,7 @@ import { NzDrawerService } from 'ng-zorro-antd/drawer';
     SimpleModalComponent,
     CopyTextRenderComponent,
     CustomHeaderComponent,
+    NzLayoutModule,
     MODULES,
   ],
   providers: [I18nService, CustomEditorService],

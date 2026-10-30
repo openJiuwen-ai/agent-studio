@@ -8,7 +8,6 @@ import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { KnowledgeBaseListComponent } from '@routes/knowledge-center/knowledge-base-list/knowledge-base-list.component';
 import { MemoryLibManagementComponent } from '@routes/memory-lib/memory-lib-management/memory-lib-management.component';
 import { CommonService } from '@services/common.service';
-import { LayoutPageComponent } from '@shared/components/layout-page/layout-page.component';
 import { MODULES } from '@shared/modules';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
@@ -26,7 +25,6 @@ import { SkillComponent } from '@agentcore/library/skill/skill.component';
     MODULES,
     ComponentLibraryComponent,
     KnowledgeBaseListComponent,
-    LayoutPageComponent,
     MemoryLibManagementComponent,
     NzTabsModule,
     PromptTemplateComponent,

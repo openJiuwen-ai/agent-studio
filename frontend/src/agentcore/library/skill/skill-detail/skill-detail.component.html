@@ -1,5 +1,5 @@
-<layout-page [showTpLayout]="false" [newStyle]="true">
-  <div mainContent>
+<nz-layout class="layout-page">
+  <nz-content>
     <custom-header mainHeader [params]="headerParams()" [responsive]="true">
       @if (skillDetail?.viewMode) {
         <div customArea class="alert">
@@ -41,5 +41,5 @@
         </div>
       </div>
     </div>
-  </div>
-</layout-page>
+  </nz-content>
+</nz-layout>
