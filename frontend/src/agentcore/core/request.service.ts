@@ -52,7 +52,6 @@ export interface HttpConfig {
   headers: any;
   body: any;
   dataType: any;
-  mask: any;
   timeout: any;
 }
 

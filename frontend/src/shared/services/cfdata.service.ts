@@ -8,7 +8,6 @@ export interface HttpConfig {
   headers?: {
     [propName: string]: string;
   };
-  mask?: boolean;
   timeout?: number;
   targetUrl?: string;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS' | 'TRACE' | 'CONNECT';
@@ -66,28 +65,6 @@ export class MaskComponent {
       if (pLoading) {
         pLoading.removeChild(this.loading);
       }
-    }
-  }
-
-  static pageInitShow(): void {
-    const background = document.createElement('div');
-    background.className = 'cf-page-init-background';
-    document.body.appendChild(background);
-    const loading = document.createElement('div');
-    loading.className = 'cf-page-init-loading';
-    document.body.appendChild(loading);
-  }
-
-  static pageInitHide(): void {
-    const background = document.querySelector('.cf-page-init-background');
-    if (background) {
-      const pBackground = background.parentNode;
-      pBackground?.removeChild(background);
-    }
-    const loading = document.querySelector('.cf-page-init-loading');
-    if (loading) {
-      const pLoading = loading.parentNode;
-      pLoading?.removeChild(loading);
     }
   }
 }
