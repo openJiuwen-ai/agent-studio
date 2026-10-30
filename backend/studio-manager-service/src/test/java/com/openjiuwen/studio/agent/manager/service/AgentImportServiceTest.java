@@ -46,8 +46,11 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1545,6 +1548,22 @@ class AgentImportServiceTest {
             assertEquals("model-1", rollback.get(0).getResourceId());
             assertNull(rollback.get(0).getAppVersion());
         }
+    }
+
+    @Test
+    void getImportInfosShouldSkipBlankLines() throws Exception {
+        ReflectionTestUtils.setField(agentImportService, "importMaxLen", 100);
+        String jsonl = "{\"resource_type\":\"AGENT\",\"resource_id\":\"agent-1\"}\n"
+            + "\n"
+            + "{\"resource_type\":\"AGENT\",\"resource_id\":\"agent-2\"}\n";
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.getInputStream()).thenReturn(new ByteArrayInputStream(jsonl.getBytes(StandardCharsets.UTF_8)));
+
+        List<ImportInfo> result = ReflectionTestUtils.invokeMethod(agentImportService, "getImportInfos", file);
+
+        assertNotNull(result);
+        assertEquals(List.of("agent-1", "agent-2"),
+            result.stream().map(ImportInfo::getResourceId).toList());
     }
 
     /**
