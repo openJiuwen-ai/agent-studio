@@ -112,6 +112,9 @@ spec:
             # insight 实时旁路写节流：累计跳过超过该次数才真正写 Redis。默认 20
             - name: workflow_insight_flush_max_skip
               value: '20'
+            # manager 出站 header 跳过名单定制（默认空 = 不过滤/全量透传）；逗号分隔、大小写不敏感
+            - name: manager_skip_outbound_header_list
+              value: ''
             # 运行时agent/workflow地址前缀（IP:Port格式），用于前端拼接API调用地址
             - name: front_page_runtime_host
               value: ''

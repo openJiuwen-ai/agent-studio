@@ -231,6 +231,17 @@ public class AgentServiceProxyService {
     @Value("${manager.http-failed-publish-await-seconds:10}")
     private long httpFailedPublishAwaitSeconds;
 
+    /**
+     * 定制:转发 runtime/builder 的出站请求时需跳过的入站 header 名单,逗号分隔。
+     * 空/缺省 = 不过滤(全量透传旧行为);非空 = 只过滤名单内的头,大小写不敏感。
+     * 域名入口按 Host 路由类部署的标准值:host,connection,keep-alive,transfer-encoding,content-length,accept-encoding。
+     */
+    @Value("${manager.skip-outbound-header-list:}")
+    private String skipOutboundHeaderListStr;
+
+    /** 启动时由 {@link #init()} 从 {@code skipOutboundHeaderListStr} 解析;空集 = 不过滤。 */
+    private Set<String> skipOutboundHeaders = Set.of();
+
     private Set<String> allowedIconType = new HashSet<>();
 
     private Set<String> allowedImgType = new HashSet<>();
@@ -251,6 +262,23 @@ public class AgentServiceProxyService {
         allowedIconType = Arrays.stream(allowedIconTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
         allowedImgType = Arrays.stream(allowedImgTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
         allowedDefaultType = Arrays.stream(allowedDefaultTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        skipOutboundHeaders = parseSkipOutboundHeaders(skipOutboundHeaderListStr);
+    }
+
+    /**
+     * 解析定制名单:逗号分割、trim、小写归一、去空项;空输入得到空集(不过滤,旧行为)。
+     * 非空时打一行启动日志,便于部署侧核对名单是否生效(名单 typo 是静默失效的)。
+     */
+    static Set<String> parseSkipOutboundHeaders(String config) {
+        Set<String> parsed = config == null ? Set.of()
+            : Arrays.stream(config.split(","))
+                .map(name -> name.trim().toLowerCase(Locale.ROOT))
+                .filter(name -> !name.isEmpty())
+                .collect(Collectors.toSet());
+        if (!parsed.isEmpty()) {
+            log.info("skip-outbound-headers customization enabled: {}", parsed);
+        }
+        return parsed;
     }
 
     private String getToken() {
@@ -1547,16 +1575,23 @@ public class AgentServiceProxyService {
         return sseEmitter;
     }
 
+    /** 命中定制名单 manager.skip-outbound-header-list(大小写不敏感)则跳过透传;名单为空恒 false,保持旧行为。 */
+    boolean shouldSkipOutboundHeader(String name) {
+        return skipOutboundHeaders.contains(name.toLowerCase(Locale.ROOT));
+    }
+
     /**
      * COM-04 §6.2：构建出站 SSE 请求——先排除三个关联 Header（防调用方伪造重复变体），
-     * 再由 {@link OkHttpCorrelationHeaderApplier} 按策略从当前线程 MDC 读取权威值先删后写。
+     * 再由 {@link OkHttpCorrelationHeaderApplier} 按策略从当前线程 MDC 读取权威值先删后写;
+     * 定制名单 manager.skip-outbound-header-list 非空时,另跳过名单内的入站 Header(host/hop-by-hop 等)。
      */
     private okhttp3.Request buildStreamRequest(String url, HttpHeaders headers, String bodyJson,
         OutboundCorrelationPolicy policy, String allowedOrigin) {
         RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
         Request.Builder builder = new Request.Builder();
         headers.forEach((key, value) -> {
-            if (value != null && !value.isEmpty() && !OkHttpCorrelationHeaderApplier.isCorrelationHeader(key)) {
+            if (value != null && !value.isEmpty() && !OkHttpCorrelationHeaderApplier.isCorrelationHeader(key)
+                && !shouldSkipOutboundHeader(key)) {
                 builder.addHeader(key, String.join(",", value));
             }
         });

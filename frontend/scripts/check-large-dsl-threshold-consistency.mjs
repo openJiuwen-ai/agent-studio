@@ -12,6 +12,9 @@
  *   5. （若存在）frontend/dist/hws/index.html    （构建产物层：能发现构建配置变化/HTML 优化
  *      导致占位符丢失 —— 由 postbuild 调用，构建后执行）
  *
+ * 另：iframe SSO 桥接占位符（iframe_sso_token_placeholder）同源检查（§5）——
+ * .staging/src index.html、start.sh 注入逻辑、部署文件声明与（若存在）构建产物均在位。
+ *
  * 用法：npm run check:threshold（构建前，prebuild 自动执行）
  *       npm run check:threshold:dist（构建后，postbuild 自动执行）
  */
@@ -117,6 +120,48 @@ if (withDist) {
   }
 }
 
+// ---- 5. iframe SSO 桥接占位符（单参数定制，默认关）----
+// 占位符三处同源：.staging/index.html（构建入口，真实生效）/ src/index.html（同步参考）/
+// start.sh（注入 sed）；部署文件须声明 IFRAME_SSO_TOKEN_PARAM（默认空 = 关闭）。
+const IFRAME_SSO_PLACEHOLDER_LINE = "window.iframeSsoTokenParam = 'iframe_sso_token_placeholder'";
+if (stagingHtml && !stagingHtml.includes(IFRAME_SSO_PLACEHOLDER_LINE)) {
+  fail('[FAIL] .staging/index.html 缺少 iframe_sso_token_placeholder 占位符（iframe SSO 桥接）');
+}
+if (srcHtml && !srcHtml.includes(IFRAME_SSO_PLACEHOLDER_LINE)) {
+  fail('[WARN->FAIL] src/index.html 与 .staging 不同步（缺 iframe SSO 占位符）');
+}
+if (!startSh.includes('iframe_sso_token_placeholder')) {
+  fail('[FAIL] start.sh 缺少 iframe_sso_token_placeholder 注入逻辑');
+}
+if (envTpl && !/^IFRAME_SSO_TOKEN_PARAM=$/m.test(envTpl)) {
+  fail('[FAIL] deploy/.env.template 未声明 IFRAME_SSO_TOKEN_PARAM=（默认空）');
+}
+if (compose && !/IFRAME_SSO_TOKEN_PARAM:\s*\$\{IFRAME_SSO_TOKEN_PARAM:-\}/.test(compose)) {
+  fail('[FAIL] docker-compose 未定义 ${IFRAME_SSO_TOKEN_PARAM:-} 透传');
+}
+if (k8s && !/name:\s*IFRAME_SSO_TOKEN_PARAM/.test(k8s)) {
+  fail('[FAIL] k8s studio-console.yaml 未定义 IFRAME_SSO_TOKEN_PARAM env');
+}
+if (withDist) {
+  const distHtmlSso = read('frontend/dist/hws/index.html');
+  if (distHtmlSso && !distHtmlSso.includes(IFRAME_SSO_PLACEHOLDER_LINE)) {
+    fail('[FAIL] 构建产物 dist/hws/index.html 丢失 iframe SSO 占位符（iframe SSO 桥接将无法启用）');
+  }
+}
+
+// ---- 5b. manager 出站 header 名单部署声明（单参数定制，默认关）----
+// compose/k8s 为显式白名单：不声明则 .env 值进不了容器，名单静默不生效（无日志无报错）。
+const k8sManager = read('deploy/k8s/studio-manager.yaml');
+if (envTpl && !/^MANAGER_SKIP_OUTBOUND_HEADER_LIST=$/m.test(envTpl)) {
+  fail('[FAIL] deploy/.env.template 未声明 MANAGER_SKIP_OUTBOUND_HEADER_LIST=（默认空）');
+}
+if (compose && !/manager_skip_outbound_header_list:\s*\$\{MANAGER_SKIP_OUTBOUND_HEADER_LIST:-\}/.test(compose)) {
+  fail('[FAIL] docker-compose studio-manager 未定义 ${MANAGER_SKIP_OUTBOUND_HEADER_LIST:-} 透传');
+}
+if (k8sManager && !/name:\s*manager_skip_outbound_header_list/.test(k8sManager)) {
+  fail('[FAIL] k8s studio-manager.yaml 未定义 manager_skip_outbound_header_list env');
+}
+
 if (failures.length) {
   console.error(failures.join('\n'));
   console.error('\n常量漂移：请同步调整 environment.ts / start.sh / .staging/index.html / 部署文件（压测后调值时）。');
@@ -126,5 +171,6 @@ if (failures.length) {
 console.log(
   `[OK] 常量一致：DEFAULT=${tsDefault} (${(tsDefault / 1024 / 1024).toFixed(0)}MB), ` +
     `MAX=${tsMax} (${(tsMax / 1024 / 1024).toFixed(0)}MB)，构建入口与部署默认值一致` +
-    (withDist ? '，构建产物含占位符' : ''),
+    (withDist ? '，构建产物含占位符' : '') +
+    '，iframe SSO 占位符在位，出站名单声明在位',
 );
