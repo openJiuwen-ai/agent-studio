@@ -46,7 +46,7 @@ from jiuwen.extension.wrapper.workflow_loader import (
     ensure_openjiuwen_workflow_registered,
 )
 from jiuwen.insight.handlers.data import NAME
-from jiuwen.insight.workflow_trace_scope import workflow_trace_scope
+from jiuwen.insight.workflow_trace_scope import scoped_astream
 from jiuwen.orchestration.flow.constant import (
     WORKFLOW_STATE,
     WORKFLOW_STATE_ERROR,
@@ -969,19 +969,22 @@ class WorkflowHandler(BaseHandler):
             # OTel 双写：任务携带的 trace_handlers（controller 链 child
             # TraceManager）绑定到工作流执行作用域，engine 的组件任务继承
             # 该协程上下文，LLM 节点内经 current_workflow_trace_manager 取用
-            # 派生 span；无则不产出（独立工作流行为不变）
-            with workflow_trace_scope(
-                (task.input_data.get("runtime_data") or {}).get("trace_handlers")
-            ):
-                async for exec_res in self._stream_handle_workflow_execute(
+            # 派生 span；无则不产出（独立工作流行为不变）。经 scoped_astream
+            # 消费：作用域只在步进内层流期间绑定——直接 with 包住含 yield
+            # 的 async for 会让绑定滞留在两次 yield 之间的消费方 Task 上下
+            # 文，兄弟任务 create_task 继承后错误归属遥测（检视意见）
+            async for exec_res in scoped_astream(
+                lambda: self._stream_handle_workflow_execute(
                     workflow_input,
                     workflow_context,
                     workflow_instance,
                     workflow_status,
                     current_node,
                     from_pe=from_pe,
-                ):
-                    yield exec_res
+                ),
+                (task.input_data.get("runtime_data") or {}).get("trace_handlers"),
+            ):
+                yield exec_res
 
             logger.debug(
                 "task_id: %s| Stream execute workflow current_node: %s, "
@@ -1755,36 +1758,38 @@ class WorkflowHandler(BaseHandler):
         # 透传到此，绑定工作流执行作用域供 LLM 节点遥测派生。该对象须先
         # 摘出再绑定（与插件侧 kwargs.pop 同一约定）：TraceManager 持有
         # tracer/span 表/insight 队列，不可序列化，随 **kwargs 流入
-        # astream 会污染执行入参、遇 checkpoint 落库直接报错
+        # astream 会污染执行入参、遇 checkpoint 落库直接报错。经
+        # scoped_astream 消费：作用域只在建立与步进内层流期间绑定，跨
+        # yield 零残留（检视意见，同 _stream_execute_workflow）
         trace_handlers = kwargs.pop("trace_handlers", None)
-        with workflow_trace_scope(trace_handlers):
-            try:
-                res_generator = await workflow.astream(query, **kwargs)
-                async for func_res in res_generator:
-                    self._check_questioner_interrupt(workflow, func_res)
-                    func_res = self.process_stream_output(func_res)
-                    if (
-                        func_res.get(WORKFLOW_ANSWER, {}).get("node_type")
-                        == WORKFLOW_END_TYPE
-                        and func_res.get("code") == StreamCode.FINISH.value
-                    ):
-                        func_res[WORKFLOW_STATE] = WORKFLOW_STATE_END
-                    yield dict(
-                        data=func_res,
-                        errCode=StatusCode.SUCCESS.code,
-                        errMessage=StatusCode.SUCCESS.message,
-                    )
-            except Exception as e:
-                import traceback
+        try:
+            async for func_res in scoped_astream(
+                lambda: workflow.astream(query, **kwargs), trace_handlers
+            ):
+                self._check_questioner_interrupt(workflow, func_res)
+                func_res = self.process_stream_output(func_res)
+                if (
+                    func_res.get(WORKFLOW_ANSWER, {}).get("node_type")
+                    == WORKFLOW_END_TYPE
+                    and func_res.get("code") == StreamCode.FINISH.value
+                ):
+                    func_res[WORKFLOW_STATE] = WORKFLOW_STATE_END
+                yield dict(
+                    data=func_res,
+                    errCode=StatusCode.SUCCESS.code,
+                    errMessage=StatusCode.SUCCESS.message,
+                )
+        except Exception as e:
+            import traceback
 
-                logger.error(
-                    f"Panel execute workflow error {traceback.format_exc()}",
-                    simple_log=f"Panel execute workflow error: {type(e)}",
-                )
-                err_func_res["errMessage"][WORKFLOW_ANSWER] = (
-                    f"Panel execute workflow error: {type(e)}"
-                )
-                yield err_func_res
+            logger.error(
+                f"Panel execute workflow error {traceback.format_exc()}",
+                simple_log=f"Panel execute workflow error: {type(e)}",
+            )
+            err_func_res["errMessage"][WORKFLOW_ANSWER] = (
+                f"Panel execute workflow error: {type(e)}"
+            )
+            yield err_func_res
 
     async def _post_process_stream_workflow(
         self, workflow_name, function_call, func_res, time_dict

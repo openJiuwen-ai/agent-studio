@@ -136,7 +136,31 @@ class TestTaskCreationSites:
 
 
 class TestWorkflowHandlerScopeBinding:
-    """workflow_handler 两处工作流 astream 消费点绑定遥测作用域。"""
+    """workflow_handler 两处工作流 astream 消费点绑定遥测作用域。
+
+    消费经 scoped_astream 包装：作用域只在步进内层流期间绑定，跨
+    yield 零残留——直接 `with workflow_trace_scope(...)` 包住含 yield
+    的 async for 会让绑定滞留在消费方 Task 上下文、兄弟任务错误继承
+    （检视意见），该形态不得回潮。
+    """
+
+    @staticmethod
+    def _scoped_astream_calls(method):
+        """method 内 scoped_astream(...) 调用列表。"""
+        return [
+            node
+            for node in ast.walk(method)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "scoped_astream"
+        ]
+
+    @staticmethod
+    def _lambda_calls_attr(call, attr):
+        """scoped_astream 首参 lambda 的函数体是否调用 <attr>。"""
+        if not call.args or not isinstance(call.args[0], ast.Lambda):
+            return False
+        return bool(_calls_with_attr(call.args[0], attr))
 
     @staticmethod
     def test_imports_scope_helper():
@@ -146,13 +170,12 @@ class TestWorkflowHandlerScopeBinding:
         imported = any(
             isinstance(node, ast.ImportFrom)
             and node.module == "jiuwen.insight.workflow_trace_scope"
-            and any(a.name == "workflow_trace_scope" for a in node.names)
+            and any(a.name == "scoped_astream" for a in node.names)
             for node in ast.walk(tree)
         )
         assert imported
 
-    @staticmethod
-    def test_stream_execute_workflow_wraps_consumption_in_scope():
+    def test_stream_execute_workflow_consumes_via_scoped_astream(self):
         tree = _load_tree(
             "jiuwen/controller/task_executor/handler/workflow_handler.py"
         )
@@ -160,41 +183,41 @@ class TestWorkflowHandlerScopeBinding:
             tree, "WorkflowHandler", "_stream_execute_workflow"
         )
         assert method is not None
-        scopes = [
-            node
-            for node in ast.walk(method)
-            if isinstance(node, ast.With)
-            and any(
-                isinstance(item.context_expr, ast.Call)
-                and getattr(item.context_expr.func, "id", None)
-                == "workflow_trace_scope"
-                for item in node.items
-            )
-        ]
-        assert scopes, "astream 消费须在 workflow_trace_scope 内"
-        # 消费调用（_stream_handle_workflow_execute）确实在作用域块里
-        assert any(_calls_with_attr(scope, "_stream_handle_workflow_execute") for scope in scopes)
+        calls = self._scoped_astream_calls(method)
+        assert calls, "_stream_execute_workflow 须经 scoped_astream 消费"
+        assert any(
+            self._lambda_calls_attr(c, "_stream_handle_workflow_execute")
+            for c in calls
+        ), "scoped_astream 须包住 _stream_handle_workflow_execute 内层流"
 
-    @staticmethod
-    def test_exec_workflow_wraps_function_call_path_in_scope():
+    def test_exec_workflow_consumes_via_scoped_astream(self):
         tree = _load_tree(
             "jiuwen/controller/task_executor/handler/workflow_handler.py"
         )
         method = _method_of(tree, "WorkflowHandler", "_exec_workflow")
         assert method is not None
-        scopes = [
-            node
-            for node in ast.walk(method)
-            if isinstance(node, ast.With)
-            and any(
+        calls = self._scoped_astream_calls(method)
+        assert calls, "react 函数调用路径的 astream 消费须经 scoped_astream"
+        assert any(
+            self._lambda_calls_attr(c, "astream") for c in calls
+        ), "scoped_astream 须包住 workflow.astream 内层流"
+
+    def test_no_bare_with_scope_around_yield_loops(self):
+        """旧形态（with workflow_trace_scope 包住含 yield 的循环）不得回潮。"""
+        tree = _load_tree(
+            "jiuwen/controller/task_executor/handler/workflow_handler.py"
+        )
+        for node in ast.walk(tree):
+            if isinstance(node, ast.With) and any(
                 isinstance(item.context_expr, ast.Call)
                 and getattr(item.context_expr.func, "id", None)
                 == "workflow_trace_scope"
                 for item in node.items
-            )
-        ]
-        assert scopes, "react 函数调用路径的 astream 消费须在作用域内"
-        assert any(_calls_with_attr(scope, "astream") for scope in scopes)
+            ):
+                raise AssertionError(
+                    "workflow_handler 不得直接 with workflow_trace_scope——"
+                    "须经 scoped_astream 收敛绑定（检视意见）"
+                )
 
 
 class TestLLMChainInstrumentation:

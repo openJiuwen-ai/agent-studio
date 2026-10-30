@@ -104,7 +104,9 @@ def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
     的 junk 字段（code/err_msg/task_id/total_latency，prompt 为提示词全文）
     绝不入载荷——on_llm_end 会把整个载荷序列化进 gen_ai.completion。与
     planner 侧 build_usage_metadata 语义对齐：全零 usage 不产出 token 键，
-    时延信号独立判活（token 未上报但时延可算时仍产出时延键）。
+    时延信号独立判活（token 未上报但时延可算时仍产出时延键）；total_tokens
+    计入判活与输出（仅上报 total 的模型实现下 input/output 全零，漏计会把
+    真实用量判成缺数据、gen_ai.usage 整体丢失——与 planner 同口径）。
 
     字段一律 getattr 兜底：生产镜像经 requirements.txt 装 openjiuwen，
     版本可能早于 core 的 cache_tokens / 成本字段波次，裸属性访问会在
@@ -117,6 +119,7 @@ def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
         return {"first_token_time": round(ttft_ms / 1000, 6)} if has_ttft else {}
     input_tokens = getattr(usage, "input_tokens", 0) or 0
     output_tokens = getattr(usage, "output_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", 0) or 0
     cache_tokens = getattr(usage, "cache_tokens", 0) or 0
     reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
     input_cost = getattr(usage, "input_cost", 0.0) or 0.0
@@ -126,6 +129,7 @@ def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
         (
             input_tokens,
             output_tokens,
+            total_tokens,
             cache_tokens,
             reasoning_tokens,
             input_cost,
@@ -140,6 +144,7 @@ def _build_workflow_usage_payload(usage, ttft_ms: Optional[float]) -> dict:
         usage_dict = {
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
             "model_name": getattr(usage, "model_name", "") or "",
             "total_cost": total_cost,
             "input_cost": input_cost,
