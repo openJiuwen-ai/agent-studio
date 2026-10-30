@@ -505,6 +505,39 @@ class TestTelemetryIsolation:
         assert end[0]["outputs"] is None
 
     @pytest.mark.asyncio
+    async def test_close_span_legacy_handler_failure_still_finalizes_oj(self):
+        """close_span 经 on_llm_end 时 legacy handler 抛错：降级直驱 OTEL 收尾。
+
+        on_llm_end 先 legacy 后双写——legacy 抛错会跳过 _oj_on_end，
+        OTEL span 悬挂在共享 span 表（检视意见）；兜底后恰好收尾一次。
+        """
+
+        class _LegacyBoomHandler:
+            def on_llm_start(self, *args, **kwargs):
+                return None
+
+            def on_llm_end(self, *args, **kwargs):
+                raise RuntimeError("legacy insight handler 故障")
+
+        tracer = _FakeTracer()
+        scope = TraceManager(
+            trace_handlers=[_LegacyBoomHandler()],
+            openjiuwen_tracer=tracer,
+        )
+        items = [AssistantMessage(content="你"), AssistantMessage(content="好")]
+        chain = _make_chain(TestStreamTelemetry._stream_llm(items), _make_conf())
+
+        gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        with workflow_trace_scope(scope):
+            await gen.__anext__()
+            await gen.aclose()
+
+        assert len(_events_by_name(tracer, "on_llm_start")) == 1
+        end = _events_by_name(tracer, "on_llm_end")
+        assert len(end) == 1  # legacy 抛错后降级直驱，恰好一次
+        assert end[0]["outputs"] is None
+
+    @pytest.mark.asyncio
     async def test_stream_early_close_finalizes_span(self):
         """流提前关闭（GeneratorExit / 上层 break）：finally 补发一次 end。
 

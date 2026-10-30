@@ -182,11 +182,28 @@ class _OjTelemetryGuard:
         await self._emit("on_llm_error", error)
 
     async def close_span(self):
-        """提前关闭补发空载荷收尾；正常 end / 异常 error 已收尾时 no-op。"""
+        """提前关闭补发收尾；正常 end / 异常 error 已收尾时 no-op。
+
+        先走完整 on_llm_end（legacy handlers + OTEL 双写）；legacy
+        handler 抛错会跳过双写收尾（on_llm_end 先 legacy 后双写），
+        此时降级直驱 OTEL 收尾（manager.oj_finalize_llm_span），
+        不留悬挂 llm.* span（检视意见）。两条路径都只告警不抛。
+        """
         if self._finalized:
             return
         self._finalized = True
-        await self._emit("on_llm_end", None)
+        try:
+            await self._manager.on_llm_end(None)
+        except Exception as e:
+            workflow_logger.warning(
+                f"workflow llm telemetry close_span failed, fallback oj finalize, skip: {e}"
+            )
+            try:
+                await self._manager.oj_finalize_llm_span()
+            except Exception as e2:
+                workflow_logger.warning(
+                    f"workflow llm telemetry oj finalize failed, skip: {e2}"
+                )
 
     async def _emit(self, method: str, arg):
         try:
