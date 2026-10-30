@@ -175,31 +175,39 @@ class _OjTelemetryGuard:
 
     async def on_llm_end(self, payload=None):
         self._finalized = True
-        await self._emit("on_llm_end", payload)
+        await self._emit_end("on_llm_end", payload)
 
     async def on_llm_error(self, error):
         self._finalized = True
-        await self._emit("on_llm_error", error)
+        await self._emit_end("on_llm_error", error)
 
     async def close_span(self):
-        """提前关闭补发收尾；正常 end / 异常 error 已收尾时 no-op。
-
-        先走完整 on_llm_end（legacy handlers + OTEL 双写）；legacy
-        handler 抛错会跳过双写收尾（on_llm_end 先 legacy 后双写），
-        此时降级直驱 OTEL 收尾（manager.oj_finalize_llm_span），
-        不留悬挂 llm.* span（检视意见）。两条路径都只告警不抛。
-        """
+        """提前关闭补发收尾；正常 end / 异常 error 已收尾时 no-op。"""
         if self._finalized:
             return
         self._finalized = True
+        await self._emit_end("on_llm_end", None)
+
+    async def _emit_end(self, method: str, arg):
+        """end / error 收尾发射：完整方法抛错时降级直驱 OTEL 收尾。
+
+        manager.on_llm_end / on_llm_error 先 legacy 后双写，legacy
+        handler 抛错会跳过双写——只告警吞掉的话 OTEL span 就此悬挂
+        （_emit 通用吞错盖不住收尾语义，检视意见）。正常路径、异常
+        路径与提前关闭共用本兜底，error 事件降级时保持 error 终态；
+        两段都只告警不抛，恰好一次由 _finalized 标志与 manager 的
+        span 表幂等共同保证。
+        """
         try:
-            await self._manager.on_llm_end(None)
+            await getattr(self._manager, method)(arg)
         except Exception as e:
             workflow_logger.warning(
-                f"workflow llm telemetry close_span failed, fallback oj finalize, skip: {e}"
+                f"workflow llm telemetry {method} failed, fallback oj finalize, skip: {e}"
             )
             try:
-                await self._manager.oj_finalize_llm_span()
+                await self._manager.oj_finalize_llm_span(
+                    error=arg if method == "on_llm_error" else None
+                )
             except Exception as e2:
                 workflow_logger.warning(
                     f"workflow llm telemetry oj finalize failed, skip: {e2}"

@@ -538,6 +538,87 @@ class TestTelemetryIsolation:
         assert end[0]["outputs"] is None
 
     @pytest.mark.asyncio
+    async def test_stream_end_legacy_handler_failure_still_finalizes_oj(self):
+        """流正常走完时 on_llm_end 遇 legacy 抛错：同样降级收尾。
+
+        修复前 on_llm_end 先置 _finalized 再经 _emit 吞错——正常路径
+        legacy 抛错后 finally 的 close_span 因 _finalized 直接 no-op，
+        OTEL span 照样悬挂（检视意见第五轮）；end / error / 提前关闭
+        现共用 _emit_end 兜底，恰好收尾一次。
+        """
+
+        class _LegacyBoomHandler:
+            def on_llm_start(self, *args, **kwargs):
+                return None
+
+            def on_llm_end(self, *args, **kwargs):
+                raise RuntimeError("legacy insight handler 故障")
+
+        tracer = _FakeTracer()
+        scope = TraceManager(
+            trace_handlers=[_LegacyBoomHandler()],
+            openjiuwen_tracer=tracer,
+        )
+        items = [AssistantMessage(content="你"), AssistantMessage(content="好")]
+        chain = _make_chain(TestStreamTelemetry._stream_llm(items), _make_conf())
+
+        gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        with workflow_trace_scope(scope):
+            async for _ in gen:
+                pass  # 完整消费到流末——正常 on_llm_end 路径而非提前关闭
+
+        assert len(_events_by_name(tracer, "on_llm_start")) == 1
+        end = _events_by_name(tracer, "on_llm_end")
+        assert len(end) == 1  # legacy 抛错后降级直驱，恰好一次
+        assert end[0]["outputs"] is None
+
+    @pytest.mark.asyncio
+    async def test_error_path_legacy_handler_failure_keeps_error_final_state(
+        self, monkeypatch
+    ):
+        """异常路径 legacy on_llm_error 抛错：降级走 error 事件收尾。
+
+        降级经 oj_finalize_llm_span(error=...) 保持 error 终态，span
+        不悬挂、不假扮成功 end（检视意见第五轮）。
+        """
+        monkeypatch.setattr(
+            llm_chain_module, "_format_llm_error_detail", lambda exc: str(exc)
+        )
+
+        class _LegacyBoomHandler:
+            def on_llm_start(self, *args, **kwargs):
+                return None
+
+            def on_llm_error(self, *args, **kwargs):
+                raise RuntimeError("legacy insight handler 故障")
+
+        tracer = _FakeTracer()
+        scope = TraceManager(
+            trace_handlers=[_LegacyBoomHandler()],
+            openjiuwen_tracer=tracer,
+        )
+        boom = RuntimeError("模型接入URL无效")
+
+        async def _boom_stream(**kwargs):
+            raise boom
+            yield  # pragma: no cover - 使其成为异步生成器
+
+        llm = MagicMock()
+        llm.stream = MagicMock(return_value=_boom_stream())
+        chain = _make_chain(llm, _make_conf())
+
+        gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        with workflow_trace_scope(scope):
+            with pytest.raises(BaseError):
+                async for _ in gen:
+                    pass
+
+        errors = _events_by_name(tracer, "on_llm_error")
+        assert len(errors) == 1  # legacy 抛错后降级直驱，恰好一次
+        assert errors[0]["error"] is boom
+        assert not _events_by_name(tracer, "on_llm_end")  # 不假扮成功 end
+
+    @pytest.mark.asyncio
     async def test_stream_early_close_finalizes_span(self):
         """流提前关闭（GeneratorExit / 上层 break）：finally 补发一次 end。
 

@@ -369,15 +369,20 @@ class TraceManager(
         )
         await self._oj_on_end("on_llm_end", self.invoke_id, outputs)
 
-    async def oj_finalize_llm_span(self) -> None:
+    async def oj_finalize_llm_span(
+        self, error: Optional[BaseException] = None
+    ) -> None:
         """只走 openjiuwen 双写收尾，不触发 legacy trace handlers。
 
-        on_llm_end 先执行 legacy handlers 再执行双写收尾——legacy
-        handler 抛错会跳过 _oj_on_end，OTEL span 悬挂在 span 表里。
-        兜底收尾方（如工作流节点的 guard close_span）在 legacy 抛错
-        后用本方法直驱 OTEL 收尾（检视意见）。
+        on_llm_end / on_llm_error 先执行 legacy handlers 再执行双写收尾
+        ——legacy handler 抛错会跳过双写，OTEL span 悬挂在 span 表里。
+        兜底收尾方（如工作流节点的 guard）在 legacy 抛错后用本方法直驱
+        OTEL 收尾（检视意见）；error 传入时走 error 事件，终态不失真。
         """
-        await self._oj_on_end("on_llm_end", self.invoke_id, None)
+        if error is None:
+            await self._oj_on_end("on_llm_end", self.invoke_id, None)
+        else:
+            await self._oj_on_error("on_llm_error", self.invoke_id, error)
 
     async def on_llm_error(self, error: BaseException, *args: Any, **kwargs: Any) -> None:
         """Invoke when llm error"""
