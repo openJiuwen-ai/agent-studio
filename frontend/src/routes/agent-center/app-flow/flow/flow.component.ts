@@ -2457,8 +2457,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.graph.enablePanning();
   }
 
-  public allowDrop(e: MouseEvent) {
+  public allowDrop(e: DragEvent) {
     e.preventDefault();
+    // Mark the canvas as an accepted copy target so palette dragend sees
+    // dropEffect !== 'none' for successful drops (see #1193).
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
   }
 
   /** 定位到画布中间 */

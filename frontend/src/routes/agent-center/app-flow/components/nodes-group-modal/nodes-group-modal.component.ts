@@ -267,17 +267,29 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
     return '';
   }
 
-  public onDragStart(e: MouseEvent) {
+  public onDragStart(e: DragEvent) {
     if (this.isFlowReadonly) {
+      e.preventDefault();
       return;
+    }
+
+    // Required so browsers report a non-"none" dropEffect on accepted drops.
+    e.dataTransfer?.setData('text/plain', 'palette-node');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copy';
     }
 
     this.clickNodeX = e.offsetX;
     this.clickNodeY = e.offsetY;
   }
 
-  public onDragEnd(e: MouseEvent, node: NodeInfo) {
+  public onDragEnd(e: DragEvent, node: NodeInfo) {
     if (this.isFlowReadonly) {
+      return;
+    }
+
+    // dragend also fires for cancelled drags and drops outside a valid target.
+    if (!e.dataTransfer || e.dataTransfer.dropEffect === 'none') {
       return;
     }
 
@@ -286,6 +298,11 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
       ptl.x < this.clickNodeX && ptl.x > 0 ? 0 : ptl.x - this.clickNodeX;
     const y =
       ptl.y < this.clickNodeY && ptl.y > 0 ? 0 : ptl.y - this.clickNodeY;
+
+    // Reject releases that map outside the canvas (negative graph coords).
+    if (x < 0 || y < 0) {
+      return;
+    }
 
     this.createNode.emit({
       ...node,
