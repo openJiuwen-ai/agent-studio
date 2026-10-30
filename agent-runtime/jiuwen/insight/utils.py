@@ -135,7 +135,15 @@ def get_conversation_facts(session: Any) -> Union[Dict[str, str], None]:
     session_id = get_session_id() if callable(get_session_id) else None
     if session_id:
         facts["conversation_id"] = str(session_id)
-    source_metadata = getattr(session, "_source_metadata", None) or {}
+    # core Session 的公开访问器优先（get_source_metadata 返回副本），
+    # 旧版底层无访问器时退回 _source_metadata 私有名——与 core
+    # react_agent 取 source_metadata 的探测口径一致，私有名仅作兜底
+    source_metadata_getter = getattr(session, "get_source_metadata", None)
+    source_metadata = (
+        source_metadata_getter()
+        if callable(source_metadata_getter)
+        else getattr(session, "_source_metadata", None)
+    )
     user_id = source_metadata.get("user_id", "") if isinstance(source_metadata, dict) else ""
     if user_id:
         facts["user_id"] = str(user_id)

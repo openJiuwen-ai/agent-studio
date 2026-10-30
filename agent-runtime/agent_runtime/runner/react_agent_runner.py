@@ -833,11 +833,12 @@ class ReActAgentRunner:
             await await_pending(req.conversation_id)
             # 会话事实源头：user_id 经 source_metadata 随 session 携带
             # （core OtelRail 与本仓双写桥的同一取值口径），供遥测桥供给
-            # openjiuwen.gen_ai.user.id
+            # openjiuwen.gen_ai.user.id。缺数据不注入：user_id 为空时传
+            # None（恢复已有 session 也不落空键覆盖上一轮播种的值）
             session = create_agent_session_with_trace(
                 session_id=session_id,
                 card=agent.card,
-                source_metadata={"user_id": req.user_id or ""},
+                source_metadata={"user_id": req.user_id} if req.user_id else None,
             )
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:

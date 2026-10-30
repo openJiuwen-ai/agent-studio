@@ -71,3 +71,52 @@ class TestSourceMetadataCompat:
         monkeypatch.setattr(tc, "_agent_accepts_source_metadata", True)
         tc.create_agent_session_with_trace(session_id="s1", card=object())
         assert "source_metadata" not in seen
+
+
+class TestRunnerSeedsUserIdConditionally:
+    """runner 侧缺数据不注入（检视意见）：user_id 为空 → source_metadata=None。
+
+    直写 {"user_id": req.user_id or ""} 会把空 user_id 键落进 session 的
+    source_metadata：core OtelRail 读出空 gen_ai.user.id，恢复已有 session
+    时还可能用空值覆盖上一轮播种的 user_id。AST 锁两个调用点的写法。
+    """
+
+    RUNNER_SITES = (
+        "agent-runtime/agent_runtime/runner/controller_runner.py",
+        "agent-runtime/agent_runtime/runner/react_agent_runner.py",
+    )
+
+    def test_runner_sites_pass_none_when_user_id_empty(self):
+        import ast
+        import os
+
+        for rel in self.RUNNER_SITES:
+            with open(os.path.join(_REPO_ROOT, rel), encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+            calls = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and getattr(node.func, "id", "") == "create_agent_session_with_trace"
+            ]
+            assert calls, rel
+            # 每个调用点的 source_metadata 都须是「真值条件 + 无空串兜底 +
+            # 空值传 None」的三元式
+            for call in calls:
+                kw = {k.arg: k.value for k in call.keywords}
+                sm = kw.get("source_metadata")
+                assert isinstance(sm, ast.IfExp), f"{rel}: 须条件注入而非恒构造"
+                assert (
+                    isinstance(sm.test, ast.Attribute) and sm.test.attr == "user_id"
+                ), f"{rel}: 条件即 req.user_id 真值"
+                body = sm.body
+                assert (
+                    isinstance(body, ast.Dict)
+                    and len(body.keys) == 1
+                    and body.keys[0].value == "user_id"
+                    and isinstance(body.values[0], ast.Attribute)
+                    and body.values[0].attr == "user_id"
+                ), f"{rel}: 真值分支直取 req.user_id，无 or-空串兜底"
+                assert (
+                    isinstance(sm.orelse, ast.Constant) and sm.orelse.value is None
+                ), f"{rel}: 空值分支传 None"

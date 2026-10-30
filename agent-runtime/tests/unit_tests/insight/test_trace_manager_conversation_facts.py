@@ -63,14 +63,21 @@ class _FakeTracer:
 
 
 class _FakeSession:
-    """Minimal stand-in exposing the openjiuwen Session fact surface."""
+    """Minimal stand-in exposing the openjiuwen Session fact surface.
+
+    取值面与 core Session 对齐：公开访问器 get_source_metadata 返回
+    副本（新 wave），私有名 _source_metadata 仅作旧 wave 兜底。
+    """
 
     def __init__(self, session_id="conv-8848", source_metadata=None):
         self._session_id = session_id
-        self._source_metadata = source_metadata
+        self._source_metadata = source_metadata or {}
 
     def get_session_id(self):
         return self._session_id
+
+    def get_source_metadata(self):
+        return dict(self._source_metadata)
 
 
 def _make_manager(**kwargs):
@@ -228,3 +235,56 @@ class TestGetConversationFacts:
     def test_factless_session_returns_none():
         """无 session_id 且无 user_id → None（调用方跳过注入）。"""
         assert get_conversation_facts(_FakeSession(session_id="")) is None
+
+    @staticmethod
+    def test_public_accessor_preferred_over_private_name():
+        """公开访问器优先（检视意见）：两处取值面不一致时以访问器为准。
+
+        回归成直读 _source_metadata 私有名时取到 from-private，断言即败。
+        """
+
+        class _AccessorSession(_FakeSession):
+            def get_source_metadata(self):
+                return {"user_id": "from-accessor"}
+
+        session = _AccessorSession(source_metadata={"user_id": "from-private"})
+
+        assert get_conversation_facts(session)["user_id"] == "from-accessor"
+
+    @staticmethod
+    def test_legacy_session_without_accessor_falls_back():
+        """旧 wave core Session 无公开访问器：私有名兜底仍能取到事实。
+
+        本地 .testenv 安装的 openjiuwen 即该形态（已验证：构造入参
+        source_metadata 落在 _source_metadata，无 get_source_metadata）。
+        """
+
+        class _LegacySession:
+            def __init__(self):
+                self._session_id = "conv-8848"
+                self._source_metadata = {"user_id": "u-legacy"}
+
+            def get_session_id(self):
+                return self._session_id
+
+        assert get_conversation_facts(_LegacySession())["user_id"] == "u-legacy"
+
+    @staticmethod
+    def test_real_core_session_contract():
+        """真实 openjiuwen Session 集成锁定（检视意见）：不依赖自建替身。
+
+        安装 wave 新旧皆可：新 wave 走 get_source_metadata 访问器，
+        旧 wave 走 _source_metadata 兜底，事实都必须取到。
+        """
+        try:
+            from openjiuwen.core.session.agent import create_agent_session
+        except ImportError:  # pragma: no cover - 环境缺 core 时跳过
+            pytest.skip("openjiuwen core session 不可用")
+        session = create_agent_session(
+            session_id="conv-real", card=None, source_metadata={"user_id": "u-real"}
+        )
+
+        assert get_conversation_facts(session) == {
+            "conversation_id": "conv-real",
+            "user_id": "u-real",
+        }
