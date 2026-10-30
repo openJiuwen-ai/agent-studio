@@ -45,9 +45,12 @@ import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1544,6 +1547,37 @@ class AgentImportServiceTest {
             assertEquals(1, rollback.size());
             assertEquals("model-1", rollback.get(0).getResourceId());
             assertNull(rollback.get(0).getAppVersion());
+        }
+    }
+
+    @Test
+    void getImportInfosShouldSkipBlankLines() {
+        ReflectionTestUtils.setField(agentImportService, "importMaxLen", 100);
+        String jsonl = "{\"resource_id\":\"agent-1\",\"resource_type\":\"AGENT\",\"resource_name\":\"a\",\"schema_version\":\"V2.0\"}\n"
+            + "\n"
+            + "{\"resource_id\":\"agent-2\",\"resource_type\":\"AGENT\",\"resource_name\":\"b\",\"schema_version\":\"V2.0\"}\n";
+        MockMultipartFile file = new MockMultipartFile("file", "v2-middle-blank.jsonl", "text/plain",
+            jsonl.getBytes(StandardCharsets.UTF_8));
+
+        List<ImportInfo> importInfos = invokeGetImportInfos(file);
+
+        assertEquals(2, importInfos.size());
+        assertEquals("agent-1", importInfos.get(0).getResourceId());
+        assertEquals("agent-2", importInfos.get(1).getResourceId());
+    }
+
+    /**
+     * 使用反射调用私有方法getImportInfos
+     */
+    @SuppressWarnings("unchecked")
+    private List<ImportInfo> invokeGetImportInfos(MultipartFile file) {
+        try {
+            Method method = AgentImportService.class.getDeclaredMethod("getImportInfos",
+                MultipartFile.class);
+            method.setAccessible(true);
+            return (List<ImportInfo>) method.invoke(agentImportService, file);
+        } catch (Exception e) {
+            throw new AgentStudioException("Failed to invoke getImportInfos: " + e.getMessage());
         }
     }
 
