@@ -236,6 +236,8 @@ class TestIdentityInheritance:
 
         llm_manager = TraceManager.generate_manager(root, {"class_name": "Model"})
         root.oj_agent_identity["agent_name"] = "mutated"
+        # 只读视图返回拷贝：改写不回写内部状态（检视意见）
+        assert root.oj_agent_identity["agent_name"] == "天气预测"
 
         await llm_manager.on_llm_start({"inputs": "hi"})
 

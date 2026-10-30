@@ -201,6 +201,8 @@ class TestConversationFactsInheritance:
 
         llm_manager = TraceManager.generate_manager(root, {"class_name": "Model"})
         root.oj_conversation_facts["conversation_id"] = "mutated"
+        # 只读视图返回拷贝：改写不回写内部状态（检视意见）
+        assert root.oj_conversation_facts["conversation_id"] == "conv-8848"
 
         await llm_manager.on_llm_start({"inputs": "hi"})
 
