@@ -354,3 +354,9 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+### Missing Tool Descriptions During Placeholder Prompt Optimization
+
+When optimizing a prompt with placeholders and configured tools, the meta-template refinement and placeholder-content refinement requests should both include the tool definitions inside `<tools_description>`. Greedy and beam-search optimization use the same refinement path. With no tools configured, this section should contain `None`.
+
+If the section still contains the unresolved `{{API_TOOLS_DESCRIPTION}}` marker, update to a version containing the placeholder refinement fix. Earlier versions discarded the result of the tool-description replacement in these two requests, even though the initial critique could already include tool information. The fix supplies the configured descriptions to each refinement request; model output quality still depends on the model and task.
