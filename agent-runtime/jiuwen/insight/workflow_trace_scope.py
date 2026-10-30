@@ -11,9 +11,10 @@ llm_chain）即可取到并派生自己的遥测 manager。ContextVar 不经过�
 序列化面，运行时上下文 / checkpoint / IR 均不受影响。
 """
 
+import inspect
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional
 
 if TYPE_CHECKING:
     from jiuwen.insight.manager import TraceManager
@@ -51,3 +52,44 @@ def workflow_trace_scope(trace_manager: Optional["TraceManager"]):
         yield trace_manager
     finally:
         _WORKFLOW_TRACE_MANAGER.reset(token)
+
+
+async def scoped_astream(
+    source: Callable[[], Any], trace_manager: Optional["TraceManager"]
+) -> AsyncIterator[Any]:
+    """把作用域绑定收敛到内层异步流步进期间的消费包装（检视意见）。
+
+    `with workflow_trace_scope(...)` 直接包住含 yield 的 async for 时，
+    生成器在 yield 处挂起而 with 块未退出，ContextVar 绑定会滞留在
+    消费方 Task 的上下文里——上层消费者在两次 yield 之间 create_task
+    的兄弟任务拷贝当前 context、继承该作用域，可能把不相关的 LLM
+    节点遥测错误归属到同一条 controller 链 span。本包装只在建立与
+    步进内层流期间绑定，向上 yield 前解绑，跨 yield 零残留；对内层
+    语义不变——内层执行体及期间创建的组件任务照常取到绑定。
+
+    Args:
+        source: 零参可调用，返回内层异步迭代器（返回值可 awaitable，
+            如 `lambda: workflow.astream(q, **kwargs)`；或直接返回
+            async generator 的调用）。
+        trace_manager: 同 workflow_trace_scope，None 容忍（照常透传）。
+    """
+    with workflow_trace_scope(trace_manager):
+        it = source()
+        if inspect.isawaitable(it):
+            it = await it
+    try:
+        while True:
+            with workflow_trace_scope(trace_manager):
+                try:
+                    item = await it.__anext__()
+                except StopAsyncIteration:
+                    return
+            yield item
+    finally:
+        aclose = getattr(it, "aclose", None)
+        if aclose is not None:
+            with workflow_trace_scope(trace_manager):
+                try:
+                    await aclose()
+                except Exception:
+                    pass

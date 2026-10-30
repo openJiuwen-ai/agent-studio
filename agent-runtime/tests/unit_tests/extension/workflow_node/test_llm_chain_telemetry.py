@@ -381,6 +381,22 @@ class TestUsagePayloadSemantics:
         assert result == {}
 
     @staticmethod
+    def test_total_only_usage_produces_token_keys():
+        """仅上报 total_tokens 的模型实现：total 计入判活与输出（检视意见）。
+
+        input/output 全零而 total 在场时若判活漏计 total，会把真实用量
+        判成缺数据返回空载荷，gen_ai.usage 整体丢失——与 planner 侧
+        build_usage_metadata 同口径。
+        """
+        result = llm_chain_module._build_workflow_usage_payload(
+            UsageMetadata(total_tokens=30, model_name="total-only-impl"), None
+        )
+        assert result["total_tokens"] == 30
+        assert result["input_tokens"] == 0
+        assert result["output_tokens"] == 0
+        assert result["model_name"] == "total-only-impl"
+
+    @staticmethod
     def test_usage_with_cache_and_reasoning_tokens():
         usage = UsageMetadata(
             input_tokens=10,
