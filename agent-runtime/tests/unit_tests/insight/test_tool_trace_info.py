@@ -39,6 +39,22 @@ def _call_names(method, attr):
     ]
 
 
+def _kwargs_pop_calls(method, key):
+    """method 内对 `kwargs.pop("<key>", ...)` 形态的调用列表。"""
+    return [
+        node
+        for node in ast.walk(method)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "pop"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "kwargs"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == key
+    ]
+
+
 class TestExtractToolTraceInfo:
     @staticmethod
     def test_pops_and_str_coerces():
@@ -148,6 +164,58 @@ class TestPluginTracerWiring:
                 for node in ast.walk(helper)
             )
             assert merged, f"{rel_path}::instance_info 不再合并工具标识"
+
+    def test_tracer_helper_takes_trace_handlers_param(self):
+        """helper 形参化接收 trace_handlers，不再从自身副本 kwargs 里 pop（检视意见）。
+
+        `kwargs.pop("trace_handlers", None)` 写在 helper 内只作用于
+        **kwargs 形参副本，调用方 kwargs 仍带不可序列化的 TraceManager。
+        """
+        for rel_path, cls, _ in self.TRACER_HELPER_SITES:
+            helper = _method_of(_load_tree(rel_path), cls, "_create_tracer_manager")
+            assert helper is not None, f"{cls}._create_tracer_manager 缺失"
+            params = [arg.arg for arg in helper.args.args]
+            assert "trace_handlers" in params, (
+                f"{rel_path}::_create_tracer_manager 未形参化接收 trace_handlers"
+            )
+            assert not _kwargs_pop_calls(helper, "trace_handlers"), (
+                f"{rel_path}::_create_tracer_manager 仍在副本 kwargs 内 pop "
+                "trace_handlers（形同虚设，调用方不受影响）"
+            )
+            gen_calls = _call_names(helper, "generate_manager")
+            assert gen_calls and gen_calls[0].args, (
+                f"{rel_path}::generate_manager 未接收 handlers"
+            )
+            first = gen_calls[0].args[0]
+            assert isinstance(first, ast.Name) and first.id == "trace_handlers", (
+                f"{rel_path}::generate_manager 首参应为 trace_handlers 形参"
+            )
+
+    def test_tracer_caller_pops_trace_handlers(self):
+        """trace_handlers 须在调用方作用域摘出并显式传 helper（检视意见）。
+
+        不可序列化的 TraceManager 留在 kwargs 会随 `invoke(**kwargs)` /
+        `create(**kwargs)` 泄入 JIUWEN_RUNTIME_KWARGS、工具运行时入参
+        与发往第三方接口的请求参数。
+        """
+        for rel_path, cls, methods in self.TRACER_HELPER_SITES:
+            tree = _load_tree(rel_path)
+            for method_name in methods:
+                method = _method_of(tree, cls, method_name)
+                assert method is not None, f"{cls}.{method_name} 缺失"
+                pops = _kwargs_pop_calls(method, "trace_handlers")
+                helper_calls = _call_names(method, "_create_tracer_manager")
+                assert pops and helper_calls, (
+                    f"{cls}.{method_name} 缺少调用方作用域的 trace_handlers "
+                    "弹出 / helper 调用"
+                )
+                assert pops[0].lineno < helper_calls[0].lineno, (
+                    f"{cls}.{method_name} 的 trace_handlers 弹出须先于 helper 调用"
+                )
+                kw_names = {kw.arg for kw in helper_calls[0].keywords if kw.arg}
+                assert "trace_handlers" in kw_names, (
+                    f"{cls}.{method_name} 未把 trace_handlers 显式传入 helper"
+                )
 
     def test_tracer_caller_pops_before_helper(self):
         """弹出必须发生在调用方作用域、且先于 helper 调用（检视意见）。

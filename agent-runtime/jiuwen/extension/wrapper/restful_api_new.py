@@ -351,9 +351,13 @@ class RestfulApiToolNew(Tool):
         """
         inputs = self._merge_input_parameters(inputs)
         # 弹出须发生在调用方作用域（helper **kwargs 形参是副本），否则
-        # 遥测键随 create(**kwargs) 泄入发往第三方接口的请求参数
+        # 遥测键与 trace_handlers（不可序列化的 TraceManager）随
+        # create(**kwargs) 泄入发往第三方接口的请求参数
         tool_trace_info = extract_tool_trace_info(kwargs)
-        trace_manager = self._create_tracer_manager(tool_trace_info, **kwargs)
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        trace_manager = self._create_tracer_manager(
+            tool_trace_info, trace_handlers=trace_handlers, **kwargs
+        )
         try:
             await trace_manager.on_plugin_start(inputs)
             request_params = self._request_params_creator.create(
@@ -392,9 +396,13 @@ class RestfulApiToolNew(Tool):
         """
         inputs = self._merge_input_parameters(inputs)
         # 弹出须发生在调用方作用域（helper **kwargs 形参是副本），否则
-        # 遥测键随 create(**kwargs) 泄入发往第三方接口的请求参数
+        # 遥测键与 trace_handlers（不可序列化的 TraceManager）随
+        # create(**kwargs) 泄入发往第三方接口的请求参数
         tool_trace_info = extract_tool_trace_info(kwargs)
-        trace_manager = self._create_tracer_manager(tool_trace_info, **kwargs)
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        trace_manager = self._create_tracer_manager(
+            tool_trace_info, trace_handlers=trace_handlers, **kwargs
+        )
         try:
             await trace_manager.on_plugin_start(inputs)
             request_params = self._request_params_creator.create(inputs, **kwargs)
@@ -458,16 +466,18 @@ class RestfulApiToolNew(Tool):
             request["headers"] = request_params.headers
         return request
 
-    def _create_tracer_manager(self, tool_trace_info=None, **kwargs) -> TraceManager:
+    def _create_tracer_manager(
+        self, tool_trace_info=None, trace_handlers=None, **kwargs
+    ) -> TraceManager:
         """创建追踪管理器"""
         instance_info = get_instance_info(self, blacklist=["auth", "headers"])
-        # 工具标识由调用方从自身 kwargs 摘出后传入，入扁平键供 core
-        # handler 盖 gen_ai.tool.call.id / gen_ai.tool.type
+        # 工具标识与 handlers 均由调用方从自身 kwargs 摘出后显式传入：
+        # 工具标识入扁平键供 core handler 盖 gen_ai.tool.call.id /
+        # gen_ai.tool.type；handlers 形参化后不再从副本 kwargs 里 pop
+        # （副本内 pop 不影响调用方，形参化后调用方无从漏传）
         if tool_trace_info:
             instance_info.update(tool_trace_info)
-        return TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None), instance_info
-        )
+        return TraceManager.generate_manager(trace_handlers, instance_info)
 
     def _create_error_invoke_response(self, error: Exception) -> dict:
         """生成 invoke error response"""
