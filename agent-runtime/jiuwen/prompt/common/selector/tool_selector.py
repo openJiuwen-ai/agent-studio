@@ -40,7 +40,7 @@ class ToolSelector(BaseModel):
 
     def select(self, query: str, tools: List[Dict], **kwargs) -> List[Dict]:
         """select tools"""
-        if not isinstance(tools, List):
+        if not isinstance(tools, list):
             raise ValueError(
                 f"selector: content type is unstructured, content should be list[str] or str; "
                 f"but got {type(tools)}"
@@ -103,7 +103,7 @@ class ToolSelector(BaseModel):
         except Exception as error:
             raise ValueError("selector perform error.") from error
 
-        if not isinstance(tools, List):
+        if not isinstance(tools, list):
             raise ValueError("selector perform error: answer_list is not list")
 
         return tools
