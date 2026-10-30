@@ -571,13 +571,19 @@ class FlowMcp(WorkflowComponent):
     def _create_error_response(self, error: Exception) -> JiuWenBaseException:
         """创建错误响应"""
         if isinstance(error, ExceptionGroup):
-            error_type = "ExceptionGroup"
+            # ExceptionGroup 的 str() 不含子异常信息，需逐个展开
+            detail = "ExceptionGroup({})".format(
+                "; ".join(
+                    f"{type(sub_error).__name__}: {sub_error}"
+                    for sub_error in error.exceptions
+                )
+            )
         else:
-            error_type = "Exception"
+            detail = f"{type(error).__name__}: {error}"
         return JiuWenBaseException(
             error_code=StatusCode.WORKFLOW_MCP_EXECUTE_ERROR.code,
             message=StatusCode.WORKFLOW_MCP_EXECUTE_ERROR.errmsg.format(
-                error=error_type
+                error=detail
             ),
         )
 
