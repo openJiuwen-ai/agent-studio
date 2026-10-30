@@ -1752,9 +1752,12 @@ class WorkflowHandler(BaseHandler):
 
         self._prepare_workflow_kwargs(inputs_dict, kwargs)
         # OTel 双写：react 任务的 runtime_data（含 trace_handlers）随 kwargs
-        # 透传到此，绑定工作流执行作用域供 LLM 节点遥测派生；kwargs 本身
-        # 原样继续传给 astream，无则不产出（行为不变）
-        with workflow_trace_scope(kwargs.get("trace_handlers")):
+        # 透传到此，绑定工作流执行作用域供 LLM 节点遥测派生。该对象须先
+        # 摘出再绑定（与插件侧 kwargs.pop 同一约定）：TraceManager 持有
+        # tracer/span 表/insight 队列，不可序列化，随 **kwargs 流入
+        # astream 会污染执行入参、遇 checkpoint 落库直接报错
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        with workflow_trace_scope(trace_handlers):
             try:
                 res_generator = await workflow.astream(query, **kwargs)
                 async for func_res in res_generator:
