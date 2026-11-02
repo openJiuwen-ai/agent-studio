@@ -101,6 +101,11 @@ class AdditionalQuestionsService:
             ctx.resource_id, ctx.resource_type,
             request.version_id if ctx.resource_type == "agent" else "",
         )
+        if ir_data is None:
+            raise JiuWenBaseException(
+                error_code=StatusCode.IR_DATA_JSON_LOAD_FAILED.code,
+                message=StatusCode.IR_DATA_JSON_LOAD_FAILED.errmsg,
+            )
         user_prompt = request.prompt or ""
         if ctx.resource_type == "agent" and not user_prompt.strip():
             configs = ir_data.get("configs") or {}
@@ -116,7 +121,7 @@ class AdditionalQuestionsService:
 
         # 6. 获取模型配置
         model_config = await self._resolve_model_config(
-            ctx.resource_type, ctx.resource_id, headers, ir_data=ir_data,
+            ctx.resource_type, ctx.resource_id, ir_data,
         )
 
         # 7. 调用模型（最多重试 MODEL_CALLS 次）
@@ -171,12 +176,9 @@ class AdditionalQuestionsService:
         return []
 
     async def _resolve_model_config(
-        self, resource_type: str, resource_id: str, headers: dict,
-        ir_data: dict | None = None,
+        self, resource_type: str, resource_id: str, ir_data: dict,
     ) -> AdditionalQuestionsModelConfig:
-        """从 OBS 读取 IR，提取模型配置。"""
-        if ir_data is None:
-            ir_data = await self._load_ir(resource_id, resource_type)
+        """从已加载的 IR 提取模型配置。"""
         config_key = IR_CONFIG_KEY_MAP.get(resource_type)
         if not config_key:
             raise ValueError(f"Unsupported resource_type: {resource_type}")

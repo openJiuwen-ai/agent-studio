@@ -654,8 +654,7 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
                 }
             }
         }
-        with patch.object(service, "_load_ir", return_value=ir_data):
-            config = await service._resolve_model_config("agent", "agent-1", {})
+        config = await service._resolve_model_config("agent", "agent-1", ir_data)
         assert config.model_service_id == "service-uuid"
         assert config.auth_id == "auth-uuid"
 
@@ -669,8 +668,7 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
                 }
             }
         }
-        with patch.object(service, "_load_ir", return_value=ir_data):
-            config = await service._resolve_model_config("workflow", "wf-1", {})
+        config = await service._resolve_model_config("workflow", "wf-1", ir_data)
         assert config.model_service_id == "service-uuid"
         assert config.auth_id == "auth-uuid"
 
@@ -716,6 +714,30 @@ class TestAdditionalQuestionsIRLoader:
             service.model_invoker, "invoke", return_value='["next question"]',
         ):
             yield service
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("prompt", [None, "", " \t\n", "request rules"])
+    @pytest.mark.parametrize("version_id", ["", "v1"])
+    @pytest.mark.parametrize("ir_path", ["", "custom/agent.json"])
+    async def test_missing_ir_fails_without_loading_draft(self, service, prompt, version_id, ir_path):
+        ctx = AdditionalQuestionsContext("agent", "agent-1", "proj-1", "conv-1", "ws-1")
+        request = AdditionalQuestionsRequest(name="test", prompt=prompt, version_id=version_id)
+        draft_ir = {"configs": {"modelConfig": {"modelName": "draft-model"}}}
+        with patch(
+            "agent_runtime.context.request_context._request_ctx",
+        ) as request_ctx, patch(
+            "agent_runtime.additional_questions.service.async_ir_load",
+            new_callable=AsyncMock, side_effect=[None, draft_ir],
+        ) as load_ir:
+            request_ctx.get.return_value.headers = {"x-ir-path": ir_path}
+            with pytest.raises(JiuWenBaseException) as exc_info:
+                await service.generate(ctx, request, {})
+
+        version_suffix = f"_{version_id}" if version_id else ""
+        expected_path = ir_path or f"agent/ir/agent-1/agent-1{version_suffix}.json"
+        load_ir.assert_awaited_once_with(expected_path)
+        service.model_invoker.invoke.assert_not_awaited()
+        assert exc_info.value.error_code == StatusCode.IR_DATA_JSON_LOAD_FAILED.code
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
