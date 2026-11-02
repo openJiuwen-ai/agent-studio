@@ -18,6 +18,19 @@ from openjiuwen.core.session.stream.base import (
 )
 
 
+_CHUNK_TYPE_MAP: dict[str, str] = {
+    "jiuwen.plugin": "Api",
+    "FlowCustomApi": "Api",
+}
+
+
+def _normalize_component_display_type(raw_type: str) -> str:
+    """自定义插件组件类型（custom.*）与 IR 插件类型统一归一为 manager 可识别的 Api。"""
+    if raw_type and raw_type.startswith("custom."):
+        return "Api"
+    return _CHUNK_TYPE_MAP.get(raw_type, raw_type)
+
+
 class StreamDataWrapper:
     """封装 workflow.stream 产生的单个 chunk，转换为统一的 StreamData 格式
 
@@ -535,7 +548,9 @@ class StreamDataWrapper:
             "agentId": "",
             "componentId": payload.get("componentId", ""),
             "componentName": payload.get("componentName", ""),
-            "componentType": payload.get("componentType", ""),
+            "componentType": _normalize_component_display_type(
+                payload.get("componentType", ""),
+            ),
             "agentParentInvokeId": "",
             "inputs": payload.get("inputs"),
             "outputs": effective_outputs,
