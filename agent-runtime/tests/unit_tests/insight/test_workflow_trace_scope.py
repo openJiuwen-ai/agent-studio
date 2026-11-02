@@ -18,22 +18,26 @@ from jiuwen.insight.workflow_trace_scope import (
 
 
 class TestWorkflowTraceScope:
-    def test_default_is_none(self):
+    @staticmethod
+    def test_default_is_none():
         assert current_workflow_trace_manager() is None
 
-    def test_bound_inside_and_restored_after_exit(self):
+    @staticmethod
+    def test_bound_inside_and_restored_after_exit():
         sentinel = object()
         with workflow_trace_scope(sentinel) as bound:
             assert bound is sentinel
             assert current_workflow_trace_manager() is sentinel
         assert current_workflow_trace_manager() is None
 
-    def test_none_is_noop(self):
+    @staticmethod
+    def test_none_is_noop():
         with workflow_trace_scope(None) as bound:
             assert bound is None
             assert current_workflow_trace_manager() is None
 
-    def test_nested_scope_restores_outer(self):
+    @staticmethod
+    def test_nested_scope_restores_outer():
         outer, inner = object(), object()
         with workflow_trace_scope(outer):
             with workflow_trace_scope(inner):
@@ -41,7 +45,8 @@ class TestWorkflowTraceScope:
             assert current_workflow_trace_manager() is outer
         assert current_workflow_trace_manager() is None
 
-    def test_exception_path_still_resets(self):
+    @staticmethod
+    def test_exception_path_still_resets():
         sentinel = object()
         with pytest.raises(RuntimeError):
             with workflow_trace_scope(sentinel):
@@ -52,7 +57,8 @@ class TestWorkflowTraceScope:
     @pytest.mark.asyncio
     async def test_asyncio_task_inherits_binding(self):
         """engine 为组件执行创建的 asyncio 任务在创建时拷贝当前
-        context——这是 LLM 节点协程内能取到作用域绑定的机制基础。"""
+        context——这是 LLM 节点协程内能取到作用域绑定的机制基础。
+        """
 
         async def _read():
             return current_workflow_trace_manager()
@@ -72,7 +78,8 @@ class TestScopedAstream:
     async def test_inner_bound_sibling_tasks_between_yields_clean(self):
         """with 直接包住含 yield 的 async for 会让绑定滞留在消费方 Task
         上下文——两次 yield 之间 create_task 的兄弟任务继承该作用域、
-        错误归属遥测。scoped_astream 只在步进内层期间绑定。"""
+        错误归属遥测。scoped_astream 只在步进内层期间绑定。
+        """
 
         async def _read():
             return current_workflow_trace_manager()

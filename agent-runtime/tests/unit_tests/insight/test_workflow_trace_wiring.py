@@ -105,12 +105,13 @@ class TestTaskCreationSites:
         tree = _load_tree(
             "jiuwen/controller/task_planner/planners/controller_planner.py"
         )
-        calls = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and getattr(node.func, "attr", None) == "create_global_intent_task"
-        ]
+        calls = []
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "attr", None) == "create_global_intent_task"
+            ):
+                calls.append(node)
         assert calls, "controller_planner 须透传 message 的 trace_handlers"
         for call in calls:
             assert len(call.args) == 3
@@ -157,13 +158,15 @@ class TestWorkflowHandlerScopeBinding:
     @staticmethod
     def _scoped_astream_calls(method):
         """method 内 scoped_astream(...) 调用列表。"""
-        return [
-            node
-            for node in ast.walk(method)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "scoped_astream"
-        ]
+        calls = []
+        for node in ast.walk(method):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "scoped_astream"
+            ):
+                calls.append(node)
+        return calls
 
     @staticmethod
     def _lambda_calls_attr(call, attr):
@@ -212,7 +215,8 @@ class TestWorkflowHandlerScopeBinding:
             self._lambda_calls_attr(c, "astream") for c in calls
         ), "scoped_astream 须包住 workflow.astream 内层流"
 
-    def test_no_bare_with_scope_around_yield_loops(self):
+    @staticmethod
+    def test_no_bare_with_scope_around_yield_loops():
         """旧形态（with workflow_trace_scope 包住含 yield 的循环）不得回潮。"""
         tree = _load_tree(
             "jiuwen/controller/task_executor/handler/workflow_handler.py"
