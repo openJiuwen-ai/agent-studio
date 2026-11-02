@@ -41,18 +41,20 @@ def _call_names(method, attr):
 
 def _kwargs_pop_calls(method, key):
     """method 内对 `kwargs.pop("<key>", ...)` 形态的调用列表。"""
-    return [
-        node
-        for node in ast.walk(method)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "pop"
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "kwargs"
-        and node.args
-        and isinstance(node.args[0], ast.Constant)
-        and node.args[0].value == key
-    ]
+    calls = []
+    for node in ast.walk(method):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "pop"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "kwargs"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == key
+        ):
+            calls.append(node)
+    return calls
 
 
 class TestExtractToolTraceInfo:
@@ -125,13 +127,15 @@ class TestPluginTracerWiring:
     @staticmethod
     def _extract_calls(method):
         """method 内 extract_tool_trace_info 调用列表。"""
-        return [
-            node
-            for node in ast.walk(method)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "extract_tool_trace_info"
-        ]
+        calls = []
+        for node in ast.walk(method):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "extract_tool_trace_info"
+            ):
+                calls.append(node)
+        return calls
 
     @staticmethod
     def _assert_extract_call(method, where):
@@ -230,14 +234,15 @@ class TestPluginTracerWiring:
             for method_name in methods:
                 method = _method_of(tree, cls, method_name)
                 assert method is not None, f"{cls}.{method_name} 缺失"
-                extracts = [
-                    call
-                    for call in self._extract_calls(method)
-                    # 直传本方法 kwargs 字典（Name），而非 **kwargs 展开（Starred）
-                    if call.args
-                    and isinstance(call.args[0], ast.Name)
-                    and call.args[0].id == "kwargs"
-                ]
+                # 直传本方法 kwargs 字典（Name），而非 **kwargs 展开（Starred）
+                extracts = []
+                for call in self._extract_calls(method):
+                    if (
+                        call.args
+                        and isinstance(call.args[0], ast.Name)
+                        and call.args[0].id == "kwargs"
+                    ):
+                        extracts.append(call)
                 helper_calls = _call_names(method, "_create_tracer_manager")
                 assert extracts and helper_calls, (
                     f"{cls}.{method_name} 缺少调用方作用域的 extract / helper 调用"
@@ -271,21 +276,32 @@ class TestPluginTracerWiring:
                 merges += 1
         assert merges == 2, f"mcpapi.py 应有 2 处合并点，实际 {merges}"
 
-    def test_mcp_runtime_kwargs_excludes_tool_facts(self):
+    @staticmethod
+    def test_mcp_runtime_kwargs_excludes_tool_facts():
         """遥测键不得泄入 MCP 工具运行时入参（JIUWEN_RUNTIME_KWARGS）。"""
         tree = _load_tree("jiuwen/extension/wrapper/mcp_tool_wrapper.py")
         excluded = set()
+        excluded_refs = 0
         for node in ast.walk(tree):
-            # 找 `k not in (...)` 形态的排除元组，收集其字符串常量
+            # 排除键收敛为模块常量 JIUWEN_INTERNAL_KWARGS（frozenset），
+            # 推导式只经 `k not in JIUWEN_INTERNAL_KWARGS` 单行引用
+            if (
+                isinstance(node, ast.Assign)
+                and getattr(node.targets[0], "id", None) == "JIUWEN_INTERNAL_KWARGS"
+            ):
+                for elt in ast.walk(node.value):
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        excluded.add(elt.value)
             if (
                 isinstance(node, ast.Compare)
                 and isinstance(node.ops[0], ast.NotIn)
-                and isinstance(node.comparators[0], ast.Tuple)
+                and getattr(node.comparators[0], "id", None)
+                == "JIUWEN_INTERNAL_KWARGS"
             ):
-                excluded.update(
-                    elt.value
-                    for elt in node.comparators[0].elts
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                )
-        assert "tool_call_id" in excluded, "JIUWEN_RUNTIME_KWARGS 未排除 tool_call_id"
-        assert "tool_type" in excluded, "JIUWEN_RUNTIME_KWARGS 未排除 tool_type"
+                excluded_refs += 1
+        assert {"tool_call_id", "tool_type"} <= excluded, (
+            "JIUWEN_INTERNAL_KWARGS 未排除 tool_call_id / tool_type"
+        )
+        assert excluded_refs, (
+            "运行时入参推导式未引用 JIUWEN_INTERNAL_KWARGS 排除内部键"
+        )

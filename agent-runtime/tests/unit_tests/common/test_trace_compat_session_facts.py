@@ -7,6 +7,7 @@ openjiuwen create_agent_session 无该参数且无 **kwargs 兜底时摘出不�
 支持时原样透传，供 core OtelRail / 双写桥取 openjiuwen.gen_ai.user.id。
 """
 
+import ast
 import os
 import sys
 
@@ -87,18 +88,17 @@ class TestRunnerSeedsUserIdConditionally:
     )
 
     def test_runner_sites_pass_none_when_user_id_empty(self):
-        import ast
-        import os
-
         for rel in self.RUNNER_SITES:
             with open(os.path.join(_REPO_ROOT, rel), encoding="utf-8") as fh:
                 tree = ast.parse(fh.read())
-            calls = [
-                node
-                for node in ast.walk(tree)
-                if isinstance(node, ast.Call)
-                and getattr(node.func, "id", "") == "create_agent_session_with_trace"
-            ]
+            calls = []
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and getattr(node.func, "id", "")
+                    == "create_agent_session_with_trace"
+                ):
+                    calls.append(node)
             assert calls, rel
             # 每个调用点的 source_metadata 都须是「真值条件 + 无空串兜底 +
             # 空值传 None」的三元式

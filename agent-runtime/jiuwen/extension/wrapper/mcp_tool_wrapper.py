@@ -25,6 +25,16 @@ from openjiuwen.core.foundation.tool import MCPTool
 
 JIUWEN_RUNTIME_KWARGS = "_jiuwen_runtime_kwargs"
 
+# 运行时入参里须剔除的执行控制键：这些是调用链内部约定，不是模型入参
+JIUWEN_INTERNAL_KWARGS = frozenset(
+    (
+        "skip_none_value",
+        "skip_inputs_validate",
+        "tool_call_id",
+        "tool_type",
+    )
+)
+
 
 def flatten_exception_group(eg) -> list:
     """将所有嵌套异常展开为平面列表"""
@@ -145,15 +155,7 @@ class McpToolWrapper:
             await trace_manager.on_plugin_start(inputs)
 
             jiuwen_kwargs = {
-                k: v
-                for k, v in kwargs.items()
-                if k
-                not in (
-                    "skip_none_value",
-                    "skip_inputs_validate",
-                    "tool_call_id",
-                    "tool_type",
-                )
+                k: v for k, v in kwargs.items() if k not in JIUWEN_INTERNAL_KWARGS
             }
             if jiuwen_kwargs:
                 inputs = dict(inputs)
