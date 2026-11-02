@@ -2,6 +2,7 @@ import asyncio
 import base64
 import io
 import json
+import logging
 import math
 import os
 import ssl
@@ -11,6 +12,8 @@ from urllib.parse import urlparse
 
 from jiuwen.common.utils.utils import illegal_url
 from jiuwen.extension.wrapper.plugin_base import PluginBase
+
+logger = logging.getLogger(__name__)
 
 
 class SSRFSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -115,6 +118,9 @@ class FlowDrawBox(PluginBase):
             # verify_ssl 显式布尔校验：仅 bool 值生效，非 bool（如 "false"/null）回退默认 True
             raw_verify_ssl = inputs.get("verify_ssl", True)
             verify_ssl = raw_verify_ssl if isinstance(raw_verify_ssl, bool) else True
+            if not verify_ssl:
+                # 关闭证书校验仅用于测试/内网自签场景：降级需可审计（日志 + 返回值标注）
+                logger.warning("draw_boxes: HTTP(S) certificate verification disabled by verify_ssl=false")
             image_bytes = self._resolve_image_bytes(image_input, verify_ssl)
             with Image.open(io.BytesIO(image_bytes)) as img:
                 width, height = img.size
@@ -238,13 +244,17 @@ class FlowDrawBox(PluginBase):
         image.save(buf, format="PNG")
         image_base64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
-        return {
+        return_result = {
             "success": True,
             "annotation_count": drawn,
             "image_size": {"width": width, "height": height},
             "image_base64": image_base64,
             "message": f"Successfully drew {drawn} annotations",
         }
+        if "verify_ssl" in inputs:
+            # 降级审计：标注本次 HTTPS 证书校验是否被关闭
+            return_result["verify_ssl_disabled"] = not verify_ssl
+        return return_result
 
     @staticmethod
     def clamp(value, lo, hi):

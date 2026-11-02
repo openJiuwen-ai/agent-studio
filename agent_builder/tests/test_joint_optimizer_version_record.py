@@ -72,6 +72,23 @@ class TestRefineExamplesVersionRecord:
         assert result.success_rate == 0.9
         assert result.optimized_prompt == "base instruction"
 
+    def test_refine_examples_equal_score_not_dropped(self):
+        """C4: acc_tmp == acc_base（同分但示例/模板不同）不丢弃，登记为合法候选版本"""
+        optimizer = self._make()
+        optimizer.acc_base = 0.8
+        optimizer.select_best_examples = MagicMock(return_value=[{"b": 2}])
+        optimizer.generate_best_examples = MagicMock(return_value=[])
+        setattr(optimizer, "_prepare_example_strings", MagicMock(return_value="example"))
+        setattr(optimizer, "_prepare_examples", MagicMock(return_value=["example"]))
+        optimizer.prompt_combine = MagicMock(return_value="full prompt v2")
+        optimizer.eval = MagicMock(return_value=(0.8, [], []))
+
+        result = getattr(optimizer, "_refine_examples")({})
+
+        assert result is not None
+        assert result.filled_prompt == "full prompt v2"
+        assert result.success_rate == 0.8
+
 
 class TestSaveStateDedupe:
     """修改点 2：history 入库去重兜底"""

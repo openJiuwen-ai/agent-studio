@@ -151,6 +151,26 @@ class TestFlowStreamTransformOverallInput:
         assert _answer_of(session) == '{"content": {"a": 1}}'
 
     @pytest.mark.asyncio
+    async def test_invoke_pure_placeholder_str_with_whole_value_raises(self):
+        """纯占位符字符串模板（{{raw_output}}）+ 数组/数字整体输入：渲染非 dict 仍抛 ValueError。
+        C3 复核确认：纯占位符整体值应用「JSON 对象模板」（{"raw_output":"{{raw_output}}"}），
+        字符串模板+整体值属边缘用法，维持严格渲染检查。"""
+        for raw in ([1, 2, 3], 10):
+            comp = _make_comp(
+                {
+                    "variables": [{"name": "raw_output", "src_path": "raw_output", "concat": False}],
+                    "frame_template": "{{raw_output}}",
+                    "add_is_last": False,
+                }
+            )
+            session = _make_mock_session()
+            with pytest.raises(Exception) as exc_info:
+                await comp.invoke(
+                    {ST_USER_FIELDS: {"raw_output": raw}}, session, _make_mock_context()
+                )
+            assert "frame_template must render to a dict" in str(exc_info.value)
+
+    @pytest.mark.asyncio
     async def test_invoke_number_inputs_rendered_like_str(self):
         """数字/布尔（int/float/bool）与 str 同步兜底：不再报错，数字/布尔作为整体帧输出"""
         cases = [

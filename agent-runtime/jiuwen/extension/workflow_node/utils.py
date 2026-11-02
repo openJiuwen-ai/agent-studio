@@ -459,12 +459,7 @@ class AsyncDictStreamTransformer:
         if self._cfg.prune_none_fields:
             out = _prune_none_fields(out)
         if not isinstance(out, dict):
-            # 纯占位符字符串模板（如 {{raw_output}}）引用数组/数字等整体值时，
-            # 渲染可能得到非 dict 结果；包装为单变量帧，由 _is_pure_placeholder 路径解包输出
-            if isinstance(self._cfg.frame_template, str) and len(self._cfg.variables) == 1:
-                out = {self._cfg.variables[0].name: out}
-            else:
-                raise ValueError("frame_template must render to a dict")
+            raise ValueError("frame_template must render to a dict")
         if self._cfg.add_is_last:
             out[self._cfg.is_last_field] = False
         return out

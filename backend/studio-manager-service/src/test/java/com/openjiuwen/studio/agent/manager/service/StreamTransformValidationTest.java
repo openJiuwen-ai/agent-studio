@@ -154,6 +154,18 @@ class StreamTransformValidationTest {
     }
 
     @Test
+    void placeholders_withEmptySchemaObject_shouldPass() {
+        // C8：上游输出对象 schema 为空列表（isEmpty）与 null 同等对待，无法确认路径时放行不误报
+        addUpstreamNodeWithSchema(new ArrayList<>());
+        WorkflowValidationService.Node node =
+            streamTransformNode("{\"content\":\"{{raw_output.data}}\"}", null);
+
+        List<WorkflowValidationVOErrors> errors = validate(node);
+
+        assertFalse(hasRefError(errors), "空 schema 无法确认时应放行");
+    }
+
+    @Test
     void placeholders_withWholeInputReference_shouldPass() {
         addUpstreamNodeWithSchema(schemaOf("data", "string"));
         WorkflowValidationService.Node node = streamTransformNode("{\"content\":\"{{raw_output}}\"}", null);

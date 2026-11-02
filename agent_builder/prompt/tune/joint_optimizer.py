@@ -1120,7 +1120,7 @@ class JointOptimizer:
         if acc_tmp is None:
             return None
 
-        if acc_tmp > self.acc_base:
+        if acc_tmp >= self.acc_base:
             self.sampled_incorrect_data = sampled_incorrect_data
             self.acc_base = acc_tmp
             self.params.examples = examples_tmp or []

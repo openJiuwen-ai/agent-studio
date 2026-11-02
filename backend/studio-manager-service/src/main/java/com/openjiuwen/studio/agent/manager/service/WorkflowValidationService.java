@@ -1557,12 +1557,6 @@ public class WorkflowValidationService {
         }
         String expected = expectedType.toLowerCase(Locale.ROOT);
         String actual = actualType.toLowerCase(Locale.ROOT);
-        // string 期望兼容 array/object 系：JSON 字符串可承载数组/对象序列化（如 draw-box coordinates 引用上游数组输出）
-        if (Strings.CS.equals(expected, TypeEnum.STRING.toString())
-            && (actual.startsWith(TypeEnum.ARRAY.toString())
-                || Strings.CS.equals(actual, TypeEnum.OBJECT.toString()))) {
-            return true;
-        }
         return getCompatibleRefTypes(expected).contains(actual);
     }
 
@@ -2708,7 +2702,8 @@ public class WorkflowValidationService {
             return true;
         }
         List<WorkflowFieldVO> currentLevel = schemaAsFieldList(field.getSchema());
-        if (currentLevel == null) {
+        // schema 为 null 或空（未声明子字段）时无法确认路径，放行避免误报
+        if (currentLevel == null || currentLevel.isEmpty()) {
             return true;
         }
         String[] segments = subPath.split("\\.");

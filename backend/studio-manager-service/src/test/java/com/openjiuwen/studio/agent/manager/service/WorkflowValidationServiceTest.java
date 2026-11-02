@@ -498,8 +498,9 @@ class WorkflowValidationServiceTest {
     }
 
     @Test
-    void validateRefTypeMatch_stringExpectedArrayActual_shouldPass() {
-        // 意见5：string 期望（如 draw-box coordinates）可兼容引用上游 array 输出（JSON 字符串可承载数组）
+    void validateRefTypeMatch_stringExpectedArrayActual_shouldReport() {
+        // C2 复核确认：string 入参引用 array 上游属真实类型不匹配（上游直传 list 非 JSON 字符串），
+        // 保持严格匹配避免把可拦截的类型不匹配放行到运行时
         WorkflowFieldVO startData = new WorkflowFieldVO();
         startData.setName("data");
         startData.setType("array");
@@ -533,7 +534,7 @@ class WorkflowValidationServiceTest {
         java.util.Set<WorkflowValidationVOErrors> errors = new java.util.HashSet<>();
         ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
             errors);
-        assertTrue(errors.isEmpty(), "string 入参兼容 array 上游（coordinates 引用数组）不应报类型不一致");
+        assertFalse(errors.isEmpty(), "string 入参引用 array 上游应报类型不一致（保持严格匹配）");
     }
 
     @Test

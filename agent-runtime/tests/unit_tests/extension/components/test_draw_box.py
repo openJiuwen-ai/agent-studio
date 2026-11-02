@@ -454,6 +454,21 @@ async def test_draw_boxes_missing_annotations():
 
 
 @pytest.mark.asyncio
+async def test_draw_boxes_verify_ssl_disabled_marker():
+    """C5/C7: verify_ssl=false 时返回结果标注 verify_ssl_disabled=true（降级可审计）"""
+    plugin = FlowDrawBox()
+    image_b64 = _make_test_image_base64()
+    result = await plugin.invoke({
+        "operation": "draw_boxes",
+        "image": image_b64,
+        "annotations": "",
+        "verify_ssl": False,
+    })
+    assert result["output"]["success"] is True
+    assert result["output"].get("verify_ssl_disabled") is True
+
+
+@pytest.mark.asyncio
 async def test_draw_boxes_empty_string_annotations():
     """draw_boxes: annotations 为空字符串 → 视为空标注，仅绘制图像(success=True)。"""
     plugin = FlowDrawBox()
