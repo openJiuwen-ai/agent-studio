@@ -93,7 +93,11 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         trace.instance_id 在工作流入口由 app_run.py 从路径 workflow_id 赋值，
         即使 workflow_start 帧丢失也能稳定兜底。
         """
-        return data.get("workflow_id") or (trace.workflow_id if trace else None) or (trace.instance_id if trace else None)
+        return (
+            data.get("workflow_id")
+            or (trace.workflow_id if trace else None)
+            or (trace.instance_id if trace else None)
+        )
 
     @staticmethod
     def _resolve_workflow_name(data: Dict[str, Any], trace: Trace) -> str:
