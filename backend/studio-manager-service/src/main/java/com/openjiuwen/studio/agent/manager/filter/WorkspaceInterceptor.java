@@ -4,6 +4,7 @@
 
 package com.openjiuwen.studio.agent.manager.filter;
 
+import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
@@ -121,6 +122,13 @@ public class WorkspaceInterceptor implements HandlerInterceptor {
         }
 
         ThreadLocalUtils.setWorkspaceName(workspaceEntity.getName());
+
+        // 系统用户免校验：跳过成员校验和角色权限校验
+        Object systemUserSkip = request.getAttribute(Constants.SYSTEM_USER_SKIP_ATTR);
+        if (Boolean.TRUE.equals(systemUserSkip)) {
+            log.info("System user skip workspace permission check, workspaceId={}", workspaceId);
+            return true;
+        }
 
         // 空间用户校验
         WorkSpaceMemberEntity workSpaceMemberEntity = workSpaceMemberMapper.selectByMemberIdAndWorkspaceId(

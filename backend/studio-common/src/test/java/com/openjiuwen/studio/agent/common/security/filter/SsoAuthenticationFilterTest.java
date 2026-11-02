@@ -6,10 +6,12 @@ package com.openjiuwen.studio.agent.common.security.filter;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.security.properties.AuthProperties;
 import com.openjiuwen.studio.agent.common.security.service.SsoAuthenticationService;
@@ -328,5 +330,96 @@ public class SsoAuthenticationFilterTest {
 
         verify(ssoAuthenticationService).authenticate("valid-token");
         verify(filterChain).doFilter(request, response);
+    }
+
+    // 场景：系统用户ID匹配时，设置免校验标记
+    @Test
+    void doFilter_systemUserMatch_shouldSetSkipAttribute() throws Exception {
+        authProperties.getSystemUser().setIds("111");
+        setExcludedPaths(Collections.emptyList());
+
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("111").userName("sysUser").domainId("domain1").projectId("proj1").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(request).setAttribute(eq(Constants.SYSTEM_USER_SKIP_ATTR), eq(Boolean.TRUE));
+    }
+
+    // 场景：系统用户ID不匹配时，不设置免校验标记
+    @Test
+    void doFilter_systemUserNotMatch_shouldNotSetSkipAttribute() throws Exception {
+        authProperties.getSystemUser().setIds("111");
+        setExcludedPaths(Collections.emptyList());
+
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("222").userName("normalUser").domainId("domain1").projectId("proj1").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(request, never()).setAttribute(eq(Constants.SYSTEM_USER_SKIP_ATTR), any());
+    }
+
+    // 场景：系统用户配置为空时，不设置免校验标记
+    @Test
+    void doFilter_emptySystemUserIds_shouldNotSetSkipAttribute() throws Exception {
+        authProperties.getSystemUser().setIds("");
+        setExcludedPaths(Collections.emptyList());
+
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("111").userName("sysUser").domainId("domain1").projectId("proj1").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(request, never()).setAttribute(eq(Constants.SYSTEM_USER_SKIP_ATTR), any());
+    }
+
+    // 场景：多个系统用户ID，逗号分隔，匹配其中之一
+    @Test
+    void doFilter_multipleSystemUserIds_shouldMatchOne() throws Exception {
+        authProperties.getSystemUser().setIds("111,112,113");
+        setExcludedPaths(Collections.emptyList());
+
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("112").userName("sysUser2").domainId("domain1").projectId("proj1").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(request).setAttribute(eq(Constants.SYSTEM_USER_SKIP_ATTR), eq(Boolean.TRUE));
+    }
+
+    // 场景：SSO 响应缺 userId 回退为 "unknown"，运维误配 auth_system_user_ids=unknown 时不触发免校验
+    // 防止所有有效 SSO Token 但缺 userId 的请求被误判为系统用户形成越权
+    @Test
+    void doFilter_reservedUserIdEvenIfMisconfigured_shouldNotSetSkipAttribute() throws Exception {
+        authProperties.getSystemUser().setIds("unknown");
+        setExcludedPaths(Collections.emptyList());
+
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("unknown").userName("unknown").domainId("0").projectId("0").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(request, never()).setAttribute(eq(Constants.SYSTEM_USER_SKIP_ATTR), any());
     }
 }
