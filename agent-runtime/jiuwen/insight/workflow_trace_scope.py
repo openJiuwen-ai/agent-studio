@@ -12,12 +12,15 @@ llm_chain）即可取到并派生自己的遥测 manager。ContextVar 不经过�
 """
 
 import inspect
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional
 
 if TYPE_CHECKING:
     from jiuwen.insight.manager import TraceManager
+
+logger = logging.getLogger(__name__)
 
 # default=None：独立工作流（无 agent 链）或任务未携带 trace_handlers 时，
 # current_workflow_trace_manager() 返回 None，消费方跳过遥测，行为不变
@@ -91,5 +94,8 @@ async def scoped_astream(
             with workflow_trace_scope(trace_manager):
                 try:
                     await aclose()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # 关闭内层流失败不应破坏向上传播的收尾路径，但要留痕
+                    logger.warning(
+                        "scoped_astream close inner stream failed, skip: %s", e
+                    )

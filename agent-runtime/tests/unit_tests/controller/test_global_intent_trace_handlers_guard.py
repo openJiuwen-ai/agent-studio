@@ -1,4 +1,5 @@
 # -*- coding: UTF-8 -*-
+# pylint: disable=protected-access  # 单元测试需直接验证 _get_handle_global_intent_workflow 的防御取出行为（公共入口在意图检测 try 深处，桩面过大）
 """create_global_intent_task_by_interrupt_message 的 runtime_data 防御单测。
 
 覆盖检视意见（197604081）：中断消息 runtime_data 为 None / 非 dict / 缺失时，

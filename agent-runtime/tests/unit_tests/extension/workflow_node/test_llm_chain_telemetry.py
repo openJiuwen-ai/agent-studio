@@ -52,14 +52,34 @@ class _FakeTracer:
 class _FakeSession:
     """stream() 读取面的最小会话替身。"""
 
-    def get_component_id(self):
+    @staticmethod
+    def get_component_id():
         return "llm_node_1"
 
-    async def write_custom_stream(self, schema):
+    @staticmethod
+    async def write_custom_stream(schema):
         pass
 
-    async def trace(self, data=None, **kwargs):
+    @staticmethod
+    async def trace(data=None, **kwargs):
         pass
+
+
+class _BoomStream:
+    """首步即抛错的异步迭代器（错误路径替身）。
+
+    替代 `async def _boom_stream` 内 `raise` 后跟不可达 `yield` 的写法
+    （那个 yield 仅为把函数变成异步生成器，属死代码）。
+    """
+
+    def __init__(self, boom):
+        self._boom = boom
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise self._boom
 
 
 def _make_conf(thinking_type=None, response_type="text"):
@@ -420,8 +440,7 @@ class TestUsagePayloadSemantics:
 
     @staticmethod
     def test_request_start_iso_accepts_both_dialects():
-        """起始时间戳双拼写：core（request_start_time，无 s）与 studio
-        模型包装层（requests_start_time，带 s）任一存在即取，缺失为空。"""
+        """TTFT 起始戳双拼写兼容：request_start_time（core，无 s）与 requests_start_time（studio 包装层，带 s）任一存在即取，缺失为空。"""
         from types import SimpleNamespace
 
         ts = "2026-10-28T10:00:00"
@@ -529,10 +548,12 @@ class TestTelemetryIsolation:
         """
 
         class _LegacyBoomHandler:
-            def on_llm_start(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_start(*args, **kwargs):
                 return None
 
-            def on_llm_end(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_end(*args, **kwargs):
                 raise RuntimeError("legacy insight handler 故障")
 
         tracer = _FakeTracer()
@@ -564,10 +585,12 @@ class TestTelemetryIsolation:
         """
 
         class _LegacyBoomHandler:
-            def on_llm_start(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_start(*args, **kwargs):
                 return None
 
-            def on_llm_end(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_end(*args, **kwargs):
                 raise RuntimeError("legacy insight handler 故障")
 
         tracer = _FakeTracer()
@@ -602,10 +625,12 @@ class TestTelemetryIsolation:
         )
 
         class _LegacyBoomHandler:
-            def on_llm_start(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_start(*args, **kwargs):
                 return None
 
-            def on_llm_error(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_error(*args, **kwargs):
                 raise RuntimeError("legacy insight handler 故障")
 
         tracer = _FakeTracer()
@@ -615,12 +640,8 @@ class TestTelemetryIsolation:
         )
         boom = RuntimeError("模型接入URL无效")
 
-        async def _boom_stream(**kwargs):
-            raise boom
-            yield  # pragma: no cover - 使其成为异步生成器
-
         llm = MagicMock()
-        llm.stream = MagicMock(return_value=_boom_stream())
+        llm.stream = MagicMock(return_value=_BoomStream(boom))
         chain = _make_chain(llm, _make_conf())
 
         gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
@@ -645,10 +666,12 @@ class TestTelemetryIsolation:
         """
 
         class _LegacyCancelHandler:
-            def on_llm_start(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_start(*args, **kwargs):
                 return None
 
-            def on_llm_end(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_end(*args, **kwargs):
                 raise asyncio.CancelledError()
 
         tracer = _FakeTracer()
@@ -683,10 +706,12 @@ class TestTelemetryIsolation:
         )
 
         class _LegacyCancelHandler:
-            def on_llm_start(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_start(*args, **kwargs):
                 return None
 
-            def on_llm_error(self, *args, **kwargs):
+            @staticmethod
+            def on_llm_error(*args, **kwargs):
                 raise asyncio.CancelledError()
 
         tracer = _FakeTracer()
@@ -696,12 +721,8 @@ class TestTelemetryIsolation:
         )
         boom = RuntimeError("模型接入URL无效")
 
-        async def _boom_stream(**kwargs):
-            raise boom
-            yield  # pragma: no cover - 使其成为异步生成器
-
         llm = MagicMock()
-        llm.stream = MagicMock(return_value=_boom_stream())
+        llm.stream = MagicMock(return_value=_BoomStream(boom))
         chain = _make_chain(llm, _make_conf())
 
         gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
