@@ -1245,8 +1245,7 @@ def test_fetch_url_verify_ssl_false_uses_unverified_context():
 
 
 def test_fetch_url_verify_ssl_false_http_initial_injects_unverified():
-    """意见7: verify_ssl=false 且初始 URL 为 http → 仍注入 unverified HTTPSHandler，
-    http→https 重定向时同样不过校验证书（不再误报 UntrustedCertError）。"""
+    """意见7: verify_ssl=false 且 http 初始 URL 也注入 unverified HTTPSHandler（重定向生效）。"""
     import ssl
     import urllib.request
     fake_resp = mock.MagicMock()
