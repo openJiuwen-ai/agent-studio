@@ -353,14 +353,10 @@ class LLMChain(WorkflowComponent):
         language_model_inputs = self._get_model_input(inputs=inputs_data)
 
         # OTel 双写：工作流链路下从作用域派生节点遥测（独立工作流无
-        # 作用域则跳过，行为不变）。guard 保证发射只告警不抛——遥测异常
-        # 不得把已成功的调用改判为节点失败
-        oj_manager = self._oj_telemetry_manager(language_model_inputs)
-        oj_telemetry = (
-            _OjTelemetryGuard(oj_manager) if oj_manager is not None else None
-        )
-        if oj_telemetry is not None:
-            await oj_telemetry.on_llm_start(language_model_inputs)
+        # 作用域则跳过，行为不变）。派生与起始发射的故障隔离统一在
+        # _oj_start_telemetry 内——遥测异常不得把已成功的调用改判为
+        # 节点失败
+        oj_telemetry = await self._oj_start_telemetry(language_model_inputs)
 
         try:
             llm_output = await self._llm.invoke(messages=language_model_inputs)
@@ -452,6 +448,40 @@ class LLMChain(WorkflowComponent):
             instance_info["message_count"] = len(messages)
         return TraceManager.generate_manager(scope, instance_info)
 
+    async def _oj_start_telemetry(self, messages) -> Optional[_OjTelemetryGuard]:
+        """派生节点遥测 manager 并发起始事件；遥测侧故障只降级不抛。
+
+        派生与起始发射原先落在业务 try 之外（检视意见第十轮）：畸形
+        作用域对象会让 generate_manager 抛 AttributeError，直接中断
+        本应成功的调用；取消类 BaseException 穿透 _emit（仅捕
+        Exception），起始 span 就此悬挂。统一兜底——Exception 降级
+        返回 None（后续发射全部跳过），BaseException 先兜底收尾再
+        重抛，不吞取消语义。
+        """
+        guard = None
+        try:
+            manager = self._oj_telemetry_manager(messages)
+            if manager is None:
+                return None
+            guard = _OjTelemetryGuard(manager)
+            await guard.on_llm_start(messages)
+            return guard
+        except Exception as e:
+            workflow_logger.warning(
+                f"workflow llm telemetry start degrade, skip: {e}"
+            )
+            return None
+        except BaseException as e:
+            if guard is not None:
+                try:
+                    await guard.close_span()
+                except Exception as e2:
+                    workflow_logger.warning(
+                        f"workflow llm telemetry start close on "
+                        f"{type(e).__name__} failed, skip: {e2}"
+                    )
+            raise
+
     @staticmethod
     def _oj_end_payload(usage, ttft_ms: Optional[float], finish_reason) -> dict:
         """构造 on_llm_end 载荷（handler 约定键名；缺数据为空 dict）。
@@ -532,15 +562,11 @@ class LLMChain(WorkflowComponent):
             await self._inject_retrieved_memory(language_model_inputs, inputs_data)
 
             # OTel 双写：工作流链路下从作用域派生节点遥测（JSON 模式经
-            # invoke 自带插桩，不在此重复）。guard 见 invoke 侧注释；子
-            # 生成器流末的 on_llm_end 经 guard 标记收尾，提前关闭
-            # （GeneratorExit / 取消 / 上层 break）由 finally 补发收尾
-            oj_manager = self._oj_telemetry_manager(language_model_inputs)
-            oj_telemetry = (
-                _OjTelemetryGuard(oj_manager) if oj_manager is not None else None
-            )
-            if oj_telemetry is not None:
-                await oj_telemetry.on_llm_start(language_model_inputs)
+            # invoke 自带插桩，不在此重复）。派生与起始发射的故障隔离
+            # 统一在 _oj_start_telemetry 内；子生成器流末的 on_llm_end
+            # 经 guard 标记收尾，提前关闭（GeneratorExit / 取消 / 上层
+            # break）由 finally 补发收尾
+            oj_telemetry = await self._oj_start_telemetry(language_model_inputs)
 
             try:
                 outputs_list = self._get_outputs_list_from_conf()

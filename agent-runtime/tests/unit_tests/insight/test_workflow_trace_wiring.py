@@ -233,6 +233,38 @@ class TestWorkflowHandlerScopeBinding:
                     "须经 scoped_astream 收敛绑定（检视意见）"
                 )
 
+    @staticmethod
+    def test_stream_handlers_arg_is_defensive_local():
+        """scoped_astream 第二参须为防御取出的局部变量（检视意见第十轮）。
+
+        `(task.input_data.get("runtime_data") or {}).get("trace_handlers")`
+        的 or-{} 只兜 None：runtime_data 为其它真值非 dict 时 .get 抛
+        AttributeError 阻断工作流执行——与 planner / rule_module 同口径
+        改防御局部变量后，以本契约禁回潮。
+        """
+        method = _method_of(
+            _load_tree(
+                "jiuwen/controller/task_executor/handler/workflow_handler.py"
+            ),
+            "WorkflowHandler",
+            "_stream_execute_workflow",
+        )
+        assert method is not None, "WorkflowHandler._stream_execute_workflow 缺失"
+        calls = []
+        for node in ast.walk(method):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "scoped_astream"
+            ):
+                calls.append(node)
+        assert calls, "_stream_execute_workflow 须经 scoped_astream 消费"
+        second = calls[0].args[1]
+        assert isinstance(second, ast.Name), (
+            "trace_handlers 须为防御取出的局部变量名，"
+            "禁 `(x.get(...) or {}).get(...)` 回潮"
+        )
+
 
 class TestLLMChainInstrumentation:
     """llm_chain 的作用域取用与三条路径的发射接线。"""
@@ -275,5 +307,20 @@ class TestLLMChainInstrumentation:
         tree = _load_tree("jiuwen/extension/workflow_node/llm_chain.py")
         method = _method_of(tree, "LLMChain", "invoke")
         assert method is not None
-        for event in ("on_llm_start", "on_llm_end", "on_llm_error"):
+        # on_llm_start 的派生与发射收在 _oj_start_telemetry（检视意见
+        # 第十轮：派生点原先在业务 try 之外，畸形 handlers / 取消穿透
+        # 会中断调用或悬挂起始 span），契约改锁 invoke / stream 两入口
+        # 均经统一入口（流式 helper 经 oj_telemetry 形参接收）
+        for path in ("invoke", "stream"):
+            m = _method_of(tree, "LLMChain", path)
+            assert m is not None
+            assert _calls_with_attr(m, "_oj_start_telemetry"), (
+                f"{path} 须经 _oj_start_telemetry 派生并发起起始事件"
+            )
+        for event in ("on_llm_end", "on_llm_error"):
             assert _calls_with_attr(method, event), f"invoke 须发射 {event}"
+        starter = _method_of(tree, "LLMChain", "_oj_start_telemetry")
+        assert starter is not None
+        assert _calls_with_attr(starter, "on_llm_start"), (
+            "_oj_start_telemetry 须发射 on_llm_start"
+        )

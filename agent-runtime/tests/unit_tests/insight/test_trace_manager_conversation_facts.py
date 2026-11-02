@@ -9,6 +9,7 @@ identity — are inherited by derived / child / member-root managers whenever
 absent (one conversation spans the whole run, so backfill is correct).
 """
 
+import inspect
 import uuid
 
 import pytest
@@ -282,6 +283,14 @@ class TestGetConversationFacts:
             from openjiuwen.core.session.agent import create_agent_session
         except ImportError:  # pragma: no cover - 环境缺 core 时跳过
             pytest.skip("openjiuwen core session 不可用")
+        # 形参探测（检视意见第十轮）：旧 wave core 既无 source_metadata
+        # 形参也无 **kwargs 兜底时直接调用会 TypeError——这正是
+        # trace_compat 兼容层降级处置（摘出不传）的场景，契约测试跳过，
+        # 降级路径由 test_trace_compat_session_facts 覆盖
+        if "source_metadata" not in inspect.signature(
+            create_agent_session
+        ).parameters:
+            pytest.skip("openjiuwen create_agent_session 无 source_metadata 形参")
         session = create_agent_session(
             session_id="conv-real", card=None, source_metadata={"user_id": "u-real"}
         )

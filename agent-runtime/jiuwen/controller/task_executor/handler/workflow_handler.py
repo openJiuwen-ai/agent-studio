@@ -973,6 +973,15 @@ class WorkflowHandler(BaseHandler):
             # 消费：作用域只在步进内层流期间绑定——直接 with 包住含 yield
             # 的 async for 会让绑定滞留在两次 yield 之间的消费方 Task 上下
             # 文，兄弟任务 create_task 继承后错误归属遥测（检视意见）
+            # 遥测数据按“可能缺失/非 dict”防御取出（同 planner /
+            # rule_module 口径）：runtime_data 异常时 trace_handlers 取
+            # None，不阻断工作流执行（检视意见第十轮）
+            runtime_data = task.input_data.get("runtime_data")
+            trace_handlers = (
+                runtime_data.get("trace_handlers")
+                if isinstance(runtime_data, dict)
+                else None
+            )
             async for exec_res in scoped_astream(
                 lambda: self._stream_handle_workflow_execute(
                     workflow_input,
@@ -982,7 +991,7 @@ class WorkflowHandler(BaseHandler):
                     current_node,
                     from_pe=from_pe,
                 ),
-                (task.input_data.get("runtime_data") or {}).get("trace_handlers"),
+                trace_handlers,
             ):
                 yield exec_res
 

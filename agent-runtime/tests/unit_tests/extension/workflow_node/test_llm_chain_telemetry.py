@@ -759,3 +759,68 @@ class TestTelemetryIsolation:
         end = _events_by_name(tracer, "on_llm_end")
         assert len(end) == 1  # finally 补发的收尾，恰好一次
         assert end[0]["outputs"] is None
+
+    @pytest.mark.asyncio
+    async def test_malformed_scope_degrades_telemetry_not_business(self):
+        """作用域对象畸形（generate_manager 抛 AttributeError）：遥测整体
+        降级跳过，本应成功的调用不受影响（检视意见第十轮——派生点原先
+        在业务 try 之外，畸形 handlers 会直接中断调用）。"""
+
+        class _NotAManager:
+            """真值、非 list、无 trace_handlers 属性——命中 _generate_manager
+            的非 list/TraceManager 分支后 AttributeError。"""
+
+        tracer = _FakeTracer()
+        llm = MagicMock()
+        llm.invoke = AsyncMock(
+            return_value=AssistantMessage(content="答案", finish_reason="stop")
+        )
+        chain = _make_chain(llm, _make_conf())
+
+        with workflow_trace_scope(_NotAManager()):
+            result = await chain.invoke(
+                {"userFields": {"query": "你好"}}, _FakeSession(), None
+            )
+
+        assert result["userFields"]["raw_output"] == "答案"  # 业务照常
+        assert not _events_by_name(tracer, "on_llm_start")  # 遥测降级跳过
+        assert not _events_by_name(tracer, "on_llm_end")
+
+    @pytest.mark.asyncio
+    async def test_cancel_during_start_emission_closes_span_then_reraises(
+        self, monkeypatch
+    ):
+        """起始发射被取消（CancelledError）：兜底收尾起始 span 后重抛。
+
+        修复前派生与 on_llm_start 在业务 try 之外、_emit 只捕 Exception，
+        取消穿透后起始 span 悬挂且无 finally 可依赖（检视意见第十轮）。
+        夹具在 OTEL span 已创建之后再取消（manager.on_llm_start 为
+        legacy 先行、双写随后——legacy 阶段取消则 span 根本未建，不构成
+        悬挂场景）；patch 打在类级：节点 manager 是从作用域派生的新实例，
+        实例级替换不会被继承。
+        """
+        tracer = _FakeTracer()
+        scope = TraceManager(
+            trace_handlers=[],
+            openjiuwen_tracer=tracer,
+        )
+        orig_start = TraceManager._oj_on_start
+
+        async def _start_then_cancel(self_inner, *args, **kwargs):
+            await orig_start(self_inner, *args, **kwargs)  # OTEL span 先建
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(TraceManager, "_oj_on_start", _start_then_cancel)
+        llm = MagicMock()
+        llm.invoke = AsyncMock(return_value=AssistantMessage(content="答案"))
+        chain = _make_chain(llm, _make_conf())
+
+        with workflow_trace_scope(scope):
+            with pytest.raises(asyncio.CancelledError):
+                await chain.invoke(
+                    {"userFields": {"query": "你好"}}, _FakeSession(), None
+                )
+
+        # 取消前的起始事件在场；起始 span 兜底收尾恰好一次
+        assert len(_events_by_name(tracer, "on_llm_start")) == 1
+        assert len(_events_by_name(tracer, "on_llm_end")) == 1
