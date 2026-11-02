@@ -401,15 +401,10 @@ export class PromptOptimizeTaskDetailComponent {
 
     this.originPrompt = task.pt_text;
 
-    const iterationInfoList0 = task.iteration_results.iteration_info_list.slice(1);
-    // 兜底：仅折叠「候选文本与评分完全相同」的相邻版本（与后端 history 去重语义一致；
-    // 修复前存量任务可能登记了重复版本；文本相同但评分更高的合法版本保留，供 bestPrompt 挑选）
-    const iterationInfoList = iterationInfoList0.filter(
-      (promptInfo, index) =>
-        index === 0 ||
-        promptInfo.optimized_prompt !== iterationInfoList0[index - 1].optimized_prompt ||
-        promptInfo.success_rate !== iterationInfoList0[index - 1].success_rate,
-    );
+    // 不去重折叠：后端 save_state 已按 filled_prompt+success_rate 精确去重（issue#1585 修复），
+    // 前端无 filled_prompt 字段，任何基于 optimized_prompt/success_rate 的折叠都可能误删
+    // 「指令与评分相同但示例（filled_prompt）不同」的合法版本，故原样展示全部迭代结果
+    const iterationInfoList = task.iteration_results.iteration_info_list.slice(1);
     this.originAcc = task.iteration_results?.iteration_info_list[0]?.success_rate;
 
     if (iterationInfoList.length > 0) {

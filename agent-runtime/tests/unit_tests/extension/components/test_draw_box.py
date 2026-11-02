@@ -1244,6 +1244,28 @@ def test_fetch_url_verify_ssl_false_uses_unverified_context():
     assert ctx.verify_mode == ssl.CERT_NONE
 
 
+def test_fetch_url_verify_ssl_false_http_initial_injects_unverified():
+    """意见7: verify_ssl=false 且初始 URL 为 http → 仍注入 unverified HTTPSHandler，
+    http→https 重定向时同样不过校验证书（不再误报 UntrustedCertError）。"""
+    import ssl
+    import urllib.request
+    fake_resp = mock.MagicMock()
+    fake_resp.__enter__.return_value = fake_resp
+    fake_resp.read.side_effect = [b"x", b""]
+    fake_opener = mock.MagicMock()
+    fake_opener.open.return_value = fake_resp
+    with mock.patch.object(_module, "illegal_url", return_value=False), \
+         mock.patch("urllib.request.build_opener", return_value=fake_opener) as build_opener:
+        data = FlowDrawBox.fetch_url("http://example.com/img.png", verify_ssl=False)
+    assert data == b"x"
+    https_handlers = [h for h in build_opener.call_args.args
+                      if isinstance(h, urllib.request.HTTPSHandler)]
+    assert len(https_handlers) == 1
+    ctx = getattr(https_handlers[0], "_context", None) or getattr(https_handlers[0], "context", None)
+    assert ctx is not None
+    assert ctx.verify_mode == ssl.CERT_NONE
+
+
 def test_fetch_url_cert_error_raises_untrusted_error():
     """问题1: 证书校验失败 → 抛 _UntrustedCertError（与图片 404 区分）。"""
     import ssl

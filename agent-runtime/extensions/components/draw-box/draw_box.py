@@ -317,8 +317,9 @@ class FlowDrawBox(PluginBase):
         if parsed.scheme not in ("http", "https"):
             raise ValueError(f"Only http/https URLs are allowed, got scheme: {parsed.scheme}")
         handlers = [SSRFSafeRedirectHandler]
-        if parsed.scheme == "https" and not verify_ssl:
-            # 关闭证书校验仅用于测试/内网自签证书场景，验证逻辑仍走同一 SSRF 防护链。
+        if not verify_ssl:
+            # 关闭证书校验（http/https 初始 URL 均注入，重定向到自签 https 时同样生效），
+            # 仅用于测试/内网自签证书场景，验证逻辑仍走同一 SSRF 防护链。
             # 使用公开 API 构造不校验对端的上下文（避免依赖受保护的 _create_unverified_context）
             unverified_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             unverified_context.check_hostname = False

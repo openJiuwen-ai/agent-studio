@@ -1557,6 +1557,12 @@ public class WorkflowValidationService {
         }
         String expected = expectedType.toLowerCase(Locale.ROOT);
         String actual = actualType.toLowerCase(Locale.ROOT);
+        // string 期望兼容 array/object 系：JSON 字符串可承载数组/对象序列化（如 draw-box coordinates 引用上游数组输出）
+        if (Strings.CS.equals(expected, TypeEnum.STRING.toString())
+            && (actual.startsWith(TypeEnum.ARRAY.toString())
+                || Strings.CS.equals(actual, TypeEnum.OBJECT.toString()))) {
+            return true;
+        }
         return getCompatibleRefTypes(expected).contains(actual);
     }
 

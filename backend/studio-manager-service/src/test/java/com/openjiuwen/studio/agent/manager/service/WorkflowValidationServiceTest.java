@@ -498,6 +498,45 @@ class WorkflowValidationServiceTest {
     }
 
     @Test
+    void validateRefTypeMatch_stringExpectedArrayActual_shouldPass() {
+        // 意见5：string 期望（如 draw-box coordinates）可兼容引用上游 array 输出（JSON 字符串可承载数组）
+        WorkflowFieldVO startData = new WorkflowFieldVO();
+        startData.setName("data");
+        startData.setType("array");
+
+        WorkflowNodeVO startInfo = new WorkflowNodeVO();
+        startInfo.setId("node_start");
+        startInfo.setType("Start");
+        startInfo.setOutputs(List.of(startData));
+
+        WorkflowFieldVO pluginInput = new WorkflowFieldVO();
+        pluginInput.setName("coordinates");
+        pluginInput.setType("string");
+
+        WorkflowNodeVO pluginInfo = new WorkflowNodeVO();
+        pluginInfo.setId("node_plugin");
+        pluginInfo.setType("Plugin");
+        pluginInfo.setInputs(List.of(pluginInput));
+
+        WorkflowValidationService.Node startNode = new WorkflowValidationService.Node(startInfo);
+        WorkflowValidationService.Node pluginNode = new WorkflowValidationService.Node(pluginInfo);
+
+        Map<String, WorkflowValidationService.Node> nodeMap = new HashMap<>();
+        nodeMap.put("node_start", startNode);
+        nodeMap.put("node_plugin", pluginNode);
+
+        Map<String, String> refMap = new HashMap<>();
+        refMap.put("ref_node_id", "node_start");
+        refMap.put("ref_var_name", "data");
+        refMap.put("source", "system");
+
+        java.util.Set<WorkflowValidationVOErrors> errors = new java.util.HashSet<>();
+        ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
+            errors);
+        assertTrue(errors.isEmpty(), "string 入参兼容 array 上游（coordinates 引用数组）不应报类型不一致");
+    }
+
+    @Test
     void resolveOutputFieldByRefPath_nestedObject_shouldResolveLeafType() {
         WorkflowFieldVO userId = new WorkflowFieldVO();
         userId.setName("user_id");
