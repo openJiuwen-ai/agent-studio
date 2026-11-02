@@ -706,6 +706,17 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
 
 class TestAdditionalQuestionsIRLoader:
 
+    @pytest.fixture
+    def service(self):
+        service = AdditionalQuestionsService()
+        history = [{"content": "question"}, {"content": "answer"}]
+        with patch.object(
+            service.conversation_reader, "get_history", return_value=history,
+        ), patch.object(
+            service.model_invoker, "invoke", return_value='["next question"]',
+        ):
+            yield service
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "version_id, expected_path",
@@ -714,30 +725,37 @@ class TestAdditionalQuestionsIRLoader:
             ("v1", "agent/ir/agent-1/agent-1_v1.json"),
         ],
     )
-    async def test_loads_agent_configuration_for_requested_version(self, version_id, expected_path):
-        with patch(
-            "agent_runtime.context.request_context._request_ctx",
-        ) as request_ctx, patch(
-            "agent_runtime.additional_questions.service.async_ir_load",
-            new_callable=AsyncMock, return_value={"configs": {}},
-        ) as load_ir:
-            request_ctx.get.return_value = None
-            result = await AdditionalQuestionsService._load_ir("agent-1", "agent", version_id)
-
-        assert result == {"configs": {}}
-        load_ir.assert_awaited_once_with(expected_path)
-
-    @pytest.mark.asyncio
-    async def test_explicit_ir_path_takes_precedence(self):
+    async def test_loads_agent_configuration_for_requested_version(self, service, version_id, expected_path):
+        ctx = AdditionalQuestionsContext("agent", "agent-1", "proj-1", "conv-1", "ws-1")
+        request = AdditionalQuestionsRequest(name="test", version_id=version_id)
         with patch(
             "agent_runtime.context.request_context._request_ctx",
         ) as request_ctx, patch(
             "agent_runtime.additional_questions.service.async_ir_load",
             new_callable=AsyncMock,
+            return_value={"configs": {"modelConfig": {"modelName": "ms-id"}}},
+        ) as load_ir:
+            request_ctx.get.return_value = None
+            result = await service.generate(ctx, request, {})
+
+        assert result.questions == ["next question"]
+        load_ir.assert_awaited_once_with(expected_path)
+
+    @pytest.mark.asyncio
+    async def test_explicit_ir_path_takes_precedence(self, service):
+        ctx = AdditionalQuestionsContext("agent", "agent-1", "proj-1", "conv-1", "ws-1")
+        request = AdditionalQuestionsRequest(name="test", version_id="v1")
+        with patch(
+            "agent_runtime.context.request_context._request_ctx",
+        ) as request_ctx, patch(
+            "agent_runtime.additional_questions.service.async_ir_load",
+            new_callable=AsyncMock,
+            return_value={"configs": {"modelConfig": {"modelName": "ms-id"}}},
         ) as load_ir:
             request_ctx.get.return_value.headers = {"x-ir-path": "custom/agent.json"}
-            await AdditionalQuestionsService._load_ir("agent-1", "agent", "v1")
+            result = await service.generate(ctx, request, {})
 
+        assert result.questions == ["next question"]
         load_ir.assert_awaited_once_with("custom/agent.json")
 
 
