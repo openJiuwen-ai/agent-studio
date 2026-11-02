@@ -43,16 +43,19 @@ def _kwargs_pop_calls(method, key):
     """method 内对 `kwargs.pop("<key>", ...)` 形态的调用列表。"""
     calls = []
     for node in ast.walk(method):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "pop"
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "kwargs"
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and node.args[0].value == key
-        ):
+        func = getattr(node, "func", None)
+        if not isinstance(node, ast.Call) or not isinstance(func, ast.Attribute):
+            continue
+        target = getattr(func, "value", None)
+        if func.attr != "pop":
+            continue
+        if not isinstance(target, ast.Name) or target.id != "kwargs":
+            continue
+        # 到这里必为 `kwargs.pop(...)`，再看首参是否目标键
+        if not node.args:
+            continue
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and first.value == key:
             calls.append(node)
     return calls
 
