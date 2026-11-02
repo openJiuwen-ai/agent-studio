@@ -5,6 +5,7 @@ Joint optimizer
 """
 
 import copy
+import math
 import random
 import re
 import threading
@@ -928,8 +929,10 @@ class JointOptimizer:
                 duplicated = any(
                     _get_history_field(item, "filled_prompt")
                     == history_record.filled_prompt
-                    and _get_history_field(item, "success_rate")
-                    == history_record.success_rate
+                    and math.isclose(
+                        _get_history_field(item, "success_rate") or 0,
+                        history_record.success_rate or 0,
+                    )
                     for item in progress_info["history"]
                 )
                 if not duplicated:

@@ -1254,7 +1254,7 @@ def test_fetch_url_cert_error_raises_untrusted_error():
         ssl.SSLCertVerificationError("certificate verify failed: self-signed"))
     with mock.patch.object(_module, "illegal_url", return_value=False), mock.patch(
         "urllib.request.build_opener", return_value=fake_opener
-    ), pytest.raises(_module._UntrustedCertError) as exc:
+    ), pytest.raises(_module.UntrustedCertError) as exc:
         FlowDrawBox.fetch_url("https://self-signed.example/img.png")
     assert "verify_ssl" in str(exc.value)
 
@@ -1264,7 +1264,7 @@ async def test_draw_boxes_untrusted_cert_returns_400_not_404():
     """问题1: draw_boxes 自签证书 URL → error_code=400（而非 404 图像加载失败）。"""
     plugin = FlowDrawBox()
     with mock.patch.object(FlowDrawBox, "fetch_url",
-                           side_effect=_module._UntrustedCertError(
+                           side_effect=_module.UntrustedCertError(
                                "SSL certificate verification failed: x. "
                                "Use http/base64 image input, or set verify_ssl=false")):
         result = await plugin.invoke({
@@ -1301,7 +1301,7 @@ async def test_find_overlaps_string_2d_coordinates():
 def test_list_plugin_fonts_missing_dir_returns_empty(tmp_path, monkeypatch):
     """问题3: 插件目录无 fonts/ 子目录时扫描结果为空。"""
     monkeypatch.setattr(_module.os.path, "abspath", lambda p: str(tmp_path / "draw_box.py"))
-    assert _module._list_plugin_fonts() == []
+    assert _module.list_plugin_fonts() == []
 
 
 def test_list_plugin_fonts_returns_sorted_fonts(tmp_path, monkeypatch):
@@ -1312,7 +1312,7 @@ def test_list_plugin_fonts_returns_sorted_fonts(tmp_path, monkeypatch):
         (font_dir / name).write_bytes(b"font-data")
     (font_dir / "readme.txt").write_text("ignore me")
     monkeypatch.setattr(_module.os.path, "abspath", lambda p: str(tmp_path / "draw_box.py"))
-    fonts = _module._list_plugin_fonts()
+    fonts = _module.list_plugin_fonts()
     assert len(fonts) == 3
     assert fonts[0].endswith("a.otf")
     assert fonts[-1].endswith("wqy-microhei.ttc")

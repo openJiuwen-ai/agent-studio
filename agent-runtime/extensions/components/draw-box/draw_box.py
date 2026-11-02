@@ -25,11 +25,11 @@ class SSRFSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(*args, **kwargs)
 
 
-class _UntrustedCertError(RuntimeError):
+class UntrustedCertError(RuntimeError):
     """HTTPS 证书校验失败（自签/不受信证书），与图片 404 区分开。"""
 
 
-def _list_plugin_fonts():
+def list_plugin_fonts():
     """扫描插件目录 fonts/ 子目录下的字体文件，支持插件包自包含中文字体。"""
     font_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
     if not os.path.isdir(font_dir):
@@ -60,7 +60,7 @@ class FlowDrawBox(PluginBase):
     _DEFAULT_FONT_SIZE = 16
     _ALLOWED_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".ico")
 
-    FONT_CANDIDATES = _list_plugin_fonts() + [
+    FONT_CANDIDATES = list_plugin_fonts() + [
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
@@ -112,7 +112,9 @@ class FlowDrawBox(PluginBase):
             return {"success": False, "error": "image is required", "error_code": 400}
 
         try:
-            verify_ssl = bool(inputs.get("verify_ssl", True))
+            # verify_ssl 显式布尔校验：仅 bool 值生效，非 bool（如 "false"/null）回退默认 True
+            raw_verify_ssl = inputs.get("verify_ssl", True)
+            verify_ssl = raw_verify_ssl if isinstance(raw_verify_ssl, bool) else True
             image_bytes = self._resolve_image_bytes(image_input, verify_ssl)
             with Image.open(io.BytesIO(image_bytes)) as img:
                 width, height = img.size
@@ -123,7 +125,7 @@ class FlowDrawBox(PluginBase):
                         "error_code": 413,
                     }
                 image = img.copy()
-        except _UntrustedCertError as e:
+        except UntrustedCertError as e:
             return {"success": False, "error": str(e), "error_code": 400}
         except Exception as e:
             return {"success": False, "error": f"Image loading failed: {e}", "error_code": 404}
@@ -316,8 +318,12 @@ class FlowDrawBox(PluginBase):
             raise ValueError(f"Only http/https URLs are allowed, got scheme: {parsed.scheme}")
         handlers = [SSRFSafeRedirectHandler]
         if parsed.scheme == "https" and not verify_ssl:
-            # 关闭证书校验仅用于测试/内网自签证书场景，验证逻辑仍走同一 SSRF 防护链
-            handlers.append(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+            # 关闭证书校验仅用于测试/内网自签证书场景，验证逻辑仍走同一 SSRF 防护链。
+            # 使用公开 API 构造不校验对端的上下文（避免依赖受保护的 _create_unverified_context）
+            unverified_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            unverified_context.check_hostname = False
+            unverified_context.verify_mode = ssl.CERT_NONE
+            handlers.append(urllib.request.HTTPSHandler(context=unverified_context))
         opener = urllib.request.build_opener(*handlers)
         try:
             with opener.open(url, timeout=30) as resp:
@@ -343,7 +349,7 @@ class FlowDrawBox(PluginBase):
         except urllib.error.URLError as e:
             # urlopen 会把 SSL 证书错误包装为 URLError(reason=SSLError)，解开单独归类
             if isinstance(e.reason, ssl.SSLError):
-                raise _UntrustedCertError(
+                raise UntrustedCertError(
                     f"SSL certificate verification failed: {e.reason}. "
                     "The certificate may be self-signed or untrusted. "
                     "Use http/base64 image input, or set verify_ssl=false (test environments only)."

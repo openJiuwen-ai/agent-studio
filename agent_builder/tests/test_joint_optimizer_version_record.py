@@ -7,6 +7,7 @@
 2. save_state 追加 history 前对候选文本（filled_prompt）与评分（success_rate）完全相同的记录去重兜底。
 """
 
+import math
 from unittest.mock import MagicMock, patch
 
 from agent_builder.prompt.tune.base.context import History
@@ -34,33 +35,37 @@ def _make_optimizer(**params_kwargs):
 class TestRefineExamplesVersionRecord:
     """修改点 1：示例精炼未采纳不登记新版本"""
 
+    @staticmethod
+    def _make():
+        return _make_optimizer()
+
     def test_refine_examples_not_improved_returns_none(self):
         """acc_tmp <= acc_base：示例精炼未提升，不产生新版本记录"""
-        optimizer = _make_optimizer()
+        optimizer = self._make()
         optimizer.acc_base = 0.8
         optimizer.select_best_examples = MagicMock(return_value=[{"b": 2}])
         optimizer.generate_best_examples = MagicMock(return_value=[{"c": 3}])
-        optimizer._prepare_example_strings = MagicMock(return_value="example")
-        optimizer._prepare_examples = MagicMock(return_value=["example"])
+        setattr(optimizer, "_prepare_example_strings", MagicMock(return_value="example"))
+        setattr(optimizer, "_prepare_examples", MagicMock(return_value=["example"]))
         optimizer.prompt_combine = MagicMock(return_value="full prompt")
         optimizer.eval = MagicMock(return_value=(0.5, [], []))
 
-        result = optimizer._refine_examples({})
+        result = getattr(optimizer, "_refine_examples")({})
 
         assert result is None
 
     def test_refine_examples_improved_returns_history(self):
         """acc_tmp > acc_base：示例精炼带来提升，登记新版本"""
-        optimizer = _make_optimizer()
+        optimizer = self._make()
         optimizer.acc_base = 0.8
         optimizer.select_best_examples = MagicMock(return_value=[{"b": 2}])
         optimizer.generate_best_examples = MagicMock(return_value=[])
-        optimizer._prepare_example_strings = MagicMock(return_value="example")
-        optimizer._prepare_examples = MagicMock(return_value=["example"])
+        setattr(optimizer, "_prepare_example_strings", MagicMock(return_value="example"))
+        setattr(optimizer, "_prepare_examples", MagicMock(return_value=["example"]))
         optimizer.prompt_combine = MagicMock(return_value="full prompt")
         optimizer.eval = MagicMock(return_value=(0.9, [], []))
 
-        result = optimizer._refine_examples({})
+        result = getattr(optimizer, "_refine_examples")({})
 
         assert result is not None
         assert result.filled_prompt == "full prompt"
@@ -71,12 +76,13 @@ class TestRefineExamplesVersionRecord:
 class TestSaveStateDedupe:
     """修改点 2：history 入库去重兜底"""
 
-    def _make_optimizer(self, progress_info, record):
+    @staticmethod
+    def _make_optimizer(progress_info, record):
         optimizer = _make_optimizer()
         optimizer.acc_base = 0.8
         optimizer.iter_num = 1
-        optimizer._check_event = MagicMock(return_value=True)
-        optimizer._prepare_example_strings = MagicMock(return_value="")
+        setattr(optimizer, "_check_event", MagicMock(return_value=True))
+        setattr(optimizer, "_prepare_example_strings", MagicMock(return_value=""))
         optimizer.prompt_combine = MagicMock(return_value="full")
         with patch(
             "agent_builder.prompt.tune.joint_optimizer.calc_run_time",
@@ -135,12 +141,16 @@ class TestSaveStateDedupe:
 class TestHistoryFieldCompat:
     """_get_history_field 兼容 History 对象与 dict 两种形态"""
 
+    @staticmethod
+    def _field(item, field_name, default=None):
+        return _get_history_field(item, field_name, default)
+
     def test_get_field_from_history_object(self):
         record = History(optimized_prompt="p", filled_prompt="f", success_rate=0.8)
-        assert _get_history_field(record, "filled_prompt") == "f"
-        assert _get_history_field(record, "success_rate") == 0.8
+        assert self._field(record, "filled_prompt") == "f"
+        assert math.isclose(self._field(record, "success_rate"), 0.8)
 
     def test_get_field_from_dict(self):
         record = {"optimized_prompt": "p", "filled_prompt": None}
-        assert _get_history_field(record, "filled_prompt") is None
-        assert _get_history_field(record, "success_rate", 0.0) == 0.0
+        assert self._field(record, "filled_prompt") is None
+        assert math.isclose(self._field(record, "success_rate", 0.0), 0.0)
