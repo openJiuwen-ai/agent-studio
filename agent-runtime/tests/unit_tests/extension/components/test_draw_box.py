@@ -442,16 +442,65 @@ async def test_draw_boxes_no_label():
 
 @pytest.mark.asyncio
 async def test_draw_boxes_missing_annotations():
-    """draw_boxes: 缺少 annotations 参数 → error_code=400。"""
+    """draw_boxes: 缺省 annotations → 视为空标注，仅绘制图像(success=True)。"""
     plugin = FlowDrawBox()
     image_b64 = _make_test_image_base64()
     result = await plugin.invoke({
         "operation": "draw_boxes",
         "image": image_b64,
     })
+    assert result["output"]["success"] is True
+    assert result["output"]["annotation_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_draw_boxes_verify_ssl_disabled_marker():
+    """C5/C7: verify_ssl=false 时返回结果标注 verify_ssl_disabled=true（降级可审计）"""
+    plugin = FlowDrawBox()
+    image_b64 = _make_test_image_base64()
+    result = await plugin.invoke({
+        "operation": "draw_boxes",
+        "image": image_b64,
+        "annotations": "",
+        "verify_ssl": False,
+    })
+    assert result["output"]["success"] is True
+    assert result["output"].get("verify_ssl_disabled") is True
+
+
+@pytest.mark.asyncio
+async def test_draw_boxes_empty_string_annotations():
+    """draw_boxes: annotations 为空字符串 → 视为空标注，仅绘制图像(success=True)。"""
+    plugin = FlowDrawBox()
+    image_b64 = _make_test_image_base64()
+    result = await plugin.invoke({
+        "operation": "draw_boxes",
+        "image": image_b64,
+        "annotations": "",
+        "coordinate_type": "absolute",
+    })
+    assert result["output"]["success"] is True
+    assert result["output"]["annotation_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_calculate_area_empty_coordinates():
+    """calculate_area: coordinates 为空字符串 → 按空坐标处理，不抛 JSONDecodeError。"""
+    plugin = FlowDrawBox()
+    result = await plugin.invoke({"operation": "calculate_area", "coordinates": ""})
+    assert isinstance(result["output"], dict)
+    assert result["output"].get("error_code") != 400
+    assert "success" in result["output"] or "point_count" in result["output"]
+
+
+@pytest.mark.asyncio
+async def test_calculate_area_invalid_coordinates():
+    """calculate_area: coordinates 为非法 JSON 字符串 → 返回明确错误提示（error_code=400）。"""
+    plugin = FlowDrawBox()
+    result = await plugin.invoke({"operation": "calculate_area", "coordinates": "not-json"})
     assert result["output"]["success"] is False
     assert result["output"]["error_code"] == 400
-    assert "annotations is required" in result["output"]["error"]
+    assert "coordinates" in result["output"]["error"]
 
 
 @pytest.mark.asyncio
@@ -1166,3 +1215,140 @@ async def test_draw_boxes_base64_decoded_too_large():
         })
     assert result["output"]["success"] is False
     assert result["output"]["error_code"] == 404
+
+
+# --------------------------------------------------------------------------- #
+# BUG2026102804734 问题1: fetch_url verify_ssl + 证书错误归 400
+# --------------------------------------------------------------------------- #
+
+def test_fetch_url_verify_ssl_true_keeps_default_handlers():
+    """问题1: verify_ssl 默认 true → 不注入关闭校验的 HTTPSHandler，行为不变。"""
+    import urllib.request
+    fake_resp = mock.MagicMock()
+    fake_resp.__enter__.return_value = fake_resp
+    fake_resp.read.side_effect = [b"x", b""]
+    fake_opener = mock.MagicMock()
+    fake_opener.open.return_value = fake_resp
+    with mock.patch.object(_module, "illegal_url", return_value=False), \
+         mock.patch("urllib.request.build_opener", return_value=fake_opener) as build_opener:
+        FlowDrawBox.fetch_url("https://example.com/img.png")
+    handlers = build_opener.call_args.args
+    assert all(not isinstance(h, urllib.request.HTTPSHandler) for h in handlers)
+    fake_opener.open.assert_called_once_with("https://example.com/img.png", timeout=30)
+
+
+def test_fetch_url_verify_ssl_false_uses_unverified_context():
+    """问题1: verify_ssl=false → 注入 HTTPSHandler 且关闭证书校验。"""
+    import ssl
+    import urllib.request
+    fake_resp = mock.MagicMock()
+    fake_resp.__enter__.return_value = fake_resp
+    fake_resp.read.side_effect = [b"x", b""]
+    fake_opener = mock.MagicMock()
+    fake_opener.open.return_value = fake_resp
+    with mock.patch.object(_module, "illegal_url", return_value=False), \
+         mock.patch("urllib.request.build_opener", return_value=fake_opener) as build_opener:
+        data = FlowDrawBox.fetch_url("https://self-signed.example/img.png", verify_ssl=False)
+    assert data == b"x"
+    https_handlers = [h for h in build_opener.call_args.args
+                      if isinstance(h, urllib.request.HTTPSHandler)]
+    assert len(https_handlers) == 1
+    # HTTPSHandler 的 context 属性名随 Python 版本不同（_context / context），双取兼容
+    ctx = getattr(https_handlers[0], "_context", None) or getattr(https_handlers[0], "context", None)
+    assert ctx is not None
+    assert ctx.verify_mode == ssl.CERT_NONE
+
+
+def test_fetch_url_verify_ssl_false_http_initial_injects_unverified():
+    """意见7: verify_ssl=false 且 http 初始 URL 也注入 unverified HTTPSHandler（重定向生效）。"""
+    import ssl
+    import urllib.request
+    fake_resp = mock.MagicMock()
+    fake_resp.__enter__.return_value = fake_resp
+    fake_resp.read.side_effect = [b"x", b""]
+    fake_opener = mock.MagicMock()
+    fake_opener.open.return_value = fake_resp
+    with mock.patch.object(_module, "illegal_url", return_value=False), \
+         mock.patch("urllib.request.build_opener", return_value=fake_opener) as build_opener:
+        data = FlowDrawBox.fetch_url("http://example.com/img.png", verify_ssl=False)
+    assert data == b"x"
+    https_handlers = [h for h in build_opener.call_args.args
+                      if isinstance(h, urllib.request.HTTPSHandler)]
+    assert len(https_handlers) == 1
+    ctx = getattr(https_handlers[0], "_context", None) or getattr(https_handlers[0], "context", None)
+    assert ctx is not None
+    assert ctx.verify_mode == ssl.CERT_NONE
+
+
+def test_fetch_url_cert_error_raises_untrusted_error():
+    """问题1: 证书校验失败 → 抛 _UntrustedCertError（与图片 404 区分）。"""
+    import ssl
+    import urllib.error
+    fake_opener = mock.MagicMock()
+    # urlopen 实际将证书错误包装为 URLError(reason=SSLError)，与真实链路保持一致
+    fake_opener.open.side_effect = urllib.error.URLError(
+        ssl.SSLCertVerificationError("certificate verify failed: self-signed"))
+    with mock.patch.object(_module, "illegal_url", return_value=False), mock.patch(
+        "urllib.request.build_opener", return_value=fake_opener
+    ), pytest.raises(_module.UntrustedCertError) as exc:
+        FlowDrawBox.fetch_url("https://self-signed.example/img.png")
+    assert "verify_ssl" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_draw_boxes_untrusted_cert_returns_400_not_404():
+    """问题1: draw_boxes 自签证书 URL → error_code=400（而非 404 图像加载失败）。"""
+    plugin = FlowDrawBox()
+    with mock.patch.object(FlowDrawBox, "fetch_url",
+                           side_effect=_module.UntrustedCertError(
+                               "SSL certificate verification failed: x. "
+                               "Use http/base64 image input, or set verify_ssl=false")):
+        result = await plugin.invoke({
+            "operation": "draw_boxes",
+            "image": "https://self-signed.example/a.png",
+            "annotations": '{"annotations":[]}',
+        })
+    assert result["output"]["success"] is False
+    assert result["output"]["error_code"] == 400
+    assert "verify_ssl" in result["output"]["error"]
+
+
+# --------------------------------------------------------------------------- #
+# BUG2026102804734 问题2: coordinates 为 string 二维 JSON 全链路可用
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_find_overlaps_string_2d_coordinates():
+    """问题2: coordinates 传 string 二维 JSON → find_overlaps 正常执行。"""
+    plugin = FlowDrawBox()
+    coordinates_str = json.dumps([
+        [{"x": 0, "y": 0}, {"x": 10, "y": 10}],
+        [{"x": 5, "y": 5}, {"x": 15, "y": 15}],
+    ])
+    result = await plugin.invoke({"operation": "find_overlaps", "coordinates": coordinates_str})
+    assert result["output"]["overlap_count"] == 1
+    assert result["output"]["overlap_pairs"] == [{"box_a": 0, "box_b": 1}]
+
+
+# --------------------------------------------------------------------------- #
+# BUG2026102804734 问题3: 插件目录字体扫描
+# --------------------------------------------------------------------------- #
+
+def test_list_plugin_fonts_missing_dir_returns_empty(tmp_path, monkeypatch):
+    """问题3: 插件目录无 fonts/ 子目录时扫描结果为空。"""
+    monkeypatch.setattr(_module.os.path, "abspath", lambda p: str(tmp_path / "draw_box.py"))
+    assert _module.list_plugin_fonts() == []
+
+
+def test_list_plugin_fonts_returns_sorted_fonts(tmp_path, monkeypatch):
+    """问题3: 插件目录 fonts/ 存在时返回排序后的字体文件（忽略非字体文件）。"""
+    font_dir = tmp_path / "fonts"
+    font_dir.mkdir()
+    for name in ["wqy-microhei.ttc", "b.TTF", "a.otf"]:
+        (font_dir / name).write_bytes(b"font-data")
+    (font_dir / "readme.txt").write_text("ignore me")
+    monkeypatch.setattr(_module.os.path, "abspath", lambda p: str(tmp_path / "draw_box.py"))
+    fonts = _module.list_plugin_fonts()
+    assert len(fonts) == 3
+    assert fonts[0].endswith("a.otf")
+    assert fonts[-1].endswith("wqy-microhei.ttc")

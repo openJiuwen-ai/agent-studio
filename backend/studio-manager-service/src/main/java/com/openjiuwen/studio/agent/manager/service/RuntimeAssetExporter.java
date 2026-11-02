@@ -290,7 +290,8 @@ public class RuntimeAssetExporter {
             && !Constants.LATEST_PUBLISH_VERSION.equals(version);
         // 收集阶段缓存只用于避免重复 OBS 往返；打包前释放，避免全部文本资产随缓存常驻内存。
         obsCache.clear();
-        Resource zipResource = buildZipWithManifest(manifest, assets, rootIrKey, isHistoryExport, resolvedVersion);
+        Resource zipResource = buildZipWithManifest(manifest, assets, rootIrKey, isHistoryExport,
+            resolvedVersion, resourceType);
 
         // 返回临时文件资源（供前端下载，不走 staging bucket）：写响应时流式读取，关流后删除临时文件。
         long durationMs = System.currentTimeMillis() - startMs;
@@ -309,19 +310,24 @@ public class RuntimeAssetExporter {
      */
     private String resolvePublishVersion(String resourceType, String resourceId, String version) {
         if (StringUtils.isBlank(version) || Constants.LATEST_PUBLISH_VERSION.equals(version)) {
-            // SDD 5.0：Redis 优先回退 OBS（PublishUtils.getPublish 已实现该语义）
+            // SDD 5.0: Redis 优先回退 OBS。未发布资源在 OBS 无元数据 → PublishUtils.getPublish 经
+            // getObjectOrNull→fileStore.readOrNull 特判 404 返回 null（仅此收敛点 404→null），
+            // getPublish 据此返回 null → meta==null 抛 EXPORT_RESOURCE_NOT_EXISTS(400)。{0} 占位填 resourceType。
+            // 注：read/downloadObsFile 在 404 时仍抛 OBS_FAILED（5xx 亦抛），404→null 语义仅经 readOrNull 收敛于此。
             com.openjiuwen.studio.agent.common.bo.AgentMetadata meta =
                 publishUtils.getPublish(resourceId, Constants.LATEST_PUBLISH_VERSION, mgObsService);
             if (meta == null || StringUtils.isBlank(meta.getVersionId())) {
                 log.error("resolvePublishVersion failed, metadata not found for: {}", resourceId);
-                throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, "agent not published");
+                throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, resourceType);
             }
             return meta.getVersionId();
         }
         // 具体版本号 → 校验存在
         ReleaseVersion rv = releaseVersionMapper.selectByAppIdAndVersionId(resourceId, version);
         if (rv == null) {
-            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, "release version not exist");
+            // 对外仍用 EXPORT_RESOURCE_NOT_EXISTS（保持 03601001 契约）, 日志带 version 区分两种失败模式。
+            log.error("resolvePublishVersion failed, release version not exist for: {}/{}", resourceId, version);
+            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, resourceType);
         }
         return version;
     }
@@ -1019,7 +1025,8 @@ public class RuntimeAssetExporter {
      * 读取 OBS 对象，按 object key 缓存（单次导出内去重，避免收集阶段与打包阶段重复读同一对象）。
      * <p>异常不缓存：抛出由调用方处理（收集阶段 catch 后 skip/标 missing；打包阶段 catch 后按 critical 终止或标 missing），
      * 下次同一 key 重读，行为与无缓存时一致。
-     * <p>含 null 缓存：mgObsService 返回 null 时缓存 null，用 containsKey 区分"已读过且为空"与"未读过"。
+     * <p>含 null 缓存：getObject 在内容为空时缓存 null（用 containsKey 区分"已读过且为空"与"未读过"）；
+     * 404 不返 null（read 404→抛 OBS_FAILED），由调用方 catch 后标 missing。
      */
     private String getCachedObject(String key, Map<String, String> obsCache) {
         if (obsCache.containsKey(key)) {
@@ -1259,7 +1266,7 @@ public class RuntimeAssetExporter {
      * @param rootIrKey 根 IR 的 object key（用于区分根 IR vs 子 IR 的缺失处理）
      */
     private Resource buildZipWithManifest(RuntimeAssetManifest manifest, List<ManifestAsset> assets,
-        String rootIrKey, boolean isHistoryExport, String resolvedVersion) {
+        String rootIrKey, boolean isHistoryExport, String resolvedVersion, String resourceType) {
         int missingCount = 0;
         long totalSize = 0;
         int irCount = 0, modelCount = 0, kbCount = 0, skillCount = 0, metadataCount = 0;
@@ -1273,8 +1280,10 @@ public class RuntimeAssetExporter {
                     if (sizeSha == null) {
                         // 读取失败/空：critical 终止（技能非 critical，此处理论上不触发）；否则已标 missing
                         if (isCriticalAsset(asset, rootIrKey)) {
-                            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS,
-                                "critical asset missing: " + asset.getKey());
+                            // key 串进日志（运维可追溯，不进 i18n error_msg）；{0} 填 resourceType（与 03601001 语义一致，不泄露 OBS 路径）。
+                            log.error("runtime_asset_export_critical_asset_missing|key={}|type={}",
+                                asset.getKey(), asset.getType());
+                            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, resourceType);
                         }
                         missingCount++;
                         continue;
@@ -1289,8 +1298,10 @@ public class RuntimeAssetExporter {
                     content = mgObsService.getObject(asset.getKey());
                 } catch (Exception e) {
                     if (isCriticalAsset(asset, rootIrKey)) {
-                        throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS,
-                            "critical asset missing: " + asset.getKey());
+                        // key 串进日志（运维可追溯，不进 i18n error_msg）；{0} 填 resourceType（与 03601001 语义一致，不泄露 OBS 路径）。
+                        log.error("runtime_asset_export_critical_asset_missing|key={}|type={}",
+                            asset.getKey(), asset.getType());
+                        throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, resourceType);
                     }
                     log.warn("runtime_asset_export_asset_missing|key={}|type={}|reason={}",
                         asset.getKey(), asset.getType(), e.getMessage());
@@ -1302,8 +1313,10 @@ public class RuntimeAssetExporter {
                 }
                 if (StringUtils.isBlank(content)) {
                     if (isCriticalAsset(asset, rootIrKey)) {
-                        throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS,
-                            "critical asset empty: " + asset.getKey());
+                        // key 串进日志（运维可追溯，不进 i18n error_msg）；{0} 填 resourceType（与 03601001 语义一致，不泄露 OBS 路径）。
+                        log.error("runtime_asset_export_critical_asset_empty|key={}|type={}",
+                            asset.getKey(), asset.getType());
+                        throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, resourceType);
                     }
                     asset.setStatus("missing");
                     asset.setErrorReason("OBS object empty");

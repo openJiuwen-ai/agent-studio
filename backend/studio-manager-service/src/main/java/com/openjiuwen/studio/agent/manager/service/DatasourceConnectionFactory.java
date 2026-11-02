@@ -134,8 +134,14 @@ public class DatasourceConnectionFactory {
                 config.addDataSourceProperty("allowLoadLocalInfile", "false");
                 config.addDataSourceProperty("allowUrlInLocalInfile", "false");
             }
-            case "postgresql" -> config.setDriverClassName("org.postgresql.Driver");
-            case "opengauss" -> config.setDriverClassName("com.huawei.opengauss.jdbc.Driver");
+            case "postgresql" -> {
+                config.setDriverClassName("org.postgresql.Driver");
+                config.addDataSourceProperty("stringtype", "unspecified");
+            }
+            case "opengauss" -> {
+                config.setDriverClassName("com.huawei.opengauss.jdbc.Driver");
+                config.addDataSourceProperty("stringtype", "unspecified");
+            }
         }
     }
 

@@ -125,11 +125,14 @@ def _build_branch_parent_patched(self) -> dict[str, str]:
             else:
                 reachable = self._forward_reachable(target)
                 for inner_bn in nested_branch_nodes:
-                    if inner_bn != branch_node_id and inner_bn in reachable:
-                        if inner_bn not in parent and not _would_create_cycle(
-                            parent, inner_bn, branch_node_id
-                        ):
-                            parent[inner_bn] = branch_node_id
+                    # G.CTL.03：拆成 early-continue，避免单 if 布尔表达式过多
+                    if inner_bn == branch_node_id or inner_bn not in reachable:
+                        continue
+                    if inner_bn in parent or _would_create_cycle(
+                        parent, inner_bn, branch_node_id
+                    ):
+                        continue
+                    parent[inner_bn] = branch_node_id
     return parent
 
 

@@ -80,10 +80,12 @@ public class PublishUtils {
         // 读redis
         String metaString = redisClient.get(getRedisKey(agentId, type));
 
-        // redis读失败，读OBS
+        // redis读失败，读OBS。用 getObjectOrNull：未发布资源元数据对象在 OBS 不存在（404）→ null，
+        // getPublish 据此返回 null（符合"获取失败返回 null"契约）→ 导出未发布资源判 EXPORT_RESOURCE_NOT_EXISTS(400)。
+        // 404→null 语义收敛于此唯一收敛点；其余 getObject/downloadObsFile 调用方 404 仍抛 OBS_FAILED（避免解引用 null NPE）。
         if (StringUtils.isEmpty(metaString)) {
             readFromRedisFailed = true;
-            metaString = obsService.getObject(getObsKey(agentId, type));
+            metaString = obsService.getObjectOrNull(getObsKey(agentId, type));
         }
 
         // OBS读失败，异常

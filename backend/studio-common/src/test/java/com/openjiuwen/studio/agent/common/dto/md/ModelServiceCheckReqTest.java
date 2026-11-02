@@ -32,6 +32,22 @@ class ModelServiceCheckReqTest {
     }
 
     @Test
+    void testSetApiUrlTrimsWhitespace() {
+        ModelServiceCheckReq req = new ModelServiceCheckReq();
+        ModelServiceCheckReq result = req.setApiUrl("  https://api.example.com/v1/chat/completions  ");
+        assertSame(req, result);
+        assertEquals("https://api.example.com/v1/chat/completions", req.getApiUrl());
+    }
+
+    @Test
+    void testSetApiUrlNullRemainsNull() {
+        ModelServiceCheckReq req = new ModelServiceCheckReq();
+        req.setApiUrl("http://api.example.com");
+        req.setApiUrl(null);
+        assertNull(req.getApiUrl());
+    }
+
+    @Test
     void testSetGetAuthType() {
         ModelServiceCheckReq req = new ModelServiceCheckReq();
         assertNull(req.getAuthType());

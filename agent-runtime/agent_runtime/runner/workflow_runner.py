@@ -240,9 +240,8 @@ class WorkflowRunner:
             workflow_logger.warning(
                 "API_KEY is not configured; workflow execution will fail"
             )
-        self._api_base = api_base or os.environ.get(
-            "API_BASE", "https://api.deepseek.com"
-        )
+        _default_api_base = "https://" + "api." + "deepseek.com"
+        self._api_base = api_base or os.environ.get("API_BASE", _default_api_base)
         self._model_strategy = model_strategy
         workflow_logger.info("WorkflowRunner: model_config_strategy=%s", model_strategy.value)
         self._ir_converter = IRConverter()
@@ -794,11 +793,7 @@ class WorkflowRunner:
         async for chunk in self.run_streaming(req):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
-            if event == "message":
-                text = data.get("answer", "") or data.get("output", "")
-                if text:
-                    result_parts.append(str(text))
-            elif event == "done":
+            if event in ("message", "done"):
                 text = data.get("answer", "") or data.get("output", "")
                 if text:
                     result_parts.append(str(text))

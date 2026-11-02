@@ -1,6 +1,7 @@
 /* Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved. */
 package com.openjiuwen.studio.agent.manager.obs;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.storage.FileMeta;
 import com.openjiuwen.studio.agent.common.storage.FileStore;
@@ -195,9 +196,21 @@ class MgObsServiceTest {
     }
 
     @Test
-    void testDownloadObsFile_Exception() {
+    void testDownloadObsFile_AgentStudioException_Passthrough() {
+        // read 抛 AgentStudioException(OBS_FAILED)（404 与 5xx 均抛 OBS_FAILED），downloadObsFile 透传不二次包装。
+        // 注：404→null 语义已收敛到 getObjectOrNull（发布元数据读取专用），downloadObsFile 404 抛 OBS_FAILED（数据不一致故障）。
+        AgentStudioException obsFailed = new AgentStudioException(StudioError.OBS_FAILED);
+        when(fileStore.read(anyString())).thenThrow(obsFailed);
+        AgentStudioException thrown = assertThrows(AgentStudioException.class,
+            () -> mgObsService.downloadObsFile("key"));
+        assertSame(obsFailed, thrown, "AgentStudioException 应透传，不被二次包装");
+    }
+
+    @Test
+    void testDownloadObsFile_UnexpectedException_WrappedAsObsFailed() {
+        // read 抛非 AgentStudioException（如 IOException），包装为 OBS_FAILED。
         when(fileStore.read(anyString())).thenThrow(new RuntimeException("fail"));
-        assertThrows(RuntimeException.class, () -> mgObsService.downloadObsFile("key"));
+        assertThrows(AgentStudioException.class, () -> mgObsService.downloadObsFile("key"));
     }
 
     @Test

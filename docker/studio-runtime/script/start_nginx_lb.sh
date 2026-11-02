@@ -218,7 +218,9 @@ function start_nginx_process() {
       kill -9 ${OLD_PID} 2>/dev/null || true
     else
       echo "Stale nginx.pid found (PID=${OLD_PID}, not a running nginx master), removing and starting fresh."
-      rm -f "${NGINX_PID}" 2>/dev/null || true
+      nginx_pid_to_delete="${NGINX_PID}_to_delete"
+      mv "${NGINX_PID}" "${nginx_pid_to_delete}" 2>/dev/null || true
+      rm -f "${nginx_pid_to_delete}" 2>/dev/null || true
     fi
   fi
 
@@ -251,7 +253,13 @@ function cleanup_previous() {
   pkill -f "watchdog.sh" 2>/dev/null || true
   # Reset watchdog fail counters so the fresh watchdog doesn't inherit a
   # near-threshold count from the previous run.
-  rm -f "${WATCHDOG_LOG_DIR:-/opt/cloud/logs/watchdog}"/fail_*.count 2>/dev/null || true
+  for watchdog_fail_count in "${WATCHDOG_LOG_DIR:-/opt/cloud/logs/watchdog}"/fail_*.count; do
+    if [ -f "${watchdog_fail_count}" ]; then
+      watchdog_fail_count_to_delete="${watchdog_fail_count}_to_delete"
+      mv "${watchdog_fail_count}" "${watchdog_fail_count_to_delete}" 2>/dev/null || true
+      rm -f "${watchdog_fail_count_to_delete}" 2>/dev/null || true
+    fi
+  done
 
   # Kill ALL old workers globally. The per-port argv grep in start_server.sh is
   # unreliable: uvicorn/gunicorn re-exec, argv rewrite, or ps truncation can

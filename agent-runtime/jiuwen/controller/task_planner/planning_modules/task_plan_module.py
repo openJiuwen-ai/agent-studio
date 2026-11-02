@@ -10,6 +10,7 @@
 """
 
 import json
+import time
 import uuid
 from typing import List, Dict, Optional
 
@@ -20,6 +21,11 @@ from jiuwen.controller.task_planner.planning_modules.plan_tracker import (
     ExecutionPlan,
     PlanStep,
     StepStatus,
+)
+from jiuwen.planner.common.stream_post_utils import (
+    build_llm_end_payload,
+    create_trace_manager_safely,
+    emit_trace_event,
 )
 from jiuwen.prompt.template.template_manager import TemplateManager
 
@@ -167,6 +173,7 @@ class TaskPlanModule:
         matched_scene: Optional[SceneConfig],
         filtered_tools: List[Dict],
         task_id: str = "",
+        runtime_data: Optional[Dict] = None,
     ) -> ExecutionPlan:
         """
         生成任务执行计划
@@ -177,6 +184,7 @@ class TaskPlanModule:
             matched_scene: 匹配的场景（可能为 None）
             filtered_tools: 过滤后的可用工具列表
             task_id: 任务ID，用于日志追踪
+            runtime_data: 运行时数据（含 trace_handlers，用于 OTel 遥测）
 
         Returns:
             ExecutionPlan: 执行计划对象
@@ -200,30 +208,55 @@ class TaskPlanModule:
             simple_log=f"task_id: {task_id}| [TaskPlan] <LLM Input>",
         )
 
+        # OTel：镜像 intention_detect 的接线，规划 LLM 调用补 on_llm_end 载荷；
+        # 事件经 emit_trace_event 隔离发射，manager 初始化走 safely 兜底——
+        # 遥测整体失效时 plan 行为与接线前一致
+        trace_manager = create_trace_manager_safely(
+            llm=self.llm,
+            functions=[],
+            trace_handlers=(runtime_data or {}).get("trace_handlers"),
+        )
+        # try 只罩 LLM 调用与其遥测：解析/构建失败属业务错误，按原语义直接
+        # 抛出，不得在同一 trace 上补发 on_llm_error（避免 end/error 双终止，
+        # 且规划错误不得误报为 LLM 调用错误）
         try:
+            await emit_trace_event(
+                trace_manager, "on_llm_start", llm_input["messages"]
+            )
+            start_time = time.time()
             result = await self.llm.ainvoke(messages)
-
-            logger.info(
-                f"task_id: {task_id}| [TaskPlan] <LLM Output> {result.content}",
-                simple_log=f"task_id: {task_id}| [TaskPlan] <LLM Output>",
+            total_time = round(time.time() - start_time, 2)
+            await emit_trace_event(
+                trace_manager,
+                "on_llm_end",
+                build_llm_end_payload(
+                    result.content,
+                    getattr(result, "usage_metadata", None),
+                    total_time,
+                ),
             )
-
-            plan_dict = self._parse_plan_result(result.content, task_id)
-            execution_plan = self._build_execution_plan(plan_dict, matched_scene)
-
-            step_count = len(execution_plan.steps)
-            logger.info(
-                f"task_id: {task_id}| Task planning completed, total steps: {step_count}",
-                simple_log=f"task_id: {task_id}| Task planning completed",
-            )
-            return execution_plan
-
         except Exception as e:
+            await emit_trace_event(trace_manager, "on_llm_error", e)
             logger.error(
                 f"task_id: {task_id}| Error during task planning: {e}",
                 simple_log=f"task_id: {task_id}| Error during task planning",
             )
             raise
+
+        logger.info(
+            f"task_id: {task_id}| [TaskPlan] <LLM Output> {result.content}",
+            simple_log=f"task_id: {task_id}| [TaskPlan] <LLM Output>",
+        )
+
+        plan_dict = self._parse_plan_result(result.content, task_id)
+        execution_plan = self._build_execution_plan(plan_dict, matched_scene)
+
+        step_count = len(execution_plan.steps)
+        logger.info(
+            f"task_id: {task_id}| Task planning completed, total steps: {step_count}",
+            simple_log=f"task_id: {task_id}| Task planning completed",
+        )
+        return execution_plan
 
     def _build_system_prompt(self) -> str:
         """

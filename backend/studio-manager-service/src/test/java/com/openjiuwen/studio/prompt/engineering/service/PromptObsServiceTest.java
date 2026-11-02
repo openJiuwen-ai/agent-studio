@@ -6,6 +6,8 @@ package com.openjiuwen.studio.prompt.engineering.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -18,6 +20,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.storage.FileMeta;
 import com.openjiuwen.studio.agent.common.storage.FileStore;
@@ -107,7 +110,20 @@ class PromptObsServiceTest {
     }
 
     @Test
-    void testDownloadObsFile_Exception_Throws() {
+    void testDownloadObsFile_AgentStudioException_Passthrough() {
+        // read 抛 AgentStudioException(OBS_FAILED)（404 与 5xx 均抛 OBS_FAILED），downloadObsFile 透传不二次包装。
+        // 注：404→null 语义已收敛到 MgObsService.getObjectOrNull，PromptObsService.downloadObsFile 404 抛 OBS_FAILED。
+        AgentStudioException obsFailed = new AgentStudioException(StudioError.OBS_FAILED);
+        when(fileStore.read(anyString())).thenThrow(obsFailed);
+
+        AgentStudioException thrown = assertThrows(AgentStudioException.class,
+            () -> obsService.downloadObsFile("nonexistent.txt"));
+        assertSame(obsFailed, thrown, "AgentStudioException 应透传，不被二次包装");
+    }
+
+    @Test
+    void testDownloadObsFile_UnexpectedException_WrappedAsObsFailed() {
+        // read 抛非 AgentStudioException（如 RuntimeException），包装为 OBS_FAILED。
         when(fileStore.read(anyString())).thenThrow(new RuntimeException("fail"));
 
         assertThrows(AgentStudioException.class,

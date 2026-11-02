@@ -28,7 +28,7 @@ public class ManagerHttpErrorResponseBuilder {
 
     @FunctionalInterface
     public interface I18nResolver {
-        String resolve(String key, Locale locale);
+        String resolve(String key, Object[] args, Locale locale);
     }
 
     private final I18nResolver resolver;
@@ -38,9 +38,12 @@ public class ManagerHttpErrorResponseBuilder {
     }
 
     public ResponseEntity<ErrorRsp> build(ErrorDescriptor descriptor, Locale locale) {
-        String errorMsg = safeResolve(descriptor.getMessageKey(), locale);
-        String errorReason = safeResolve(descriptor.getReasonKey(), locale);
-        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), locale);
+        // 从异常 cause 提取 args 填 i18n 占位符; reason/suggestion 当前无占位符, 多传 args 被 MessageFormat 忽略。
+        // args 不足时 I18nUtil catch 返回 code 兜底, 不抛。
+        Object[] args = extractArgs(descriptor);
+        String errorMsg = safeResolve(descriptor.getMessageKey(), args, locale);
+        String errorReason = safeResolve(descriptor.getReasonKey(), args, locale);
+        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), args, locale);
 
         ErrorRsp rsp = new ErrorRsp()
             .setErrorCode(descriptor.getErrorCode())
@@ -65,12 +68,21 @@ public class ManagerHttpErrorResponseBuilder {
      * COM-03 §4: fail-closed——resolver 异常时抛出,不返回空串。
      * 调用方 (build) 的调用者 (handler/listener) 应捕获并提供硬编码安全响应。
      */
-    private String safeResolve(String key, Locale locale) {
-        String result = resolver.resolve(key, locale);
+    private String safeResolve(String key, Object[] args, Locale locale) {
+        String result = resolver.resolve(key, args, locale);
         if (result == null || result.isBlank()) {
             throw new IllegalStateException(
                 "i18n resolution returned blank for key=" + key + " locale=" + locale);
         }
         return result;
+    }
+
+    /** 从 descriptor.cause 提取 i18n 占位符 args; cause 非 ASE 时返回 null。 */
+    private Object[] extractArgs(ErrorDescriptor descriptor) {
+        Throwable cause = descriptor.getCause();
+        if (cause instanceof com.openjiuwen.studio.agent.common.exception.AgentStudioException ase) {
+            return ase.getArgs();
+        }
+        return null;
     }
 }

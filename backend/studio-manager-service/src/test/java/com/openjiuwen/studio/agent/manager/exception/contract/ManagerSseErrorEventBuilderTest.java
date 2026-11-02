@@ -4,8 +4,10 @@
 
 package com.openjiuwen.studio.agent.manager.exception.contract;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
@@ -26,8 +28,9 @@ class ManagerSseErrorEventBuilderTest {
     private static final String SUGGESTION_KEY = "openjiuwen.02001129.suggestion";
     private static final String REQ_ID = "req-sse-001";
 
+    // Resolver: args 非 null 时把 args[0] 拼进返回值（验证 args 透传），否则只返回 key。
     private final ManagerHttpErrorResponseBuilder.I18nResolver resolver =
-        (key, locale) -> key + "::resolved";
+        (key, args, locale) -> args != null && args.length > 0 ? key + "::" + args[0] : key + "::resolved";
 
     private final ManagerSseErrorEventBuilder sseBuilder =
         new ManagerSseErrorEventBuilder(resolver);
@@ -74,6 +77,21 @@ class ManagerSseErrorEventBuilderTest {
         assertTrue(wire.startsWith("data: "), "SSE event must start with 'data: '");
         assertTrue(wire.endsWith("\n\n"), "SSE event must end with \\n\\n");
         assertTrue(wire.contains("\"event\":\"error\""));
+    }
+
+    /** bug009 根因2: cause 为 ASE 时, args 透传给 resolver 填占位符。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void causeAgentStudioException_argsPassedToResolver() {
+        AgentStudioException cause = new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS,
+            "agent");
+        ErrorDescriptor d = new ErrorDescriptor(CODE, 400, MSG_KEY, REASON_KEY,
+            SUGGESTION_KEY, REQ_ID, null, null, null, cause);
+        Map<String, Object> env = sseBuilder.buildEnvelope(d, Locale.CHINA);
+        Map<String, Object> data = (Map<String, Object>) env.get("data");
+        assertEquals(MSG_KEY + "::agent", data.get("error_msg"));
+        assertEquals(REASON_KEY + "::agent", data.get("error_reason"));
+        assertEquals(SUGGESTION_KEY + "::agent", data.get("error_suggestion"));
     }
 
     // ---- Terminal guard ----

@@ -177,6 +177,11 @@ class PlanExecutePlanner(TaskPlanner):
             matched_scene=matched_scene,
             filtered_tools=tools_for_planning,
             task_id=self.task_id,
+            runtime_data=(
+                message.runtime_data
+                if isinstance(getattr(message, "runtime_data", None), dict)
+                else None
+            ),
         )
 
         # 初始化计划跟踪

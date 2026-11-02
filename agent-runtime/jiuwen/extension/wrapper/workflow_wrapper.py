@@ -52,11 +52,14 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "LoopComponent": "jiuwen.loop",
     "FlowApi": "Api",
     "FlowCustomApi": "Api",
+    "jiuwen.plugin": "Api",
     "FlowInput": "jiuwen.input",
     "ExceptionInfo": "jiuwen.exception",
     "LoopSetVariable": "jiuwen.setVariable",
     "Aggregate": "jiuwen.aggregation",
     "FlowCode": "Code",
+    "FlowTemplateTransform": "TemplateTransform",
+    "jiuwen.templateTransform": "TemplateTransform",
     "EI.ComplexIntentDetection": "EI.ComplexIntentDetection",
     "jiuwen.paramExtraction": "jiuwen.paramExtraction",
     "FlowMcp": "jiuwen.mcp",
@@ -540,16 +543,13 @@ class WorkflowWrapper:
     def _is_skip_component(chunk: Any) -> bool:
         """检查 chunk 是否来自内部控制流节点（_parallel_done 等），命中则跳过。"""
         comp_id = ""
-        if isinstance(chunk, TraceSchema):
+        if isinstance(chunk, (TraceSchema, OutputSchema)):
             payload = chunk.payload if isinstance(chunk.payload, dict) else {}
             comp_id = payload.get("componentId", "")
         elif isinstance(chunk, CustomSchema):
             comp_id = getattr(chunk, "componentId", "") or ""
             if not comp_id and isinstance(getattr(chunk, "data", None), dict):
                 comp_id = chunk.data.get("componentId", "")
-        elif isinstance(chunk, OutputSchema):
-            payload = chunk.payload if isinstance(chunk.payload, dict) else {}
-            comp_id = payload.get("componentId", "")
         if not comp_id:
             return False
         return any(key in comp_id for key in _SKIP_COMPONENT_KEY)
@@ -751,9 +751,10 @@ class WorkflowWrapper:
             "agentId": payload.get("workflowId", ""),
             "componentId": comp_id,
             "componentName": effective_component_name,
+            # 优先用 IR 覆盖后的类型（Trace 对未登记组件可能是空/unknown）
             "componentType": _DEBUG_EVENT_RETURN_TO_SERVICE.get(
-                payload.get("componentType", "unknown"),
-                payload.get("componentType", ""),
+                effective_component_type or payload.get("componentType", "unknown"),
+                effective_component_type or payload.get("componentType", ""),
             ),
             "agentParentInvokeId": "",
             "inputs": payload.get("inputs"),

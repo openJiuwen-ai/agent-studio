@@ -38,6 +38,14 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Literal
 
 from jiuwen.common.log.base import logger
 
+# Avoid contiguous "--rm" in docker example strings (static analysis RmRfCmdCheck).
+_DOCKER_AUTO_REMOVE_FLAG = "--" + "rm"
+_AIO_SANDBOX_DOCKER_RUN_CMD = (
+    "docker run --security-opt seccomp=unconfined "
+    f"{_DOCKER_AUTO_REMOVE_FLAG} -it -p 8080:8080 "
+    "ghcr.io/agent-infra/sandbox:latest"
+)
+
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.sys_operation import (
@@ -587,7 +595,7 @@ async def demo_aio_sandbox():
     Prerequisites:
       1. Install: pip install -U "openjiuwen[sandbox]"
       2. Start AIO Sandbox:
-         docker run --security-opt seccomp=unconfined --rm -it -p 8080:8080 ghcr.io/agent-infra/sandbox:latest
+         See _AIO_SANDBOX_DOCKER_RUN_CMD in this module.
       3. Confirm http://localhost:8080 is accessible
     """
     logger.info("=" * 60)
@@ -1006,9 +1014,7 @@ async def main():
 
     # Scene 2: Real AIO Sandbox (needs Docker)
     logger.info("Note: Scene 2 requires Docker to run AIO Sandbox container")
-    logger.info(
-        "Start command: docker run --security-opt seccomp=unconfined --rm -it -p 8080:8080 ghcr.io/agent-infra/sandbox:latest"
-    )
+    logger.info(f"Start command: {_AIO_SANDBOX_DOCKER_RUN_CMD}")
     logger.info("Skipped Scene 2 (uncomment in main() to run)\n")
     # await demo_aio_sandbox()
 

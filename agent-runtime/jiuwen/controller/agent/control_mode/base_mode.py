@@ -83,7 +83,7 @@ class BaseMode:
             else:
                 yield {"ret_code": RetCode.FAILED, "result": "任务执行未返回任何结果"}
                 termination_signal = True
-        return last_message, termination_signal
+        return
 
     @staticmethod
     def should_output_to_user(message: Message) -> bool:
@@ -194,7 +194,7 @@ class BaseMode:
             else:
                 # 非消息类型直接输出
                 yield chunk
-        return last_message, termination_signal
+        return
 
     async def process_task_execution_streaming_message(
         self, task_execution: TaskExecution

@@ -1,4 +1,4 @@
-<div class="flex h-full w-full flex-col">
+<div class="flex h-full w-full flex-col" (keydown)="handleKeyDown($event)">
   <div class="mb-[16px] block">
     <div class="flex w-[calc(100%-38px)] items-center justify-between">
       <div class="flex items-center gap-[8px]">
@@ -35,11 +35,26 @@
                 nz-input
                 [maxlength]="paramNameMaxLen"
                 [(ngModel)]="param.name"
+                [title]="param.name"
                 (focus)="rememberName(i)"
+                (ngModelChange)="changeUpdateTime()"
                 (blur)="onNameBlur(i)"
                 [placeholder]="'input_placeholder' | i18nextEager"
                 [valueValidityValidator]="getInputNames(i)"
+                [class.input-error]="
+                  inputForm?.controls['inputFormName' + i]?.invalid &&
+                  (inputForm?.controls['inputFormName' + i]?.dirty || inputForm?.controls['inputFormName' + i]?.touched)
+                "
               />
+              <div
+                *ngIf="
+                  inputForm?.controls['inputFormName' + i]?.invalid &&
+                  (inputForm?.controls['inputFormName' + i]?.dirty || inputForm?.controls['inputFormName' + i]?.touched)
+                "
+                class="error-tip"
+              >
+                {{ inputForm?.controls['inputFormName' + i]?.errors?.serviceName?.tiErrorMessage }}
+              </div>
             </div>
             <div class="flex w-2/3 items-start gap-[8px]">
               <div class="flex w-[calc(100%-16px)]">
@@ -63,6 +78,7 @@
                     type="text"
                     nz-input
                     [(ngModel)]="param.value.content"
+                    (ngModelChange)="changeUpdateTime()"
                     (blur)="handelSave()"
                     [placeholder]="'input_placeholder' | i18nextEager"
                   />

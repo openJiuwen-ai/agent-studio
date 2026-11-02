@@ -42,7 +42,7 @@ class ToolUseMode(BaseMode):
             else:
                 yield {"ret_code": RetCode.FAILED, "result": "任务执行未返回任何结果"}
                 termination_signal = True
-        return last_message, termination_signal
+        return
 
     async def stream(self, **kwargs) -> AsyncGenerator:
         """流式调用控制器处理用户查询"""

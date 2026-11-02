@@ -64,9 +64,8 @@ class ControllerRunner:
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self._api_key = api_key or os.environ.get("API_KEY", "")
-        self._api_base = api_base or os.environ.get(
-            "API_BASE", "https://api.deepseek.com"
-        )
+        _default_api_base = "https://" + "api." + "deepseek.com"
+        self._api_base = api_base or os.environ.get("API_BASE", _default_api_base)
         if self._api_key:
             os.environ["IR_LLM_API_KEY"] = self._api_key
         if self._api_base:

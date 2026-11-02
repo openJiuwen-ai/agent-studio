@@ -24,6 +24,10 @@ from jiuwen.planner.common.stream_post_utils import (
     convert_ai_message_to_llm_output,
     insert_contexts_before_user_query,
     create_trace_manager,
+    build_usage_metadata,
+    build_finish_reason,
+    USAGE_METADATA,
+    FINISH_REASON,
 )
 from jiuwen.plugin.models.param import Param
 from jiuwen.plugin.models.tool import Tool
@@ -150,9 +154,15 @@ class LlmPlanningModule(PlanningModuleBase, ABC):
         model_stat = dict()
         if usage_metadata is not None:
             model_stat = usage_metadata.model_stats
-        await trace_manager.on_llm_end(
-            dict(content=llm_output.content, model_stat=model_stat)
-        )
+        payload = dict(content=llm_output.content, model_stat=model_stat)
+        # OTel 双写：按 core handler 约定键名补用量/成本/时延（缺数据时为空，跳过注入）
+        usage_dict = build_usage_metadata(usage_metadata)
+        if usage_dict:
+            payload[USAGE_METADATA] = usage_dict
+        finish_reason = build_finish_reason(usage_metadata)
+        if finish_reason:
+            payload[FINISH_REASON] = finish_reason
+        await trace_manager.on_llm_end(payload)
 
     @staticmethod
     def format_tools(tools: List[Tool], **kwargs):

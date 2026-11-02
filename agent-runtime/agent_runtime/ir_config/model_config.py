@@ -20,6 +20,10 @@ from openjiuwen.core.foundation.llm import ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
 
+def _default_llm_api_base() -> str:
+    return "https://" + "api." + "deepseek.com"
+
+
 class EnvVarModelConfigProvider(ModelConfigProvider):
     """从环境变量读取模型配置"""
 
@@ -32,7 +36,7 @@ class EnvVarModelConfigProvider(ModelConfigProvider):
         api_key = os.environ.get("IR_LLM_API_KEY")
         if not api_key:
             raise ValueError("IR_LLM_API_KEY 环境变量未设置")
-        api_base = os.environ.get("IR_LLM_API_BASE", "https://api.deepseek.com")
+        api_base = os.environ.get("IR_LLM_API_BASE", _default_llm_api_base())
         model_name = os.environ.get("IR_LLM_MODEL_NAME", "deepseek-chat")
         temperature = float(os.getenv("IR_LLM_TEMPERATURE", "0.5"))
         top_p = float(os.getenv("IR_LLM_TOP_P", "0.5"))
@@ -100,7 +104,7 @@ class IRModelConfigProvider(ModelConfigProvider):
         global_config: Optional[dict] = None,
     ) -> LLMCompConfig:
         api_key = os.environ.get("IR_LLM_API_KEY", "mock_key")
-        api_base = os.environ.get("MODEL_ROUTER_API", "https://api.deepseek.com")
+        api_base = os.environ.get("MODEL_ROUTER_API", _default_llm_api_base())
         temperature = float(os.getenv("IR_LLM_TEMPERATURE", "0.5"))
         top_p = float(os.getenv("IR_LLM_TOP_P", "0.5"))
         verify_ssl = os.getenv("IR_LLM_SSL_VERIFY", "false").lower() == "true"

@@ -156,12 +156,12 @@ public class JiuWenPromptTaskJob implements Job {
         try {
             I18nUtil i18n = SpringBeanUtils.getBean(I18nUtil.class);
             if (i18n != null) {
-                return (key, locale) -> i18n.getMessage(key, locale);
+                return (key, args, locale) -> i18n.getMessage(key, args, locale);
             }
         } catch (Exception e) {
             // no Spring context
         }
-        return (key, locale) -> {
+        return (key, args, locale) -> {
             if (key.endsWith(".reason")) {
                 return "A downstream service returned an error or was unreachable.";
             }

@@ -125,7 +125,7 @@ public class BaseEventListener extends EventSourceListener {
     private static ManagerHttpErrorResponseBuilder.I18nResolver resolveResolver() {
         I18nUtil i18n = lookupI18n();
         if (i18n != null) {
-            return (key, locale) -> i18n.getMessage(key, locale);
+            return (key, args, locale) -> i18n.getMessage(key, args, locale);
         }
         return fallbackResolver();
     }
@@ -140,7 +140,7 @@ public class BaseEventListener extends EventSourceListener {
     }
 
     private static ManagerHttpErrorResponseBuilder.I18nResolver fallbackResolver() {
-        return (key, locale) -> {
+        return (key, args, locale) -> {
             if (key.endsWith(".reason")) {
                 return "A downstream service returned an error or was unreachable.";
             }

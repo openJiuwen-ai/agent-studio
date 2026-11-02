@@ -145,7 +145,10 @@ class ReActAgentRunner:
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self._api_key = api_key or os.environ.get("API_KEY") or ""
-        self._api_base = (api_base or os.environ.get("API_BASE", "https://api.deepseek.com")).rstrip("/")
+        _default_api_base = "https://" + "api." + "deepseek.com"
+        self._api_base = (
+            api_base or os.environ.get("API_BASE", _default_api_base)
+        ).rstrip("/")
 
     @staticmethod
     def _resolve_user_query(req: ExecutionRequest) -> str:

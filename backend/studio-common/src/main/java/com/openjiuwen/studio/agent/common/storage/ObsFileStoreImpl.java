@@ -146,9 +146,46 @@ public class ObsFileStoreImpl implements FileStore {
                 return IOUtils.toString(is, StandardCharsets.UTF_8);
             }
             return null;
+        } catch (ObsException e) {
+            // read：对象不存在（404）与其他 OBS 故障统一抛 OBS_FAILED（透传 cause，便于上层排查）。
+            // 404 在多数调用方（downloadObsFile → JSON.parseObject 解引用）属数据不一致故障，应 500 而非 NPE。
+            // 需要"404=业务语义 null"的调用方（发布元数据读取）用 readOrNull。
+            log.error("read failed: {}", path, e);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
         } catch (Exception e) {
             log.error("read failed: {}", path, e);
-            throw new AgentStudioException(StudioError.OBS_FAILED);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
+        } finally {
+            IOUtils.closeQuietly(is);
+        }
+    }
+
+    @Override
+    public String readOrNull(String path) {
+        String[] parts = splitPath(path);
+        InputStream is = null;
+        try {
+            ObsObject obj = obsClient.getObject(parts[0], parts[1]);
+            is = obj.getObjectContent();
+            if (is != null) {
+                return IOUtils.toString(is, StandardCharsets.UTF_8);
+            }
+            return null;
+        } catch (ObsException e) {
+            // readOrNull：仅 NoSuchKey（对象不存在=未发布）语义化为 null（用于"对象不存在=业务语义"的调用方，
+            // 如发布元数据读取：未发布资源的元数据对象不存在 → null → 调用方据此判未发布）；
+            // 其他故障（5xx）仍抛 OBS_FAILED，不掩盖真实故障。
+            // 注：NoSuchBucket（桶缺失/配置错）虽 HTTP 404 但 errorCode 不同，属真实故障 → 抛 OBS_FAILED，
+            // 避免桶缺失被误判为未发布→400 掩盖 OBS 配置问题。
+            if (e.getResponseCode() == 404 && "NoSuchKey".equals(e.getErrorCode())) {
+                log.warn("obs object not found (NoSuchKey), treat as absent: {}", path);
+                return null;
+            }
+            log.error("readOrNull failed: {}", path, e);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
+        } catch (Exception e) {
+            log.error("readOrNull failed: {}", path, e);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
         } finally {
             IOUtils.closeQuietly(is);
         }

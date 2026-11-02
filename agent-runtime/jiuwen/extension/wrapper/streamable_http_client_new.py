@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
+from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.models.api_utils import ApiUtils
@@ -33,7 +34,7 @@ from openjiuwen.core.foundation.tool.mcp.base import (
 from openjiuwen.core.foundation.tool.mcp.client.mcp_client import McpClient
 from agent_runtime.context.request_context import strip_correlation_headers
 
-mcp_time_out_seconds = float(os.getenv("MCP_TIME_OUT_SECONDS", 120))
+mcp_time_out_seconds = parse_mcp_time_out_seconds()
 
 
 def flatten_exception_group(eg: ExceptionGroup | BaseException) -> list[BaseException]:
@@ -54,6 +55,20 @@ def exception_group_to_str_simple(eg: ExceptionGroup) -> str:
     return "\n".join(
         f"{type(e).__name__}: {str(e)}" for e in flatten_exception_group(eg)
     )
+
+
+def _normalize_choose_tools(value):
+    """归一化 mcp_choose_tools：None 保持放行，序列转为 frozenset，
+    字符串/其他非法形态按空集处理（防子串匹配绕过白名单）。"""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return frozenset(value)
+    logger.error(
+        "invalid mcp_choose_tools type %s, treat as empty (reject all tools)",
+        type(value).__name__,
+    )
+    return frozenset()
 
 
 class StreamableHttpClientNew(McpClient):
@@ -77,7 +92,9 @@ class StreamableHttpClientNew(McpClient):
 
         self._plugin_dependency = config.params.get("plugin_dependency", {})
         self._tool_params = config.params.get("tool_params", [])
-        self._mcp_choose_tools = config.params.get("mcp_choose_tools")
+        self._mcp_choose_tools = _normalize_choose_tools(
+            config.params.get("mcp_choose_tools")
+        )
         self._auth = config.params.get("auth", {})
         self._input_parameters = config.params.get("input_parameters", {})
 
@@ -305,12 +322,22 @@ class StreamableHttpClientNew(McpClient):
 
         每次调用新建 client/session，执行完毕后自动释放
         """
+        if self._mcp_choose_tools is not None and tool_name not in self._mcp_choose_tools:
+            err_msg = f"tool {tool_name} is not in the chosen mcp tools {self._mcp_choose_tools}"
+            logger.error(err_msg)
+            raise exception.PluginParamException(message=err_msg)
+
         jiuwen_kwargs = arguments.pop(JIUWEN_RUNTIME_KWARGS, {}) or {}
 
         request_params = self._prepare_request_params(
             arguments, name=tool_name, **jiuwen_kwargs
         )
         tmp_url = self._build_mcp_url(request_params)
+
+        # 节点超时与 MCP_TIME_OUT_SECONDS 取小
+        effective_timeout = mcp_time_out_seconds
+        if timeout > 0:
+            effective_timeout = min(mcp_time_out_seconds, timeout)
 
         logger.info(
             f"Calling tool '{tool_name}' via streamable-http with arguments: {arguments}"
@@ -319,8 +346,8 @@ class StreamableHttpClientNew(McpClient):
         async with streamablehttp_client(
             tmp_url,
             headers=request_params.headers,
-            sse_read_timeout=mcp_time_out_seconds,
-            timeout=mcp_time_out_seconds,
+            sse_read_timeout=effective_timeout,
+            timeout=effective_timeout,
         ) as (read_stream, write_stream, _):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()

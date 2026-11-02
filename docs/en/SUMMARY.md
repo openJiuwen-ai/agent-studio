@@ -11,6 +11,7 @@
   - [Asset Plaza Preset](how-to/asset-plaza-preset.md)
   - [Observability Deployment](how-to/configure-opentelemetry.md)
   - [Knowledge Base Integration Guide](how-to/knowledge-base-guide.md)
+  - [SQL Node Configuration Guide](how-to/sql-node-guide.md)
   - [Audit Log Guide](how-to/audit-log-guide.md)
   - [Troubleshooting](how-to/troubleshooting.md)
 - [Reference](reference/)

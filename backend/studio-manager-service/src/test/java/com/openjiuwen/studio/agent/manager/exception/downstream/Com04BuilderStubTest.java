@@ -40,7 +40,7 @@ class Com04BuilderStubTest {
     private final DownstreamErrorMapper mapper = new DownstreamErrorMapper(
         new DownstreamErrorMappingCatalog(new ManagerErrorCatalog()));
     private final ManagerHttpErrorResponseBuilder httpBuilder =
-        new ManagerHttpErrorResponseBuilder((key, locale) -> {
+        new ManagerHttpErrorResponseBuilder((key, args, locale) -> {
             if (key.endsWith(".reason")) return "A downstream service returned an error.";
             if (key.endsWith(".suggestion")) return "Please retry later.";
             return "Downstream service call failed.";

@@ -17,12 +17,16 @@ from jiuwen.controller.utils.utils import ToolFormatter
 from jiuwen.planner.common import OpType
 from jiuwen.planner.common.exception import LLMInvocationFailedException
 from jiuwen.planner.common.stream_post_utils import (
+    build_finish_reason,
+    build_usage_metadata,
     create_trace_manager,
     _process_time_info_by_llm_output,
     LATENCY,
     MODEL_STAT,
     _format_yield_result,
     MODEL_USAGE,
+    USAGE_METADATA,
+    FINISH_REASON,
 )
 from jiuwen.planner.planning_modules.base import PromptPlanningModule
 from jiuwen.plugin.models.function import Function
@@ -279,6 +283,7 @@ class LLMModule:
         await trace_manager.on_llm_start(messages)
 
         llm_output, time_dict, model_stat, model_usage = dict(), dict(), dict(), dict()
+        finish_usage = dict()
         try:
             result = self.llm.astream(
                 LanguageModelInput(
@@ -292,6 +297,7 @@ class LLMModule:
                 model_stat,
                 model_usage,
                 self._is_thinking_enabled(),
+                finish_usage,
             ):
                 yield item
         except Exception as e:
@@ -309,6 +315,15 @@ class LLMModule:
         output_on_insights.update({LATENCY: time_dict})
         output_on_insights.update({MODEL_STAT: model_stat})
         output_on_insights.update({MODEL_USAGE: model_usage})
+        # OTel 双写：按 core handler 约定键名补用量/成本/时延（缺数据时为空，跳过注入）
+        usage_dict = build_usage_metadata(
+            finish_usage.get("usage"), finish_usage.get("tpot_ms")
+        )
+        if usage_dict:
+            output_on_insights[USAGE_METADATA] = usage_dict
+        finish_reason = build_finish_reason(finish_usage.get("usage"))
+        if finish_reason:
+            output_on_insights[FINISH_REASON] = finish_reason
         await trace_manager.on_llm_end(output_on_insights)
 
     def _is_thinking_enabled(self) -> bool:

@@ -96,7 +96,7 @@ public class ProxyEventSourceListener extends EventSourceListener {
 
     /** 向后兼容构造函数（测试用）——使用安全 fallback resolver 和默认 locale。 */
     public ProxyEventSourceListener(String requestId, CountDownLatch latch, SseEmitter sseEmitter) {
-        this(requestId, latch, sseEmitter, (key, loc) -> {
+        this(requestId, latch, sseEmitter, (key, args, loc) -> {
             if (key.endsWith(".reason")) return "A downstream service returned an error or was unreachable.";
             if (key.endsWith(".suggestion")) return "Please retry later; contact support if the issue persists.";
             return "Downstream service call failed.";

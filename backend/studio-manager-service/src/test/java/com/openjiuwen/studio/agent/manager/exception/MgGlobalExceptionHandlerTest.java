@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -74,9 +75,12 @@ class MgGlobalExceptionHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new MgGlobalExceptionHandler(i18nUtil);
-        // COM-03: builder resolves via getMessage(String key, Locale locale)
+        // COM-03: builder resolves via getMessage(String key, Object[] args, Locale locale)
+        // 显式 3 参重载（避免 locale 落入 varargs 的 args[0]）。varargs 版 stub 保留供其他直连路径。
         lenient().when(i18nUtil.getMessage(anyString())).thenReturn("i18n-msg");
         lenient().when(i18nUtil.getMessage(anyString(), isA(java.util.Locale.class)))
+            .thenReturn("i18n-msg");
+        lenient().when(i18nUtil.getMessage(anyString(), nullable(java.lang.Object[].class), any(java.util.Locale.class)))
             .thenReturn("i18n-msg");
     }
 

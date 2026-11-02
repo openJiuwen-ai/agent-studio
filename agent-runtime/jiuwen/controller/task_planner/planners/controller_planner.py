@@ -923,6 +923,11 @@ class ControllerPlanner(TaskPlanner):
             chat_history=chat_history,
             available_intents=available_intents,
             task_id=self.task_id,
+            runtime_data=(
+                message.runtime_data
+                if isinstance(getattr(message, "runtime_data", None), dict)
+                else None
+            ),
         )
         return result.is_complex
 

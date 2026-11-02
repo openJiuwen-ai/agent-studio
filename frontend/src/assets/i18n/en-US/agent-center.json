@@ -505,6 +505,7 @@
   "nodeDesc.ParamExtraction": "Extract parameters from specified objects. Sub workflows can be configured to verify and calibrate parameters and initiate user interaction.",
   "nodeDesc.DataQuery": "Queries data from the database. Users can configure query conditions and query methods.",
   "nodeDesc.StreamTransform": "Streaming messages",
+  "nodeDesc.TemplateTransform": "Render input variables into text with a Jinja2 template.",
   "view_doc": "View Documentation",
   "single-test": "Node Testing",
   "icon-more": "More",

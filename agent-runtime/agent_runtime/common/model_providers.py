@@ -155,9 +155,8 @@ class Nl2ModelConfigProvider:
         x_auth_token = headers.get("x_auth_token", "")
 
         ctx = _request_ctx.get()
-        if ctx and ctx.headers:
-            if not x_auth_token:
-                x_auth_token = ctx.headers.get("x-auth-token", "") or ctx.headers.get("X-Auth-Token", "")
+        if ctx and ctx.headers and not x_auth_token:
+            x_auth_token = ctx.headers.get("x-auth-token", "") or ctx.headers.get("X-Auth-Token", "")
 
         custom_headers = {}
         if auth_id:

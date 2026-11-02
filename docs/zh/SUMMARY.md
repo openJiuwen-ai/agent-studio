@@ -11,6 +11,7 @@
   - [资产广场预置](how-to/asset-plaza-preset.md)
   - [可观测性部署](how-to/configure-opentelemetry.md)
   - [知识库接入指南](how-to/knowledge-base-guide.md)
+  - [SQL自定义节点配置指南](how-to/sql-node-guide.md)
   - [审计日志使用指南](how-to/audit-log-guide.md)
   - [运行问题排查](how-to/troubleshooting.md)
   - [常见问题 FAQ](../FAQ/faq.md)

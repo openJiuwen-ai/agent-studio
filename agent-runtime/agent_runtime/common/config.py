@@ -426,6 +426,13 @@ class CodeExecutionSettings(BaseSettings):
         default=False,
         validation_alias="ALLOW_LOCAL_CODE_EXEC",
     )
+    # 本地执行的兜底超时（秒）：异常处理未配 exceptionProcess.timeout 时使用。
+    # 与沙箱超时（SECURITY_SANDBOX_TIMEOUT）解耦，避免混用。
+    local_exec_timeout: int = Field(
+        default=900,
+        gt=0,
+        validation_alias="LOCAL_CODE_EXEC_TIMEOUT",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

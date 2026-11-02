@@ -509,6 +509,7 @@
   "nodeDesc.ParamExtraction": "提取指定对象中的参数，支持配置子工作流进行参数的校验与校准、发起用户交互。",
   "nodeDesc.DataQuery": "查询database数据，用户可配置查询条件和查询方式。",
   "nodeDesc.StreamTransform": "流式消息",
+  "nodeDesc.TemplateTransform": "使用 Jinja2 模板将输入变量渲染为文本。",
   "view_doc": "查看文档",
   "single-test": "节点测试",
   "icon-more": "更多",

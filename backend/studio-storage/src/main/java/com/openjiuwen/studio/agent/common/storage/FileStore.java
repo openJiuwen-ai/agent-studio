@@ -68,6 +68,25 @@ public interface FileStore {
     String read(String path);
 
     /**
+     * 读取指定路径的文本内容，对象不存在时返回 {@code null}（而非抛出）。
+     *
+     * <p>用于"对象不存在=业务语义"的调用方（如发布元数据读取：未发布资源的元数据对象在 OBS 不存在，
+     * 404 应语义化为 null 而非 OBS 服务故障）。其余读取场景应使用 {@link #read(String)}，
+     * 让对象不存在与其他 OBS 故障统一抛出，避免调用方解引用 null 导致 NPE。</p>
+     *
+     * <p>默认实现委托 {@link #read(String)}：本地实现（LocalFileStoreImpl）对象不存在本就抛出
+     * （NoSuchFileException），不区分 404，故默认行为即"不存在也抛"，与 {@code read} 一致；
+     * OBS 实现（ObsFileStoreImpl）覆盖此方法，对 404 返回 null、对 5xx 等真实故障抛出。</p>
+     *
+     * @param path 存储路径，格式为 {@code namespace/objectKey}
+     * @return 文本内容（UTF-8）；对象不存在时返回 {@code null}（仅 OBS 实现区分）
+     * @throws RuntimeException 真实存储故障（如 OBS 5xx）时抛出
+     */
+    default String readOrNull(String path) {
+        return read(path);
+    }
+
+    /**
      * 读取指定路径的二进制流。
      *
      * @param path 存储路径，格式为 {@code namespace/objectKey}

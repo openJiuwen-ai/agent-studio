@@ -34,9 +34,11 @@ public class ManagerSseErrorEventBuilder {
      * @return Map 形式的 {@code {event:"error", data:{...}}}
      */
     public Map<String, Object> buildEnvelope(ErrorDescriptor descriptor, Locale locale) {
-        String errorMsg = safeResolve(descriptor.getMessageKey(), locale);
-        String errorReason = safeResolve(descriptor.getReasonKey(), locale);
-        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), locale);
+        // 从异常 cause 提取 args 填 i18n 占位符; reason/suggestion 当前无占位符, 多传 args 被忽略。
+        Object[] args = extractArgs(descriptor);
+        String errorMsg = safeResolve(descriptor.getMessageKey(), args, locale);
+        String errorReason = safeResolve(descriptor.getReasonKey(), args, locale);
+        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), args, locale);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("error_code", descriptor.getErrorCode());
@@ -66,12 +68,21 @@ public class ManagerSseErrorEventBuilder {
     }
 
     /** COM-03 §4: fail-closed——resolver 异常或空值时抛出,不返回空串。 */
-    private String safeResolve(String key, Locale locale) {
-        String result = resolver.resolve(key, locale);
+    private String safeResolve(String key, Object[] args, Locale locale) {
+        String result = resolver.resolve(key, args, locale);
         if (result == null || result.isBlank()) {
             throw new IllegalStateException(
                 "i18n resolution returned blank for key=" + key + " locale=" + locale);
         }
         return result;
+    }
+
+    /** 从 descriptor.cause 提取 i18n 占位符 args（同 ManagerHttpErrorResponseBuilder）。 */
+    private Object[] extractArgs(ErrorDescriptor descriptor) {
+        Throwable cause = descriptor.getCause();
+        if (cause instanceof com.openjiuwen.studio.agent.common.exception.AgentStudioException ase) {
+            return ase.getArgs();
+        }
+        return null;
     }
 }

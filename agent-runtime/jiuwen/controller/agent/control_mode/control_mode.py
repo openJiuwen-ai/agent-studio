@@ -299,7 +299,7 @@ class ControllerMode(BaseMode):
 
         # 检查特殊工作流
         self._check_special_workflow_completion(workflow_name, task_execution_id)
-        return []
+        return
 
     def _handle_workflow_interrupt(self, message, task_execution_id):
         """处理工作流中断消息"""

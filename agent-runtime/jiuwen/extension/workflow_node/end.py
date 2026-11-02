@@ -855,25 +855,24 @@ class End(BaseEnd):
                     index=output.get("index", 0) + 1,
                     payload=output,
                 )
-        if last_end_node_stream:
+        if last_end_node_stream and self._should_emit_end_marker():
             # 当模板以 {{...}} 结尾时，旧框架 split 末元素为空字符串，
             # 会作为 PARTIAL_CONTENT(answer="") 发送，充当流式结束标记
-            if self._should_emit_end_marker():
-                empty_result = get_output_data_with_metadata(
-                    answer="",
-                    node_id=node_id,
-                    node_name=self.node_name,
-                    node_type=self.node_type,
-                    should_interrupt=self.end_interrupt,
-                    outputs=user_fields,
-                    output_mode=self.output_mode.value if self.output_mode else None,
-                    struct_answer="",
-                )
-                yield OutputSchema(
-                    type="end node stream",
-                    index=last_end_node_stream.index + 2,
-                    payload=empty_result,
-                )
+            empty_result = get_output_data_with_metadata(
+                answer="",
+                node_id=node_id,
+                node_name=self.node_name,
+                node_type=self.node_type,
+                should_interrupt=self.end_interrupt,
+                outputs=user_fields,
+                output_mode=self.output_mode.value if self.output_mode else None,
+                struct_answer="",
+            )
+            yield OutputSchema(
+                type="end node stream",
+                index=last_end_node_stream.index + 2,
+                payload=empty_result,
+            )
 
         # 添加结束节点最后的finish事件，带有完整的workflow输出信息
         if len(response_parts) == 1 and not isinstance(response_parts[0], str):
@@ -978,9 +977,8 @@ class End(BaseEnd):
         # 聚合流式输入
         collected_inputs = []
         outputs = {}
-        if inputs and isinstance(inputs, dict):
-            if inputs.get(USER_FIELDS):
-                inputs = inputs[USER_FIELDS]
+        if inputs and isinstance(inputs, dict) and inputs.get(USER_FIELDS):
+            inputs = inputs[USER_FIELDS]
         if hasattr(inputs, "__aiter__"):
             async for input_chunk in inputs:
                 collected_inputs.append(input_chunk)
@@ -1150,9 +1148,8 @@ class End(BaseEnd):
         # 流式连接下 __stream_metadata__ 会被引擎包装为 AsyncGenerator，需消费取最后一帧
         stream_metadata = None
         _meta_count = 0
-        if inputs and isinstance(inputs, dict):
-            if inputs.get(USER_FIELDS):
-                inputs = inputs[USER_FIELDS]
+        if inputs and isinstance(inputs, dict) and inputs.get(USER_FIELDS):
+            inputs = inputs[USER_FIELDS]
         _raw_meta = inputs.pop("__stream_metadata__", None) if isinstance(inputs, dict) else None
         if isinstance(_raw_meta, AsyncGenerator):
             _last_meta = None

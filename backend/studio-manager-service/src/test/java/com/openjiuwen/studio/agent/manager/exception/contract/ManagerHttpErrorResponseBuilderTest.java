@@ -8,6 +8,8 @@ import com.openjiuwen.studio.agent.common.dto.ErrorDetail;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 
@@ -30,9 +32,9 @@ class ManagerHttpErrorResponseBuilderTest {
     private static final String SUGGESTION_KEY = "openjiuwen.02001129.suggestion";
     private static final String REQ_ID = "req-test-001";
 
-    // Simple resolver: returns key + "::resolved" for any key
+    // Resolver: message 段把 args 拼进返回值（验证 args 透传），reason/suggestion（args=null）只返回 key。
     private final ManagerHttpErrorResponseBuilder.I18nResolver resolver =
-        (key, locale) -> key + "::resolved";
+        (key, args, locale) -> args != null && args.length > 0 ? key + "::" + args[0] : key + "::resolved";
 
     private final ManagerHttpErrorResponseBuilder builder =
         new ManagerHttpErrorResponseBuilder(resolver);
@@ -119,5 +121,22 @@ class ManagerHttpErrorResponseBuilderTest {
             SUGGESTION_KEY, REQ_ID, null, null, null, null);
         ResponseEntity<ErrorRsp> resp = builder.build(d500, Locale.CHINA);
         assertEquals(500, resp.getStatusCode().value());
+    }
+
+    /** bug009 根因2: cause 为 ASE 时, args 透传给 resolver 填占位符, locale 不被误填。 */
+    @Test
+    void causeAgentStudioException_argsPassedToResolver() {
+        // EXPORT_RESOURCE_NOT_EXISTS 抛出时 args=["agent"]（resourceType），三段同传。
+        AgentStudioException cause = new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS,
+            "agent");
+        ErrorDescriptor d = new ErrorDescriptor(CODE, 400, MSG_KEY, REASON_KEY,
+            SUGGESTION_KEY, REQ_ID, null, null, null, cause);
+        ResponseEntity<ErrorRsp> resp = builder.build(d, Locale.CHINA);
+        assertEquals(MSG_KEY + "::agent", resp.getBody().getErrorMsg(),
+            "args 应透传给 message resolver 填占位符,而非被 locale 误填");
+        assertEquals(REASON_KEY + "::agent", resp.getBody().getErrorReason(),
+            "reason 段同样透传 args");
+        assertEquals(SUGGESTION_KEY + "::agent", resp.getBody().getErrorSuggestion(),
+            "suggestion 段同样透传 args");
     }
 }

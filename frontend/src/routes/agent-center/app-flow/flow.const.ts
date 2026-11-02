@@ -224,7 +224,7 @@ export const WORKFLOW_SVGS = {
   Controller: cdnAssetUrl('assets/agent-center/flow/Controller.svg'),
   KnowledgeRepo: cdnAssetUrl('assets/agent-center/flow/KnowledgeRepo.svg'),
   Code: cdnAssetUrl('assets/agent-center/flow/Code.svg'),
-  TemplateTransform: cdnAssetUrl('assets/agent-center/flow/Code.svg'),
+  TemplateTransform: cdnAssetUrl('assets/agent-center/flow/TemplateTransform.svg'),
   Branch: cdnAssetUrl('assets/agent-center/flow/Branch.svg'),
   IntentDetection: cdnAssetUrl('assets/agent-center/flow/Intent.svg'),
   IntentDetectionContainer: cdnAssetUrl('assets/agent-center/flow/Intent.svg'),

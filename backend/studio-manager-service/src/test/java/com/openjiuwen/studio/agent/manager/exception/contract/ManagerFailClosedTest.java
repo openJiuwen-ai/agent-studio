@@ -67,25 +67,25 @@ class ManagerFailClosedTest {
 
     private ProxyEventSourceListener withFailingResolver() {
         return new ProxyEventSourceListener(RID, new CountDownLatch(1), spyEmitter(),
-            (key, locale) -> { throw new RuntimeException("resolver-boom"); },
+            (key, args, locale) -> { throw new RuntimeException("resolver-boom"); },
             java.util.Locale.ENGLISH);
     }
 
     private ProxyEventSourceListener withBlankResolver() {
         return new ProxyEventSourceListener(RID, new CountDownLatch(1), spyEmitter(),
-            (key, locale) -> "   ",
+            (key, args, locale) -> "   ",
             java.util.Locale.ENGLISH);
     }
 
     private ProxyEventSourceListener withNullResolver() {
         return new ProxyEventSourceListener(RID, new CountDownLatch(1), spyEmitter(),
-            (key, locale) -> null,
+            (key, args, locale) -> null,
             java.util.Locale.ENGLISH);
     }
 
     private ProxyEventSourceListener withValidResolver() {
         return new ProxyEventSourceListener(RID, new CountDownLatch(1), spyEmitter(),
-            (key, locale) -> "msg:" + key,
+            (key, args, locale) -> "msg:" + key,
             java.util.Locale.ENGLISH);
     }
 
@@ -158,7 +158,7 @@ class ManagerFailClosedTest {
         SseEmitter emitter = spyEmitter();
         ProxyEventSourceListener listener = new ProxyEventSourceListener(
             RID, new CountDownLatch(1), emitter,
-            (key, loc) -> { throw new RuntimeException("boom"); },
+            (key, args, loc) -> { throw new RuntimeException("boom"); },
             java.util.Locale.ENGLISH);
         triggerFailure(listener);
         // emitter 被 complete 至少一次

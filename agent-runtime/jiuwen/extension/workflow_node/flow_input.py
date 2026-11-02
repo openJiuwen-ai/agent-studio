@@ -262,14 +262,13 @@ class FlowInputUtils:
                                 f"got {type(value).__name__}"
                             )
                 elif flow_type == "object":
-                    if not isinstance(value, dict):
-                        if isinstance(value, str):
-                            inputs[input_field] = json.loads(value)
-                        else:
-                            raise TypeError(
-                                f"Expected dict for field '{input_field}', "
-                                f"got {type(value).__name__}"
-                            )
+                    if not isinstance(value, dict) and isinstance(value, str):
+                        inputs[input_field] = json.loads(value)
+                    elif not isinstance(value, dict):
+                        raise TypeError(
+                            f"Expected dict for field '{input_field}', "
+                            f"got {type(value).__name__}"
+                        )
             except (ValueError, TypeError) as e:
                 raise build_error(
                     StatusCode.COMPONENT_QUESTIONER_INPUT_PARAM_ERROR,
