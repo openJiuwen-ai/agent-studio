@@ -764,11 +764,13 @@ class TestTelemetryIsolation:
     async def test_malformed_scope_degrades_telemetry_not_business(self):
         """作用域对象畸形（generate_manager 抛 AttributeError）：遥测整体
         降级跳过，本应成功的调用不受影响（检视意见第十轮——派生点原先
-        在业务 try 之外，畸形 handlers 会直接中断调用）。"""
+        在业务 try 之外，畸形 handlers 会直接中断调用）。
+        """
 
         class _NotAManager:
             """真值、非 list、无 trace_handlers 属性——命中 _generate_manager
-            的非 list/TraceManager 分支后 AttributeError。"""
+            的非 list/TraceManager 分支后 AttributeError。
+            """
 
         tracer = _FakeTracer()
         llm = MagicMock()
