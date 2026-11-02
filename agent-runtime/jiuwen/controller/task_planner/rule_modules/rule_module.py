@@ -263,8 +263,16 @@ class RuleModule:
                 if intent_config.intent_id == intent_id:
                     global_intent = intent_config
                     break
+            # 遥测数据按“可能缺失/非 dict”防御取出（同 controller_planner 口径）：
+            # runtime_data 异常时 trace_handlers 取 None，绝不影响意图任务是否创建
+            runtime_data = getattr(msg, "runtime_data", None)
+            trace_handlers = (
+                runtime_data.get("trace_handlers")
+                if isinstance(runtime_data, dict)
+                else None
+            )
             return self.create_global_intent_task(
-                global_intent, task_id, msg.runtime_data.get("trace_handlers")
+                global_intent, task_id, trace_handlers
             )
         except Exception as e:
             logger.error(

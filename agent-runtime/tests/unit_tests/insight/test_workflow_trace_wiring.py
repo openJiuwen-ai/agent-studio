@@ -94,6 +94,11 @@ class TestTaskCreationSites:
         )
         calls = _calls_with_attr(caller, "create_global_intent_task")
         assert calls and len(calls[0].args) == 3
+        # 第三参须为防御取出的局部变量：runtime_data 缺失/非 dict 时取 None，
+        # 不得回潮为裸调 msg.runtime_data.get(...)
+        assert isinstance(
+            calls[0].args[2], ast.Name
+        ), "第三参须为防御取出的局部变量名"
 
     @staticmethod
     def test_controller_planner_intent_task_passes_message_handlers():
