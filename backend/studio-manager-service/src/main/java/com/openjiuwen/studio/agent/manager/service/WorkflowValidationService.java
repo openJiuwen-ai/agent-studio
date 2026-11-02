@@ -2734,7 +2734,8 @@ public class WorkflowValidationService {
             } else {
                 return true;
             }
-            if (currentLevel == null) {
+            if (currentLevel == null || currentLevel.isEmpty()) {
+                // 更深层级 schema 缺失或为空（无法确认路径）时放行，避免误报（与入口语义一致）
                 return true;
             }
         }

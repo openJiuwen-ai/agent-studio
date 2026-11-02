@@ -166,6 +166,25 @@ class StreamTransformValidationTest {
     }
 
     @Test
+    void placeholders_withEmptyNestedSchema_shouldPass() {
+        // E1：循环内更深的 currentLevel 为空列表（如 object 子 schema 为空）时同样放行，
+        // 避免 findFieldByName(空表) 返回 null 而误报变量不存在
+        List<Map<String, Object>> schema = new ArrayList<>();
+        Map<String, Object> dataField = new HashMap<>();
+        dataField.put("name", "data");
+        dataField.put("type", "object");
+        dataField.put("schema", new ArrayList<Object>());
+        schema.add(dataField);
+        addUpstreamNodeWithSchema(schema);
+        WorkflowValidationService.Node node =
+            streamTransformNode("{\"content\":\"{{raw_output.data.name}}\"}", null);
+
+        List<WorkflowValidationVOErrors> errors = validate(node);
+
+        assertFalse(hasRefError(errors), "中段空 schema（空列表）无法确认时应放行");
+    }
+
+    @Test
     void placeholders_withWholeInputReference_shouldPass() {
         addUpstreamNodeWithSchema(schemaOf("data", "string"));
         WorkflowValidationService.Node node = streamTransformNode("{\"content\":\"{{raw_output}}\"}", null);
