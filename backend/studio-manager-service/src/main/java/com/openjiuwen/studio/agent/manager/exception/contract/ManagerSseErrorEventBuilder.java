@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.exception.contract;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.error.PassthroughText;
 
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -30,15 +31,35 @@ public class ManagerSseErrorEventBuilder {
 
     /**
      * 构建 SSE error 事件的业务 JSON envelope。
+     * <p>
+     * 统一族格式（COM-04 §5.2 修订二期，2026-11-02 用户裁定）：下游失败
+     * （descriptor 携带组件标签）时 {@code error_msg=族前缀}、
+     * {@code error_reason="组件{label}：{错误信息}"}；非下游错误保持
+     * i18n 三键 + fail-closed 原行为。
      *
      * @return Map 形式的 {@code {event:"error", data:{...}}}
      */
     public Map<String, Object> buildEnvelope(ErrorDescriptor descriptor, Locale locale) {
-        // 从异常 cause 提取 args 填 i18n 占位符; reason/suggestion 当前无占位符, 多传 args 被忽略。
+        // 从异常 cause 提取 args 填 i18n 占位符（origin 10f62b9cd 特性）；族格式
+        // 文案无占位符, 多传 args 被忽略, 与统一族格式兼容。
         Object[] args = extractArgs(descriptor);
-        String errorMsg = safeResolve(descriptor.getMessageKey(), args, locale);
-        String errorReason = safeResolve(descriptor.getReasonKey(), args, locale);
-        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), args, locale);
+        String label = descriptor.getDownstreamComponentLabel();
+        String errorMsg;
+        String errorReason;
+        String errorSuggestion;
+        if (label != null) {
+            errorMsg = DownstreamFamilyFormat.message(resolver, args, locale);
+            errorReason = DownstreamFamilyFormat.reason(resolver, descriptor, label, args, locale);
+            errorSuggestion = DownstreamFamilyFormat.suggestion(resolver, descriptor, args, locale);
+        } else {
+            PassthroughText passthrough = descriptor.getPassthroughText();
+            String messageFallback = passthrough != null ? passthrough.getMessage() : null;
+            errorMsg = safeResolve(descriptor.getMessageKey(), args, locale, messageFallback);
+            errorReason = safeResolve(descriptor.getReasonKey(), args, locale,
+                passthrough != null ? firstNonBlank(passthrough.getReason(), messageFallback) : null);
+            errorSuggestion = safeResolve(descriptor.getSuggestionKey(), args, locale,
+                passthrough != null ? firstNonBlank(passthrough.getSuggestion(), messageFallback) : null);
+        }
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("error_code", descriptor.getErrorCode());
@@ -67,14 +88,43 @@ public class ManagerSseErrorEventBuilder {
         }
     }
 
-    /** COM-03 §4: fail-closed——resolver 异常或空值时抛出,不返回空串。 */
-    private String safeResolve(String key, Object[] args, Locale locale) {
-        String result = resolver.resolve(key, args, locale);
+    /**
+     * COM-03 §4 fail-closed + COM-04 §5.2 修订（2026-11-02）回退：
+     * 优先 i18n 解析（含"回显 key"视为未命中——I18nUtil 以 key 作默认值返回）；
+     * 未命中且有受管三段文案回退值时使用回退值；否则按原 fail-closed 语义
+     * 抛出（resolver 异常原样重抛，空值抛 IllegalStateException），不返回空串。
+     */
+    private String safeResolve(String key, Object[] args, Locale locale, String passthroughFallback) {
+        String result = null;
+        RuntimeException resolveError = null;
+        try {
+            result = resolver.resolve(key, args, locale);
+        } catch (RuntimeException e) {
+            resolveError = e;
+        }
+        boolean miss = result == null || result.isBlank() || key.equals(result);
+        if (miss && passthroughFallback != null && !passthroughFallback.isBlank()) {
+            return passthroughFallback;
+        }
+        if (resolveError != null) {
+            throw resolveError;
+        }
         if (result == null || result.isBlank()) {
             throw new IllegalStateException(
                 "i18n resolution returned blank for key=" + key + " locale=" + locale);
         }
         return result;
+    }
+
+    /** 字段级回退链的第二跳：字段文案缺失时回退到 message（mapper 兜底之外的双保险）。 */
+    private static String firstNonBlank(String primary, String secondary) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        if (secondary != null && !secondary.isBlank()) {
+            return secondary;
+        }
+        return null;
     }
 
     /** 从 descriptor.cause 提取 i18n 占位符 args（同 ManagerHttpErrorResponseBuilder）。 */

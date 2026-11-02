@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.exception.downstream;
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.error.ErrorDefinition;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.error.PassthroughText;
 
 /**
  * COM-04 §4.3: 唯一下游映射入口。
@@ -18,15 +19,22 @@ import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
  * <ol>
  *   <li>以 {@code (service, downstreamErrorCode)} 精确查询显式映射表；</li>
  *   <li>命中且对应 Manager 定义满足约束时，选择该 Manager 定义；</li>
+ *   <li>RUNTIME canonical 码形（纵深校验，非仅 parser 信任）且无显式映射时，
+ *       按 runtime 原码透传（HTTP 阶段用下游实际状态，SSE 阶段 500——修复
+ *       2026-10-27 版本要求 downstreamHttpStatus 非空导致 SSE 错误帧永远进不了
+ *       本分支的洞），并附帧内受管三段文案供构建器 i18n 缺失时回退；</li>
  *   <li>未命中、无原码、未知码、响应损坏或 transport failure，
  *       选择 {@code ManagerErrorCatalog.downstreamDependencyFailed()}（02001131/502）；</li>
  *   <li>构造 descriptor 时保留原始 {@code cause}，写入 {@code downstreamService}；
  *       有可信原码时同时写入 {@code downstreamErrorCode}；</li>
- *   <li>{@code httpStatus} 只来自选中的 Manager {@code ErrorDefinition}，
- *       绝不来自 {@code downstreamHttpStatus}。</li>
+ *   <li>{@code httpStatus} 只来自选中的 Manager {@code ErrorDefinition}
+ *       （RUNTIME 透传路径为其原码透传状态），绝不来自未经选择的 {@code downstreamHttpStatus}。</li>
  * </ol>
  */
 public final class DownstreamErrorMapper {
+
+    /** RUNTIME 透传路径在 SSE 阶段（无下游 HTTP 状态）使用的 ErrorDefinition 状态。 */
+    static final int RUNTIME_SSE_PASSTHROUGH_STATUS = 500;
 
     private final DownstreamErrorMappingCatalog catalog;
 
@@ -47,8 +55,34 @@ public final class DownstreamErrorMapper {
 
         // 1. 显式 (service, code) 映射 → Manager-owned 定义（初始为空，命中即用）
         ErrorDefinition chosen = null;
+        PassthroughText passthrough = null;
         if (trustedCode != null) {
             chosen = catalog.lookupExplicitMapping(service, trustedCode).orElse(null);
+        }
+        // 1b. RUNTIME 透传（2026-11-02 修订）：可信 Runtime canonical 码形且无显式
+        //     映射时按原码透传。码形校验为纵深防御——直接构造的 DownstreamFailure
+        //     也不能把 Builder canonical 码（13 头）或任意格式推入透传路径。
+        //     HTTP 阶段沿用下游实际状态（2026-10-27 行为）；SSE 阶段（状态为空，
+        //     2026-10-27 版本在此处漏过全部 SSE 错误帧）使用 500。Manager i18n
+        //     已覆盖的码（8 位 0 头族）由构建器优先解析 i18n，行为不变；i18n 缺失
+        //     的码（引擎 6 位族等）由构建器回退到帧内受管三段文案。
+        if (chosen == null && trustedCode != null
+                && service == DownstreamService.RUNTIME
+                && catalog.isRuntimeCanonicalShape(trustedCode)) {
+            int passthroughStatus = failure.getDownstreamHttpStatus() != null
+                ? failure.getDownstreamHttpStatus() : RUNTIME_SSE_PASSTHROUGH_STATUS;
+            chosen = catalog.resolveByCode(trustedCode, passthroughStatus).orElse(null);
+            if (failure.getDownstreamMessage() != null) {
+                // 受管文案完整性兜底：reason/suggestion 缺失时用 message 填充——
+                // 构建器对 i18n 缺失的码按字段回退，部分缺失若不补齐会在
+                // fail-closed 路径抛出，前端将收不到任何错误帧（比兜底码更糟）。
+                String reason = failure.getDownstreamReason() != null
+                    ? failure.getDownstreamReason() : failure.getDownstreamMessage();
+                String suggestion = failure.getDownstreamSuggestion() != null
+                    ? failure.getDownstreamSuggestion() : failure.getDownstreamMessage();
+                passthrough = new PassthroughText(
+                    failure.getDownstreamMessage(), reason, suggestion);
+            }
         }
         // 2. 未命中/无原码/未知码/transport failure → 默认 02001131/502
         if (chosen == null) {
@@ -57,13 +91,45 @@ public final class DownstreamErrorMapper {
 
         // 3. 构造 descriptor：cause + downstreamService + (可信时) downstreamErrorCode
         //    httpStatus 只来自 chosen Manager ErrorDefinition，绝不来自 downstreamHttpStatus
+        //    统一族格式（2026-11-02 二期）：组件标签由本 mapper 唯一判定（runtime/builder/
+        //    external——RUNTIME 访问 OBS/DB 是其内部依赖，不细分到具体依赖，用户裁定）；
+        //    manager 自身直接访问 OBS/SQL 的码族标签由 DependencyComponentLabels 判定
         return new ErrorDescriptor(
             chosen.getErrorCode(), chosen.getHttpStatus(),
             chosen.getMessageKey(), chosen.getReasonKey(), chosen.getSuggestionKey(),
             requestId, null,
             service,              // 总存在
             trustedCode,          // 可信原码或 null（service-without-code 合法）
-            failure.getCause()    // 原始 cause，仅内部日志
+            failure.getCause(),   // 原始 cause，仅内部日志
+            passthrough,          // 受管三段文案，构建器 i18n 缺失时回退；可空
+            resolveComponentLabel(service, trustedCode, failure.getDownstreamMessage())
         );
+    }
+
+    /**
+     * 统一族格式的组件标签（2026-11-02 二期）：识别"哪个下游组件失败"。
+     * <p>
+     * 用户裁定：RUNTIME 访问 OBS/数据库是 RUNTIME 自己的内部依赖，**不细分**
+     * ——下游视角的组件只有服务本身：
+     * <ul>
+     *   <li>BUILDER → {@code builder}；</li>
+     *   <li>RUNTIME（含其 OBS/DB 内部依赖失败）→ {@code runtime}；</li>
+     *   <li>其余服务 → 枚举名小写（如 {@code external}），无服务时 null。</li>
+     * </ul>
+     * manager 自身直接访问 OBS/SQL 的失败标签见
+     * {@code contract.DependencyComponentLabels}（码族精确匹配 obs/mysql）。
+     */
+    private static String resolveComponentLabel(DownstreamService service, String trustedCode,
+                                                String managedMessage) {
+        if (service == null) {
+            return null;
+        }
+        if (service == DownstreamService.BUILDER) {
+            return "builder";
+        }
+        if (service == DownstreamService.RUNTIME) {
+            return "runtime";
+        }
+        return service.name().toLowerCase(java.util.Locale.ROOT);
     }
 }

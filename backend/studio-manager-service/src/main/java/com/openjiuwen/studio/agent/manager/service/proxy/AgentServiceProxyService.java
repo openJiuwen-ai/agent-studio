@@ -79,6 +79,15 @@ import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBr
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMapper;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMappingCatalog;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailure;
+import com.openjiuwen.studio.agent.manager.exception.downstream.Transport;
+import com.openjiuwen.studio.agent.common.error.DownstreamService;
+import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.utils.LanguageUtils;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
@@ -255,6 +264,17 @@ public class AgentServiceProxyService {
     private I18nUtil i18nUtil;
 
     /**
+     * 统一族格式（COM-04 §5.2 修订二期，2026-11-02 用户裁定一致性）：调测链路
+     * builder 掉线与 runtime 掉线同构——走 DownstreamErrorMapper 兜底
+     * 02001131/502 + BUILDER 组件标签（"组件builder：下游服务调用返回错误或
+     * 网络不可达"）；02501037 回归其本职（上游模型探活失败的业务码，不带
+     * 下游组件标签）。
+     */
+    private DownstreamErrorMapper downstreamMapper;
+
+    private ManagerHttpErrorResponseBuilder downstreamHttpBuilder;
+
+    /**
      * 初始化
      */
     @PostConstruct
@@ -262,6 +282,10 @@ public class AgentServiceProxyService {
         allowedIconType = Arrays.stream(allowedIconTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
         allowedImgType = Arrays.stream(allowedImgTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
         allowedDefaultType = Arrays.stream(allowedDefaultTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        this.downstreamMapper = new DownstreamErrorMapper(
+            new DownstreamErrorMappingCatalog(new ManagerErrorCatalog()));
+        this.downstreamHttpBuilder = new ManagerHttpErrorResponseBuilder(
+            (key, args, locale) -> i18nUtil.getMessage(key, args, locale));
         skipOutboundHeaders = parseSkipOutboundHeaders(skipOutboundHeaderListStr);
     }
 
@@ -427,17 +451,16 @@ public class AgentServiceProxyService {
         } catch (Exception parseEx) {
             log.warn("Failed to parse Feign error body.", parseEx);
         }
-        // 无法从 Feign 异常解析出 builder 的 error body 时，退回通用错误码（不带构造的 details，
-        // 避免透出对用户无意义的异常堆栈信息）
-        ErrorInfo errorInfo = i18nUtil.getMessage(
-            new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
-        ErrorRsp errorRsp = new ErrorRsp()
-            .setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode())
-            .setErrorMsg(errorInfo.getMessage())
-            .setErrorReason(errorInfo.getReason())
-            .setErrorSuggestion(errorInfo.getSuggestion());
-        int status = e.status() > 0 ? e.status() : 500;
-        return ResponseEntity.status(status).body(errorRsp);
+        // 无法从 Feign 异常解析出 builder 的 error body 时（builder 不可达等）：
+        // 与 runtime 掉线同构（用户裁定，2026-11-02）——走 DownstreamErrorMapper
+        // 兜底 02001131/502 + BUILDER 组件标签；02501037 不再用于 builder 掉线
+        // （回归其本职：上游模型探活失败的业务码）。
+        DownstreamFailure failure = DownstreamFailure.transportFailure(
+            DownstreamService.BUILDER, Transport.FEIGN, e);
+        ErrorDescriptor descriptor = downstreamMapper.map(failure, MDC.get(MdcKeys.REQUEST_ID));
+        ResponseEntity<ErrorRsp> built = downstreamHttpBuilder.build(
+            descriptor, LanguageUtils.getLanguageLocale());
+        return new ResponseEntity<>(built.getBody(), built.getHeaders(), built.getStatusCode());
     }
 
     /**
@@ -447,20 +470,25 @@ public class AgentServiceProxyService {
      */
     private ResponseEntity<Object> parseDownstreamFailureError(DownstreamFailureException e) {
         DownstreamFailure failure = e.getFailure();
+        if (!failure.hasTrustedErrorCode()) {
+            // 无可信原码（builder 不可达等）：走 DownstreamErrorMapper 兜底
+            // 02001131 + 组件标签（与 runtime 掉线同构，2026-11-02 用户裁定）
+            log.warn("DownstreamFailure without trusted code: {}", failure);
+            ErrorDescriptor descriptor = downstreamMapper.map(failure, MDC.get(MdcKeys.REQUEST_ID));
+            ResponseEntity<ErrorRsp> built = downstreamHttpBuilder.build(
+                descriptor, LanguageUtils.getLanguageLocale());
+            return new ResponseEntity<>(built.getBody(), built.getHeaders(), built.getStatusCode());
+        }
+        // 可信原码：透传 builder 原码 + 调测语义文案（既有行为保持）
         String requestId = MDC.get(MdcKeys.REQUEST_ID);
         ErrorInfo errorInfo = i18nUtil.getMessage(
             new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
         ErrorRsp errorRsp = new ErrorRsp()
             .setRequestId(requestId)
+            .setErrorCode(failure.getDownstreamErrorCode())
             .setErrorMsg(errorInfo.getMessage())
             .setErrorReason(errorInfo.getReason())
             .setErrorSuggestion(errorInfo.getSuggestion());
-        if (failure.hasTrustedErrorCode()) {
-            errorRsp.setErrorCode(failure.getDownstreamErrorCode());
-        } else {
-            errorRsp.setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode());
-            log.warn("DownstreamFailure without trusted code: {}", failure);
-        }
         Integer dsStatus = failure.getDownstreamHttpStatus();
         return ResponseEntity.status(dsStatus != null && dsStatus > 0 ? dsStatus : 500).body(errorRsp);
     }

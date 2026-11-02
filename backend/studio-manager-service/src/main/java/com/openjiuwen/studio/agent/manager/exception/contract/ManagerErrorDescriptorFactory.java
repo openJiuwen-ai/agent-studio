@@ -48,32 +48,20 @@ public class ManagerErrorDescriptorFactory {
     public ErrorDescriptor fromAgentStudioException(AgentStudioException ex, String requestId) {
         ErrorDefinition defn = catalog.resolve(ex.getErrorCode());
         List<ErrorDetail> safeDetails = toSafeDetails(ex.getDetails());
-        return new ErrorDescriptor(
-            defn.getErrorCode(), defn.getHttpStatus(),
-            defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-            requestId, safeDetails, null, null, ex
-        );
+        return newDescriptor(defn, requestId, safeDetails, ex);
     }
 
     /** 框架校验 → 参数校验定义 + allowlist details。 */
     public ErrorDescriptor fromValidation(StudioError error, List<String> detailMessages) {
         ErrorDefinition defn = catalog.resolve(error);
         List<ErrorDetail> safeDetails = toSafeDetails(detailMessages);
-        return new ErrorDescriptor(
-            defn.getErrorCode(), defn.getHttpStatus(),
-            defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-            currentRequestId(), safeDetails, null, null, null
-        );
+        return newDescriptor(defn, currentRequestId(), safeDetails, null);
     }
 
     /** 未知异常 → 安全兜底码 + cause。 */
     public ErrorDescriptor fromUnknown(Exception ex) {
         ErrorDefinition defn = catalog.unexpectedError();
-        return new ErrorDescriptor(
-            defn.getErrorCode(), defn.getHttpStatus(),
-            defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-            currentRequestId(), null, null, null, ex
-        );
+        return newDescriptor(defn, currentRequestId(), null, ex);
     }
 
     /**
@@ -82,11 +70,7 @@ public class ManagerErrorDescriptorFactory {
      */
     public ErrorDescriptor fromStudioError(StudioError error, Throwable cause) {
         ErrorDefinition defn = catalog.resolve(error);
-        return new ErrorDescriptor(
-            defn.getErrorCode(), defn.getHttpStatus(),
-            defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-            currentRequestId(), null, null, null, cause
-        );
+        return newDescriptor(defn, currentRequestId(), null, cause);
     }
 
     /** 下游依赖失败（502）。 */
@@ -100,11 +84,10 @@ public class ManagerErrorDescriptorFactory {
      */
     public ErrorDescriptor fromDownstreamDependencyWithRequestId(String requestId, Throwable ex) {
         ErrorDefinition defn = catalog.downstreamDependencyFailed();
-        return new ErrorDescriptor(
-            defn.getErrorCode(), defn.getHttpStatus(),
-            defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-            requestId, null, null, null, ex
-        );
+        // 统一族格式（2026-11-02 二期）：此兜底路径未知具体下游服务身份
+        // （正常路径由 DownstreamErrorMapper 判定并打标签），不标组件——
+        // 构建器退回 i18n 三键原格式，避免臆测组件名。
+        return newDescriptor(defn, requestId, null, ex);
     }
 
     /**
@@ -115,28 +98,35 @@ public class ManagerErrorDescriptorFactory {
         ErrorCode foundationErrorCode = ex.getErrorCode();
         if (foundationErrorCode == null) {
             ErrorDefinition defn = catalog.unexpectedError();
-            return new ErrorDescriptor(
-                defn.getErrorCode(), defn.getHttpStatus(),
-                defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-                currentRequestId(), null, null, null, ex
-            );
+            return newDescriptor(defn, currentRequestId(), null, ex);
         }
         String code = foundationErrorCode.getCode();
         int httpStatus = foundationErrorCode.getHttpCode();
         return new ErrorDescriptor(
             code, httpStatus,
             code, code + ".reason", code + ".suggestion",
-            currentRequestId(), null, null, null, ex
+            currentRequestId(), null, null, null, ex, null,
+            DependencyComponentLabels.forManagerErrorCode(code)
         );
     }
 
     /** FeignException → 下游依赖失败（502）；body 解析由 COM-04 响应单元接入。 */
     public ErrorDescriptor fromFeignException(FeignException ex) {
         ErrorDefinition defn = catalog.downstreamDependencyFailed();
+        return newDescriptor(defn, currentRequestId(), null, ex);
+    }
+
+    /**
+     * 统一构造入口（COM-04 §5.2 修订二期，2026-11-02）：按错误码挂依赖组件标签
+     * （OBS/SQL 数据库等 manager 直接访问的依赖失败走统一族格式），其余走原格式。
+     */
+    private ErrorDescriptor newDescriptor(ErrorDefinition defn, String requestId,
+                                          List<ErrorDetail> safeDetails, Throwable cause) {
         return new ErrorDescriptor(
             defn.getErrorCode(), defn.getHttpStatus(),
             defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
-            currentRequestId(), null, null, null, ex
+            requestId, safeDetails, null, null, cause, null,
+            DependencyComponentLabels.forManagerErrorCode(defn.getErrorCode())
         );
     }
 

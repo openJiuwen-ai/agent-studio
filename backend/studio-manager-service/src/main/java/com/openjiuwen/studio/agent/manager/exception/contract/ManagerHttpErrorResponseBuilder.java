@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.exception.contract;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.dto.ErrorDetail;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.error.PassthroughText;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -38,12 +39,28 @@ public class ManagerHttpErrorResponseBuilder {
     }
 
     public ResponseEntity<ErrorRsp> build(ErrorDescriptor descriptor, Locale locale) {
-        // 从异常 cause 提取 args 填 i18n 占位符; reason/suggestion 当前无占位符, 多传 args 被 MessageFormat 忽略。
-        // args 不足时 I18nUtil catch 返回 code 兜底, 不抛。
+        // 从异常 cause 提取 args 填 i18n 占位符（origin 10f62b9cd 特性）；族格式
+        // 文案无占位符, 多传 args 被 MessageFormat 忽略, 与统一族格式兼容。
         Object[] args = extractArgs(descriptor);
-        String errorMsg = safeResolve(descriptor.getMessageKey(), args, locale);
-        String errorReason = safeResolve(descriptor.getReasonKey(), args, locale);
-        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), args, locale);
+        String label = descriptor.getDownstreamComponentLabel();
+        String errorMsg;
+        String errorReason;
+        String errorSuggestion;
+        if (label != null) {
+            // 统一族格式（COM-04 §5.2 修订二期，2026-11-02 用户裁定）：
+            // error_msg=族前缀，error_reason="组件{label}：{错误信息}"
+            errorMsg = DownstreamFamilyFormat.message(resolver, args, locale);
+            errorReason = DownstreamFamilyFormat.reason(resolver, descriptor, label, args, locale);
+            errorSuggestion = DownstreamFamilyFormat.suggestion(resolver, descriptor, args, locale);
+        } else {
+            PassthroughText passthrough = descriptor.getPassthroughText();
+            String messageFallback = passthrough != null ? passthrough.getMessage() : null;
+            errorMsg = safeResolve(descriptor.getMessageKey(), args, locale, messageFallback);
+            errorReason = safeResolve(descriptor.getReasonKey(), args, locale,
+                passthrough != null ? firstNonBlank(passthrough.getReason(), messageFallback) : null);
+            errorSuggestion = safeResolve(descriptor.getSuggestionKey(), args, locale,
+                passthrough != null ? firstNonBlank(passthrough.getSuggestion(), messageFallback) : null);
+        }
 
         ErrorRsp rsp = new ErrorRsp()
             .setErrorCode(descriptor.getErrorCode())
@@ -65,16 +82,43 @@ public class ManagerHttpErrorResponseBuilder {
     }
 
     /**
-     * COM-03 §4: fail-closed——resolver 异常时抛出,不返回空串。
+     * COM-03 §4 fail-closed + COM-04 §5.2 修订（2026-11-02）回退：
+     * 优先 i18n 解析（含"回显 key"视为未命中——I18nUtil 以 key 作默认值返回）；
+     * 未命中且有受管三段文案回退值时使用回退值；否则按原 fail-closed 语义
+     * 抛出（resolver 异常原样重抛，空值抛 IllegalStateException），不返回空串。
      * 调用方 (build) 的调用者 (handler/listener) 应捕获并提供硬编码安全响应。
      */
-    private String safeResolve(String key, Object[] args, Locale locale) {
-        String result = resolver.resolve(key, args, locale);
+    private String safeResolve(String key, Object[] args, Locale locale, String passthroughFallback) {
+        String result = null;
+        RuntimeException resolveError = null;
+        try {
+            result = resolver.resolve(key, args, locale);
+        } catch (RuntimeException e) {
+            resolveError = e;
+        }
+        boolean miss = result == null || result.isBlank() || key.equals(result);
+        if (miss && passthroughFallback != null && !passthroughFallback.isBlank()) {
+            return passthroughFallback;
+        }
+        if (resolveError != null) {
+            throw resolveError;
+        }
         if (result == null || result.isBlank()) {
             throw new IllegalStateException(
                 "i18n resolution returned blank for key=" + key + " locale=" + locale);
         }
         return result;
+    }
+
+    /** 字段级回退链的第二跳：字段文案缺失时回退到 message（mapper 兜底之外的双保险）。 */
+    private static String firstNonBlank(String primary, String secondary) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        if (secondary != null && !secondary.isBlank()) {
+            return secondary;
+        }
+        return null;
     }
 
     /** 从 descriptor.cause 提取 i18n 占位符 args; cause 非 ASE 时返回 null。 */

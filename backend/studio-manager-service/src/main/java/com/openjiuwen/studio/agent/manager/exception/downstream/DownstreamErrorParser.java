@@ -51,6 +51,14 @@ public final class DownstreamErrorParser {
     /** Builder pre-canonical8 裸 int code 字段名（桥接，等 Builder 迁 canonical8 后过时）。 */
     private static final String BUILDER_CODE_FIELD = "code";
 
+    /** 受管三段文案字段名（Runtime 自身 catalog/i18n 产物，契约修订 2026-11-02）。 */
+    private static final String ERROR_MSG_FIELD = "error_msg";
+    private static final String ERROR_REASON_FIELD = "error_reason";
+    private static final String ERROR_SUGGESTION_FIELD = "error_suggestion";
+
+    /** 单个受管文案字段的字符上限（超出截断，防诊断放大）。 */
+    static final int MAX_TEXT_FIELD_CHARS = 512;
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final DownstreamErrorMappingCatalog catalog;
@@ -72,9 +80,9 @@ public final class DownstreamErrorParser {
     public DownstreamFailure parseHttp(DownstreamService service, Transport transport,
                                        Integer downstreamHttpStatus, String contentType,
                                        byte[] boundedBody, Throwable cause) {
-        String trustedCode = extractTrustedErrorCode(service, boundedBody);
+        ExtractedError extracted = extractError(service, boundedBody);
         return DownstreamFailure.httpResponse(service, transport, downstreamHttpStatus,
-            trustedCode, cause);
+            extracted.code, extracted.message, extracted.reason, extracted.suggestion, cause);
     }
 
     /**
@@ -91,8 +99,9 @@ public final class DownstreamErrorParser {
             // 非 error event（含普通 message 中出现 error_code）不构成失败事实
             return Optional.empty();
         }
-        String trustedCode = extractTrustedErrorCode(service, boundedData);
-        return Optional.of(DownstreamFailure.sseEvent(service, transport, trustedCode, cause));
+        ExtractedError extracted = extractError(service, boundedData);
+        return Optional.of(DownstreamFailure.sseEvent(service, transport, extracted.code,
+            extracted.message, extracted.reason, extracted.suggestion, cause));
     }
 
     /** 传输层失败（无 HTTP 响应，无可信原码）。 */
@@ -102,35 +111,51 @@ public final class DownstreamErrorParser {
     }
 
     /**
-     * 严格提取顶层字符串 {@code error_code} 并 trust-check。
-     * <p>无可信原码的所有情况均返回 {@code null}：body null/空/超限、非 JSON、数组、
+     * 严格提取顶层字符串 {@code error_code} 并 trust-check；RUNTIME 同时提取
+     * 帧内受管三段文案（{@code error_msg/error_reason/error_suggestion}，
+     * 契约修订 2026-11-02：Runtime 自身 catalog/i18n 产物，非原始 body）。
+     * <p>无可信原码的所有情况均返回 {@code code=null}：body null/空/超限、非 JSON、数组、
      * 字段缺失/非字符串/blank、未识别码、损坏 UTF-8、解析异常。
      */
-    private String extractTrustedErrorCode(DownstreamService service, byte[] boundedBody) {
+    private ExtractedError extractError(DownstreamService service, byte[] boundedBody) {
         if (boundedBody == null || boundedBody.length == 0) {
-            return null;
+            return ExtractedError.EMPTY;
         }
         if (boundedBody.length > MAX_BODY_BYTES) {
             // 超限：停止解析，安全降级（caller 已应受限读取，此处为双保险）
-            return null;
+            return ExtractedError.EMPTY;
         }
         JsonNode root;
         try {
             root = MAPPER.readTree(decodeStrictUtf8(boundedBody));
         } catch (JsonProcessingException e) {
             // 非 JSON / 损坏 → 无可信原码（不抛第二异常）
-            return null;
+            return ExtractedError.EMPTY;
         } catch (CharacterCodingException e) {
             // 损坏 UTF-8（含其他字段非法字节）→ 一律无可信原码
-            return null;
+            return ExtractedError.EMPTY;
         } catch (RuntimeException e) {
             // 其余解析异常 → 无可信原码
-            return null;
+            return ExtractedError.EMPTY;
         }
         if (root == null || !root.isObject()) {
             // 数组、标量等非对象 → 无可信原码
-            return null;
+            return ExtractedError.EMPTY;
         }
+        String code = extractTrustedErrorCode(service, root);
+        String message = null;
+        String reason = null;
+        String suggestion = null;
+        if (service == DownstreamService.RUNTIME) {
+            message = extractBoundedText(root, ERROR_MSG_FIELD);
+            reason = extractBoundedText(root, ERROR_REASON_FIELD);
+            suggestion = extractBoundedText(root, ERROR_SUGGESTION_FIELD);
+        }
+        return new ExtractedError(code, message, reason, suggestion);
+    }
+
+    /** 既有信任逻辑（自 JsonNode 起），判定行为与 2026-10-27 前完全一致。 */
+    private String extractTrustedErrorCode(DownstreamService service, JsonNode root) {
         JsonNode codeNode = root.get(ERROR_CODE_FIELD);
         if (codeNode != null && codeNode.isTextual()) {
             String code = codeNode.asText();
@@ -158,6 +183,43 @@ public final class DownstreamErrorParser {
             }
         }
         return null;
+    }
+
+    /**
+     * 有界提取受管文案字段：仅字符串节点；blank → null；
+     * 超长按 {@link #MAX_TEXT_FIELD_CHARS} 截断（不追加标记，避免放大信息量）。
+     */
+    private static String extractBoundedText(JsonNode root, String field) {
+        JsonNode node = root.get(field);
+        if (node == null || !node.isTextual()) {
+            return null;
+        }
+        String value = node.asText();
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() <= MAX_TEXT_FIELD_CHARS) {
+            return trimmed;
+        }
+        return trimmed.substring(0, MAX_TEXT_FIELD_CHARS);
+    }
+
+    /** 单次解析产物：可信原码 + 受管三段文案（均可空）。 */
+    private static final class ExtractedError {
+        private static final ExtractedError EMPTY = new ExtractedError(null, null, null, null);
+
+        private final String code;
+        private final String message;
+        private final String reason;
+        private final String suggestion;
+
+        private ExtractedError(String code, String message, String reason, String suggestion) {
+            this.code = code;
+            this.message = message;
+            this.reason = reason;
+            this.suggestion = suggestion;
+        }
     }
 
     /**
