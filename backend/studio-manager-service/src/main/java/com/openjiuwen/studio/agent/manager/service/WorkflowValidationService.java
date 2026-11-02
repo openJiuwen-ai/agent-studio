@@ -2721,7 +2721,8 @@ public class WorkflowValidationService {
             if (hasIndex) {
                 WorkflowFieldVO elementField = arrayElementAsField(current);
                 if (elementField == null) {
-                    return false;
+                    // 数组字段未声明元素 schema：无法确认，放行（与改动前行为一致，避免误拦）
+                    return true;
                 }
                 if (isLast) {
                     return true;

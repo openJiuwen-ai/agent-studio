@@ -142,6 +142,18 @@ class StreamTransformValidationTest {
     }
 
     @Test
+    void placeholders_withArrayMissingElementSchema_shouldPass() {
+        // 数组字段未声明元素 schema：无法确认引用路径，放行（与改动前行为一致，避免误拦）
+        addUpstreamNodeWithSchema(schemaOf("items", "array"));
+        WorkflowValidationService.Node node =
+            streamTransformNode("{\"content\":\"{{raw_output.items[0].name}}\"}", null);
+
+        List<WorkflowValidationVOErrors> errors = validate(node);
+
+        assertFalse(hasRefError(errors), "数组元素 schema 缺失无法确认时应放行");
+    }
+
+    @Test
     void placeholders_withWholeInputReference_shouldPass() {
         addUpstreamNodeWithSchema(schemaOf("data", "string"));
         WorkflowValidationService.Node node = streamTransformNode("{\"content\":\"{{raw_output}}\"}", null);
