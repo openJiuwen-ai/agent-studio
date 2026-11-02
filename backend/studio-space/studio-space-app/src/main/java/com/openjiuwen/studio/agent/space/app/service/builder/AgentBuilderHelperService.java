@@ -136,7 +136,7 @@ public class AgentBuilderHelperService {
             AppCommonUtils.setCommonCreateProperties(query);
             query.setCreatedDate(new Timestamp(System.currentTimeMillis()));
             AgentBuilderMessageEntity answer = new AgentBuilderMessageEntity().setId(AppCommonUtils.getUUID())
-                .setParentId(query.getParentId())
+                .setParentId(query.getId())
                 .setTaskId(task.getId())
                 .setType(AgentBuilderMsgType.SYSTEM.getType())
                 .setContent("")
