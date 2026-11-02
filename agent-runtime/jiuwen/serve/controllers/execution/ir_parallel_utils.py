@@ -23,6 +23,15 @@ class ParallelJoinSpec:
     fork_source: str
     join_target: str
     lanes: tuple[ParallelLane, ...]
+    # 该 spec 是否由「同一汇聚点上、结构相同但来自互斥 fork 波（不同 parallel_id）」
+    # 的多个候选合并而来。典型拓扑：判断 neg 的 if 链上节点扇出（u1 波）与
+    # default 锚点扇出（u2 波）共享同一汇聚点，汇聚点入边带逗号拼接的多组
+    # join 标记。此时旧 wait_for_all + CNF resolver 会把跨波可达的前驱误并成
+    # 一个 OR 组（任一到达即触发、且不跨超步去重）→ 汇聚点按到达 token 数
+    # 重复执行。只有这类汇聚点才允许 lane 旁路移除 wait_for_all、改由
+    # [done 列表] 纯 AND 屏障接管；普通单波汇聚（含嵌套菱形）必须保留
+    # wait_for_all 交给 CNF resolver，否则互斥 done 会被纯 AND 拖成死锁。
+    merged_across_exclusive_waves: bool = False
 
 
 @dataclass
@@ -38,6 +47,19 @@ class ParallelJoinPlan:
         for spec in self.joins.values():
             result.extend(lane.done_node for lane in spec.lanes)
         return tuple(result)
+
+    @property
+    def cross_exclusive_wave_join_targets(self) -> frozenset[str]:
+        """汇聚点集合：被多个互斥 fork 波共享、CNF 必然误并 OR 而重复触发。
+
+        仅这些汇聚点应由 lane/done 列表边接管并移除 wait_for_all；其余 lane
+        汇聚点（单波，含嵌套菱形）保留 wait_for_all 交由 CNF resolver。
+        """
+        return frozenset(
+            spec.join_target
+            for spec in self.joins.values()
+            if spec.merged_across_exclusive_waves
+        )
 
     def rewrite_target(
         self, source: str, target: str, branch_id: str | None = None
@@ -311,7 +333,11 @@ def build_parallel_join_plan(
         # 节点扇出）意味着运行时至多一组波触发，单套 lane-done barrier 的
         # AND 等待语义不变；不互斥（如兄弟分支节点可同时触发两波）时保持
         # 多 spec —— 由下方整体回退 wait_for_all 兜底。
-        merged: list[tuple[str, frozenset, str, list]] = []
+        # 合并项额外携带 cross_wave 标记：当类内成员来自「不同 parallel_id」
+        # （不同 fork 波）且互斥时，说明汇聚点被多个互斥波共享，旧
+        # wait_for_all + CNF 会把跨波前驱误并 OR 而重复触发，该 spec 才允许
+        # lane 旁路移除 wait_for_all。
+        merged: list[tuple[str, frozenset, str, list, bool]] = []
         for members in clusters.values():
             mutually_exclusive = True
             for i, member_i in enumerate(members):
@@ -324,12 +350,15 @@ def build_parallel_join_plan(
                         break
                 if not mutually_exclusive:
                     break
-            if len(members) == 1 or mutually_exclusive:
-                merged.append(members[0])
+            if len(members) == 1:
+                merged.append((*members[0], False))
+            elif mutually_exclusive:
+                distinct_wave_count = len({member[0] for member in members})
+                merged.append((*members[0], distinct_wave_count >= 2))
             else:
-                merged.extend(members)
+                merged.extend((*item, False) for item in members)
 
-        for parallel_id, _signature, first_fork_source, selected in merged:
+        for parallel_id, _signature, first_fork_source, selected, cross_wave in merged:
             lanes: list[ParallelLane] = []
             for _, lane_start, terminals in selected:
                 lane_key = _sanitize_node_id(lane_start)
@@ -352,6 +381,7 @@ def build_parallel_join_plan(
                     fork_source=first_fork_source,
                     join_target=join_target,
                     lanes=tuple(sorted(lanes, key=lambda item: item.done_node)),
+                    merged_across_exclusive_waves=cross_wave,
                 )
             )
 

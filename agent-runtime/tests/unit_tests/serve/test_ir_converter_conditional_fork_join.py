@@ -869,3 +869,118 @@ async def test_auto_batch_edge_kept_for_end_mixed_ref():
     assert "node_end" in (spec.edges.get("node_start") or [])
     # 修复核心同时成立：消息不被补独立触发边
     assert "node_msg" not in (spec.edges.get("node_start") or [])
+
+
+# ---------------------------------------------------------------------------
+# 嵌套菱形（死锁 + 重复执行）：外层判定 B 的 if 臂内并行 fork P/Q（单波）
+# 汇聚 X，B 的 default 臂经 DD 直达 X。converter 对这种「单波 + 互斥直达
+# 前驱」汇聚点保留 wait_for_all，接线为 DD→X 直达 + [D1,D2]→X 列表边。
+# 修复前 barrier CNF resolver 把 {D1,D2,DD} 误并成单个 OR 组：query 非空
+# 时 D1、D2 各触发一次 X（X=2 重复执行）；query 为空时纯 AND 等待永不满足
+# （X=0 死锁）。修复后按路径签名展开为 [{D1,DD},{D2,DD}]：
+#   - if 路径：两个 OR 组各由 D1、D2 满足（DD 不执行）→ X 恰好 1 次；
+#   - default 路径：两个 OR 组都由 DD 满足 → X 恰好 1 次。
+# ---------------------------------------------------------------------------
+
+
+def _build_nested_diamond_graph(query_nonempty: bool):
+    """复刻 converter 对嵌套菱形的接线：X 保留 wait_for_all + DD 直达 + 列表边。"""
+    import openjiuwen.core.workflow  # noqa: F401  规避循环导入
+    from openjiuwen.core.graph.graph import PregelGraph
+
+    g = PregelGraph()
+    for node_id in ["B", "P", "Q", "LLM", "LLM1", "LLM2", "D1", "D2", "DD", "X", "MSG"]:
+        g.add_node(node_id, object(), wait_for_all=(node_id == "X"))
+
+    g.start_node("B")
+
+    def if_taken():
+        return query_nonempty
+
+    def default_taken():
+        return not query_nonempty
+
+    g.add_conditional_edges(
+        "B",
+        _MiniRouter([
+            _MiniBranch("B-if", if_taken, ["P", "Q"]),
+            _MiniBranch("B-default", default_taken, ["DD"]),
+        ]),
+    )
+    g.register_branch_targets("B", {"P", "Q", "DD"})
+
+    g.add_conditional_edges(
+        "P",
+        _MiniRouter([
+            _MiniBranch("P-if", if_taken, ["LLM"]),
+            _MiniBranch("P-default", default_taken, ["D1"]),
+        ]),
+    )
+    g.register_branch_targets("P", {"LLM", "D1"})
+
+    g.add_conditional_edges(
+        "Q",
+        _MiniRouter([
+            _MiniBranch("Q-if", if_taken, ["LLM1"]),
+            _MiniBranch("Q-default", default_taken, ["D2"]),
+        ]),
+    )
+    g.register_branch_targets("Q", {"LLM1", "D2"})
+
+    for src, tgt in [
+        ("LLM", "D1"),
+        ("LLM1", "LLM2"),
+        ("LLM2", "D2"),
+        ("DD", "X"),
+        ("X", "MSG"),
+    ]:
+        g.add_edge(src, tgt)
+    g.add_edge(["D1", "D2"], "X")
+    return g
+
+
+def test_nested_diamond_barrier_groups_are_cnf_paired(_event_loop):
+    """CNF 分组：外层 default 直达前驱 DD 与外层 if 臂内两条 lane done 配对。"""
+    import openjiuwen.core.workflow  # noqa: F401  规避循环导入
+
+    g = _build_nested_diamond_graph(True)
+    # 白盒验证引擎私有 CNF 屏障分组算法本身，需直调其内部方法
+    groups = g._resolve_barrier_groups(  # pylint: disable=protected-access
+        "X", [{"D1"}, {"D2"}, {"DD"}]
+    )
+    assert {frozenset(grp) for grp in groups} == {
+        frozenset({"D1", "DD"}),
+        frozenset({"D2", "DD"}),
+    }, groups
+
+
+@pytest.mark.parametrize("query_nonempty", [True, False])
+def test_nested_diamond_join_executes_once(query_nonempty, _event_loop):
+    """if 路径（内层并行两 lane）与 default 路径（DD 直达）下 X/MSG 都只执行一次。"""
+
+    async def _run():
+        g = _build_nested_diamond_graph(query_nonempty)
+        pregel = getattr(g, "_compile")()
+        for node_name, pnode in pregel.nodes.items():
+            pnode.func = _make_fn(node_name)
+        EXEC_LOG.clear()
+        from openjiuwen.core.graph.pregel.config import PregelConfig
+
+        await pregel.run(config=PregelConfig(session_id=None, ns=None))
+
+    _event_loop.run_until_complete(asyncio.wait_for(_run(), timeout=15))
+    assert len(EXEC_LOG.get("X", [])) == 1, (
+        f"嵌套菱形汇聚节点应只执行 1 次，实际 {len(EXEC_LOG.get('X', []))} 次；"
+        f"执行记录: { {k: len(v) for k, v in EXEC_LOG.items()} }"
+    )
+    assert len(EXEC_LOG.get("MSG", [])) == 1
+    if query_nonempty:
+        # if 路径：内层并行两 lane 各完成一次，default 直达 DD 不执行
+        assert len(EXEC_LOG.get("D1", [])) == 1
+        assert len(EXEC_LOG.get("D2", [])) == 1
+        assert len(EXEC_LOG.get("DD", [])) == 0
+    else:
+        # default 路径：仅 DD 执行，内层两 lane 不执行
+        assert len(EXEC_LOG.get("DD", [])) == 1
+        assert len(EXEC_LOG.get("D1", [])) == 0
+        assert len(EXEC_LOG.get("D2", [])) == 0

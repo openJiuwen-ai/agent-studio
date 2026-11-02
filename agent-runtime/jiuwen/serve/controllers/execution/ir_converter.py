@@ -1673,33 +1673,47 @@ class IRConverter:
         connections = _normalize_list(ir_data.get("connections") or [])
         parallel_join_nodes = collect_parallel_join_nodes(connections, node_by_id)
         parallel_join_plan = build_parallel_join_plan(connections, node_by_id)
-        # lane 机制接管的汇聚点不再叠加 wait_for_all：join 由 [done 列表] ->
-        # join_target 的列表边 barrier 完成 AND 等待。若叠加 wait_for_all，
-        # 入边会再经过 _resolve_barrier_groups 的 CNF 分组，在「判断节点分支
-        # 扇出到相同子图」场景下，各 lane-done 从分叉判断的两个条件都可达，
-        # 会被误并成一个 OR 组，barrier 退化为「任一到达即触发」→ 汇聚节点
-        # 按到达 token 数重复执行。仅当该汇聚点的全部入边都被 lane 覆盖时才
-        # 移除，避免未覆盖的直达边从 barrier 组退化为独立触发边。
-        # （build_parallel_join_plan 保证同一汇聚点至多注册一个 spec：多 spec
-        # 会产生多条列表边 barrier，无 wait_for_all 时按组重复触发，已在 plan
-        # 构建时整体回退。）
-        _lane_join_targets = {
-            spec.join_target for spec in parallel_join_plan.joins.values()
-        }
+        # 【8a7b5d76f 旁路作用域收窄：同时修复「汇聚点重复执行」与「嵌套
+        # 菱形死锁」】
+        # lane/done 列表边接线始终生成；但是否移除汇聚点的 wait_for_all，只
+        # 针对「被多个互斥 fork 波共享」的汇聚点（入边带逗号拼接的多组 join
+        # 标记，如某判断 if 链上节点扇出 与 default 锚点扇出 汇聚到同一节点）：
+        #   - 这类汇聚点若保留 wait_for_all，CNF resolver 会把从互斥波都可达
+        #     的前驱误并成一个 OR 组（任一到达即触发、不跨超步去重）→ 汇聚
+        #     点按到达 token 数【重复执行】。移除 wait_for_all 由 [done 列表]
+        #     纯 AND 接管，每波每条 lane 的 done 恰好一次 → 只执行一次。
+        #   - 普通单波汇聚（含嵌套菱形）不跨波，done 之间可能互斥；必须保留
+        #     wait_for_all，交给 nested_branch_barrier_patch 的 CNF 分组把互斥
+        #     done 并为 OR 组，否则 [done 列表] 纯 AND 会【死锁】（运行时仅
+        #     一个 done 到达，屏障永不满足）。
+        # cross_exclusive_wave_join_targets 仅包含前者，二者各走正确路径。
+        _lane_join_targets: set[str] = set(
+            parallel_join_plan.cross_exclusive_wave_join_targets
+        )
+        # 守卫：仅当汇聚点的「全部原始入边」都已被 lane 重写为 terminal->done
+        # （不存在绕过 [done 列表] barrier 的直达触发边）时，才真正剔除其
+        # wait_for_all。若存在未被 lane 接管的直达边，保留 wait_for_all 由 CNF
+        # 兜底，避免移除屏障后直达边把汇聚点提前/重复拉起。
         if _lane_join_targets:
             _rewritten_keys = set(parallel_join_plan.terminal_to_done)
             for _conn in connections:
-                _src = ((_conn.get("source") or {}).get("componentId") or "").strip()
-                _dst = ((_conn.get("target") or {}).get("componentId") or "").strip()
+                _src = (
+                    (_conn.get("source") or {}).get("componentId") or ""
+                ).strip()
+                _dst = (
+                    (_conn.get("target") or {}).get("componentId") or ""
+                ).strip()
+                _bid = (
+                    (_conn.get("source") or {}).get("branchId") or ""
+                ).strip()
                 if not _src or not _dst or _dst not in _lane_join_targets:
                     continue
-                if _src.endswith("_input") or _dst.endswith("_output"):
-                    continue
-                _bid = ((_conn.get("source") or {}).get("branchId") or "").strip() or None
-                if (_src, _dst, _bid) not in _rewritten_keys:
+                if (_src, _dst, _bid or None) not in _rewritten_keys:
                     _lane_join_targets.discard(_dst)
             if _lane_join_targets:
-                parallel_join_nodes = parallel_join_nodes - _lane_join_targets
+                parallel_join_nodes = (
+                    parallel_join_nodes - _lane_join_targets
+                )
 
         component_by_id: dict[str, Any] = {}
 
