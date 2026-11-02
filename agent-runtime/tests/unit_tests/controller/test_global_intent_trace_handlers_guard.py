@@ -82,3 +82,57 @@ def test_dict_runtime_data_passes_handlers(monkeypatch):
     )
     assert ret == "TASK"
     assert captured["args"][2] is handlers
+
+
+class _PlannerIntent:
+    def __init__(self):
+        self.name = "gi-name"
+        self.handler_type = "workflow"
+
+
+def _make_planner():
+    """绕过 __init__ 构造最小 ControllerPlanner（只关心单方法行为）。"""
+    from jiuwen.controller.task_planner.planners.controller_planner import (
+        ControllerPlanner,
+    )
+
+    planner = object.__new__(ControllerPlanner)
+    planner.plan_config = SimpleNamespace(global_intents=[_PlannerIntent()])
+    return planner
+
+
+def _planner_capture_call(planner, monkeypatch):
+    captured = {}
+
+    def _fake_rule_module_call(global_intent, task_id, trace_handlers=None):
+        captured["args"] = (global_intent, task_id, trace_handlers)
+        return "TASK"
+
+    planner.rule_module = SimpleNamespace(
+        create_global_intent_task=_fake_rule_module_call
+    )
+    return captured
+
+
+def test_planner_none_runtime_data_still_creates_intent_task(monkeypatch):
+    """controller_planner 侧同口径：runtime_data 为 None 不炸、任务照常创建。"""
+    planner = _make_planner()
+    captured = _planner_capture_call(planner, monkeypatch)
+    msg = SimpleNamespace(
+        task_id="t-9", runtime_data=None,
+    )
+    ret = planner._get_handle_global_intent_workflow("gi-name", msg)
+    assert ret == "TASK"
+    assert captured["args"][2] is None
+
+
+def test_planner_dict_runtime_data_passes_handlers(monkeypatch):
+    planner = _make_planner()
+    captured = _planner_capture_call(planner, monkeypatch)
+    handlers = ["h2"]
+    msg = SimpleNamespace(
+        task_id="t-9", runtime_data={"trace_handlers": handlers},
+    )
+    ret = planner._get_handle_global_intent_workflow("gi-name", msg)
+    assert ret == "TASK"
+    assert captured["args"][2] is handlers

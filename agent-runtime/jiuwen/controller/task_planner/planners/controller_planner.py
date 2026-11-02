@@ -764,10 +764,18 @@ class ControllerPlanner(TaskPlanner):
                     # 根据handler_type处理不同类型的全局意图
                     if global_intent.handler_type:
                         task_id = getattr(message, "task_id", "task")
+                        # 遥测数据按“可能缺失/非 dict”防御取出（同 rule_module 口径）：
+                        # runtime_data 异常时 trace_handlers 取 None，绝不影响意图任务是否创建
+                        runtime_data = getattr(message, "runtime_data", None)
+                        trace_handlers = (
+                            runtime_data.get("trace_handlers")
+                            if isinstance(runtime_data, dict)
+                            else None
+                        )
                         return self.rule_module.create_global_intent_task(
                             global_intent,
                             task_id,
-                            message.runtime_data.get("trace_handlers"),
+                            trace_handlers,
                         )
                     break
 

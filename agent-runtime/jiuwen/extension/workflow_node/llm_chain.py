@@ -200,8 +200,9 @@ class _OjTelemetryGuard:
         handler 抛错会跳过双写——只告警吞掉的话 OTEL span 就此悬挂
         （_emit 通用吞错盖不住收尾语义，检视意见）。正常路径、异常
         路径与提前关闭共用本兜底，error 事件降级时保持 error 终态；
-        两段都只告警不抛，恰好一次由 _finalized 标志与 manager 的
-        span 表幂等共同保证。
+        Exception 分支只告警不抛，CancelledError / GeneratorExit 等
+        BaseException 分支降级收尾后重抛（不改取消/关闭语义）；恰好
+        一次由 _finalized 标志与 manager 的 span 表幂等共同保证。
         """
         try:
             await getattr(self._manager, method)(arg)
@@ -217,6 +218,20 @@ class _OjTelemetryGuard:
                 workflow_logger.warning(
                     f"workflow llm telemetry oj finalize failed, skip: {e2}"
                 )
+        except BaseException as e:
+            # CancelledError / GeneratorExit 等 BaseException 穿透 Exception 捕获：
+            # 此时 _finalized 已置位、外层 close_span 会 no-op，不在此降级直驱收尾
+            # 的话 OTEL span 就此悬挂（与其余悬挂场景同构）。收尾后必须重抛，
+            # 不吞取消/关闭语义。
+            try:
+                await self._manager.oj_finalize_llm_span(
+                    error=arg if method == "on_llm_error" else None
+                )
+            except Exception as e2:
+                workflow_logger.warning(
+                    f"workflow llm telemetry oj finalize on {type(e).__name__} failed, skip: {e2}"
+                )
+            raise
 
     async def _emit(self, method: str, arg):
         try:

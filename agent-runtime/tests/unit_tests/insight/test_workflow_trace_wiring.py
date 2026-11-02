@@ -105,15 +105,20 @@ class TestTaskCreationSites:
         tree = _load_tree(
             "jiuwen/controller/task_planner/planners/controller_planner.py"
         )
-        found = False
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and getattr(node.func, "attr", None) == "create_global_intent_task"
-                and len(node.args) == 3
-            ):
-                found = True
-        assert found, "controller_planner 须透传 message 的 trace_handlers"
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "attr", None) == "create_global_intent_task"
+        ]
+        assert calls, "controller_planner 须透传 message 的 trace_handlers"
+        for call in calls:
+            assert len(call.args) == 3
+            # 第三参须为防御取出的局部变量：runtime_data 缺失/非 dict 时取 None，
+            # 不得回潮为裸调 message.runtime_data.get(...)
+            assert isinstance(
+                call.args[2], ast.Name
+            ), "controller_planner 第三参须为防御取出的局部变量名"
 
     @staticmethod
     def test_plan_execute_mode_stash_and_task_payload():

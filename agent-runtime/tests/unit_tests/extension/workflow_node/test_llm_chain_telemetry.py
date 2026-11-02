@@ -635,6 +635,87 @@ class TestTelemetryIsolation:
         assert not _events_by_name(tracer, "on_llm_end")  # 不假扮成功 end
 
     @pytest.mark.asyncio
+    async def test_cancel_during_end_emission_finalizes_oj_then_reraises(self):
+        """正常流末发射被取消（CancelledError）：降级收尾后重抛。
+
+        修复前 _emit_end 只捕 Exception——CancelledError 穿透时
+        _finalized 已置位、finally close_span no-op，OTEL span 悬挂
+        （检视意见第八轮）；现在 BaseException 分支降级直驱收尾后
+        重抛，取消语义不被吞。
+        """
+
+        class _LegacyCancelHandler:
+            def on_llm_start(self, *args, **kwargs):
+                return None
+
+            def on_llm_end(self, *args, **kwargs):
+                raise asyncio.CancelledError()
+
+        tracer = _FakeTracer()
+        scope = TraceManager(
+            trace_handlers=[_LegacyCancelHandler()],
+            openjiuwen_tracer=tracer,
+        )
+        items = [AssistantMessage(content="你"), AssistantMessage(content="好")]
+        chain = _make_chain(TestStreamTelemetry._stream_llm(items), _make_conf())
+
+        gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        with workflow_trace_scope(scope):
+            with pytest.raises(asyncio.CancelledError):
+                async for _ in gen:
+                    pass  # 完整消费到流末——正常 on_llm_end 发射阶段被取消
+
+        end = _events_by_name(tracer, "on_llm_end")
+        assert len(end) == 1  # 取消穿透前降级直驱，恰好一次
+        assert not _events_by_name(tracer, "on_llm_error")
+
+    @pytest.mark.asyncio
+    async def test_cancel_during_error_emission_keeps_error_state_then_reraises(
+        self, monkeypatch
+    ):
+        """异常路径发射被取消：降级走 error 事件收尾后重抛。
+
+        CancelledError 与 error 载荷同时发生时，降级仍经
+        oj_finalize_llm_span(error=...) 保持 error 终态，不假扮成功 end。
+        """
+        monkeypatch.setattr(
+            llm_chain_module, "_format_llm_error_detail", lambda exc: str(exc)
+        )
+
+        class _LegacyCancelHandler:
+            def on_llm_start(self, *args, **kwargs):
+                return None
+
+            def on_llm_error(self, *args, **kwargs):
+                raise asyncio.CancelledError()
+
+        tracer = _FakeTracer()
+        scope = TraceManager(
+            trace_handlers=[_LegacyCancelHandler()],
+            openjiuwen_tracer=tracer,
+        )
+        boom = RuntimeError("模型接入URL无效")
+
+        async def _boom_stream(**kwargs):
+            raise boom
+            yield  # pragma: no cover - 使其成为异步生成器
+
+        llm = MagicMock()
+        llm.stream = MagicMock(return_value=_boom_stream())
+        chain = _make_chain(llm, _make_conf())
+
+        gen = chain.stream({"userFields": {"query": "你好"}}, _FakeSession(), None)
+        with workflow_trace_scope(scope):
+            with pytest.raises(asyncio.CancelledError):
+                async for _ in gen:
+                    pass
+
+        errors = _events_by_name(tracer, "on_llm_error")
+        assert len(errors) == 1  # 取消穿透前降级直驱，恰好一次且终态为 error
+        assert errors[0]["error"] is boom
+        assert not _events_by_name(tracer, "on_llm_end")  # 不假扮成功 end
+
+    @pytest.mark.asyncio
     async def test_stream_early_close_finalizes_span(self):
         """流提前关闭（GeneratorExit / 上层 break）：finally 补发一次 end。
 
