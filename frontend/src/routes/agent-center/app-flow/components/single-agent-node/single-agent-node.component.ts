@@ -183,9 +183,14 @@ export class SingleAgentNodeComponent
           agentInfo.version_name = this.last_version_name;
 
           // configs 与编排弹窗 getSubSingleAgent 生成的单智能体成员 DSL 同构；
+          // mode 按最新版本实际 sub_type 动态映射（planexecute → 'PlanExecute'，
+          // 其余 → 'agent'），与编排弹窗保持一致；
           // 保留画布节点已有 intent（与 SubController 画布升级先例一致），
           // fromShare/valid 等其余字段由 createMultiAgentTree 的
           // getMergedConfigs 从画布节点旧 configs 合并回来
+          const memberMode = ((agentInfo as any)?.sub_type ?? '').trim() === 'planexecute'
+            ? 'PlanExecute'
+            : 'agent';
           const bodyParams = {
             id: this.nodeInfo?.id,
             name: agentInfo.name,
@@ -194,7 +199,7 @@ export class SingleAgentNodeComponent
               node_id: '',
               id: agentInfo.agent_id,
               name: agentInfo.name,
-              mode: 'PlanExecute',
+              mode: memberMode,
               type: ApplicationType.SINGLE_AGENT,
               description: agentInfo.description,
               version: this.last_version_id,
