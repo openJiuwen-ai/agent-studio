@@ -164,6 +164,11 @@ class TestConditionalForkCommaJoin:
         done_ids = set(plan.terminal_to_done.values())
         assert len(done_ids) == 2
         assert len(plan.done_nodes) == 2
+        # node_b2 的 if 波(geqp) 与 default 波(yumx) 互斥且共享同一汇聚点 →
+        # 标记为跨互斥波：converter 据此移除汇聚点 wait_for_all，由 [done 列表]
+        # 纯 AND 接管，避免 CNF 把跨波前驱误并 OR 而重复执行。
+        assert spec.merged_across_exclusive_waves is True
+        assert plan.cross_exclusive_wave_join_targets == frozenset({"node_code"})
 
     @staticmethod
     def test_terminal_rewrite_covers_all_join_edges():
@@ -196,6 +201,10 @@ class TestStartForkSingleIdUnchanged:
         expected = _expected_lane_terminals()
         for lane_start, lane in lanes.items():
             assert set(lane.terminals) == expected[lane_start], lane_start
+        # 单波（start 直达扇出，无第二个互斥 fork 波）→ 不标记跨波：
+        # 汇聚点保留 wait_for_all 交 CNF，防止嵌套菱形互斥 done 被纯 AND 拖死。
+        assert spec.merged_across_exclusive_waves is False
+        assert plan.cross_exclusive_wave_join_targets == frozenset()
 
 
 class TestNoForkOrNoMarker:
@@ -386,6 +395,9 @@ class TestExclusiveDualForkMerged:
         assert ("node_p", "node_code", "node_p-default") in plan.terminal_to_done
         assert ("node_q", "node_code", "node_q-default") in plan.terminal_to_done
         assert ("node_llm2", "node_code", None) in plan.terminal_to_done
+        # u1/u2 是来自不同 parallel_id 的互斥 fork 波 → 跨波标记为真
+        assert spec.merged_across_exclusive_waves is True
+        assert plan.cross_exclusive_wave_join_targets == frozenset({"node_code"})
 
     @staticmethod
     def test_non_exclusive_dual_fork_still_falls_back():
