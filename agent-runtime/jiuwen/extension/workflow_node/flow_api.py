@@ -37,6 +37,7 @@ from jiuwen.extension.workflow_node.utils import (
 )
 from jiuwen.extension.wrapper.restful_api_loader import convert_ir_to_card
 from jiuwen.extension.wrapper.restful_api_new import RestfulApiToolNew
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from jiuwen.plugin.models.param import Param
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
@@ -483,6 +484,10 @@ class FlowApi(WorkflowComponent):
                     component_type_str="FlowApi",
                     metadata={"param_name": "unknown"},
                 )
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数记日志后跳过，插件照常被调用
+                    continue
                 raise _build_flow_api_error(
                     FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR,
                     error_msg=(

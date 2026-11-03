@@ -63,6 +63,24 @@ def transform_type(value, expected_type, key):
     return value
 
 
+# 插件/MCP 参数松校验开关（PLUGIN_MCP_LOOSE_PARAM_VALIDATION，默认关闭）。
+# 开启后对齐旧架构（lumina / 旧线 ei_patch 覆盖形态）的行为：调用入参出现
+# 未定义参数名时不再抛错，仅记日志并静默跳过，插件/MCP 照常被调用——
+# 用于旧架构现网向新架构迁移期间的兼容模式（旧架构现网对未知参数本就宽容）。
+_LOOSE_PARAM_VALIDATION_ENV = "PLUGIN_MCP_LOOSE_PARAM_VALIDATION"
+
+
+def is_loose_param_validation_enabled() -> bool:
+    """插件/MCP 参数松校验是否开启。
+
+    环境变量 ``PLUGIN_MCP_LOOSE_PARAM_VALIDATION`` 为 true（大小写不敏感、
+    允许首尾空白）时开启；未设置或其他值一律关闭（默认严格校验：
+    未定义参数名抛 WORKFLOW_API_INPUTS_ERROR / WORKFLOW_MCP_INPUTS_ERROR）。
+    每次调用实时读取环境变量，改值须重启进程生效。
+    """
+    return str(os.getenv(_LOOSE_PARAM_VALIDATION_ENV, "")).strip().lower() == "true"
+
+
 class ApiUtils:
     @staticmethod
     def encrypt_service_auth(auth: dict):

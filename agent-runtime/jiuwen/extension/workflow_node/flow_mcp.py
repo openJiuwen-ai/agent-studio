@@ -30,6 +30,7 @@ from jiuwen.extension.wrapper.sse_client_new import SSEClientNew
 from jiuwen.extension.wrapper.streamable_http_client_new import StreamableHttpClientNew
 from jiuwen.plugin.common import constant
 from jiuwen.plugin.common.utils.ir_utils import MCP_PARAM_LOCATIONS
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
@@ -434,6 +435,10 @@ class FlowMcp(WorkflowComponent):
                     component_type_str="FlowMcp",
                     metadata={"param_name": name},
                 )
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数记日志后跳过，MCP 工具照常被调用
+                    continue
                 raise _build_flow_mcp_error(
                     FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
                     param=name,

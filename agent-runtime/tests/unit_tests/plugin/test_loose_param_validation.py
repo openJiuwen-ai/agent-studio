@@ -1,0 +1,152 @@
+# coding: utf-8
+# Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+
+"""插件/MCP 参数松校验开关（PLUGIN_MCP_LOOSE_PARAM_VALIDATION）单元测试。
+
+覆盖四层：
+1. 开关解析（默认关 / true 变体 / 非 true 值）
+2. 新引擎 FlowApi._format_api_inputs（未知参数默认抛错，松校验跳过）
+3. 新引擎 FlowMcp._format_api_inputs（同上）
+4. 旧引擎（orchestration）FlowApi / FlowMcp 的同款行为
+"""
+
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+
+from jiuwen.common.exception import JiuWenBaseException as CommonJiuWenBaseException
+from jiuwen.extension.workflow_node.flow_api import FlowApi, FlowApiStatusCode
+from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
+from jiuwen.extension.workflow_node.utils import JiuWenBaseException
+from jiuwen.orchestration.flow.components.flow_api import FlowApi as OldFlowApi
+from jiuwen.orchestration.flow.components.flow_mcp import FlowMcp as OldFlowMcp
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
+from jiuwen.plugin.models.param import Param
+
+ENV_KEY = "PLUGIN_MCP_LOOSE_PARAM_VALIDATION"
+
+
+def _make_param(name="query", param_type="string", required=True):
+    return Param(name, f"param {name}", param_type=param_type, required=required)
+
+
+# ─── 1. 开关解析 ───────────────────────────────────────────────────────
+
+
+class TestLooseFlagParsing:
+    def test_unset_defaults_off(self, monkeypatch):
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        assert is_loose_param_validation_enabled() is False
+
+    @pytest.mark.parametrize("value", ["false", "False", "FALSE", "0", "yes", "garbage", ""])
+    def test_non_true_values_off(self, monkeypatch, value):
+        monkeypatch.setenv(ENV_KEY, value)
+        assert is_loose_param_validation_enabled() is False
+
+    @pytest.mark.parametrize("value", ["true", "TRUE", "True", " true ", "\ttrue\n"])
+    def test_true_variants_on(self, monkeypatch, value):
+        monkeypatch.setenv(ENV_KEY, value)
+        assert is_loose_param_validation_enabled() is True
+
+
+# ─── 2. 新引擎 FlowApi ─────────────────────────────────────────────────
+
+
+def _make_flow_api():
+    comp = FlowApi()
+    comp._api = SimpleNamespace(params=[_make_param()])
+    return comp
+
+
+class TestFlowApiLooseValidation:
+    def test_unknown_param_raises_by_default(self, monkeypatch):
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        comp = _make_flow_api()
+        with pytest.raises(JiuWenBaseException) as ei:
+            asyncio.run(comp._format_api_inputs({"query": "a", "unknown": "b"}))
+        assert ei.value.error_code == FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR.value[0]
+
+    def test_unknown_param_skipped_when_loose_on(self, monkeypatch):
+        monkeypatch.setenv(ENV_KEY, "true")
+        comp = _make_flow_api()
+        result = asyncio.run(comp._format_api_inputs({"query": "a", "unknown": "b"}))
+        assert result == {"query": "a"}
+
+    def test_none_valued_extra_param_always_skipped(self, monkeypatch):
+        # None 值多余参数在两种模式下都静默丢弃（先于名字检查，与开关无关）
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        comp = _make_flow_api()
+        result = asyncio.run(comp._format_api_inputs({"query": "a", "unknown": None}))
+        assert result == {"query": "a"}
+
+    def test_known_params_transformed_regardless_of_flag(self, monkeypatch):
+        monkeypatch.setenv(ENV_KEY, "true")
+        comp = _make_flow_api()
+        result = asyncio.run(comp._format_api_inputs({"query": 123}))
+        assert result == {"query": "123"}
+
+
+# ─── 3. 新引擎 FlowMcp ─────────────────────────────────────────────────
+
+
+def _make_flow_mcp():
+    comp = FlowMcp.__new__(FlowMcp)
+    comp._client = SimpleNamespace(_tool_params=[_make_param()])
+    return comp
+
+
+class TestFlowMcpLooseValidation:
+    def test_unknown_param_raises_by_default(self, monkeypatch):
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        comp = _make_flow_mcp()
+        with pytest.raises(JiuWenBaseException):
+            comp._format_api_inputs({"query": "a", "unknown": "b"})
+
+    def test_unknown_param_skipped_when_loose_on(self, monkeypatch):
+        monkeypatch.setenv(ENV_KEY, "true")
+        comp = _make_flow_mcp()
+        api_inputs, schema_patches = comp._format_api_inputs(
+            {"query": "a", "unknown": "b"}
+        )
+        assert api_inputs == {"query": "a"}
+        assert schema_patches == {}
+
+
+# ─── 4. 旧引擎（orchestration） ────────────────────────────────────────
+
+
+def _make_old_flow_api():
+    comp = OldFlowApi.__new__(OldFlowApi)
+    comp._api = SimpleNamespace(params=[_make_param()])
+    return comp
+
+
+def _make_old_flow_mcp():
+    comp = OldFlowMcp.__new__(OldFlowMcp)
+    comp.api = SimpleNamespace(params=[_make_param()])
+    return comp
+
+
+class TestOldEngineLooseValidation:
+    def test_old_flow_api_unknown_param_raises_by_default(self, monkeypatch):
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        comp = _make_old_flow_api()
+        with pytest.raises(CommonJiuWenBaseException):
+            comp._format_api_inputs({"query": "a", "unknown": "b"})
+
+    def test_old_flow_api_unknown_param_skipped_when_loose_on(self, monkeypatch):
+        monkeypatch.setenv(ENV_KEY, "true")
+        comp = _make_old_flow_api()
+        assert comp._format_api_inputs({"query": "a", "unknown": "b"}) == {"query": "a"}
+
+    def test_old_flow_mcp_unknown_param_raises_by_default(self, monkeypatch):
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        comp = _make_old_flow_mcp()
+        with pytest.raises(CommonJiuWenBaseException):
+            comp._format_api_inputs({"query": "a", "unknown": "b"})
+
+    def test_old_flow_mcp_unknown_param_skipped_when_loose_on(self, monkeypatch):
+        monkeypatch.setenv(ENV_KEY, "true")
+        comp = _make_old_flow_mcp()
+        assert comp._format_api_inputs({"query": "a", "unknown": "b"}) == {"query": "a"}
