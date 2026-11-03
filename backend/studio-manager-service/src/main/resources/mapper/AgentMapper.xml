@@ -849,8 +849,11 @@
         <if test="searchCriteria != null and searchCriteria.subType != null">
             and sub_type = #{searchCriteria.subType,jdbcType=VARCHAR}
         </if>
-        <!-- 深度研究类智能体暂不支持作为子智能体引用，列表默认排除（sub_type 可能为 null，需保留） -->
-        <if test="searchCriteria == null or searchCriteria.subType == null">
+        <!-- 深度研究类单智能体暂不支持作为子智能体引用：仅在查询单智能体列表（type=agent）
+             且未显式指定 sub_type 过滤时默认排除（sub_type 可能为 null，需保留），
+             不影响 type=controller 及未指定 type 的通用列表调用方 -->
+        <if test="(searchCriteria == null or searchCriteria.subType == null)
+            and searchCriteria != null and searchCriteria.type == 'agent'">
             and (sub_type is null or sub_type != 'deepresearch')
         </if>
         ) t1
