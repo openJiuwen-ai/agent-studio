@@ -5,12 +5,14 @@
 
 覆盖四层：
 1. 开关解析（默认关 / true 变体 / 非 true 值）
-2. 新引擎 FlowApi._format_api_inputs（未知参数默认抛错，松校验跳过）
+2. 新引擎 FlowApi._format_api_inputs（未知参数默认抛错；松校验跳过且打
+   WARNING——带参数名，迁移期可据此收集清理清单）
 3. 新引擎 FlowMcp._format_api_inputs（同上）
 4. 旧引擎（orchestration）FlowApi / FlowMcp 的同款行为
 """
 
 import asyncio
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +31,14 @@ ENV_KEY = "PLUGIN_MCP_LOOSE_PARAM_VALIDATION"
 
 def _make_param(name="query", param_type="string", required=True):
     return Param(name, f"param {name}", param_type=param_type, required=required)
+
+
+def _mock_workflow_logger(records):
+    """构造捕获 warning/error 的 workflow_logger 替身（monkeypatch 模块级名字用）"""
+    return SimpleNamespace(
+        warning=lambda msg, *a, **kw: records.append(("WARNING", msg, kw)),
+        error=lambda msg, *a, **kw: records.append(("ERROR", msg, kw)),
+    )
 
 
 # ─── 1. 开关解析 ───────────────────────────────────────────────────────
@@ -64,20 +74,32 @@ class TestFlowApiLooseValidation:
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_api()
         with pytest.raises(JiuWenBaseException) as ei:
-            asyncio.run(comp._format_api_inputs({"query": "a", "unknown": "b"}))
+            asyncio.run(comp._format_api_inputs({"query": "a", "extra": "b"}))
         assert ei.value.error_code == FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR.value[0]
 
-    def test_unknown_param_skipped_when_loose_on(self, monkeypatch):
+    def test_loose_on_skips_and_logs_warning_with_param_name(self, monkeypatch):
         monkeypatch.setenv(ENV_KEY, "true")
+        records = []
+        monkeypatch.setattr(
+            "jiuwen.extension.workflow_node.flow_api.workflow_logger",
+            _mock_workflow_logger(records),
+        )
         comp = _make_flow_api()
-        result = asyncio.run(comp._format_api_inputs({"query": "a", "unknown": "b"}))
+        result = asyncio.run(comp._format_api_inputs({"query": "a", "extra": "b"}))
         assert result == {"query": "a"}
+        # 松校验跳过必须打 WARNING（非静默、非 ERROR），且带被跳过的参数名
+        warnings = [r for r in records if r[0] == "WARNING"]
+        errors = [r for r in records if r[0] == "ERROR"]
+        assert len(warnings) == 1
+        assert "skip undefined param" in warnings[0][1]
+        assert warnings[0][2]["metadata"]["param_name"] == "extra"
+        assert errors == []
 
-    def test_none_valued_extra_param_always_skipped(self, monkeypatch):
+    def test_none_valued_extra_param_always_skipped_without_log(self, monkeypatch):
         # None 值多余参数在两种模式下都静默丢弃（先于名字检查，与开关无关）
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_api()
-        result = asyncio.run(comp._format_api_inputs({"query": "a", "unknown": None}))
+        result = asyncio.run(comp._format_api_inputs({"query": "a", "extra": None}))
         assert result == {"query": "a"}
 
     def test_known_params_transformed_regardless_of_flag(self, monkeypatch):
@@ -101,16 +123,27 @@ class TestFlowMcpLooseValidation:
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_mcp()
         with pytest.raises(JiuWenBaseException):
-            comp._format_api_inputs({"query": "a", "unknown": "b"})
+            comp._format_api_inputs({"query": "a", "extra": "b"})
 
-    def test_unknown_param_skipped_when_loose_on(self, monkeypatch):
+    def test_loose_on_skips_and_logs_warning_with_param_name(self, monkeypatch):
         monkeypatch.setenv(ENV_KEY, "true")
+        records = []
+        monkeypatch.setattr(
+            "jiuwen.extension.workflow_node.flow_mcp.workflow_logger",
+            _mock_workflow_logger(records),
+        )
         comp = _make_flow_mcp()
         api_inputs, schema_patches = comp._format_api_inputs(
-            {"query": "a", "unknown": "b"}
+            {"query": "a", "extra": "b"}
         )
         assert api_inputs == {"query": "a"}
         assert schema_patches == {}
+        warnings = [r for r in records if r[0] == "WARNING"]
+        errors = [r for r in records if r[0] == "ERROR"]
+        assert len(warnings) == 1
+        assert "skip undefined param" in warnings[0][1]
+        assert warnings[0][2]["metadata"]["param_name"] == "extra"
+        assert errors == []
 
 
 # ─── 4. 旧引擎（orchestration） ────────────────────────────────────────
@@ -133,20 +166,41 @@ class TestOldEngineLooseValidation:
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_old_flow_api()
         with pytest.raises(CommonJiuWenBaseException):
-            comp._format_api_inputs({"query": "a", "unknown": "b"})
+            comp._format_api_inputs({"query": "a", "extra": "b"})
 
-    def test_old_flow_api_unknown_param_skipped_when_loose_on(self, monkeypatch):
+    def test_old_flow_api_loose_on_skips_and_logs_warning(self, monkeypatch, caplog):
         monkeypatch.setenv(ENV_KEY, "true")
         comp = _make_old_flow_api()
-        assert comp._format_api_inputs({"query": "a", "unknown": "b"}) == {"query": "a"}
+        with caplog.at_level(logging.WARNING):
+            result = comp._format_api_inputs({"query": "a", "extra": "b"})
+        assert result == {"query": "a"}
+        skip_warnings = [
+            r for r in caplog.records if "loose param validation" in r.getMessage()
+        ]
+        assert len(skip_warnings) == 1
+        assert "extra" in skip_warnings[0].getMessage()
+        # 松校验跳过不是错误——不应出现 error 级日志
+        assert not [
+            r for r in caplog.records if r.levelno >= logging.ERROR
+        ]
 
     def test_old_flow_mcp_unknown_param_raises_by_default(self, monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_old_flow_mcp()
         with pytest.raises(CommonJiuWenBaseException):
-            comp._format_api_inputs({"query": "a", "unknown": "b"})
+            comp._format_api_inputs({"query": "a", "extra": "b"})
 
-    def test_old_flow_mcp_unknown_param_skipped_when_loose_on(self, monkeypatch):
+    def test_old_flow_mcp_loose_on_skips_and_logs_warning(self, monkeypatch, caplog):
         monkeypatch.setenv(ENV_KEY, "true")
         comp = _make_old_flow_mcp()
-        assert comp._format_api_inputs({"query": "a", "unknown": "b"}) == {"query": "a"}
+        with caplog.at_level(logging.WARNING):
+            result = comp._format_api_inputs({"query": "a", "extra": "b"})
+        assert result == {"query": "a"}
+        skip_warnings = [
+            r for r in caplog.records if "loose param validation" in r.getMessage()
+        ]
+        assert len(skip_warnings) == 1
+        assert "extra" in skip_warnings[0].getMessage()
+        assert not [
+            r for r in caplog.records if r.levelno >= logging.ERROR
+        ]

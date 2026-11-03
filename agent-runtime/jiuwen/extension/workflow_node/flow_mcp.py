@@ -429,16 +429,23 @@ class FlowMcp(WorkflowComponent):
                                 pass
                         api_inputs[name] = converted
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数打 WARNING（带参数名，迁移期可据此
+                    # 收集多余参数清理清单）后跳过，MCP 工具照常被调用
+                    workflow_logger.warning(
+                        f"{TAG} loose param validation: skip undefined param",
+                        event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                        component_type_str="FlowMcp",
+                        metadata={"param_name": name},
+                    )
+                    continue
                 workflow_logger.error(
                     f"{TAG} _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                     component_type_str="FlowMcp",
                     metadata={"param_name": name},
                 )
-                if is_loose_param_validation_enabled():
-                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
-                    # 对齐旧架构行为——未知参数记日志后跳过，MCP 工具照常被调用
-                    continue
                 raise _build_flow_mcp_error(
                     FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
                     param=name,
