@@ -223,4 +223,40 @@ class DownstreamErrorMapperTest {
             null), REQUEST_ID);
         assertEquals("builder", builder.getDownstreamComponentLabel());
     }
+
+    // ---- 评审守卫（2026-11-03）：mapper 不得在构造阶段抛异常 ----
+
+    @Test
+    void map_blank_managed_message_no_throw_and_passthrough_stays_null() {
+        // 空白 message 视为无可信文案（与 PassthroughText 构造不变量一致），
+        // 原码仍透传、走 i18n/族文案回退——绝不在 descriptor 构造阶段抛
+        // IllegalArgumentException 打穿错误处理路径自身
+        DownstreamFailure f = DownstreamFailure.sseEvent(
+            DownstreamService.RUNTIME, Transport.OKHTTP_SSE, "openjiuwen.101003",
+            "   ", null, null, null);
+        ErrorDescriptor d = mapper.map(f, REQUEST_ID);
+        assertEquals("openjiuwen.101003", d.getErrorCode());
+        assertNull(d.getPassthroughText());
+    }
+
+    @Test
+    void map_non_error_downstream_status_clamped_to_502() {
+        // 1xx/2xx/3xx 越界状态：ErrorDefinition 只接受 4xx-5xx——防御性归一 502
+        DownstreamFailure f = DownstreamFailure.httpResponse(
+            DownstreamService.RUNTIME, Transport.FEIGN, 302, "openjiuwen.02001003",
+            null, null, null, null);
+        ErrorDescriptor d = mapper.map(f, REQUEST_ID);
+        assertEquals("openjiuwen.02001003", d.getErrorCode());
+        assertEquals(502, d.getHttpStatus());
+    }
+
+    @Test
+    void map_null_request_id_falls_back_to_unknown() {
+        // requestId 空守卫：MDC 未写入时回退 unknown，不抛 IllegalArgumentException
+        DownstreamFailure f = DownstreamFailure.transportFailure(
+            DownstreamService.RUNTIME, Transport.OKHTTP_SSE, null);
+        ErrorDescriptor d = mapper.map(f, null);
+        assertEquals("openjiuwen.02001131", d.getErrorCode());
+        assertEquals("unknown", d.getRequestId());
+    }
 }

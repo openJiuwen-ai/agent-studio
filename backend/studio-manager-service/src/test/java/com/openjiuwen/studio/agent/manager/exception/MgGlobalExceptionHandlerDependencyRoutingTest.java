@@ -6,7 +6,10 @@ package com.openjiuwen.studio.agent.manager.exception;
 
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestHeaderHolderUtils;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.support.StaticMessageSource;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -29,6 +32,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 误标 mysql 或漏到 02001002 兜底。
  */
 class MgGlobalExceptionHandlerDependencyRoutingTest {
+
+    /**
+     * 语种固定（评审修订 2026-11-03）：断言的族文案按语种分档，而
+     * LanguageUtils 读的是 {@link RequestHeaderHolderUtils} 的 ThreadLocal
+     * （生产由 X-Language Filter 写入，Spring 的 LocaleContextHolder 不参与），
+     * 测试显式置 zh-CN 避免依赖 ThreadLocal 缺省形态。
+     */
+    @BeforeEach
+    void pinRequestLanguage() {
+        RequestHeaderHolderUtils.setRequestLanguage("zh-CN");
+    }
+
+    @AfterEach
+    void clearRequestLanguage() {
+        RequestHeaderHolderUtils.clear();
+    }
 
     private MgGlobalExceptionHandler handler() {
         StaticMessageSource ms = new StaticMessageSource();

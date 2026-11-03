@@ -69,19 +69,23 @@ public final class DownstreamErrorMapper {
         if (chosen == null && trustedCode != null
                 && service == DownstreamService.RUNTIME
                 && catalog.isRuntimeCanonicalShape(trustedCode)) {
-            int passthroughStatus = failure.getDownstreamHttpStatus() != null
-                ? failure.getDownstreamHttpStatus() : RUNTIME_SSE_PASSTHROUGH_STATUS;
+            int passthroughStatus = passthroughHttpStatus(failure.getDownstreamHttpStatus());
             chosen = catalog.resolveByCode(trustedCode, passthroughStatus).orElse(null);
-            if (failure.getDownstreamMessage() != null) {
+            String message = failure.getDownstreamMessage();
+            if (message != null && !message.isBlank()) {
                 // 受管文案完整性兜底：reason/suggestion 缺失时用 message 填充——
                 // 构建器对 i18n 缺失的码按字段回退，部分缺失若不补齐会在
                 // fail-closed 路径抛出，前端将收不到任何错误帧（比兜底码更糟）。
+                // 门槛用非空白（与 PassthroughText 构造不变量一致，评审修订
+                // 2026-11-03）：message 为空白时视为无可信文案，passthrough 保持
+                // null 走 i18n/族文案回退，绝不在 descriptor 构造阶段抛异常。
                 String reason = failure.getDownstreamReason() != null
-                    ? failure.getDownstreamReason() : failure.getDownstreamMessage();
+                    && !failure.getDownstreamReason().isBlank()
+                    ? failure.getDownstreamReason() : message;
                 String suggestion = failure.getDownstreamSuggestion() != null
-                    ? failure.getDownstreamSuggestion() : failure.getDownstreamMessage();
-                passthrough = new PassthroughText(
-                    failure.getDownstreamMessage(), reason, suggestion);
+                    && !failure.getDownstreamSuggestion().isBlank()
+                    ? failure.getDownstreamSuggestion() : message;
+                passthrough = new PassthroughText(message, reason, suggestion);
             }
         }
         // 2. 未命中/无原码/未知码/transport failure → 默认 02001131/502
@@ -97,13 +101,39 @@ public final class DownstreamErrorMapper {
         return new ErrorDescriptor(
             chosen.getErrorCode(), chosen.getHttpStatus(),
             chosen.getMessageKey(), chosen.getReasonKey(), chosen.getSuggestionKey(),
-            requestId, null,
+            safeRequestId(requestId), null,
             service,              // 总存在
             trustedCode,          // 可信原码或 null（service-without-code 合法）
             failure.getCause(),   // 原始 cause，仅内部日志
             passthrough,          // 受管三段文案，构建器 i18n 缺失时回退；可空
             resolveComponentLabel(service, trustedCode, failure.getDownstreamMessage())
         );
+    }
+
+    /**
+     * 透传 ErrorDefinition 状态（评审修订 2026-11-03）：
+     * null（SSE 阶段，无下游 HTTP 状态）→ 500；4xx/5xx 原样透传；
+     * 非错误区间（1xx/2xx/3xx——直接构造的 DownstreamFailure 或异常网关形态）
+     * → 502。ErrorDefinition 只接受 4xx-5xx，原样透传越界状态会在 descriptor
+     * 构造阶段抛 IllegalArgumentException，打穿错误处理路径自身。
+     */
+    private static int passthroughHttpStatus(Integer downstreamStatus) {
+        if (downstreamStatus == null) {
+            return RUNTIME_SSE_PASSTHROUGH_STATUS;
+        }
+        if (downstreamStatus >= 400 && downstreamStatus <= 599) {
+            return downstreamStatus;
+        }
+        return 502;
+    }
+
+    /**
+     * requestId 非空守卫（评审修订 2026-11-03）：调用方 MDC 未写入时回退
+     * unknown——ErrorDescriptor 要求非空，null 直传会抛 IllegalArgumentException，
+     * 把本应返回的下游失败错误体升级为未知异常。
+     */
+    private static String safeRequestId(String requestId) {
+        return requestId != null && !requestId.isBlank() ? requestId : "unknown";
     }
 
     /**

@@ -457,10 +457,8 @@ public class AgentServiceProxyService {
         // （回归其本职：上游模型探活失败的业务码）。
         DownstreamFailure failure = DownstreamFailure.transportFailure(
             DownstreamService.BUILDER, Transport.FEIGN, e);
-        ErrorDescriptor descriptor = downstreamMapper.map(failure, MDC.get(MdcKeys.REQUEST_ID));
-        ResponseEntity<ErrorRsp> built = downstreamHttpBuilder.build(
-            descriptor, LanguageUtils.getLanguageLocale());
-        return new ResponseEntity<>(built.getBody(), built.getHeaders(), built.getStatusCode());
+        ErrorDescriptor descriptor = downstreamMapper.map(failure, requestIdOrUnknown());
+        return renderDownstreamErrorOrSafeFallback(descriptor);
     }
 
     /**
@@ -474,10 +472,8 @@ public class AgentServiceProxyService {
             // 无可信原码（builder 不可达等）：走 DownstreamErrorMapper 兜底
             // 02001131 + 组件标签（与 runtime 掉线同构，2026-11-02 用户裁定）
             log.warn("DownstreamFailure without trusted code: {}", failure);
-            ErrorDescriptor descriptor = downstreamMapper.map(failure, MDC.get(MdcKeys.REQUEST_ID));
-            ResponseEntity<ErrorRsp> built = downstreamHttpBuilder.build(
-                descriptor, LanguageUtils.getLanguageLocale());
-            return new ResponseEntity<>(built.getBody(), built.getHeaders(), built.getStatusCode());
+            ErrorDescriptor descriptor = downstreamMapper.map(failure, requestIdOrUnknown());
+            return renderDownstreamErrorOrSafeFallback(descriptor);
         }
         // 可信原码：透传 builder 原码 + 调测语义文案（既有行为保持）
         String requestId = MDC.get(MdcKeys.REQUEST_ID);
@@ -491,6 +487,43 @@ public class AgentServiceProxyService {
             .setErrorSuggestion(errorInfo.getSuggestion());
         Integer dsStatus = failure.getDownstreamHttpStatus();
         return ResponseEntity.status(dsStatus != null && dsStatus > 0 ? dsStatus : 500).body(errorRsp);
+    }
+
+    /** MDC 中的 request-id；未写入时回退 unknown——ErrorDescriptor 要求非空，
+     * null 直传 mapper 会在 descriptor 构造阶段抛 IllegalArgumentException（评审修订 2026-11-03）。 */
+    private static String requestIdOrUnknown() {
+        String rid = MDC.get(MdcKeys.REQUEST_ID);
+        return rid != null && !rid.isBlank() ? rid : "unknown";
+    }
+
+    /**
+     * 渲染下游错误 descriptor；渲染路径自身失败（构建器 fail-closed 抛出、
+     * resolver 异常等）时回退到不依赖 i18n 的硬编码 ErrorRsp（族字面量文案 +
+     * 502）——COM-03 §4 调用方捕获约定：错误处理路径自身不得把原始下游错误
+     * 升级成 02001002 覆盖（评审修订 2026-11-03）。
+     */
+    private ResponseEntity<Object> renderDownstreamErrorOrSafeFallback(ErrorDescriptor descriptor) {
+        try {
+            ResponseEntity<ErrorRsp> built = downstreamHttpBuilder.build(
+                descriptor, LanguageUtils.getLanguageLocale());
+            return new ResponseEntity<>(built.getBody(), built.getHeaders(), built.getStatusCode());
+        } catch (Exception renderEx) {
+            log.error("Downstream error render failed, using hardcoded fallback: {}",
+                renderEx.getMessage());
+            String label = descriptor.getDownstreamComponentLabel();
+            String reason = (label != null ? "组件" + label + "：" : "")
+                + "下游服务调用返回错误或网络不可达";
+            ErrorRsp rsp = new ErrorRsp()
+                .setErrorCode(descriptor.getErrorCode())
+                .setErrorMsg("下游依赖访问失败。")
+                .setErrorReason(reason)
+                .setErrorSuggestion("请检查下游服务状态后重试。")
+                .setRequestId(descriptor.getRequestId());
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Request-Id", descriptor.getRequestId());
+            return new ResponseEntity<>(rsp, headers, org.springframework.http.HttpStatus.BAD_GATEWAY);
+        }
     }
 
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,

@@ -426,8 +426,14 @@ public class MgGlobalExceptionHandler {
      * （{@code org.springframework.data.redis.*} / {@code org.redisson.*}）。
      * 链上带环（cause 指回自身）时终止，防止死循环。
      */
+    /** cause 链深度上限：防多节点环（A↔B）——t != t.getCause() 只能拦截自环。 */
+    private static final int MAX_CAUSE_CHAIN_DEPTH = 64;
+
     private static boolean isRedisAccessFailure(Throwable ex) {
-        for (Throwable t = ex; t != null && t != t.getCause(); t = t.getCause()) {
+        // 深度上限兜底（评审修订 2026-11-03）：两节点及以上的 cause 环无法靠
+        // t != t.getCause() 拦截，超限即终止——异常链正常深度远小于 64。
+        Throwable t = ex;
+        for (int depth = 0; t != null && depth < MAX_CAUSE_CHAIN_DEPTH; depth++, t = t.getCause()) {
             for (Class<?> c = t.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
                 String name = c.getName();
                 if (name.startsWith("org.springframework.data.redis.")
