@@ -106,7 +106,7 @@ public final class DownstreamErrorMapper {
             trustedCode,          // 可信原码或 null（service-without-code 合法）
             failure.getCause(),   // 原始 cause，仅内部日志
             passthrough,          // 受管三段文案，构建器 i18n 缺失时回退；可空
-            resolveComponentLabel(service, trustedCode, failure.getDownstreamMessage())
+            resolveComponentLabel(service)
         );
     }
 
@@ -149,8 +149,7 @@ public final class DownstreamErrorMapper {
      * manager 自身直接访问 OBS/SQL 的失败标签见
      * {@code contract.DependencyComponentLabels}（码族精确匹配 obs/mysql）。
      */
-    private static String resolveComponentLabel(DownstreamService service, String trustedCode,
-                                                String managedMessage) {
+    private static String resolveComponentLabel(DownstreamService service) {
         if (service == null) {
             return null;
         }

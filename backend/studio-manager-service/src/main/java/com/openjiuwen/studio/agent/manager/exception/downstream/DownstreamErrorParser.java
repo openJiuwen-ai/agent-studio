@@ -111,9 +111,13 @@ public final class DownstreamErrorParser {
     }
 
     /**
-     * 严格提取顶层字符串 {@code error_code} 并 trust-check；RUNTIME 同时提取
-     * 帧内受管三段文案（{@code error_msg/error_reason/error_suggestion}，
+     * 严格提取顶层字符串 {@code error_code} 并 trust-check；RUNTIME 可信码时
+     * 同时提取帧内受管三段文案（{@code error_msg/error_reason/error_suggestion}，
      * 契约修订 2026-11-02：Runtime 自身 catalog/i18n 产物，非原始 body）。
+     * <p>文案仅随可信码提取（评审修订 2026-11-03 三轮）——与
+     * {@link DownstreamFailure} 的"仅可信 RUNTIME 错误帧携带文案"契约一致；
+     * 不可信帧的文案不进 DownstreamFailure（mapper 有二次信任门兜底，但
+     * 契约描述与实现须一致）。
      * <p>无可信原码的所有情况均返回 {@code code=null}：body null/空/超限、非 JSON、数组、
      * 字段缺失/非字符串/blank、未识别码、损坏 UTF-8、解析异常。
      */
@@ -146,7 +150,7 @@ public final class DownstreamErrorParser {
         String message = null;
         String reason = null;
         String suggestion = null;
-        if (service == DownstreamService.RUNTIME) {
+        if (service == DownstreamService.RUNTIME && code != null) {
             message = extractBoundedText(root, ERROR_MSG_FIELD);
             reason = extractBoundedText(root, ERROR_REASON_FIELD);
             suggestion = extractBoundedText(root, ERROR_SUGGESTION_FIELD);

@@ -25,7 +25,7 @@ import java.util.Locale;
  * 组装结果恒非空（字面量终兜底），fail-closed 的"不返回空文案"约束按构造满足；
  * 非下游错误不走本类（保持 i18n 三键 + fail-closed 抛出语义）。
  */
-final class DownstreamFamilyFormat {
+public final class DownstreamFamilyFormat {
 
     /** 族前缀 i18n key（即默认下游依赖失败码的 message key）。 */
     static final String FAMILY_MSG_KEY = "openjiuwen.02001131";
@@ -40,6 +40,33 @@ final class DownstreamFamilyFormat {
         "Please check the downstream service status and retry.";
 
     private DownstreamFamilyFormat() {
+    }
+
+    // ---- 纯字面量兜底（公开给渲染失败时的硬编码回退,评审修订 2026-11-03 三轮:
+    //      AgentServiceProxyService.renderDownstreamErrorOrSafeFallback 的 catch
+    //      分支曾硬编码中文,与族格式的中英分档不一致——英文用户在渲染失败兜底
+    //      路径会收到中文错误。此组方法不依赖 resolver/i18n,按语种取字面量) ----
+
+    /** 渲染失败兜底:族前缀字面量。 */
+    public static String fallbackMessage(Locale locale) {
+        return isChinese(locale) ? FAMILY_MSG_FALLBACK_ZH : FAMILY_MSG_FALLBACK_EN;
+    }
+
+    /** 渲染失败兜底:reason 字面量（"组件{label}：…"/"component {label}: …";label 可空）。 */
+    public static String fallbackReason(String label, Locale locale) {
+        String detail = isChinese(locale) ? GENERIC_DETAIL_ZH : GENERIC_DETAIL_EN;
+        if (label == null || label.isBlank()) {
+            return detail;
+        }
+        return isChinese(locale)
+            ? "组件" + label + "：" + detail
+            : "component " + label + ": " + detail;
+    }
+
+    /** 渲染失败兜底:suggestion 字面量。 */
+    public static String fallbackSuggestion(Locale locale) {
+        return isChinese(locale)
+            ? FAMILY_SUGGESTION_FALLBACK_ZH : FAMILY_SUGGESTION_FALLBACK_EN;
     }
 
     /** error_msg：族前缀。 */

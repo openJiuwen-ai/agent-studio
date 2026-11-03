@@ -79,6 +79,7 @@ import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBr
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.exception.contract.DownstreamFamilyFormat;
 import com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog;
 import com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder;
 import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMapper;
@@ -498,9 +499,11 @@ public class AgentServiceProxyService {
 
     /**
      * 渲染下游错误 descriptor；渲染路径自身失败（构建器 fail-closed 抛出、
-     * resolver 异常等）时回退到不依赖 i18n 的硬编码 ErrorRsp（族字面量文案 +
-     * 502）——COM-03 §4 调用方捕获约定：错误处理路径自身不得把原始下游错误
-     * 升级成 02001002 覆盖（评审修订 2026-11-03）。
+     * resolver 异常等）时回退到不依赖 i18n 的字面量 ErrorRsp（按语种取
+     * DownstreamFamilyFormat 的中英兜底——评审修订 2026-11-03 三轮：原硬编码
+     * 中文与族格式语种分档不一致，英文用户在渲染失败路径会收到中文）——
+     * COM-03 §4 调用方捕获约定：错误处理路径自身不得把原始下游错误
+     * 升级成 02001002 覆盖。
      */
     private ResponseEntity<Object> renderDownstreamErrorOrSafeFallback(ErrorDescriptor descriptor) {
         try {
@@ -510,14 +513,13 @@ public class AgentServiceProxyService {
         } catch (Exception renderEx) {
             log.error("Downstream error render failed, using hardcoded fallback: {}",
                 renderEx.getMessage());
-            String label = descriptor.getDownstreamComponentLabel();
-            String reason = (label != null ? "组件" + label + "：" : "")
-                + "下游服务调用返回错误或网络不可达";
+            Locale locale = LanguageUtils.getLanguageLocale();
             ErrorRsp rsp = new ErrorRsp()
                 .setErrorCode(descriptor.getErrorCode())
-                .setErrorMsg("下游依赖访问失败。")
-                .setErrorReason(reason)
-                .setErrorSuggestion("请检查下游服务状态后重试。")
+                .setErrorMsg(DownstreamFamilyFormat.fallbackMessage(locale))
+                .setErrorReason(DownstreamFamilyFormat.fallbackReason(
+                    descriptor.getDownstreamComponentLabel(), locale))
+                .setErrorSuggestion(DownstreamFamilyFormat.fallbackSuggestion(locale))
                 .setRequestId(descriptor.getRequestId());
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);

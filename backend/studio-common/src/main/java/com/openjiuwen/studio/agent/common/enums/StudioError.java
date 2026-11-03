@@ -249,11 +249,6 @@ public enum StudioError {
     REDISSON_GET_BUCKET_FAILED(INTERNAL_SERVER_ERROR, COMMON, "1040"),
 
     /**
-     * Redis访问失败（连接/读写失败——Spring Data Redis 异常族，统一族格式标注组件redis）
-     */
-    REDIS_ACCESS_FAILED(INTERNAL_SERVER_ERROR, COMMON, "1051"),
-
-    /**
      * 获取用户 token 错误
      */
     IAM_GET_USERINFO_EXCEPTION(INTERNAL_SERVER_ERROR, COMMON, "1041"),
@@ -302,6 +297,11 @@ public enum StudioError {
      * Get request iam context failed
      */
     GET_REQUEST_IAM_FAILED(INTERNAL_SERVER_ERROR, COMMON, "1050"),
+
+    /**
+     * Redis访问失败（连接/读写失败——Spring Data Redis 异常族，统一族格式标注组件redis）
+     */
+    REDIS_ACCESS_FAILED(INTERNAL_SERVER_ERROR, COMMON, "1051"),
 
     /**
      * endpoint can not be found
