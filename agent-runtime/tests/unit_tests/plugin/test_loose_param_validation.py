@@ -1,5 +1,6 @@
 # coding: utf-8
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# pylint: disable=protected-access
 
 """插件/MCP 参数松校验开关（PLUGIN_MCP_LOOSE_PARAM_VALIDATION）单元测试。
 
@@ -11,6 +12,10 @@
 4. 新引擎 FlowCustomApi._format_api_inputs（callMode=custom 的自定义插件
    节点走此组件——ir_converter 按 callMode 分派，与 FlowApi 同契约）
 5. 旧引擎（orchestration）FlowApi / FlowMcp 的同款行为
+
+protected 访问说明：单测直测 _format_api_inputs/直塞 _api/_client 是
+本目录既有惯例（见 test_flow_mcp_format_inputs.py），文件头 pylint 禁用
+protected-access。
 """
 
 import asyncio
@@ -48,17 +53,21 @@ def _mock_workflow_logger(records):
 
 
 class TestLooseFlagParsing:
-    def test_unset_defaults_off(self, monkeypatch):
+
+    @staticmethod
+    def test_unset_defaults_off(monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         assert is_loose_param_validation_enabled() is False
 
+    @staticmethod
     @pytest.mark.parametrize("value", ["false", "False", "FALSE", "0", "yes", "garbage", ""])
-    def test_non_true_values_off(self, monkeypatch, value):
+    def test_non_true_values_off(monkeypatch, value):
         monkeypatch.setenv(ENV_KEY, value)
         assert is_loose_param_validation_enabled() is False
 
+    @staticmethod
     @pytest.mark.parametrize("value", ["true", "TRUE", "True", " true ", "\ttrue\n"])
-    def test_true_variants_on(self, monkeypatch, value):
+    def test_true_variants_on(monkeypatch, value):
         monkeypatch.setenv(ENV_KEY, value)
         assert is_loose_param_validation_enabled() is True
 
@@ -73,14 +82,17 @@ def _make_flow_api():
 
 
 class TestFlowApiLooseValidation:
-    def test_unknown_param_raises_by_default(self, monkeypatch):
+
+    @staticmethod
+    def test_unknown_param_raises_by_default(monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_api()
         with pytest.raises(JiuWenBaseException) as ei:
             asyncio.run(comp._format_api_inputs({"query": "a", "extra": "b"}))
         assert ei.value.error_code == FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR.value[0]
 
-    def test_loose_on_skips_and_logs_warning_with_param_name(self, monkeypatch):
+    @staticmethod
+    def test_loose_on_skips_and_logs_warning_with_param_name(monkeypatch):
         monkeypatch.setenv(ENV_KEY, "true")
         records = []
         monkeypatch.setattr(
@@ -98,14 +110,16 @@ class TestFlowApiLooseValidation:
         assert warnings[0][2]["metadata"]["param_name"] == "extra"
         assert errors == []
 
-    def test_none_valued_extra_param_always_skipped_without_log(self, monkeypatch):
+    @staticmethod
+    def test_none_valued_extra_param_always_skipped_without_log(monkeypatch):
         # None 值多余参数在两种模式下都静默丢弃（先于名字检查，与开关无关）
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_api()
         result = asyncio.run(comp._format_api_inputs({"query": "a", "extra": None}))
         assert result == {"query": "a"}
 
-    def test_known_params_transformed_regardless_of_flag(self, monkeypatch):
+    @staticmethod
+    def test_known_params_transformed_regardless_of_flag(monkeypatch):
         monkeypatch.setenv(ENV_KEY, "true")
         comp = _make_flow_api()
         result = asyncio.run(comp._format_api_inputs({"query": 123}))
@@ -122,13 +136,16 @@ def _make_flow_mcp():
 
 
 class TestFlowMcpLooseValidation:
-    def test_unknown_param_raises_by_default(self, monkeypatch):
+
+    @staticmethod
+    def test_unknown_param_raises_by_default(monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_mcp()
         with pytest.raises(JiuWenBaseException):
             comp._format_api_inputs({"query": "a", "extra": "b"})
 
-    def test_loose_on_skips_and_logs_warning_with_param_name(self, monkeypatch):
+    @staticmethod
+    def test_loose_on_skips_and_logs_warning_with_param_name(monkeypatch):
         monkeypatch.setenv(ENV_KEY, "true")
         records = []
         monkeypatch.setattr(
@@ -159,14 +176,17 @@ def _make_flow_custom_api():
 
 
 class TestFlowCustomApiLooseValidation:
-    def test_unknown_param_raises_by_default(self, monkeypatch):
+
+    @staticmethod
+    def test_unknown_param_raises_by_default(monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_flow_custom_api()
         with pytest.raises(JiuWenBaseException) as ei:
             asyncio.run(comp._format_api_inputs({"query": "a", "extra": "b"}))
         assert ei.value.error_code == FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR.value[0]
 
-    def test_loose_on_skips_and_logs_warning_with_param_name(self, monkeypatch):
+    @staticmethod
+    def test_loose_on_skips_and_logs_warning_with_param_name(monkeypatch):
         monkeypatch.setenv(ENV_KEY, "true")
         records = []
         monkeypatch.setattr(
@@ -200,13 +220,16 @@ def _make_old_flow_mcp():
 
 
 class TestOldEngineLooseValidation:
-    def test_old_flow_api_unknown_param_raises_by_default(self, monkeypatch):
+
+    @staticmethod
+    def test_old_flow_api_unknown_param_raises_by_default(monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_old_flow_api()
         with pytest.raises(CommonJiuWenBaseException):
             comp._format_api_inputs({"query": "a", "extra": "b"})
 
-    def test_old_flow_api_loose_on_skips_and_logs_warning(self, monkeypatch, caplog):
+    @staticmethod
+    def test_old_flow_api_loose_on_skips_and_logs_warning(monkeypatch, caplog):
         monkeypatch.setenv(ENV_KEY, "true")
         comp = _make_old_flow_api()
         with caplog.at_level(logging.WARNING):
@@ -222,13 +245,15 @@ class TestOldEngineLooseValidation:
             r for r in caplog.records if r.levelno >= logging.ERROR
         ]
 
-    def test_old_flow_mcp_unknown_param_raises_by_default(self, monkeypatch):
+    @staticmethod
+    def test_old_flow_mcp_unknown_param_raises_by_default(monkeypatch):
         monkeypatch.delenv(ENV_KEY, raising=False)
         comp = _make_old_flow_mcp()
         with pytest.raises(CommonJiuWenBaseException):
             comp._format_api_inputs({"query": "a", "extra": "b"})
 
-    def test_old_flow_mcp_loose_on_skips_and_logs_warning(self, monkeypatch, caplog):
+    @staticmethod
+    def test_old_flow_mcp_loose_on_skips_and_logs_warning(monkeypatch, caplog):
         monkeypatch.setenv(ENV_KEY, "true")
         comp = _make_old_flow_mcp()
         with caplog.at_level(logging.WARNING):
