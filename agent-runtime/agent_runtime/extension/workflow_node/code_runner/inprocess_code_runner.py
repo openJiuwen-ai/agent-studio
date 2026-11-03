@@ -10,7 +10,6 @@
   如需可靠硬超时，请使用 LOCAL_CODE_EXEC_MODE=subprocess。
 """
 
-import asyncio
 import copy
 import ctypes
 import logging
