@@ -37,6 +37,9 @@ echo "[paas_env] loading: ${ENV_FILE}"
 # || [ -n "$k" ]:read 读到 EOF 且无换行时已赋值但返回非 0——不带此条件,
 # 末行(无结尾换行)永远进不了循环体,静默丢参(评审修订 2026-11-03)。
 while IFS='=' read -r k v || [ -n "$k" ]; do
+  # 剥离行首 UTF-8 BOM(Windows 编辑器保存常见,首行键会带 EF BB BF 前缀
+  # 被正则静默丢弃——评审修订 2026-11-03 第二轮)
+  k=${k#$'\xEF\xBB\xBF'}
   # 剥离行尾 CR(CRLF 文件;EOF 无换行时 CR 同样残留在行尾)
   k=${k%$'\r'}
   v=${v%$'\r'}
