@@ -21,6 +21,7 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SensitiveLogContext;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
@@ -47,12 +48,15 @@ import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.OkHttpUtils;
+import com.openjiuwen.studio.agent.manager.utils.PinnedDns;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 
 import inet.ipaddr.IPAddressString;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.parser.OpenAPIV3Parser;
@@ -319,8 +323,8 @@ public class PluginAdapterImpl implements IPlugin {
 
     @Override
     public boolean isNewTool(PluginEntity pluginEntity) {
-        if (pluginEntity == null) {
-            return false; // 或抛出异常，视业务而定
+        if (pluginEntity == null || pluginEntity.getRequestInfo() == null) {
+            return false;
         }
         return pluginEntity.getRequestInfo().contains("basic_info");
     }
@@ -515,7 +519,7 @@ public class PluginAdapterImpl implements IPlugin {
         body.setParameter(processNestedStructure(body.getParameter()));
         log.info("[runTool] start to run, pluginId {}, toolId {} ", pluginId, toolId);
         JSONObject requestBody = JSON.parseObject(body.getParameter());
-        log.info("[runTool] get requestBody {}", requestBody);
+        log.info("[runTool] get requestBody, size={}", requestBody.size());
 
         // 下载OBS文件
         String objectKey = String.format("%s/%s.json", TOOL_TEST_OBS_PATH, toolId);
@@ -556,7 +560,7 @@ public class PluginAdapterImpl implements IPlugin {
         Map<String, String> pathParams = new HashMap<>();
         Map<String, String> headers = new HashMap<>();
         parseParams(operation, requestBody, urlParamsMap, headers, pathParams);
-        log.info("[runTool] pathParams parse to {}", pathParams);
+        log.info("[runTool] pathParams parse to {}", SensitiveLogContext.mask(String.valueOf(pathParams)));
 
         // 构造鉴权信息，用于前端展示的信息返回ENCRYPTED_VALUE
         Map<String, String> urlParamsEncrypted = new HashMap<>();
@@ -569,13 +573,13 @@ public class PluginAdapterImpl implements IPlugin {
         String url = operation.getServers().get(0).getUrl();
 
         // 替换url占位符
-        log.info("[runTool] before url replace: {}", url);
+        log.info("[runTool] before url replace: {}", SensitiveLogContext.mask(url));
         for (Map.Entry<String, String> entry : pathParams.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             url = url.replaceAll("\\{" + key + "\\}", Matcher.quoteReplacement(value));
         }
-        log.info("[runTool] after url replace: {}", url);
+        log.info("[runTool] after url replace: {}", SensitiveLogContext.mask(url));
 
         // 如果是预置插件就不做黑名单网段IP校验
         log.info("[runTool] plugin is preset ? {}", pluginId.startsWith(PRESET));
@@ -597,7 +601,7 @@ public class PluginAdapterImpl implements IPlugin {
             urlShown = sb.toString().substring(0, sb.toString().length() - 1);
         }
         // 发送请求
-        log.info("[runTool] open api file parse success, start to make request {}", urlShown);
+        log.info("[runTool] open api file parse success, start to make request {}", SensitiveLogContext.mask(urlShown));
 
         // 构造请求体
         String requestBodyJson;
@@ -613,22 +617,57 @@ public class PluginAdapterImpl implements IPlugin {
 
         RequestResult requestResult;
         // 区分json和form-data
-        log.info("[runTool] Handling {} request.", headers.get(Constant.CONTENT_TYPE));
-        if (StringUtil.equals(headers.get(Constant.CONTENT_TYPE), Constant.MULTIPART_FORM_DATA)) {
+        // FEAT-073: 工具参数含 file/<子类型> 时强制走 multipart 分支——
+        // file 参数值为 URL（OBS 预签名/直链），须下载后以 multipart 文件字段透传
+        boolean hasFileParam = operation.getRequestBody() != null
+            && operation.getRequestBody().getContent() != null
+            && operation.getRequestBody().getContent().containsKey(Constant.MULTIPART_FORM_DATA);
+        if (hasFileParam || StringUtil.equals(headers.get(Constant.CONTENT_TYPE), Constant.MULTIPART_FORM_DATA)) {
+            log.info("[runTool] Handling multipart/form-data request (hasFileParam={}).", hasFileParam);
             Map<String, String> formParams = new HashMap<>();
             Map<String, MultipartFile> fileParams = new HashMap<>();
-            // 下载url数据
+            // FEAT-073: schema 感知的参数分发——仅 file/<子类型> 参数走 URL 下载
+            // （非 file 参数值恰似 URL 也不误下载）；array<file/*> 逐元素下载；
+            // 其余按值进 formParams（multipart 表单本为字符串域）。
+            // schema 不可读时（header 强制 multipart 的存量工具）保持旧的值试探行为。
+            Map<String, Schema> bodyProps = getMultipartBodyProps(operation);
             for (String key : requestBody.keySet()) {
-                String value = requestBody.getString(key);
-                Optional<MultipartFile> file = downloadFileAsMultipartFile(value);
-                if (file.isPresent()) {
-                    fileParams.put(key, file.get());
+                Object raw = requestBody.get(key);
+                if (raw == null) {
+                    // 可选参数不填不传（VALID_URL_PATTERN.matcher(null) NPE 防护）
+                    continue;
+                }
+                if (isFileArrayParam(bodyProps, key) && raw instanceof JSONArray) {
+                    JSONArray urls = (JSONArray) raw;
+                    for (int i = 0; i < urls.size(); i++) {
+                        String elementUrl = urls.getString(i);
+                        if (elementUrl == null) {
+                            continue;
+                        }
+                        final int idx = i;
+                        // 多文件字段的表单命名约定为括号索引形态（key[0]、key[1]），
+                        // 非 RFC 7578 的重复同名字段形态——接收方（插件服务端）按此
+                        // 约定解析；若某插件后端只认重复同名字段，需调整此处命名
+                        downloadFileAsMultipartFile(projectId, elementUrl)
+                            .ifPresent(f -> fileParams.put(key + "[" + idx + "]", f));
+                    }
+                } else if (raw instanceof String) {
+                    String value = (String) raw;
+                    boolean shouldDownload = bodyProps == null || isFileParam(bodyProps, key);
+                    if (shouldDownload) {
+                        downloadFileAsMultipartFile(projectId, value)
+                            .ifPresentOrElse(f -> fileParams.put(key, f), () -> formParams.put(key, value));
+                    } else {
+                        formParams.put(key, value);
+                    }
                 } else {
-                    formParams.put(key, value);
+                    // 数值/对象/非文件数组：按序列化文本进表单域
+                    formParams.put(key, requestBody.getString(key));
                 }
             }
             requestResult = okHttpUtils.callFormData(url, method, headers, urlParamsMap, formParams, fileParams);
         } else {
+            log.info("[runTool] Handling {} request.", headers.get(Constant.CONTENT_TYPE));
             requestResult = okHttpUtils.call(url, method, headers, urlParamsMap, requestBodyJson);
         }
         log.info("[runTool] call tool finished, return code {}", requestResult.getCode());
@@ -770,36 +809,110 @@ public class PluginAdapterImpl implements IPlugin {
     /**
      * 从指定URL下载文件并转换为MultipartFile对象
      *
+     * @param projectId 项目 ID（SSRF 内网拦截按项目配置）
      * @param fileUrl 文件下载地址
      * @return MultipartFile对象
      */
     @SneakyThrows
-    public Optional<MultipartFile> downloadFileAsMultipartFile(String fileUrl) {
-        log.info("downloadFileAsMultipartFile: {}", fileUrl);
+    public Optional<MultipartFile> downloadFileAsMultipartFile(String projectId, String fileUrl) {
+        // URL 查询串可能携带 OBS 预签名 AccessKeyId/Signature，日志脱敏（与 Python 侧 _redact_urls 同语义），
+        // 并叠加本次请求登记的敏感值（加密环境变量明文）脱敏
+        log.info("downloadFileAsMultipartFile: {}", SensitiveLogContext.mask(UrlCheckUtils.redactUrlQuery(fileUrl)));
 
         if (!VALID_URL_PATTERN.matcher(fileUrl).matches()) {
             return Optional.empty();
         }
+        // SSRF 防护：与工具基址 URL 同源校验（黑名单/白名单/内网 IP 拦截）——
+        // 此前仅格式正则，内网地址（127.0.0.1/169.254.169.254 等）可直接下载；
+        // 返回校验阶段解析到的主机地址（开关关闭/白名单等未做 IP 校验的
+        // 放行场景为 null）
+        InetAddress[] validated = urlCheckUtils.checkUrlAndResolve(projectId, fileUrl);
 
-        long startTime = System.currentTimeMillis();
-        InputStream inputStream = obsService.getByUrl(fileUrl);
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        try {
-            // 将输入流读取到字节数组
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, length);
-            }
-            byte[] fileBytes = outputStream.toByteArray();
-
-            // 创建MultipartFile对象
-            String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
-            log.info("downloadFileAsMultipartFile:{}, cost: {} ms", fileUrl, System.currentTimeMillis() - startTime);
-            return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
-        } finally {
-            closeResources(inputStream, outputStream);
+        // DNS 钉死：把校验阶段地址按主机名钉入本线程，OkHttp 连接期解析
+        // 固定返回它们——消除校验/连接两次解析的 TOCTOU（DNS rebinding 可
+        // 在校验后换址），与 Python 侧 pinned_https_resolution 对齐。
+        // 多地址全量钉死，保留连接层逐地址回退
+        String pinnedHost = validated == null ? null : hostOf(fileUrl);
+        if (pinnedHost != null) {
+            PinnedDns.pin(pinnedHost, Arrays.asList(validated));
         }
+        try {
+            long startTime = System.currentTimeMillis();
+            InputStream inputStream = obsService.getByUrl(fileUrl);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try {
+                // 将输入流读取到字节数组
+                byte[] buffer = new byte[1024];
+                int length;
+                while ((length = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, length);
+                }
+                byte[] fileBytes = outputStream.toByteArray();
+
+                // 创建MultipartFile对象
+                String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
+                log.info("downloadFileAsMultipartFile:{}, cost: {} ms",
+                    SensitiveLogContext.mask(UrlCheckUtils.redactUrlQuery(fileUrl)), System.currentTimeMillis() - startTime);
+                return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
+            } finally {
+                closeResources(inputStream, outputStream);
+            }
+        } finally {
+            if (pinnedHost != null) {
+                PinnedDns.unpin();
+            }
+        }
+    }
+
+    /**
+     * 取 URL 的主机名——仅在 checkUrl 已成功解析过该 URL 后调用
+     * （理论不可达 URISyntaxException 按 null 处理，走系统解析不钉死）
+     */
+    private String hostOf(String url) {
+        try {
+            return new URL(url).getHost();
+        } catch (MalformedURLException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 读取 multipart 请求体的 schema 属性表（key -> 参数 schema）
+     */
+    private Map<String, Schema> getMultipartBodyProps(Operation operation) {
+        try {
+            if (operation.getRequestBody() != null && operation.getRequestBody().getContent() != null) {
+                MediaType mediaType = operation.getRequestBody().getContent().get(Constant.MULTIPART_FORM_DATA);
+                if (mediaType != null && mediaType.getSchema() != null
+                    && mediaType.getSchema().getProperties() != null) {
+                    return mediaType.getSchema().getProperties();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("read multipart body schema failed, fallback to value-based download", e);
+        }
+        return null;
+    }
+
+    /**
+     * 判断参数是否为 file/<子类型>（单文件）
+     */
+    private boolean isFileParam(Map<String, Schema> props, String key) {
+        Schema paramSchema = props != null ? props.get(key) : null;
+        return paramSchema != null && paramSchema.getType() != null && paramSchema.getType().startsWith("file/");
+    }
+
+    /**
+     * 判断参数是否为 array&lt;file/&gt;（多文件，元素 schema 为 file/&lt;子类型&gt;）
+     */
+    private boolean isFileArrayParam(Map<String, Schema> props, String key) {
+        Schema paramSchema = props != null ? props.get(key) : null;
+        if (paramSchema == null || !"array".equals(paramSchema.getType())
+            || !(paramSchema.getItems() instanceof Schema)) {
+            return false;
+        }
+        Schema items = (Schema) paramSchema.getItems();
+        return items.getType() != null && items.getType().startsWith("file/");
     }
 
     private void parseParams(Operation operation, JSONObject requestBody, Map<String, String> urlParams,
@@ -882,10 +995,10 @@ public class PluginAdapterImpl implements IPlugin {
     }
 
     public String processNestedStructure(String rawJson) {
-        log.info("Start processing JSON: {}", rawJson);
+        log.info("Start processing JSON: {}", SensitiveLogContext.mask(rawJson));
 
         JSONObject root = JSON.parseObject(rawJson);
-        log.info("Parsed JSON: {}", root.toJSONString());
+        log.info("Parsed JSON: {}", SensitiveLogContext.mask(root.toJSONString()));
 
         // 遍历 JSON 中的所有字段
         for (String key : root.keySet()) {
@@ -929,7 +1042,7 @@ public class PluginAdapterImpl implements IPlugin {
         }
 
         String newJson = root.toJSONString();
-        log.info("Processed JSON result: {}", newJson);
+        log.info("Processed JSON result: {}", SensitiveLogContext.mask(newJson));
 
         return newJson;
     }
@@ -970,7 +1083,7 @@ public class PluginAdapterImpl implements IPlugin {
      * @param hostBlackList 连接器host黑名单
      */
     public void checkSwaggerUrlValid(String swaggerUrl, String hostBlackList) {
-        log.info("Start: check url {} from black list.", swaggerUrl);
+        log.info("Start: check url {} from black list.", SensitiveLogContext.mask(swaggerUrl));
         if (hostBlackList.isEmpty()) {
             return;
         }
@@ -992,13 +1105,13 @@ public class PluginAdapterImpl implements IPlugin {
                 }
             } catch (UnknownHostException e) {
                 // 不做控制，运行态DNS一样，有问题会调不通，没有影响
-                log.warn("swagger base url is Unknown Host: {}", host);
+                log.warn("swagger base url is Unknown Host: {}", SensitiveLogContext.mask(host));
             }
         } catch (MalformedURLException e) {
             throw new AgentStudioException(StudioError.INVALID_URL);
         } catch (Exception e) {
-            // 捕获其他异常，防止程序崩溃
-            log.error("Error while checking swagger URL: {}", swaggerUrl, e);
+            // 捕获其他异常，防止程序崩溃；url 脱敏后输出，并保留完整堆栈（堆栈本身不含敏感值）
+            log.error("Error while checking swagger URL: {}", SensitiveLogContext.mask(swaggerUrl), e);
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
         log.info("End: check url from black list.");
@@ -1011,11 +1124,11 @@ public class PluginAdapterImpl implements IPlugin {
      * @param connectorHostBlackList 连接器host黑名单
      */
     public void checkHostValid(String host, Set<String> connectorHostBlackList) {
-        log.info("Start: check host {} from black list.", host);
+        log.info("Start: check host {} from black list.", SensitiveLogContext.mask(host));
 
         // 判断host是否在黑名单中
         if (connectorHostBlackList.contains(host)) {
-            log.warn("checkHostValid failed, host: {}", host);
+            log.warn("checkHostValid failed, host: {}", SensitiveLogContext.mask(host));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
 
@@ -1029,8 +1142,9 @@ public class PluginAdapterImpl implements IPlugin {
                 try {
                     IPAddressString ipAddress = new IPAddressString(ips);
                     if (ipAddress.contains(hostAddress) || host.contains(ips)) {
+                        // host 可能来自加密环境变量，打印前统一脱敏
                         log.warn("checkHostValid failed, ipAddress:{}, hostAddress: {}, host: {}, ips:{}", ipAddress,
-                                hostAddress, host, ips);
+                                SensitiveLogContext.mask(String.valueOf(hostAddress)), SensitiveLogContext.mask(host), ips);
                         throw new AgentStudioException(StudioError.INVALID_URL);
                     }
                 } catch (IllegalArgumentException e) {
@@ -1040,7 +1154,7 @@ public class PluginAdapterImpl implements IPlugin {
             }
         } catch (IllegalArgumentException e) {
             // host 不是合法的IP地址，可能是域名，不进行网段判断
-            log.warn("Host is not a valid IP address, skip subnet check: {}", host);
+            log.warn("Host is not a valid IP address, skip subnet check: {}", SensitiveLogContext.mask(host));
         }
     }
 

@@ -142,8 +142,8 @@ bash scripts/export-dependency-images.sh ~/dep-images
 |------|------|
 | mysql | 8.0 |
 | redis | 7 |
-| minio/minio | RELEASE.2024-11-07T00-52-20Z |
-| minio/mc | RELEASE.2024-11-05T11-29-45Z |
+| pgsty/silo | RELEASE.2026-10-18T00-00-00Z |
+| pgsty/mc | RELEASE.2026-10-18T00-00-00Z |
 
 导出完成后，将 `~/dep-images/` 传输到目标机器的 `dep-images/` 目录下。
 
@@ -314,7 +314,7 @@ bash deploy.sh logging-remote # 2) 再启动远程 vector（push 到监控节点
 
 - **L1/L2（VictoriaLogs）**：通过 `VICTORIA_LOGS_RETENTION` 配置，默认 7 天，超期自动清理。
 - Java、Python runtime 和 NGINX 日志使用正文中的真实事件时间，首次导入历史日志不会污染"最近日志"查询。
-- 两者均与应用本地 audit（180 天）相互独立。
+- 两者均与审计日志（默认 180 天保留）相互独立。审计日志默认关闭，如需开启，在 `.env` 中设置 `STUDIO_OPERATION_LOG_SWITCH=true`，详见[审计日志使用指南](./audit-log-guide.md)。
 
 ### 7.4 更多
 

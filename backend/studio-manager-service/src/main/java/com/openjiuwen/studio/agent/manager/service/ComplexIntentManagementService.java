@@ -47,6 +47,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -171,9 +172,15 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
         complexIntent.setBranchesCnt(0);
 
         // 校验名称是否重复
-        checkIntentNameRepeat(body.getName(), projectId, workspaceId, complexIntent.getIntentId());
+        checkIntentNameRepeat(body.getName(), projectId, workspaceId, null);
 
-        complexIntentMapper.createEntity(complexIntent);
+        try {
+            complexIntentMapper.createEntity(complexIntent);
+        } catch (DuplicateKeyException e) {
+            // t_complex_intent 仅主键唯一，捕获即 id 冲突（含并发竞态），无歧义映射专用错误码
+            log.error("intent package id already exists, id:{}", complexIntent.getIntentId());
+            throw new AgentStudioException(StudioError.COMPLEX_INTENT_EXIST);
+        }
         if (body.getBranches() == null || body.getBranches().isEmpty()) {
             return new ComplexIntentBriefRsp().setIntentId(complexIntent.getIntentId());
         }
@@ -455,10 +462,12 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
             throw new AgentStudioException(StudioError.RESOURCE_OP_ERROR);
         }
         ComplexIntentEntity entity = entitiesAccurate.get(0);
-        if (!entity.getIntentId().equals(intentId)) {
-            log.error("already an intent package with the same name , entities:{}", entitiesAccurate);
-            throw new AgentStudioException(StudioError.RESOURCE_OP_ERROR);
+        // 仅修改场景传 intentId 排除自身；创建场景传 null 不排除（任何同名都算重复）
+        if (intentId != null && entity.getIntentId().equals(intentId)) {
+            return;
         }
+        log.error("already an intent package with the same name , entities:{}", entitiesAccurate);
+        throw new AgentStudioException(StudioError.RESOURCE_OP_ERROR);
     }
 
     /**

@@ -190,7 +190,7 @@ public class WorkspaceService implements IWorkspaceService {
 
         if (existedWorkspaceEntity == null) {
             log.error("the workspace of id {} in projectId {} is not exist", updateWorkspaceReq.getId(), projectId);
-            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+            throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED);
         }
 
         WorkspaceMemberInfo workspaceMemberInfo = workspaceMemberService.queryWorkspaceMemberDetail(projectId,
@@ -239,6 +239,13 @@ public class WorkspaceService implements IWorkspaceService {
         if (deleteWorkspaceReq == null) {
             throw new AgentStudioException(StudioError.PARAMS_IS_REQUIRED);
         }
+        WorkspaceInfo workspaceInfo = workspaceMapper.selectById(projectId, deleteWorkspaceReq.getId());
+
+        if (workspaceInfo == null) {
+            log.error("the workspace of id {} in projectId {} is not exist", deleteWorkspaceReq.getId(), projectId);
+            throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED);
+        }
+
         WorkspaceMemberInfo workspaceMemberInfo = workspaceMemberService.queryWorkspaceMemberDetail(projectId,
             RequestContextUtils.getRequestUserId(), deleteWorkspaceReq.getId());
 
@@ -246,9 +253,7 @@ public class WorkspaceService implements IWorkspaceService {
             throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
         }
 
-        WorkspaceInfo workspaceInfo = workspaceMapper.selectById(projectId, deleteWorkspaceReq.getId());
-
-        if (workspaceInfo == null || CommonConstant.WORKSPACE.TYPE.PERSON_TYPE.equals(workspaceInfo.getType())) {
+        if (CommonConstant.WORKSPACE.TYPE.PERSON_TYPE.equals(workspaceInfo.getType())) {
             log.error("user {} no permission to delete workspace {}", RequestContextUtils.getRequestUserId(),
                 deleteWorkspaceReq.getId());
             throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
@@ -299,6 +304,12 @@ public class WorkspaceService implements IWorkspaceService {
 
         List<String> userJoinedWorkspaceIdList = new ArrayList<>(workSpaceMemberMap.keySet());
 
+        // A newly initialized user has no workspace membership yet. Returning here also prevents
+        // an empty id list from being rendered as invalid "IN ()" SQL.
+        if (userJoinedWorkspaceIdList.isEmpty()) {
+            return new GetWorkspaceListRsp().setCount(0).setWorkspaceList(userJoinedWorkspaceInfoList);
+        }
+
         List<WorkspaceEntity> workspaceEntityList = workspaceMapper.getWorkspaceByProjectIdAndWorkspaceIds(projectId,
             userJoinedWorkspaceIdList, queryWorkspaceQo.getType());
 
@@ -330,7 +341,7 @@ public class WorkspaceService implements IWorkspaceService {
         WorkspaceEntity workspaceEntity = workspaceMapper.getWorkspaceByWorkspaceId(projectId, workspaceId);
 
         if (workspaceEntity == null) {
-            return workspaceInfo;
+            throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED);
         }
 
         BeanUtils.copyProperties(workspaceEntity, workspaceInfo);

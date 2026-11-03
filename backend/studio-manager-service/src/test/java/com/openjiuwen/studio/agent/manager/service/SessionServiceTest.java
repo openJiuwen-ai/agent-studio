@@ -8,12 +8,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.manager.entity.Session;
 import com.openjiuwen.studio.agent.manager.entity.User;
 import com.openjiuwen.studio.agent.manager.repository.SessionRepository;
@@ -28,14 +34,16 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
+/**
+ * SessionService 基于 RedisClient 单栈的会话缓存行为验证
+ * （key 前缀 + JSON 值 + Duration 超时；损坏缓存按未命中处理）。
+ */
 @ExtendWith(MockitoExtension.class)
 class SessionServiceTest {
 
@@ -43,14 +51,18 @@ class SessionServiceTest {
 
     private static final int INACTIVITY_TIMEOUT = 1800;
 
+    private static final Duration ABSOLUTE_TIMEOUT_DURATION = Duration.ofSeconds(ABSOLUTE_TIMEOUT);
+
+    /** 与实现同口径的用户 JSON 序列化器（User 含 LocalDateTime 字段，需 JavaTimeModule） */
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
     @Mock
     private SessionRepository sessionRepository;
 
     @Mock
-    private RedisTemplate<String, Object> redisTemplate;
-
-    @Mock
-    private ValueOperations<String, Object> valueOperations;
+    private RedisClient redisClient;
 
     @Mock
     private HttpServletRequest request;
@@ -60,19 +72,19 @@ class SessionServiceTest {
 
     private User testUser;
 
+    private String testUserJson;
+
     @Captor
     private ArgumentCaptor<LocalDateTime> timeCaptor;
+
     @BeforeEach
     void setUp() throws Exception {
-        // 添加lenient()
         testUser = new User();
         testUser.setId(1L);
         testUser.setUsername("testUser");
         testUser.setDomainId("domain1");
         testUser.setProjectId("project1");
-
-        // 设置RedisTemplate行为
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        testUserJson = MAPPER.writeValueAsString(testUser);
 
         // 使用反射设置私有字段值
         setPrivateField(sessionService, "absoluteTimeoutSeconds", ABSOLUTE_TIMEOUT);
@@ -100,28 +112,39 @@ class SessionServiceTest {
 
         // 验证数据库保存
         verify(sessionRepository).save(any(Session.class));
-        // 验证Redis存储
         assertNotNull(result);
         assertEquals(generatedSessionId, result.getSessionId());
+        // 验证Redis存储（key 前缀 + 用户 JSON + 绝对超时 Duration）
+        verify(redisClient).set(startsWith("session:"), eq(testUserJson), eq(ABSOLUTE_TIMEOUT_DURATION));
     }
 
     @Test
     void refreshSession_ShouldUpdateActivityTime() {
         String sessionId = "activeSession";
-        LocalDateTime now = LocalDateTime.now();
 
         // 设置Redis存在该会话
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(true);
-        when(valueOperations.get("session:" + sessionId)).thenReturn(testUser);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
+        when(redisClient.get("session:" + sessionId)).thenReturn(testUserJson);
 
         // 刷新会话
         sessionService.refreshSession(sessionId);
 
         // 验证数据库更新
         verify(sessionRepository).updateLastActivity(eq(sessionId), any(LocalDateTime.class));
-        // 验证Redis续期
-        verify(valueOperations).set(eq("session:" + sessionId), eq(testUser), eq((long) ABSOLUTE_TIMEOUT),
-            eq(TimeUnit.SECONDS));
+        // 验证Redis续期（原文透传，不做反序列化往返）
+        verify(redisClient).set(eq("session:" + sessionId), eq(testUserJson), eq(ABSOLUTE_TIMEOUT_DURATION));
+    }
+
+    @Test
+    void refreshSession_WhenRedisValueMissing_ShouldSkipRenewal() {
+        String sessionId = "noValueSession";
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
+        when(redisClient.get("session:" + sessionId)).thenReturn(null);
+
+        sessionService.refreshSession(sessionId);
+
+        verify(sessionRepository).updateLastActivity(eq(sessionId), any(LocalDateTime.class));
+        verify(redisClient, never()).set(anyString(), anyString(), any(Duration.class));
     }
 
     @Test
@@ -129,7 +152,7 @@ class SessionServiceTest {
         String sessionId = "validSession";
         Session activeSession = createValidSession();
 
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(true);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
         when(sessionRepository.findBySessionId(sessionId)).thenReturn(Optional.of(activeSession));
 
         assertTrue(sessionService.validateSession(sessionId));
@@ -138,7 +161,7 @@ class SessionServiceTest {
     @Test
     void validateSession_WhenRedisMissing_ShouldReturnFalse() {
         String sessionId = "invalidSession";
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(false);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(false);
 
         assertFalse(sessionService.validateSession(sessionId));
     }
@@ -146,7 +169,7 @@ class SessionServiceTest {
     @Test
     void validateSession_WhenDbMissing_ShouldReturnFalse() {
         String sessionId = "dbMissingSession";
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(true);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
         when(sessionRepository.findBySessionId(sessionId)).thenReturn(Optional.empty());
 
         assertFalse(sessionService.validateSession(sessionId));
@@ -158,7 +181,7 @@ class SessionServiceTest {
         Session expiredSession = createValidSession();
         expiredSession.setExpireTime(LocalDateTime.now().minusMinutes(1)); // 设置为过去时间
 
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(true);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
         when(sessionRepository.findBySessionId(sessionId)).thenReturn(Optional.of(expiredSession));
 
         assertFalse(sessionService.validateSession(sessionId));
@@ -171,7 +194,7 @@ class SessionServiceTest {
         // 设置最后活动时间为超过无操作超时时间
         inactiveSession.setLastActivityTime(LocalDateTime.now().minusSeconds(INACTIVITY_TIMEOUT + 1));
 
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(true);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
         when(sessionRepository.findBySessionId(sessionId)).thenReturn(Optional.of(inactiveSession));
 
         assertFalse(sessionService.validateSession(sessionId));
@@ -182,9 +205,9 @@ class SessionServiceTest {
         String sessionId = "validSession";
         Session activeSession = createValidSession();
 
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(true);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
         when(sessionRepository.findBySessionId(sessionId)).thenReturn(Optional.of(activeSession));
-        when(valueOperations.get("session:" + sessionId)).thenReturn(testUser);
+        when(redisClient.get("session:" + sessionId)).thenReturn(testUserJson);
 
         Optional<User> user = sessionService.getUserBySession(sessionId);
         assertTrue(user.isPresent());
@@ -192,9 +215,23 @@ class SessionServiceTest {
     }
 
     @Test
+    void getUserBySession_WhenJsonCorrupted_ShouldReturnEmpty() {
+        String sessionId = "corruptedSession";
+        Session activeSession = createValidSession();
+
+        when(redisClient.exists("session:" + sessionId)).thenReturn(true);
+        when(sessionRepository.findBySessionId(sessionId)).thenReturn(Optional.of(activeSession));
+        when(redisClient.get("session:" + sessionId)).thenReturn("not-a-json{");
+
+        // 缓存值损坏按未命中处理，不抛异常
+        Optional<User> user = sessionService.getUserBySession(sessionId);
+        assertTrue(user.isEmpty());
+    }
+
+    @Test
     void getUserBySession_WhenInvalidSession_ShouldReturnEmpty() {
         String sessionId = "invalidSession";
-        when(redisTemplate.hasKey("session:" + sessionId)).thenReturn(false);
+        when(redisClient.exists("session:" + sessionId)).thenReturn(false);
 
         Optional<User> user = sessionService.getUserBySession(sessionId);
         assertTrue(user.isEmpty());
@@ -203,7 +240,6 @@ class SessionServiceTest {
     @Test
     void cleanupExpiredSessions_ShouldCallBothOperations() {
         // 准备测试数据
-        LocalDateTime testCurrentTime = LocalDateTime.now();
         int expectedExpiredCount = 5;
         int expectedDeletedCount = 3;
         // 模拟repository行为

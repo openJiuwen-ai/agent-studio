@@ -49,8 +49,11 @@ class UrlCheckUtilsTest {
     }
 
     @Test
-    void testCheckUrl_UrlWithPlaceholder() {
-        assertDoesNotThrow(() -> urlCheckUtils.checkUrl("project1", "http://example.com/{id}"));
+    void testCheckUrl_UrlWithInlinePlaceholder_throws() {
+        // URL 中嵌 {id}（非整串占位符）应拒绝：与前端 USER_URL_PATTERN=[^{}\s]+ 对齐，
+        // 同 testValidateUrlSyntax_inlinePlaceholder_throws。checkUrl 走 URI 解析，
+        // { 在 path 非法 → URISyntaxException → INVALID_URL。原 assertDoesNotThrow 断言与此设计意图矛盾，订正。
+        assertThrows(AgentStudioException.class, () -> urlCheckUtils.checkUrl("project1", "http://example.com/{id}"));
     }
 
     @Test

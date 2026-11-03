@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.MemoryServiceInstanceMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.openjiuwen.studio.agent.manager.entity.MemoryServiceInstanceEntity">
+        <id column="id" property="id" jdbcType="VARCHAR"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="base_url" property="baseUrl" jdbcType="VARCHAR"/>
+        <result column="api_key" property="apiKey" jdbcType="VARCHAR"/>
+        <result column="workspace_id" property="workspaceId" jdbcType="VARCHAR"/>
+        <result column="project_id" property="projectId" jdbcType="VARCHAR"/>
+        <result column="domain_id" property="domainId" jdbcType="VARCHAR"/>
+        <result column="health_status" property="healthStatus" jdbcType="VARCHAR"/>
+        <result column="last_check_at" property="lastCheckAt" jdbcType="TIMESTAMP"/>
+        <result column="deploy_meta" property="deployMeta" jdbcType="VARCHAR"/>
+        <result column="created_user_id" property="createdUserId" jdbcType="VARCHAR"/>
+        <result column="created_user_name" property="createdUserName" jdbcType="VARCHAR"/>
+        <result column="last_update_user_id" property="lastUpdateUserId" jdbcType="VARCHAR"/>
+        <result column="last_update_user_name" property="lastUpdateUserName" jdbcType="VARCHAR"/>
+        <result column="create_time" property="createTime" jdbcType="TIMESTAMP"/>
+        <result column="update_time" property="updateTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- 基础列 -->
+    <sql id="Base_Column_List">
+        id, name, base_url, api_key, workspace_id, project_id, domain_id,
+        health_status, last_check_at, deploy_meta,
+        created_user_id, created_user_name, last_update_user_id,
+        last_update_user_name, create_time, update_time
+    </sql>
+
+    <!-- 插入记录 -->
+    <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.MemoryServiceInstanceEntity">
+        INSERT INTO t_memory_service_instance (
+            id, name, base_url, api_key, workspace_id, project_id, domain_id,
+            health_status, last_check_at, deploy_meta,
+            created_user_id, created_user_name, last_update_user_id, last_update_user_name
+        ) VALUES (
+                     #{id}, #{name}, #{baseUrl}, #{apiKey}, #{workspaceId}, #{projectId}, #{domainId},
+                     #{healthStatus}, #{lastCheckAt}, #{deployMeta},
+                     #{createdUserId}, #{createdUserName}, #{lastUpdateUserId}, #{lastUpdateUserName}
+                 )
+    </insert>
+
+    <!-- 根据ID删除 -->
+    <delete id="deleteById" parameterType="java.lang.String">
+        DELETE FROM t_memory_service_instance WHERE id = #{id}
+    </delete>
+
+    <!-- 更新记录 -->
+    <update id="updateById" parameterType="com.openjiuwen.studio.agent.manager.entity.MemoryServiceInstanceEntity">
+        UPDATE t_memory_service_instance
+        <set>
+            <if test="name != null and name != ''">
+                name = #{name},
+            </if>
+            <if test="baseUrl != null and baseUrl != ''">
+                base_url = #{baseUrl},
+            </if>
+            <if test="apiKey != null and apiKey != ''">
+                api_key = #{apiKey},
+            </if>
+            <if test="healthStatus != null and healthStatus != ''">
+                health_status = #{healthStatus},
+            </if>
+            <if test="lastCheckAt != null">
+                last_check_at = #{lastCheckAt},
+            </if>
+            <if test="deployMeta != null">
+                deploy_meta = #{deployMeta},
+            </if>
+            <if test="lastUpdateUserId != null and lastUpdateUserId != ''">
+                last_update_user_id = #{lastUpdateUserId},
+            </if>
+            <if test="lastUpdateUserName != null and lastUpdateUserName != ''">
+                last_update_user_name = #{lastUpdateUserName},
+            </if>
+        </set>
+        WHERE id = #{id} and project_id = #{projectId}
+    </update>
+
+    <!-- 根据ID查询 -->
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_memory_service_instance
+        WHERE id = #{id}
+    </select>
+
+    <!-- 根据ID和空间ID查询实例 -->
+    <select id="selectByIdAndWorkspaceId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_memory_service_instance
+        WHERE id = #{id}
+        AND workspace_id = #{workspaceId}
+    </select>
+
+    <!-- 条件查询列表 -->
+    <select id="selectByCondition" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_memory_service_instance
+        <where>
+            <if test="projectId != null and projectId != ''">
+                AND project_id = #{projectId}
+            </if>
+            <if test="workspaceId != null and workspaceId != ''">
+                AND workspace_id = #{workspaceId}
+            </if>
+            <if test="domainId != null and domainId != ''">
+                AND domain_id = #{domainId}
+            </if>
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+
+    <!-- 查询绑定了指定实例的记忆库数量 -->
+    <select id="countReposByInstanceId" resultType="int">
+        SELECT COUNT(*) FROM t_memory_repo
+        WHERE memory_service_instance_id = #{instanceId}
+    </select>
+
+</mapper>

@@ -4,3 +4,19 @@
     height: 100%;
   }
 }
+
+.icon-border {
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    border-color: #191919;
+    background-color: #F2F5FC;
+  }
+}

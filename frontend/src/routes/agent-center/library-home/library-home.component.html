@@ -9,7 +9,7 @@
         </nz-tab>
       </nz-tabs>
 
-      <div class="main-container" [class.has-sub-tab]="['prompt', 'knowledge'].includes(currentTabId)">
+      <div class="main-container" [class.has-sub-tab]="['prompt', 'knowledge', 'memoryLib'].includes(currentTabId)">
         <meta-component-library style="height: 100%" *ngIf="currentTabId==='plugin'" [appType]="'Plugin'"></meta-component-library>
         <meta-component-library style="height: 100%" *ngIf="currentTabId==='mcp'" [appType]="'MCP'"></meta-component-library>
         <meta-prompt-template style="height: 100%" *ngIf="currentTabId==='prompt'"></meta-prompt-template>

@@ -30,7 +30,9 @@ export class SetSidebarVisibilityService {
 
     if (state === 'hideHeader') {
       consoleHeader?.setAttribute('style', 'display:none;');
-      consoleContainer.style.paddingTop = '0px';
+      if (consoleContainer) {
+        consoleContainer.style.paddingTop = '0px';
+      }
     }
 
     if (state === 'hideSidebar') {
@@ -39,9 +41,11 @@ export class SetSidebarVisibilityService {
         'style',
         `padding-left: 0px !important;height:calc(100vh - ${HWCloudTopHeight + layoutHeaderHeight}px)`,
       );
-      setTimeout(() => {
-        consoleContainer.style.paddingLeft = '0px';
-      }, 1000);
+      if (consoleContainer) {
+        setTimeout(() => {
+          consoleContainer.style.paddingLeft = '0px';
+        }, 1000);
+      }
     }
 
     if (state === 'init') {
@@ -52,15 +56,19 @@ export class SetSidebarVisibilityService {
         `margin-left: 0px !important;  width: 100% !important; height:calc(100vh - ${HWCloudTopHeight + layoutHeaderHeight}px)`,
       );
       // 存储原始 JContainer 的 paddingLeft 值
-      this.consoleContainerPaddingLeft = consoleContainer.style.paddingLeft;
-      consoleContainer.style.paddingLeft = '0px';
+      if (consoleContainer) {
+        this.consoleContainerPaddingLeft = consoleContainer.style.paddingLeft;
+        consoleContainer.style.paddingLeft = '0px';
+      }
     }
 
     if (state === 'destroy') {
       consoleSidebar?.setAttribute('style', 'display: none');
       menuSidebar?.setAttribute('style', '');
       content?.setAttribute('style', `height:calc(100vh - ${HWCloudTopHeight + layoutHeaderHeight}px)`);
-      consoleContainer.style.paddingLeft = this.consoleContainerPaddingLeft;
+      if (consoleContainer) {
+        consoleContainer.style.paddingLeft = this.consoleContainerPaddingLeft;
+      }
       content?.removeAttribute('data-set');
     }
     if (state === null || isNeedHideContainer) {

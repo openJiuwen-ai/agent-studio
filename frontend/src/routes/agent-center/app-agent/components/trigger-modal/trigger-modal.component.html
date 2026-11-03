@@ -4,8 +4,25 @@
 
 <div class="modal-body" style="overflow: hidden">
   <div class="flex h-full w-full flex-col">
+    <!-- 触发类型选择器 -->
+    <nz-form-item class="mt-[16px]">
+      <nz-form-label [nzRequired]="true">
+        {{ 'triggermodalcomponent_127' | i18nextEager }}
+      </nz-form-label>
+      <nz-form-control>
+        <div class="flex gap-[3px]">
+          <div [className]="triggerType === 'time' ? 'type_btn checked' : 'type_btn'" (click)="selectTriggerType('time')">
+            {{ 'trigger_type_timer' | i18nextEager }}
+          </div>
+          <div [className]="triggerType === 'polling' ? 'type_btn checked' : 'type_btn'" (click)="selectTriggerType('polling')">
+            {{ 'trigger_type_polling' | i18nextEager }}
+          </div>
+        </div>
+      </nz-form-control>
+    </nz-form-item>
+
     <ng-container *ngIf="triggerType === 'time'">
-      <form [formGroup]="timeTriggerForm" class="mt-[16px] h-full w-full vertical-form" style="overflow-x: hidden; width: 100%">
+      <form [formGroup]="timeTriggerForm" class="h-full w-full vertical-form" style="overflow-x: hidden; width: 100%">
         <nz-form-item>
           <nz-form-label [nzRequired]="true">
             {{ 'triggerhalfmodalcomponent_86' | i18nextEager }}
@@ -32,7 +49,7 @@
         </nz-form-item>
         <nz-form-item>
           <nz-form-label>
-            {{ 'triggermodalcomponent_127' | i18nextEager }}
+            <span class="mr-1">{{ 'trigger_mode' | i18nextEager }}</span>
           </nz-form-label>
           <nz-form-control>
             <div class="flex gap-[3px]">
@@ -103,6 +120,116 @@
                 @if (timeTriggerForm.get('prompt')?.hasError('required')) {
                   {{ 'required' | i18nextEager }}
                 } @else if (timeTriggerForm.get('prompt')?.hasError('maxlength')) {
+                  {{ '长度不能大于500' }}
+                }
+              </div>
+            }
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item *ngIf="showCallMethod">
+          <nz-form-label>
+            <span class="mr-1">{{ 'triggermodalcomponent_130' | i18nextEager }}</span>
+            <span nz-icon nzType="question-circle" nzTheme="outline" nz-tooltip [nzTooltipTitle]="'triggermodalcomponent_147' | i18nextEager"></span>
+          </nz-form-label>
+          <nz-form-control>
+            <form [formGroup]="asyncTriggerForm">
+              <nz-select style="width: 100%; min-width: 100%" formControlName="invocationType">
+                @for (option of invocationTypeOptions; track option.value) {
+                  <nz-option [nzValue]="option.value" [nzLabel]="option.label"></nz-option>
+                }
+              </nz-select>
+            </form>
+          </nz-form-control>
+        </nz-form-item>
+      </form>
+    </ng-container>
+
+    <ng-container *ngIf="triggerType === 'polling'">
+      <form [formGroup]="pollingTriggerForm" class="h-full w-full vertical-form" style="overflow-x: hidden; width: 100%">
+        <nz-form-item>
+          <nz-form-label [nzRequired]="true">
+            {{ 'triggerhalfmodalcomponent_86' | i18nextEager }}
+          </nz-form-label>
+          <nz-form-control>
+            <input
+              type="text"
+              nz-input
+              style="width: 100%; min-width: 100%"
+              [placeholder]="'triggerhalfmodalcomponent_87' | i18nextEager"
+              formControlName="name"
+              [class.input-error]="isControlInvalid(pollingTriggerForm.get('name'))"
+            />
+            @if (isControlInvalid(pollingTriggerForm.get('name'))) {
+              <div class="form-error-tip">
+                @if (pollingTriggerForm.get('name')?.hasError('required')) {
+                  {{ 'required' | i18nextEager }}
+                } @else if (pollingTriggerForm.get('name')?.hasError('serviceName')) {
+                  {{ pollingTriggerForm.get('name')?.errors?.serviceName?.nzErrorMessage }}
+                }
+              </div>
+            }
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item>
+          <nz-form-label [nzRequired]="true">
+            {{ 'triggermodalcomponent_poll_url' | i18nextEager }}
+          </nz-form-label>
+          <nz-form-control>
+            <input
+              type="text"
+              nz-input
+              style="width: 100%; min-width: 100%"
+              [placeholder]="'triggermodalcomponent_poll_url_placeholder' | i18nextEager"
+              formControlName="poll_url"
+              [class.input-error]="isControlInvalid(pollingTriggerForm.get('poll_url'))"
+            />
+            @if (isControlInvalid(pollingTriggerForm.get('poll_url'))) {
+              <div class="form-error-tip">
+                @if (pollingTriggerForm.get('poll_url')?.hasError('required')) {
+                  {{ 'required' | i18nextEager }}
+                } @else if (pollingTriggerForm.get('poll_url')?.hasError('pattern')) {
+                  {{ 'triggermodalcomponent_poll_url_invalid' | i18nextEager }}
+                }
+              </div>
+            }
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item>
+          <nz-form-label [nzRequired]="true">
+            <span class="mr-1">{{ 'triggermodalcomponent_poll_interval' | i18nextEager }}</span>
+            <span nz-icon nzType="question-circle" nzTheme="outline" nz-tooltip [nzTooltipTitle]="'triggermodalcomponent_poll_interval_tip' | i18nextEager"></span>
+          </nz-form-label>
+          <nz-form-control>
+            <div class="color-[#808080] flex items-center gap-2">
+              <input type="number" nz-input class="!w-[80px]" min="1" placeholder="1" formControlName="pollInterval" />
+              <nz-select class="!w-[100px]" formControlName="pollIntervalUnit">
+                @for (option of pollIntervalOptions; track option.value) {
+                  <nz-option [nzValue]="option.value" [nzLabel]="option.label"></nz-option>
+                }
+              </nz-select>
+              <span>{{ 'triggermodalcomponent_161' | i18nextEager }}</span>
+            </div>
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item>
+          <nz-form-label [nzRequired]="true">
+            <span class="mr-1">{{ 'triggermodalcomponent_129' | i18nextEager }}</span>
+            <span nz-icon nzType="question-circle" nzTheme="outline" nz-tooltip [nzTooltipTitle]="'triggermodalcomponent_144' | i18nextEager"></span>
+          </nz-form-label>
+          <nz-form-control>
+            <nz-textarea-count [nzMaxCharacterCount]="500">
+              <textarea
+                nz-input
+                [nzAutosize]="{ minRows: 1, maxRows: 4 }"
+                [placeholder]="'triggermodalcomponent_145' | i18nextEager"
+                formControlName="prompt"
+              ></textarea>
+            </nz-textarea-count>
+            @if (isControlInvalid(pollingTriggerForm.get('prompt'))) {
+              <div class="form-error-tip">
+                @if (pollingTriggerForm.get('prompt')?.hasError('required')) {
+                  {{ 'required' | i18nextEager }}
+                } @else if (pollingTriggerForm.get('prompt')?.hasError('maxlength')) {
                   {{ '长度不能大于500' }}
                 }
               </div>

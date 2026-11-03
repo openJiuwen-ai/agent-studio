@@ -394,11 +394,13 @@ class ContextManager:
         """为最新的用户消息添加意图"""
         latest_user_msg = self.get_latest_user_message()
         if latest_user_msg:
-            if latest_user_msg.intent:
+            if (
+                latest_user_msg.intent
+                and intent not in latest_user_msg.intent
+            ):
                 # 只有当intent不在列表中时才添加
-                if intent not in latest_user_msg.intent:
-                    latest_user_msg.intent.append(intent)
-            else:
+                latest_user_msg.intent.append(intent)
+            elif not latest_user_msg.intent:
                 latest_user_msg.intent = [intent]
 
     def get_latest_k_chat_history(self, k: int) -> List[Dict[str, Any]]:

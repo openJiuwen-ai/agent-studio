@@ -5,12 +5,15 @@ package com.openjiuwen.studio.agent.manager.service.memory;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.ListMemoryItemResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SearchMemoryItemRequestBody;
 import com.openjiuwen.studio.agent.manager.dto.UpdateMemoryItemRequestBody;
+import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
+import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 
 import org.junit.jupiter.api.AfterEach;
@@ -48,6 +51,9 @@ class MemoryItemManagementServiceTest {
     @Mock
     private AgentRuntimeClient agentRuntimeClient;
 
+    @Mock
+    private MemoryRepoMapper memoryRepoMapper;
+
     @InjectMocks
     private MemoryItemManagementService memoryItemManagementService;
 
@@ -57,6 +63,7 @@ class MemoryItemManagementServiceTest {
     void setUp() {
         mockedStaticRequestContextUtils = mockStatic(RequestContextUtils.class, RETURNS_DEEP_STUBS);
         mockedStaticRequestContextUtils.when(RequestContextUtils::getRequestUserId).thenReturn("test-user");
+        when(memoryRepoMapper.selectById("repo-1")).thenReturn(MemoryRepoEntity.builder().build());
     }
 
     @AfterEach
@@ -286,6 +293,20 @@ class MemoryItemManagementServiceTest {
     }
 
     // ── searchMemoryItems tests ──
+
+    @Test
+    void test_searchMemoryItems_repo_not_exist_throws() {
+        // Given
+        when(memoryRepoMapper.selectById("repo-missing")).thenReturn(null);
+
+        SearchMemoryItemRequestBody body = new SearchMemoryItemRequestBody();
+        body.setQuery("test");
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryItemManagementService.searchMemoryItems("project-1", "repo-missing", body));
+        assertEquals(StudioError.MEMORY_REPO_NOT_EXIST, ex.getErrorCode());
+    }
 
     @Test
     void test_searchMemoryItems_returns_results() {

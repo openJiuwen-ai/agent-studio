@@ -165,6 +165,17 @@
               <img alt="" class="test-run-error-icon" [src]="getStatusSrc(testStatusObj.status)"/>
               {{testStatusObj.text}}
             </div>
+            <div
+              class="chat-header-icon"
+              *ngIf="isMultiAgentMode"
+              [class.sys-params-active]="hasControllerSystemParams"
+              nz-tooltip
+              [nzTooltipTitle]="'controller_system_params' | i18nextEager"
+            >
+              <span (click)="openSystemParamsModal()">
+                <nz-icon nzType="filter" nzTheme="outline" />
+              </span>
+            </div>
             <div class="chat-header-icon" nz-tooltip [nzTooltipTitle]="'agent_clear' | i18nextEager" >
               <span (click)="clearChat()">
                 <nz-icon nzType="clear" nzTheme="outline" />
@@ -828,4 +839,52 @@
       </div>
     </ng-template>
   </ng-container>
+
+  <!-- Controller 系统参数弹窗：activeWorkflows/workflowSequence（入口按钮仅多智能体模式显示） -->
+  <nz-modal
+    [(nzVisible)]="isSystemParamsModalVisible"
+    (nzOnCancel)="closeSystemParamsModal()"
+    [nzTitle]="'controller_system_params' | i18nextEager"
+    [nzWidth]="560"
+  >
+    <div *nzModalContent>
+      <div class="sys-params-tip">
+        {{ 'controller_system_params_tip' | i18nextEager }}
+      </div>
+      <nz-form-item class="sys-params-form-item">
+        <nz-form-label nzFor="controllerActiveWorkflows" [nzSpan]="24">
+          activeWorkflows
+        </nz-form-label>
+        <nz-form-control [nzSpan]="24">
+          <textarea
+            nz-input
+            rows="3"
+            [(ngModel)]="systemParamsDraft.activeWorkflows"
+            [placeholder]="'controller_system_params_active_workflows_placeholder' | i18nextEager"
+          ></textarea>
+        </nz-form-control>
+      </nz-form-item>
+      <nz-form-item class="sys-params-form-item">
+        <nz-form-label nzFor="controllerWorkflowSequence" [nzSpan]="24">
+          workflowSequence
+        </nz-form-label>
+        <nz-form-control [nzSpan]="24">
+          <textarea
+            nz-input
+            rows="3"
+            [(ngModel)]="systemParamsDraft.workflowSequence"
+            [placeholder]="'controller_system_params_workflow_sequence_placeholder' | i18nextEager"
+          ></textarea>
+        </nz-form-control>
+      </nz-form-item>
+    </div>
+    <div *nzModalFooter>
+      <button nz-button (click)="closeSystemParamsModal()">
+        {{ 'cancel' | i18nextEager }}
+      </button>
+      <button nz-button nzType="primary" (click)="confirmSystemParamsModal()">
+        {{ 'confirm' | i18nextEager }}
+      </button>
+    </div>
+  </nz-modal>
 </nz-drawer>

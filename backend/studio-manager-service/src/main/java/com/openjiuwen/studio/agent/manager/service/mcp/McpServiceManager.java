@@ -545,17 +545,19 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         McpServerEntity serverEntity = serverDao.selectById(serverId);
         if (serverEntity == null) {
-            log.info("Server not found. Server ID: {}", serverId);
-            return new McpServerDetailInfoDto();
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
         }
-
-        if ("private".equals(serverEntity.getType())) {
+        // 白名单放行：inner 全租户可见；private 仅本租户可见；其余（脏数据孤儿）404
+        String type = serverEntity.getType();
+        if ("private".equals(type)) {
             if (!RequestContextUtils.getRequestUserDomainId().equals(serverEntity.getTenantId())
                 || !CommonUtil.getDeptCode().equals(serverEntity.getDeptCode())) {
                 log.error("get server's detail rejected. server is {}, belong to {}, but current tenant is {}",
                     serverId, serverEntity.getTenantId(), RequestContextUtils.getRequestUserDomainId());
                 McpServiceExceptionUtils.throwUserNoPermissionError();
             }
+        } else if (!"inner".equals(type)) {
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
         }
 
         McpServerDetailInfoDto mcpServerDetailInfoDto = mcpUtil.serverEntity2McpServerDetailInfoDto(serverEntity);
@@ -784,6 +786,11 @@ public class McpServiceManager implements IMcpServiceManagerService {
     public String createServer(String projectId, String workspaceId, McpServerDetailReq serverDetail) {
         log.info("operation log {}:start to create mcp server", projectId);
         CommonUtil.validateTenantIdIsNotEmpty();
+        // 白名单约束：type 仅允许 inner（平台预置）或 private（私有），杜绝脏数据孤儿
+        if (!"inner".equals(serverDetail.getType())
+            && !"private".equals(serverDetail.getType())) {
+            throw new AgentStudioException(StudioError.MCP_SERVER_TYPE_INVALID);
+        }
 
         // 构建实体
         McpServerEntity serverEntity = mcpUtil.mcpDetailInfoDto2ServerEntity(serverDetail);
@@ -1340,7 +1347,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
             workspaceId);
         if (ObjectUtils.isEmpty(serviceEntity)) {
             log.error("No mcp service id is {} !", id);
-            McpServiceExceptionUtils.throwMissingParameterError("mcpId");
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
         }
         // 状态校验
         if ("creatingStack".equals(serviceEntity.getFcInstanceStatus())) {

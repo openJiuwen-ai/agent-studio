@@ -5,6 +5,7 @@ import { Unzipped, unzipSync } from 'fflate';
 import { firstValueFrom, lastValueFrom } from 'rxjs';
 
 import { CustomTreeNode } from '@agentcore/constants/skill.model';
+import { SkillApi } from '@agentcore/api/skill.api';
 
 @Injectable()
 export class CustomEditorService {
@@ -71,17 +72,39 @@ export class CustomEditorService {
     return s;
   }, {});
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private skillApi: SkillApi) {}
 
+  /**
+   * 通过 Skill ID 下载并解压 zip 制品包。
+   *
+   * <p>请求同源后端接口 {@link SkillApi#getSkillPackageContent}，由后端代理读取 OBS
+   * 中的 zip 并流式返回，避免前端跨域直接请求 OBS 签名 URL（CORS 问题）。</p>
+   *
+   * @param skillId Skill ID
+   * @returns 文件树节点数组（解压失败时返回空数组）
+   */
+  async downloadAndUnzipBySkillId(skillId: string): Promise<Array<CustomTreeNode>> {
+    try {
+      // 1. 请求同源后端接口下载 zip 字节流（后端流式转发 OBS 内容）
+      const buffer = await lastValueFrom(this.skillApi.getSkillPackageContent(skillId));
+      // 2. 同步解压
+      const data: Unzipped = unzipSync(new Uint8Array(buffer));
+      const tree = this.convertToTree(data);
+      return tree;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('downloadAndUnzipBySkillId failed:', err);
+      return [];
+    }
+  }
+
+  /**
+   * @deprecated 使用 {@link #downloadAndUnzipBySkillId} 替代。
+   * 旧方法直接请求 OBS 签名 URL，存在 CORS 问题。
+   */
   async downloadAndUnzip(url: string): Promise<Array<CustomTreeNode>> {
     try {
-      // 1. 等待下载完成 (ArrayBuffer)
       const buffer = await lastValueFrom(this.http.get(url, { responseType: 'arraybuffer' }));
-      // --- 强制检查数据真面目 ---
-      const uint8 = new Uint8Array(buffer);
-      const text = new TextDecoder().decode(uint8.slice(0, 100));
-      // 2. 同步解压 (使用 unzipSync 替代 unzip)
-      // 这行代码执行完后，data 立即就有值了，不需要回调函数
       const data: Unzipped = unzipSync(new Uint8Array(buffer));
       const tree = this.convertToTree(data);
       return tree;

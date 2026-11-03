@@ -16,4 +16,6 @@ public class DatasourceExecuteReq implements Serializable {
     private String query;
 
     private List<String> conditions;
+
+    private String outputFormat;
 }

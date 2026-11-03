@@ -209,26 +209,6 @@ public interface PromptEngineerApi {
         @NotNull @ApiParam(value = "空间ID", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
-    @ApiOperation(value = "启动提示词优化任务", nickname = "startPromptTask",
-        notes = "将任务从草稿(0)或等待执行(1)状态启动为执行中(2)", response = PromptBaseInfo.class,
-        tags = {"Prompt Engineer"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "启动成功", response = PromptBaseInfo.class),
-        @ApiResponse(code = 400, message = "启动失败（如当前状态不允许启动）", response = PromptErrorInfo.class),
-        @ApiResponse(code = 404, message = "任务不存在", response = PromptErrorInfo.class),
-        @ApiResponse(code = 500, message = "服务器错误", response = PromptErrorInfo.class)
-    })
-    @RequestMapping(value = "/v2/{project_id}/prompt/tasks/{task_id}/start", produces = {"application/json"},
-        method = RequestMethod.POST)
-    ResponseEntity<PromptBaseInfo> startPromptTask(
-        @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId,
-        @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-        @Parameter(in = ParameterIn.PATH, description = "任务ID", required = true, schema = @Schema())
-        @PathVariable("task_id") String taskId,
-        @NotNull @ApiParam(value = "空间ID", required = true) @RequestParam(value = "workspace_id", required = true)
-        String workspaceId);
-
     @ApiOperation(value = "全量更新提示词优化任务（只能更新草稿）", nickname = "updatePromptTaskDraft",
         notes = "Fully update a prompt optimization task (all fields required)", response = PromptBaseResp.class,
         tags = {"Prompt Engineer"})

@@ -185,7 +185,6 @@ NOT_SUPPORT_EXCEPTION_COMPONENT_TYPES = [NodeType.LOOP.value, NodeType.ERROR_END
 # 自定义节点多分支判断标志
 CUSTOM_MULTI_BRANCH_SIGN = "@@"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 CLASSIFICATION_ID = "classificationId"
 INVALID_CLASSIFICATION_ID = -1
 
@@ -1135,6 +1134,7 @@ class BpmnWorkflow(BaseWorkflow):
                         invokable=invokable,
                         invokable_input=invokable_input_new,
                         cur_span_instance=cur_span_instance,
+                        node_timeout=timeout,
                     ),
                     timeout=timeout,
                 )
@@ -1168,13 +1168,17 @@ class BpmnWorkflow(BaseWorkflow):
             ):
                 if invokable.exception_config.retry_times > 0:
                     logger.warning(f"{invokable.type}_{invokable.id} not support retry")
+                _timeout = rewrite_timeout(
+                    self.runtime_context, invokable, invokable.exception_config.timeout
+                )
                 invokable_output = await asyncio.wait_for(
                     self._do_invoke(
                         invokable=invokable,
                         invokable_input=invokable_input,
                         cur_span_instance=cur_span_instance,
+                        node_timeout=_timeout,
                     ),
-                    timeout=invokable.exception_config.timeout,
+                    timeout=_timeout,
                 )
             else:
                 invokable_output = await self._do_invoke_retry(
@@ -1309,7 +1313,8 @@ class BpmnWorkflow(BaseWorkflow):
             raise formatted_exception from error
 
     async def _do_invoke(
-        self, invokable: Node, invokable_input, cur_span_instance: Span
+        self, invokable: Node, invokable_input, cur_span_instance: Span,
+        node_timeout: float = 0,
     ):
         """
         组件invoke的判断逻辑，主要区分异步执行、流式执行、其他执行方式。
@@ -1359,6 +1364,7 @@ class BpmnWorkflow(BaseWorkflow):
                 stream_callback=self._stream_callback,
                 span=cur_span_instance,
                 ref=invokable.inputs,
+                node_timeout=node_timeout,
             )
         elif invokable.type in [NodeType.API.value, NodeType.EXTRACTOR.value]:
             api_configs = self.runtime_context.get(WORKFLOW_API_CONFIGS)
@@ -1398,6 +1404,7 @@ class BpmnWorkflow(BaseWorkflow):
                 inputs=invokable_input,
                 runtime_auth_headers=self.runtime_context.get(WORKFLOW_API_CONFIGS),
                 span=cur_span_instance,
+                node_timeout=node_timeout,
             )
             if invokable.type == NodeType.LOOP.value:
                 invokable.state = invokable.action.metadata.node_state
@@ -1612,6 +1619,16 @@ class BpmnWorkflow(BaseWorkflow):
         )
 
         if is_data_source_valid and is_streaming_api_node:
+
+            if node_id not in data_source:
+                logger.warning(
+                    f"Streaming API node '{node_id}' has not been executed "
+                    f"(possibly on an unselected branch), "
+                    f"reference '{match_str}' will be set to None."
+                )
+                parent[key] = None
+                return True
+
             if validate_ref_recursive(split_string(match_str), node.outputs):
                 parent[key] = self._generator(split_string(match_str), data_source)
             else:
@@ -2270,11 +2287,16 @@ class BpmnWorkflow(BaseWorkflow):
                 f"Failed to parse IR as BPMNWorkflow, details: {e}",
                 simple_log="Failed to parse IR as BPMNWorkflow.",
             )
+            # 若内层已是带 error_code 的 JiuWenBaseException（如分支表达式校验
+            # 抛出的 101623），直接透传，避免被外层 101902 覆盖而丢失原始错误码
+            if isinstance(e, JiuWenBaseException):
+                raise
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.code,
-                message=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.errmsg.format(
-                    reason=str(e) if LOG_VERBOSE_MODE else str(type(e).__name__)
-                ),
+                message=StatusCode.WORKFLOW_IR_VALIDATION_ERROR.errmsg.format(reason=str(e)),
+                node_id=getattr(e, "node_id", None),
+                node_name=getattr(e, "node_name", None),
+                node_type=getattr(e, "node_type", None),
             ) from e
 
         self.runtime_context.update(dict(node_variable=self.workflow.data))
@@ -2322,6 +2344,12 @@ class BpmnWorkflow(BaseWorkflow):
         node_id = path_list[0]
         field_name = path_list[-1]
         target_value = None
+
+        if node_id not in data_source:
+            logger.error(f"node_id '{node_id}' not found in data_source, "
+                         f"the node may not been executed. path_list: {path_list}")
+            return None
+
         for i in range(len(path_list) - 1, 0, -1):
             current_field = path_list[i]
             current_value = data_source[node_id]["userFields"].get(current_field, {})

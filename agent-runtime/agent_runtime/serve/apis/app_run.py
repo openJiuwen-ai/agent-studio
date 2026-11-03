@@ -38,6 +38,8 @@ from agent_runtime.common.env_variables_loader import (
     load_default_environment_id,
     _SECRET_ENV_KEYS_KEY,
 )
+from agent_runtime.common.background_task import await_pending
+from agent_runtime.common.exception.errors import AgentBuilderError
 from agent_runtime.event_handler.event_handler import EventHandler
 from agent_runtime.event_handler.base.conversation import (
     ConversationManager,
@@ -49,7 +51,7 @@ from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
-from openjiuwen.core.common.logging import workflow_logger, set_session_id
+from openjiuwen.core.common.logging import workflow_logger
 
 # USER_MSG_FIELD
 _USER_MSG_FIELD = "query"
@@ -291,6 +293,11 @@ async def _load_conversation_data(
     Returns:
         (conversation_history, dialogue_count)
     """
+    # 恢复单会话顺序性：终态事件后台化后，上一轮的会话历史落库/agent 状态
+    # 保存可能仍在飞；读取前先有界等待（超时放行并记 error，不无限阻塞）。
+    # 本函数是三个执行入口加载会话数据的唯一通道，且先于 runner 内 session
+    # 创建执行，一个 join 点同时保护历史读取与 session recover。
+    await await_pending(conversation_id)
     try:
         messages, dialogue_count = await _conv_manager.get_conversation_data(
             conversation_id, instance_id, user_id, version_id
@@ -364,6 +371,14 @@ def build_req_json_from_workflow(
         "enableHistory": body.enable_history,
         **_long_term_memory_params(body.long_term_memory),
     }
+    # Pass long_term_memory config (enable_memory_retrieve/extract + memory_repo_id)
+    # to runtime params so the workflow runner can trigger memory retrieval/extraction.
+    if body.long_term_memory:
+        ltm = body.long_term_memory
+        params["enableMemoryRetrieve"] = ltm.get("enable_retrieve", False)
+        params["enableMemoryExtract"] = ltm.get("enable_extract", False)
+        if ltm.get("memory_repo_id"):
+            params["memoryRepoId"] = ltm["memory_repo_id"]
     if secret_env_keys:
         params["secretEnvKeys"] = secret_env_keys
 
@@ -399,6 +414,13 @@ def build_req_json_from_agent(
         "enableHistory": body.enable_history,
         **_long_term_memory_params(body.long_term_memory),
     }
+    # Pass long_term_memory config (enable_memory_retrieve/extract + memory_repo_id)
+    if body.long_term_memory:
+        ltm = body.long_term_memory
+        params["enableMemoryRetrieve"] = ltm.get("enable_retrieve", False)
+        params["enableMemoryExtract"] = ltm.get("enable_extract", False)
+        if ltm.get("memory_repo_id"):
+            params["memoryRepoId"] = ltm["memory_repo_id"]
     if environment_variables:
         params["environmentVariables"] = environment_variables
     if secret_env_keys:
@@ -549,9 +571,6 @@ async def _execute_workflow_run(
     resolve_env: bool = True,
 ):
     """工作流试运行核心逻辑."""
-    # 中间件在路由匹配前执行、拿不到 path_params，trace_id 会回退成 execution_id；
-    # 此处路由已匹配、ctx.conversation_id 已从 path 取到，覆盖日志上下文使日志按会话可追踪
-    set_session_id(ctx.conversation_id or getattr(request.state, "execution_id", "") or "")
     workflow_logger.info(
         f"Workflow app run request: project={ctx.project_id}, workflow={ctx.workflow_id}, "
         f"conversation={ctx.conversation_id}, version={ctx.version}"
@@ -618,6 +637,11 @@ async def _execute_workflow_run(
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
+        # 该分支绕过 _load_conversation_data 及其中的 await_pending join；
+        # workflow 无 runner 级 join（无 session/post_run），上一轮后台落库
+        # 若仍在飞，本轮收尾 update_conversation 的读改写会与之竞态（脏读/
+        # 后写覆盖丢消息），此处补有界等待（检视意见3）。
+        await await_pending(ctx.conversation_id)
         conversation_history = [msg.model_dump(by_alias=True) for msg in body.messages]
         dialogue_count = 1
     else:
@@ -695,8 +719,6 @@ async def _execute_agent_run(
     resolve_env: bool = True,
 ):
     """智能体试运行核心逻辑."""
-    # 同 _execute_workflow_run：路由匹配后用 path 的 conversation_id 覆盖 trace_id
-    set_session_id(ctx.conversation_id or getattr(request.state, "execution_id", "") or "")
     workflow_logger.info(
         f"Agent app run request: project={ctx.project_id}, agent={ctx.agent_id}, "
         f"conversation={ctx.conversation_id}, version={ctx.version}"
@@ -807,6 +829,8 @@ async def _execute_agent_run(
     try:
         handler_type = await _resolve_handler_type(ir_path)
     except Exception as e:
+        if isinstance(e, AgentBuilderError):
+            raise
         workflow_logger.error(f"Failed to resolve handler type from IR: {ir_path}, error: {e}")
         raise JiuWenBaseException(
             error_code=StatusCode.IR_DATA_JSON_LOAD_FAILED.code,

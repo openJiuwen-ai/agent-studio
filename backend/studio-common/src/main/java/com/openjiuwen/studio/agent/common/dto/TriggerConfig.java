@@ -77,6 +77,14 @@ public class TriggerConfig implements Serializable {
     @Length(max = 500)
     private String hookUrl = null;
 
+    @JsonProperty("poll_url")
+    @Schema(description = "Polling检查地址", example = "https://example.com/feed.rss")
+    private String pollUrl = null;
+
+    @JsonProperty("poll_interval_seconds")
+    @Schema(description = "Polling检查间隔，单位为秒", example = "300")
+    private Integer pollIntervalSeconds = null;
+
     @JsonProperty("created_on")
     @Schema(description = "创建时间", example = "2026-09-01T12:00:00Z")
     private Date createdOn = null;
@@ -153,6 +161,24 @@ public class TriggerConfig implements Serializable {
         return this;
     }
 
+    public String getPollUrl() {
+        return pollUrl;
+    }
+
+    public TriggerConfig setPollUrl(String pollUrl) {
+        this.pollUrl = pollUrl;
+        return this;
+    }
+
+    public Integer getPollIntervalSeconds() {
+        return pollIntervalSeconds;
+    }
+
+    public TriggerConfig setPollIntervalSeconds(Integer pollIntervalSeconds) {
+        this.pollIntervalSeconds = pollIntervalSeconds;
+        return this;
+    }
+
     public Date getCreatedOn() {
         return createdOn;
     }
@@ -175,6 +201,8 @@ public class TriggerConfig implements Serializable {
         sb.append("    invocation: ").append(toIndentedString(invocation)).append("\n");
         sb.append("    params: ").append(toIndentedString(params)).append("\n");
         sb.append("    hookUrl: ").append(toIndentedString(hookUrl)).append("\n");
+        sb.append("    pollUrl: ").append(toIndentedString(pollUrl)).append("\n");
+        sb.append("    pollIntervalSeconds: ").append(toIndentedString(pollIntervalSeconds)).append("\n");
         sb.append("    createdOn: ").append(toIndentedString(createdOn)).append("\n");
         sb.append("}");
         return sb.toString();
@@ -193,12 +221,15 @@ public class TriggerConfig implements Serializable {
             && Objects.equals(this.type, triggerConfig.type) && Objects.equals(this.cron, triggerConfig.cron)
             && Objects.equals(this.prompt, triggerConfig.prompt) && Objects.equals(this.invocation,
             triggerConfig.invocation) && Objects.equals(this.params, triggerConfig.params) && Objects.equals(
-            this.hookUrl, triggerConfig.hookUrl) && Objects.equals(this.createdOn, triggerConfig.createdOn);
+            this.hookUrl, triggerConfig.hookUrl) && Objects.equals(this.pollUrl, triggerConfig.pollUrl)
+            && Objects.equals(this.pollIntervalSeconds, triggerConfig.pollIntervalSeconds)
+            && Objects.equals(this.createdOn, triggerConfig.createdOn);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(triggerId, name, type, cron, prompt, invocation, params, hookUrl, createdOn);
+        return Objects.hash(triggerId, name, type, cron, prompt, invocation, params, hookUrl, pollUrl,
+            pollIntervalSeconds, createdOn);
     }
 
     /**

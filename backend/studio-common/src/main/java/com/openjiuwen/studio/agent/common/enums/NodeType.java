@@ -75,9 +75,9 @@ public enum NodeType {
     CODE("Code", false, "jiuwen.code", "Code", "code"),
 
     /**
-     * 文本处理节点，workflow节点
+     * 模板转换节点，workflow节点。完整 Jinja2，不同于 LLM/End/Message 的简单 {{var}} 替换。
      */
-    TEMPLATE_TRANSFORM("Prompt", false, null, null),
+    TEMPLATE_TRANSFORM("TemplateTransform", false, "jiuwen.templateTransform", "TemplateTransform"),
 
     /**
      * 意图识别节点，workflow节点

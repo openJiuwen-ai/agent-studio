@@ -31,7 +31,8 @@ from enum import Enum
 from typing import Any
 
 from agent_runtime.common.config import settings
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from agent_runtime.common.session_state_access import get_state_info
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from jiuwen.orchestration.flow.constant import REQUEST_VARIABLES
@@ -480,7 +481,7 @@ class Start(WorkflowComponent):
         try:
             if not (workflow_id and conversation_id and values_define):
                 return {}
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             store_key = f"{REDIS_GLOBAL_VALS_NAME}.{workflow_id}.{conversation_id}"
             memory_values = await redis_client.get(store_key)
             if memory_values:
@@ -523,7 +524,7 @@ class Start(WorkflowComponent):
         try:
             if not (workflow_id and conversation_id and values_define):
                 return None
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             store_key = f"{REDIS_GLOBAL_VALS_NAME}.{workflow_id}.{conversation_id}"
             # 只存values_define中的变量和memory_vars中的值
             new_memory_vars = {
@@ -538,7 +539,7 @@ class Start(WorkflowComponent):
                 new_memory_vars = {**old_values, **new_memory_vars}
             await redis_client.set(
                 store_key, json.dumps(new_memory_vars, ensure_ascii=False),
-                ex=_DEFAULT_CONVERSATION_VARIABLE_TTL,
+                duration=Duration.seconds(_DEFAULT_CONVERSATION_VARIABLE_TTL),
             )
         except Exception as e:
             workflow_logger.error(

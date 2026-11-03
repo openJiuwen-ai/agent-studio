@@ -139,6 +139,9 @@ class Qwen(BaseModel, BaseChatModel):
         """agentBuilder chat function"""
         resquest_data, headers = self._request_params(messages, tools)
         resquest_data.update({"stream": False})
+        # 非流式批式语义：首 token 即完整响应到达。双时间戳打点与 _stream 对齐，
+        # TTFT 换算后 ≈ 整体请求时延（消费端按 ISO 双戳差值计算）
+        request_start_time = datetime.datetime.now(tz=BJ_TZ).isoformat()
         res = requests.post(
             url=self.api_base,
             json=resquest_data,
@@ -156,6 +159,8 @@ class Qwen(BaseModel, BaseChatModel):
                 task_id=res_json.get("id", self.model_name),
                 model_name=res_json.get("model", self.model_name),
                 finish_reason="stop",
+                requests_start_time=request_start_time,
+                first_token_time=datetime.datetime.now(tz=BJ_TZ).isoformat(),
             )
             (
                 usage_metadata.input_tokens,

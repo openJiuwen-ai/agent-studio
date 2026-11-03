@@ -119,8 +119,6 @@ ENABLE_KEY = "enable"
 WORKFLOW_GLOBAL_INTENTS = "global_intents"
 WORKFLOW_CHAT_HISTORY = "workflow_chat_history"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class IntentDetectionStatusCode(Enum):
     """IntentDetection 组件专用错误码"""
@@ -464,7 +462,7 @@ class IntentDetection(WorkflowComponent):
             global_intent_map = current_inputs.pop("global_intent_map", {})
         except Exception as e:
             self._raise_input_error(
-                str(e) if LOG_VERBOSE_MODE else str(type(e).__name__)
+                str(type(e).__name__)
             )
 
         if self.intent_config.enable_knowledge:
@@ -981,7 +979,8 @@ class IntentDetection(WorkflowComponent):
             current_inputs.update({CHAT_HISTORY: chat_history_str})
 
         if self.intent_config.enable_input:
-            current_inputs.update({INPUT: inputs.get(INPUT)})
+            user_fields = inputs.get("userFields", {}) if isinstance(inputs, dict) else {}
+            current_inputs.update({INPUT: user_fields.get(INPUT)})
 
         current_inputs["global_intent_map"] = global_intent_map
         return current_inputs

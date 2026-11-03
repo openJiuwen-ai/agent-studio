@@ -1,0 +1,26 @@
+<meta-acc-block class="block mb-3" [title]="'exception_handling' | i18nextEager">
+  <ng-template #content>
+    <div class="mt-4 mb-2 flex items-center">
+      <div class="mr-4 flex items-center gap-[4px]">
+        <span>{{ 'exception_ignored' | i18nextEager }}</span>
+        <span nz-icon nzType="question-circle" nzTheme="outline"
+          nz-tooltip [nzTooltipTitle]="'exception_ignored_tip' | i18nextEager"
+          style="font-size: 14px; color: #808080; cursor: pointer;"></span>
+      </div>
+      <nz-switch [(ngModel)]="configs.exception_enable" (ngModelChange)="onValueChange()"></nz-switch>
+    </div>
+    <div class="mb-2 mt-3" *ngIf="configs.exception_enable">{{ 'default_output' | i18nextEager }}</div>
+    <div class="editor-wrapper" *ngIf="configs.exception_enable">
+      <div class="flex items-center rounded-t-[8px] bg-[#F0F7FF] px-[16px] py-[4px]">
+        <span class="mr-[2px]">json</span>
+      </div>
+      <div class="h-[200px]">
+        <ngx-monaco-editor
+          [options]="editorOptions"
+          [(ngModel)]="configs.exception_suppression"
+          (ngModelChange)="editorOnSave()"
+        ></ngx-monaco-editor>
+      </div>
+    </div>
+  </ng-template>
+</meta-acc-block>

@@ -137,9 +137,8 @@ class TimeUtility(object):
         for i in range(5):
             if handler[i] > -1 and handler[i + 1] == -1:
                 fir = True
-            if handler[i] == -1 and handler[i + 1] > -1:
-                if fir:
-                    sec = True
+            if handler[i] == -1 and handler[i + 1] > -1 and fir:
+                sec = True
 
         if fir and sec:
             return False

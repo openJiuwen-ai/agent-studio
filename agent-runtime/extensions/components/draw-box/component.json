@@ -1,0 +1,7 @@
+{
+  "type": "custom.draw_box",
+  "classInfo": {
+    "className": "FlowDrawBox",
+    "filePath": "extensions/components/draw-box/draw_box.py"
+  }
+}

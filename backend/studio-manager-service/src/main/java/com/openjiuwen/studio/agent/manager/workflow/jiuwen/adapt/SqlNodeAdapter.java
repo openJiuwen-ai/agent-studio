@@ -41,12 +41,15 @@ public class SqlNodeAdapter extends AbstractIRNodeAdapter {
 
     private static final String ALL_COLUMNS = "*";
 
+    private static final String OUTPUT_FORMAT = "output_format";
+
     @Override
     public Map<String, Object> adaptConfig(WorkflowNodeVO workflowNodeVo) {
         Map<String, Object> nodeConfigs = workflowNodeVo.getConfigs();
         Map<String, Object> configs = new HashMap<>();
 
         configs.put(DATASOURCE_ID, nodeConfigs.get(DATASOURCE_ID));
+        configs.put(OUTPUT_FORMAT, nodeConfigs.get(OUTPUT_FORMAT));
 
         if (nodeConfigs.get(SELECT_QUERY) != null) {
             String selectColumn = constructColumnByList(nodeConfigs.get(OUTPUT_COLUMN));

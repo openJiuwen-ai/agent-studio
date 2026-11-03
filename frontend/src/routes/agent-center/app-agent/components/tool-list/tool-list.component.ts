@@ -62,6 +62,8 @@ export class ToolListComponent {
   public getTriggerType(type: string): string {
     if (type === 'EVENT') {
       return this.i18n.transform('toollistcomponent_66');
+    } else if (type === 'POLLING') {
+      return this.i18n.transform('toollistcomponent_polling');
     } else {
       return this.i18n.transform('toollistcomponent_67');
     }
@@ -69,7 +71,7 @@ export class ToolListComponent {
 
   public getTipText(item: any, agentType) {
     if (!item) { return null; }
-    const { cron, hook_url, prompt, invocation } = item;
+    const { cron, hook_url, prompt, invocation, poll_url, poll_interval_seconds } = item;
     const showCallMethod = agentType === 'workflow';
     if (item.type === 'TIMER') {
       if (showCallMethod) {
@@ -80,6 +82,11 @@ export class ToolListComponent {
         };
       }
       return { cron: this.toolListService.convertFromCronExpression(cron), prompt };
+    } else if (item.type === 'POLLING') {
+      if (showCallMethod) {
+        return { poll_url, poll_interval_seconds, prompt, invocation };
+      }
+      return { poll_url, poll_interval_seconds, prompt };
     } else {
       return { hook_url, prompt };
     }

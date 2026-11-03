@@ -8,6 +8,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from redis_spi.types import Duration, PubSubMessage, SetCondition
 
 from agent_runtime.serve.execution_registry import (
     CANCEL_CHANNEL,
@@ -28,22 +29,30 @@ def _reset_singleton():
 
 
 def _make_redis() -> MagicMock:
-    """构造全 AsyncMock 的异步 Redis 客户端（decode_responses=False 语义：返回 bytes）。"""
+    """构造全 AsyncMock 的 SPI 客户端替身（bytes 语义：返回 bytes）。
+
+    PubSub 面：``as_capability(PubSubCapability)`` 返回 ``client.pubsub_cap``
+    （publish AsyncMock + pubsub 工厂）；核心面命令直接挂在 client 上。
+    """
     client = MagicMock()
     client.hset = AsyncMock()
     client.expire = AsyncMock()
     client.set = AsyncMock()
     client.get = AsyncMock(return_value=None)
     client.delete = AsyncMock()
-    client.publish = AsyncMock()
     client.exists = AsyncMock(return_value=0)
     client.hgetall = AsyncMock(return_value={})
+    pubsub_cap = MagicMock()
+    pubsub_cap.publish = AsyncMock()
+    pubsub_cap.pubsub = MagicMock()
+    client.pubsub_cap = pubsub_cap
+    client.as_capability = MagicMock(return_value=pubsub_cap)
     return client
 
 
 def _patch_redis(client):
-    """registry._redis() 为函数内 lazy import，必须 patch common_utils 模块命名空间。"""
-    return patch("common_utils.redis_manager.get_redis_client", return_value=client)
+    """registry 经 redis_spi accessor 单例取客户端 —— patch accessor 模块命名空间。"""
+    return patch("redis_spi.accessor.get_redis", return_value=client)
 
 
 class TestRegister:
@@ -75,11 +84,14 @@ class TestRegister:
         assert client.hset.await_count == 2
         client.hset.assert_any_await("exec:conv-1", mapping=expected_mapping)
         client.hset.assert_any_await("suspend:conv-1", mapping=expected_mapping)
-        client.expire.assert_any_await("exec:conv-1", EXEC_TTL_SECONDS)
-        client.expire.assert_any_await("suspend:conv-1", EXEC_TTL_SECONDS)
-        # nx=True：仅当标记不存在时初始化 false，保留挂起期间 cancel 置位的 true（US3 恢复检测依赖）
+        client.expire.assert_any_await("exec:conv-1", Duration.seconds(EXEC_TTL_SECONDS))
+        client.expire.assert_any_await("suspend:conv-1", Duration.seconds(EXEC_TTL_SECONDS))
+        # NX：仅当标记不存在时初始化 false，保留挂起期间 cancel 置位的 true（US3 恢复检测依赖）
         client.set.assert_awaited_once_with(
-            "cancel:conv-1", "false", ex=EXEC_TTL_SECONDS, nx=True
+            "cancel:conv-1",
+            "false",
+            duration=Duration.seconds(EXEC_TTL_SECONDS),
+            condition=SetCondition.NX,
         )
 
     @pytest.mark.asyncio
@@ -157,8 +169,11 @@ class TestCancelMark:
         with _patch_redis(client):
             await registry.mark_cancelled("conv-1")
 
-        client.set.assert_awaited_once_with("cancel:conv-1", "true", ex=EXEC_TTL_SECONDS)
-        client.publish.assert_awaited_once_with(CANCEL_CHANNEL, "conv-1")
+        client.set.assert_awaited_once_with(
+            "cancel:conv-1", "true", duration=Duration.seconds(EXEC_TTL_SECONDS)
+        )
+        # publish 走 PubSubCapability 视图（SPI 分层：核心面无 publish）
+        client.pubsub_cap.publish.assert_awaited_once_with(CANCEL_CHANNEL, "conv-1")
 
     @pytest.mark.asyncio
     async def test_is_cancelled_bytes_semantics(self):
@@ -315,11 +330,13 @@ class TestSubscriber:
         client = _make_redis()
         pubsub = self._make_pubsub(
             [
-                {"type": "subscribe", "channel": CANCEL_CHANNEL.encode()},
-                {"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-1"},
+                PubSubMessage(type="subscribe", channel=CANCEL_CHANNEL.encode(), data=1),
+                PubSubMessage(
+                    type="message", channel=CANCEL_CHANNEL.encode(), data=b"conv-1"
+                ),
             ]
         )
-        client.pubsub = MagicMock(return_value=pubsub)
+        client.pubsub_cap.pubsub = MagicMock(return_value=pubsub)
         registry = ExecutionRegistry()
         task = asyncio.create_task(asyncio.sleep(10))
 
@@ -338,9 +355,13 @@ class TestSubscriber:
     async def test_subscriber_ignores_unknown_conversation(self):
         client = _make_redis()
         pubsub = self._make_pubsub(
-            [{"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-none"}]
+            [
+                PubSubMessage(
+                    type="message", channel=CANCEL_CHANNEL.encode(), data=b"conv-none"
+                )
+            ]
         )
-        client.pubsub = MagicMock(return_value=pubsub)
+        client.pubsub_cap.pubsub = MagicMock(return_value=pubsub)
         registry = ExecutionRegistry()
 
         with _patch_redis(client), \
@@ -355,9 +376,13 @@ class TestSubscriber:
         """路由隔离：广播仅命中目标会话，注册中的其他会话 task 不得被误取消。"""
         client = _make_redis()
         pubsub = self._make_pubsub(
-            [{"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-2"}]
+            [
+                PubSubMessage(
+                    type="message", channel=CANCEL_CHANNEL.encode(), data=b"conv-2"
+                )
+            ]
         )
-        client.pubsub = MagicMock(return_value=pubsub)
+        client.pubsub_cap.pubsub = MagicMock(return_value=pubsub)
         registry = ExecutionRegistry()
         task = asyncio.create_task(asyncio.sleep(10))
 
@@ -384,7 +409,9 @@ class TestSubscriber:
             yield  # pragma: no cover 使其成为 async generator
 
         async def _ok():
-            yield {"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-1"}
+            yield PubSubMessage(
+                type="message", channel=CANCEL_CHANNEL.encode(), data=b"conv-1"
+            )
             raise asyncio.CancelledError  # 处理完目标消息后模拟 shutdown
 
         calls = {"n": 0}
@@ -394,7 +421,7 @@ class TestSubscriber:
             return _broken() if calls["n"] == 1 else _ok()
 
         pubsub.listen = _listen_call
-        client.pubsub = MagicMock(return_value=pubsub)
+        client.pubsub_cap.pubsub = MagicMock(return_value=pubsub)
         registry = ExecutionRegistry()
         task = asyncio.create_task(asyncio.sleep(10))
 

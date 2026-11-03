@@ -773,8 +773,14 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
     });
   }
 
+  private exportModalRef: any = null;
+
   /** 导出工作流或插件 */
   public exportTool() {
+    // 防止连点打开多个导出模态框
+    if (this.exportModalRef) {
+      return;
+    }
     const modalRef = this.nzModal.create({
       nzTitle: null,
       nzFooter: null,
@@ -786,18 +792,22 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
         exportTypeOptions: this.getExportTypeOptions()
       },
     });
+    this.exportModalRef = modalRef;
 
     const instance = modalRef.getContentComponent();
     instance.confirm.subscribe(({ type, rows }) => {
       if (this.isNewExport) {
-        this.newExportFn(type, rows, modalRef);
+        this.newExportFn(type, rows, modalRef, instance);
       } else {
         this.oldExportFn(type, rows, modalRef);
       }
     });
+    modalRef.afterClose.subscribe(() => {
+      this.exportModalRef = null;
+    });
   }
 
-  public newExportFn(type, rows, modalRef: { destroy: () => void }) {
+  public newExportFn(type, rows, modalRef: { destroy: () => void }, instance?: any) {
     const idMap = {
       agent: "agent_id",
       workflow: "workflow_id",
@@ -818,6 +828,11 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
           exportResult: res
         }
       });
+    }).catch(() => {
+      // 导出失败时复位模态框内的提交标记，允许用户重试
+      if (instance) {
+        instance.submitting = false;
+      }
     });
   }
 

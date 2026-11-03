@@ -76,7 +76,7 @@ public class CreateToolReq implements Serializable {
     private String intfType = null;
 
     @JsonProperty("input_schema")
-    @Schema(description = "输入Schema", example = "{}")
+    @Schema(description = "输入参数Schema（JSON字符串）。入参每个属性必填description（非空）和location（Body/Headers/Query/Path之一）；不支持嵌套数组和additionalProperties；支持类型：string/number/integer/object/array/boolean/null；参数嵌套深度和数量受配置限制。", example = "\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"city\\\":{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"城市名称\\\",\\\"location\\\":\\\"Body\\\"},\\\"days\\\":{\\\"type\\\":\\\"integer\\\",\\\"description\\\":\\\"天数\\\",\\\"location\\\":\\\"Query\\\"}}}\"")
     @Length(max = 200000)
     private String inputSchema = null;
 
@@ -85,7 +85,7 @@ public class CreateToolReq implements Serializable {
     private Boolean isInputList = false;
 
     @JsonProperty("output_schema")
-    @Schema(description = "输出Schema", example = "{}")
+    @Schema(description = "输出参数Schema（JSON字符串）。出参属性无description和location必填要求；不支持嵌套数组和additionalProperties；支持类型：string/number/integer/object/array/boolean/null。", example = "\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"result\\\":{\\\"type\\\":\\\"string\\\"}}}\"")
     @Length(max = 200000)
     private String outputSchema = null;
 

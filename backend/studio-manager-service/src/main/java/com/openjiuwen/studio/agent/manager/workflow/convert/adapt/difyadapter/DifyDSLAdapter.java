@@ -548,7 +548,13 @@ public class DifyDSLAdapter implements AdapterService {
                     startTypeNodes.add(sourceIdRaw);
                 } else if (edgeConfig != null && NodeType.INTENT_DETECTION.getDifyType()
                     .equalsIgnoreCase(edgeConfig.get("sourceType"))) {
-                    workflowEdgeVO.setBranch("branch_" + edgeMap.get("sourceHandle").toString());
+                    // branch 必须映射为数字序号（branch_1..N），与 QuestionClassifierNodeConverter
+                    // .adaptBranches 的编号一致：runtime 意图路由链（category_list 构建 + 路由条件生成）
+                    // 强依赖 branch_(\d+) 格式，Dify 语义 class id（如 dj/zx）会导致分类列表为空 +
+                    // 条件全部兜底"分类0"→101021。按 classes 数组顺序：第 i 个 class 的出边 → branch_{i+1}。
+                    // constructEdgesAndSort 先于 constructNodes 执行，无法从已转换节点取映射，
+                    // 需直接从原始 graphData 的 question-classifier 节点 classes 构建。
+                    workflowEdgeVO.setBranch("branch_" + intentClassIndex(data, sourceIdRaw, edgeMap.get("sourceHandle").toString()));
                 } else if (edgeConfig != null && (
                     CommonConstant.DIFY.LOOP_START.equalsIgnoreCase(edgeConfig.get("sourceType"))
                         || CommonConstant.DIFY.ITERATION_START.equalsIgnoreCase(edgeConfig.get("sourceType")))) {
@@ -880,6 +886,55 @@ public class DifyDSLAdapter implements AdapterService {
         } else {
             workflowFieldVO.setType(type);
         }
+    }
+
+    /**
+     * 查找 question-classifier 节点（sourceIdRaw）的 class（sourceHandle）在其 classes
+     * 数组中的序号（1-based），用于把 Dify 语义 class id 映射为 branch_{N} 数字格式。
+     *
+     * <p>与 {@link QuestionClassifierNodeConverter#adaptBranches} 的编号规则一致：
+     * 第 i 个 class（0-based）→ branch_{i+1}。</p>
+     *
+     * <p>找不到节点/classes/匹配项时返回原 class id（保持旧行为拼 "branch_" + id，
+     * 不让边转换因映射缺失而抛错，由下游校验兜底）。</p>
+     *
+     * @param data 完整 graphData（含 nodes/edges）
+     * @param sourceIdRaw Dify 源节点 id（question-classifier 节点）
+     * @param sourceHandle 边上的 sourceHandle（= Dify class id）
+     * @return class 序号字符串（"1"、"2"...）或原 class id
+     */
+    private String intentClassIndex(Map<String, Object> data, String sourceIdRaw, String sourceHandle) {
+        // 全程安全转换（与 QuestionClassifierNodeConverter.adaptBranches 同源，检视意见 #6）：
+        // constructEdgesAndSort 没有 convertNode 那样的 per-node try/catch 兜底，
+        // 此处任何 CCE/NPE 都会中断整个导入。非 List/Map 结构一律降级返回原 class id。
+        List<Map<String, Object>> graphNodes = MapReadUtil.safeCastToListWithMap(data.get("nodes"));
+        if (graphNodes == null) {
+            return sourceHandle;
+        }
+        for (Map<String, Object> graphNode : graphNodes) {
+            if (graphNode == null || !sourceIdRaw.equals(String.valueOf(graphNode.get("id")))) {
+                continue;
+            }
+            Map<String, Object> nodeData = MapReadUtil.safeCastToMapWithStringKey(graphNode.get("data"));
+            if (nodeData == null
+                || !NodeType.INTENT_DETECTION.getDifyType().equalsIgnoreCase(String.valueOf(nodeData.get("type")))) {
+                break;
+            }
+            List<Map<String, Object>> classes = MapReadUtil.safeCastToListWithMap(nodeData.get("classes"));
+            if (classes == null) {
+                break;
+            }
+            // safeCastToListWithMap 会把非 Map 元素转为 null 占位——逐元素判空跳过；
+            // null 占位保留原索引，与节点侧 adaptBranches 对同一 classes 列表的计数语义一致
+            for (int i = 0; i < classes.size(); i++) {
+                Map<String, Object> classMap = classes.get(i);
+                if (classMap != null && sourceHandle.equals(String.valueOf(classMap.get("id")))) {
+                    return String.valueOf(i + 1);
+                }
+            }
+            break;
+        }
+        return sourceHandle;
     }
 
 }

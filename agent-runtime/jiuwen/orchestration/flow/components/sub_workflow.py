@@ -44,8 +44,6 @@ from jiuwen.orchestration.flow.stream.base import StreamCode
 from jiuwen.orchestration.utils import Input, Output
 from pydantic import BaseModel, Field, ValidationError
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class Reference(BaseModel):
     id: str = Field(title="子workflow对应的workflow id")
@@ -85,7 +83,10 @@ class SubWorkflow(Invokable, InteractiveComponent):
     @staticmethod
     async def _filter_stream_res(data_queue: asyncio.Queue):
         """
-        通过队列读取子线程中子工作流流式输出内容，过滤START, WORKFLOW_START, WORKFLOW_END
+        通过队列读取子线程中子工作流流式输出内容，过滤START, WORKFLOW_START, WORKFLOW_END。
+
+        与 openjiuwen extension 一致：多控制器只需要「挂载工作流」自身的 workflow_start；
+        图内嵌套 SubWorkflow 的 lifecycle 不向外透出。
         """
         while True:
             data = await data_queue.get()
@@ -344,7 +345,7 @@ class SubWorkflow(Invokable, InteractiveComponent):
                 raise JiuWenBaseException(
                     error_code=StatusCode.SUB_WORKFLOW_EXECUTION_ERROR.code,
                     message=StatusCode.SUB_WORKFLOW_EXECUTION_ERROR.errmsg.format(
-                        msg=raw_msg if LOG_VERBOSE_MODE else safe_msg
+                        msg=safe_msg
                     ),
                 )
             if item.code == StreamCode.MESSAGE_END.value:
@@ -410,8 +411,6 @@ class SubWorkflow(Invokable, InteractiveComponent):
             raise JiuWenBaseException(
                 error_code=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR.code,
                 message=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR.errmsg.format(
-                    msg=format_pydantic_validation_error_message(e)
-                    if LOG_VERBOSE_MODE
-                    else f"{type(e).__name__}"
+                    msg=f"{type(e).__name__}"
                 ),
             ) from e

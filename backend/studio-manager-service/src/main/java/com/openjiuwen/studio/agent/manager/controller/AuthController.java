@@ -5,7 +5,6 @@
 package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
-import com.openjiuwen.studio.agent.common.utils.simple.ServletUtils;
 import com.openjiuwen.studio.agent.common.utils.simple.SimpleAuthUtils;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.manager.service.simple.IAuthService;
@@ -14,8 +13,6 @@ import com.openjiuwen.studio.agent.manager.service.simple.SimpleAuthService;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,18 +51,6 @@ public class AuthController {
     @PostConstruct
     private void init() {
         authService = applicationContext.getBean(SimpleAuthService.class);
-    }
-
-    @ApiOperation(value = "登出", nickname = "logout", notes = "登出", response = String.class, tags = {"logout"})
-    @ApiResponses(value = {@ApiResponse(code = 200, message = "登出结果", response = String.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 为鉴权", response = ErrorRsp.class)})
-    @RequestMapping(value = "/authui/logout", produces = {"application/text"}, method = RequestMethod.GET)
-    public String loginOut(HttpServletRequest request, HttpServletResponse response) {
-        String sid = ServletUtils.getAgentSid(request);
-        String result = authService.loginOut(sid);
-        ServletUtils.deleteSidCookie(response);
-        return result;
     }
 
     @ApiOperation(value = "token校验", nickname = "validateToken", notes = "校验token并返回对应用户信息",

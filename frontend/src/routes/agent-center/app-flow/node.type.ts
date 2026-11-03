@@ -126,6 +126,7 @@ export type INodeType =
   | 'End'
   | 'LLM'
   | 'Code'
+  | 'TemplateTransform'
   | 'Plugin'
   | 'Branch'
   | 'Workflow'
@@ -404,6 +405,8 @@ export interface ILLMNode extends INodeBase {
     exception_process?: IExceptionProcess;
     enable_thinking?: boolean; //模型是否输出深度思考
     enable_memory?: boolean; // 是否启用记忆
+    /** 开启后仅已声明入参被当作变量，其余 {{...}} 按字面量保留 */
+    allow_literal_braces?: boolean;
     descriptionText?: string;
     isDefaultName?: boolean;
   };
@@ -640,6 +643,7 @@ export interface ISqlNode extends INodeBase {
     name: string;
     sql: string;
     type?: string;
+    output_format?: 'json' | 'table';
     descriptionText?: string;
     isDefaultName?: boolean;
   };
@@ -658,6 +662,7 @@ export interface IDataQueryNode extends INodeBase {
     select_query?: any;
     limit?: Number;
     orders?: Array<any>;
+    output_format?: 'json' | 'table';
     descriptionText?: string;
     isDefaultName?: boolean;
   };
@@ -740,6 +745,16 @@ export interface ICodeNode extends INodeBase {
     enable_sandbox?: boolean;
     fg_id?: string;
     exception_process?: IExceptionProcess;
+    descriptionText?: string;
+    isDefaultName?: boolean;
+  };
+}
+
+export interface ITemplateTransformNode extends INodeBase {
+  inputs: IWorkflowField[];
+  outputs: IWorkflowField[];
+  configs: {
+    template: string;
     descriptionText?: string;
     isDefaultName?: boolean;
   };
@@ -1158,6 +1173,7 @@ export type NodeInfo =
   | IBranchNode
   | IQuestionerNode
   | ICodeNode
+  | ITemplateTransformNode
   | IIntentNode
   | IMessageNode
   | IAggregationNode
@@ -1180,7 +1196,8 @@ export type HasOutputsNode =
   | ILLMNode
   | IPluginNode
   | IQuestionerNode
-  | ICodeNode;
+  | ICodeNode
+  | ITemplateTransformNode;
 
 export type HasInputsNode =
   | IEndNode
@@ -1188,6 +1205,7 @@ export type HasInputsNode =
   | IPluginNode
   | IQuestionerNode
   | ICodeNode
+  | ITemplateTransformNode
   | IIntentNode
   | IKnowledgeRepo
   | IMessageNode;
@@ -1197,6 +1215,7 @@ export type IsolatedTestableNode =
   | IPluginNode
   | IQuestionerNode
   | ICodeNode
+  | ITemplateTransformNode
   | IIntentNode;
 
 export type MidNode = ILLMNode | IPluginNode;

@@ -826,3 +826,21 @@
     margin-right: 8px;
   }
 }
+
+// Controller 系统参数（activeWorkflows/workflowSequence）：
+// 已配置时入口按钮高亮，提示收窄参数生效中
+.chat-header-icon.sys-params-active {
+  color: #1c85ff;
+}
+
+// 系统参数弹窗内的说明与表单间距
+.sys-params-tip {
+  font-size: 12px;
+  line-height: 20px;
+  color: #808080;
+  margin-bottom: 8px;
+}
+
+.sys-params-form-item {
+  margin-bottom: 12px;
+}

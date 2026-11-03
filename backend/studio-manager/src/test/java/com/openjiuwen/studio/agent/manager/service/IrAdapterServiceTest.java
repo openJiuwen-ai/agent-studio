@@ -14,6 +14,7 @@ import static org.mockito.Answers.RETURNS_DEEP_STUBS;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
@@ -30,11 +31,13 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
+import com.openjiuwen.studio.agent.manager.enums.PluginCallModeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.ToolCredentialMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.mcp.infrastructure.apig.CesService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
+import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
 import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
@@ -87,6 +90,9 @@ class IrAdapterServiceTest extends BaseTest {
     private IPlugin pluginService;
 
     @Mock
+    private PluginBaseImpl pluginBaseImplMock;
+
+    @Mock
     private ModelServiceManager modelServiceManager;
 
     private static MockedStatic<CryptoUtils> mgSccCryptoUtils;
@@ -130,6 +136,12 @@ class IrAdapterServiceTest extends BaseTest {
 
         // 将 Mock 出来的 encryptionAdapter 注入到 irAdapterService 中
         ReflectionTestUtils.setField(irAdapterService, "encryptionAdapter", encryptionAdapter);
+
+        // Mock pluginBaseImpl 以避免 isAuthRequiredPresetPlugin 查询真实 DB
+        ReflectionTestUtils.setField(irAdapterService, "pluginBaseImpl", pluginBaseImplMock);
+        when(pluginBaseImplMock.buildToolByPlugin(
+                nullable(String.class), nullable(String.class), anyString(), anyString()))
+                .thenReturn(createMockToolEntity());
 
         ReflectionTestUtils.setField(irAdapterService, "agentIrVersion", "1.0.0");
         ReflectionTestUtils.setField(irAdapterService, "opProjectId", "test-op-project");
@@ -878,6 +890,162 @@ class IrAdapterServiceTest extends BaseTest {
             List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, true);
             assertEquals(1, result.size());
         }
+    }
+
+    /**
+     * 用例描述：验证 parsePluginConfig 对自定义插件输出 callMode 为 "custom"
+     * 预制条件：Mock pluginService.getToolEntity 返回 callMode="custom" 的 ToolEntity
+     * 输入参数：pluginConfig.id="test#0"，projectId="test-project"，isAgentPlugin=false
+     * 预期结果：返回的 Map 中 callMode 为 "custom"
+     */
+    @Test
+    void testParsePluginConfigShouldOutputCallModeForCustomPlugin() {
+        // Given
+        ToolEntity customTool = new ToolEntity();
+        customTool.setToolId("test#0");
+        customTool.setCallMode(PluginCallModeEnum.CUSTOM.getCode());
+        customTool.setInputSchema("{}");
+        customTool.setOutputSchema("{}");
+
+        when(pluginService.getToolEntity(anyString(), eq("test-project"), eq("test-op-project"), anyString()))
+            .thenReturn(customTool);
+
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "test#0");
+        pluginConfig.put("version_id", "v1");
+
+        // When
+        Map<String, Object> result = irAdapterService.parsePluginConfig(pluginConfig, "test-project", false);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(PluginCallModeEnum.CUSTOM.getCode(), result.get("callMode"));
+    }
+
+    /**
+     * 用例描述：验证 parsePluginConfig 在 callMode 为 null 时默认输出 "api"
+     * 预制条件：Mock pluginService.getToolEntity 返回 callMode=null 的 ToolEntity
+     * 输入参数：pluginConfig.id="test#0"，projectId="test-project"，isAgentPlugin=false
+     * 预期结果：返回的 Map 中 callMode 为 "api"
+     */
+    @Test
+    void testParsePluginConfigShouldDefaultCallModeToApiWhenNull() {
+        // Given
+        ToolEntity tool = new ToolEntity();
+        tool.setToolId("test#0");
+        // callMode is null
+        tool.setInputSchema("{}");
+        tool.setOutputSchema("{}");
+
+        when(pluginService.getToolEntity(anyString(), eq("test-project"), eq("test-op-project"), anyString()))
+            .thenReturn(tool);
+
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "test#0");
+        pluginConfig.put("version_id", "v1");
+
+        // When
+        Map<String, Object> result = irAdapterService.parsePluginConfig(pluginConfig, "test-project", false);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(PluginCallModeEnum.API.getCode(), result.get("callMode"));
+    }
+
+    /**
+     * 用例描述：验证 parsePluginConfig 对自定义插件从 metadata 中提取并输出 componentType
+     * 预制条件：Mock pluginService.getToolEntity 返回 callMode="custom" 且 metadata 含 component_type 的 ToolEntity
+     * 输入参数：pluginConfig.id="test#0"，projectId="test-project"，isAgentPlugin=false
+     * 预期结果：返回的 Map 中 componentType 为 "draw_box"
+     */
+    @Test
+    void testParsePluginConfigShouldOutputComponentTypeForCustomPlugin() {
+        // Given
+        ToolEntity customTool = new ToolEntity();
+        customTool.setToolId("test#0");
+        customTool.setCallMode(PluginCallModeEnum.CUSTOM.getCode());
+        customTool.setMetadata("{\"component_type\":\"draw_box\"}");
+        customTool.setInputSchema("{}");
+        customTool.setOutputSchema("{}");
+
+        when(pluginService.getToolEntity(anyString(), eq("test-project"), eq("test-op-project"), anyString()))
+            .thenReturn(customTool);
+
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "test#0");
+        pluginConfig.put("version_id", "v1");
+
+        // When
+        Map<String, Object> result = irAdapterService.parsePluginConfig(pluginConfig, "test-project", false);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(PluginCallModeEnum.CUSTOM.getCode(), result.get("callMode"));
+        assertEquals("draw_box", result.get("componentType"));
+    }
+
+    /**
+     * 用例描述：验证 parsePluginConfig 在 metadata 为空时不出输出 componentType
+     * 预制条件：Mock pluginService.getToolEntity 返回 callMode="custom" 但 metadata 为 null 的 ToolEntity
+     * 输入参数：pluginConfig.id="test#0"，projectId="test-project"，isAgentPlugin=false
+     * 预期结果：返回的 Map 中不包含 componentType
+     */
+    @Test
+    void testParsePluginConfigShouldNotOutputComponentTypeWhenMetadataIsEmpty() {
+        // Given
+        ToolEntity customTool = new ToolEntity();
+        customTool.setToolId("test#0");
+        customTool.setCallMode(PluginCallModeEnum.CUSTOM.getCode());
+        // metadata is null
+        customTool.setInputSchema("{}");
+        customTool.setOutputSchema("{}");
+
+        when(pluginService.getToolEntity(anyString(), eq("test-project"), eq("test-op-project"), anyString()))
+            .thenReturn(customTool);
+
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "test#0");
+        pluginConfig.put("version_id", "v1");
+
+        // When
+        Map<String, Object> result = irAdapterService.parsePluginConfig(pluginConfig, "test-project", false);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(PluginCallModeEnum.CUSTOM.getCode(), result.get("callMode"));
+        assertNull(result.get("componentType"));
+    }
+
+    /**
+     * 用例描述：验证 parsePluginConfig 在 requestInfo 为 null 时不抛 NPE
+     * 预制条件：Mock pluginService.getToolEntity 返回 requestInfo=null 的 ToolEntity
+     * 输入参数：pluginConfig.id="test#0"，projectId="test-project"，isAgentPlugin=false
+     * 预期结果：方法不抛异常，结果中 url 和 method 为 null
+     */
+    @Test
+    void testParsePluginConfigShouldHandleNullRequestInfoWithoutNpe() {
+        // Given
+        ToolEntity tool = new ToolEntity();
+        tool.setToolId("test#0");
+        tool.setCallMode(PluginCallModeEnum.API.getCode());
+        tool.setInputSchema("{}");
+        tool.setOutputSchema("{}");
+        // requestInfo is null
+
+        when(pluginService.getToolEntity(anyString(), eq("test-project"), eq("test-op-project"), anyString()))
+            .thenReturn(tool);
+
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "test#0");
+        pluginConfig.put("version_id", "v1");
+
+        // When
+        Map<String, Object> result = irAdapterService.parsePluginConfig(pluginConfig, "test-project", false);
+
+        // Then — requestInfo 为 null 时 url 和 method 不在结果中
+        assertNotNull(result);
+        assertNull(result.get("url"));
+        assertNull(result.get("method"));
     }
 
 }

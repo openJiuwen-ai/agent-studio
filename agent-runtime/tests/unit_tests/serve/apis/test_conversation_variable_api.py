@@ -115,7 +115,7 @@ class TestGetConversationVariables:
         mock_client.get = AsyncMock(return_value=raw)
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -141,7 +141,7 @@ class TestGetConversationVariables:
         mock_client.get = AsyncMock(return_value=None)
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -167,7 +167,7 @@ class TestGetConversationVariables:
         mock_client.get = AsyncMock(return_value=raw)
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.error_rsp.ErrorContextBuilder"
@@ -202,7 +202,7 @@ class TestUpdateConversationVariable:
         mock_client.set = AsyncMock()
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -225,10 +225,10 @@ class TestUpdateConversationVariable:
             assert result.name == "var1"
             assert result.value == "new"
             mock_client.set.assert_awaited_once()
-            # 验证 set 调用包含 ex 参数（TTL）
+            # 验证 set 调用包含 duration 参数（SPI TTL 值对象）
             call_kwargs = mock_client.set.call_args[1]
-            assert "ex" in call_kwargs
-            assert call_kwargs["ex"] > 0
+            assert "duration" in call_kwargs
+            assert call_kwargs["duration"].total_seconds > 0
 
     @pytest.mark.asyncio
     async def test_add_new_key(self):
@@ -238,7 +238,7 @@ class TestUpdateConversationVariable:
         mock_client.set = AsyncMock()
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -268,7 +268,7 @@ class TestUpdateConversationVariable:
         mock_client.set = AsyncMock(return_value=None)
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"

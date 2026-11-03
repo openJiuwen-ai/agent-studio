@@ -364,7 +364,7 @@ POST /v1/{project_id}/agent-manager/workflows/chat/{short_code}/conversations/{c
 
 | Parameter | Required | Type | Description |
 |------|------|------|------|
-| inputs | Yes | Map<String,Object> | The user's question, used as input for running the workflow |
+| inputs | Yes | Map<String,Object> | The user's question, used as input for running the workflow; file-type parameters accept directly accessible URLs (image/video subtypes) |
 | plugin_configs | No | Array of PluginConfig | Plugin configuration information |
 
 **PluginConfig**

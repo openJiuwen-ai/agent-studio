@@ -55,6 +55,9 @@ spec:
             # Redis pipeline 事务开关，true 使用标准事务，false 不使用事务
             - name: REDIS_TRANSACTION_ENABLED
               value: 'true'
+            # Redis 连接池上限（common_utils RedisClientManager，IR/模型缓存等共用），代码默认 50
+            - name: REDIS_MAX_CONNECTIONS
+              value: '50'
             # ======== [选填] 提示词优化任务持久化存储（不填则仅存内存） ========
             # STORE_DB_TYPE: mysql/gaussdb/postgresql
             # STORE_DB_HOST: 单机一个IP，主备/集群逗号分隔(GaussDB/PG自动寻主，MySQL仅连首个)

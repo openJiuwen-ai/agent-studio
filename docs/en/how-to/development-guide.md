@@ -8,6 +8,8 @@ This guide covers the various development and extension capabilities of the agen
 - [SSO Remote Auth Configuration](#sso-remote-auth-configuration)
 - [Storage Configuration and Extension](#storage-configuration-and-extension)
 - [Database Password Provider Extension](#database-password-provider-extension)
+- [Custom Plugin Development](#custom-plugin-development)
+- [Redis Adaptation Configuration and Extension](#redis-adaptation-configuration-and-extension)
 
 ---
 
@@ -214,15 +216,37 @@ Client → sends request with auth Token to platform → platform extracts Token
    | User unique identifier | `user_id` | Response body | Yes | `user_info_claims_user_id` |
    | User name | `user_name` | Response body | Yes | `user_info_claims_user_name` |
    | Domain identifier | `domain_id` | Response body | No (defaults to `0` if missing) | `user_info_claims_domain_id` |
+   | Domain name | `domain_name` | Response body | No (defaults to `0` if missing) | `user_info_claims_domain_name` |
    | Project identifier | `project_id` | Response body | No (defaults to `0` if missing) | `user_info_claims_project_id` |
+
+   > **Domain name (`domain_name`) — must be confirmed at deployment**: some platform features (e.g. the team workspace "Add member" picker querying the user list via IAM) exchange the domain name for an IAM domain token, and that domain name must actually exist in IAM.
+   > - If the SSO response carries a domain name: set `user_info_claims_domain_name` to the corresponding field name (default `domain_name`);
+   > - If the SSO response does not carry it: you **must** set `user_info_defaults_domain_name` to the real IAM domain name.
+   >
+   > When unset, the platform falls back to `0` (no NPE; a single WARN is logged by studio-manager), but `0` is normally not a real domain, so the IAM-backed features above will fail and the member list will still be empty. Do not rely on this fallback.
 
    Example: The platform by default extracts the user unique identifier from the `user_id` field in the SSO response. If the field is named `account_id` in the SSO response, configure `user_info_claims_user_id=account_id`. The same applies to other fields; modify the corresponding environment variable when inconsistent with defaults.
 
    > The following configurations generally do not need modification but can be adjusted as needed:
-   > - Values when domain/project identifiers are missing can be modified via `user_info_defaults_domain_id`, `user_info_defaults_project_id` (default `0`)
+   > - Values when domain/project identifiers are missing can be modified via `user_info_defaults_domain_id`, `user_info_defaults_domain_name`, `user_info_defaults_project_id` (default `0`)
    > - Auth-exempt paths via `auth_path_excluded` config (default `/v1/health, /health`), multiple paths comma-separated, supports Ant wildcards (e.g. `/v3/**`)
 
 2. **Configure `auth_sso_validate_url` to enable SSO auth**: Set `auth_sso_validate_url` to the SSO Server's auth interface URL; modify environment variables for any inconsistent items in Step 1; restart studio-manager / studio-runtime services to take effect.
+
+### System User Configuration (Optional)
+
+When `auth_system_user_ids` is configured, if the userId returned by SSO matches the configured value, workspace member checks and role permission checks will be skipped. This is suitable for pipeline/automation scenarios where a fixed identity is used to call management APIs.
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `auth_system_user_ids` | Empty (disabled) | System user ID list, comma-separated. When SSO-returned userId matches, workspace member checks and permission checks are skipped |
+
+> **Operations Security Notice**:
+> - The configured userId will gain **unrestricted access to all existing workspaces**, bypassing all role and permission checks, equivalent to a global administrator
+> - Tokens must be held only by pipeline/automation systems, **not issued to frontend users**. Store in CI/CD secret management or K8s Secret
+> - **Never** set `auth_system_user_ids` to `unknown` (the default value when SSO does not return a userId), otherwise all requests without a userId will gain skip-permission access
+> - System users still need a valid SSO Token (token expiration returns 401; when SSO is unavailable, falls back to 300-second cache, same as regular users), and still pass workspaceId format validation and workspace existence checks
+> - System user operations are recorded by `@OperationLog` and `@DistributedLock`, traceable via logs
 
 ### Rollback and Disable
 
@@ -554,3 +578,199 @@ spec:
 ### Rollback and Disable
 
 Set `DATASOURCE_PASSWORD_PROVIDER_TYPE` (Python side) or `datasource_password_provider_type` (Java side) to `DEFAULT`, or clear the environment variable, and restart the service to roll back to the default local decryption mode.
+
+---
+
+## Redis Adaptation Configuration and Extension
+
+This section describes the agent-studio Redis adaptation layer: connection parameters for the built-in default implementations (Redisson on the Java side, native redis-py on the Python side), and the pluggable assembly of enterprise-custom Redis Providers (for self-built Redis proxies or vendor-specific Redis services). The extension style mirrors the [Storage Configuration and Extension](#storage-configuration-and-extension) and [Database Password Provider Extension](#database-password-provider-extension) sections.
+
+### Overview
+
+Redis access follows a **SPI abstraction + pluggable Provider** architecture on both sides:
+
+- **studio-manager (Java)**: the `common.redis` package in `studio-manager-api` defines the `RedisClient` interface, the `RedisProviderFactory` factory interface and the `RedisExceptionClassifier` exception family; the `common.redis` package in `studio-manager-service` provides the default Redisson implementation, an in-memory implementation (for tests) and the single assembly entry point `RedisProviderResolver`
+- **agent-builder / agent-runtime (Python)**: the `packages/redis_spi` package defines the `RedisProvider` base class and the `RedisClient` protocols; the `packages/redis_native` package provides the default redis-py based implementation (native)
+
+Assembly resolution priority is aligned on both sides: **explicit implementation > auto discovery (ServiceLoader / entry_points) > built-in default**. The default assembly is connection-checked at startup (fail-fast); leaving all Provider settings unset preserves existing behavior.
+
+### Default Assembly (out of the box)
+
+No Provider settings are required by default — only connection parameters.
+
+#### studio-manager configuration (Java)
+
+| Property | Required | Description |
+|---------|----------|-------------|
+| `redis.host` | Yes | Redis host |
+| `redis.port` | Yes | Port |
+| `redis.password` | No | Password |
+| `redis.cluster_node_list` | Cluster mode | Cluster node list (`host:port`, comma separated) |
+| `redis.master` + `redis.sentinel_ports` | Sentinel mode | Sentinel master name and sentinel port list |
+| `redis.connection.pool.size` | No | Connection pool size, default `64` |
+| `redis.connection.minimum.idle.size` | No | Minimum idle connections, default `24` |
+
+#### agent-builder / agent-runtime configuration (Python)
+
+| Environment Variable | Required | Description |
+|---------------------|----------|-------------|
+| `REDIS_HOST` | Yes | Default `127.0.0.1` |
+| `REDIS_PORT` | Yes | Default `6379` |
+| `REDIS_PASSWORD` | No | Password |
+| `REDIS_MODE` | No | `single` (default) / `cluster` / `sentinel` |
+| `REDIS_DATABASE` | No | Default `0` |
+| `REDIS_CLUSTER_NODES` | `cluster` mode | Cluster node list |
+| `REDIS_SENTINEL_MASTER` + `REDIS_SENTINEL_NODES` | `sentinel` mode | Master name and node list |
+| `REDIS_MAX_CONNECTIONS` | No | Max connections, default `50` |
+| `REDIS_SOCKET_TIMEOUT` / `REDIS_SOCKET_CONNECT_TIMEOUT` | No | Timeouts in seconds, default `5.0` |
+| `REDIS_SSL_ENABLED` | No | Default `false` |
+| `REDIS_TRANSACTION_ENABLED` | No | Transactional pipelines, default `true` |
+
+### CUSTOM Mode (custom Provider)
+
+For scenarios that target non-standard Redis (self-built proxies, vendor-specific protocols, etc.).
+
+#### studio-manager configuration (Java)
+
+| Property | Required | Description |
+|---------|----------|-------------|
+| `redis.client-type` | Yes | Set to `custom` (ServiceLoader auto discovery); alternatively skip it and specify `redis.provider-class` explicitly |
+| `redis.provider-class` | No | Fully qualified implementation class name (e.g. `com.acme.NosProviderFactory`) or a ServiceLoader registered name |
+| `redis.provider-config` | No | Provider-specific parameters (inline); the framework does not parse inner fields |
+| `redis.provider-config-file` | No | Provider-specific parameter file path (alternative to inline) |
+
+**Implementation requirements** (choose one, A recommended):
+
+A. Implement `RedisProviderFactory` (recommended) — the framework calls `create(RedisProviderContext)`:
+
+```java
+public class NosProviderFactory implements RedisProviderFactory {
+
+    @Override
+    public RedisClient create(RedisProviderContext context) {
+        // context carries connection parameters, cluster/sentinel settings
+        // and pass-through enterprise-specific parameters
+        return new NosRedisClient(context);
+    }
+}
+```
+
+B. Implement `RedisClient` directly with a no-arg constructor plus a `void init(RedisProviderContext)` method
+C. Legacy seam: keep a `(String host, String password, int port)` three-arg constructor (transitional)
+
+**ServiceLoader registration** (required for `client-type=custom` auto discovery): add
+`META-INF/services/com.openjiuwen.studio.agent.common.redis.spi.RedisProviderFactory` inside the plugin JAR containing the fully qualified implementation class name. A single Provider on the classpath is picked automatically; with multiple Providers, disambiguate via `redis.provider-class`.
+
+> **Difference from storage/password plugins**: storage and password extensions support loading external JARs via `URLClassLoader` (`STORAGE_CUSTOM_CLASSPATH`, etc.); Redis Provider classes must be on the application classpath — place the plugin JAR in the `lib/` directory of the studio-manager deployment (loaded via Spring Boot `loader.path`).
+
+#### agent-builder / agent-runtime configuration (Python)
+
+| Environment Variable | Required | Description |
+|---------------------|----------|-------------|
+| `REDIS_PROVIDER` | Yes | `file_path:ClassName` (e.g. `/opt/cloud/plugins/nos_provider.py:NosProvider`) or an installed module name; `native` is a built-in reserved name that cannot be overridden |
+| `REDIS_PROVIDER_CLASS` | Together with above | Class name (used when `REDIS_PROVIDER` is a module name) |
+| `REDIS_PROVIDER_CONFIG` | No | Provider-specific parameters (JSON object), passed through via `settings.raw_provider_config()` |
+| `REDIS_PROVIDER_CONFIG_FILE` | No | Parameter file path (alternative to inline JSON) |
+
+**Implementation requirements**:
+
+1. Subclass `RedisProvider` (`redis_spi.factory.RedisProvider`)
+2. Implement `async start(settings) -> RedisClient` and `async stop()` — connections must be established lazily inside `start()` (the module must be importable without a Redis connection)
+3. Optionally override `capabilities()` (declare supported optional capability groups) and `native_client()` (expose the underlying client)
+
+```python
+from redis_spi.factory import RedisProvider
+from redis_spi.config import RedisProviderSettings
+
+
+class NosProvider(RedisProvider):
+
+    async def start(self, settings: RedisProviderSettings):
+        # settings.raw_provider_config() passes through
+        # enterprise-specific REDIS_PROVIDER_CONFIG parameters
+        return await build_nos_client(settings)
+
+    async def stop(self) -> None:
+        ...
+```
+
+After assembly a ping fail-fast applies: an unreachable connection raises immediately and the Provider is reclaimed, leaving no half-initialized state.
+
+#### CUSTOM configuration differences: studio-manager vs agent-builder / agent-runtime
+
+| Dimension | studio-manager (Java) | agent-builder / agent-runtime (Python) |
+|-----------|------------------------|----------------------------------------|
+| Type setting | `redis.client-type=custom` | `REDIS_PROVIDER=<module:Class>` |
+| Implementation | `redis.provider-class` (FQCN / ServiceLoader name) | `REDIS_PROVIDER_CLASS` (class name) |
+| Loading mechanism | `ServiceLoader` / classpath reflection | `importlib` dynamic import (file path or module name) |
+| Distribution registration | `META-INF/services` declaration | entry_points registry |
+| Enterprise-specific parameters | `redis.provider-config` (via `RedisProviderContext`) | `REDIS_PROVIDER_CONFIG` (JSON pass-through) |
+| Assembly validation | Resolver failures report all available implementation names | Post-assembly ping fail-fast, Provider reclaimed on failure |
+| Spring injection | Not supported (read config via `RedisProviderContext`) | Not supported (read config via `os.getenv()` / settings) |
+
+> **`REDIS_PROVIDER` supports two forms**:
+> - File path (optionally with a `:ClassName` suffix): `/opt/cloud/plugins/nos_provider` (`.py` appended automatically) or `/opt/cloud/plugins/nos_provider.py:NosProvider`
+> - Module name (must be installed): `my_package.nos_provider` (with `REDIS_PROVIDER_CLASS=NosProvider`)
+
+### Interface Definitions
+
+#### Java interface (common.redis package in studio-manager-api)
+
+```java
+public interface RedisProviderFactory {
+
+    /**
+     * Creates a Redis client instance.
+     *
+     * @param context configuration context (connection parameters +
+     *                cluster/sentinel settings + enterprise-specific pass-through)
+     * @return RedisClient client instance
+     * @throws RedisProviderException on creation failure (missing config, unreachable, etc.)
+     */
+    RedisClient create(RedisProviderContext context);
+}
+```
+
+`RedisClient` (`com.openjiuwen.studio.agent.common.redis.RedisClient`) defines string/hash/list/set commands and `RedisLock` lock semantics; unsupported capabilities raise `CapabilityUnsupportedException`, and access exceptions are normalized by `RedisExceptionClassifier` into the `RedisAccessException` family (connection failure / timeout / wrong type / command error).
+
+#### Python abstract base class (packages/redis_spi)
+
+```python
+class RedisProvider(ABC):
+
+    @abstractmethod
+    async def start(self, settings: RedisProviderSettings) -> RedisClient:
+        """Create and return the client (including pool initialization)."""
+
+    @abstractmethod
+    async def stop(self) -> None:
+        """Reclaim all resources."""
+
+    def capabilities(self) -> list[type]:
+        """Declare supported optional capability groups (Protocol classes in capabilities.py). Empty by default."""
+
+    def native_client(self) -> Any:
+        """Expose the underlying native client (transitional compatibility). Unsupported by default."""
+```
+
+`RedisClient` is a composition of capability `Protocol`s from `redis_spi.protocols` (`KeyCommands` / `StringCommands` / `HashCommands` / `ListCommands` / `SetCommands` / `ScanCommands` / `Pipeline`, extended capabilities in `capabilities.py`).
+
+### Upgrade Notes (from the legacy DATASOURCE_REDIS scheme)
+
+| Change | Old behavior | New behavior | Upgrade action |
+|--------|--------------|--------------|----------------|
+| **Config surface merge** | Intent detection / memory used the separate `DATASOURCE_REDIS_*` vars (could point to a dedicated instance/db) | Merged into the unified `REDIS_*` surface (single `RedisProviderSettings`) | Deployments where `DATASOURCE_REDIS_HOST` differed from `REDIS_HOST` will read empty after the upgrade (values degrade to defaults) — migrate the data into the unified instance, or point `REDIS_*` at the previously dedicated instance |
+| **Builder startup semantics** | Redis ping failure: warn-and-continue | Assembly-time ping fail-fast terminates the process (a half-available chronic failure is better surfaced explicitly, matching runtime) | Builder environments without Redis must deploy one first (Redis is a declared required dependency) or stay on the previous version |
+| **Sentinel node password** | `REDIS_SENTINEL_PASSWORD` (sentinel-node auth, independent of the data-node password; the legacy scheme crypto-decrypted this value) | Modeled as `RedisProviderSettings.sentinel_password` (same env var name); **passed through verbatim, no decryption** | Sentinel clusters with requirepass should verify the variable is carried into the new config surface **and stored in plaintext** — an encrypted value will fail assembly with an explicit connection error (fail-fast, not silent) |
+
+### Rollback and Disable
+
+Remove the Provider-related settings (Java: `redis.client-type` / `redis.provider-class` / `redis.provider-config*`; Python: `REDIS_PROVIDER*`) and restart the service to fall back to the default implementations (Java = Redisson, Python = native).
+
+---
+
+## Custom Plugin Development
+
+When existing HTTP API plugins cannot meet your needs (e.g., direct database access, file processing, canvas interaction, local computation, and other non-HTTP scenarios), the platform supports developing custom Python plugins with Schema-driven forms and custom execution logic.
+
+See the [Custom Plugin Development Guide](./custom-plugin-development-guide.md) for details on plugin structure, Python interface contract, SQL specification, integration methods, and self-check checklist.

@@ -1566,6 +1566,8 @@ public class ControllerManagementService {
             if (repoEntity.getLongTermMemoryStrategies() != null && !repoEntity.getLongTermMemoryStrategies().isEmpty()) {
                 memoryConfigIR.setStrategies(repoEntity.getLongTermMemoryStrategies());
             }
+            // 注入外部后端配置（backend_type/scope_id/instance_id/instance_base_url），api_key 不入 IR
+            irAdapterService.injectExternalMemoryConfig(memoryConfigIR, repoEntity);
         }
         ir.getConfigs().setMemory(memoryConfigIR);
     }

@@ -76,11 +76,6 @@ public class PromptEngineerApiController implements PromptEngineerApi {
     }
 
     @Override
-    public ResponseEntity<PromptBaseInfo> startPromptTask(String projectId, String taskId, String workspaceId) {
-        return ResponseModel.success(promptEngineerService.startPromptTask(projectId, taskId, workspaceId));
-    }
-
-    @Override
     public ResponseEntity<PromptBaseResp> updatePromptTaskDraft(String projectId, String taskId, String workspaceId, PromptTaskCreateReq body) {
         return ResponseModel.success(promptEngineerService.updatePromptTaskDraft(projectId, taskId, workspaceId, body));
     }

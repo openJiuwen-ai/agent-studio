@@ -99,9 +99,17 @@ export class ImportSkillModalComponent {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
+      // 防竞态：await 期间用户可能点 × 移除或重选了别的文件，
+      // 若 selectedFile 已不再指向本次解析的文件，则丢弃本次结果，避免把已移除文件的解析结果写回状态。
+      if (this.selectedFile !== file) {
+        return;
+      }
       const unzipped = unzipSync(new Uint8Array(arrayBuffer));
       this.unZip(unzipped);
     } catch (error) {
+      if (this.selectedFile !== file) {
+        return;
+      }
       this.importZipErrorTip = this.i18n.transform('skill.import.result.null');
       this.isShowResult = true;
     }
@@ -144,6 +152,7 @@ export class ImportSkillModalComponent {
     if (this.selectedFile) {
       this.selectedFile = undefined;
     }
+    this.fileList = [];
     this.isShowResult = false;
     this.skillInfo = { name: '', description: '' };
   }
@@ -179,15 +188,84 @@ export class ImportSkillModalComponent {
 
   private parseSkillMd(content: string): { name: string; description: string } {
     const skill = { name: '', description: '' };
-    const lines = content.split('---')[1]?.trim().split('\n') || [];
+    // 查找 frontmatter：起始 --- 在文件开头，结束 --- 必须在行首（前面是换行符）
+    // 避免匹配 block scalar 内容中的缩进 ---
+    if (!content.startsWith('---')) {
+      return skill;
+    }
+    let endFront = -1;
+    let searchFrom = 3;
+    while (true) {
+      const pos = content.indexOf('---', searchFrom);
+      if (pos === -1) break;
+      if (pos > 0 && content[pos - 1] === '\n') {
+        endFront = pos;
+        break;
+      }
+      searchFrom = pos + 3;
+    }
+    if (endFront === -1) return skill;
+    const lines = content.substring(3, endFront).trim().split('\n');
 
-    for (const line of lines) {
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
       const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        i++;
+        continue;
+      }
+      // 跳过缩进行（非顶层 key）
+      if (line.charAt(0) === ' ' || line.charAt(0) === '\t') {
+        i++;
+        continue;
+      }
+
       if (trimmed.startsWith('name:')) {
         skill.name = trimmed.slice(5).trim();
       } else if (trimmed.startsWith('description:')) {
-        skill.description = trimmed.slice(12).trim();
+        let value = trimmed.slice(12).trim();
+        // YAML block scalar: | (literal) 或 > (folded)，支持 chomping indicator (- +)
+        const isBlockScalar = value === '|' || value === '>' || value === '|-' || value === '|+' || value === '>-' || value === '>+';
+        if (isBlockScalar) {
+          const isFolded = value.startsWith('>');
+          const blockLines: string[] = [];
+          i++;
+          let firstLine = true;
+          let lastWasBlankLine = false;
+          while (i < lines.length) {
+            const bl = lines[i];
+            // 去除行尾 \r 以兼容 Windows CRLF 换行
+            const blTrimmed = bl.replace(/\r$/, '');
+            // 空行属于 block 内容（段落分隔）
+            if (blTrimmed.length === 0) {
+              i++;
+              if (blockLines.length > 0) {
+                blockLines.push('\n');
+              }
+              lastWasBlankLine = true;
+              continue;
+            }
+            // 缩进行属于 block scalar
+            if (bl.charAt(0) === ' ' || bl.charAt(0) === '\t') {
+              if (!firstLine && !lastWasBlankLine) {
+                // folded 模式换行合并为空格，但空行后不再追加空格（YAML folded 语义）
+                blockLines.push(isFolded ? ' ' : '\n');
+              }
+              blockLines.push(bl.trim());
+              firstLine = false;
+              lastWasBlankLine = false;
+              i++;
+            } else {
+              break;
+            }
+          }
+          skill.description = blockLines.join('').trim();
+          continue;
+        }
+        skill.description = value;
       }
+      i++;
     }
     return skill;
   }
@@ -197,29 +275,109 @@ export class ImportSkillModalComponent {
     for (const [originalPath, buffer] of Object.entries(unzipped)) {
       const content = new TextDecoder().decode(buffer as ArrayBuffer);
       const standardizedPath = this.normalizePath(originalPath);
-
       fileMap[standardizedPath] = content;
     }
     const rootFiles = Object.keys(fileMap);
-    const hasSingleFolder = this.hasSingleFolder(rootFiles);
-    const folders = rootFiles.filter(path => path.includes('/'));
-    this.isShowResult = true;
-    if (!hasSingleFolder) {
+
+    // isShowResult 语义：成功解析出 SKILL.md 且 frontmatter 含 name/description 时置 true；
+    // 错误分支同样保持 true，但清空 skillInfo，以便模板 @else 分支渲染 importZipErrorTip
+    // （importZipErrorTip 仅在 @if (isShowResult) 区块内渲染，见模板）。
+    this.isShowResult = false;
+
+    // 与后端 validateDirectoryStructure 的 equalsIgnoreCase 对齐：SKILL.md 判断大小写不敏感
+    const SKILL_MD_LOWER = 'skill.md';
+    const findSkillMdKey = (predicate: (path: string) => boolean) =>
+      rootFiles.find(p => {
+        const lower = p.toLowerCase();
+        return predicate(lower);
+      });
+
+    // 策略1：根级 SKILL.md（平铺结构）
+    // 与后端对齐：根级 SKILL.md 存在即进入平铺分支。但如果根级 SKILL.md 不带 frontmatter
+    //（name/description 为空），且子目录有带 frontmatter 的 SKILL.md，则回落到策略2
+    const rootSkillMdKey = findSkillMdKey(p => p === SKILL_MD_LOWER);
+    if (rootSkillMdKey) {
+      const rootParsed = this.parseSkillMd(fileMap[rootSkillMdKey]);
+      const rootHasFrontmatter = rootParsed.name?.trim() && rootParsed.description?.trim();
+      // 检查子目录是否有带 frontmatter 的 SKILL.md
+      const nestedSkillMdKeys = rootFiles.filter(p => {
+        const lower = p.toLowerCase();
+        return lower !== SKILL_MD_LOWER && lower.endsWith('/' + SKILL_MD_LOWER);
+      });
+      const hasNestedWithFrontmatter = nestedSkillMdKeys.some(key => {
+        const parsed = this.parseSkillMd(fileMap[key]);
+        return parsed.name?.trim() && parsed.description?.trim();
+      });
+
+      if (rootHasFrontmatter) {
+        // 根级带 frontmatter：禁止子目录再出现带 frontmatter 的 SKILL.md
+        if (hasNestedWithFrontmatter) {
+          this.skillInfo = { name: '', description: '' };
+          this.importZipErrorTip = this.i18n.transform('skill.import.result.valid.tip1');
+          this.isShowResult = true;
+          return;
+        }
+        this.skillInfo = rootParsed;
+        this.isShowResult = true;
+        return;
+      } else if (!hasNestedWithFrontmatter) {
+        // 根级不带 frontmatter，子目录也没有带 frontmatter 的 SKILL.md
+        // 仍按平铺处理，展示解析结果（空的 name/description → 报"解析结果为空"）
+        this.skillInfo = rootParsed;
+        if (!rootParsed.name?.trim() || !rootParsed.description?.trim()) {
+          this.importZipErrorTip = this.i18n.transform('skill.import.result.null');
+        }
+        this.isShowResult = true;
+        return;
+      }
+      // 根级不带 frontmatter 但子目录有带 frontmatter 的 → 回落到策略2
+    }
+
+    // 策略2：单文件夹结构 {folderName}/SKILL.md
+    // 与后端情况2对齐：优先用带 frontmatter 的候选消歧；若全部不带 frontmatter，用全部候选
+    // 这样单文件夹结构下 SKILL.md 缺字段时仍能选中并展示解析结果（空的 name/description → 报"解析结果为空"）
+    const allCandidates = rootFiles.filter(p => p.toLowerCase().endsWith('/' + SKILL_MD_LOWER));
+    const frontmatterCandidates = allCandidates.filter(key => {
+      const parsed = this.parseSkillMd(fileMap[key]);
+      return parsed.name?.trim() && parsed.description?.trim();
+    });
+    const skillMdCandidates = frontmatterCandidates.length > 0 ? frontmatterCandidates : allCandidates;
+    if (skillMdCandidates.length !== 1) {
+      this.skillInfo = { name: '', description: '' };
       this.importZipErrorTip = this.i18n.transform('skill.import.result.valid.tip1');
+      this.isShowResult = true;
       return;
     }
-
-    const folderName = folders[0]?.split('/')?.[0];
-    const skillMdPath = `${folderName}/SKILL.md`;
-
-    if (!fileMap[skillMdPath]) {
-      this.importZipErrorTip = this.i18n.transform('skill.import.result.valid.tip2');
+    const skillMdPath = skillMdCandidates[0];
+    const folderName = skillMdPath.slice(0, -('/' + SKILL_MD_LOWER).length);
+    // SKILL.md 必须直接位于该子目录根级，不允许 a/b/SKILL.md（后端校验 {name}/SKILL.md 规范）
+    if (folderName.includes('/')) {
+      this.skillInfo = { name: '', description: '' };
+      this.importZipErrorTip = this.i18n.transform('skill.import.result.valid.tip1');
+      this.isShowResult = true;
       return;
     }
-    this.skillInfo = this.parseSkillMd(fileMap[skillMdPath]);
-    if (!this.skillInfo?.name?.trim() || !this.skillInfo?.description?.trim()) {
+    // 根级非空目录唯一性：含 SKILL.md 的目录必须是根级唯一的非空目录（与后端情况2对齐）
+    // 否则如 assets/ + my-skill/SKILL.md 会通过前端预览，但后端以 FILES_NUMBER_DOES_NOT_MATCH 拒绝
+    const rootLevelDirs = new Set(
+      rootFiles
+        .filter(p => p.includes('/'))
+        .map(p => p.split('/')[0])
+    );
+    for (const dir of rootLevelDirs) {
+      if (dir !== folderName) {
+        this.skillInfo = { name: '', description: '' };
+        this.importZipErrorTip = this.i18n.transform('skill.import.result.valid.tip1');
+        this.isShowResult = true;
+        return;
+      }
+    }
+    const parsed = this.parseSkillMd(fileMap[skillMdPath]);
+    this.skillInfo = parsed;
+    if (!parsed.name?.trim() || !parsed.description?.trim()) {
       this.importZipErrorTip = this.i18n.transform('skill.import.result.null');
     }
+    this.isShowResult = true;
   }
 
   private normalizePath(rawPath: string): string {
@@ -227,11 +385,6 @@ export class ImportSkillModalComponent {
     normalized = normalized.replace(/\/+/g, '/');
     normalized = normalized.replace(/\/+$/, '');
     return normalized;
-  }
-
-  private hasSingleFolder(zipFiles: string[]): boolean {
-    const rootFolders = new Set(zipFiles.map(file => file.split('/')[0]));
-    return rootFolders.size === 1;
   }
 
   handleUploadChange(fileItem: any): void {
@@ -245,6 +398,7 @@ export class ImportSkillModalComponent {
     this.fileList = [fileItem.file];
     if (fileItem.file.name.lastIndexOf('.zip') < 0) {
       this.onAddItemFailed({ validResults: ['type'] });
+      this.onRemoveItems();
       return;
     }
     this.onAddFileSuccess(fileItem.file.originFileObj);

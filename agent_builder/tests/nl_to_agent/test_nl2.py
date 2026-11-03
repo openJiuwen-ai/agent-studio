@@ -27,6 +27,10 @@ def _setup_nl2_mocks():
         manager_mock.StateManager = MagicMock
         sys.modules["jiuwen.serve.controllers.execution.manager"] = manager_mock
 
+    if "model_service" not in sys.modules:
+        ms_mock = types.ModuleType("model_service")
+        sys.modules["model_service"] = ms_mock
+
 
 _setup_nl2_mocks()
 
@@ -38,6 +42,7 @@ from agent_builder.nl_to_agent.nl2 import (
     N2LRequestBody,
     SSEEvent,
     _error_sse_generator,
+    _generate,
     _generate_optimize_task_job_id,
     _n2l_json_wapper,
 )
@@ -80,12 +85,31 @@ class TestN2LRequestBody:
     """N2LRequestBody 模型测试"""
 
     @staticmethod
+    def test_required_model_missing_raises():
+        """缺少必填 model 字段时抛出 ValidationError"""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            N2LRequestBody(query="test")
+
+    @staticmethod
     def test_default_none_for_optional_fields():
         """可选字段默认为 None"""
-        body = N2LRequestBody(query="test")
-        assert body.model is None
+        from agent_builder.nl_to_agent.nl2 import N2LModel
+
+        body = N2LRequestBody(query="test", model=N2LModel(modelName="model1"))
         assert body.resource is None
         assert body.conversationId is None
+
+    @staticmethod
+    def test_model_name_required_raises():
+        """modelName 为必填字段，缺失时抛出 ValidationError"""
+        from pydantic import ValidationError
+
+        from agent_builder.nl_to_agent.nl2 import N2LModel
+
+        with pytest.raises(ValidationError):
+            N2LModel()
 
     @staticmethod
     def test_assignment_works():
@@ -302,65 +326,166 @@ class TestN2lJsonWapper:
         set_payload = mock_request_json.set.call_args[0][0]
         assert set_payload["conversationId"] == "conv1"
 
+    @patch("agent_builder.nl_to_agent.nl2.request_json")
+    @staticmethod
+    def test_extension_null_not_crash(self, mock_request_json):
+        """model.extension 显式为 null 时不抛 AttributeError"""
+        mock_request_json.get.return_value = {}
+        mock_request_json.set = MagicMock()
+        req_json = {
+            "model": {
+                "modelName": "test-model",
+                "extension": None,
+            }
+        }
+        result = _n2l_json_wapper(
+            "proj1", "agents", "conv1", req_json, TestN2lJsonWapper._make_mock_request()
+        )
+        assert result["modelInfo"]["headers"]["auth_id"] is None
+        assert result["modelInfo"]["headers"]["deployment_id"] == ""
+
 
 class TestErrorSseGenerator:
-    """_error_sse_generator 函数测试"""
+    """_error_sse_generator COM-03 五字段契约测试（P5-BLD-01）"""
 
     @staticmethod
-    def test_yields_start_error_end_events():
-        """依次产生 START、error、END 事件"""
-        results = list(_error_sse_generator(Exception("test error"), "task1"))
-        assert len(results) == 3
-        start_data = json.loads(results[0][len("data: "):].strip())
-        assert start_data["event"] == "START"
-        error_data = json.loads(results[1][len("data: "):].strip())
-        assert error_data["event"] == "error"
-        assert "code" in error_data["data"]
-        assert "message" in error_data["data"]
-        end_data = json.loads(results[2][len("data: "):].strip())
-        assert end_data["event"] == "END"
+    def _set_ctx(rid="rid-test", lang="zh-cn"):
+        from agent_builder.adapter.request_context_bridge import (
+            RequestContext,
+            _request_ctx,
+        )
+        return _request_ctx.set(RequestContext(headers={"x-language": lang}, request_id=rid))
 
     @staticmethod
-    def test_start_event_contains_task_id():
+    def _reset_ctx(token):
+        from agent_builder.adapter.request_context_bridge import _request_ctx
+        _request_ctx.reset(token)
+
+    @staticmethod
+    def _error_data(results):
+        return json.loads(results[1][len("data: "):].strip())["data"]
+
+    def test_yields_start_error_no_end(self):
+        """COM-03 唯一终态：START + error,无 END"""
+        token = self._set_ctx()
+        try:
+            results = list(_error_sse_generator(Exception("SECRET-in-msg"), "task1"))
+        finally:
+            self._reset_ctx(token)
+        assert len(results) == 2
+        assert json.loads(results[0][6:].strip())["event"] == "START"
+        assert json.loads(results[1][6:].strip())["event"] == "error"
+
+    def test_start_event_contains_task_id(self):
         """START 事件包含 conversationId"""
-        results = list(_error_sse_generator(Exception("err"), "my_task"))
-        start_data = json.loads(results[0][len("data: "):].strip())
-        assert start_data["conversationId"] == "my_task"
+        token = self._set_ctx()
+        try:
+            results = list(_error_sse_generator(Exception("err"), "my_task"))
+        finally:
+            self._reset_ctx(token)
+        start = json.loads(results[0][len("data: "):].strip())
+        assert start["conversationId"] == "my_task"
 
-    @staticmethod
-    def test_error_event_with_jiuwen_exception():
-        """JiuWenBaseException 的错误码和消息被正确提取"""
-        from jiuwen.common.exception.base import JiuWenBaseException
+    def test_plain_exception_five_fields_internal(self):
+        """普通异常→13100004 五字段 + 原始正文不外露"""
+        token = self._set_ctx()
+        try:
+            results = list(_error_sse_generator(ValueError("SECRET-path/token"), "task1"))
+        finally:
+            self._reset_ctx(token)
+        data = self._error_data(results)
+        assert data["error_code"] == "openjiuwen.13100004"
+        for f in ("error_msg", "error_reason", "error_suggestion", "request_id"):
+            assert data.get(f), f"{f} non-empty"
+        assert data["request_id"] == "rid-test"
+        assert "SECRET-path/token" not in json.dumps(data)
 
+    def test_100029_maps_to_13100014_deepseek(self):
+        """100029→13100014 + DeepSeek suggestion（catalog/i18n 映射）"""
+        from agent_builder.adapter.exception_bridge import JiuWenBaseException
+        exc = JiuWenBaseException(error_code=100029, message="Model response error: foo")
+        token = self._set_ctx()
+        try:
+            results = list(_error_sse_generator(exc, "task1"))
+        finally:
+            self._reset_ctx(token)
+        data = self._error_data(results)
+        assert data["error_code"] == "openjiuwen.13100014"
+        assert "DeepSeek-V3" in data.get("error_suggestion", "")
+        assert "foo" not in json.dumps(data)  # 原始 message 不外露
+
+    def test_unregistered_code_fail_closed(self):
+        """未登记码 12345→13100004（fail-closed,不透传裸码）"""
+        from agent_builder.adapter.exception_bridge import JiuWenBaseException
         exc = JiuWenBaseException(error_code=12345, message="custom error")
-        results = list(_error_sse_generator(exc, "task1"))
-        error_data = json.loads(results[1][len("data: "):].strip())
-        assert error_data["data"]["code"] == "12345"
-        assert "custom error" in error_data["data"]["message"]
+        token = self._set_ctx()
+        try:
+            results = list(_error_sse_generator(exc, "task1"))
+        finally:
+            self._reset_ctx(token)
+        data = self._error_data(results)
+        assert data["error_code"] == "openjiuwen.13100004"
+        assert "12345" not in data["error_code"]
+        assert "custom error" not in json.dumps(data)
+
+
+class TestGeneratePreStreamFailure:
+    """P5-BLD-02: 建流前失败（await coroutine/__aiter__）→ START + canonical error,
+    无 UnboundLocalError 二次异常（data_task 预初始化 None + finally 条件取消）。
+    """
 
     @staticmethod
-    def test_error_event_with_plain_exception():
-        """普通异常使用默认错误码 500"""
-        results = list(_error_sse_generator(ValueError("bad value"), "task1"))
-        error_data = json.loads(results[1][len("data: "):].strip())
-        assert error_data["data"]["code"] == "500"
+    def _set_ctx():
+        from agent_builder.adapter.request_context_bridge import (
+            RequestContext,
+            _request_ctx,
+        )
+        return _request_ctx.set(RequestContext(headers={"x-language": "zh-cn"}, request_id="rid-bld02"))
 
     @staticmethod
-    def test_error_event_with_model_response_error_code():
-        """错误码 100029 且包含 Model response error 时使用特殊消息"""
-        exc = Exception("model error")
-        exc.error_code = 100029
-        exc.message = "Model response error occurred"
-        results = list(_error_sse_generator(exc, "task1"))
-        error_data = json.loads(results[1][len("data: "):].strip())
-        assert "DeepSeek-V3" in error_data["data"]["message"]
+    def _reset_ctx(token):
+        from agent_builder.adapter.request_context_bridge import _request_ctx
+        _request_ctx.reset(token)
 
-    @staticmethod
-    def test_end_event_contains_task_id():
-        """END 事件包含 conversationId"""
-        results = list(_error_sse_generator(Exception("err"), "my_task"))
-        end_data = json.loads(results[2][len("data: "):].strip())
-        assert end_data["conversationId"] == "my_task"
+    @pytest.mark.asyncio
+    async def test_await_coroutine_failure_no_second_exception(self):
+        """await coroutine 失败 → START + canonical error,无 UnboundLocalError"""
+        async def _failing_coro():
+            raise RuntimeError("SECRET-await-coro-fail")
+        token = self._set_ctx()
+        raised, events = None, []
+        try:
+            async for chunk in _generate(_failing_coro(), "task-bld02"):
+                events.append(chunk)
+        except BaseException as e:  # noqa: BLE001
+            raised = e
+        finally:
+            self._reset_ctx(token)
+        assert raised is None, f"建流前失败不应二次异常: {raised!r}"
+        assert len(events) == 2, f"期望 START+error 2 事件, got {len(events)}"
+        assert b"SECRET-await-coro-fail" not in events[1], "原始正文不得外露"
+
+    @pytest.mark.asyncio
+    async def test_aiter_failure_no_second_exception(self):
+        """__aiter__ 失败 → START + canonical error,无 UnboundLocalError"""
+        class _FailingAiter:
+            def __init__(self):
+                self.error = RuntimeError("SECRET-aiter-fail")
+
+            def __aiter__(self):
+                raise self.error
+        token = self._set_ctx()
+        raised, events = None, []
+        try:
+            async for chunk in _generate(_FailingAiter(), "task-bld02"):
+                events.append(chunk)
+        except BaseException as e:  # noqa: BLE001
+            raised = e
+        finally:
+            self._reset_ctx(token)
+        assert raised is None, f"建流前失败不应二次异常: {raised!r}"
+        assert len(events) == 2, f"期望 START+error 2 事件, got {len(events)}"
+        assert b"SECRET-aiter-fail" not in events[1], "原始正文不得外露"
 
 
 class TestAgentTypeMap:

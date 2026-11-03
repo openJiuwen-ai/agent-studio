@@ -130,25 +130,6 @@
             <artifactId>HikariCP</artifactId>
         </dependency>
         <dependency>
-            <artifactId>redisson</artifactId>
-            <groupId>org.redisson</groupId>
-            <version>${redisson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>snakeyaml</artifactId>
-                    <groupId>org.yaml</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-databind</artifactId>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>jackson-dataformat-yaml</artifactId>
-                    <groupId>com.fasterxml.jackson.dataformat</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>

@@ -84,6 +84,7 @@ import { AggregationModalComponent } from '../components/aggregation-modal/aggre
 import { BranchModalComponent } from '../components/branch-modal/branch-modal.component';
 import { ChildFlowModalComponent } from '../components/child-flow-modal/child-flow-modal.component';
 import { CodeModalComponent } from '../components/code-modal/code-modal.component';
+import { TemplateTransformModalComponent } from '../components/template-transform-modal/template-transform-modal.component';
 import { ControllerModalComponent } from '../components/controller-modal/controller-modal.component';
 import { DialogHalfmodalComponent } from '../components/dialog-halfmodal/dialog-halfmodal.component';
 import { EndModalComponent } from '../components/end-modal/end-modal.component';
@@ -108,6 +109,7 @@ import { QuestionerModalComponent } from '../components/questioner-modal/questio
 import { RunModalComponent } from '../components/run-modal/run-modal.component';
 import { SetVariableModalComponent } from '../components/set-variable-modal/set-variable-modal.component';
 import { SqlModalComponent } from '../components/sql-modal/sql-modal.component';
+import { HttpModalComponent } from '../components/http-modal/http-modal.component';
 import { StartModalComponent } from '../components/start-modal/start-modal.component';
 import { UpdateNodeNameModalComponent } from '../components/update-node-name-modal/update-node-name-modal.component';
 import { IRefIndex, NodeUtils } from '../components/utils';
@@ -232,6 +234,7 @@ const NodeMap = {
   Mcp: MCPServiceModalComponent,
   Branch: BranchModalComponent,
   Code: CodeModalComponent,
+  TemplateTransform: TemplateTransformModalComponent,
   IntentDetection: IntentModalComponent,
   ComplexIntentDetection: IntentModalComponent,
   Questioner: QuestionerModalComponent,
@@ -251,6 +254,7 @@ const NodeMap = {
   StructuredMessagesException: ExceptionModalComponent,
   ParamExtraction: ParamExtractionModalComponent,
   StreamTransform: StreamTransformModalComponent,
+  Http: HttpModalComponent,
 };
 
 export interface ICreateNodeConfig {
@@ -361,6 +365,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public conversationId = uuidV4();
 
   public showGlobalConfigDrawer = false;
+  private pendingMemoryRenames: { oldRef: string; newRef: string }[] = [];
   public showLogDrawer = false;
   public showPluginDrawer = false;
   public showChildFlowDrawer = false;
@@ -855,6 +860,25 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             {name, type, trigger_id, prompt, hook_url},
           ];
         }
+        if (type === 'POLLING') {
+          const is_has = this.triggerAdded.list.some(
+            (item) => item.trigger_id === trigger_id,
+          );
+          if (is_has) {
+            for (let i = 0; i < this.triggerAdded.list.length; i++) {
+              const cur = this.triggerAdded.list[i];
+              if (cur?.trigger_id === trigger_id) {
+                this.triggerAdded.list[i] = triggerAdded;
+                break;
+              }
+            }
+          } else {
+            this.triggerAdded.list = [
+              ...this.triggerAdded.list,
+              {name, type, trigger_id, poll_url: triggerAdded.poll_url, poll_interval_seconds: triggerAdded.poll_interval_seconds, prompt, invocation},
+            ];
+          }
+        }
       });
 
     this.appFlowServ
@@ -1280,7 +1304,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
     this.modelManagementService
-      .getAvailableModelList({with_router: true, publish_status: 'online'})
+      // model_type 必须显式传入（与 llm-select 默认拉取参数一致）：后端缺省仅返回 LLM，
+      // 会导致 llm-modal 的 isVisionModel 对 IMAGE-TO-TEXT（视觉）模型恒为 false，
+      // 大模型节点的「视觉理解输入」引用区无法渲染。
+      .getAvailableModelList({with_router: true, publish_status: 'online', model_type: 'LLM,IMAGE-TO-TEXT'})
       .then((res) => {
         this.availableModelList = res.data.map((item: any) => ({
           ...item,
@@ -1355,14 +1382,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
-    // 节点抽屉关闭并触发保存时候
-    this.appFlowServ.nodeModalCloseMonitor$()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(async (nodeData: any) => {
-        if (this.type !== 'multi' && nodeData?.id && !this.isFlowReadonly) {
-          this.saveStatusMap.set(nodeData?.id, true);
-        }
-      })
+    // 说明：节点「保存中」标记 saveStatusMap 不再在“抽屉关闭”时置位。
+    // 关闭先置位、仅靠保存成功复位；若关闭时保存被校验拦截（未发出保存事件），
+    // 标记将永久为 true，导致 openNodeModal 永久跳过、节点无法再次打开。
+    // 现改为与保存生命周期对齐：同步预处理完成、进入 try/finally 保护后才置位
+    // （见下方 nodeSaveMonitor$），预处理抛错/早退时标记未置位不泄漏，
+    // 置位后由 finally 统一复位。
 
     this.appFlowServ
       .nodeSaveMonitor$()
@@ -1378,10 +1403,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         let {nodeData = {}} = ref || {};
 
-        // 保存
+        // 同步预处理阶段不置位任何标记：此段抛错或提前 return 时标记尚未置位，
+        // 不会泄漏；“保存中”与确认 loading 的置位下移到预处理完成、进入 try 之前
         this.exceptionBranchHandler(nodeData);
         nodeData = NodeUtils.traversalNodeSource(nodeData);
-        this.nodeServ.setIsConfirmLoading(true);
         this.isResetNodeHeightMap = true;
         // 高级意图节点与其容器节点的连接线是异步创建的，避免多次调用updateFlowData导致数据不一致
         let isSkipUpdateFlow = false;
@@ -1400,39 +1425,53 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           this.createIntentContainerNode(nodeData.id);
           let bodyParams;
           setTimeout(async () => {
-            if (isContainerNode) {
-              // 若已存在意图动作配置节点，需异步更新DSL
-              bodyParams = FlowUtils.updateContainerNodeDsl(
-                this.graph,
-                this.workflowDetail,
-                nodeData,
-                containerNodeId,
-                this.getNodeInfoById.bind(this),
-                this.appFlowServ,
-              );
-            }
-            this.handleAdvancedIntentConns(nodeData.id);
-            this.updateRef();
-            await this.updateFlowData(
-              {
-                isDrag: false,
-                nodeInfo: nodeData,
-                successCb: () => {
-                  if (isContainerNode) {
-                    this.appFlowServ.setAppRefs(this.ref_workflows);
-                    FlowUtils.syncContainerInfoToGraph(
-                      this.graph,
-                      bodyParams,
-                      containerNodeId,
-                    );
+            // 高级意图节点的容器 DSL 更新、连接线重建与真正的 updateFlowData 均在本异步分支内串行执行，
+            // 任一环节在 await 前抛错（updateContainerNodeDsl / handleAdvancedIntentConns / updateRef）
+            // 都会跳过下方复位逻辑。故用 try/finally 兜底：无论成功、失败还是异常，
+            // 都必须复位“保存中”标记，否则 saveStatusMap 永久为 true、节点无法再次打开。
+            try {
+              if (isContainerNode) {
+                // 若已存在意图动作配置节点，需异步更新DSL
+                bodyParams = FlowUtils.updateContainerNodeDsl(
+                  this.graph,
+                  this.workflowDetail,
+                  nodeData,
+                  containerNodeId,
+                  this.getNodeInfoById.bind(this),
+                  this.appFlowServ,
+                );
+              }
+              this.handleAdvancedIntentConns(nodeData.id);
+              this.updateRef();
+              await this.updateFlowData(
+                {
+                  isDrag: false,
+                  nodeInfo: nodeData,
+                  successCb: () => {
+                    if (isContainerNode) {
+                      this.appFlowServ.setAppRefs(this.ref_workflows);
+                      FlowUtils.syncContainerInfoToGraph(
+                        this.graph,
+                        bodyParams,
+                        containerNodeId,
+                      );
+                    }
+                  },
+                  faildCb: () => {
+
                   }
                 },
-                faildCb: () => {
-
-                }
-              },
-              bodyParams,
-            );
+                bodyParams,
+              );
+            } finally {
+              // 高级意图节点(isAdvancedModeNew / ComplexIntentDetection)的真实保存于本异步分支
+              // 结束后才真正完成：在此复位“保存中”标记（外层 finally 因 isSkipUpdateFlow
+              // 提前 return 时已复位确认 loading，此处不可再延迟复位——若延迟到后续其他节点
+              // 保存期间，会错误清除后者的确认 loading；saveStatusMap 由本分支独占复位）
+              if (this.type !== 'multi' && nodeData?.id) {
+                this.saveStatusMap.set(nodeData.id, false);
+              }
+            }
           });
         }
         // 普通模式
@@ -1463,6 +1502,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           if (exceedsList.length) {
             const exceedsStr = exceedsList.join(',')
             MessageComponent.showError(`绑定子智能体【${exceedsStr}】达到最大深度限制，请删除后重试`, 5000);
+            // 深度校验早退发生在置位之前，两个标记均未置位，无泄漏，无需局部复位
             return
           }
           const controller_node: any = this.workflowDetail.details.nodes.find(contr_item => contr_item.type === 'Controller');
@@ -1477,6 +1517,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.updateNodeData(nodeData);
         }
+        // 同步预处理全部完成，进入 try/finally 保护后再置位：“保存中”与确认 loading。
+        // 置位前的抛错/早退分支标记未置位、不会泄漏；置位后的任何路径（含异常）
+        // 都由 finally 统一复位，节点不会永久无法打开
+        if (this.type !== 'multi' && nodeData?.id) {
+          this.saveStatusMap.set(nodeData.id, true);
+        }
+        this.nodeServ.setIsConfirmLoading(true);
         try {
           if (isSkipUpdateFlow) {
             return;
@@ -1510,7 +1557,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         } finally {
           this.nodeServ.setIsConfirmLoading(false);
-          if (this.type !== 'multi' && nodeData?.id) {
+          // 高级意图节点(isAdvancedModeNew)：真实保存在上方 setTimeout 中异步执行，此刻尚未结束，
+          // saveStatusMap 由该异步分支在 updateFlowData 完成后复位，避免过早解锁导致可重开。
+          if (!isSkipUpdateFlow && this.type !== 'multi' && nodeData?.id) {
             setTimeout(() => {
               this.saveStatusMap.set(nodeData?.id, false);
             });
@@ -2234,6 +2283,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.appFlowServ.setNodeClicked(EHalfmodalType.GLOBAL);
   }
 
+  public onMemoryRenamed(renames: { oldRef: string; newRef: string }[]): void {
+    this.pendingMemoryRenames = renames;
+  }
+
   public onGlobalConfigsChange(configs: IFlowConfigs): void {
     FlowUtils.updateRefsAfterConfigsChange(
       configs,
@@ -2241,7 +2294,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.graph,
       this.updateRefType,
       this,
+      this.pendingMemoryRenames,
     );
+    this.pendingMemoryRenames = [];
     if (configs.default_model && configs.default_model_switch) {
       const {model_deployment_id, model_name, model_type, model} =
         configs.default_model;
@@ -4897,6 +4952,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (opKey && ['z', 'y'].includes(event.key)) {
+      // Skip canvas undo/redo when focus is in an editable control, let the browser handle it natively
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
       // undo
       if (opKey && event.key === 'z') {
         this.undo();

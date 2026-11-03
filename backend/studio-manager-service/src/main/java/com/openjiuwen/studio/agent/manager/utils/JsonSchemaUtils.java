@@ -19,6 +19,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -87,7 +88,7 @@ public class JsonSchemaUtils {
         int depth = node.getDepth();
         if (depth > maxDepthLimit) {
             throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                "The parameter nesting depth cannot exceed " + maxDepthLimit + ".");
+                List.of("The parameter nesting depth cannot exceed " + maxDepthLimit + "."));
         }
 
         // 节点缺失或类型非法，返回false
@@ -152,7 +153,8 @@ public class JsonSchemaUtils {
         // Map，子节点在 additionalProperties 中
         sonNode = node.getNode().get(MAP_KEY);
         if (!Objects.isNull(sonNode)) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
+                List.of("additionalProperties is not supported."));
         }
 
         // Object，子节点列表在 properties 中，需要遍历出具体子节点 innerNode
@@ -178,16 +180,23 @@ public class JsonSchemaUtils {
             return true;
         }
         throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-            "The number of parameters cannot exceed " + maxPropLimit + ".");
+            List.of("The number of parameters cannot exceed " + maxPropLimit + "."));
     }
 
     /**
-     * 判断当前字段类型，是否不属于JsonSchema类型
+     * 判断当前字段类型，是否不属于JsonSchema类型。
+     *
+     * FEAT-073：file/<子类型>（如 file/image、file/video、file/default）为插件
+     * File 类型入参的合法类型标识，与开始节点 File 参数、运行时引擎的识别
+     * 体系三方一致，按前缀放行。
      *
      * @param type 字段类型
      * @return true：不属于JsonSchema类型，false：属于JsonSchema类型
      */
     private static boolean isNotJsonSchemaType(String type) {
+        if (type != null && type.startsWith("file/")) {
+            return false;
+        }
         return Arrays.stream(JsonSchemaType.values()).noneMatch(jsonSchemaType -> jsonSchemaType.type.equals(type));
     }
 
@@ -223,7 +232,7 @@ public class JsonSchemaUtils {
             // 不支持数组嵌套数组
             if (JsonSchemaType.ARRAY.type.equals(type)) {
                 throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                    String.format("The parameter [%s] cannot be nested array.", name));
+                    List.of(String.format("The parameter [%s] cannot be nested array.", name)));
             }
             // 数组的子节点无需校验
             return;
@@ -236,15 +245,15 @@ public class JsonSchemaUtils {
         // 描述，必填
         if (Objects.isNull(jsonNode.get(DESCRIPTION)) || StringUtils.isBlank(jsonNode.get(DESCRIPTION).asText())) {
             throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                String.format("The parameter [%s]'s description cannot be empty.", name));
+                List.of(String.format("The parameter [%s]'s description cannot be empty.", name)));
         }
         // 位置，必填，且只能取 Body Headers Query 和 Path
         if (Objects.isNull(jsonNode.get(LOCATION)) || StringUtils.isBlank(jsonNode.get(LOCATION).asText())
             || Arrays.stream(ToolParamLocation.values())
                 .noneMatch(toolParam -> toolParam.location.equals(jsonNode.get(LOCATION).asText()))) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, String.format(
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(String.format(
                 "The parameter [%s]'s location cannot be empty and must be one of: [Body, Headers, Query, Path]",
-                name));
+                name)));
         }
         // 默认值，非必填，值要与参数类型匹配
         if (Objects.nonNull(jsonNode.get(DEFAULT))) {
@@ -252,23 +261,29 @@ public class JsonSchemaUtils {
             if (StringUtils.isBlank(defaultNode.asText())) {
                 return;
             }
+            // FEAT-073：file/<子类型>（file/image 等）不在 JsonSchemaType 枚举内，
+            // valueOf 会抛 IllegalArgumentException 使接口 500 而非受控错误；
+            // 其默认值为文件 URL 字符串，无 number/integer/boolean 格式校验，直接放行
+            if (type.startsWith("file/")) {
+                return;
+            }
             switch (JsonSchemaType.valueOf(type.toUpperCase(Locale.ROOT))) {
                 case NUMBER:
                     if (!isNumber(defaultNode.asText())) {
                         throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                            String.format("The parameter [%s]'s default value must be a number.", name));
+                            List.of(String.format("The parameter [%s]'s default value must be a number.", name)));
                     }
                     break;
                 case INTEGER:
                     if (!isInteger(defaultNode.asText())) {
                         throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                            String.format("The parameter [%s]'s default value must be an integer.", name));
+                            List.of(String.format("The parameter [%s]'s default value must be an integer.", name)));
                     }
                     break;
                 case BOOLEAN:
                     if (!isBoolean(defaultNode.asText())) {
                         throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                            String.format("The parameter [%s]'s default value must be a boolean.", name));
+                            List.of(String.format("The parameter [%s]'s default value must be a boolean.", name)));
                     }
                     break;
                 default:

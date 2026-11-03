@@ -36,6 +36,7 @@ class ComponentClassPool(metaclass=Singleton):
         if (
             comp_type.startswith(BUILT_IN_COMPONENT_PREFIX)
             and "jiuwen.code" not in comp_type
+            and "jiuwen.templateTransform" not in comp_type
         ):
             raise JiuWenBaseException(
                 error_code=StatusCode.COMPONENT_POOL_REGISTER_INVALID_CLASS_NAME.code,

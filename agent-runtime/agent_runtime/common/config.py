@@ -173,8 +173,10 @@ class SecuritySandboxSettings(BaseSettings):
     idle_ttl_seconds: int = Field(
         default=600, validation_alias="SECURITY_SANDBOX_IDLE_TTL"
     )
+    # 沙箱内层超时：与代码节点异常处理外层超时（exceptionProcess.timeout）取小生效；
+    # 节点级配置值大于此处时会被沙箱在本值处截断，需联动调大本值才可生效
     timeout_seconds: int = Field(
-        default=300, validation_alias="SECURITY_SANDBOX_TIMEOUT"
+        default=900, validation_alias="SECURITY_SANDBOX_TIMEOUT"
     )
     sandbox_type: str = Field(
         default="aio", validation_alias="SECURITY_SANDBOX_TYPE"
@@ -274,6 +276,25 @@ class CacheSettings(BaseSettings):
     mem_cache_ttl_seconds: int = Field(
         default=3600, validation_alias="MEM_CACHE_TTL_SECONDS"
     )
+    # 构建期子 IR 并发预取的单批并发上限（async_ir_load_batch）。
+    # 必须 ≥1：0 会使信号量 acquire 永久阻塞（请求挂起无报错），ge=1
+    # 让非法 env 在启动期即 ValidationError fail-fast。
+    # 注意：这是"每次批量调用"的约束而非全局预算——冷缓存下瞬时 Redis 连接
+    # 需求 ≈ 并发构建请求数 × 本值，需与 REDIS_MAX_CONNECTIONS（共享池，
+    # 默认 50）核算：默认 5 时约 10 个并发冷构建才会触顶（上限 10 时约
+    # 5 个即触顶）；redis-py 池耗尽抛 "Too many connections" 不排队。
+    ir_load_max_concurrency: int = Field(
+        default=5, ge=1, validation_alias="IR_LOAD_MAX_CONCURRENCY"
+    )
+    ir_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="IR_CACHE_TTL_SECONDS", ge=1
+    )
+    workflow_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
+    )
+    agent_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1
+    )
     max_cache_data_size: int = Field(
         default=2 * 1024 * 1024, validation_alias="MAX_CACHE_DATA_SIZE"
     )
@@ -289,6 +310,9 @@ class CacheSettings(BaseSettings):
     )
     model_cache_redis_ttl: int = Field(
         default=300, validation_alias="MODEL_CACHE_REDIS_TTL"
+    )
+    kb_config_cache_ttl: int = Field(
+        default=300, validation_alias="KB_CONFIG_CACHE_TTL"
     )
 
     model_config = SettingsConfigDict(
@@ -388,11 +412,26 @@ class CodeExecutionSettings(BaseSettings):
     LOCAL_CODE_EXEC_MODE 环境变量控制代码节点的本地执行方式：
     - inprocess: 进程内 exec() 执行（默认，高性能，无隔离）
     - subprocess: 子进程执行（有进程级隔离，但启动开销约 50-200ms）
+
+    ALLOW_LOCAL_CODE_EXEC 控制是否允许本地代码执行：
+    - false（默认）: 拒绝本地执行，必须使用沙箱模式
+    - true: 允许本地执行（⚠️ 仅限可信内网环境，无安全隔离）
     """
 
     local_exec_mode: Literal["inprocess", "subprocess"] = Field(
         default="inprocess",
         validation_alias="LOCAL_CODE_EXEC_MODE",
+    )
+    allow_local_exec: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LOCAL_CODE_EXEC",
+    )
+    # 本地执行的兜底超时（秒）：异常处理未配 exceptionProcess.timeout 时使用。
+    # 与沙箱超时（SECURITY_SANDBOX_TIMEOUT）解耦，避免混用。
+    local_exec_timeout: int = Field(
+        default=900,
+        gt=0,
+        validation_alias="LOCAL_CODE_EXEC_TIMEOUT",
     )
 
     model_config = SettingsConfigDict(

@@ -355,12 +355,15 @@ def get_value_from_nested_structure_by_path_list(nested_structure: dict, path: s
             if isinstance(key, int) and key < len(final_result):
                 final_result = final_result[key]
             elif isinstance(key, str):
-                final_result = []
+                # 对 list 中每个 dict 抽取同名字段（map 语义）。
+                # 注意不能先覆盖 final_result 再遍历自身，否则恒返回空列表。
+                mapped_result = []
                 for item in final_result:
                     if isinstance(item, dict):
-                        final_result.append(item.get(key, None))
+                        mapped_result.append(item.get(key, None))
                     else:
                         return None
+                final_result = mapped_result
             else:
                 return None
 

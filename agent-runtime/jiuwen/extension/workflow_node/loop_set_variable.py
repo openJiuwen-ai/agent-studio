@@ -21,7 +21,8 @@
 import json
 
 from agent_runtime.common.config import settings
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
@@ -223,7 +224,7 @@ class LoopSetVariable(LoopSetVariableComponent):
             if not (workflow_id and conversation_id):
                 return
 
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             store_key = f"{REDIS_GLOBAL_VALS_NAME}.{workflow_id}.{conversation_id}"
 
             # 提取变量名（从 "node_start.userFields.memory.var" 中提取 "var"）
@@ -264,7 +265,7 @@ class LoopSetVariable(LoopSetVariableComponent):
             # 写入 Redis
             await redis_client.set(
                 store_key, json.dumps(merged_data, ensure_ascii=False),
-                ex=_DEFAULT_CONVERSATION_VARIABLE_TTL,
+                duration=Duration.seconds(_DEFAULT_CONVERSATION_VARIABLE_TTL),
             )
         except Exception as e:
             workflow_logger.error(

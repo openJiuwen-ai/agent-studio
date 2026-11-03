@@ -89,7 +89,7 @@ public interface PluginMapper {
 
     void updateIdAndName(@Param("toolId") String pluginId, @Param("uuid") String uuid);
 
-    void updateProjectIdByIds(String opSvcProjectId, List<String> pluginIds);
+    void updateProjectIdByIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("pluginIds") List<String> pluginIds);
 
-    String selectVersionByPluginId(String pluginId);
+    String selectVersionByPluginId(@Param("pluginId") String pluginId);
 }

@@ -249,6 +249,9 @@ public class WorkflowValidationService {
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
 
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
+
     @Value("${workflow.system-fields:}")
     private String systemFields;
 
@@ -597,7 +600,7 @@ public class WorkflowValidationService {
                     continue;
                 }
                 if (NodeType.STREAM_TRANSFORM.getType().equals(node.getType())) {
-                    validateStreamTransformNodeConfig(node, errors);
+                    validateStreamTransformNodeConfig(nodeMap, node, errors);
                 }
                 for (IRConfig irConfig : irConfigs.get(node.getType())) {
                     String id = irConfig.getId();
@@ -1323,8 +1326,261 @@ public class WorkflowValidationService {
                 // 若引用节点存在，增加判断引用节点从属关系
                 validateReference(nodeMap, refMap, node,
                     field.getName(), errors);
+                // 插件 / MCP：引用类型须与入参声明类型兼容（bug 5142740）
+                if (NodeType.PLUGIN.getType().equalsIgnoreCase(node.getType())
+                    || NodeType.MCP.getType().equalsIgnoreCase(node.getType())) {
+                    validateRefTypeMatch(nodeMap, refMap, node, field, errors);
+                }
             }
         }
+    }
+
+    /** 路径段：字段名，可选数组下标，如 sys / items[0] */
+    private static final Pattern REF_PATH_SEGMENT = Pattern.compile("^([^\\[\\]]+)(?:\\[(\\d+)\\])?$");
+
+    /**
+     * 校验引用变量类型与当前入参声明类型是否兼容。
+     * 支持顶层与嵌套路径（a.b、a[0].b）；路径解析失败时跳过，避免误报。
+     */
+    private void validateRefTypeMatch(Map<String, Node> nodeMap, Map<String, String> refMap, Node currentNode,
+        WorkflowFieldVO field, Set<WorkflowValidationVOErrors> errors) {
+        String refNodeId = refMap.get(CommonConstant.Workflow.REF_NODE_ID);
+        String refVarName = refMap.get(CommonConstant.Workflow.REF_VAR_NAME);
+        if (StringUtils.isAnyBlank(refNodeId, refVarName)) {
+            return;
+        }
+        Node refNode = nodeMap.get(refNodeId);
+        if (refNode == null || refNode.getNodeInfo() == null
+            || CollectionUtils.isEmpty(refNode.getNodeInfo().getOutputs())) {
+            return;
+        }
+        WorkflowFieldVO refOutput = resolveOutputFieldByRefPath(refNode.getNodeInfo().getOutputs(), refVarName);
+        if (refOutput == null) {
+            return;
+        }
+        String expected = normalizeWorkflowFieldType(field);
+        String actual = normalizeWorkflowFieldType(refOutput);
+        if (StringUtils.isAnyBlank(expected, actual) || isRefTypeCompatible(expected, actual)) {
+            return;
+        }
+        errors.add(new WorkflowValidationVOErrors().setId(currentNode.getId())
+            .setType(currentNode.getType())
+            .setReason(MessageFormat.format(i18nUtil.getMessage("workflow.validate.input.type.mismatch"),
+                field.getName(), expected, actual)));
+    }
+
+    /**
+     * 按 ref_var_name 路径解析到具体输出字段（与前端 fields2RefParams 的 names.join('.') 对齐）。
+     * 解析失败返回 null。
+     */
+    private WorkflowFieldVO resolveOutputFieldByRefPath(List<WorkflowFieldVO> outputs, String refVarName) {
+        if (CollectionUtils.isEmpty(outputs) || StringUtils.isBlank(refVarName)) {
+            return null;
+        }
+        String[] segments = refVarName.split("\\.");
+        List<WorkflowFieldVO> currentLevel = outputs;
+        WorkflowFieldVO current = null;
+        for (int i = 0; i < segments.length; i++) {
+            Matcher matcher = REF_PATH_SEGMENT.matcher(segments[i]);
+            if (!matcher.matches()) {
+                return null;
+            }
+            String fieldName = matcher.group(1);
+            boolean hasIndex = matcher.group(2) != null;
+            current = findFieldByName(currentLevel, fieldName);
+            if (current == null) {
+                return null;
+            }
+            boolean isLast = i == segments.length - 1;
+            if (hasIndex) {
+                WorkflowFieldVO elementField = arrayElementAsField(current);
+                if (elementField == null) {
+                    return null;
+                }
+                if (isLast) {
+                    return elementField;
+                }
+                if (!Strings.CI.equals(elementField.getType(), TypeEnum.OBJECT.toString())) {
+                    return null;
+                }
+                currentLevel = schemaAsFieldList(elementField.getSchema());
+                if (currentLevel == null) {
+                    return null;
+                }
+            } else if (!isLast) {
+                if (!Strings.CI.equals(current.getType(), TypeEnum.OBJECT.toString())) {
+                    return null;
+                }
+                currentLevel = schemaAsFieldList(current.getSchema());
+                if (currentLevel == null) {
+                    return null;
+                }
+            }
+        }
+        return current;
+    }
+
+    private WorkflowFieldVO findFieldByName(List<WorkflowFieldVO> fields, String name) {
+        if (CollectionUtils.isEmpty(fields) || StringUtils.isBlank(name)) {
+            return null;
+        }
+        return fields.stream()
+            .filter(f -> f != null && Strings.CS.equals(f.getName(), name))
+            .findFirst()
+            .orElse(null);
+    }
+
+    /**
+     * 将 schema（子字段列表）转为 WorkflowFieldVO 列表；解析失败返回 null。
+     */
+    private List<WorkflowFieldVO> schemaAsFieldList(Object schema) {
+        if (schema == null) {
+            return null;
+        }
+        if (schema instanceof List<?> list) {
+            List<WorkflowFieldVO> result = new ArrayList<>();
+            for (Object item : list) {
+                WorkflowFieldVO vo = coerceToFieldVo(item);
+                if (vo != null) {
+                    result.add(vo);
+                }
+            }
+            return result;
+        }
+        try {
+            List<Object> subFields = JsonUtils.objectToClass(schema);
+            if (subFields == null) {
+                return null;
+            }
+            List<WorkflowFieldVO> result = new ArrayList<>();
+            for (Object item : subFields) {
+                WorkflowFieldVO vo = coerceToFieldVo(item);
+                if (vo != null) {
+                    result.add(vo);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private WorkflowFieldVO coerceToFieldVo(Object item) {
+        if (item instanceof WorkflowFieldVO vo) {
+            return vo;
+        }
+        if (item instanceof Map<?, ?> map) {
+            WorkflowFieldVO vo = new WorkflowFieldVO();
+            Object name = map.get("name");
+            Object type = map.get("type");
+            if (name == null || type == null) {
+                return null;
+            }
+            vo.setName(String.valueOf(name));
+            vo.setType(String.valueOf(type));
+            vo.setSchema(map.get("schema"));
+            return vo;
+        }
+        return JsonUtils.objectToClassTypeQuiet(item, WorkflowFieldVO.class);
+    }
+
+    /**
+     * 数组字段的元素描述转为 WorkflowFieldVO，用于 items[0] 路径段。
+     * 支持 type=array + schema 元素描述，或 type=array&lt;T&gt;。
+     */
+    private WorkflowFieldVO arrayElementAsField(WorkflowFieldVO arrayField) {
+        if (arrayField == null || StringUtils.isBlank(arrayField.getType())) {
+            return null;
+        }
+        String type = arrayField.getType().toLowerCase(Locale.ROOT);
+        if (Strings.CS.equals(type, TypeEnum.ARRAY.toString())) {
+            Object elementDesc = arrayField.getSchema();
+            WorkflowFieldVO fromSchema = coerceToFieldVo(elementDesc);
+            if (fromSchema != null && StringUtils.isNotBlank(fromSchema.getType())) {
+                return fromSchema;
+            }
+            String elementType = schemaFieldType(elementDesc);
+            if (StringUtils.isBlank(elementType)) {
+                return null;
+            }
+            WorkflowFieldVO vo = new WorkflowFieldVO();
+            vo.setName(arrayField.getName());
+            vo.setType(elementType);
+            vo.setSchema(schemaFieldSchema(elementDesc));
+            return vo;
+        }
+        if (type.startsWith("array<") && type.endsWith(">")) {
+            String elementType = type.substring(6, type.length() - 1).trim();
+            WorkflowFieldVO vo = new WorkflowFieldVO();
+            vo.setName(arrayField.getName());
+            vo.setType(elementType);
+            // array<object> 时 schema 常为子字段列表；array + 元素描述时取内层 schema
+            Object schema = arrayField.getSchema();
+            if (Strings.CS.equals(elementType, TypeEnum.OBJECT.toString())) {
+                String schemaType = schemaFieldType(schema);
+                if (Strings.CS.equals(schemaType, TypeEnum.OBJECT.toString())) {
+                    vo.setSchema(schemaFieldSchema(schema));
+                } else {
+                    vo.setSchema(schema);
+                }
+            } else {
+                vo.setSchema(schemaFieldSchema(schema));
+            }
+            return vo;
+        }
+        return null;
+    }
+
+    /**
+     * 将 DSL 字段类型规范为前端一致的展示类型（如 array + schema.string → array&lt;string&gt;）。
+     */
+    private String normalizeWorkflowFieldType(WorkflowFieldVO field) {
+        if (field == null || StringUtils.isBlank(field.getType())) {
+            return "";
+        }
+        String type = field.getType().toLowerCase(Locale.ROOT);
+        if (Strings.CS.equals(type, TypeEnum.ARRAY.toString())) {
+            String elementType = schemaFieldType(field.getSchema());
+            if (StringUtils.isNotBlank(elementType)) {
+                return "array<" + elementType + ">";
+            }
+        }
+        return type;
+    }
+
+    /**
+     * 期望类型与引用类型是否兼容（与前端 input-tree-select 兼容表对齐）。
+     */
+    private boolean isRefTypeCompatible(String expectedType, String actualType) {
+        if (StringUtils.isAnyBlank(expectedType, actualType)) {
+            return true;
+        }
+        String expected = expectedType.toLowerCase(Locale.ROOT);
+        String actual = actualType.toLowerCase(Locale.ROOT);
+        return getCompatibleRefTypes(expected).contains(actual);
+    }
+
+    private List<String> getCompatibleRefTypes(String type) {
+        List<String> fileSubTypes = List.of("default", "doc", "txt", "excel", "ppt", "image", "audio", "video");
+        if (Strings.CS.equals(type, TypeEnum.STRING.toString())) {
+            List<String> result = new ArrayList<>();
+            result.add("string");
+            fileSubTypes.forEach(s -> result.add("file/" + s));
+            return result;
+        }
+        if (Strings.CS.equals(type, "array<string>")) {
+            List<String> result = new ArrayList<>();
+            result.add("array<string>");
+            fileSubTypes.forEach(s -> result.add("array<file/" + s + ">"));
+            return result;
+        }
+        if (Strings.CS.equals(type, "file/default")) {
+            return fileSubTypes.stream().map(s -> "file/" + s).toList();
+        }
+        if (Strings.CS.equals(type, "array<file/default>")) {
+            return fileSubTypes.stream().map(s -> "array<file/" + s + ">").toList();
+        }
+        return List.of(type);
     }
 
     private void validateConfig(Object element, IRConfig irConfig, ValidateConfigWrapper ValidateConfigData) {
@@ -1571,7 +1827,8 @@ public class WorkflowValidationService {
      *
      * @param workflowEntity 工作流实例
      */
-    public void validateModifyPrivilege(WorkflowEntity workflowEntity, String projectId, String workspaceId) {
+    public void validateModifyPrivilege(WorkflowEntity workflowEntity, String projectId, String workspaceId,
+        String requestMethod) {
         // 管理租户不校验
         if (Strings.CS.equals(RequestContextUtils.getRequestProjectId(), opSvcProjectId)) {
             return;
@@ -1583,6 +1840,10 @@ public class WorkflowValidationService {
                 workflowEntity.getProjectId(), projectId, workflowEntity.getWorkspaceId(), workspaceId);
             throw new AgentStudioException(StudioError.PRIVILEGE_ERROR);
         }
+        // 角色与创建人校验(配置驱动):OWNER/ADMIN 全权;DEVELOPER/OPERATOR 仅限自己创建的
+        // delete 用 "delete"，update 用 "edit" 语义 action
+        String action = "DELETE".equals(requestMethod) ? "delete" : "edit";
+        workspacePermissionValidator.validateWorkflow(projectId, workspaceId, workflowEntity.getCreatorId(), action, false);
     }
 
     /**
@@ -2287,27 +2548,34 @@ public class WorkflowValidationService {
      * 校验流式输出节点 configs
      */
     @SuppressWarnings("unchecked")
-    private void validateStreamTransformNodeConfig(Node node, List<WorkflowValidationVOErrors> errors) {
+    private void validateStreamTransformNodeConfig(Map<String, Node> nodeMap, Node node,
+        List<WorkflowValidationVOErrors> errors) {
         if (node == null || node.getNodeInfo() == null) {
             return;
         }
 
         // 校验一定存在frame_template
         Map<String, Object> transformer =  (Map<String, Object>) node.getNodeInfo().getConfigs().get("transformer");
-        String frame_template = (String) transformer.get("frame_template");
+        String frame_template = transformer == null ? null : (String) transformer.get("frame_template");
         if (StringUtils.isEmpty(frame_template)) {
             errors.add(new WorkflowValidationVOErrors().setId(node.getId())
                 .setType(node.getType())
                 .setReason(i18nUtil.getMessage("openjiuwen.02201094")));
+            return;
         }
 
-        // 校验 frame_template 的格式是 json
-        try {
-            JSONObject.parseObject(frame_template);
-        } catch (Exception e) {
-            errors.add(new WorkflowValidationVOErrors().setId(node.getId())
-                .setType(node.getType())
-                .setReason(i18nUtil.getMessage("openjiuwen.02201095")));
+        // 校验 frame_template 的格式：支持纯占位符（如 {{raw_output}}）或有效 JSON
+        // 纯占位符格式：只包含 {{xxx}} 模式的模板变量
+        String templateWithoutPlaceholders = frame_template.replaceAll("\\{\\{[^}]+\\}\\}", "").trim();
+        if (!templateWithoutPlaceholders.isEmpty()) {
+            // 如果去除占位符后还有内容，则必须是有效 JSON
+            try {
+                JSONObject.parseObject(frame_template);
+            } catch (Exception e) {
+                errors.add(new WorkflowValidationVOErrors().setId(node.getId())
+                    .setType(node.getType())
+                    .setReason(i18nUtil.getMessage("openjiuwen.02201095")));
+            }
         }
 
         // 校验concat字段是在frame_template里的
@@ -2320,6 +2588,164 @@ public class WorkflowValidationService {
             }
         }
 
+        // 校验流式消息内容中引用的变量必须为本节点输入参数及其有效字段
+        validateStreamTransformReferencedVariables(nodeMap, node, frame_template, errors);
+    }
+
+    /**
+     * 流式消息内容中的双大括号模板变量匹配，如 {{raw_output}}、{{raw_output.data}}
+     */
+    private static final Pattern TEMPLATE_VAR_PATTERN = Pattern.compile("\\{\\{([^}]+)\\}\\}");
+
+    /**
+     * 输入参数引用中的分组前缀（userFields./systemFields.）在解析上游输出字段时需剔除
+     */
+    private static final List<String> STREAM_REF_GROUP_PREFIXES = List.of("userFields.", "systemFields.");
+
+    /**
+     * 校验流式消息内容引用的变量存在性。
+     *
+     * <p>占位符必须引用本节点输入参数（支持整体引用如 {{raw_output}} 与字段引用如
+     * {{raw_output.data}}）；字段引用还要求对应子路径存在于输入参数（上游输出字段）的
+     * schema 中。无法确认的场景（上游节点缺失、schema 缺失、引用解析失败）放行不误报。
+     */
+    private void validateStreamTransformReferencedVariables(Map<String, Node> nodeMap, Node node,
+        String frameTemplate, List<WorkflowValidationVOErrors> errors) {
+        if (StringUtils.isBlank(frameTemplate) || node == null || node.getNodeInfo() == null) {
+            return;
+        }
+        List<WorkflowFieldVO> inputs = node.getNodeInfo().getInputs();
+        if (CollectionUtils.isEmpty(inputs) || inputs.size() != 1) {
+            return;
+        }
+        WorkflowFieldVO input = inputs.get(0);
+        if (input == null || StringUtils.isBlank(input.getName())) {
+            return;
+        }
+        String inputName = input.getName();
+        WorkflowFieldVO refOutput = nodeMap == null ? null
+            : resolveStreamTransformInputOutputField(nodeMap, input);
+        Matcher matcher = TEMPLATE_VAR_PATTERN.matcher(frameTemplate);
+        while (matcher.find()) {
+            String varPath = matcher.group(1).trim();
+            if (StringUtils.isBlank(varPath)) {
+                continue;
+            }
+            // 占位符必须指向本节点输入参数
+            if (!varPath.equals(inputName)
+                && !varPath.startsWith(inputName + ".")
+                && !varPath.startsWith(inputName + "[")) {
+                errors.add(buildStreamTransformRefError(node, varPath));
+                continue;
+            }
+            // 字段级引用：子路径必须存在于输入参数 schema 中（无法确认时放行）
+            if (!varPath.equals(inputName) && refOutput != null) {
+                String subPath = varPath.startsWith(inputName + ".")
+                    ? varPath.substring(inputName.length() + 1) : varPath.substring(inputName.length());
+                if (!isStreamTransformFieldPathPresent(refOutput, subPath)) {
+                    errors.add(buildStreamTransformRefError(node, varPath));
+                }
+            }
+        }
+    }
+
+    /**
+     * 解析流式消息节点输入参数引用的上游输出字段，用于子路径校验。
+     *
+     * <p>与 IR 构建侧 StreamTransformNodeAdapter 保持一致：输入参数值须为 ref 类型，
+     * ref_var_name 可能带 userFields./systemFields. 分组前缀，解析时剔除。
+     */
+    private WorkflowFieldVO resolveStreamTransformInputOutputField(Map<String, Node> nodeMap, WorkflowFieldVO input) {
+        if (input == null || input.getValue() == null
+            || !WorkflowFieldVOValue.TypeEnum.REF.equals(input.getValue().getType())) {
+            return null;
+        }
+        Object content = input.getValue().getContent();
+        if (content == null) {
+            return null;
+        }
+        Map<String, String> refMap;
+        try {
+            refMap = new ObjectMapper().convertValue(content, new TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            return null;
+        }
+        if (refMap == null) {
+            return null;
+        }
+        String refNodeId = refMap.get(CommonConstant.Workflow.REF_NODE_ID);
+        String refVarName = refMap.get(CommonConstant.Workflow.REF_VAR_NAME);
+        if (StringUtils.isAnyBlank(refNodeId, refVarName)) {
+            return null;
+        }
+        Node refNode = nodeMap.get(refNodeId);
+        if (refNode == null || refNode.getNodeInfo() == null
+            || CollectionUtils.isEmpty(refNode.getNodeInfo().getOutputs())) {
+            return null;
+        }
+        String strippedVarName = refVarName;
+        for (String groupPrefix : STREAM_REF_GROUP_PREFIXES) {
+            if (strippedVarName.startsWith(groupPrefix)) {
+                strippedVarName = strippedVarName.substring(groupPrefix.length());
+                break;
+            }
+        }
+        return resolveOutputFieldByRefPath(refNode.getNodeInfo().getOutputs(), strippedVarName);
+    }
+
+    /**
+     * 判断子路径（如 data、items[0].name）是否存在于输入参数字段的 schema 中。
+     * schema 缺失或路径无法解析时返回 true 放行，避免误报。
+     */
+    private boolean isStreamTransformFieldPathPresent(WorkflowFieldVO field, String subPath) {
+        if (StringUtils.isBlank(subPath)) {
+            return true;
+        }
+        List<WorkflowFieldVO> currentLevel = schemaAsFieldList(field.getSchema());
+        // schema 为 null 或空（未声明子字段）时无法确认路径，放行避免误报
+        if (currentLevel == null || currentLevel.isEmpty()) {
+            return true;
+        }
+        String[] segments = subPath.split("\\.");
+        for (int i = 0; i < segments.length; i++) {
+            Matcher matcher = REF_PATH_SEGMENT.matcher(segments[i]);
+            if (!matcher.matches()) {
+                return true;
+            }
+            String fieldName = matcher.group(1);
+            boolean hasIndex = matcher.group(2) != null;
+            WorkflowFieldVO current = findFieldByName(currentLevel, fieldName);
+            if (current == null) {
+                return false;
+            }
+            boolean isLast = i == segments.length - 1;
+            if (hasIndex) {
+                WorkflowFieldVO elementField = arrayElementAsField(current);
+                if (elementField == null) {
+                    // 数组字段未声明元素 schema：无法确认，放行（与改动前行为一致，避免误拦）
+                    return true;
+                }
+                if (isLast) {
+                    return true;
+                }
+                currentLevel = schemaAsFieldList(elementField.getSchema());
+            } else if (!isLast) {
+                currentLevel = schemaAsFieldList(current.getSchema());
+            } else {
+                return true;
+            }
+            if (currentLevel == null || currentLevel.isEmpty()) {
+                // 更深层级 schema 缺失或为空（无法确认路径）时放行，避免误报（与入口语义一致）
+                return true;
+            }
+        }
+        return true;
+    }
+
+    private WorkflowValidationVOErrors buildStreamTransformRefError(Node node, String varPath) {
+        return new WorkflowValidationVOErrors().setId(node.getId())
+            .setType(node.getType())
+            .setReason(MessageFormat.format(i18nUtil.getMessage("openjiuwen.02201100"), varPath));
     }
 
     /**

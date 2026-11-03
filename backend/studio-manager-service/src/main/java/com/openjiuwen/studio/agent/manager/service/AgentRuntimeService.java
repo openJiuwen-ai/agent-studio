@@ -464,32 +464,61 @@ public class AgentRuntimeService {
         return Optional.of(agentInvokeInfo);
     }
 
+    private static final String RESUME_EXECUTION_ID_PREFIX = "task_id:";
+
     /**
-     * 保存taskId
+     * DEF-01: 构造恢复执行记录 Redis key 的唯一入口。
+     * 第一段为资源 ID（Agent 场景为 agentId，Workflow 场景为 workflowId），第二段为 conversationId。
+     * 调用方不得自行拼接 key。
      */
-    public void saveTaskId(String agentId, String conversationId, String taskId) {
-        redisClient.set("task_id:" + agentId + ":" + conversationId, taskId, Duration.ofSeconds(expireTime));
+    private static String resumeExecutionIdKey(String resourceId, String conversationId) {
+        return RESUME_EXECUTION_ID_PREFIX + resourceId + ":" + conversationId;
     }
 
     /**
-     * 查询taskId
+     * 保存可恢复执行记录：以 {@code resourceId + conversationId} 为逻辑键，存储已选定的 {@code executionId}。
+     * <p>DEF-01：保存值权威来源为 {@link AgentExecuteParams#getExecutionId()}，不再依赖回调线程 MDC。
+     * 任意维度为空即跳过写入，不产生带 {@code null} 或空段的 key。{@code executionId} 的格式合法性
+     * 由 DEF-02 统一执行 ID 选择器在选值时保证，本方法只做非空防御，不重复实现格式校验。
      */
-    public String queryTaskId(String agentId, String conversationId) {
+    public void saveResumeExecutionId(String resourceId, String conversationId, String executionId) {
+        if (StringUtils.isEmpty(resourceId) || StringUtils.isEmpty(conversationId)
+            || StringUtils.isEmpty(executionId)) {
+            return;
+        }
+        redisClient.set(resumeExecutionIdKey(resourceId, conversationId), executionId,
+            Duration.ofSeconds(expireTime));
+    }
+
+    /**
+     * 查询可恢复执行记录：以 {@code resourceId + conversationId} 为逻辑键取回保存的 {@code executionId}。
+     * <p>DEF-01：查询与保存使用同一逻辑键（修复查询侧曾以 {@code executionId} 作第二段的不一致）。
+     * 任意维度为空返回空串，不访问 Redis。Redis 异常降级返回空串。
+     */
+    public String queryResumeExecutionId(String resourceId, String conversationId) {
+        if (StringUtils.isEmpty(resourceId) || StringUtils.isEmpty(conversationId)) {
+            return "";
+        }
         try {
-            return redisClient.get("task_id:" + agentId + ":" + conversationId);
+            return redisClient.get(resumeExecutionIdKey(resourceId, conversationId));
         } catch (Exception e) {
+            log.warn("Failed to query resume executionId: {}", e.getMessage());
             return "";
         }
     }
 
     /**
-     * Delete taskId from Redis after workflow completes, to prevent reuse by next execution.
+     * 删除可恢复执行记录：Workflow 完成后删除，防止同会话下次执行误用。
+     * <p>DEF-01：仅同步命名，不改删除时机。任意维度为空即跳过。
      */
-    public void deleteTaskId(String agentId, String conversationId) {
+    public void deleteResumeExecutionId(String resourceId, String conversationId) {
+        if (StringUtils.isEmpty(resourceId) || StringUtils.isEmpty(conversationId)) {
+            return;
+        }
         try {
-            redisClient.delete("task_id:" + agentId + ":" + conversationId);
+            redisClient.delete(resumeExecutionIdKey(resourceId, conversationId));
         } catch (Exception e) {
-            log.warn("Failed to delete taskId: {}", e.getMessage());
+            log.warn("Failed to delete resume executionId: {}", e.getMessage());
         }
     }
 

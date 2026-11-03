@@ -441,7 +441,9 @@ export class CreateToolComponent implements OnInit {
     },
   ];
 
-  public reqeustArgTypeOptions = [
+  // 响应参数（输出）类型选项：插件输出不支持 File（FEAT-073 仅输入侧），
+  // 输入侧 Body tab 用 cascadeTypeOptions（nz-cascader），非 Body tab 用 reqeustArgNoneObjTypeOptions
+  public reqeustArgTypeOptions: any[] = [
     { label: 'String', value: 'string' },
     { label: 'Integer', value: 'integer' },
     { label: 'Number', value: 'number' },
@@ -454,6 +456,8 @@ export class CreateToolComponent implements OnInit {
     { label: 'Array<Object>', value: 'array<object>' },
   ];
 
+  // 非 Body tab（Query/Headers/Path）不支持 File 类型（文件走 multipart 请求体），
+  // 与 Object/Array 等不支持类型一致：展示但置灰
   public reqeustArgNoneObjTypeOptions = [
     { label: 'String', value: 'string' },
     { label: 'Integer', value: 'integer' },
@@ -465,7 +469,96 @@ export class CreateToolComponent implements OnInit {
     { label: 'Array<Integer>', value: 'array<integer>', disabled: true },
     { label: 'Array<Boolean>', value: 'array<boolean>', disabled: true },
     { label: 'Array<Object>', value: 'array<object>', disabled: true },
+    { label: 'File', value: 'file', disabled: true },
   ];
+
+  /** File 类型级联选项（与开始节点 getInputParamTypes 一致，供 nz-cascader 使用） */
+  private getFileTypeOptions() {
+    return [
+      {
+        label: 'File',
+        value: 'file',
+        children: [
+          { label: 'Default', value: 'default', isLeaf: true },
+          { label: 'Doc', value: 'doc', isLeaf: true },
+          { label: 'Txt', value: 'txt', isLeaf: true },
+          { label: 'Excel', value: 'excel', isLeaf: true },
+          { label: 'PPT', value: 'ppt', isLeaf: true },
+          { label: 'Image', value: 'image', isLeaf: true },
+          { label: 'Audio', value: 'audio', isLeaf: true },
+          { label: 'Video', value: 'video', isLeaf: true },
+        ],
+      },
+    ];
+  }
+
+  /** 级联选项完整列表（nz-cascader 格式：普通类型为叶子，File 为可展开父节点）——缓存避免每次变更检测创建新数组 */
+  private _cascadeTypeOptions: any[] | null = null;
+
+  public get cascadeTypeOptions(): any[] {
+    if (!this._cascadeTypeOptions) {
+      this._cascadeTypeOptions = [
+        { label: 'String', value: 'string', isLeaf: true },
+        { label: 'Integer', value: 'integer', isLeaf: true },
+        { label: 'Number', value: 'number', isLeaf: true },
+        { label: 'Boolean', value: 'boolean', isLeaf: true },
+        { label: 'Object', value: 'object', isLeaf: true },
+        { label: 'Array<String>', value: 'array<string>', isLeaf: true },
+        { label: 'Array<Number>', value: 'array<number>', isLeaf: true },
+        { label: 'Array<Integer>', value: 'array<integer>', isLeaf: true },
+        { label: 'Array<Boolean>', value: 'array<boolean>', isLeaf: true },
+        { label: 'Array<Object>', value: 'array<object>', isLeaf: true },
+        ...this.getFileTypeOptions(),
+      ];
+    }
+    return this._cascadeTypeOptions;
+  }
+
+  /** nz-cascader 值转换：数组 ['file','image'] → 字符串 'file/image'，叶子 ['string'] → 'string' */
+  onCascadeTypeChange(value: any[], origin: IRequestArgsView): void {
+    if (!value || value.length === 0) {
+      return;
+    }
+    origin.type = value.length === 1 ? value[0] : value.join('/');
+    // 存储级联值到 origin，避免模板中每次变更检测都创建新数组。
+    // 注意：_cascadeValue 仅为 UI 缓存，保存时 view2Schema 按字段白名单解构
+    // 构建schema，此字段不会序列化入库——若将来改为全量序列化须剔除。
+    (origin as any)._cascadeValue = value;
+    this.onParamTypeChange(origin);
+  }
+
+  /** 当前类型转为 nz-cascader 值（缓存在 origin 上，不在模板中调用） */
+  getCascadeValue(origin: IRequestArgsView): any[] {
+    const cached = (origin as any)._cascadeValue;
+    const currentType = origin.type || '';
+
+    // 已有缓存且与 type 一致时直接复用（避免新数组引用导致变更检测循环）
+    if (cached && this.cascadeToString(cached) === currentType) {
+      return cached;
+    }
+
+    // type 变化后重新计算并缓存
+    const value = this.stringToCascade(currentType);
+    (origin as any)._cascadeValue = value;
+    return value;
+  }
+
+  private cascadeToString(value: any[]): string {
+    if (!value || value.length === 0) {
+      return '';
+    }
+    return value.length === 1 ? value[0] : value.join('/');
+  }
+
+  private stringToCascade(type: string): any[] {
+    if (!type) {
+      return [];
+    }
+    if (type.startsWith('file/')) {
+      return ['file', type.substring(5)];
+    }
+    return [type];
+  }
 
   public isOp = false;
 
@@ -732,7 +825,15 @@ export class CreateToolComponent implements OnInit {
   }
 
   onParamTypeChange(param: IRequestArgsView) {
-    if (!this.isSimpleType(param.type)) {
+    if (param.type.startsWith('file/')) {
+      // File 类型：叶节点、无子属性、无默认值、无校验（文件在运行时提供）
+      delete param?.children;
+      (param as any).isLeaf = true;
+      param.validated = false;
+      param.default = '';
+      param.validate_type = '';
+      param.validate_rule = '';
+    } else if (!this.isSimpleType(param.type)) {
       param.validated = false;
       param.default = '';
     } else {

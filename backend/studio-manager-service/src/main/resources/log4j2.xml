@@ -23,22 +23,14 @@
         <Property name="PERFORM_FILE_MAX_TOTAL_SIZE" value="${env:PERFORM_FILE_MAX_TOTAL_SIZE:-500MB}" />
         <Property name="PERFORM_FILE_MAX_TOTAL_COUNT" value="${env:PERFORM_FILE_MAX_TOTAL_COUNT:-100}" />
 
-        <!-- 接口日志配置 -->
-        <Property name="INF_FILE_ROLLING_SIZE" value="${env:INF_FILE_ROLLING_SIZE:-100MB}" />
-        <Property name="INF_FILE_MAX_COUNT" value="${env:INF_FILE_MAX_COUNT:-100}" />
-        <Property name="INF_FILE_MAX_AGE" value="${env:INF_FILE_MAX_AGE:-30d}" />
-        <Property name="INF_FILE_MAX_TOTAL_SIZE" value="${env:INF_FILE_MAX_TOTAL_SIZE:-1GB}" />
-        <Property name="INF_FILE_MAX_TOTAL_COUNT" value="${env:INF_FILE_MAX_TOTAL_COUNT:-100}" />
-
         <!-- 审计日志配置 -->
         <Property name="TRACE_FILE_ROLLING_SIZE" value="${env:TRACE_FILE_ROLLING_SIZE:-50MB}" />
         <Property name="TRACE_FILE_MAX_COUNT" value="${env:TRACE_FILE_MAX_COUNT:-200}" />
         <Property name="TRACE_FILE_MAX_AGE" value="${env:TRACE_FILE_MAX_AGE:-180d}" />
 
         <Property name="LOG_PATTERN"
-                  value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] [%X{request-id}] [%X{task-id}] [%thread] [%logger{15}:%L] - [%msg]%n" />
-        <Property name="INF_LOG_PATTERN" value="[%X{request-id}] [%X{task-id}] [%thread] - [%msg]%n" />
-        <Property name="PERF_LOG_PATTERN" value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%X{request-id}] [%X{task-id}] - %msg%n" />
+                  value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] [%X{request-id}] [%X{execution-id}] [%X{conversation-id}] [%X{trace_id}] [%thread] [%logger{15}:%L] - [%msg]%n" />
+        <Property name="PERF_LOG_PATTERN" value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] [%X{request-id}] [%X{execution-id}] [%X{conversation-id}] [%X{trace_id}] - [%msg]%n" />
         <Property name="TRACE_LOG_PATTERN" value="%msg%n" />
     </Properties>
 
@@ -89,26 +81,6 @@
             </DefaultRolloverStrategy>
         </RollingFile>
 
-        <!-- 接口日志的appender -->
-        <RollingFile name="ROLLING_FILE_INF">
-            <FileName>${LOG_PATH}/${FILE_NAME}-interface.log</FileName>
-            <FilePattern>${LOG_PATH}/${FILE_NAME}-interface-%d{yyyy-MM-dd}.%i.zip</FilePattern>
-            <PatternLayout pattern="${INF_LOG_PATTERN}"/>
-            <Policies>
-                <SizeBasedTriggeringPolicy size="${INF_FILE_ROLLING_SIZE}" />
-            </Policies>
-            <DefaultRolloverStrategy max="${INF_FILE_MAX_COUNT}">
-                <Delete basePath="${LOG_PATH}" maxDepth="2">
-                    <IfFileName glob="*${FILE_NAME}-interface-*.zip" />
-                    <IfAny>
-                        <IfLastModified age="${INF_FILE_MAX_AGE}" />
-                        <IfAccumulatedFileSize exceeds="${INF_FILE_MAX_TOTAL_SIZE}" />
-                        <IfAccumulatedFileCount exceeds="${INF_FILE_MAX_TOTAL_COUNT}" />
-                    </IfAny>
-                </Delete>
-            </DefaultRolloverStrategy>
-        </RollingFile>
-
         <!-- 审计日志配置规则 -->
         <RollingFile name="ROLLING_FILE_TRACE">
             <FileName>${TRACE_LOG_PATH}/${TRACE_FILE}.log</FileName>
@@ -130,22 +102,14 @@
         <!-- Async appenders -->
         <Async name="ASYNC_STDOUT" bufferSize="65536" blocking="false">
             <AppenderRef ref="STDOUT"/>
-            <OverflowAction>DISCARD</OverflowAction>
         </Async>
 
         <Async name="ASYNC_ROLLING_FILE" bufferSize="65536" blocking="false">
             <AppenderRef ref="ROLLING_FILE"/>
-            <OverflowAction>DISCARD</OverflowAction>
         </Async>
 
         <Async name="ASYNC_ROLLING_FILE_PERFORM" bufferSize="65536" blocking="false">
             <AppenderRef ref="ROLLING_FILE_PERFORM"/>
-            <OverflowAction>DISCARD</OverflowAction>
-        </Async>
-
-        <Async name="ASYNC_ROLLING_FILE_INF" bufferSize="65536" blocking="false">
-            <AppenderRef ref="ROLLING_FILE_INF"/>
-            <OverflowAction>DISCARD</OverflowAction>
         </Async>
         <Async name="ASYNC_ROLLING_FILE_TRACE" bufferSize="65536">
             <AppenderRef ref="ROLLING_FILE_TRACE"/>

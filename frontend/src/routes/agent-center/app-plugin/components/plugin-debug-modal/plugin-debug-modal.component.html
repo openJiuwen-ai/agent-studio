@@ -5,10 +5,25 @@
   <div class="req-params">
     <span class="title">{{ 'request_params' | i18nextEager }}</span>
     <div class="h-[calc(100%-38px)] overflow-y-auto p-6">
+      <nz-alert *ngIf="envVarLoadFailed" nzType="warning" nzShowIcon class="mb-4" [nzMessage]="envVarLoadFailedTpl"></nz-alert>
+      <ng-template #envVarLoadFailedTpl>
+        <span>{{ 'debug_env_var_load_failed_tip' | i18nextEager }}</span>
+      </ng-template>
+      <nz-alert *ngIf="!envVarLoadFailed && !hasDefaultEnv" nzType="warning" nzShowIcon class="mb-4" [nzMessage]="noDefaultEnvTpl"></nz-alert>
+      <ng-template #noDefaultEnvTpl>
+        <span>{{ 'debug_no_default_env_tip' | i18nextEager }}</span>
+      </ng-template>
+      <nz-alert *ngIf="!envVarLoadFailed && hasDefaultEnv && envVarMissingList.length" nzType="warning" nzShowIcon class="mb-4" [nzMessage]="envVarMissingTpl"></nz-alert>
+      <ng-template #envVarMissingTpl>
+        <div>{{ 'debug_env_var_missing_tip' | i18nextEager: { env: defaultEnvName } }}</div>
+        <div *ngFor="let missing of envVarMissingList" class="mt-1">
+          {{ missing.paramName }} → {{ missing.varName }}
+        </div>
+      </ng-template>
       <dynamic-node-params *ngIf="requestArgToDynamicForm.length" #dynamicFormIns [inputList]="requestArgToDynamicForm"></dynamic-node-params>
     </div>
     <div class="cutline"></div>
-    <button class="debug-btn" nz-button nzType="primary" (click)="onDebugging()" [disabled]="isLoading">
+    <button class="debug-btn" nz-button nzType="primary" (click)="onDebugging()" [disabled]="isLoading || !isParamsReady">
       {{ 'start_debug' | i18nextEager }}
     </button>
   </div>

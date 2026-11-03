@@ -250,6 +250,11 @@ export class ScenarioExamplePageComponent
     this.cdr.markForCheck();
   }
 
+  override finalizeRequestingOnStreamFail(): void {
+    super.finalizeRequestingOnStreamFail();
+    this.isShowStopIcon = false;
+  }
+
   override onMessage(curIndex: number, token: any) {
     super.onMessage(curIndex, token);
 
@@ -260,6 +265,8 @@ export class ScenarioExamplePageComponent
     if (event === 'error') {
       this.isStreamFail = true;
       this.workflowFailedMsg = message;
+      // 业务 error 时不必等 SSE done；否则停止按钮会一直转
+      this.showErrorState(this.workflowFailedMsg);
     }
   }
 

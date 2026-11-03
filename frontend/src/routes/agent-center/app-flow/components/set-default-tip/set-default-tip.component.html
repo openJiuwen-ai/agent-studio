@@ -176,8 +176,18 @@
             [accept]="fileTypeAccept | fileAcc"
             (change)="onUploadFile($event)"
           />
+          <file-url-input
+            [type]="uploadDesc"
+            [(mode)]="urlMode"
+            [disabled]="isUploading"
+            [localEntriesExist]="hasLocalFileEntries()"
+            [existingUrls]="getExistingUrls()"
+            [editRequest]="urlEditReq"
+            (addUrls)="onAddUrlEntries($event)"
+            (saveEdit)="onSaveUrlEntry($event)"
+          ></file-url-input>
           <div
-            *ngIf="isMulti || !fileList.length"
+            *ngIf="urlMode !== 'url' && !hasUrlFileEntries() && (isMulti || !fileList.length)"
             class="dotted-frame flex w-full cursor-pointer flex-col items-center rounded-[8px] border-2 border-dotted border-[#c2c2c2] bg-[#fff] pb-[16px] pt-[16px]"
             (click)="fileInput.click()"
           >
@@ -200,6 +210,14 @@
             <div class="file-desc mt-[6px] text-[#808080]">
               {{ uploadDesc | fileDesc }}
             </div>
+          </div>
+          <!-- 互斥：已存在 URL 录入条目时阻断本地上传 -->
+          <div
+            *ngIf="urlMode !== 'url' && hasUrlFileEntries()"
+            class="flex w-full items-center gap-[6px] rounded-[8px] border border-dashed border-[#c2c2c2] bg-[#fafafa] px-[16px] py-[12px] text-[12px] text-[#808080]"
+          >
+            <nz-icon nzType="info-circle" nzTheme="outline"></nz-icon>
+            {{ 'upload_blocked_by_url_files' | i18nextEager }}
           </div>
           <div
             *ngIf="fileList.length"
@@ -231,8 +249,14 @@
                   *ngIf="fileItem.progress === 'loading'"
                   nzSimple
                 ></nz-spin>
+                <nz-icon
+                  *ngIf="fileItem.progress !== 'loading' && fileItem.fromUrl"
+                  nzType="link"
+                  nzTheme="outline"
+                  class="text-[16px]"
+                ></nz-icon>
                 <meta-upload-file-icon
-                  *ngIf="fileItem.progress !== 'loading'"
+                  *ngIf="fileItem.progress !== 'loading' && !fileItem.fromUrl"
                   [fileName]="fileItem.name"
                 ></meta-upload-file-icon>
                 <span
@@ -241,17 +265,29 @@
                     'text-[#F23030]': fileItem.progress === 'failed'
                   }"
                   nz-tooltip
-                  [nzTooltipTitle]="fileItem.name"
+                  [nzTooltipTitle]="fileItem.fromUrl ? fileItem.url : fileItem.name"
                 >
                   {{ fileItem.name }}</span
                 >
                 <span
-                  class="ml-auto cursor-pointer text-[16px]"
-                  nz-icon
-                  nzType="delete"
-                  nzTheme="outline"
-                  (click)="removeFile($event, i)"
-                ></span>
+                  class="ml-auto flex items-center gap-[8px]"
+                >
+                  <span
+                    *ngIf="fileItem.fromUrl"
+                    class="cursor-pointer text-[16px]"
+                    nz-icon
+                    nzType="edit"
+                    nzTheme="outline"
+                    (click)="editUrlEntry($event, i)"
+                  ></span>
+                  <span
+                    class="cursor-pointer text-[16px]"
+                    nz-icon
+                    nzType="delete"
+                    nzTheme="outline"
+                    (click)="removeFile($event, i)"
+                  ></span>
+                </span>
               </div>
               <div
                 class="error-tip flex w-full items-center"

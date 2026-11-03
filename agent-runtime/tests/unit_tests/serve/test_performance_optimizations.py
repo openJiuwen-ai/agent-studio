@@ -72,12 +72,13 @@ def test_openjiuwen_direct_commit_does_not_alias_mutable_payload():
         pytest.skip("openjiuwen core does not expose InMemoryCommitState")
 
     state = InMemoryCommitState()
-    commit = getattr(state, "update_by_id_and_commit", None)
-    if commit is None:
+    update_by_id = getattr(state, "update_by_id", None)
+    if update_by_id is None:
         pytest.skip("openjiuwen core does not expose direct commit API")
 
     payload = {"loop-node": {"items": []}}
-    commit("loop-node", payload)
+    update_by_id("loop-node", payload)
+    state.commit()
 
     payload["loop-node"]["items"].append("mutated-after-commit")
 
@@ -162,7 +163,7 @@ async def test_async_ir_load_deduplicates_concurrent_same_path_within_request():
     release = asyncio.Event()
     load_calls = 0
 
-    async def load(_path):
+    async def load(_path, should_refresh_ttl=False):
         nonlocal load_calls
         load_calls += 1
         started.set()
@@ -199,7 +200,7 @@ async def test_async_ir_load_waiter_cancellation_does_not_duplicate_load():
     release = asyncio.Event()
     load_calls = 0
 
-    async def load(_path):
+    async def load(_path, should_refresh_ttl=False):
         nonlocal load_calls
         load_calls += 1
         started.set()

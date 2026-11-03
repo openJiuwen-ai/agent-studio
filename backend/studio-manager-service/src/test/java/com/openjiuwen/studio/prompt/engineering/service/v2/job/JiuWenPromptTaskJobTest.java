@@ -18,8 +18,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailure;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailureException;
+import com.openjiuwen.studio.agent.manager.exception.downstream.Transport;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.prompt.engineering.entity.v2.ExecConfig;
 import com.openjiuwen.studio.prompt.engineering.entity.v2.PromptTaskDetailVo;
@@ -335,6 +339,19 @@ class JiuWenPromptTaskJobTest {
         jiuWenPromptTaskJob.pauseTask(buildPromptTaskDetailVo(), TOKEN);
         verify(clientTemplate).postForEntity(anyString(), eq(TOKEN), isNull(), eq(JIuWenPromptBaseRes.class));
     }
+
+    @Test
+    void test_pauseTask_transport_failure() {
+        DownstreamFailureException transportEx = new DownstreamFailureException(
+            DownstreamFailure.transportFailure(DownstreamService.BUILDER, Transport.CLIENT_TEMPLATE, null));
+        when(clientTemplate.postForEntity(anyString(), eq(TOKEN), isNull(), eq(JIuWenPromptBaseRes.class)))
+            .thenThrow(transportEx);
+        AgentStudioException thrown = assertThrows(AgentStudioException.class, () -> {
+            jiuWenPromptTaskJob.pauseTask(buildPromptTaskDetailVo(), TOKEN);
+        });
+        assertEquals(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED, thrown.getErrorCode());
+    }
+
     @Test
     void test_pauseAndResumeTask_error() {
         // 测试 pauseTask 失败
@@ -580,11 +597,9 @@ class JiuWenPromptTaskJobTest {
 
     @Test
     void test_delete_task_job_not_found() {
-        HttpServerErrorException notFoundEx = new HttpServerErrorException(
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            "Internal Server Error",
-            "{\"code\":102155,\"message\":\"Prompt optimize job not found.\"}".getBytes(),
-            java.nio.charset.StandardCharsets.UTF_8);
+        DownstreamFailureException notFoundEx = new DownstreamFailureException(
+            DownstreamFailure.httpResponse(DownstreamService.BUILDER, Transport.CLIENT_TEMPLATE,
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), "102155", null));
 
         when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
             notFoundEx);
@@ -597,19 +612,30 @@ class JiuWenPromptTaskJobTest {
 
     @Test
     void test_delete_task_server_error_other_than_not_found() {
-        HttpServerErrorException serverErrorEx = new HttpServerErrorException(
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            "Internal Server Error",
-            "{\"code\":102099,\"message\":\"Some other server error.\"}".getBytes(),
-            java.nio.charset.StandardCharsets.UTF_8);
+        DownstreamFailureException serverErrorEx = new DownstreamFailureException(
+            DownstreamFailure.httpResponse(DownstreamService.BUILDER, Transport.CLIENT_TEMPLATE,
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), "102099", null));
 
         when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
             serverErrorEx);
 
-        // 非 job not found 的服务端错误仍应抛异常
-        assertThrows(AgentStudioException.class, () -> {
+        // 非 job not found 的服务端错误仍应抛 DELETE_OPTIMIZATION_TASK
+        AgentStudioException thrown = assertThrows(AgentStudioException.class, () -> {
             jiuWenPromptTaskJob.deleteTask(buildPromptTaskDetailVo(), TOKEN);
         });
+        assertEquals(StudioError.DELETE_OPTIMIZATION_TASK, thrown.getErrorCode());
+    }
+
+    @Test
+    void test_delete_task_transport_failure() {
+        DownstreamFailureException transportEx = new DownstreamFailureException(
+            DownstreamFailure.transportFailure(DownstreamService.BUILDER, Transport.CLIENT_TEMPLATE, null));
+        when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
+            transportEx);
+        AgentStudioException thrown = assertThrows(AgentStudioException.class, () -> {
+            jiuWenPromptTaskJob.deleteTask(buildPromptTaskDetailVo(), TOKEN);
+        });
+        assertEquals(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED, thrown.getErrorCode());
     }
 
     @Test
@@ -639,11 +665,9 @@ class JiuWenPromptTaskJobTest {
 
     @Test
     void test_get_task_detail_job_not_found() {
-        HttpServerErrorException notFoundEx = new HttpServerErrorException(
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            "Internal Server Error",
-            "{\"code\":102155,\"message\":\"Prompt optimize job not found.\"}".getBytes(),
-            java.nio.charset.StandardCharsets.UTF_8);
+        DownstreamFailureException notFoundEx = new DownstreamFailureException(
+            DownstreamFailure.httpResponse(DownstreamService.BUILDER, Transport.CLIENT_TEMPLATE,
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), "102155", null));
 
         when(clientTemplate.getForEntity(anyString(), eq(TOKEN), eq(JiuWenPromptDeatilRes.class))).thenThrow(
             notFoundEx);
@@ -657,11 +681,9 @@ class JiuWenPromptTaskJobTest {
 
     @Test
     void test_get_task_detail_server_error_other_than_not_found() {
-        HttpServerErrorException serverErrorEx = new HttpServerErrorException(
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            "Internal Server Error",
-            "{\"code\":102099,\"message\":\"Some other server error.\"}".getBytes(),
-            java.nio.charset.StandardCharsets.UTF_8);
+        DownstreamFailureException serverErrorEx = new DownstreamFailureException(
+            DownstreamFailure.httpResponse(DownstreamService.BUILDER, Transport.CLIENT_TEMPLATE,
+                HttpStatus.INTERNAL_SERVER_ERROR.value(), "102099", null));
 
         when(clientTemplate.getForEntity(anyString(), eq(TOKEN), eq(JiuWenPromptDeatilRes.class))).thenThrow(
             serverErrorEx);

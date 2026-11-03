@@ -10,6 +10,7 @@ import { UploadFileIconComponent } from '@shared/components/upload-file-icon/upl
 import { UploadFileAccPipe, UploadFileDescPipe } from '../../../pipes/upload-file.pipe';
 import { I18NEXT_NAMESPACE } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
+import { FileUrlInputComponent } from '@shared/components/file-url-input/file-url-input.component';
 
 @Component({
   selector: 'dynamic-node-params-chat',
@@ -28,6 +29,7 @@ import { I18nNamespace } from '@i18n';
     UploadFileIconComponent,
     UploadFileAccPipe,
     UploadFileDescPipe,
+    FileUrlInputComponent,
   ],
   providers: [
     {

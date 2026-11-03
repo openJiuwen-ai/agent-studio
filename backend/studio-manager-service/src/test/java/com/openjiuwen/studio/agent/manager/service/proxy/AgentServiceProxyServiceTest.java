@@ -1,13 +1,18 @@
 /* Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved. */
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
+import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SensitiveLogContext;
+import com.openjiuwen.studio.agent.common.utils.SensitiveTextMasker;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
@@ -15,12 +20,14 @@ import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.EnvironmentManagerEntity;
+import com.openjiuwen.studio.agent.manager.entity.EnvironmentVariableEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseChannel;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
+import com.openjiuwen.studio.agent.manager.mapper.EnvironmentVariableMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseChannelMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
@@ -33,6 +40,10 @@ import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
+import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
+import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
+import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
+import com.openjiuwen.studio.agent.manager.observability.OutboundCorrelationPolicy;
 import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,16 +53,21 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -105,6 +121,15 @@ class AgentServiceProxyServiceTest {
     private EnvironmentManagerMapper environmentManagerMapper;
 
     @Mock
+    private EnvironmentVariableMapper environmentVariableMapper;
+
+    @Mock
+    private EnvironmentCacheUtil environmentCacheUtil;
+
+    @Mock
+    private IPluginBase pluginBase;
+
+    @Mock
     private ReleaseChannelMapper releaseChannelMapper;
 
     @Mock
@@ -122,7 +147,8 @@ class AgentServiceProxyServiceTest {
     void setUp() {
         proxyService = new AgentServiceProxyService(runtimeClient, builderClient, redisClient, agentMapper, workflowMapper,
             modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper,
-            environmentManagerMapper, releaseChannelMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
+            environmentManagerMapper, environmentVariableMapper, environmentCacheUtil, pluginBase,
+            releaseChannelMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");
@@ -1089,6 +1115,313 @@ class AgentServiceProxyServiceTest {
         assertEquals("http://runtime:8080/v1/workflows/chat/code-1/conversations/conv-1?workspace_id=ws-1",
             urlCaptor.getValue());
         verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue(anyString());
+    }
+
+    /**
+     * 加密变量为纯数字、schema 类型为 integer/number 时解密值被归一为 JSON 裸数字，
+     * 回显脱敏需替换为「带引号掩码」：既脱敏又保持 JSON 合法，避免明文经回显泄漏。
+     */
+    @Test
+    void testMaskSecretText_JsonBareNumberSecret() {
+        Set<String> secrets = new LinkedHashSet<>(Arrays.asList("123456", "123456.0"));
+        assertEquals("{\"port\":\"******\"}", SensitiveTextMasker.mask("{\"port\":123456}", secrets, true));
+        assertEquals("{\"port\":\"******\"}", SensitiveTextMasker.mask("{\"port\":123456.0}", secrets, true));
+        // 数字出现在 JSON 字符串内部时替换为裸掩码，字符串内容仍合法
+        assertEquals("{\"msg\":\"count ****** items\"}",
+            SensitiveTextMasker.mask("{\"msg\":\"count 123456 items\"}", secrets, true));
+        // 无符号密钥不应把 -123456 这类带符号数字拆坏（保持 JSON 合法）
+        assertEquals("{\"a\":-123456}", SensitiveTextMasker.mask("{\"a\":-123456}", secrets, true));
+    }
+
+    /**
+     * 加密变量为布尔字面量时：裸布尔替换为带引号掩码，且字符串内的布尔词不被误替换（保持 JSON 合法）。
+     */
+    @Test
+    void testMaskSecretText_JsonBareBooleanSecret() {
+        Set<String> secrets = new LinkedHashSet<>(Collections.singletonList("true"));
+        assertEquals("{\"flag\":\"******\"}", SensitiveTextMasker.mask("{\"flag\":true}", secrets, true));
+        assertEquals("{\"msg\":\"it is ******\"}", SensitiveTextMasker.mask("{\"msg\":\"it is true\"}", secrets, true));
+        // 布尔词出现在 JSON 字符串中间时同样替换，且不破坏 JSON
+        assertEquals("{\"msg\":\"a ****** flag\"}", SensitiveTextMasker.mask("{\"msg\":\"a true flag\"}", secrets, true));
+    }
+
+    /**
+     * 字符串字面量密钥整体替换；相邻的更长数字不应被误替换。
+     */
+    @Test
+    void testMaskSecretText_JsonQuotedSecretAndNonSecretPreserved() {
+        Set<String> secrets = new LinkedHashSet<>(Collections.singletonList("123456"));
+        assertEquals("{\"port\":\"******\"}", SensitiveTextMasker.mask("{\"port\":\"123456\"}", secrets, true));
+        assertEquals("{\"port\":1234567}", SensitiveTextMasker.mask("{\"port\":1234567}", secrets, true));
+    }
+
+    /**
+     * 非 JSON 回显（URL/Header/错误信息）中裸密钥仍替换为掩码。
+     */
+    @Test
+    void testMaskSecretText_NonJsonBareSecret() {
+        Set<String> secrets = new LinkedHashSet<>(Collections.singletonList("123456"));
+        assertEquals("host?port=******", SensitiveTextMasker.mask("host?port=123456", secrets, false));
+    }
+
+    /**
+     * 日志脱敏上下文：登记敏感值后 mask 替换为掩码，clear 后不再替换（避免线程复用跨请求泄漏）。
+     */
+    @Test
+    void testSensitiveLogContext_RegisterAndClear() {
+        try {
+            SensitiveLogContext.register(Collections.singletonList("S3cretValue"));
+            assertEquals("https://host/******", SensitiveLogContext.mask("https://host/S3cretValue"));
+        } finally {
+            SensitiveLogContext.clear();
+        }
+        assertEquals("https://host/S3cretValue", SensitiveLogContext.mask("https://host/S3cretValue"));
+    }
+
+    // ---------- resolveEnvVarParams（环境变量绑定回填 / 缺失拦截） ----------
+
+    private static final String SCHEMA_HOST_REQUIRED =
+        "{\"properties\":{\"host\":{\"type\":\"string\",\"env_var_ref\":\"HOST\"}},\"required\":[\"host\"]}";
+
+    private static final String SCHEMA_OTHER_REQUIRED =
+        "{\"properties\":{\"other\":{\"type\":\"string\",\"env_var_ref\":\"OTHER\"}},\"required\":[\"other\"]}";
+
+    private static final String SCHEMA_HOST_REQUIRED_OPTIONAL =
+        "{\"properties\":{\"host\":{\"type\":\"string\",\"env_var_ref\":\"HOST\"},"
+            + "\"opt\":{\"type\":\"string\",\"env_var_ref\":\"OPT\"}},\"required\":[\"host\"]}";
+
+    /**
+     * 安全边界：占位符引用的变量名与字段绑定变量不一致时不解析，原样下发，防止套取其它环境变量明文。
+     */
+    @Test
+    void testResolveEnvVarParams_PlaceholderNameMismatch_NotResolved() {
+        when(pluginBase.buildToolByPlugin("proj-1", "ws-1", "plugin-1", "1"))
+            .thenReturn(toolWithInputSchema(SCHEMA_HOST_REQUIRED));
+        String parameter = "{\"host\":\"${_env.plugin_url_params.OTHER}\"}";
+
+        Object result = resolveEnvVarParams(parameter);
+
+        assertTrue(missingVarsOf(result).isEmpty());
+        assertFalse(loadFailedOf(result));
+        assertEquals(parameter, parameterOf(result), "未绑定的占位符应原样下发");
+    }
+
+    /**
+     * 必填绑定参数为空且变量缺失时计入缺失（拦截）；非必填留空放行。
+     */
+    @Test
+    void testResolveEnvVarParams_RequiredMissingBlockedOptionalAllowed() {
+        when(pluginBase.buildToolByPlugin("proj-1", "ws-1", "plugin-1", "1"))
+            .thenReturn(toolWithInputSchema(SCHEMA_HOST_REQUIRED_OPTIONAL));
+        stubDefaultEnvWithVariables("[]");
+
+        Object result = resolveEnvVarParams("{}");
+
+        assertTrue(missingVarsOf(result).contains("HOST"), "必填绑定参数缺失应计入缺失");
+        assertFalse(missingVarsOf(result).contains("OPT"), "非必填绑定参数留空应放行");
+        assertFalse(loadFailedOf(result));
+    }
+
+    /**
+     * 用户手填的值优先：手填的 ****** 字面量不再当作回填信号，原样下发。
+     */
+    @Test
+    void testResolveEnvVarParams_UserFilledMaskLiteralPreserved() {
+        when(pluginBase.buildToolByPlugin("proj-1", "ws-1", "plugin-1", "1"))
+            .thenReturn(toolWithInputSchema(SCHEMA_HOST_REQUIRED));
+        String parameter = "{\"host\":\"******\"}";
+
+        Object result = resolveEnvVarParams(parameter);
+
+        assertEquals(parameter, parameterOf(result), "用户手填的 ****** 不应被回填覆盖");
+        assertTrue(missingVarsOf(result).isEmpty());
+    }
+
+    /**
+     * 数组格式 input_schema 按当前调测工具过滤，不注入同插件其它工具的绑定。
+     */
+    @Test
+    void testResolveEnvVarParams_ArraySchemaFilteredByToolId() {
+        when(pluginBase.buildToolByPlugin("proj-1", "ws-1", "plugin-1", "1")).thenReturn(toolWithInputSchema(
+            arrayInputSchema(new String[][]{{"1", SCHEMA_HOST_REQUIRED}, {"2", SCHEMA_OTHER_REQUIRED}})));
+        stubDefaultEnvWithVariables("[]");
+
+        Object result = resolveEnvVarParams("{}");
+
+        assertTrue(missingVarsOf(result).contains("HOST"));
+        assertFalse(missingVarsOf(result).contains("OTHER"), "其它工具的绑定不应注入当前调测");
+    }
+
+    /**
+     * 缓存中加密变量解密失败，但 DB 回退成功解析同一变量 → 不误判为加载失败。
+     */
+    @Test
+    void testResolveEnvVarParams_CacheDecryptFailDbSuccess_NotLoadFailed() {
+        when(pluginBase.buildToolByPlugin("proj-1", "ws-1", "plugin-1", "1"))
+            .thenReturn(toolWithInputSchema(SCHEMA_HOST_REQUIRED));
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+        when(environmentCacheUtil.getEnvironmentCache("env-1", "ws-1"))
+            .thenReturn("[{\"name\":\"HOST\",\"value\":{\"content\":\"ENCRYPTED\",\"secret\":true}}]");
+        EnvironmentVariableEntity entity = new EnvironmentVariableEntity();
+        entity.setEnvVariable("[{\"name\":\"HOST\",\"value\":{\"content\":\"real-host\",\"secret\":false}}]");
+        when(environmentVariableMapper.findByProjectIdAndWorkspaceIdAndEnvId("proj-1", "ws-1", "env-1"))
+            .thenReturn(entity);
+
+        try (MockedStatic<CryptoUtils> crypto = mockStatic(CryptoUtils.class)) {
+            crypto.when(() -> CryptoUtils.decrypt("ENCRYPTED")).thenThrow(new RuntimeException("bad key"));
+
+            Object result = resolveEnvVarParams("{}");
+
+            assertFalse(loadFailedOf(result), "缓存解密失败但 DB 回退成功不应误判加载失败");
+            assertTrue(missingVarsOf(result).isEmpty());
+            assertTrue(parameterOf(result).contains("real-host"));
+        }
+    }
+
+    /** 反射调用私有 resolveEnvVarParams（固定 proj-1/ws-1/plugin-1，toolId=1）。 */
+    private Object resolveEnvVarParams(String parameter) {
+        return ReflectionTestUtils.invokeMethod(proxyService, "resolveEnvVarParams", "proj-1", "ws-1", "plugin-1", "1",
+            parameter);
+    }
+
+    private Set<String> missingVarsOf(Object result) {
+        return ReflectionTestUtils.invokeMethod(result, "getMissingVars");
+    }
+
+    private boolean loadFailedOf(Object result) {
+        return Boolean.TRUE.equals(ReflectionTestUtils.invokeMethod(result, "isLoadFailed"));
+    }
+
+    private String parameterOf(Object result) {
+        return ReflectionTestUtils.invokeMethod(result, "getParameter");
+    }
+
+    private ToolEntity toolWithInputSchema(String inputSchema) {
+        ToolEntity tool = new ToolEntity();
+        tool.setInputSchema(inputSchema);
+        return tool;
+    }
+
+    /** 默认环境存在 + DB 环境变量为该 JSON（缓存未命中） */
+    private void stubDefaultEnvWithVariables(String envVariableJson) {
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-1");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-1")).thenReturn(List.of(env));
+        EnvironmentVariableEntity entity = new EnvironmentVariableEntity();
+        entity.setEnvVariable(envVariableJson);
+        when(environmentVariableMapper.findByProjectIdAndWorkspaceIdAndEnvId("proj-1", "ws-1", "env-1"))
+            .thenReturn(entity);
+    }
+
+    /** 构造数组格式 input_schema：[{tool_id, input_schema}]，input_schema 为内层 schema 字符串。 */
+    private static String arrayInputSchema(String[][] toolIdAndSchema) {
+        JSONArray array = new JSONArray();
+        for (String[] pair : toolIdAndSchema) {
+            JSONObject item = new JSONObject();
+            item.put("tool_id", pair[0]);
+            item.put("input_schema", pair[1]);
+            array.add(item);
+        }
+        return array.toJSONString();
+    }
+
+    /**
+     * parseSkipOutboundHeaders — null / 空串 / 全空白项:得到空集(不过滤,旧行为)
+     */
+    @Test
+    void testParseSkipOutboundHeaders_BlankInputYieldsEmptySet() {
+        assertTrue(AgentServiceProxyService.parseSkipOutboundHeaders(null).isEmpty());
+        assertTrue(AgentServiceProxyService.parseSkipOutboundHeaders("").isEmpty());
+        assertTrue(AgentServiceProxyService.parseSkipOutboundHeaders(" , , ").isEmpty());
+    }
+
+    /**
+     * parseSkipOutboundHeaders — trim + 小写归一 + 去空项
+     */
+    @Test
+    void testParseSkipOutboundHeaders_TrimsLowercasesAndDropsBlanks() {
+        assertEquals(Set.of("host", "content-length", "accept-encoding"),
+            AgentServiceProxyService.parseSkipOutboundHeaders(" Host ,Content-Length,,accept-encoding "));
+    }
+
+    /**
+     * shouldSkipOutboundHeader — 名单为空:任何头都不跳过(全量透传旧行为)
+     */
+    @Test
+    void testShouldSkipOutboundHeader_EmptyListMatchesNothing() {
+        ReflectionTestUtils.setField(proxyService, "skipOutboundHeaders", Set.of());
+        assertFalse(proxyService.shouldSkipOutboundHeader("Host"));
+        assertFalse(proxyService.shouldSkipOutboundHeader("content-length"));
+    }
+
+    /**
+     * shouldSkipOutboundHeader — 命中判断大小写不敏感;业务头不受影响
+     */
+    @Test
+    void testShouldSkipOutboundHeader_CaseInsensitive() {
+        ReflectionTestUtils.setField(proxyService, "skipOutboundHeaders", Set.of("host", "content-length"));
+        assertTrue(proxyService.shouldSkipOutboundHeader("Host"));
+        assertTrue(proxyService.shouldSkipOutboundHeader("HOST"));
+        assertTrue(proxyService.shouldSkipOutboundHeader("Content-Length"));
+        assertFalse(proxyService.shouldSkipOutboundHeader("Authorization"));
+    }
+
+    /**
+     * buildStreamRequest — 名单为空(默认):Host / Content-Length / Accept-Encoding 照常透传(回归锚)
+     */
+    @Test
+    void testBuildStreamRequest_EmptyListForwardsTransportHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Host", "studio.example.com");
+        headers.add("Content-Length", "123");
+        headers.add("Accept-Encoding", "gzip");
+        headers.add("Authorization", "Bearer token");
+
+        okhttp3.Request request = invokeBuildStreamRequest(headers);
+        assertEquals("studio.example.com", request.header("Host"));
+        assertEquals("123", request.header("Content-Length"));
+        assertEquals("gzip", request.header("Accept-Encoding"));
+        assertEquals("Bearer token", request.header("Authorization"));
+    }
+
+    /**
+     * buildStreamRequest — 名单配置后:名单内的头被跳过,业务头照常透传
+     */
+    @Test
+    void testBuildStreamRequest_ConfiguredListSkipsListedHeaders() {
+        ReflectionTestUtils.setField(proxyService, "skipOutboundHeaders",
+            Set.of("host", "connection", "keep-alive", "transfer-encoding", "content-length", "accept-encoding"));
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Host", "studio.example.com");
+        headers.add("Content-Length", "123");
+        headers.add("Accept-Encoding", "gzip");
+        headers.add("Connection", "keep-alive");
+        headers.add("Authorization", "Bearer token");
+
+        okhttp3.Request request = invokeBuildStreamRequest(headers);
+        assertNull(request.header("Host"));
+        assertNull(request.header("Content-Length"));
+        assertNull(request.header("Accept-Encoding"));
+        assertNull(request.header("Connection"));
+        assertEquals("Bearer token", request.header("Authorization"));
+    }
+
+    /**
+     * 直调私有 buildStreamRequest:MDC 补齐 RUNTIME_EXECUTION 三键,origin 与目标 URL 一致
+     */
+    private okhttp3.Request invokeBuildStreamRequest(HttpHeaders headers) {
+        MDC.put(MdcKeys.REQUEST_ID, "req-1");
+        MDC.put(MdcKeys.TRACE_ID, "trace-1");
+        MDC.put(MdcKeys.EXECUTION_ID, "exec-1");
+        try {
+            return ReflectionTestUtils.invokeMethod(proxyService, "buildStreamRequest",
+                "http://runtime:8080/v1/workflows/chat", headers, "{}",
+                OutboundCorrelationPolicy.RUNTIME_EXECUTION, "http://runtime:8080");
+        } finally {
+            MDC.clear();
+        }
     }
 
     /**

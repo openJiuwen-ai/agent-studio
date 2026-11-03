@@ -623,9 +623,14 @@ class FlowCard(WorkflowComponent):
         return self._end_interrupt
 
     @property
-    def node_type(self) -> str:
-        """获取节点类型"""
+    def resolved_node_type(self) -> str:
+        """获取节点类型（与 NODE_TYPE 常量区分，避免静态分析字段/方法同名冲突）"""
         return self.NODE_TYPE
+
+    @property
+    def node_type(self) -> str:
+        """兼容旧属性名；新代码请使用 resolved_node_type。"""
+        return self.resolved_node_type
 
     @property
     def config(self) -> FlowCardConfig:

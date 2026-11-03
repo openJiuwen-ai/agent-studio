@@ -135,7 +135,10 @@ public class LLMNodeConverter extends AbstractSDSLNodeConverter {
         Map<String, Object> modelConfig = MapReadUtil.safeCastToMapWithStringKey(data.get("model"));
         if (modelConfig != null) {
             Map<String, String> modelInfo = new HashMap<>();
-            modelInfo.put(CommonConstant.ModelParam.MODEL_NAME, modelConfig.get("name").toString());
+            String modelName = modelConfig.get("name").toString();
+            modelInfo.put(CommonConstant.ModelParam.MODEL_NAME, modelName);
+            // Dify 只有模型名，补全平台 deployment id/type（IR 生成必需），查不到留空用户手选
+            fillModelDeploymentInfo(modelInfo, modelName);
             configs.put(CommonConstant.ModelParam.MODEL, modelInfo);
             Map<String, Object> modelParams = MapReadUtil.safeCastToMapWithStringKey(modelConfig.get("completion_params"));
             configs.put(CommonConstant.ModelParam.MAX_TOKENS, modelParams.get(CommonConstant.ModelParam.MAX_TOKENS) == null ? 2048 : modelParams.get(CommonConstant.ModelParam.MAX_TOKENS));

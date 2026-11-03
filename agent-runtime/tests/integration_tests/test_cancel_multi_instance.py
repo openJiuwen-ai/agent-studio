@@ -32,6 +32,7 @@ from agent_runtime.serve.execution_registry import (
     RegistrationInfo,
     reset_execution_registry,
 )
+from redis_native.client import NativeRedisClient
 
 
 @pytest.fixture(autouse=True)
@@ -81,7 +82,7 @@ class TestCrossInstanceCancelBroadcast:
         """VR-9：执行在实例 A，/cancel 受理在实例 B → 广播 → A 本地 task 被取消。"""
         client = fakeredis.aioredis.FakeRedis(decode_responses=False)
         try:
-            with patch("common_utils.redis_manager.get_redis_client", return_value=client):
+            with patch("redis_spi.accessor.get_redis", return_value=NativeRedisClient(client)):
                 # 实例 A：注册在飞执行 + 启动广播订阅（对应 server lifespan 启动的订阅者）
                 registry_a = ExecutionRegistry()
                 running_task = asyncio.create_task(asyncio.sleep(30))
@@ -124,7 +125,7 @@ class TestResumeAfterCancelDuringSuspend:
         """US3：挂起期间被取消 → 注册注销后标记留存 → 恢复检测命中并清标记。"""
         client = fakeredis.aioredis.FakeRedis(decode_responses=False)
         try:
-            with patch("common_utils.redis_manager.get_redis_client", return_value=client):
+            with patch("redis_spi.accessor.get_redis", return_value=NativeRedisClient(client)):
                 registry = ExecutionRegistry()
                 task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(
@@ -140,7 +141,7 @@ class TestResumeAfterCancelDuringSuspend:
 
                 # 恢复路径（workflow_runner 直读 Redis，不 import serve 层）
                 with patch(
-                    "agent_runtime.runner.workflow_runner.get_redis_client",
+                    "redis_spi.accessor.get_redis",
                     return_value=client,
                 ):
                     runner = WorkflowRunner.__new__(WorkflowRunner)
@@ -158,7 +159,7 @@ class TestCancelEndpointEndToEnd:
         """端到端：端点受理 → 标记 + 广播 → 持有实例订阅回调 → 本地 task 取消。"""
         client = fakeredis.aioredis.FakeRedis(decode_responses=False)
         try:
-            with patch("common_utils.redis_manager.get_redis_client", return_value=client):
+            with patch("redis_spi.accessor.get_redis", return_value=NativeRedisClient(client)):
                 registry = ExecutionRegistry()
                 running_task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(
@@ -197,7 +198,7 @@ class TestCancelEndpointEndToEnd:
         """端到端 403：project 不匹配 → 真实 _build_error_response（ErrorRsp i18n），标记不置位。"""
         client = fakeredis.aioredis.FakeRedis(decode_responses=False)
         try:
-            with patch("common_utils.redis_manager.get_redis_client", return_value=client):
+            with patch("redis_spi.accessor.get_redis", return_value=NativeRedisClient(client)):
                 registry = ExecutionRegistry()
                 task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(

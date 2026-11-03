@@ -32,9 +32,12 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "flask>=3.1.0",
     "pyahocorasick>=2.2.0",
+    "Pillow==10.4.0",
     "model-service",
     "storage",
     "common-utils",
+    "redis-spi",
+    "redis-native",
 ]
 
 [project.optional-dependencies]
@@ -64,6 +67,7 @@ include = ["agent_runtime*", "jiuwen*", "agent_builder*"]
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
+addopts = "--import-mode=importlib"
 
 [[tool.uv.index]]
 name = "aliyun-mirrors"
@@ -75,3 +79,6 @@ default = true
 model-service = { path = "../packages/model_service", editable = true }
 storage = { path = "../packages/storage", editable = true }
 common-utils = { path = "../packages/common_utils", editable = true }
+# Redis 适配层（Phase 2 接线）：SPI 抽象 + redis-py 原生实现
+redis-spi = { path = "../packages/redis_spi", editable = true }
+redis-native = { path = "../packages/redis_native", editable = true }

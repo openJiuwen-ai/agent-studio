@@ -1,4 +1,5 @@
 .editor-wrapper{
+  position: relative;
   height: 100%;
   width: 100%;
   padding: 8px 0 12px 12px;
@@ -6,6 +7,7 @@
   border-radius: 2px;
 }
 .editor {
+  position: relative;
   width: 100%;
   height: 100%;
   white-space: pre-wrap;
@@ -22,15 +24,11 @@
     transition: border-color 0.2s;
   }
 
-  //&::before
-  //{
-  //  position: relative;
-  //  content: attr(placeholder);
-  //  color: #9ca3af;
-  //  pointer-events: none;
-  //}
   &::before {
     position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
     content: attr(placeholder);
     color: #9ca3af;
     pointer-events: none;
@@ -94,6 +92,18 @@
     word-break: break-word;
     background-color: #deecff;
     color: #1476FF;
+    border-radius: 2px;
+    padding-left: 4px;
+    padding-right: 4px;
+
+    margin-left: 2px;
+    margin-right: 2px;
+  }
+  .highlight-inline {
+
+    word-break: break-word;
+    background-color: #e8f5e9;
+    color: #2e7d32;
     border-radius: 2px;
     padding-left: 4px;
     padding-right: 4px;

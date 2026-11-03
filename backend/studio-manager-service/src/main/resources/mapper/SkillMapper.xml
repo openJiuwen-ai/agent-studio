@@ -22,6 +22,7 @@
     <resultMap id="SearchResultMap" type="com.openjiuwen.studio.agent.manager.bo.SkillDetails" extends="BaseResultMap">
         <result column="obs_path" jdbcType="VARCHAR" property="obsPath"/>
         <result column="version_name" jdbcType="VARCHAR" property="versionName"/>
+        <result column="published_asset" jdbcType="INTEGER" property="publishedAsset"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.SkillEntity">

@@ -14,6 +14,18 @@
   .ti3-form-title {
     font-size: 16px !important;
   }
+
+  #customDetail {
+    tp-layout-content.tp-layout-content {
+      min-width: unset !important;
+      max-width: 100% !important;
+    }
+
+    custom-header .responsive {
+      min-width: unset !important;
+      max-width: 100% !important;
+    }
+  }
 }
 
 .alert {
@@ -78,15 +90,37 @@
 
 #fullContent {
   max-width: 1884px !important;
-  min-width: 1884px !important;
   padding-left: 96px !important;
   padding-right: 96px !important;
+  box-sizing: border-box !important;
 }
 
-@media screen and (max-width: 1884px) {
+@media screen and (max-width: 1920px) {
   #fullContent {
-    max-width: 1508px !important;
+    width: 100% !important;
+    max-width: unset !important;
     padding-left: 96px !important;
     padding-right: 96px !important;
+  }
+}
+
+@media screen and (max-width: 1400px) {
+  #fullContent {
+    padding-left: 48px !important;
+    padding-right: 48px !important;
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  #fullContent {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  #fullContent {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
   }
 }

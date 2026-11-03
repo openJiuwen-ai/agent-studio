@@ -10,4 +10,7 @@ import java.util.List;
 public interface IDatasourceExecuteService {
 
     DatasourceExecuteResp executeSql(String datasourceId, String query, List<String> conditions);
+
+    DatasourceExecuteResp executeSql(String datasourceId, String query, List<String> conditions,
+                                     String outputFormat);
 }

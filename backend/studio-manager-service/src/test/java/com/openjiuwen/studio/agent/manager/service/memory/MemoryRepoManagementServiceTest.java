@@ -3,6 +3,8 @@
  */
 package com.openjiuwen.studio.agent.manager.service.memory;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.AgentMemoryConfig;
 import com.openjiuwen.studio.agent.manager.dto.CreateMemoryRepoRequestBody;
@@ -22,6 +24,7 @@ import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
+import com.openjiuwen.studio.agent.manager.service.IMemoryServiceInstanceService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +53,8 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.mockito.ArgumentCaptor;
+
 @MockitoSettings(strictness = Strictness.LENIENT)
 class MemoryRepoManagementServiceTest {
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
@@ -66,6 +71,9 @@ class MemoryRepoManagementServiceTest {
 
     @Mock
     private MgObsService mgObsService;
+
+    @Mock
+    private IMemoryServiceInstanceService memoryServiceInstanceService;
 
     @InjectMocks
     private MemoryRepoManagementService memoryRepoManagementService;
@@ -121,6 +129,69 @@ class MemoryRepoManagementServiceTest {
             // When
             CreateMemoryRepoResponseBody result = memoryRepoManagementService.createMemoryRepo(null, null, null);
         });
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_empty_should_throw() {
+        // Given
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(new ArrayList<>());
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_contains_null_should_throw() {
+        // Given
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        List<LongTermMemoryStrategy> strategies = new ArrayList<>();
+        strategies.add(null);
+        body.setLongTermMemoryStrategies(strategies);
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_type_null_should_throw() {
+        // Given
+        LongTermMemoryStrategy s1 = new LongTermMemoryStrategy();
+        s1.setType(null);
+        s1.setPrompt("p1");
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(List.of(s1));
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void test_createMemoryRepo_strategies_duplicate_type_should_throw() {
+        // Given
+        LongTermMemoryStrategy s1 = new LongTermMemoryStrategy();
+        s1.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        s1.setPrompt("p1");
+        LongTermMemoryStrategy s2 = new LongTermMemoryStrategy();
+        s2.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        s2.setPrompt("p2");
+        CreateMemoryRepoRequestBody body = new CreateMemoryRepoRequestBody();
+        body.setName("test_name");
+        body.setLongTermMemoryStrategies(List.of(s1, s2));
+
+        // When/Then
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> memoryRepoManagementService.createMemoryRepo("not_empty", "not_empty", body));
+        assertEquals(StudioError.MEMORY_STRATEGY_DUPLICATE, ex.getErrorCode());
     }
 
 
@@ -212,6 +283,62 @@ class MemoryRepoManagementServiceTest {
             // When
             ModifyMemoryRepoResponseBody result = memoryRepoManagementService.modifyMemoryRepo(null, null, null, null);
         });
+    }
+
+
+    @Test
+    void test_modifyMemoryRepo_should_not_default_backend_type_to_builtin_when_omitted() throws Exception {
+        // Given — 编辑请求仅改名称，未携带 memory_backend_type
+        when(memoryRepoMapper.updateById(any(MemoryRepoEntity.class))).thenReturn(1);
+
+        ModifyMemoryRepoRequestBody body = new ModifyMemoryRepoRequestBody();
+        List<LongTermMemoryStrategy> strategies = new ArrayList<>();
+        LongTermMemoryStrategy strategy = new LongTermMemoryStrategy();
+        strategy.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        strategy.setPrompt("prompt");
+        strategies.add(strategy);
+        body.setName("renamed-repo");
+        body.setDescription("renamed-desc");
+        body.setLongTermMemoryStrategies(strategies);
+        // memoryBackendType 与 memoryServiceInstanceId 均未设置
+
+        // When
+        memoryRepoManagementService.modifyMemoryRepo("project1", "repo-external", "ws1", body);
+
+        // Then — 写入实体的 memoryBackendType 必须保持为 null（不默认 BUILTIN），
+        // 这样 MyBatis 选择性更新会跳过该列，EXTERNAL 记忆库不会被静默改写。
+        ArgumentCaptor<MemoryRepoEntity> captor = ArgumentCaptor.forClass(MemoryRepoEntity.class);
+        verify(memoryRepoMapper).updateById(captor.capture());
+        assertNull(captor.getValue().getMemoryBackendType(),
+            "修改时缺失 memory_backend_type 不得默认为 BUILTIN");
+        assertNull(captor.getValue().getMemoryServiceInstanceId(),
+            "修改时缺失 memory_service_instance_id 不得被篡改");
+    }
+
+    @Test
+    void test_modifyMemoryRepo_should_preserve_explicit_external_backend_type() throws Exception {
+        // Given — 显式携带 EXTERNAL + 实例ID，应原样写入
+        when(memoryRepoMapper.updateById(any(MemoryRepoEntity.class))).thenReturn(1);
+
+        ModifyMemoryRepoRequestBody body = new ModifyMemoryRepoRequestBody();
+        List<LongTermMemoryStrategy> strategies = new ArrayList<>();
+        LongTermMemoryStrategy strategy = new LongTermMemoryStrategy();
+        strategy.setType(LongTermMemoryStrategy.TypeEnum.SEMANTIC_MEMORY);
+        strategy.setPrompt("prompt");
+        strategies.add(strategy);
+        body.setName("external-repo");
+        body.setLongTermMemoryStrategies(strategies);
+        body.setMemoryBackendType("EXTERNAL");
+        body.setMemoryServiceInstanceId("instance-001");
+
+        // When
+        memoryRepoManagementService.modifyMemoryRepo("project1", "repo-external", "ws1", body);
+
+        // Then
+        ArgumentCaptor<MemoryRepoEntity> captor = ArgumentCaptor.forClass(MemoryRepoEntity.class);
+        verify(memoryRepoMapper).updateById(captor.capture());
+        assertEquals("EXTERNAL", captor.getValue().getMemoryBackendType());
+        assertEquals("instance-001", captor.getValue().getMemoryServiceInstanceId());
     }
 
 

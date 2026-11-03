@@ -23,6 +23,7 @@ import com.openjiuwen.studio.agent.manager.dto.CreateVersionReq;
 import com.openjiuwen.studio.agent.manager.dto.ExportParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceRsp;
+import com.openjiuwen.studio.agent.manager.dto.RuntimeAssetExportParams;
 import com.openjiuwen.studio.agent.manager.dto.GetAgentVersionQo;
 import com.openjiuwen.studio.agent.manager.dto.ImportListInfo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
@@ -370,6 +371,30 @@ import java.util.Map;
         @RequestHeader(value = "Accept", required = false) String accept,
         @NotNull @ApiParam(value = "导出参数设置。", required = true) @Valid @RequestBody ExportResourceParams body);
 
+    @ApiOperation(value = "导出运行时资产", nickname = "exportRuntimeAsset",
+        notes = "按应用维度（agent/controller/workflow）导出全部运行依赖资产，打包成 ZIP。"
+            + "复用 t_mapping 依赖图，输出 ZIP + manifest.json，供运行态加载。",
+        response = org.springframework.core.io.Resource.class, tags = {"AgentManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "导出的 ZIP 文件流。", response = org.springframework.core.io.Resource.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/runtime-asset/export",
+        method = RequestMethod.POST)
+    ResponseEntity<Resource> exportRuntimeAsset(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "项目ID。", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间ID。", required = true, schema = @Schema())
+        @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "运行时资产导出参数。", required = true) @Valid
+        @RequestBody RuntimeAssetExportParams body);
+
+
     @ApiOperation(value = "导出插件", nickname = "exportTools", notes = "导出插件。", response = Resource.class,
         tags = {"AgentManagement"})
     @ApiResponses(value = {
@@ -490,7 +515,10 @@ import java.util.Map;
         GetAgentVersionQo getAgentVersionQo);
 
     @ApiOperation(value = "获取指定角色的权限列表", nickname = "getPermissionsByRole",
-        notes = "根据角色名称返回该角色对应的权限列表。", response = List.class, responseContainer = "Map",
+        notes = "根据角色名称返回该角色对应的权限列表。响应 Map 的 key 为角色名(如 DEVELOPER)，"
+            + "另有特殊 key: creatorCheckPermissions(需创建人校验的 METHOD#URI 列表)、"
+            + "currentUserId(当前用户 userId)、currentUserName(当前用户 userName)。",
+        response = List.class, responseContainer = "Map",
         tags = {"AgentManagement"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "成功获取权限列表。", response = List.class, responseContainer = "Map"),

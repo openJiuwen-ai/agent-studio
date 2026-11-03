@@ -1,0 +1,112 @@
+<div class="flex h-full w-full flex-col" (keydown)="handleKeyDown($event)">
+  <!-- Header -->
+  <div class="mb-[16px] block">
+    <div class="flex w-[calc(100%-38px)] items-center justify-between">
+      <div class="flex items-center gap-[8px]">
+        <img
+          class="model-config-icon"
+          [src]="type2Img(nodeInfo.type)"
+          alt="http-node"
+        />
+        <edit-name
+          [(name)]="nodeInfo.name"
+          (onBlurConfirm)="updateName()"
+        ></edit-name>
+      </div>
+
+      <div class="flex items-center gap-[16px]" *ngIf="!isFlowReadonly">
+        <div
+          (click)="onClickTest()"
+          class="single-test-icon-modal"
+          nz-tooltip
+          [nzTooltipTitle]="'single-test' | i18nextEager"
+        ></div>
+        <div class="cursor-pointer" nz-tooltip [nzTooltipTitle]="'icon-more' | i18nextEager">
+          <div nz-dropdown [nzDropdownMenu]="actionsMenu" nzTrigger="click" class="pw-three-dots-more-modal">
+            <span nz-icon nzType="more" nzTheme="outline"></span>
+          </div>
+          <nz-dropdown-menu #actionsMenu="nzDropdownMenu">
+            <ul nz-menu>
+              <li *ngFor="let action of actions" nz-menu-item (click)="onClickAction(action)">{{ action.label }}</li>
+            </ul>
+          </nz-dropdown-menu>
+        </div>
+        <div class="h-[16px] w-[1px] bg-[#dbdbdb]"></div>
+      </div>
+    </div>
+
+    <node-description
+      [nodeInfo]="nodeInfo"
+      (descriptionChange)="updateView()"
+    ></node-description>
+
+    <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
+  </div>
+
+  <!-- Body -->
+  <div id="flow-http-modal-body" class="relative h-full w-full overflow-auto flex-1 pr-[16px]">
+    <div class="flex h-full w-full flex-col overflow-auto">
+      <!-- API URL -->
+      <meta-config-url
+        #configUrl
+        [configs]="configs"
+        (valueChange)="onSave()"
+        (updateTimeChange)="changeUpdateTime()"
+      ></meta-config-url>
+
+      <div class="my-[16px] h-[1px] w-full shrink-0 bg-[#f0f0f0]"></div>
+
+      <!-- Input Params -->
+      <meta-config-input-output
+        #configInputOutput
+        [nodeInfo]="nodeInfo"
+        [inputParams]="inputParams"
+        [sourceOptions]="sourceOptions"
+        (inputChange)="inputChange($event)"
+      ></meta-config-input-output>
+
+      <div class="my-[16px] h-[1px] w-full shrink-0 bg-[#f0f0f0]"></div>
+
+      <!-- Request Config (Query / Headers / Body) -->
+      <meta-config-request
+        #configRequest
+        [nodeInfo]="nodeInfo"
+        [configs]="configs"
+        [inputParams]="inputParams"
+        [sourceOptions]="sourceOptions"
+        (valueChange)="onSave()"
+        (inputChange)="inputOnSave()"
+        (timeChange)="changeUpdateTime()"
+      ></meta-config-request>
+
+      <div class="my-[16px] h-[1px] w-full shrink-0 bg-[#f0f0f0]"></div>
+
+      <!-- Auth -->
+      <meta-config-auth
+        #configAuth
+        [configs]="configs"
+        (valueChange)="onSave()"
+        (inputChange)="inputOnSave()"
+        (updateTimeChange)="changeUpdateTime()"
+      ></meta-config-auth>
+
+      <div class="my-[16px] h-[1px] w-full shrink-0 bg-[#f0f0f0]"></div>
+
+      <!-- Output Params (readonly) -->
+      <meta-acc-block class="block" [title]="'output_params' | i18nextEager">
+        <ng-template #content>
+          <readonly-params-tree [params]="nodeInfo.outputs" />
+        </ng-template>
+      </meta-acc-block>
+
+      <div class="my-[16px] h-[1px] w-full shrink-0 bg-[#f0f0f0]"></div>
+
+      <!-- Exception Handling -->
+      <meta-config-exception
+        #configException
+        [configs]="configs"
+        (valueChange)="onSave()"
+      ></meta-config-exception>
+    </div>
+  </div>
+</div>

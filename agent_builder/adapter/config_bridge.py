@@ -12,6 +12,7 @@ All settings are read from environment variables via pydantic-settings,
 keeping the same env var names as agent_runtime.
 """
 
+import os
 from enum import Enum
 from typing import Literal, Optional
 
@@ -155,7 +156,7 @@ class SecuritySandboxSettings(BaseSettings):
         default=600, validation_alias="SECURITY_SANDBOX_IDLE_TTL"
     )
     timeout_seconds: int = Field(
-        default=300, validation_alias="SECURITY_SANDBOX_TIMEOUT"
+        default=900, validation_alias="SECURITY_SANDBOX_TIMEOUT"
     )
     sandbox_type: str = Field(
         default="aio", validation_alias="SECURITY_SANDBOX_TYPE"
@@ -330,6 +331,10 @@ class CodeExecutionSettings(BaseSettings):
         default="inprocess",
         validation_alias="LOCAL_CODE_EXEC_MODE",
     )
+    allow_local_exec: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LOCAL_CODE_EXEC",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -380,6 +385,26 @@ class DataBaseSettings(BaseSettings):
         return self
 
 
+class BuilderLoggingSettings(BaseSettings):
+    """Builder 日志根目录设置（DEF-05 §5.5，SYNC-01 P3.3 从旧分支移植）。
+
+    只暴露 ``LOGGING_LOG_PATH``——日志根目录。其余日志参数（轮转值、文件名、
+    输出方式、等级、格式）由 ``init_logger`` 用冻结常量固定，不在此处开放覆盖，
+    避免运行配置绕过冻结契约（VEC-01）。生产值由部署固定为
+    ``/opt/cloud/logs/agent-builder``；本地缺省指向仓库内日志目录。
+    """
+
+    log_path: str = Field(
+        default=os.path.join(
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
+            "logs",
+        ),
+        validation_alias="LOGGING_LOG_PATH",
+    )
+
+
 class Settings:
     server = ServerSettings()
     llm = LLMSettings()
@@ -395,6 +420,7 @@ class Settings:
     otel = OtelSettings()
     code_execution = CodeExecutionSettings()
     db_config = DataBaseSettings()
+    logging = BuilderLoggingSettings()
 
 
 settings = Settings()

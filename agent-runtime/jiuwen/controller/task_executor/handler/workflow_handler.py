@@ -69,8 +69,6 @@ from jiuwen.serve.common.context import request, g, request_json
 from jiuwen.serve.controllers.execution.utils import get_current_time_ms
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class WorkflowHandler(BaseHandler):
     """工作流处理器"""
@@ -422,7 +420,7 @@ class WorkflowHandler(BaseHandler):
             for wf_msg in self._handle_workflow_message(task):
                 yield wf_msg
         elif task.task_type == TaskType.WORKFLOW_RESUME:
-            pass
+            pass  # Resume handled elsewhere; intentionally no stream output here.
         else:
             error_msg = f"不支持的任务类型: {task.task_type}"
             yield {"type": "error", "content": error_msg}
@@ -499,17 +497,13 @@ class WorkflowHandler(BaseHandler):
 
         # 处理非顺序执行的工作流
         if not self._has_workflow_sequence():
-            gen = self._handle_non_sequential_workflow(
-                workflow_context, workflow_req_params
-            )
-            while True:
-                try:
-                    yield next(gen)
-                except StopIteration as e:
-                    interrupted = e.value
-                    if interrupted:
-                        return
-                    break
+            outcome: dict = {"interrupted": False}
+            for msg in self._handle_non_sequential_workflow(
+                workflow_context, workflow_req_params, outcome
+            ):
+                yield msg
+            if outcome["interrupted"]:
+                return
 
         # 准备工作流执行参数
         workflow_req_params = self.prepare_workflow_params(
@@ -1031,9 +1025,12 @@ class WorkflowHandler(BaseHandler):
         )
 
     def _handle_non_sequential_workflow(
-        self, workflow_context: WorkflowContext, workflow_req_params: dict
-    ) -> Generator[Message, None, bool]:
-        """处理非顺序执行的工作流，返回是否中断"""
+        self,
+        workflow_context: WorkflowContext,
+        workflow_req_params: dict,
+        outcome: dict | None = None,
+    ) -> Generator[Message, None, None]:
+        """处理非顺序执行的工作流；是否中断写入 outcome['interrupted']。"""
         # 中断恢复场景：工作流已处于 INTERRUPTED 状态，用户回复是用来推进
         # 中断节点（如 QA needReply）的，不应再触发参数缺失提问，否则会吞掉
         # 机机报文回复，导致 QA 下游节点永远拿不到 response。
@@ -1061,7 +1058,9 @@ class WorkflowHandler(BaseHandler):
             yield MessageConverter.create_workflow_interrupt_from_controller_message(
                 workflow_name=workflow_context.workflow_name, question=question
             )
-            return True
+            if outcome is not None:
+                outcome["interrupted"] = True
+            return
 
         # 更新全局变量
         if extracted_key_fields_dict:
@@ -1069,7 +1068,9 @@ class WorkflowHandler(BaseHandler):
                 workflow_req_params, extracted_key_fields_dict
             )
 
-        return False
+        if outcome is not None:
+            outcome["interrupted"] = False
+        return
 
     def _update_global_variables(
         self, workflow_req_params: dict, extracted_fields: dict
@@ -1304,10 +1305,14 @@ class WorkflowHandler(BaseHandler):
                         workflow_status,
                         from_pe=from_pe,
                     )
-                # 流式输出添加workflow_id和workflow_name字段
+                # 流式输出补齐 workflow_id/name；子工作流帧若已自带 id 则不覆盖
                 if output.data:
-                    output.data["workflow_id"] = workflow_context.workflow_id
-                    output.data["workflow_name"] = workflow_context.workflow_name
+                    output.data.setdefault(
+                        "workflow_id", workflow_context.workflow_id
+                    )
+                    output.data.setdefault(
+                        "workflow_name", workflow_context.workflow_name
+                    )
                 # 转发所有输出
                 yield output
 
@@ -1762,9 +1767,7 @@ class WorkflowHandler(BaseHandler):
                 simple_log=f"Panel execute workflow error: {type(e)}",
             )
             err_func_res["errMessage"][WORKFLOW_ANSWER] = (
-                str(e)
-                if LOG_VERBOSE_MODE
-                else f"Panel execute workflow error: {type(e)}"
+                f"Panel execute workflow error: {type(e)}"
             )
             yield err_func_res
 

@@ -21,12 +21,13 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -46,6 +47,9 @@ public class DatasourceExecuteService implements IDatasourceExecuteService {
     @Value("${datasource.execute.allowed-operations:SELECT,INSERT,UPDATE}")
     private String allowedOperations;
 
+    private static final String OUTPUT_FORMAT_TABLE = "table";
+    private static final String DEFAULT_OUTPUT_FORMAT = "json";
+
     private static final Pattern COMMENT_PATTERN = Pattern.compile("--|/\\*|\\*/");
     private static final Pattern CONDITION_INJECTION_PATTERN =
         Pattern.compile("\\bOR\\s+1\\s*=\\s*1\\b|\\bAND\\s+1\\s*=\\s*1\\b", Pattern.CASE_INSENSITIVE);
@@ -59,10 +63,16 @@ public class DatasourceExecuteService implements IDatasourceExecuteService {
     }
 
     public DatasourceExecuteResp executeSql(String datasourceId, String query, List<String> conditions) {
+        return executeSql(datasourceId, query, conditions, DEFAULT_OUTPUT_FORMAT);
+    }
+
+    @Override
+    public DatasourceExecuteResp executeSql(String datasourceId, String query, List<String> conditions,
+                                             String outputFormat) {
         validateSqlStatement(query);
 
         HikariDataSource dataSource = connectionFactory.getConnectionPool(datasourceId);
-        return doExecute(query, dataSource, conditions);
+        return doExecute(query, dataSource, conditions, outputFormat);
     }
 
     private void validateSqlStatement(String query) {
@@ -119,7 +129,8 @@ public class DatasourceExecuteService implements IDatasourceExecuteService {
         }
     }
 
-    private DatasourceExecuteResp doExecute(String query, HikariDataSource dataSource, List<String> conditions) {
+    private DatasourceExecuteResp doExecute(String query, HikariDataSource dataSource,
+                                            List<String> conditions, String outputFormat) {
         DatasourceExecuteResp resp = new DatasourceExecuteResp();
         try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement statement = connection.prepareStatement(query)) {
@@ -136,10 +147,13 @@ public class DatasourceExecuteService implements IDatasourceExecuteService {
                 if (upperQuery.startsWith("SELECT")) {
                     try (ResultSet rs = statement.executeQuery()) {
                         convertResultSetToResp(rs, resp);
+                        if (OUTPUT_FORMAT_TABLE.equalsIgnoreCase(outputFormat)) {
+                            resp.setMarkdownTable(buildMarkdownTable(resp.getOutputList()));
+                        }
                     }
                 } else {
                     int affectedRows = statement.executeUpdate();
-                    Map<String, Object> result = new HashMap<>();
+                    Map<String, Object> result = new LinkedHashMap<>();
                     result.put("affectedRows", affectedRows);
                     resp.getOutputList().add(result);
                 }
@@ -158,7 +172,7 @@ public class DatasourceExecuteService implements IDatasourceExecuteService {
         int columnCount = metaData.getColumnCount();
         int rowCount = 0;
         while (rs.next() && rowCount < maxResponse) {
-            Map<String, Object> row = new HashMap<>();
+            Map<String, Object> row = new LinkedHashMap<>();
             for (int i = 1; i <= columnCount; i++) {
                 String columnName = metaData.getColumnLabel(i);
                 String columnType = metaData.getColumnTypeName(i);
@@ -173,5 +187,28 @@ public class DatasourceExecuteService implements IDatasourceExecuteService {
             resp.getOutputList().add(row);
             rowCount++;
         }
+    }
+
+    private String buildMarkdownTable(List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return "";
+        }
+        Map<String, Object> firstRow = rows.get(0);
+        List<String> columnNames = new ArrayList<>(firstRow.keySet());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("| ").append(String.join(" | ", columnNames)).append(" |\n");
+        sb.append("| ").append(columnNames.stream().map(c -> "---").collect(Collectors.joining(" | ")))
+            .append(" |\n");
+
+        for (Map<String, Object> row : rows) {
+            List<String> cells = new ArrayList<>();
+            for (String col : columnNames) {
+                Object val = row.get(col);
+                cells.add(val == null ? "" : val.toString().replace("|", "\\|").replace("\n", " "));
+            }
+            sb.append("| ").append(String.join(" | ", cells)).append(" |\n");
+        }
+        return sb.toString();
     }
 }

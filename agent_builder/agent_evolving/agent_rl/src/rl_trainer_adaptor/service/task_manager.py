@@ -126,9 +126,8 @@ class TrainingTaskManager:
             task = self._tasks.get(task_id)
             if task.status == TaskStatus.RUNNING:
                 task.status = get_trainer_status(task_id)
-                if task.status == TaskStatus.FAILED:
-                    if not task.error_message:
-                        task.error_message = get_trainer_error(task_id)
+                if task.status == TaskStatus.FAILED and not task.error_message:
+                    task.error_message = get_trainer_error(task_id)
             return self._tasks.get(task_id)
 
     def update_task_status(

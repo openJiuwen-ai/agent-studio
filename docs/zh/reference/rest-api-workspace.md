@@ -1,5 +1,7 @@
 # 工作空间 API
 
+> **废弃提示**：本页面的 API 文档已废弃，最新文档请以 OpenAPI 规范为准（`docs/api/studio-manager/openapi.yaml` 或 `/v3/api-docs` 端点）。下方内容可能过时，仅供参考。
+
 ---
 
 ## 目录

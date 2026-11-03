@@ -18,11 +18,11 @@ import yaml
 from jiuwen.common.config import config
 from jiuwen.common.configs.env_constants import (
     DATASOURCE_GAUSSDB_PASSWORD_KEY,
-    JIUWEN_EXTENSION_PATH_KEY,
     RAILS_CUSTOM_RAILS_PATH_KEY,
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
+from jiuwen.extension.wrapper.plugin_base import PluginBase
 from jiuwen.common.llm_service.base import ModelFactory
 from jiuwen.common.log.base import logger
 from jiuwen.common.security.util.fileutil import validate_path_traversal
@@ -461,94 +461,107 @@ def load_components(extension_path: str = ""):
     该函数用于加载自定义组件，通过读取指定路径下的组件文件夹中的JSON文件来获取组件信息，
     并动态加载对应的Python文件中的类，将其注册到组件池中。
 
+    单个插件加载失败不会中断整体初始化，仅记录 warning 日志并跳过该插件。
+
     Args:
-        extension_path (str): 拓展路径，用于指定自定义组件的根目录。如果未提供，将从环境变量中获取。
+        extension_path (str): 拓展路径，用于指定自定义组件的根目录。如果未提供，基于代码文件位置自动推导。
 
     Returns:
         None
+    """
+    if not extension_path:
+        extension_path = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+    custom_components_path = os.path.join(extension_path, "extensions", "components")
+    if not os.path.isdir(custom_components_path):
+        logger.info(
+            f"Custom components directory not found: {custom_components_path}, skipping"
+        )
+        return
+    for folder_name in os.listdir(custom_components_path):
+        if ".." in folder_name:
+            logger.warning(f"Skip suspicious folder name: {folder_name}")
+            continue
+        folder_path = os.path.join(custom_components_path, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+        try:
+            _load_single_component(extension_path, folder_path)
+        except Exception as e:
+            logger.warning(
+                f"Failed to load custom component from {folder_path}: {e}"
+            )
+
+
+def _load_single_component(extension_path: str, folder_path: str):
+    """加载单个自定义插件组件。
+
+    Args:
+        extension_path: 拓展根路径，用于拼接 Python 文件绝对路径。
+        folder_path: 插件文件夹路径。
 
     Raises:
-        JiuWenBaseException: 当以下情况发生时抛出异常：
-            - 指定的文件夹中缺少JSON文件。
-            - JSON文件中缺少必要的字段（type、className、filePath）。
-            - Python文件中未找到对应的类。
+        JiuWenBaseException: 加载失败时抛出，由调用方捕获并记录日志。
     """
-    # 获取自定义组件文件夹路径
-    if not extension_path:
-        extension_path = os.environ.get(JIUWEN_EXTENSION_PATH_KEY)
-    if not extension_path:
-        return
-    validate_path_traversal(extension_path)
-    custom_components_path = os.path.join(extension_path, "extensions", "components")
-    if custom_components_path:
-        for folder_name in os.listdir(custom_components_path):
-            if ".." in folder_name:
-                logger.warning(f"Skip suspicious folder name: {folder_name}")
-                continue
-            folder_path = os.path.join(custom_components_path, folder_name)
-            # 确保是文件夹
-            if os.path.isdir(folder_path):
-                json_file = None
+    json_file = os.path.join(folder_path, "component.json")
+    if not os.path.isfile(json_file):
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
+            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
+                reason=f"Missing component.json in folder: {folder_path}"
+            ),
+        )
+    with open(json_file, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
 
-                # 在文件夹中查找 json 文件
-                for file_name in os.listdir(folder_path):
-                    if ".." in file_name:
-                        logger.warning(f"Skip suspicious file name: {file_name}")
-                        continue
-                    if file_name.endswith(".json"):
-                        json_file = os.path.join(folder_path, file_name)
-                # 确保找到了 json 文件
-                if json_file:
-                    # 读取 json 文件内容
-                    with open(json_file, "r", encoding="utf-8") as f:
-                        json_data = json.load(f)
+    type_key = json_data.get("type")
+    class_name = json_data.get("classInfo", {}).get("className")
+    file_path_str = json_data.get("classInfo", {}).get("filePath")
+    if file_path_str and ".." in file_path_str:
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
+            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
+                reason=f"Path traversal detected in filePath: {file_path_str}"
+            ),
+        )
+    if file_path_str and os.path.isabs(file_path_str):
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
+            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
+                reason=f"Absolute filePath is not allowed: {file_path_str}"
+            ),
+        )
+    py_file = os.path.join(extension_path, file_path_str)
 
-                    # 获取 type 和 className
-                    type_key = json_data.get("type")
-                    class_name = json_data.get("classInfo", {}).get("className")
-                    file_path_str = json_data.get("classInfo", {}).get("filePath")
-                    if file_path_str and ".." in file_path_str:
-                        raise JiuWenBaseException(
-                            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
-                            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
-                                reason=f"Path traversal detected in filePath: {file_path_str}"
-                            ),
-                        )
-                    py_file = os.path.join(extension_path, file_path_str)
+    if not (type_key and class_name and py_file):
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
+            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
+                reason=f"Invalid JSON data in {json_file}: missing type or className or file_path"
+            ),
+        )
+    module_name = f"custom_plugin_{os.path.basename(folder_path)}_{os.path.splitext(os.path.basename(py_file))[0]}"
+    spec = importlib.util.spec_from_file_location(module_name, py_file)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
 
-                    if type_key and class_name and py_file:
-                        # 动态加载 py 文件中的类
-                        module_name = os.path.splitext(os.path.basename(py_file))[0]
-                        spec = importlib.util.spec_from_file_location(
-                            module_name, py_file
-                        )
-                        module = importlib.util.module_from_spec(spec)
-                        sys.modules[module_name] = module
-                        spec.loader.exec_module(module)
-
-                        # 获取类对象
-                        cls = getattr(module, class_name, None)
-                        if cls:
-                            # 将类对象存入自定义组件池
-                            component_class_pool.register_component_class(type_key, cls)
-                        else:
-                            raise JiuWenBaseException(
-                                error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
-                                message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
-                                    reason=f"Class '{class_name}' not found in {py_file}"
-                                ),
-                            )
-                    else:
-                        raise JiuWenBaseException(
-                            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
-                            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
-                                reason=f"Invalid JSON data in {json_file}: missing type or className or file_path"
-                            ),
-                        )
-                else:
-                    raise JiuWenBaseException(
-                        error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
-                        message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
-                            reason=f"Missing json in folder: {folder_path}"
-                        ),
-                    )
+    cls = getattr(module, class_name, None)
+    if cls:
+        if not issubclass(cls, PluginBase):
+            raise JiuWenBaseException(
+                error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
+                message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
+                    reason=f"Class '{class_name}' in {py_file} does not inherit from PluginBase"
+                ),
+            )
+        component_class_pool.register_component_class(type_key, cls)
+        logger.info(f"Loaded custom component: {type_key} from {py_file}")
+    else:
+        raise JiuWenBaseException(
+            error_code=StatusCode.COMPONENT_POOL_INIT_ERROR.code,
+            message=StatusCode.COMPONENT_POOL_INIT_ERROR.errmsg.format(
+                reason=f"Class '{class_name}' not found in {py_file}"
+            ),
+        )

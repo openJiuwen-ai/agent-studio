@@ -157,6 +157,7 @@ import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
 import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
 import com.openjiuwen.studio.agent.manager.utils.ImageBase64Utils;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
+import com.openjiuwen.studio.agent.manager.utils.PollingTriggerConfigValidator;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -172,10 +173,13 @@ import org.quartz.JobDetail;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.SimpleScheduleBuilder;
 import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Lazy;
@@ -184,6 +188,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -208,8 +214,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -272,7 +276,13 @@ public class AgentManagementService implements IAgentManagementService {
 
     private static final int MAX_SKILL_NUM = 50;
 
-    private final ExecutorService fixedThreadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    /**
+     * OBS/长期记忆清理线程池（COM-02 转受管：原自建 newFixedThreadPool(THREAD_POOL_SIZE=100)
+     * 迁移为 ObservabilityAsyncConfig.agentMgmtCleanupExecutor，保现状容量与无界队列，加 MDC 传播）
+     */
+    @Autowired
+    @Qualifier("agentMgmtCleanupExecutor")
+    private ThreadPoolTaskExecutor fixedThreadPool;
 
     private final ObjectMapper jacksonObjectMapper;
 
@@ -346,6 +356,9 @@ public class AgentManagementService implements IAgentManagementService {
     private AgentExportService agentExportService;
 
     @Autowired
+    private RuntimeAssetExporter runtimeAssetExporter;
+
+    @Autowired
     private ShareResourceMapper shareResourceMapper;
 
     /**
@@ -360,6 +373,9 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Autowired
     private EnvironmentServiceManagerService environmentServiceManagerService;
+
+    @Autowired
+    private WorkspacePermissionValidator workspacePermissionValidator;
 
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
@@ -443,6 +459,12 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Autowired
     private KnowledgeBaseServiceImpl knowledgeBaseService;
+
+    @Autowired
+    private PollingTriggerConfigValidator pollingTriggerConfigValidator;
+
+    @Autowired
+    private PollingStateService pollingStateService;
 
     /**
      * 构造方法
@@ -770,66 +792,122 @@ public class AgentManagementService implements IAgentManagementService {
         resourceId = "agentId",
         resourceName = ""
     )
+    @Transactional
     public TriggerConfig addTrigger(String projectId, String agentId, String workspaceId, TriggerConfig body) {
-        if (!TriggerType.TIMER.name().equals(body.getType()) && !TriggerType.EVENT.name().equals(body.getType())) {
-            log.error("Trigger type is wrong. The wrong type is {}. projectId = {}, agentId = {}", body.getType(),
-                projectId, agentId);
+        if (!TriggerType.TIMER.name().equals(body.getType()) && !TriggerType.EVENT.name().equals(body.getType())
+            && !TriggerType.POLLING.name().equals(body.getType())) {
             throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, body.getType());
         }
         Agent agent = getAgent(projectId, workspaceId, agentId);
         List<TriggerConfig> triggerList = agent.getTriggerList();
         if (!CollectionUtils.isEmpty(triggerList) && triggerList.size() >= CommonConstant.MAX_TRIGGER_NUMS) {
-            log.error("The number of triggers has reached the upper limit. projectId = {}, agentId = {}", projectId,
-                agentId);
             throw new AgentStudioException(StudioError.AGENT_TRIGGER_SIZE_LIMIT);
         }
-        if (TriggerType.TIMER.name().equals(body.getType())) {
-            if (body.getTriggerId() == null || body.getTriggerId().isEmpty()) {
-                body.setTriggerId(UUID.randomUUID().toString());
-            }
-            TriggerKey triggerKey = TriggerKey.triggerKey(body.getTriggerId());
-            try {
-                Trigger trigger = scheduler.getTrigger(triggerKey);
-                if (trigger == null) {
-                    trigger = TriggerBuilder.newTrigger()
-                        .withIdentity(triggerKey)
-                        .withSchedule(CronScheduleBuilder.cronSchedule(body.getCron()))
-                        .build();
-                    JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
-                        .withIdentity(body.getName() + '_' + body.getTriggerId())
-                        .usingJobData(CommonConstant.PROJECT_ID, projectId)
-                        .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
-                        .usingJobData(CommonConstant.AGENT_ID, agentId)
-                        .usingJobData(CommonConstant.TRIGGER_ID, body.getTriggerId())
-                        .usingJobData(CommonConstant.PROMPT, body.getPrompt())
-                        .usingJobData(CommonConstant.WORKSPACE_ID, workspaceId)
-                        .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
-                        .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
-                        .build();
-                    scheduler.scheduleJob(jobDetail, trigger);
-                    if (!scheduler.isShutdown()) {
-                        scheduler.start();
-                    }
-                }
-            } catch (SchedulerException e) {
-                log.error("Scheduler add job failed.", e);
+        if (TriggerType.POLLING.name().equals(body.getType()) || StringUtils.isEmpty(body.getTriggerId())) {
+            body.setTriggerId(UUID.randomUUID().toString());
+        }
+        body.setCreatedOn(new Date());
+        triggerList = triggerList == null ? new ArrayList<>() : new ArrayList<>(triggerList);
+        triggerList.add(body);
+
+        // Polling 触发器在落库前校验并补齐默认值，确保默认值被持久化
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            pollingTriggerConfigValidator.validateAndApplyDefaults(body);
+        }
+
+        persistTriggerList(projectId, workspaceId, agentId, triggerList);
+
+        // Polling 触发器初始化运行时状态
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            if (!pollingStateService.initializeState(body.getTriggerId())) {
+                log.error("Initialize polling state failed, triggerId: {}", body.getTriggerId());
                 throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
             }
         }
-        ModifyAgentReq modifyAgentReq = new ModifyAgentReq();
-        if (triggerList == null) {
-            modifyAgentReq.setTriggerList(new ArrayList<>());
-        } else {
-            modifyAgentReq.setTriggerList(triggerList);
-        }
-        body.setCreatedOn(new Date());
-        modifyAgentReq.getTriggerList().add(body);
 
-        // 更新agent
-        Agent newAgent = buildModifyAgent(projectId, workspaceId, agentId, modifyAgentReq);
-        agentMapper.updateByPrimaryKeySelective(newAgent);
-        newAgent = getAgent(projectId, agentId);
-        uploadAgentIr(newAgent);
+        // Quartz 调度移到事务提交后执行：LocalDataSourceJobStore 用独立 Connection，不参与 Spring 事务，
+        // 若在事务内调度，DB 回滚无法撤销已提交的调度副作用，导致孤儿 Job（DB 无记录但 Quartz 持续触发）。
+        // afterCommit 阶段 Quartz 失败时 DB 已提交，用户可重试 editTrigger 恢复，相比孤儿 Job 可发现可修复。
+        // 无事务上下文（如单元测试直接调用）时回退到同步执行，保持向后兼容。
+        final TriggerConfig triggerConfig = body;
+        final String capturedProjectId = projectId;
+        final String capturedAgentId = agentId;
+        final String capturedWorkspaceId = workspaceId;
+        Runnable quartzAction = () -> {
+            if (TriggerType.TIMER.name().equals(triggerConfig.getType())) {
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                try {
+                    if (scheduler.getTrigger(triggerKey) == null) {
+                        Trigger trigger = TriggerBuilder.newTrigger()
+                            .withIdentity(triggerKey)
+                            .withSchedule(CronScheduleBuilder.cronSchedule(triggerConfig.getCron()))
+                            .build();
+                        JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
+                            .withIdentity(triggerConfig.getName() + '_' + triggerConfig.getTriggerId())
+                            .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                            .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                            .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                            .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                            .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                            .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                            .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                            .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                            .build();
+                        scheduler.scheduleJob(jobDetail, trigger);
+                        if (!scheduler.isShutdown()) {
+                            scheduler.start();
+                        }
+                    }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler add job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
+                }
+            }
+
+            if (TriggerType.POLLING.name().equals(triggerConfig.getType())) {
+                JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
+                    .withIdentity(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP)
+                    .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                    .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                    .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
+                    .usingJobData(CommonConstant.POLL_URL, triggerConfig.getPollUrl())
+                    .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                    .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                    .build();
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                    .withIdentity(triggerKey)
+                    .withSchedule(SimpleScheduleBuilder.simpleSchedule()
+                        .withIntervalInSeconds(triggerConfig.getPollIntervalSeconds())
+                        .repeatForever()
+                        .withMisfireHandlingInstructionNextWithRemainingCount())
+                    .build();
+                try {
+                    if (scheduler.getTrigger(triggerKey) == null) {
+                        scheduler.scheduleJob(jobDetail, trigger);
+                        if (!scheduler.isShutdown()) {
+                            scheduler.start();
+                        }
+                    }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler add polling job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    quartzAction.run();
+                }
+            });
+        } else {
+            quartzAction.run();
+        }
+        uploadAgentIr(getAgent(projectId, agentId));
         return body;
     }
 
@@ -1047,6 +1125,7 @@ public class AgentManagementService implements IAgentManagementService {
                 agentId);
             throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
         }
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "delete", false);
 
         if (shareResourceMapper.countResourceByResourceId(projectId, agentId) > 0) {
             log.error("the agent has been shared,you can't delete it");
@@ -1067,6 +1146,17 @@ public class AgentManagementService implements IAgentManagementService {
                     log.error("Scheduler delete job failed.", e);
                     throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
                 }
+            } else if (TriggerType.POLLING.name().equals(triggerConfig.getType())) {
+                pollingStateService.lockState(triggerConfig.getTriggerId());
+                try {
+                    scheduler.pauseTrigger(TriggerKey.triggerKey(triggerConfig.getTriggerId()));
+                    scheduler.unscheduleJob(TriggerKey.triggerKey(triggerConfig.getTriggerId()));
+                    scheduler.deleteJob(new JobKey(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP));
+                } catch (SchedulerException e) {
+                    log.error("Scheduler delete polling job failed.", e);
+                    throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+                }
+                pollingStateService.deleteState(triggerConfig.getTriggerId());
             }
         }
     }
@@ -1079,42 +1169,76 @@ public class AgentManagementService implements IAgentManagementService {
         resourceId = "triggerId",
         resourceName = ""
     )
+    @Transactional
     public Void deleteTrigger(String projectId, String agentId, String triggerId, String workspaceId) {
         Agent agent = getAgent(projectId, workspaceId, agentId);
         List<TriggerConfig> triggerList = agent.getTriggerList();
-        if (CollectionUtils.isEmpty(triggerList)) {
-            log.error("Trigger does not exist! projectId = {}, agentId = {}, triggerId = {}", projectId, agentId,
-                triggerId);
-            throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, triggerId);
-        }
-        for (int index = 0; index < triggerList.size(); index++) {
-            if (triggerId.equals(triggerList.get(index).getTriggerId())) {
-                TriggerConfig triggerConfig = triggerList.get(index);
-                if (TriggerType.TIMER.name().equals(triggerConfig.getType())) {
-                    try {
-                        scheduler.pauseTrigger(TriggerKey.triggerKey(triggerId));
-                        scheduler.unscheduleJob(TriggerKey.triggerKey(triggerId));
-                        scheduler.deleteJob(new JobKey(triggerConfig.getName() + '_' + triggerId));
-                    } catch (SchedulerException e) {
-                        log.error("Scheduler delete job failed.", e);
-                        throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
-                    }
+        int triggerIndex = -1;
+        if (triggerList != null) {
+            for (int index = 0; index < triggerList.size(); index++) {
+                if (Objects.equals(triggerId, triggerList.get(index).getTriggerId())) {
+                    triggerIndex = index;
+                    break;
                 }
-                triggerList.remove(index);
-                ModifyAgentReq modifyAgentReq = new ModifyAgentReq();
-                modifyAgentReq.setTriggerList(triggerList);
-
-                // 更新agent
-                Agent newAgent = buildModifyAgent(projectId, workspaceId, agentId, modifyAgentReq);
-                agentMapper.updateByPrimaryKeySelective(newAgent);
-                newAgent = getAgent(projectId, agentId);
-                uploadAgentIr(newAgent);
-                return null;
             }
         }
-        log.error("Trigger does not exist! projectId = {}, agentId = {}, triggerId = {}", projectId, agentId,
-            triggerId);
-        throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, triggerId);
+        if (triggerIndex < 0) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, triggerId);
+        }
+        TriggerConfig currentConfig = triggerList.get(triggerIndex);
+        if (!TriggerType.TIMER.name().equals(currentConfig.getType())
+            && !TriggerType.EVENT.name().equals(currentConfig.getType())
+            && !TriggerType.POLLING.name().equals(currentConfig.getType())) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, currentConfig.getType());
+        }
+        triggerList = new ArrayList<>(triggerList);
+        triggerList.remove(triggerIndex);
+
+        persistTriggerList(projectId, workspaceId, agentId, triggerList);
+
+        if (TriggerType.POLLING.name().equals(currentConfig.getType())) {
+            pollingStateService.lockState(triggerId);
+            pollingStateService.deleteState(triggerId);
+        }
+
+        // Quartz 调度移到事务提交后执行：LocalDataSourceJobStore 用独立 Connection，不参与 Spring 事务，
+        // 若在事务内删除，DB 回滚会导致 DB 仍有记录但 Quartz 已删除的反向孤儿 Job。
+        // 无事务上下文时回退到同步执行，保持向后兼容。
+        final TriggerConfig capturedConfig = currentConfig;
+        final String capturedTriggerId = triggerId;
+        Runnable quartzAction = () -> {
+            if (TriggerType.TIMER.name().equals(capturedConfig.getType())) {
+                try {
+                    scheduler.pauseTrigger(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.unscheduleJob(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.deleteJob(new JobKey(capturedConfig.getName() + '_' + capturedTriggerId));
+                } catch (SchedulerException e) {
+                    log.error("Scheduler delete job failed, triggerId: {}", capturedTriggerId, e);
+                }
+            }
+
+            if (TriggerType.POLLING.name().equals(capturedConfig.getType())) {
+                try {
+                    scheduler.pauseTrigger(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.unscheduleJob(TriggerKey.triggerKey(capturedTriggerId));
+                    scheduler.deleteJob(new JobKey(capturedTriggerId, Scheduler.DEFAULT_GROUP));
+                } catch (SchedulerException e) {
+                    log.error("Scheduler delete polling job failed, triggerId: {}", capturedTriggerId, e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    quartzAction.run();
+                }
+            });
+        } else {
+            quartzAction.run();
+        }
+        uploadAgentIr(getAgent(projectId, agentId));
+        return null;
     }
 
     @Override
@@ -1125,11 +1249,148 @@ public class AgentManagementService implements IAgentManagementService {
         resourceId = "agentId",
         resourceName = ""
     )
+    @Transactional
     public TriggerConfig editTrigger(String projectId, String agentId, String workspaceId, TriggerConfig body) {
-        // delete 原任务
-        deleteTrigger(projectId, agentId, body.getTriggerId(), workspaceId);
-        addTrigger(projectId, agentId, workspaceId, body);
+        if (!TriggerType.TIMER.name().equals(body.getType()) && !TriggerType.EVENT.name().equals(body.getType())
+            && !TriggerType.POLLING.name().equals(body.getType())) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, body.getType());
+        }
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        List<TriggerConfig> triggerList = agent.getTriggerList();
+        int triggerIndex = -1;
+        if (triggerList != null) {
+            for (int index = 0; index < triggerList.size(); index++) {
+                if (Objects.equals(body.getTriggerId(), triggerList.get(index).getTriggerId())) {
+                    triggerIndex = index;
+                    break;
+                }
+            }
+        }
+        if (triggerIndex < 0) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_EXIST, body.getTriggerId());
+        }
+        TriggerConfig currentConfig = triggerList.get(triggerIndex);
+        if (!Objects.equals(currentConfig.getType(), body.getType())) {
+            throw new AgentStudioException(StudioError.AGENT_TRIGGER_TYPE_INCORRECT, body.getType());
+        }
+        body.setCreatedOn(currentConfig.getCreatedOn());
+        triggerList = new ArrayList<>(triggerList);
+        triggerList.set(triggerIndex, body);
+
+        // Polling 触发器在落库前校验并补齐默认值，确保默认值被持久化
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            pollingTriggerConfigValidator.validateAndApplyDefaults(body);
+        }
+
+        persistTriggerList(projectId, workspaceId, agentId, triggerList);
+
+        if (TriggerType.POLLING.name().equals(body.getType())) {
+            boolean urlChanged = !Objects.equals(currentConfig.getPollUrl(), body.getPollUrl());
+            pollingStateService.lockState(body.getTriggerId());
+            if (pollingStateService.getState(body.getTriggerId()) == null) {
+                if (!pollingStateService.initializeState(body.getTriggerId())) {
+                    log.error("Initialize polling state failed during edit, triggerId: {}", body.getTriggerId());
+                    throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+                }
+            } else if (urlChanged) {
+                pollingStateService.resetState(body.getTriggerId());
+            }
+        }
+
+        // Quartz 调度移到事务提交后执行：LocalDataSourceJobStore 用独立 Connection，不参与 Spring 事务，
+        // 若在事务内调度，DB 回滚无法撤销已提交的调度副作用，导致孤儿 Job 或 DB 与 Quartz 不一致。
+        // 无事务上下文时回退到同步执行，保持向后兼容。
+        final TriggerConfig triggerConfig = body;
+        final TriggerConfig capturedCurrentConfig = currentConfig;
+        final String capturedProjectId = projectId;
+        final String capturedAgentId = agentId;
+        final String capturedWorkspaceId = workspaceId;
+        Runnable quartzAction = () -> {
+            if (TriggerType.TIMER.name().equals(triggerConfig.getType())) {
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                    .withIdentity(triggerKey)
+                    .withSchedule(CronScheduleBuilder.cronSchedule(triggerConfig.getCron()))
+                    .build();
+                JobDetail jobDetail = JobBuilder.newJob(AgentTriggerService.class)
+                    .withIdentity(triggerConfig.getName() + '_' + triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                    .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                    .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                    .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                    .build();
+                try {
+                    scheduler.pauseTrigger(triggerKey);
+                    scheduler.unscheduleJob(triggerKey);
+                    scheduler.deleteJob(new JobKey(capturedCurrentConfig.getName() + '_'
+                        + triggerConfig.getTriggerId()));
+                    scheduler.scheduleJob(jobDetail, trigger);
+                    if (!scheduler.isShutdown()) {
+                        scheduler.start();
+                    }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler edit job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
+                }
+            }
+
+            if (TriggerType.POLLING.name().equals(triggerConfig.getType())) {
+                JobDetail jobDetail = JobBuilder.newJob(PollingTriggerService.class)
+                    .withIdentity(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP)
+                    .usingJobData(CommonConstant.PROJECT_ID, capturedProjectId)
+                    .usingJobData(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId())
+                    .usingJobData(CommonConstant.AGENT_ID, capturedAgentId)
+                    .usingJobData(CommonConstant.TRIGGER_ID, triggerConfig.getTriggerId())
+                    .usingJobData(CommonConstant.TRIGGER_TYPE, TriggerType.POLLING.name())
+                    .usingJobData(CommonConstant.POLL_URL, triggerConfig.getPollUrl())
+                    .usingJobData(CommonConstant.PROMPT, triggerConfig.getPrompt())
+                    .usingJobData(CommonConstant.WORKSPACE_ID, capturedWorkspaceId)
+                    .usingJobData(CommonConstant.AGENT_RUNTIME_ENDPOINT, agentRuntimeEndpoint)
+                    .usingJobData(CommonConstant.RUN_AGENT_STREAM_URL, runAgentStreamUrl)
+                    .build();
+                TriggerKey triggerKey = TriggerKey.triggerKey(triggerConfig.getTriggerId());
+                Trigger trigger = TriggerBuilder.newTrigger()
+                    .withIdentity(triggerKey)
+                    .withSchedule(SimpleScheduleBuilder.simpleSchedule()
+                        .withIntervalInSeconds(triggerConfig.getPollIntervalSeconds())
+                        .repeatForever()
+                        .withMisfireHandlingInstructionNextWithRemainingCount())
+                    .build();
+                try {
+                    scheduler.pauseTrigger(triggerKey);
+                    scheduler.unscheduleJob(triggerKey);
+                    scheduler.deleteJob(new JobKey(triggerConfig.getTriggerId(), Scheduler.DEFAULT_GROUP));
+                    scheduler.scheduleJob(jobDetail, trigger);
+                    if (!scheduler.isShutdown()) {
+                        scheduler.start();
+                    }
+                } catch (SchedulerException e) {
+                    log.error("Scheduler edit polling job failed, triggerId: {}", triggerConfig.getTriggerId(), e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    quartzAction.run();
+                }
+            });
+        } else {
+            quartzAction.run();
+        }
+        uploadAgentIr(getAgent(projectId, agentId));
         return body;
+    }
+
+    private void persistTriggerList(String projectId, String workspaceId, String agentId,
+        List<TriggerConfig> triggerList) {
+        if (agentMapper.updateTriggerList(projectId, workspaceId, agentId, triggerList, new Date()) != 1) {
+            throw new AgentStudioException(StudioError.SCHEDULER_EXCEPTION);
+        }
     }
 
     @Override
@@ -1392,10 +1653,11 @@ public class AgentManagementService implements IAgentManagementService {
             checkKnowledgeType(body);
         }
 
-        Agent agent = agentMapper.selectById(agentId);
+        Agent agent = getAgent(projectId, workspaceId, agentId);
         if (agent == null) {
             throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
         }
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "edit", false);
 
         AgentType agentType = AgentType.naValueOf(body.getType() == null ? agent.getType() : body.getType().toString());
 
@@ -2418,6 +2680,9 @@ public class AgentManagementService implements IAgentManagementService {
     )
     public Void createAgentVersion(String projectId, String agentId, String workspaceId,
         CreateVersionReq createVersionReq) {
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的版本
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "version-create", false);
         // 校验发布版本数量
         List<ReleaseVersion> releaseVersionList = releaseVersionMapper.selectByAppId(agentId);
         if (releaseVersionList.size() > releaseMaxSize) {
@@ -2434,7 +2699,6 @@ public class AgentManagementService implements IAgentManagementService {
         }
 
         AgentInfo agentInfo = retrieveAgent(projectId, agentId, workspaceId);
-        Agent agent = getAgent(projectId, workspaceId, agentId);
         ReleaseVersion releaseVersion = new ReleaseVersion();
         String versionId = String.valueOf(System.currentTimeMillis());
 
@@ -2738,6 +3002,8 @@ public class AgentManagementService implements IAgentManagementService {
     )
     public CommonDeleteRsp deleteAgentVersion(String projectId, String agentId, String versionId, String workspaceId) {
         Agent agent = getAgent(projectId, workspaceId, agentId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的版本
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "version-delete", false);
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(agent.getAgentId(), versionId);
         if (releaseVersion == null) {
             log.error("agent version is not found, agentId = {}, versionId = {}", agentId, versionId);
@@ -2834,7 +3100,10 @@ public class AgentManagementService implements IAgentManagementService {
     public BatchDeleteVersionsResponseBody batchDeleteAgentVersions(String projectId, String agentId,
         String workspaceId, BatchDeleteVersionsRequestBody body) {
         // 资源归属校验，防止横向越权（与deleteAgentVersion对齐）
-        getAgent(projectId, workspaceId, agentId);
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        // 创建人校验:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的版本
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(),
+            "version-batch-delete", false);
 
         // 一次查出已共享版本信息，被共享版本直接进failed列表，避免开启无效事务后中途回滚
         ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(agentId);
@@ -2952,6 +3221,8 @@ public class AgentManagementService implements IAgentManagementService {
 
         // 校验Agent是否存在
         Agent agent = getAgent(projectId, workspaceId, agentId);
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的渠道
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "channel-create", false);
 
         ReleaseChannel newReleaseChannel = new ReleaseChannel();
         newReleaseChannel.setCreator(RequestContextUtils.getRequestUserName());
@@ -3030,6 +3301,12 @@ public class AgentManagementService implements IAgentManagementService {
                 newReleaseChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             }
             newReleaseChannel.setVersionId(createChannelReq.getVersionId());
+            ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId,
+                createChannelReq.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+            }
+            newReleaseChannel.setVersionName(version.getVersionName());
             newReleaseChannel.setVisibilityScope(createChannelReq.getVisibilityScope().toString());
             newReleaseChannel.setCallCount(createChannelReq.getCallCount());
             newReleaseChannel.setWorkspaceId(workspaceId);
@@ -3054,6 +3331,9 @@ public class AgentManagementService implements IAgentManagementService {
             newReleaseChannel.setStatus("released");
             ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId,
                 createChannelReq.getVersionId());
+            if (version == null) {
+                throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+            }
             newReleaseChannel.setVersionName(version.getVersionName());
             newReleaseChannel.setReleasedOn(new Date(System.currentTimeMillis()));
             releaseChannelMapper.insert(newReleaseChannel);
@@ -3088,6 +3368,13 @@ public class AgentManagementService implements IAgentManagementService {
         resourceName = ""
     )
     public Void deleteAgentChannel(String projectId, String agentId, String channelId, String workspaceId) {
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的渠道
+        // 兜底孤儿数据:agent 已删但渠道残留时，agentMapper 返回 null，跳过创建人校验继续清理渠道
+        Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId);
+        if (agent != null) {
+            workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "channel-delete", false);
+        }
+
         // 发布到agent-builder空间，agentId和channelId相同
         if (publishAgentBuilderEnable && agentId.equals(channelId)) {
             agentSpaceService.unpublish(workspaceId, agentId);
@@ -3193,6 +3480,10 @@ public class AgentManagementService implements IAgentManagementService {
     )
     public VersionChannelInfo modifyAgentChannel(String projectId, String agentId, String channelId, String workspaceId,
         ModifyChannelReq body) {
+        // 创建人权限:DEVELOPER/OPERATOR 仅能管理自己创建的智能体的渠道
+        Agent agent = getAgent(projectId, workspaceId, agentId);
+        workspacePermissionValidator.validateAgent(projectId, workspaceId, agent.getCreatorId(), "channel-modify", false);
+
         ReleaseChannel oldChannel = releaseChannelMapper.selectByIdAppIdWorkspaceId(channelId, agentId, projectId,
             workspaceId);
         if (ObjectUtils.isEmpty(oldChannel)) {
@@ -3204,6 +3495,9 @@ public class AgentManagementService implements IAgentManagementService {
         newChannel.setVisibilityScope(body.getVisibilityScope().toString());
         newChannel.setCallCount(body.getCallCount());
         ReleaseVersion version = releaseVersionMapper.selectByAppIdAndVersionId(agentId, body.getVersionId());
+        if (version == null) {
+            throw new AgentStudioException(StudioError.AGENT_VERSION_NOT_EXIST);
+        }
         newChannel.setVersionName(version.getVersionName());
         // 更新subType
         if (version.getSubType() != null) {
@@ -3348,8 +3642,7 @@ public class AgentManagementService implements IAgentManagementService {
 
         // 处理响应
         if (response.getStatusCode() != HttpStatus.OK || StringUtils.isBlank(response.getBody())) {
-            log.error("Failed to generate icon using the model. StatusCode: {}, ResponseBody: {}", response.getStatusCode(),
-                response.getBody());
+            log.error("Failed to generate icon using the model. StatusCode: {}", response.getStatusCode());
             throw new AgentStudioException(StudioError.GENERATE_ICON_FAILED);
         }
 
@@ -3371,7 +3664,7 @@ public class AgentManagementService implements IAgentManagementService {
             mgObsService.uploadObsFile(objectKey, new ByteArrayInputStream(imageBytes), 0);
             return new AutoAddResultJsonObject().setIcons(new Icon().setIcon(iconName).setIconDetail(b64JsonCompressed));
         } catch (Exception e) {
-            log.error("Error parsing response body: {}", response.getBody(), e);
+            log.error("Error parsing response body", e);
             throw new AgentStudioException(StudioError.GENERATE_ICON_FAILED);
         }
     }
@@ -3501,6 +3794,14 @@ public class AgentManagementService implements IAgentManagementService {
         List<String> permissions = permissionService.getMergedPermissions().get(role);
         Map<String, List<String>> result = new HashMap<>();
         result.put(role, permissions);
+        // 返回当前角色需创建人校验的权限列表(METHOD#URI)，供前端按创建人显隐编辑/删除按钮
+        List<String> creatorCheckPermissions = permissionService.getMergedCreatorCheckPermissions().get(role);
+        result.put("creatorCheckPermissions",
+            creatorCheckPermissions == null ? Collections.emptyList() : creatorCheckPermissions);
+        // 返回当前用户标识，供前端对比资源 creator 显隐按钮
+        // 工作流/智能体 creatorId 对比 userId；模型供应商/服务 createdByUser 对比 userName
+        result.put("currentUserId", Collections.singletonList(RequestContextUtils.getRequestUserId()));
+        result.put("currentUserName", Collections.singletonList(RequestContextUtils.getRequestUserName()));
         return result;
     }
 
@@ -3729,6 +4030,16 @@ public class AgentManagementService implements IAgentManagementService {
         return agentExportService.exportResource(projectId, workspaceId, accept, body);
     }
 
+    @Override
+    public Resource exportRuntimeAssetZip(String projectId, String workspaceId,
+        String resourceType, String resourceId, String version) {
+        // 巡检 #14：与 exportAgents/exportResource 一致，强制校验导出能力 SKU 开关，
+        // 防未开通导出权限用户绕过 SKU 限制导出运行时资产。
+        skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
+        return runtimeAssetExporter.exportRuntimeAssetZip(projectId, workspaceId,
+            resourceType, resourceId, version);
+    }
+
     /**
      * 导入Agent
      *
@@ -3859,14 +4170,29 @@ public class AgentManagementService implements IAgentManagementService {
         if (Objects.isNull(policy)) {
             return;
         }
-        float topK = policy.getTopK();
-        if (policy.getRecallThreshold() > knowledgeRecallThresholdMax
-            || policy.getRecallThreshold() < knowledgeRecallThresholdMin) {
-            throw new AgentStudioException(StudioError.KNOW_RECALL_THRESHOLD_ILLEGAL);
+        // 防御性校验：min > max 时自动交换，避免产出越界值
+        double min = knowledgeRecallThresholdMin;
+        double max = knowledgeRecallThresholdMax;
+        if (min > max) {
+            log.warn("knowledge.recall-threshold min({}) > max({}), 已自动交换", min, max);
+            double tmp = min;
+            min = max;
+            max = tmp;
         }
-        if (policy.getFaqThreshold() > knowledgeRecallThresholdMax
-            || policy.getFaqThreshold() < knowledgeRecallThresholdMin) {
-            throw new AgentStudioException(StudioError.FAQ_THRESHOLD_ILLEGAL);
+        // clamp：超过 max 取 max，低于 min 取 min
+        if (policy.getRecallThreshold() > max) {
+            log.warn("recallThreshold clamp: {} -> {}", policy.getRecallThreshold(), max);
+            policy.setRecallThreshold((float) max);
+        } else if (policy.getRecallThreshold() < min) {
+            log.warn("recallThreshold clamp: {} -> {}", policy.getRecallThreshold(), min);
+            policy.setRecallThreshold((float) min);
+        }
+        if (policy.getFaqThreshold() > max) {
+            log.warn("faqThreshold clamp: {} -> {}", policy.getFaqThreshold(), max);
+            policy.setFaqThreshold((float) max);
+        } else if (policy.getFaqThreshold() < min) {
+            log.warn("faqThreshold clamp: {} -> {}", policy.getFaqThreshold(), min);
+            policy.setFaqThreshold((float) min);
         }
     }
 

@@ -74,6 +74,7 @@ from jiuwen.orchestration.flow.stream.base import StreamCode, StreamData
 from jiuwen.serve.controllers.execution.open_utils import (
     cache_workflow_queue,
     async_ir_load,
+    drain_background_ttl_tasks,
 )
 
 # 多次使用的变量名以常量定义
@@ -1177,7 +1178,9 @@ class LazyWorkflow:
         """instantiate"""
         try:
             # 优先从缓存中读取 WorkflowSpec 重建
-            sub_wf_spec = await cache_workflow_queue.aget(self.ir_path)
+            sub_wf_spec = await cache_workflow_queue.aget(
+                self.ir_path, should_refresh_ttl=True
+            )
             if "is_sub_workflow" not in self._params:
                 self._params["is_sub_workflow"] = self.parent_workflow_id is not None
             if sub_wf_spec is not None:
@@ -1277,7 +1280,9 @@ async def build_workflow(
         )
         return await lwf.instantiate()
     if isinstance(data, dict):
-        cache_workflow_spec = await cache_workflow_queue.aget(data.get("ir_path", ""))
+        cache_workflow_spec = await cache_workflow_queue.aget(
+            data.get("ir_path", ""), should_refresh_ttl=True
+        )
         if cache_workflow_spec:
             data = cache_workflow_spec
     wf = Workflow(**kwargs)
@@ -1289,4 +1294,23 @@ def sync_build_workflow(
     data: Union[dict, WorkflowState, WorkflowSpec], **kwargs
 ) -> Workflow:
     """sync build workflow"""
-    return asyncio.new_event_loop().run_until_complete(build_workflow(data, **kwargs))
+    loop = asyncio.new_event_loop()
+    try:
+        result = loop.run_until_complete(build_workflow(data, **kwargs))
+    except BaseException:
+        # 构建失败：无返回对象（ChatManager）持有该循环，drain 后显式关闭
+        # 防止事件循环及其 fd 依赖 GC 兜底回收
+        try:
+            drain_background_ttl_tasks(loop)
+        except Exception as e:
+            logger.warning(f"drain background ttl tasks failed: {e}")
+        loop.close()
+        raise
+    # 成功路径：返回的 Workflow 的 ChatManager 绑定此循环，后续 wf.stream /
+    # clean_up 会经 chat_manager.get_loop 继续使用，不得 close
+    try:
+        drain_background_ttl_tasks(loop)
+    except Exception as e:
+        # 仅记录不抛出：drain 是收尾清理，其失败不得掩盖构建结果
+        logger.warning(f"drain background ttl tasks failed: {e}")
+    return result

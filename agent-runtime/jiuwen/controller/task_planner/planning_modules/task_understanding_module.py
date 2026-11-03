@@ -9,11 +9,17 @@
 """
 
 import re
+import time
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from jiuwen.common.llm_service.messages import HumanMessage, SystemMessage
 from jiuwen.common.log.base import logger
+from jiuwen.planner.common.stream_post_utils import (
+    build_llm_end_payload,
+    create_trace_manager_safely,
+    emit_trace_event,
+)
 from jiuwen.prompt.template.template_manager import TemplateManager
 
 
@@ -65,6 +71,7 @@ class TaskUnderstandingModule:
         chat_history: List[Dict],
         available_intents: List[str],
         task_id: str = "",
+        runtime_data: Optional[Dict] = None,
     ) -> TaskUnderstandingOutput:
         """
         判断用户请求是否为复杂意图
@@ -74,6 +81,7 @@ class TaskUnderstandingModule:
             chat_history: 对话历史
             available_intents: 可用意图名称列表
             task_id: 任务ID，用于日志追踪
+            runtime_data: 运行时数据（含 trace_handlers，用于 OTel 遥测）
 
         Returns:
             TaskUnderstandingOutput(is_complex: bool)
@@ -97,20 +105,49 @@ class TaskUnderstandingModule:
             simple_log=f"task_id: {task_id}| [TaskUnderstanding] <LLM Input>",
         )
 
+        # OTel：镜像 intention_detect 的接线，理解 LLM 调用补 on_llm_end 载荷；
+        # 事件经 emit_trace_event 隔离发射，manager 初始化走 safely 兜底——
+        # 遥测整体失效时 invoke 行为与接线前一致
+        trace_manager = create_trace_manager_safely(
+            llm=self.llm,
+            functions=[],
+            trace_handlers=(runtime_data or {}).get("trace_handlers"),
+        )
         try:
+            await emit_trace_event(
+                trace_manager, "on_llm_start", llm_input["messages"]
+            )
+            start_time = time.time()
             result = await self.llm.ainvoke(messages)
-            output_text = (result.content or "").strip()
-            logger.info(
-                f"task_id: {task_id}| [TaskUnderstanding] <LLM Output> {output_text}",
-                simple_log=f"task_id: {task_id}| [TaskUnderstanding] <LLM Output>",
+            total_time = round(time.time() - start_time, 2)
+            # AIMessage.content 契约允许 list；载荷与后处理统一按 str 兜底
+            content = result.content if isinstance(result.content, str) else ""
+            await emit_trace_event(
+                trace_manager,
+                "on_llm_end",
+                build_llm_end_payload(
+                    content,
+                    getattr(result, "usage_metadata", None),
+                    total_time,
+                ),
             )
         except Exception as e:
+            await emit_trace_event(trace_manager, "on_llm_error", e)
             logger.error(
                 f"task_id: {task_id}| Task understanding llm error: {e}",
                 simple_log=f"task_id: {task_id}| Task understanding llm error",
             )
             return TaskUnderstandingOutput(is_complex=False)
 
+        # 后处理在 try 外：on_llm_end 已发射，此处再抛错进 except 会补发
+        # on_llm_error，同一 trace 出现 end/error 双终止；与 task_plan 的
+        # 「try 只罩 LLM 调用，解析在 try 外」约定对齐。空串经
+        # _parse_is_complex 判 False，与原错误分支兜底语义一致
+        output_text = content.strip()
+        logger.info(
+            f"task_id: {task_id}| [TaskUnderstanding] <LLM Output> {output_text}",
+            simple_log=f"task_id: {task_id}| [TaskUnderstanding] <LLM Output>",
+        )
         is_complex = self._parse_is_complex(output_text)
         logger.info(
             f"task_id: {task_id}| Task understanding result: is_complex={is_complex}",

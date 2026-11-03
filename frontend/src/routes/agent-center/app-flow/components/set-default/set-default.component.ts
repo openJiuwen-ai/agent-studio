@@ -157,7 +157,14 @@ export class SetDefaultComponent implements OnInit, OnDestroy {
     isClose: boolean;
     display?: string;
   }): void => {
-    if (!isNil(state?.value) && this.param.type.includes('file')) {
+    // array 形态 file 参数的 type 为 ['array<file>', 'image']，无精确 'file' 元素，
+    // 需并列 array<file> 分支（与 set-default-tip saveFile/onClickOutside 守卫同口径），
+    // 否则 array 默认值仅能在弹层关闭时经 close 路径写入，录入期不落库
+    if (
+      !isNil(state?.value) &&
+      (this.param.type.includes('file') ||
+        this.param.type.includes('array<file>'))
+    ) {
       if (this.host === 'json-input') {
         this.param.value.content = state.value;
       } else {

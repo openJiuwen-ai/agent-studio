@@ -24,7 +24,6 @@ _mock_modules = [
     # SUT binds ``request as current_request`` from here.
     "jiuwen.serve.common.context",
     "jiuwen.serve.common.message",
-    "agent_runtime.memory.global_vals_callback_handler",
     "utils",
     "utils.constants",
 ]

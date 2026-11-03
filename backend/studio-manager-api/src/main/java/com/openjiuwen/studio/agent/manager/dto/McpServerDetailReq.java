@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -66,7 +67,9 @@ public class McpServerDetailReq implements Serializable {
     private String url = null;
 
     @JsonProperty("type")
-    @Schema(description = "类型", example = "sse")
+    @Schema(description = "类型：inner（平台预置）/ private（私有）", example = "inner", allowableValues = {"inner", "private"})
+    @NotBlank(message = "type is required and must be inner or private")
+    @Pattern(regexp = "^(inner|private)$", message = "type must be inner or private")
     private String type = null;
 
     @JsonProperty("deploy_type")

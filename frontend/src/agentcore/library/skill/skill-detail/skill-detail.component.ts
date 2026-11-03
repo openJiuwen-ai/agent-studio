@@ -49,7 +49,6 @@ export class SkillDetailComponent {
   skillId = this._route.snapshot.queryParamMap.get('id');
   fromSkill = this.from === SkillDetailFromPage.SKILL;
   fromUrl = this.from === SkillDetailFromPage.SKILL ? '/home/agent-center/library-home?tabId=skill' : '/home/skill-market';
-  packageUrl = computed(() => skillDetailSignal()?.obsUrl);
   historyModalInstance;
   headerParams: Signal<CustomHeaderParam> = computed(() => {
     this.skillDetail = skillDetailSignal();

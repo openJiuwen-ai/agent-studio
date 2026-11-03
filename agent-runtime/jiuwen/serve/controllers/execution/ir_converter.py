@@ -14,6 +14,7 @@ from collections import defaultdict
 from typing import Any, AsyncIterator, Dict, Iterable, List, NamedTuple, Optional
 
 from agent_runtime.extension.workflow_node.flow_code import FlowCode
+from agent_runtime.extension.workflow_node.flow_template_transform import FlowTemplateTransform
 from agent_runtime.extension.workflow_node.flow_knowledge_retrieval import FlowKnowledgeRetrieval
 from agent_runtime.extension.workflow_node.ParamOutput import ParamOutput
 from agent_runtime.extension.workflow_node.complex_intent_detection import ComplexIntentDetection
@@ -40,6 +41,9 @@ from jiuwen.extension.patches.loop_body_session_cleanup_patch import (
     apply_loop_body_session_cleanup_patch,
     apply_loop_state_cleanup_patch,
 )
+from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
+    apply_global_memory_ref_resolution_patch,
+)
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
 )
@@ -53,6 +57,7 @@ from jiuwen.extension.patches.parallel_branch_grouping_patch import (
 from jiuwen.extension.workflow_node.flow_agent import FlowAgent, FlowAgentConfig
 from jiuwen.extension.workflow_node.flow_aggregate import Aggregate
 from jiuwen.extension.workflow_node.flow_api import FlowApi
+from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
 from jiuwen.extension.workflow_node.flow_card import FlowCard, FlowCardConfig
 from jiuwen.extension.workflow_node.flow_exception import ExceptionInfo
 from jiuwen.extension.workflow_node.flow_extractor import Extractor
@@ -82,6 +87,7 @@ from jiuwen.serve.controllers.execution.enum import IRType
 from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import (
     async_ir_load,
+    async_ir_load_batch,
     deserialize_object,
     cache_agent_queue,
     cache_agent_group_queue,
@@ -107,6 +113,7 @@ from pydantic import ValidationError
 apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
+apply_global_memory_ref_resolution_patch()
 from jiuwen.extension.workflow_node.utils import WorkflowMetadata
 
 from jiuwen.serve.controllers.execution.ir_parallel_utils import (
@@ -1037,6 +1044,8 @@ class IRConverter:
         result: dict[str, dict[str, dict]] = {}
         current_wf_defs: dict[str, dict] = {}
         components = ir_data.get("components") or []
+        # SubWorkflow 子路径收集（保序，可含重复），循环后并发预取
+        sub_workflow_paths: list = []
         for comp in components:
             comp_id = comp.get("id")
             if not comp_id:
@@ -1061,21 +1070,35 @@ class IRConverter:
                 },
             }
             current_wf_defs[comp_id] = node_def
-            # 递归提取 SubWorkflow 子工作流内部节点
+            # 递归提取 SubWorkflow 子工作流内部节点：先收集子路径，
+            # 循环结束后并发预取，再按原顺序逐个递归提取
             ir_type = comp.get("type", "")
             if ir_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
                 reference = raw_configs.get("reference") or {}
                 child_path = reference.get("path", "")
                 if child_path:
-                    try:
-                        child_ir = await async_ir_load(child_path)
-                        child_defs = await IRConverter.extract_node_defs(child_ir)
-                        result.update(child_defs)
-                    except Exception:
-                        logger.debug(
-                            "Failed to load sub workflow IR from %s for node defs extraction",
-                            child_path,
-                        )
+                    sub_workflow_paths.append(child_path)
+        # 并发预取子工作流 IR；单失败不中断其余（对齐原 try/except 吞错
+        # 继续语义），失败项连同其递归一起跳过。占位判断用 BaseException
+        # 以覆盖 CancelledError（其非 Exception 子类）
+        child_irs = await async_ir_load_batch(
+            sub_workflow_paths, return_exceptions=True
+        )
+        for child_path, child_ir in zip(sub_workflow_paths, child_irs, strict=True):
+            if isinstance(child_ir, BaseException):
+                logger.debug(
+                    "Failed to load sub workflow IR from %s for node defs extraction",
+                    child_path,
+                )
+                continue
+            try:
+                child_defs = await IRConverter.extract_node_defs(child_ir)
+                result.update(child_defs)
+            except Exception:
+                logger.debug(
+                    "Failed to extract node defs from sub workflow IR %s",
+                    child_path,
+                )
         if current_wf_defs and workflow_id:
             result[workflow_id] = current_wf_defs
         return result
@@ -1259,31 +1282,36 @@ class IRConverter:
             )
             child_metadata_list: List[AgentMetaData] = []
             # check if current ir_data has child agents
-            if current_ir_data.get("configs", {}).get("agents"):
-                for child in current_ir_data.get("configs", {}).get("agents"):
-                    # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            "loading ir data of %s",
-                            child.get("id"),
-                            simple_log="loading ir data of child",
-                        )
-                    # 支持从父Agent修改子Agent描述
-                    parent_description = child.get("description", "")
-                    child_ir_data = await async_ir_load(child.get("ir_path"))
-                    # R-04: intent 覆盖通过参数下传到子的 current_metadata,不再原地写 child_ir_data
-                    child_intent = child.get("intent") if isinstance(child.get("intent"), dict) else None
-                    child_config = await _recursive_create(
-                        child_ir_data,
-                        current_metadata,
-                        parent_description,
-                        parent_intent=child_intent,
+            children = current_ir_data.get("configs", {}).get("agents") or []
+            # 并发预取全部子 Agent IR（原为 for 循环逐个 await，串行 IO 往返
+            # 是多智能体构建期的主要耗时）；递归转换在预取完成后仍按原顺序
+            # 串行执行，intent 覆盖（R-04）等转换语义不变
+            children_irs = await async_ir_load_batch(
+                [child.get("ir_path") for child in children]
+            )
+            for child, child_ir_data in zip(children, children_irs, strict=True):
+                # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "loading ir data of %s",
+                        child.get("id"),
+                        simple_log="loading ir data of child",
                     )
-                    child_config.metadata.ir_path = child.get("ir_path")
-                    child_config.metadata.mode = child.get(
-                        "mode", child_config.metadata.mode
-                    )
-                    child_metadata_list.append(child_config.metadata)
+                # 支持从父Agent修改子Agent描述
+                parent_description = child.get("description", "")
+                # R-04: intent 覆盖通过参数下传到子的 current_metadata,不再原地写 child_ir_data
+                child_intent = child.get("intent") if isinstance(child.get("intent"), dict) else None
+                child_config = await _recursive_create(
+                    child_ir_data,
+                    current_metadata,
+                    parent_description,
+                    parent_intent=child_intent,
+                )
+                child_config.metadata.ir_path = child.get("ir_path")
+                child_config.metadata.mode = child.get(
+                    "mode", child_config.metadata.mode
+                )
+                child_metadata_list.append(child_config.metadata)
 
             task_id = str(secrets.token_hex(24))
             if logger.isEnabledFor(logging.DEBUG):
@@ -1423,7 +1451,7 @@ class IRConverter:
         if cache_enabled:
             agent = await timed_cache_op(
                 "Agent instance retrieval",
-                cache_agent_queue.aget(agent_config.ir_path),
+                cache_agent_queue.aget(agent_config.ir_path, should_refresh_ttl=True),
                 agent_config.ir_path,
             )
 
@@ -1719,11 +1747,12 @@ class IRConverter:
             nid = node.get("id")
             ntype = node.get("type", "")
             cfgs = node.get("configs") or {}
-            if ntype in _llm_types and bool(cfgs.get("stream", False)):
-                ir_stream_source_ids.add(nid)
-            elif ntype in IRConverter._STREAMING_API_TYPES and bool(
+            # G.CTL.03：拆成中间布尔量，避免单 if 条件过多
+            llm_stream = ntype in _llm_types and bool(cfgs.get("stream", False))
+            api_stream = ntype in IRConverter._STREAMING_API_TYPES and bool(
                 cfgs.get("streaming", False)
-            ):
+            )
+            if llm_stream or api_stream:
                 ir_stream_source_ids.add(nid)
 
         # Pre-compute stream connection targets from explicit IR connections.
@@ -2108,8 +2137,6 @@ class IRConverter:
                 set_end_kwargs["stream_inputs_schema"] = (
                     stream_schema if stream_schema else {}
                 )
-            elif has_batch:
-                set_end_kwargs["inputs_schema"] = inputs_schema
             elif has_stream:
                 set_end_kwargs["stream_inputs_schema"] = inputs_schema
             else:
@@ -2339,6 +2366,9 @@ class IRConverter:
         if node_type == "jiuwen.code":
             return FlowCode(configs), node_type, configs
 
+        if node_type == "jiuwen.templateTransform":
+            return FlowTemplateTransform(configs), node_type, configs
+
         if node_type == "jiuwen.knowledgeRetrieval":
             return FlowKnowledgeRetrieval(configs), node_type, configs
 
@@ -2369,6 +2399,9 @@ class IRConverter:
             return Extractor(), node_type, configs
 
         if node_type in {"jiuwen.plugin", "jiuwen.api", "jiuwen.flowApi"}:
+            call_mode = configs.get("callMode", "api")
+            if call_mode == "custom":
+                return FlowCustomApi(configs), node_type, configs
             return FlowApi(configs), node_type, configs
 
         if node_type in {"jiuwen.mcp", "jiuwen.flowMcp"}:
@@ -2609,6 +2642,39 @@ class IRConverter:
         if node_type == "jiuwen.sql":
             return FlowSql(configs), node_type, configs
 
+        if node_type == "EI.http":
+            from openjiuwen.core.workflow.components.tool.http import (
+                HTTPRequestComponent,
+                HttpComponentConfig,
+                HttpRequestParamConfig,
+                HttpRequestBodyConfig,
+                HttpContentType,
+            )
+
+            url = configs.get("url", "")
+            method = (configs.get("method") or "GET").upper()
+            request_type = configs.get("requestType") or configs.get("request_type") or "NONE"
+            request_body = configs.get("requestBody") or configs.get("request_body") or ""
+            # G3：组件用 ast.literal_eval 解析 body 模板，JSON 小写 true/false/null
+            # 非合法 Python 字面量 → 解析失败 → 整个 body 静默不发（status 仍 200）。
+            # 发送前经 json.dumps 还原，故预处理成 Python 字面量不改变线上语义。
+            request_body = _pythonize_json_literals(request_body)
+
+            body_config = None
+            if request_type.upper() == "JSON" and request_body:
+                body_config = HttpRequestBodyConfig(
+                    content_type=HttpContentType.JSON,
+                    json_data=request_body,
+                )
+
+            http_params = HttpRequestParamConfig(
+                url=url,
+                method=method,
+                body=body_config,
+            )
+            http_config = HttpComponentConfig(request_params=http_params)
+            return HTTPRequestComponent(http_config), node_type, configs
+
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
         )
@@ -2646,6 +2712,12 @@ class IRConverter:
             _timeout = -1.0
             _max_retries = 0
             exception_config = None
+        # MCP 节点：Vertex 层 asyncio.wait_for 直接用 node_config.timeout，
+        # 需在此处与 MCP_TIME_OUT_SECONDS 取小，使兜底上限在编排层生效。
+        if node_type in {"jiuwen.mcp", "jiuwen.flowMcp"} and _timeout > 0:
+            from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
+
+            _timeout = min(_timeout, parse_mcp_time_out_seconds())
         _comp_reg: dict[str, Any] = {
             "timeout": _timeout,
             "max_retries": _max_retries,
@@ -2719,6 +2791,13 @@ class IRConverter:
         )
         _attach_node_def(component, node, configs)
 
+        if resolved_type == "EI.http":
+            # G1/G2/G4：组件读 inputs['query_parameters']（IR 给的是 query）、
+            # {{}} 替换只查顶层 inputs（IR 把用户字段挂在 userFields 键下）、
+            # 鉴权 configs.auth 无人消费（组件自带 auth 通道未实现 query 域）。
+            # 在注册前重排 inputs 货架一次补齐三者。
+            inputs_schema = _remap_http_inputs_schema(inputs_schema, configs)
+
         if resolved_type == "jiuwen.start":
             _start_kwargs = dict(inputs_schema=_build_start_inputs_schema(node))
             if "name" in inspect.signature(workflow.set_start_comp).parameters:
@@ -2785,26 +2864,7 @@ class IRConverter:
                 workflow.set_end_comp(node_id, component, **_end_kwargs)
             return component
 
-        if resolved_type == "jiuwen.message":
-            if stream_inputs_schema is not None:
-                _add_workflow_comp_with_exception(
-                    workflow,
-                    node_id,
-                    component,
-                    stream_inputs_schema=stream_inputs_schema,
-                    **_comp_reg,
-                )
-            else:
-                _add_workflow_comp_with_exception(
-                    workflow,
-                    node_id,
-                    component,
-                    inputs_schema=inputs_schema,
-                    **_comp_reg,
-                )
-            return component
-
-        if resolved_type in {"jiuwen.card", "jiuwen.flowCard"}:
+        if resolved_type in {"jiuwen.message", "jiuwen.card", "jiuwen.flowCard"}:
             if stream_inputs_schema is not None:
                 _add_workflow_comp_with_exception(
                     workflow,
@@ -3319,6 +3379,19 @@ class IRConverter:
             )
 
         inputs_schema = _convert_schema(node.get("inputs") or {})
+        if node_type == "EI.http":
+            # 与 _add_component 注册路径对齐：单节点调试同样需要 G1/G2/G4 货架重排
+            # （query→query_parameters、userFields 平铺、auth 并入），
+            # 否则调试时 query/用户参数/鉴权都无法按组件预期读取
+            inputs_schema = _remap_http_inputs_schema(inputs_schema, configs)
+            # 异常处理同样对齐注册路径：HTTP 前端只写 exceptionEnable/
+            # exceptionSuppression，注册路径经 _parse_exception_config 合成
+            # exceptionProcess，而调试 wrapper 只消费 configs.exceptionProcess
+            # ——缺合成则单节点调试开启异常处理不恢复，与试运行行为不一致
+            if not (configs or {}).get("exceptionProcess"):
+                synthesized = _synthesize_exception_process(node)
+                if synthesized:
+                    configs = {**(configs or {}), "exceptionProcess": synthesized}
         return SingleComponentInfo(
             component=component,
             node_id=component_id,
@@ -3335,6 +3408,18 @@ class IRConverter:
         """
         all_configs: List[MemoryIrConfig] = []
         visited = set()
+
+        async def _load_keyed_irs(keyed_paths: list) -> dict:
+            """并发加载 (key, ir_path) 对中非空路径的子 IR，返回 {key: ir_data}。
+
+            空 ir_path 项不加载（与原 `if child_ir_path:` 过滤一致）；
+            递归转换由调用方按原顺序串行执行。
+            """
+            keyed_paths = [(k, p) for k, p in keyed_paths if p]
+            if not keyed_paths:
+                return {}
+            loaded = await async_ir_load_batch([p for _, p in keyed_paths])
+            return {k: ir for (k, _), ir in zip(keyed_paths, loaded, strict=True)}
 
         async def _recursive_create(current_ir_data: dict[str, Any]):
             """for each agent|workflow, add its MemoryIrConfig into list"""
@@ -3356,47 +3441,57 @@ class IRConverter:
                 )
 
             current_ir_type = IRConverter.identify_ir(current_ir_data)
+            # 显式 null 子节点字段维持串行版 TypeError fail-fast（不加 or []
+            # 兜底：静默缺 Memory 配置比构建失败更难发现，三个分支同此约定）
             if current_ir_type == IRType.Agent:
-                for child_workflow_info in current_ir_data.get("configs", {}).get(
-                    "workflows", []
-                ):
-                    child_workflow_ir_path = child_workflow_info.get("ir_path", "")
-                    if child_workflow_ir_path:
-                        child_workflow_ir_data = await async_ir_load(
-                            child_workflow_ir_path
-                        )
-                        await _recursive_create(child_workflow_ir_data)
+                child_infos = current_ir_data.get("configs", {}).get("workflows", [])
+                # 并发预取挂载工作流 IR；空 ir_path 不加载（与原行为一致）
+                ir_by_key = await _load_keyed_irs(
+                    [
+                        (i, info.get("ir_path", ""))
+                        for i, info in enumerate(child_infos)
+                    ]
+                )
+                for i in range(len(child_infos)):
+                    if i in ir_by_key:
+                        await _recursive_create(ir_by_key[i])
             elif current_ir_type == IRType.Workflow:
-                for child_workflow_info in current_ir_data.get("components", {}):
+                child_infos = current_ir_data.get("components", {})
+                # 仅 SubWorkflow 组件需要加载子 IR（与原 continue 过滤一致）
+                ir_by_key = await _load_keyed_irs(
+                    [
+                        (
+                            i,
+                            info.get("configs", {})
+                            .get("reference", {})
+                            .get("path", ""),
+                        )
+                        for i, info in enumerate(child_infos)
+                        if info.get("type") == NodeType.SUB_WORKFLOW.value
+                    ]
+                )
+                for i, child_workflow_info in enumerate(child_infos):
                     if child_workflow_info.get("type") != NodeType.SUB_WORKFLOW.value:
                         continue
-                    child_workflow_ir_path = (
-                        child_workflow_info.get("configs", {})
-                        .get("reference", {})
-                        .get("path", "")
-                    )
-                    if child_workflow_ir_path:
-                        child_workflow_ir_data = await async_ir_load(
-                            child_workflow_ir_path
-                        )
-                        await _recursive_create(child_workflow_ir_data)
+                    if i in ir_by_key:
+                        await _recursive_create(ir_by_key[i])
             elif current_ir_type == IRType.MultiAgents:
-                for child_agent_info in current_ir_data.get("configs", {}).get(
-                    "agents", []
-                ):
-                    child_agent_ir_path = child_agent_info.get("ir_path", "")
-                    if child_agent_ir_path:
-                        child_agent_ir_data = await async_ir_load(child_agent_ir_path)
-                        await _recursive_create(child_agent_ir_data)
-                for child_workflow_info in current_ir_data.get("configs", {}).get(
-                    "workflows", []
-                ):
-                    child_workflow_ir_path = child_workflow_info.get("ir_path", "")
-                    if child_workflow_ir_path:
-                        child_workflow_ir_data = await async_ir_load(
-                            child_workflow_ir_path
-                        )
-                        await _recursive_create(child_workflow_ir_data)
+                agent_infos = current_ir_data.get("configs", {}).get("agents", [])
+                workflow_infos = current_ir_data.get("configs", {}).get("workflows", [])
+                # 子 Agent 与挂载工作流合并为一次并发预取；递归顺序保持原
+                # "先 agents 后 workflows"（key 用复合元组避免两组索引冲突）
+                ir_by_key = await _load_keyed_irs(
+                    [(("agent", i), info.get("ir_path", ""))
+                     for i, info in enumerate(agent_infos)]
+                    + [(("workflow", i), info.get("ir_path", ""))
+                       for i, info in enumerate(workflow_infos)]
+                )
+                for i in range(len(agent_infos)):
+                    if ("agent", i) in ir_by_key:
+                        await _recursive_create(ir_by_key[("agent", i)])
+                for i in range(len(workflow_infos)):
+                    if ("workflow", i) in ir_by_key:
+                        await _recursive_create(ir_by_key[("workflow", i)])
 
         await _recursive_create(root_ir_data)
         return all_configs
@@ -4081,9 +4176,182 @@ _NO_EXCEPTION_TYPES = frozenset({"jiuwen.loop", "jiuwen.exception"})
 _NO_RETRY_TYPES = frozenset({"jiuwen.subWorkflow", "jiuwen.workflowComposite"})
 
 
+# handle_type 规范值（与 jiuwen.orchestration.flow.constant 的 EXCEPTION_HANDLE_* 同值），
+# 键为小写形态供大小写不敏感归一。注意：下游 bpmn_workflow 以驼峰常量比较 handle_type，
+# 历史上此处 .lower() 后直接存储，导致 defaultOutputs 分支在 IR 注册路径上永不可达。
+_CANONICAL_EXCEPTION_HANDLE_TYPES = {
+    "interrupt": "interrupt",
+    "defaultoutputs": "defaultOutputs",
+    "default_outputs": "defaultOutputs",
+    "errorbranch": "errorbranch",
+    "error_branch": "errorbranch",
+}
+
+# HTTP 节点默认输出模板键（snake_case）→ 组件输出键（驼峰）别名，
+# 不别名则兜底路径上 End 引用 statusCode/errorMessage 取空。
+_HTTP_OUTPUT_KEY_ALIASES = {
+    "status_code": "statusCode",
+    "error_message": "errorMessage",
+}
+
+# 组件 process_inputs 保留键：用户字段平铺到顶层时避让，防覆盖组件读取通道。
+# query 与前端禁名清单同口径：用户行叫 query 时平铺出的顶层 query 键组件
+# 并不读取（只读 query_parameters），静默忽略不如告警跳过；headers 等同理
+_HTTP_RESERVED_INPUT_KEYS = frozenset(
+    {"query", "query_parameters", "headers", "authentication", "body", "method", "url"}
+)
+
+# 匹配"引号字符串（双/单引号，含转义）"、"{{占位符}}"或"裸 true/false/null 令牌"：
+# 前三者整体被第一分支消费，内部内容不受替换影响：
+# - {"msg": "true story"} / {'msg': 'true story'} 串内单词不改写（body 允许
+#   Python 字面量形态，组件走 ast.literal_eval，单引号串是合法输入）；
+# - {{true}} / {{null}} 占位符内裸词是变量名，改写成 {{True}} 后无法按原始
+#   key 解析，body 解析失败会被组件静默丢弃。
+_JSON_LITERAL_TOKEN_RE = re.compile(
+    r'("(?:[^"\\]|\\.)*"'  # 双引号字符串（含转义）
+    r"|'(?:[^'\\]|\\.)*'"  # 单引号字符串（含转义）
+    r"|\{\{[^{}]*\}\}"  # {{占位符}}整段保护
+    r")|\b(true|false|null)\b"
+)
+_JSON_LITERAL_TO_PYTHON = {"true": "True", "false": "False", "null": "None"}
+
+
+def _pythonize_json_literals(template: Any) -> Any:
+    """把 JSON body 模板中裸写的 true/false/null 改写为 Python 字面量。
+
+    组件以 ast.literal_eval 解析 body 模板（G3）：JSON 小写布尔/null 非法 →
+    解析失败返回 {} → 整个 body 静默不发且无告警。body 发出前经 json.dumps
+    序列化回 true/false/null，故该预处理不改变线上语义。
+    """
+    if not isinstance(template, str):
+        return template
+    return _JSON_LITERAL_TOKEN_RE.sub(
+        lambda m: m.group(0) if m.group(1) else _JSON_LITERAL_TO_PYTHON[m.group(2)],
+        template,
+    )
+
+
+def _remap_http_inputs_schema(inputs_schema: Any, configs: dict | None) -> Any:
+    """重排 EI.http 的 inputs 货架，补齐三个消费缺口：
+
+    - G1：组件读 inputs['query_parameters']，IR 货架键为 query → 改名；
+    - G2：组件 {{}} 替换只遍历顶层 inputs，IR 把用户字段挂在 userFields 键下 → 平铺；
+    - G4：configs.auth（Java 产出 {scope, headers:{k:v}, query:{k:v}}）无人消费，
+      组件自带 authentication 通道未实现 query 域 → 直接并入两个货架；
+      用户手配行优先（setdefault），auth 不覆盖用户显式配置。
+    """
+    if not isinstance(inputs_schema, dict):
+        return inputs_schema
+    query = inputs_schema.get("query")
+    existing_query_parameters = inputs_schema.get("query_parameters")
+    headers = inputs_schema.get("headers")
+    remapped: dict[str, Any] = {
+        # schema 已含 query_parameters（调用方直接给组件形态，
+        # 或函数被重复调用）时合并而非重置——末尾兜底循环会因该键已在
+        # remapped 中而跳过，重置将丢失已有值。同名键 query（IR 原生货架）优先。
+        "query_parameters": {
+            **(
+                dict(existing_query_parameters)
+                if isinstance(existing_query_parameters, dict)
+                else {}
+            ),
+            **(dict(query) if isinstance(query, dict) else {}),
+        },
+        "headers": dict(headers) if isinstance(headers, dict) else {},
+    }
+    user_fields = inputs_schema.get("userFields")
+    if isinstance(user_fields, dict):
+        for key, value in user_fields.items():
+            if key in _HTTP_RESERVED_INPUT_KEYS:
+                logger.warning(
+                    f"EI.http user field {key!r} collides with component reserved "
+                    "input key; skipped in inputs remap"
+                )
+                continue
+            remapped[key] = value
+    auth = (configs or {}).get("auth")
+    if isinstance(auth, dict):
+        # auth.headers/auth.query 为真值非 dict 形态（字符串/列表，API 直写或
+        # 导入 DSL 畸形数据）时直接 .items() 会 AttributeError 打断整段 IR
+        # 转换——按形态甄别：畸形子字段仅跳过合并并告警，用户货架与另一
+        # 鉴权域不受影响
+        auth_headers = auth.get("headers") or {}
+        if not isinstance(auth_headers, dict):
+            logger.warning(
+                f"EI.http configs.auth.headers 非对象"
+                f"（{type(auth_headers).__name__}），跳过合并"
+            )
+            auth_headers = {}
+        for key, value in auth_headers.items():
+            remapped["headers"].setdefault(key, value)
+        auth_query = auth.get("query") or {}
+        if not isinstance(auth_query, dict):
+            logger.warning(
+                f"EI.http configs.auth.query 非对象"
+                f"（{type(auth_query).__name__}），跳过合并"
+            )
+            auth_query = {}
+        for key, value in auth_query.items():
+            remapped["query_parameters"].setdefault(key, value)
+    for key, value in inputs_schema.items():
+        if key not in ("query", "headers", "userFields") and key not in remapped:
+            remapped[key] = value
+    return remapped
+
+
+def _synthesize_exception_process(node: dict) -> dict | None:
+    """为只写 exceptionEnable/exceptionSuppression 的 EI.http 节点合成 exceptionProcess。
+
+    HTTP 节点前端不产出 exceptionProcess，缺此 fallback 时开启异常处理仍直接
+    中断（G5）。合成仅限 EI.http：其他节点类型的
+    exceptionProcess 由各自前端产出，缺失时保持既有语义，泛化合成会改变
+    HTTP 以外节点的既有异常行为。
+    """
+    if node.get("type") != "EI.http":
+        return None
+    configs = node.get("configs") or {}
+    # exceptionSuppression 是前端编辑器直绑的 JSON 串：用户清空内容后存 ''，
+    # 语义为"开启异常处理 + 空默认输出"，不得按未配置回退 interrupt
+    suppression = configs.get("exceptionSuppression")
+    if not configs.get("exceptionEnable") or suppression is None:
+        return None
+    if isinstance(suppression, dict):
+        # API 直写形态已是对象：不得再过 json.loads（抛 TypeError 被捕获后
+        # 回退空默认输出，用户已配置的兜底值被静默丢弃），直接进别名归一
+        default_outputs = suppression
+    else:
+        try:
+            default_outputs = json.loads(suppression) if suppression else {}
+        except (TypeError, ValueError):
+            logger.warning(
+                f"node {node.get('id')} exceptionSuppression 非合法 JSON，"
+                "按开启异常处理语义回退空默认输出"
+            )
+            default_outputs = {}
+    if isinstance(default_outputs, dict):
+        default_outputs = {
+            _HTTP_OUTPUT_KEY_ALIASES.get(key, key): value
+            for key, value in default_outputs.items()
+        }
+    else:
+        # 合法 JSON 但非对象（数组/字符串/数字）：异常恢复按 dict 消费
+        # （_merge_dicts 对其 .items() 合并），原样透传会 AttributeError
+        # 导致恢复失败，按开启异常处理语义回退空默认输出
+        logger.warning(
+            f"node {node.get('id')} exceptionSuppression 为合法 JSON 但非对象"
+            f"（{type(default_outputs).__name__}），回退空默认输出"
+        )
+        default_outputs = {}
+    return {"handleType": "defaultOutputs", "defaultOutputs": default_outputs}
+
+
 def _parse_exception_config(node: dict) -> ExceptionConfig | None:
-    """从 IR 节点的 configs.exceptionProcess 中解析异常处理配置。"""
+    """从 IR 节点的 configs.exceptionProcess 中解析异常处理配置。
+    无 exceptionProcess 时尝试 exceptionEnable/exceptionSuppression 合成（见上）。
+    """
     ep = (node.get("configs") or {}).get("exceptionProcess")
+    if not ep:
+        ep = _synthesize_exception_process(node)
     if not ep:
         return None
 
@@ -4096,7 +4364,8 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     # MCP 节点的 outputs_schema 使用类型描述符（如 {"type": "array"}），
     # 不适合作为 get_by_schema 的提取模板。置空后 _post_invoke 跳过 schema 提取，
     # 错误恢复结果（defaultOutputs）直接通过。
-    if node_type in ("jiuwen.mcp", "jiuwen.flowMcp"):
+    # EI.http 输出为扁平 kv 同款道理：置空让兜底输出键原样通过。
+    if node_type in ("jiuwen.mcp", "jiuwen.flowMcp", "EI.http"):
         outputs_schema = {}
     else:
         outputs_schema = _convert_schema(node.get("outputs") or {})
@@ -4109,8 +4378,12 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     if not isinstance(retry_times, int) or retry_times < 0:
         retry_times = 0
 
+    handle_type = _CANONICAL_EXCEPTION_HANDLE_TYPES.get(
+        str(ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT)).strip().lower(),
+        EXCEPTION_HANDLE_INTERRUPT,
+    )
     return ExceptionConfig(
-        handle_type=ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT).lower(),
+        handle_type=handle_type,
         timeout=timeout,
         retry_times=retry_times,
         default_outputs=ep.get("defaultOutputs", {}),

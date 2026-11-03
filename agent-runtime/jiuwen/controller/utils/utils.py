@@ -992,7 +992,7 @@ class MessageConverter:
             message_type=MessageType.WORKFLOW_COMPLETION,
             content={
                 "workflow_name": workflow_context.workflow_name,
-                "workflow_id：": workflow_context.workflow_id,
+                "workflow_id": workflow_context.workflow_id,
                 "workflow_type": workflow_context.type,
                 "exec_res": exec_res,
             },

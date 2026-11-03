@@ -52,6 +52,15 @@ public class AgentTriggerService extends QuartzJobBean {
         JobDataMap jobDetailMap = context.getJobDetail().getJobDataMap();
         String jobName = context.getJobDetail().getKey().getName();
         log.info("[Task Start] The scheduled task starts to be executed. Task name:{}", jobName);
+        executeTarget(jobDetailMap);
+    }
+
+    /**
+     * Executes the Agent or Workflow described by the supplied trigger data.
+     *
+     * @param jobDetailMap trigger target data
+     */
+    public void executeTarget(JobDataMap jobDetailMap) {
         String authToken = StringUtils.EMPTY;
 
         // 2. 判断任务类型并执行
@@ -59,6 +68,9 @@ public class AgentTriggerService extends QuartzJobBean {
             handleAgentTask(jobDetailMap, authToken);
         } else if (jobDetailMap.containsKey(CommonConstant.Workflow.ID)) {
             handleWorkflowTask(jobDetailMap, authToken);
+        } else {
+            log.error("Trigger {} has no valid target (neither agentId nor workflowId). JobDataMap keys: {}",
+                jobDetailMap.getString(CommonConstant.TRIGGER_ID), jobDetailMap.getKeys());
         }
     }
 
@@ -91,7 +103,7 @@ public class AgentTriggerService extends QuartzJobBean {
         SpringBeanUtils.getBean(MgAsyncService.class).callRunAgentStream(() -> {
             try {
                 Request request = buildRequest(projectId, agentId, token, jobDetailMap, JSON.toJSONString(agentRunReq),
-                        null // Agent任务不需要UUID
+                        UUID.randomUUID().toString()
                 );
                 executeStreamRequest(request, sseEmitter, jobDetailMap);
             } catch (Exception e) {
@@ -139,6 +151,8 @@ public class AgentTriggerService extends QuartzJobBean {
 
     // 执行流式请求
     private void executeStreamRequest(Request request, SseEmitter sseEmitter, JobDataMap jobDetailMap) {
+        String triggerId = jobDetailMap.getString(CommonConstant.TRIGGER_ID);
+        log.info("Trigger {} stream request started, url={}", triggerId, request.url());
         okHttpClientUtils.getHttpClient().newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
@@ -156,7 +170,7 @@ public class AgentTriggerService extends QuartzJobBean {
                         handleError(new IOException("Response body is empty."), sseEmitter, jobDetailMap);
                         return;
                     }
-                    processStreamResponse(body, sseEmitter);
+                    processStreamResponse(body, sseEmitter, triggerId);
                 }
                 sendDone(sseEmitter);
             }
@@ -164,16 +178,31 @@ public class AgentTriggerService extends QuartzJobBean {
     }
 
     // 处理流式响应
-    private void processStreamResponse(ResponseBody body, SseEmitter sseEmitter) throws IOException {
+    private void processStreamResponse(ResponseBody body, SseEmitter sseEmitter, String triggerId) throws IOException {
+        int lineCount = 0;
+        StringBuilder summaryContent = new StringBuilder();
+        boolean hasSummary = false;
         try (BufferedSource source = body.source()) {
             while (!source.exhausted()) {
                 String line = source.readUtf8Line();
                 if (line != null && line.startsWith(CommonConstant.EVENT_DATA_PREFIX)) {
                     String data = line.substring(CommonConstant.EVENT_DATA_PREFIX.length()).trim();
                     sseEmitter.send(SseEmitter.event().data(data));
+                    lineCount++;
+
+                    // 只记录 summary_response 事件的完整内容
+                    if (data.contains("\"event\": \"summary_response\"") || data.contains("\"event\":\"summary_response\"")) {
+                        summaryContent.append(data);
+                        hasSummary = true;
+                    }
                 }
             }
         }
+
+        if (hasSummary) {
+            log.info("Trigger {} final response: {}", triggerId, summaryContent);
+        }
+        log.info("Trigger {} stream completed, total data lines: {}", triggerId, lineCount);
     }
 
     // 统一错误处理

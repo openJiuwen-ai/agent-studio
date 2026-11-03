@@ -30,6 +30,10 @@ class HierarchicalControlAgent(BaseControlAgent):
         self.interrupted_agents: List[str] = []
         self.call_agent_history: List[str] = []
         self.message_context: ConversationHistory = ConversationHistory()
+        # 本轮是否由「恢复被中断 agent」触发（WaitUserInput 等待输入场景）。
+        # select_agent 命中中断恢复时置位，execute 据此补发一次 workflow_resume，
+        # 使 manager 端取回上一轮缓存的 executionId、把调试记录合并为一条。
+        self._resumed_from_interrupt: bool = False
 
     @staticmethod
     def _create_error_message(
@@ -47,6 +51,32 @@ class HierarchicalControlAgent(BaseControlAgent):
                     message=error_msg,
                 ),
                 execution_id=execution_id,
+            ),
+            timestamp=time.time(),
+        )
+
+    @staticmethod
+    def _create_workflow_resume_message(agent_id: str) -> Message:
+        """创建恢复中断agent的流消息
+
+        WaitUserInput（等待输入）场景下工作流是正常完成后中断的，任务队列中
+        没有 WORKFLOW_RESUME 任务，工作流级 resume 事件不会发出；manager 端
+        依赖 workflow_resume 事件取回上一轮缓存的 executionId 来合并调试记录，
+        因此在恢复被中断 agent 时由控制 agent 补发该事件。
+        """
+        logger.info(f"Creating agent resume stream data for agent: {agent_id}")
+        return Message(
+            type=MemberMessageType.STREAM,
+            agent_id="control_agent",
+            data=StreamData(
+                code=StreamCode.WORKFLOW_RESUME_MESSAGE.value,
+                msg="controller_agent_resume",
+                data={
+                    "type": "controller_agent_resume",
+                    "reason": "resume_interrupted_agent",
+                    "agent_id": agent_id,
+                },
+                execution_id="",
             ),
             timestamp=time.time(),
         )
@@ -78,6 +108,14 @@ class HierarchicalControlAgent(BaseControlAgent):
                 if not agent_id:
                     logger.debug("No more agents available for execution")
                     break
+
+                # 恢复被中断 agent（如 WaitUserInput 等待输入后的下一轮）：
+                # 补发 workflow_resume 事件，manager 端据此取回上一轮缓存的
+                # executionId，把本轮调试记录合并进上一条 execution
+                if self._resumed_from_interrupt:
+                    self._resumed_from_interrupt = False
+                    yield self._create_workflow_resume_message(agent_id)
+
                 self.call_agent_history.append(agent_id)
                 # 2. 调用agent
                 stream_handler = StreamHandler()
@@ -264,6 +302,8 @@ class HierarchicalControlAgent(BaseControlAgent):
             if recent_interrupted_agent in self.agents:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("Resuming interrupted agent: %s", recent_interrupted_agent)
+                # 标记本轮为中断恢复，execute 将补发 workflow_resume 事件
+                self._resumed_from_interrupt = True
                 return recent_interrupted_agent
 
         # 3. 默认选择main_agent

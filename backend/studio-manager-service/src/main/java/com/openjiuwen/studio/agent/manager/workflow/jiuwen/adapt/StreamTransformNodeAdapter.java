@@ -105,12 +105,33 @@ public class StreamTransformNodeAdapter extends AbstractIRNodeAdapter {
         Map<String, Object> irTransformer = new HashMap<>();
         irTransformer.put(VARIABLES, variables);
 
-        // 尝试解析为 JSON 对象，若非 JSON 则保留字符串
-        try {
-            irTransformer.put(FRAME_TEMPLATE, objectMapper.readTree(frameTemplate));
-            irTransformer.put(FINAL_TEMPLATE, objectMapper.readTree(convertJson(variables, frameTemplate)));
-        } catch (Exception e) {
-            throw new AgentStudioException(StudioError.FRAME_TEMPLATE_INVALID_JSON);
+        // 尝试解析为 JSON 对象
+        // 支持纯占位符格式（如 {{raw_output}}）：将整个输入作为帧引用
+        if (variables.isEmpty() && frameTemplate.matches("\\{\\{[^.}]+\\}\\}")) {
+            // 纯占位符：创建变量，name 和 src_path 都设为实际输入参数名
+            // 这样 _build_transformer_config 会匹配 v.name == _source_field 并清空 src_path
+            // 运行时 _read_src 在 src_path 为空时返回整个帧对象
+            Map<String, Object> wholeInputVar = new HashMap<>();
+            wholeInputVar.put(NAME, inputVarNames);
+            wholeInputVar.put(SRC_PATH, inputVarNames);
+            wholeInputVar.put(CONCAT, false);
+            variables.add(wholeInputVar);
+            irTransformer.put(VARIABLES, variables);
+            // frame_template 使用实际输入参数名引用
+            String wrappedTemplate = "{\"" + inputVarNames + "\": \"{{" + inputVarNames + "}}\"}";
+            try {
+                irTransformer.put(FRAME_TEMPLATE, objectMapper.readTree(wrappedTemplate));
+                irTransformer.put(FINAL_TEMPLATE, objectMapper.readTree(wrappedTemplate));
+            } catch (Exception e) {
+                throw new AgentStudioException(StudioError.FRAME_TEMPLATE_INVALID_JSON);
+            }
+        } else {
+            try {
+                irTransformer.put(FRAME_TEMPLATE, objectMapper.readTree(frameTemplate));
+                irTransformer.put(FINAL_TEMPLATE, objectMapper.readTree(convertJson(variables, frameTemplate)));
+            } catch (Exception e) {
+                throw new AgentStudioException(StudioError.FRAME_TEMPLATE_INVALID_JSON);
+            }
         }
 
         // 有聚合字段时，必须设置成true
@@ -121,7 +142,7 @@ public class StreamTransformNodeAdapter extends AbstractIRNodeAdapter {
         irTransformer.put(ADD_IS_LAST, false);
 
         // 设置固定配置项
-        complementFieldsConfig(configs);
+        complementFieldsConfig(configs, inputVarNames);
 
         configs.put(TRANSFORMER, irTransformer);
         return configs;
@@ -193,14 +214,14 @@ public class StreamTransformNodeAdapter extends AbstractIRNodeAdapter {
     /**
      * 流式处理节点： 补全节点缺失的 userFields 和 systemFields 配置
      */
-    private void complementFieldsConfig(Map<String, Object> nodeConfig) {
+    private void complementFieldsConfig(Map<String, Object> nodeConfig, String inputName) {
         // 1. 构造 userFields
         Map<String, Object> userFields = new HashMap<>();
         List<Map<String, Object>> userInputs = new ArrayList<>();
 
 
         Map<String, Object> inputItem = new HashMap<>();
-        inputItem.put(ID, "_input");
+        inputItem.put(ID, inputName);
         inputItem.put(TYPE, "object");
         inputItem.put(REQUIRED, true);
         inputItem.put(SOURCE_TYPE, REF_PARAMETERS_TYPE);

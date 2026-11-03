@@ -13,6 +13,7 @@ import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { DataSourceManagementRepoService } from '@services/repositories/datasource-management-repo.service';
 import { cloneDeep } from 'lodash';
+import { Subject } from 'rxjs';
 import { AppFlowService } from '../../app-flow.service';
 import {
   getInitInputParamConfig,
@@ -27,12 +28,13 @@ import type {
   IParamRef,
   ISqlNode,
   IDataQueryNode,
-  IWFViewWithMultiType,
+  IWFView,
   IWorkflowField,
 } from '../../node.type';
 import { AccBlockComponent } from '../acc-block/acc-block.component';
 import { AddPropsIconComponent } from '../add-props-icon/add-props-icon.component';
 import { ModalBaseComponent } from '../base/modal-base.component';
+import { CmdTextareaComponent } from '../cmd-textarea/cmd-textarea.component';
 import { EditNameComponent } from '../edit-name/edit-name.component';
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
 import { NodeUtils } from '../utils';
@@ -40,7 +42,6 @@ import { InputTreeSelect } from 'src/routes/agent-center/app-flow/components/inp
 import { NonEmptyValidatorDirective, ValueValidityValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { RefSelectedRequireDirective } from '@shared/directives/common-validator.directive';
 import { IDatasourceList, IDatasourceItem } from '@routes/agent-center/types/datasource.types';
-import { FlowUtils } from '../../utils/flow-utils';
 
 @Component({
   selector: 'meta-sql-modal',
@@ -57,6 +58,7 @@ import { FlowUtils } from '../../utils/flow-utils';
     EditNameComponent,
     NodeDescriptionComponent,
     InputTreeSelect,
+    CmdTextareaComponent,
   ],
   providers: [
     {
@@ -97,7 +99,25 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
 
   public sql = '';
 
-  public outputParams: IWFViewWithMultiType[] = [];
+  public outputFormat: 'json' | 'table' = 'json';
+
+  public outputFormatOptions = [
+    { label: 'JSON', value: 'json' },
+    { label: 'Markdown', value: 'table' },
+  ];
+
+  public outputParams: IWFView[] = [];
+
+  private allOutputParams: IWFView[] = [];
+
+  readonly showSqlVarListSubject$ = new Subject<boolean>();
+  readonly showSqlInlineVarListSubject$ = new Subject<boolean>();
+
+  onShowVarList(event: Event, subject: Subject<boolean>) {
+    event.preventDefault();
+    event.stopPropagation();
+    subject.next(true);
+  }
 
   public outputDataTypes = getOutputParamTypes();
   public noneObjDataTypes = getNoneObjOutputParamTypes();
@@ -144,9 +164,12 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
       });
     }
 
-    this.outputParams = FlowUtils.fields2Views(
+    this.allOutputParams = NodeUtils.fields2Views(
       (this.nodeInfo as ISqlNode).outputs,
     );
+    this.ensureDefaultOutputParams();
+    this.outputFormat = (this.nodeInfo.configs as any)?.output_format === 'table' ? 'table' : 'json';
+    this.outputParams = this.filterOutputParams();
 
     this.selectedDatasource = this.nodeInfo.configs?.id
       ? {
@@ -179,13 +202,14 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
       name: datasource?.name,
       type: datasource?.type,
       sql: this.sql,
+      output_format: this.outputFormat,
     };
     this.appFlowServ.setNodeSaveMonitor({
       nodeData: {
         ...this.nodeInfo,
         inputs: NodeUtils.getDtoInputs(this.inputParams),
         configs,
-        outputs: NodeUtils.multiTypeViews2Fields(this.outputParams),
+        outputs: NodeUtils.views2Fields(this.outputParams),
       },
     });
     if (this.updateTimeout) {
@@ -246,7 +270,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     this.onSave();
   }
 
-  showDelete(param: IWFViewWithMultiType) {
+  showDelete(param: IWFView) {
     if (this.disableEdit(param)) {
       return false;
     }
@@ -256,8 +280,8 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     return true;
   }
 
-  disableEdit(param: IWFViewWithMultiType) {
-    return param.name === 'output_list' || param.name === 'row_num';
+  disableEdit(param: IWFView) {
+    return param.name === 'output_list' || param.name === 'row_num' || param.name === 'markdown_table';
   }
 
   onStartNodeNameChange() {
@@ -266,7 +290,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     });
   }
 
-  getOutputNames(param: IWFViewWithMultiType): { existingValues: string[] } {
+  getOutputNames(param: IWFView): { existingValues: string[] } {
     let names: string[] = [];
     if (param.depth === 0) {
       names = this.outputParams.map((arg) => arg.name);
@@ -278,7 +302,7 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     return { existingValues: names };
   }
 
-  private findParentNode(nodes: IWFViewWithMultiType[], target: any): IWFViewWithMultiType | null {
+  private findParentNode(nodes: IWFView[], target: any): IWFView | null {
     for (const node of nodes) {
       if (node.children?.includes(target)) {
         return node;
@@ -291,8 +315,8 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     return null;
   }
 
-  deleteOutputParam(param: IWFViewWithMultiType) {
-    const removeNode = (nodes: IWFViewWithMultiType[], target: any): boolean => {
+  deleteOutputParam(param: IWFView) {
+    const removeNode = (nodes: IWFView[], target: any): boolean => {
       const idx = nodes.indexOf(target);
       if (idx >= 0) {
         nodes.splice(idx, 1);
@@ -352,6 +376,64 @@ export class SqlModalComponent extends ModalBaseComponent implements OnInit, OnD
     this.changeUpdateTime();
     if (this.appFlowServ.testRunVerificationError) {
       this.handelSave();
+    }
+  }
+
+  onOutputFormatChange(value: string) {
+    for (const param of this.outputParams) {
+      const idx = this.allOutputParams.findIndex(p => p.name === param.name);
+      if (idx >= 0) {
+        this.allOutputParams[idx] = cloneDeep(param);
+      }
+    }
+    this.outputFormat = value as 'json' | 'table';
+    this.outputParams = this.filterOutputParams();
+    this.onSave();
+  }
+
+  private filterOutputParams(): IWFView[] {
+    return this.allOutputParams.filter(param => {
+      if (this.outputFormat === 'table' && param.name === 'output_list') return false;
+      if (this.outputFormat === 'json' && param.name === 'markdown_table') return false;
+      return true;
+    });
+  }
+
+  private ensureDefaultOutputParams() {
+    const defaults: IWorkflowField[] = [
+      {
+        name: 'output_list',
+        description: '',
+        required: true,
+        type: 'array',
+        source: 'user',
+        reflection: false,
+        value: { content: '', type: 'generated', hint: '' },
+        schema: { name: '', type: 'object', schema: [] },
+      },
+      {
+        name: 'row_num',
+        description: '',
+        required: true,
+        type: 'integer',
+        source: 'user',
+        reflection: false,
+        value: { content: '', type: 'generated', hint: '' },
+      },
+      {
+        name: 'markdown_table',
+        description: 'Markdown Table',
+        required: false,
+        type: 'string',
+        source: 'user',
+        reflection: false,
+        value: { content: '', type: 'generated', hint: '' },
+      },
+    ];
+    for (const def of defaults) {
+      if (!this.allOutputParams.find(p => p.name === def.name)) {
+        this.allOutputParams.push(...NodeUtils.fields2Views([def]));
+      }
     }
   }
 

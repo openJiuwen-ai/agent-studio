@@ -828,7 +828,7 @@
     <update id="updateProjectIdByIds" parameterType="java.util.Map">
         UPDATE t_tool
         SET project_id =  #{opSvcProjectId}
-        WHERE id IN
+        WHERE tool_id IN
         <foreach collection="pluginIds" item="pluginId" separator="," open="(" close=")">
             #{pluginId}
         </foreach>

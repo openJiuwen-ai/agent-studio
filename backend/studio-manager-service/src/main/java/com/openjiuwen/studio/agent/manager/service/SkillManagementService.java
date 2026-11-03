@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Objects;
 
 /**
  * 组件库的 Skill 生命周期管理
@@ -141,6 +142,52 @@ public class SkillManagementService implements ISkillManagementService {
     }
 
     /**
+     * 流式读取指定 Skill 最新版本的 zip 制品包内容。
+     *
+     * <p>供前端详情页文件目录树展示使用，避免前端跨域直接请求 OBS 签名 URL。
+     * 复用 {@link MgObsService#readObsFileStream(String)} 直接读取 OBS 对象字节流，
+     * 由 Controller 层包装为 StreamingResponseBody 流式转发给前端。</p>
+     *
+     * <p><b>访问控制（按发布状态区分）</b>：</p>
+     * <ul>
+     *   <li><b>已发布资源</b>（published_asset = 1）：跳过 domainId 校验。
+     *       skill 市场按 published_asset 查询时不带 domainId 过滤，市场资源可能来自其他 domain，
+     *       跨 domain 预览属于既有契约（详见检视意见 #127、#151）。</li>
+     *   <li><b>私有包</b>（published_asset = 0 或 null）：必须校验 domainId 归属。
+     *       私有 skill 的完整制品包含源码与工具配置，不应被其他 domain 的用户越权拉取
+     *       （详见检视意见 Medium Priority #168）。鉴权强度与 deleteStudioSkill 对齐。</li>
+     * </ul>
+     * <p>不比对 workspaceId / projectId：同 domain 内跨工作区/项目的预览属于既有契约。</p>
+     *
+     * <p>实现说明：使用 {@link SkillMapper#searchBySkillId(String)}（LEFT JOIN 版本表 + t_skill.*）
+     * 一次性拿到 obs_path / domain_id / published_asset。</p>
+     *
+     * <p>返回的 InputStream 由调用方（Controller）负责关闭。</p>
+     */
+    @Override
+    public InputStream getSkillPackageContent(String skillId, String workspaceId, String projectId) {
+        log.info("Get skill package content, skillId: {}, workspaceId: {}, projectId: {}",
+                skillId, workspaceId, projectId);
+        // 查询 Skill 基本信息及最新版本 obs_path（searchBySkillId 已 LEFT JOIN t_skill_version）
+        SkillDetails skill = skillMapper.searchBySkillId(skillId);
+        if (skill == null || Strings.isEmpty(skill.getObsPath())) {
+            log.error("Skill not exists or obs path is empty, skillId: {}", skillId);
+            throw new AgentStudioException(StudioError.SKILL_NOT_EXISTS);
+        }
+        // 访问控制：私有包必须校验 domainId，已发布资源跳过（保留跨 domain 市场预览契约）
+        boolean isPublished = skill.getPublishedAsset() != null && skill.getPublishedAsset() == 1;
+        if (!isPublished) {
+            String requestDomainId = RequestContextUtils.getRequestUserDomainId();
+            if (!Objects.equals(skill.getDomainId(), requestDomainId)) {
+                log.error("Private skill does not belong to the current domain, skillId: {}, domainId: {}, requestDomainId: {}",
+                        skillId, skill.getDomainId(), requestDomainId);
+                throw new AgentStudioException(StudioError.SKILL_NOT_EXISTS);
+            }
+        }
+        return mgObsService.readObsFileStream(skill.getObsPath());
+    }
+
+    /**
      * 导入 Skill 制品包
      */
     @Transactional
@@ -156,31 +203,36 @@ public class SkillManagementService implements ISkillManagementService {
         log.info("Import skill, workspaceId: {}, projectId: {}", workspaceId, projectId);
         // 文件格式转换
         File zipFile = MultipartFileToZipUtils.convertToZipFile(multipartFile);
+        // finalZipFile 提前声明，便于 finally 引用清理重打包临时文件
+        File finalZipFile = zipFile;
         try {
-            // 调用校验方法
-            ZipValidationUtils.validateZipFile(zipFile);
+            // 1. 校验（validateZipFile 改为返回 frontmatter，不再依赖静态变量）
+            Map<String, Object> frontmatter = ZipValidationUtils.validateZipFile(zipFile);
 
-            // 获取frontmatter信息
-            Map<String, Object> frontmatter = ZipValidationUtils.getFrontmatter();
+            // 2. 获取 skill name
+            String skillName = frontmatter.get(NAME).toString();
 
-            // 生成Skill相关
+            // 3. 生成Skill相关
             String skillId = UUID.randomUUID().toString();
 
-            // 构造OBS存储路径,上传文件到OBS
+            // 4. 检测并重打包平铺结构（平铺包会被重打包为 {skillName}/ 结构）
+            finalZipFile = ZipValidationUtils.repackIfFlat(zipFile, skillName);
+
+            // 5. 构造OBS存储路径,上传文件到OBS（统一使用 skillName 命名）
             String obsKey = String.format(SKILL_VERSION_FILE_PATH_TEMPLATE,
                     RequestContextUtils.getRequestUserId(),
                     skillId,
                     skillId,
-                    multipartFile.getOriginalFilename());
+                    skillName + ".zip");
             String obsUrl;
 
             // 上传Skill制品包
-            try (InputStream inputStream = new FileInputStream(zipFile)) {
+            try (InputStream inputStream = new FileInputStream(finalZipFile)) {
                 log.warn("File upload to OBS, obsKey: {}", obsKey);
                 mgObsService.uploadObsFile(obsKey, inputStream, -1);
                 obsUrl = mgObsService.getTemporaryGetRsp(false, obsKey, 3600);
             } catch (Exception e) {
-                log.error("Error OBS upload, skillId: {}, filename: {}", skillId, zipFile.getName(), e);
+                log.error("Error OBS upload, skillId: {}, filename: {}", skillId, finalZipFile.getName(), e);
                 throw new AgentStudioException(StudioError.UPLOAD_FILE_TO_OBS_FAILED);
             }
 
@@ -230,6 +282,19 @@ public class SkillManagementService implements ISkillManagementService {
             log.info("Import skill succeeded, skillId: {}, obsKey: {}", skillId, obsKey);
             return response;
         } finally {
+            // 清理重打包临时文件（仅当产生了重打包文件时）
+            if (finalZipFile != zipFile && finalZipFile.exists()) {
+                try {
+                    if (!finalZipFile.delete()) {
+                        finalZipFile.deleteOnExit();
+                        log.warn("Failed to delete repacked zip: {}", finalZipFile.getAbsolutePath());
+                    }
+                } catch (SecurityException e) {
+                    log.warn("Security exception while deleting repacked zip: {}",
+                            finalZipFile.getAbsolutePath(), e);
+                }
+            }
+            // 清理原始临时 zip
             if (zipFile.exists()) {
                 try {
                     if (!zipFile.delete()) {

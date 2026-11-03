@@ -30,7 +30,7 @@ public class MemberOwnershipBody implements Serializable {
     private String workspaceId = null;
 
     @JsonProperty("next_owner_id")
-    @Schema(description = "下一页", example = "example-id-123", required = true)
+    @Schema(description = "新所有者用户ID（需为当前空间成员）", example = "userB", required = true)
     @NotBlank
     private String nextOwnerId = null;
 

@@ -77,6 +77,23 @@ export class SkillApi extends JiuwenBaseApi {
       .pipe(map(res => customPropTransfer(res, SkillDetailRes).skillInfo));
   }
 
+  /**
+   * 流式下载 Skill 制品包内容（zip 字节流）。
+   *
+   * <p>请求同源后端接口，由后端代理读取 OBS 中的 zip 并流式返回，
+   * 避免前端跨域直接请求 OBS 签名 URL（CORS 问题）。
+   * 走 RequestService 框架以自动替换 {projectId}/{workspaceId} 占位符。</p>
+   */
+  getSkillPackageContent(skillId: string): Observable<ArrayBuffer> {
+    return this.request.get({
+      url: `${this.prefix}/${skillId}/package-content`,
+      query: {
+        workspace_id: this.request.getWorkspaceId(),
+      },
+      dataType: 'arraybuffer',
+    } as any);
+  }
+
   queryReference(skillId: string, offset = 0, limit = 100, messageConfig?: MessageConfig) {
     return this.request
       .get({

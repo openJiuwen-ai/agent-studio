@@ -46,6 +46,7 @@ from jiuwen.plugin.common.constant import (
 from jiuwen.plugin.models.api_utils import ApiUtils
 from jiuwen.plugin.models.param import Param
 from jiuwen.plugin.models.request_params import RequestParamsCreator, RequestParams
+from agent_runtime.context.request_context import strip_correlation_headers
 from pydantic import ValidationError
 
 DATA_PREFIX = "data:"
@@ -167,6 +168,9 @@ class RestFulAPI(Invokable, ABC):
                 inputs, file_params_list_type=False, **kwargs
             )
             self._validate_request_params(request_params)
+            # D-02/B07（SYNC-01 P3.4）：鉴权钩子后最终发送边界——plugin_auth 可重引入
+            # 关联 Header，须在发送前再次剥离（大小写不敏感）。
+            strip_correlation_headers(request_params.headers)
             self._load_cert(request_params)
             has_multi_queries = (
                 isinstance(inputs, dict) and "multi_queries" in inputs.keys()
@@ -205,6 +209,8 @@ class RestFulAPI(Invokable, ABC):
             await trace_manager.on_plugin_start(inputs)
             request_params = self.request_params_creator.create(inputs, **kwargs)
             self._validate_request_params(request_params)
+            # D-02/B07（SYNC-01 P3.4）：鉴权钩子后最终发送边界——同 ainvoke。
+            strip_correlation_headers(request_params.headers)
 
             # 处理files参数
             request = self._create_post_request(request_params)

@@ -47,7 +47,7 @@ public class JiuwenRuntimeI18nService {
             String errorCode = eventData.get("code") == null ? SYSTEM_ERROR_CODE : eventData.get("code").toString();
 
             Locale locale = LanguageUtils.getLanguageLocale();
-            eventData.put("error_code", "openjiuwen." + errorCode);
+            eventData.putIfAbsent("error_code", "openjiuwen." + errorCode);
             eventData.put("error_msg", safeGetMessage(errorCode, locale));
             eventData.put("error_suggestion", safeGetMessage(errorCode + ".suggestion", locale));
             eventData.put("error_reason", safeGetMessage(errorCode + ".reason", locale));

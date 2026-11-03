@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -28,6 +29,7 @@ public class EnvironmentInfoRequest implements Serializable {
 
     @JsonProperty("name")
     @Schema(description = "安全组名称", example = "my-security-group")
+    @NotNull
     @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9-]{3,47}$")
     private String name = null;
 
@@ -45,11 +47,13 @@ public class EnvironmentInfoRequest implements Serializable {
 
     @JsonProperty("vpcId")
     @Schema(description = "VPC ID", example = "vpc-001")
+    @NotNull
     @Length(min = 1, max = 64)
     private String vpcId = null;
 
     @JsonProperty("subnetId")
     @Schema(description = "子网ID", example = "subnet-001")
+    @NotNull
     @Length(min = 1, max = 64)
     private String subnetId = null;
 

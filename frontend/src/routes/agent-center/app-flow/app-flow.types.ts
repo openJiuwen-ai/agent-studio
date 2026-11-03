@@ -111,6 +111,8 @@ export interface IFlowTrigger {
   hook_url?: string;
   prompt?: string;
   invocation?: string;
+  poll_url?: string;
+  poll_interval_seconds?: number;
 }
 
 export interface IFlowConfigs {

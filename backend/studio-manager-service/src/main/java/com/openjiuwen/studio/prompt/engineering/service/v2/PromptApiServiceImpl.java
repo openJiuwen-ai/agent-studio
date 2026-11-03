@@ -18,7 +18,6 @@ import com.openjiuwen.studio.prompt.engineering.dto.CreatePromptResp;
 import com.openjiuwen.studio.prompt.engineering.dto.GetPromptListsQo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptNewListVo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptTemplateNewVo;
-import com.openjiuwen.studio.prompt.engineering.dto.QueryCustomPromptApiActionsQo;
 import com.openjiuwen.studio.prompt.engineering.entity.Industry;
 import com.openjiuwen.studio.prompt.engineering.entity.PePromptTemplate;
 import com.openjiuwen.studio.prompt.engineering.entity.v2.PromptVar;
@@ -174,44 +173,6 @@ public class PromptApiServiceImpl implements IPromptApiService {
             .withZone(ZoneId.systemDefault());
 
         return formatter.format(date.toInstant());
-    }
-
-    @Override
-    // 查询单个
-    public PePromptTemplateNewVo queryCustomPromptApiActions(String projectId, String promptId,
-                                                             QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo) {
-        log.info("operation log {} : query prompt Template", projectId);
-
-        if (StringUtil.isNullOrEmpty(promptId)) {
-            log.warn("queryCustomPromptApiActions: promptId is null or empty, projectId: {}", projectId);
-            throw new AgentStudioException(StudioError.PROMPT_ID_IS_NOT_EXISTED);
-        }
-
-        if (queryCustomPromptApiActionsQo == null) {
-            log.warn("queryCustomPromptApiActions: queryCustomPromptApiActionsQo is null, projectId: {}", projectId);
-            throw new AgentStudioException(StudioError.TEMPLATE_ID_IS_EMPTY);
-        }
-
-        validProjectAndWorkspaceId(projectId, queryCustomPromptApiActionsQo.getWorkspaceId());
-
-        PePromptTemplate pePromptTemplate = pePromptTemplateMapper.queryTemplateIds(promptId,
-                queryCustomPromptApiActionsQo.getWorkspaceId());
-
-        if (pePromptTemplate == null) {
-            log.warn("queryCustomPromptApiActions: template not found, promptId: {}, workspaceId: {}",
-                    promptId, queryCustomPromptApiActionsQo.getWorkspaceId());
-            throw new AgentStudioException(StudioError.QUERY_TEMPLATE_ERROR);
-        }
-
-        PePromptTemplateNewVo pePromptTemplateNewVo = new PePromptTemplateNewVo();
-        BeanUtils.copyProperties(pePromptTemplate, pePromptTemplateNewVo);
-        pePromptTemplateNewVo.setCreatedOn(Date2String(pePromptTemplate.getCreatedOn()));
-        pePromptTemplateNewVo.setUpdatedOn(Date2String(pePromptTemplate.getUpdatedOn()));
-        pePromptTemplateNewVo.setIndustryId(pePromptTemplate.getIndustry().getId());
-        pePromptTemplateNewVo.setPtType(String.valueOf(pePromptTemplate.getPtType()));
-
-        return pePromptTemplateNewVo;
-
     }
 
     @Override

@@ -12,6 +12,7 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestHeaderHolderUtils;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.manager.dto.ListKnowledgeBasesQo;
+import com.openjiuwen.studio.agent.manager.observability.ConversationIdValidator;
 import com.openjiuwen.studio.agent.manager.dto.ListKnowledgeBasesResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ListPluginsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListWorkflowLastVersionsQo;
@@ -34,10 +35,14 @@ import com.openjiuwen.studio.agent.manager.service.WorkflowManagementService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.plugin.PluginService;
 
+import io.swagger.annotations.ApiImplicitParam;
+import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -53,6 +58,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -81,9 +87,18 @@ public class JiuwenServiceProxyController {
         @ApiResponse(code = 200, message = "OK", response = Object.class),
         @ApiResponse(code = 400, message = "Error response", response = ErrorRsp.class)
     })
+    @ApiImplicitParams(value = {
+        @ApiImplicitParam(name = "project_id", value = "项目ID", required = true, paramType = "path", dataType = "string"),
+        @ApiImplicitParam(name = "agent_type", value = "Agent类型，仅支持 agents（NL2智能体生成）/ workflows（NL2工作流生成）",
+            required = true, paramType = "path", dataType = "string", allowableValues = "agents,workflows"),
+        @ApiImplicitParam(name = "cid", value = "会话ID", required = true, paramType = "path", dataType = "string"),
+        @ApiImplicitParam(name = "workspace_id", value = "空间ID", required = true, paramType = "query", dataType = "string")
+    })
     @PostMapping("/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat")
     public Object generatorAgentOrWorkflow(@PathVariable("project_id") String projectId,
-        @PathVariable("agent_type") String agentType, @PathVariable("cid") String cid,
+        @Pattern(regexp = "agents|workflows") @PathVariable("agent_type") String agentType,
+        @Pattern(regexp = ConversationIdValidator.N2L_CONVERSATION_REGEXP) @Size(min = 1, max = 128)
+        @PathVariable("cid") String cid,
         @RequestParam("workspace_id") String workspaceId, @RequestBody @Valid NLChatReq body) {
         String token = RequestContextUtils.getRequestAuthToken();
         checkPermission(body, projectId, workspaceId);
@@ -193,7 +208,25 @@ public class JiuwenServiceProxyController {
             }
         }, error -> {
             log.error("JiuwenServiceProxyController error to receive sse event:", error);
-            sseEmitter.completeWithError(new AgentStudioException(StudioError.JIU_WEN_SERVICE_EXCEPTION));
+            try {
+                // 透传上游映射后的具体错误码（如 404 资源不存在），仅未知异常兜底 1058
+                StudioError errorCode = StudioError.JIU_WEN_SERVICE_EXCEPTION;
+                if (error instanceof AgentStudioException) {
+                    errorCode = ((AgentStudioException) error).getErrorCode();
+                }
+                Map<String, Object> errorEvent = new HashMap<>();
+                errorEvent.put("event", "error");
+                Map<String, Object> errorData = new HashMap<>();
+                errorData.put("code", errorCode.getCode());
+                errorData.put("error_code", errorCode.getFullCode());
+                errorData.put("message", "");
+                errorEvent.put("data", errorData);
+                sseEmitter.send(SseEmitter.event().data(parseEventMsg(errorEvent, language)).build());
+            } catch (IOException e) {
+                log.error("JiuwenServiceProxyController error to send error sse event:", e);
+            }
+            sseEmitter.completeWithError(error instanceof AgentStudioException ? error
+                : new AgentStudioException(StudioError.JIU_WEN_SERVICE_EXCEPTION));
         }, sseEmitter::complete);
 
         return sseEmitter;

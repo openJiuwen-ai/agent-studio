@@ -169,10 +169,13 @@ def test_handle_type_errorbranch_lowercased():
     assert config.handle_type == "errorbranch"
 
 
-def test_handle_type_default_outputs_lowercased():
+def test_handle_type_default_outputs_normalized_to_camel():
+    # 2026-09-14 行为变更：历史实现 .lower() 后存储（"defaultoutputs"），而下游
+    # bpmn_workflow 以驼峰常量 "defaultOutputs" 比较 → defaultOutputs 分支在 IR
+    # 路径永不可达（死路径 bug）。现归一为规范驼峰值，任意大小写输入均映射成功。
     node = _make_node(exception_process=_make_ep(handle_type="DefaultOutputs"))
     config = _parse_exception_config(node)
-    assert config.handle_type == "defaultoutputs"
+    assert config.handle_type == "defaultOutputs"
 
 
 # ─── timeout / retryTimes 边界值 ─────────────────────────────────────

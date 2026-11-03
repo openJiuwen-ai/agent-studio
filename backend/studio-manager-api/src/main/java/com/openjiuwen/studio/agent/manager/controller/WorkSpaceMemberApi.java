@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * WorkSpaceMemberApi interface
  */ public interface WorkSpaceMemberApi {
-    @ApiOperation(value = "", nickname = "batchAddWorkspaceMember", notes = "批量添加团队空间成员。",
+    @ApiOperation(value = "批量添加团队空间成员", nickname = "batchAddWorkspaceMember", notes = "批量添加团队空间成员。需要 OWNER 或 ADMIN 权限。member_id 需符合 ^[a-zA-Z0-9_-]+$ 格式（1-64字符），role 不能为 OWNER。",
         response = Integer.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "批量添加团队空间成员成功。", response = Integer.class),
@@ -56,7 +56,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody WorkspaceMemberBody body);
 
-    @ApiOperation(value = "", nickname = "batchDeleteWorkspaceMember", notes = "批量移除团队空间成员。",
+    @ApiOperation(value = "批量移除团队空间成员", nickname = "batchDeleteWorkspaceMember", notes = "批量移除团队空间成员。需要 OWNER 或 ADMIN 权限。不能移除空间所有者（OWNER）。",
         response = Integer.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "批量移除成员成功。", response = Integer.class),
@@ -74,7 +74,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         String workspaceId, @NotNull @ApiParam(value = "批量删除空间成员请求体。", required = true) @Valid @RequestBody
         DeleteWorkspaceMemberReq body);
 
-    @ApiOperation(value = "", nickname = "batchUpdateWorkspaceMemberRole", notes = "修改团队空间成员角色。",
+    @ApiOperation(value = "修改团队空间成员角色", nickname = "batchUpdateWorkspaceMemberRole", notes = "修改团队空间成员角色。需要 OWNER 或 ADMIN 权限。可将成员角色修改为 ADMIN/DEVELOPER/OPERATOR，不能修改为 OWNER。",
         response = Integer.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "成员角色修改成功。", response = Integer.class),
@@ -92,7 +92,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @PathVariable("project_id") String projectId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody WorkspaceMemberBody1 body);
 
-    @ApiOperation(value = "", nickname = "exitWorkspace", notes = "当前用户退出指定空间",
+    @ApiOperation(value = "退出当前用户所在空间", nickname = "exitWorkspace", notes = "当前用户退出指定团队空间。空间所有者（OWNER）不能退出空间，需先转让所有权。",
         response = CommonResponse.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "退出空间成功。", response = CommonResponse.class)
@@ -106,7 +106,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @ApiParam(value = "要退出的空间ID。", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId);
 
-    @ApiOperation(value = "", nickname = "queryIamUserList", notes = "获取IAM用户列表。",
+    @ApiOperation(value = "查询可添加的 IAM 用户列表", nickname = "queryIamUserList", notes = "获取当前租户下的 IAM 用户列表，用于添加空间成员时选择用户。依赖 IAM 服务，Simple Auth 模式下返回空列表。",
         response = GetWorkspaceMemberListRsp.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "获取当前租户下面的用户列表。", response = GetWorkspaceMemberListRsp.class),
@@ -121,7 +121,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @ApiParam(value = "空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
             String workspaceId);
 
-    @ApiOperation(value = "", nickname = "queryRoleList", notes = "获取团队空间下的角色列表。",
+    @ApiOperation(value = "查询团队空间角色列表", nickname = "queryRoleList", notes = "获取团队空间下的角色列表。角色包括 OWNER/ADMIN/DEVELOPER/OPERATOR。",
         response = GetWorkspaceMemberRoleRsp.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "获取当前租户下面的用户列表。", response = GetWorkspaceMemberRoleRsp.class),
@@ -137,7 +137,7 @@ import org.springframework.web.bind.annotation.RequestParam;
             String workspaceId);
 
 
-    @ApiOperation(value = "", nickname = "queryWorkspaceMemberList", notes = "查询团队空间成员列表",
+    @ApiOperation(value = "查询团队空间成员列表", nickname = "queryWorkspaceMemberList", notes = "查询指定团队空间的成员列表，支持分页。",
         response = GetWorkspaceMemberListRsp.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "获取团队空间成员列表响应体。", response = GetWorkspaceMemberListRsp.class),
@@ -151,7 +151,7 @@ import org.springframework.web.bind.annotation.RequestParam;
         @ApiParam(value = "QueryWorkspaceMemberListQo: converted from multi query params") @Valid
         QueryWorkspaceMemberListQo queryWorkspaceMemberListQo);
 
-    @ApiOperation(value = "", nickname = "transferWorkspaceOwnership", notes = "转让空间所有权给指定用户。",
+    @ApiOperation(value = "转让空间所有权", nickname = "transferWorkspaceOwnership", notes = "将团队空间所有权转让给指定用户。仅 OWNER 可操作。转让后原所有者降级为 ADMIN。next_owner_id 必须为已是空间成员的用户。",
         response = CommonResponse.class, tags = {"WorkSpaceMember"})
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "操作完成。", response = CommonResponse.class)

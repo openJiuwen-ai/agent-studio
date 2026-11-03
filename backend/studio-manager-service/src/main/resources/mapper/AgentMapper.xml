@@ -380,7 +380,7 @@
         <if test="name != null and !name.equals('')">
             and name like concat('%', #{name,jdbcType=VARCHAR}, '%')
         </if>
-        <if test="ids != null">
+        <if test="ids != null and ids.size() > 0">
             and agent_id  in
             <foreach item="id" collection="ids" open="(" separator="," close=")">
                 #{id}
@@ -392,7 +392,7 @@
         <if test="workspaceId != null and !workspaceId.equals('')">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
-        <if test="types != null">
+        <if test="types != null and types.size() > 0">
             and type IN
             <foreach item="item" collection="types" open="(" separator="," close=")">
                 #{item}
@@ -411,7 +411,7 @@
         <if test="name != null and !name.equals('')">
             and name like concat('%', #{name,jdbcType=VARCHAR}, '%')
         </if>
-        <if test="ids != null">
+        <if test="ids != null and ids.size() > 0">
             and id  in
             <foreach item="id" collection="ids" open="(" separator="," close=")">
                 #{id}
@@ -423,7 +423,7 @@
         <if test="workspaceId != null and !workspaceId.equals('')">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
-        <if test="types != null">
+        <if test="types != null and types.size() > 0">
             and workflow_type IN
             <foreach item="item" collection="types" open="(" separator="," close=")">
                 #{item}
@@ -432,6 +432,16 @@
         ) AS combined
         ORDER BY updated_at desc
     </select>
+
+    <update id="updateTriggerList">
+        UPDATE t_agent
+        SET trigger_list = #{triggerList,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.TriggerConfigArrayHandler},
+            updated_on = #{updatedOn,jdbcType=TIMESTAMP}
+        WHERE agent_id = #{agentId,jdbcType=VARCHAR}
+          AND project_id = #{projectId,jdbcType=VARCHAR}
+          AND workspace_id = #{workspaceId,jdbcType=VARCHAR}
+          AND deleted = false
+    </update>
 
     <update id="updateByPrimaryKeySelective"
         parameterType="com.openjiuwen.studio.agent.manager.entity.Agent">
@@ -788,7 +798,7 @@
                 agent_variables = #{agentInfo.agentVariables,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.AgentVariableArrayHandler},
             </if>
             <if test="agentInfo.inputVariables != null">
-                agent_variables = #{agentInfo.inputVariables,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.AgentInputVariableArrayHandler},
+                input_variables = #{agentInfo.inputVariables,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.AgentInputVariableArrayHandler},
             </if>
             <if test="agentInfo.memoryConfig != null">
                 memory_config = #{agentInfo.memoryConfig,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.ModelConfigHandler},

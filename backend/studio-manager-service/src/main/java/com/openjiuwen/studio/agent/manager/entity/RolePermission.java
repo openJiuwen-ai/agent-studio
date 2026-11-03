@@ -17,6 +17,14 @@ public class RolePermission {
     @JsonProperty("permissions")
     private List<String> permissions;
 
+    /**
+     * 需创建人校验的权限列表(METHOD#URI)。这些 URI 通过角色权限校验后，
+     * 仍需在 Service 层校验资源创建人(仅创建者本人或 OWNER/ADMIN 可操作)，
+     * 用于 DEVELOPER/OPERATOR 等"只能改自己创建的"场景。OWNER/ADMIN 不配置此项(全权)。
+     */
+    @JsonProperty("creatorCheckPermissions")
+    private List<String> creatorCheckPermissions;
+
     // Getters and Setters
     public String getRoleName() {
         return roleName;
@@ -42,9 +50,17 @@ public class RolePermission {
         this.permissions = permissions;
     }
 
+    public List<String> getCreatorCheckPermissions() {
+        return creatorCheckPermissions;
+    }
+
+    public void setCreatorCheckPermissions(List<String> creatorCheckPermissions) {
+        this.creatorCheckPermissions = creatorCheckPermissions;
+    }
+
     @Override
     public String toString() {
         return "RolePermission{" + "roleName='" + roleName + '\'' + ", roleDescription='" + roleDescription + '\''
-            + ", permissions=" + permissions + '}';
+            + ", permissions=" + permissions + ", creatorCheckPermissions=" + creatorCheckPermissions + '}';
     }
 }

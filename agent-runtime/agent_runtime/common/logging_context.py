@@ -5,7 +5,6 @@ import re
 from agent_runtime.common.config import settings
 from agent_runtime.common.session_state_access import get_state_info
 from agent_runtime.context.request_context import _request_ctx
-from openjiuwen.core.common.logging import get_session_id
 
 COMMON_LOG_FORMAT = (
     "%(asctime)s,%(msecs)03d|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
@@ -89,9 +88,8 @@ def find_secret_env_field_names(config, secret_keys):
                 walk(item, current_field)
         elif isinstance(obj, str):
             m = _ENV_REF_PATTERN.search(obj)
-            if m and m.group(1) in secret_keys_set:
-                if current_field:
-                    secret_fields[current_field] = m.group(1)
+            if m and m.group(1) in secret_keys_set and current_field:
+                secret_fields[current_field] = m.group(1)
 
     walk(config)
     return secret_fields
@@ -217,12 +215,15 @@ def install_request_id_log_record_factory() -> None:
 
     def record_factory(*args, **kwargs):
         record = previous_factory(*args, **kwargs)
+        ctx = _request_ctx.get()
         if not hasattr(record, "trace_id"):
-            record.trace_id = get_session_id()
+            record.trace_id = ctx.trace_id
         if not hasattr(record, "execution_id"):
-            record.execution_id = _request_ctx.get().execution_id
+            record.execution_id = ctx.execution_id
         if not hasattr(record, "request_id"):
-            record.request_id = _request_ctx.get().request_id
+            record.request_id = ctx.request_id
+        if not hasattr(record, "conversation_id"):
+            record.conversation_id = ctx.conversation_id
         return record
 
     logging.setLogRecordFactory(record_factory)

@@ -83,12 +83,17 @@
         <if test="type != null and type != ''">
             and type = #{type}
         </if>
-        <if test="workspaceIds != null">
-            and id IN
-            <foreach item="item" collection="workspaceIds" open="(" separator="," close=")">
-                #{item}
-            </foreach>
-        </if>
+        <choose>
+            <when test="workspaceIds != null and !workspaceIds.isEmpty()">
+                and id IN
+                <foreach item="item" collection="workspaceIds" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </when>
+            <otherwise>
+                and 1 = 0
+            </otherwise>
+        </choose>
         order by
         case when type = 'PERSON' then 0 else 1 end asc,
         name asc, id asc;

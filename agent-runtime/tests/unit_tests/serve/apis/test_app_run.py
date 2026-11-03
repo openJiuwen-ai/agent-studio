@@ -64,6 +64,7 @@ from agent_runtime.serve.apis.app_run import (
 from agent_runtime.serve.apis.app_run_request import (
     WorkflowAppRunRequest,
     AgentAppRunRequest,
+    AgentRunContext,
     ExecutionContext,
     NodeRunContext,
     NodeExecuteRequest,
@@ -348,6 +349,84 @@ class TestResolveHandlerType:
             mock_load.return_value = {"configs": {"mode": "unknown"}}
             result = await _resolve_handler_type("ir/path.json")
             assert result == "workflow"
+
+    @pytest.mark.asyncio
+    async def test_ir_not_found_raises_ir_build_exception(self):
+        """BUG2026091500735: IR 不存在时 _resolve_handler_type 应抛出 IRBuildException(AgentBuilderError)"""
+        from agent_runtime.common.ir_exceptions import IRBuildException
+        from agent_runtime.common.exception.errors import AgentBuilderError
+
+        with patch("agent_runtime.serve.apis.app_run.async_ir_load") as mock_load:
+            mock_load.side_effect = IRBuildException("storage not found")
+            with pytest.raises(IRBuildException) as exc_info:
+                await _resolve_handler_type("ir/nonexistent.json")
+            assert isinstance(exc_info.value, AgentBuilderError)
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_not_agent_builder_error(self):
+        """BUG2026091500735: 非 AgentBuilderError 异常不应被误捕为 IRBuildException"""
+        with patch("agent_runtime.serve.apis.app_run.async_ir_load") as mock_load:
+            mock_load.side_effect = RuntimeError("unexpected error")
+            with pytest.raises(RuntimeError):
+                await _resolve_handler_type("ir/path.json")
+
+
+class TestExecuteAgentRunAgentBuilderErrorPropagation:
+    """BUG2026091500735: _execute_agent_run 应直接 re-raise AgentBuilderError，不包装为 JiuWenBaseException"""
+
+    @pytest.mark.asyncio
+    async def test_agent_builder_error_is_reraised_not_wrapped(self):
+        """当 _resolve_handler_type 抛出 AgentBuilderError 子类时，应直接传播而非包装为 500"""
+        from agent_runtime.common.ir_exceptions import IRBuildException
+        from agent_runtime.common.exception.errors import AgentBuilderError
+
+        with patch("agent_runtime.serve.apis.app_run._resolve_handler_type") as mock_resolve, \
+             patch("agent_runtime.serve.apis.app_run._request_ctx") as mock_ctx, \
+             patch("agent_runtime.serve.apis.app_run.load_environment_variables", new_callable=AsyncMock) as mock_env, \
+             patch("agent_runtime.serve.apis.app_run._load_conversation_data", new_callable=AsyncMock) as mock_conv, \
+             patch("agent_runtime.serve.apis.app_run._resolve_env_scope", new_callable=AsyncMock) as mock_env_scope, \
+             patch("agent_runtime.serve.apis.app_run.resolve_published_version", new_callable=AsyncMock) as mock_pv, \
+             patch("agent_runtime.serve.apis.app_run.check_before_agent_run", new_callable=AsyncMock) as mock_check, \
+             patch("agent_runtime.serve.apis.app_run.build_req_json_from_agent") as mock_build_req, \
+             patch("agent_runtime.serve.apis.app_run.ir_execute", new_callable=AsyncMock) as mock_ir_exec, \
+             patch("agent_runtime.serve.apis.app_run.ExecutionRequest") as mock_exec_req:
+
+            mock_pv.return_value = "v1"
+            mock_check.return_value = None
+            mock_env.return_value = {}
+            mock_conv.return_value = ([], 1)
+            mock_env_scope.return_value = (None, None)
+            mock_ir_exec.return_value = JSONResponse(content={"result": "ok"})
+            mock_build_req.return_value = {"query": "test"}
+            mock_exec_req.model_validate.return_value = MagicMock()
+            mock_resolve.side_effect = IRBuildException("IR not found")
+
+            mock_request_ctx = MagicMock()
+            mock_request_ctx.user_id = "user-1"
+            mock_ctx.get.return_value = mock_request_ctx
+
+            body = AgentAppRunRequest(query="test")
+            ctx = AgentRunContext(
+                project_id="proj-1",
+                agent_id="agent-1",
+                conversation_id="conv-1",
+                version="v1",
+            )
+
+            from agent_runtime.serve.apis.app_run import _execute_agent_run
+            request = MagicMock(spec=Request)
+            request.headers = {"x-language": "zh-cn"}
+            request.state = MagicMock()
+
+            with pytest.raises(AgentBuilderError) as exc_info:
+                await _execute_agent_run(
+                    ctx=ctx,
+                    body=body,
+                    request=request,
+                    stream_header="true",
+                    resolve_env=False,
+                )
+            assert isinstance(exc_info.value, IRBuildException)
 
 
 class TestExtractInstanceId:

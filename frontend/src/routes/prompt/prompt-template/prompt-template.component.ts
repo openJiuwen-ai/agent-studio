@@ -30,7 +30,7 @@ import { PipesModule } from '../../../pipes/pipes.module';
 import { NoDataGuideComponentComponent } from '@shared/components/no-data-guide/no-data-guide.component';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzMessageService } from 'ng-zorro-antd/message';
-import { NzDrawerService } from 'ng-zorro-antd/drawer';
+import { NzDrawerRef, NzDrawerService } from 'ng-zorro-antd/drawer';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzPaginationModule } from 'ng-zorro-antd/pagination';
@@ -617,7 +617,16 @@ export class PromptTemplateComponent implements OnInit, OnDestroy {
     this.openModalRef = drawerRef;
   }
 
+  /** 导出抽屉引用，用于防止连点重复打开导出抽屉 */
+  private exportDrawerRef: NzDrawerRef | null = null;
+  /** 异步导出进行中标记，用于覆盖「抽屉关闭后、导出完成前」的防重窗口 */
+  private exporting = false;
+
   public exportTemplate() {
+    // 防止连点打开多个导出抽屉；异步导出进行中也禁止再次触发
+    if (this.exportDrawerRef || this.exporting) {
+      return;
+    }
     this.closeCurrentModal();
     const drawerRef = this.nzDrawerService.create({
       nzWidth: '700px',
@@ -634,6 +643,7 @@ export class PromptTemplateComponent implements OnInit, OnDestroy {
           },
         ],
         confirm: ({ rows }: any) => {
+          this.exporting = true;
           this.service.exportPromptTmplV2(rows.map((row: any) => row.template_id)).subscribe({
             next: (res: any) => {
               CommonUtils.downloadFile(
@@ -643,12 +653,22 @@ export class PromptTemplateComponent implements OnInit, OnDestroy {
                 res.headers.get('Content-Disposition')
               );
             },
+            complete: () => {
+              this.exporting = false;
+            },
+            error: () => {
+              this.exporting = false;
+            },
           });
         },
       },
       nzClosable: true,
       nzMaskClosable: true,
       nzZIndex: 10000,
+    });
+    this.exportDrawerRef = drawerRef;
+    drawerRef.afterClose.subscribe(() => {
+      this.exportDrawerRef = null;
     });
     this.cdr.detectChanges();
   }

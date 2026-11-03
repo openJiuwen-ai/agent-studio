@@ -26,7 +26,7 @@ class TestSecuritySandboxSettingsDefaults:
             assert s.server == ""
             assert s.ssl_verify is False
             assert s.idle_ttl_seconds == 600
-            assert s.timeout_seconds == 300
+            assert s.timeout_seconds == 900
             assert s.scope == "system"
         finally:
             for k, v in saved.items():
@@ -97,7 +97,7 @@ class TestSettingsIntegration:
             assert s.server == ""
             assert s.ssl_verify is False
             assert s.idle_ttl_seconds == 600
-            assert s.timeout_seconds == 300
+            assert s.timeout_seconds == 900
             assert s.scope == "system"
         finally:
             for k, v in saved.items():

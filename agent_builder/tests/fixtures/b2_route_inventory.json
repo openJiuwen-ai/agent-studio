@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "purpose": "SUT-01 CD-018 (B2) §6.2 路由全集快照——Flask url_map + FastAPI app.routes + dispatcher 覆盖证明",
+    "generated_at": "2026-09-29",
+    "baseline_commit": "5515b416",
+    "classification_legend": {
+      "public-prompt": "Prompt 公开入口，blueprint @ /flask，dispatcher 接管 /v1/prompt 与 /flask/v1/prompt",
+      "public-mmapo": "MMAPO 公开入口，blueprint @ /flask，dispatcher 接管 /v1/MMprompt 与 /flask/v1/MMprompt",
+      "auto-static": "Flask 自动生成的静态资源规则，非公开业务入口；dispatcher 不接管，转交 FastAPI（404，无 static 目录）",
+      "fastapi": "FastAPI router 注册的路径，method ownership 归 FastAPI"
+    }
+  },
+  "flask_url_map": [
+    {"rule": "/static/<path:filename>", "methods": ["GET"], "class": "auto-static", "endpoint": "static"},
+    {"rule": "/flask/v1/prompt/build", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_generate"},
+    {"rule": "/flask/v1/prompt/optimize_feedback", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.optimize_feedback"},
+    {"rule": "/flask/v1/prompt/optimize_badcase", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.optimize_bad_cases"},
+    {"rule": "/flask/v1/prompt/templates_optimization/jobs", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize"},
+    {"rule": "/flask/v1/prompt/templates_optimization/jobs/<job_id>", "methods": ["GET"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize_progress"},
+    {"rule": "/flask/v1/prompt/templates_optimization/data_check", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize_cases_validation"},
+    {"rule": "/flask/v1/prompt/templates_optimization/jobs/<job_id>", "methods": ["DELETE"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize_delete"},
+    {"rule": "/flask/v1/prompt/templates_optimization/jobs/<job_id>/stop", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize_stop"},
+    {"rule": "/flask/v1/prompt/templates_optimization/jobs/<job_id>/restart", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize_restart"},
+    {"rule": "/flask/v1/prompt/templates_optimization/jobs/get_infos", "methods": ["POST"], "class": "public-prompt", "endpoint": "prompt_manage_api.prompt_optimize_progress_list"},
+    {"rule": "/flask/v1/MMprompt/templates_optimization/jobs", "methods": ["POST"], "class": "public-mmapo", "endpoint": "mmapo_api.prompt_optimization"},
+    {"rule": "/flask/v1/MMprompt/templates_optimization/jobs/get_infos", "methods": ["POST"], "class": "public-mmapo", "endpoint": "mmapo_api.prompt_optimize_progress_list"},
+    {"rule": "/flask/v1/MMprompt/templates_optimization/jobs/<job_id>", "methods": ["GET"], "class": "public-mmapo", "endpoint": "mmapo_api.prompt_optimize_progress"},
+    {"rule": "/flask/v1/MMprompt/templates_optimization/jobs/<job_id>/stop", "methods": ["POST"], "class": "public-mmapo", "endpoint": "mmapo_api.prompt_optimize_stop"},
+    {"rule": "/flask/v1/MMprompt/templates_optimization/jobs/<job_id>/restart", "methods": ["POST"], "class": "public-mmapo", "endpoint": "mmapo_api.prompt_optimize_restart"},
+    {"rule": "/flask/v1/MMprompt/templates_optimization/jobs/<job_id>", "methods": ["DELETE"], "class": "public-mmapo", "endpoint": "mmapo_api.prompt_optimize_delete"}
+  ],
+  "fastapi_routes": [
+    {"path": "/v1/health", "methods": ["GET"]},
+    {"path": "/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat", "methods": ["POST"]},
+    {"path": "/v1/agent-builder/chat/completions", "methods": ["POST"]},
+    {"path": "/v1/agent-builder/embeddings", "methods": ["POST"]},
+    {"path": "/v1/agent-builder/rerank", "methods": ["POST"]},
+    {"path": "/v1/{project_id}/model-service/status/check", "methods": ["POST"]}
+  ],
+  "dispatcher_coverage": {
+    "rules": [
+      "/v1/prompt → /flask/v1/prompt",
+      "/v1/MMprompt → /flask/v1/MMprompt",
+      "/flask/v1/prompt → passthrough",
+      "/flask/v1/MMprompt → passthrough",
+      "其他 → FastAPI"
+    ],
+    "all_public_flask_routes_covered": true,
+    "static_excluded": "/static/<path:filename> 为 Flask 自动规则，非公开业务入口，dispatcher 不接管（转 FastAPI 404，无 static 目录）"
+  }
+}

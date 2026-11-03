@@ -285,6 +285,10 @@ class Node:
 class SwitchNode(Node):
     """Branch node."""
 
+    # 字符串字面量（单/双引号，支持转义）。安全检查前先剥离，
+    # 避免把字面量的"内容"当成标识符或非法字符来判定（如 'open'、'a@b.com'）。
+    _STR_LITERAL_RE = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
+
     def __init__(self, node_info, runtime_context, from_spec: bool = False):
         # 意图分类组件已在外部进行Node实例化，所以此处跳过
         if node_info.get(_TYPE) != NodeType.INTENT_DETECTION.value:
@@ -297,9 +301,19 @@ class SwitchNode(Node):
             expression_str = branch.get(_BOOL_EXPRESSION, "")
             safe_expr_for_check = self._preprocess_expression(expression_str)
             if not self.safe_check(safe_expr_for_check):
+                node_id = node_info.get(_ID, "")
+                node_name = node_info.get("name", "")
+                node_type = node_info.get(_TYPE, "")
                 raise JiuWenBaseException(
                     error_code=StatusCode.WORKFLOW_BRANCH_EXPRESSION_ERROR.code,
-                    message=StatusCode.WORKFLOW_BRANCH_EXPRESSION_ERROR.errmsg,
+                    message=(
+                        f"{StatusCode.WORKFLOW_BRANCH_EXPRESSION_ERROR.errmsg}"
+                        f", node={node_name}({node_id}), branch={branch.get(_ID, '')}"
+                        f", expression={expression_str}"
+                    ),
+                    node_id=node_id,
+                    node_name=node_name,
+                    node_type=node_type,
                 )
             self.branches.update({branch[_ID]: expression_str})
         self.node_spec = NodeSpec(node_config=node_info, node_type=_SWITCH_NODE_TYPE)
@@ -342,7 +356,9 @@ class SwitchNode(Node):
             return True
 
         allowed_pattern = r'^[a-zA-Z0-9_.$\s+\-*/%()<>!=&|~^?:,\[\]{}\'"\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+$'
-        if not re.match(allowed_pattern, expression_str):
+        # 先剥离字符串字面量再校验字符白名单：'a@b.com'、'x#y'、'a;b' 这类
+        # 合法业务取值的内容不应被判定为"非法字符"。
+        if not re.match(allowed_pattern, self._STR_LITERAL_RE.sub("''", expression_str)):
             return False
 
         dangerous_keywords = [
@@ -402,15 +418,43 @@ class SwitchNode(Node):
             r"lambda\s*:",
         ]
 
-        for pattern in dangerous_keywords:
-            if re.search(pattern, expression_str, re.IGNORECASE):
-                return False
-
         try:
             tree = ast.parse(stripped, mode="eval")
-            return self._is_ast_safe(tree.body)
         except Exception:
             return False
+
+        # 危险关键词只匹配"标识符"（Name / Attribute.attr / Call.func），
+        # 字符串、数字字面量的"内容"不参与匹配 —— 否则 'open'、'os'、'sys'、'input'
+        # 这类合法业务取值会被误判为注入风险。
+        identifier_skeleton = " ".join(self._iter_identifiers(tree.body))
+        for pattern in dangerous_keywords:
+            if re.search(pattern, identifier_skeleton, re.IGNORECASE):
+                return False
+
+        return self._is_ast_safe(tree.body)
+
+    def _iter_identifiers(self, node):
+        """遍历 AST，产出标识符骨架。
+
+        调用节点产出 ``名字(`` 形式，以保证 ``chr\\(`` / ``ord\\(`` / ``unichr\\(``
+        这类带左括号的关键词模式仍可命中。
+        """
+        if isinstance(node, ast.Name):
+            yield node.id
+        elif isinstance(node, ast.Attribute):
+            yield node.attr
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name):
+                yield func.id + "("
+            elif isinstance(func, ast.Attribute):
+                yield func.attr + "("
+        elif isinstance(node, ast.Lambda):
+            # 产出 "lambda:" 以保证 dangerous_keywords 中的 r"lambda\s*:" 能命中；
+            # 否则骨架里只有 "lambda"（无冒号），lambda 表达式会被放行
+            yield "lambda:"
+        for child in ast.iter_child_nodes(node):
+            yield from self._iter_identifiers(child)
 
     def _is_ast_safe(self, node) -> bool:
         """Recursively validate AST node safety."""
@@ -483,6 +527,13 @@ class SwitchNode(Node):
                 return False
             # Check the object part (e.g., os in os.system)
             if not self._is_ast_safe(func.value):
+                return False
+
+        else:
+            # 被调用对象既不是 Name 也不是 Attribute（如 Lambda、Subscript、
+            # 嵌套 Call）时，递归校验 func 本身，避免 (lambda: 0)()、arr[0]()
+            # 这类表达式绕过安全检查
+            if not self._is_ast_safe(func):
                 return False
 
         return all(self._is_ast_safe(arg) for arg in node.args) and all(

@@ -25,11 +25,19 @@ public class TemplateTransformNodeConverter extends AbstractSDSLNodeConverter {
 
     @Override
     public WorkflowNodeVO adapt(Map<String, Object> data, WorkflowNodeVO workflowNodeVO, Map<String, WorkflowNodeVO> workflowNodeMap) {
-        workflowNodeVO.setType(NodeType.TEMPLATE_TRANSFORM_DIFY.getType());
+        workflowNodeVO.setType(NodeType.TEMPLATE_TRANSFORM.getType());
         workflowNodeVO.setInputs(adaptInputs(data, workflowNodeMap));
         workflowNodeVO.setOutputs(adaptOutputs(data));
         workflowNodeVO.setConfigs(adaptConfigs(data));
         return workflowNodeVO;
+    }
+
+    @Override
+    public Map<String, Object> adaptConfigs(Map<String, Object> data) {
+        Map<String, Object> configsMap = super.adaptConfigs(data);
+        Object template = data.get("template");
+        configsMap.put("template", template == null ? "" : template);
+        return configsMap;
     }
 
     @SuppressWarnings("unchecked")

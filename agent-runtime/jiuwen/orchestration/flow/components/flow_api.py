@@ -31,7 +31,6 @@ from jiuwen.plugin.common.utils.ir_utils import PluginIRConverter
 from jiuwen.plugin.models.api_utils import transform_type
 
 TAG = " === FLOW_API === "
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 OLD_IR_PLUGIN_RESPONSE = "raw_output"
 
 
@@ -201,7 +200,7 @@ class FlowApi(Invokable):
                 raise JiuWenBaseException(
                     error_code=StatusCode.WORKFLOW_API_INPUTS_ERROR.code,
                     message=f"{StatusCode.WORKFLOW_API_INPUTS_ERROR.errmsg}, "
-                    f"param is {name if LOG_VERBOSE_MODE else 'not api params'}",
+                    "param is not api params",
                 )
         return api_inputs
 

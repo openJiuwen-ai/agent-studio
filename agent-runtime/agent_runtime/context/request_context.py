@@ -26,6 +26,7 @@ class RequestContext:
     user_id: str = ""
     project_id: str = ""
     conversation_id: str = ""
+    trace_id: str = ""
     execution_id: str = ""
     request_id: str = ""
     secret_env_keys: list = field(default_factory=list)
@@ -51,21 +52,23 @@ _request_ctx: ContextVar[RequestContext] = ContextVar(
 )
 
 
-try:
-    from opentelemetry.propagators.tracecontext import TraceContextTextMapPropagator
-    _tp_propagator = TraceContextTextMapPropagator()
-except ImportError:
-    _tp_propagator = None
+# D-02（SYNC-01 P3.4）：W3C traceparent 第三方注入已移除（老分支无此函数；
+# 模型/插件/MCP 出站不传播平台关联 Header）。若未来恢复第三方 W3C 传播，
+# 须按 D-02 另行提出协议变更并经用户确认，不得静默恢复。
+
+# B07：第三方发送边界保留的关联 Header 名（小写；匹配大小写不敏感）。
+# 含预置/钩子重引入的伪造值——最终发送前一律剥离；认证/客户 Header 不动。
+_RESERVED_CORRELATION_HEADERS = frozenset(
+    {"x-request-id", "x-execution-id", "traceparent"}
+)
 
 
-def inject_traceparent(headers: dict) -> None:
-    """Inject W3C traceparent header from current OTel context into headers dict.
+def strip_correlation_headers(headers: dict) -> None:
+    """D-02/B07：在最终第三方发送边界剥离平台保留关联 Header（原地，大小写不敏感）。
 
-    This enables downstream services (plugins, MCP servers, LLM gateways)
-    with their own OTel SDK to continue the same trace, achieving
-    cross-service distributed tracing.
-
-    No-op when opentelemetry is not installed or no active span exists.
+    模型/插件/MCP 出站 headers 在发送前调用；业务鉴权（X-Auth-*/Authorization）
+    与已授权客户 Header（cust-*）不受影响。内部 Runtime/Builder 目标不适用本函数
+    （P4 按"仅带白名单且覆盖伪造值"另验）。
     """
-    if _tp_propagator is not None:
-        _tp_propagator.inject(headers)
+    for key in [k for k in headers if str(k).lower() in _RESERVED_CORRELATION_HEADERS]:
+        headers.pop(key, None)

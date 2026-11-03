@@ -685,4 +685,129 @@ class PluginBaseImplTest extends BaseTest {
             }
         }
     }
+
+    /**
+     * 用例描述：验证 transferPlugin2Tool 将 pluginEntity 的 callMode 透传到 toolEntity
+     * 预制条件：通过 SQL 插入测试插件数据，手动设置 callMode 为 "custom"
+     * 输入参数：pluginId="workflow_no_auth_tool"，toolId="76a94adcb96f4c7f"
+     * 预期结果：返回的 ToolEntity.getCallMode() 等于 "custom"
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    @Sql(scripts = {"classpath:sql/plugin_reserve_meeting_room_setup_db.sql"})
+    void testTransferPlugin2ToolShouldPreserveCallMode() throws Exception {
+        // Given
+        PluginEntity pluginEntity = pluginMapperAuto.selectByPrimaryKeyAndWorkspace(
+            "workflow_no_auth_tool", null, Constants.TEST_WORKSPACE_ID);
+        pluginEntity.setCallMode("custom");
+
+        // When
+        ToolEntity result = pluginBaseImpl.transferPlugin2Tool(pluginEntity, "76a94adcb96f4c7f");
+
+        // Then
+        assertNotNull(result);
+        assertEquals("custom", result.getCallMode());
+    }
+
+    /**
+     * 用例描述：验证 transformTool2Plugin 在 toolEntity.callMode 为 null 时默认设置为 "api"
+     * 预制条件：创建一个 ToolEntity，所有字段均为 null
+     * 输入参数：无
+     * 预期结果：返回的 PluginEntity.getCallMode() 等于 "api"
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testTransformTool2PluginShouldDefaultCallModeToApiWhenNull() throws Exception {
+        // Given
+        ToolEntity toolEntity = new ToolEntity();
+        // callMode, inputSchema, outputSchema, requestInfo all null
+
+        // When
+        PluginEntity result = pluginBaseImpl.transformTool2Plugin(toolEntity);
+
+        // Then
+        assertNotNull(result);
+        assertEquals("api", result.getCallMode());
+    }
+
+    /**
+     * 用例描述：验证 transformTool2Plugin 在 toolEntity.callMode 为 "custom" 时正确透传
+     * 预制条件：创建一个 ToolEntity 并设置 callMode 为 "custom"
+     * 输入参数：无
+     * 预期结果：返回的 PluginEntity.getCallMode() 等于 "custom"
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testTransformTool2PluginShouldPreserveCustomCallMode() throws Exception {
+        // Given
+        ToolEntity toolEntity = new ToolEntity();
+        toolEntity.setCallMode("custom");
+
+        // When
+        PluginEntity result = pluginBaseImpl.transformTool2Plugin(toolEntity);
+
+        // Then
+        assertNotNull(result);
+        assertEquals("custom", result.getCallMode());
+    }
+
+    /**
+     * 用例描述：验证 buildToolByPlugin 对 callMode 为 "custom" 且 requestInfo 为空的自定义插件不抛异常
+     * 预制条件：Mock pluginMapper 和 toolMapper 返回自定义插件数据，type=inner，callMode=custom，requestInfo=null
+     * 输入参数：projectId="test"，workspaceId="test"，pluginId="custom-plugin"，toolId="0"
+     * 预期结果：方法不抛出 AgentStudioException
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testBuildToolByPluginShouldNotThrowForCustomPluginWithBlankRequestInfo() throws Exception {
+        // Given — 使用 Mock mappers 而非 auto-wired 的真实 mapper
+        ReflectionTestUtils.setField(pluginBaseImpl, "pluginMapper", pluginMapper);
+        ReflectionTestUtils.setField(pluginBaseImpl, "toolMapper", toolMapper);
+
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.INNER.type);
+        pluginEntity.setCallMode("custom");
+        // requestInfo is null (blank)
+
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace(anyString(), isNull(), isNull()))
+            .thenReturn(pluginEntity);
+        when(toolMapper.selectWithoutStatus(anyString(), isNull(), isNull()))
+            .thenReturn(new ToolEntity());
+
+        // When & Then — custom 插件 requestInfo 为空不抛异常
+        assertDoesNotThrow(() -> {
+            ToolEntity result = pluginBaseImpl.buildToolByPlugin(
+                "test-project", "test-workspace", "custom-plugin", "0");
+            assertNotNull(result);
+        });
+    }
+
+    /**
+     * 用例描述：验证 transformEntityToDTO 处理老格式插件（无 basic_info）且 URL 为 null 时不抛 NPE
+     * 预制条件：创建一个 PluginEntity，requestInfo 为不含 basic_info 的 JSON（url 字段为 null）
+     * 输入参数：pluginEntity
+     * 预期结果：返回 PluginDTO 且不抛出 NullPointerException
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testTransformEntityToDTOShouldHandleNullUrlWithoutNpe() throws Exception {
+        // Given — 老格式 requestInfo，不含 basic_info，ToolInfo.url 为 null
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("old-plugin");
+        pluginEntity.setPluginDisplayName("old-plugin");
+        pluginEntity.setPluginChineseName("老插件");
+        pluginEntity.setRequestInfo("{\"tool_id\":\"test\",\"url\":null}");
+        // inputSchema, outputSchema, etc. all null
+
+        // When
+        PluginDTO result = pluginBaseImpl.transformEntityToDTO(pluginEntity);
+
+        // Then — 不抛 NPE，返回有效 DTO
+        assertNotNull(result);
+    }
 }

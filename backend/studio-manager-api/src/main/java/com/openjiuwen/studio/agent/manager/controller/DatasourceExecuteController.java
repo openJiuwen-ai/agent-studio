@@ -28,6 +28,7 @@ public class DatasourceExecuteController {
         @PathVariable("datasource_id") String datasourceId,
         @RequestBody DatasourceExecuteReq req) {
         return ResponseModel.success(
-            datasourceExecuteService.executeSql(datasourceId, req.getQuery(), req.getConditions()));
+            datasourceExecuteService.executeSql(datasourceId, req.getQuery(),
+                req.getConditions(), req.getOutputFormat()));
     }
 }

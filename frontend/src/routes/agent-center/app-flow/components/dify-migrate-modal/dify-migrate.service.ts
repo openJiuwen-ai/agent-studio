@@ -184,7 +184,7 @@ export class DifyMigrateService {
   private setGlobalConfigNode(): void {
     const additionalQuestionsConfig = this.workFlowDsl.workflow_details.configs.additional_questions_config;
 
-    if(additionalQuestionsConfig.enable) {
+    if(additionalQuestionsConfig?.enable) {
       this.halfCompatible.nodes.push({
         type: MigrateNodeType.GlobalConfig
       })

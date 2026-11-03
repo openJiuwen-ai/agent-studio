@@ -35,6 +35,8 @@ export interface IMemoryLibItem extends IMemoryLibItemVirtualData, IMemoryLibBas
   update_time: number;
   conversation_round?: number;
   time_span?: number;
+  memory_backend_type?: string;
+  memory_service_instance_id?: string;
 }
 
 /** 记忆库的提取策略  */
@@ -64,6 +66,8 @@ export interface IMemoryLibDetail extends IMemoryLibBaseInfo {
   update_time: number;
   conversation_round?: number;
   time_span?: number;
+  memory_backend_type?: string;
+  memory_service_instance_id?: string;
 }
 
 /** 记忆库的卡片展示模式配置  */
@@ -132,6 +136,8 @@ export interface IMemoryLibChangeParams {
   long_term_memory_strategies?: IMemoryStrategy[];
   conversation_round?: number;
   time_span?: number;
+  memory_backend_type?: string;
+  memory_service_instance_id?: string;
 }
 
 /** 记忆库创建Res  */

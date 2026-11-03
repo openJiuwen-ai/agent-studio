@@ -21,6 +21,7 @@ import java.util.Map;
 @Validated
 public class NLChatReq {
     @Valid
+    @NotNull
     @Size(max = 10)
     private Map<String, Object> model;
 

@@ -50,8 +50,12 @@ public class CustomerHeaderFeignInterceptor implements RequestInterceptor {
             return;
         }
 
-        // 直接透传所有 captured customer headers
+        // 透传客户 Header，但排除三个关联 Header（COM-04 §4.3：关联 Header 由
+        // CorrelationFeignInterceptor 权威注入并覆盖伪造值，客户透传不得重复写入或保留预置值）
         for (Map.Entry<String, String> entry : captured.entrySet()) {
+            if (isCorrelationHeader(entry.getKey())) {
+                continue;
+            }
             if (!template.headers().containsKey(entry.getKey())) {
                 template.header(entry.getKey(), entry.getValue());
             }
@@ -61,5 +65,11 @@ public class CustomerHeaderFeignInterceptor implements RequestInterceptor {
             log.info("[customer-header] Feign customer header passthrough: client={}, headers={}",
                 clientName, captured.keySet());
         }
+    }
+
+    /** 三个关联 Header 的大小写不敏感判定——客户透传排除，防覆盖权威值。 */
+    static boolean isCorrelationHeader(String name) {
+        return "X-Request-Id".equalsIgnoreCase(name) || "TraceID".equalsIgnoreCase(name)
+            || "X-Execution-Id".equalsIgnoreCase(name);
     }
 }

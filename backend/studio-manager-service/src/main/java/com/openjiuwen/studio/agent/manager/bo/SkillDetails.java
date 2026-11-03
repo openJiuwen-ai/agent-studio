@@ -60,4 +60,7 @@ public class SkillDetails {
 
     @JsonProperty("project_id")
     private String projectId;
+
+    @JsonProperty("published_asset")
+    private Integer publishedAsset;
 }

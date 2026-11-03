@@ -19,7 +19,8 @@ import reactor.core.publisher.Flux;
  * agent builder服务client
  *
  */
-@FeignClient(name = "agentBuilder", url = "${feign.client.config.agentBuilder.url:}")
+@FeignClient(name = "agentBuilder", url = "${feign.client.config.agentBuilder.url:}",
+    configuration = BuilderCorrelationFeignConfig.class)
 public interface AgentBuilderClient {
 
     /**

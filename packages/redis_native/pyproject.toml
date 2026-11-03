@@ -1,0 +1,19 @@
+[project]
+name = "redis-native"
+version = "0.1.0"
+description = "openJiuwen Redis SPI 内置原生实现（redis-py 委托；运行时镜像内唯一允许 import redis 的包）"
+requires-python = ">=3.11"
+dependencies = [
+    "redis>=5.0",
+    "redis-spi",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+redis-spi = { path = "../redis_spi", editable = true }
+
+[tool.setuptools.packages.find]
+include = ["redis_native*"]

@@ -109,6 +109,55 @@
                               >
                               </nz-select>
 
+                              <!-- File 类型参数：本地上传 + URL 录入（FEAT-073） -->
+                              <div class="w-full" *ngIf="isFileType(node.origin.type)">
+                                <input
+                                  type="file"
+                                  #pluginFileInput
+                                  class="hidden"
+                                  [accept]="node.origin.type | fileAcc"
+                                  (change)="onPluginFileUpload($event, node.origin)"
+                                />
+                                <div class="flex w-full flex-col gap-[4px]">
+                                  <div class="flex items-center gap-[6px]">
+                                    <button
+                                      nz-button
+                                      nzType="default"
+                                      nzSize="small"
+                                      [disabled]="node.origin.isDisabled"
+                                      (click)="pluginFileInput.click()"
+                                    >
+                                      <nz-icon nzType="upload" nzTheme="outline"></nz-icon>
+                                      {{ 'upload_file' | i18nextEager }}
+                                    </button>
+                                    <input
+                                      style="flex: 1"
+                                      type="text"
+                                      nz-input
+                                      nzSize="small"
+                                      [name]="'inputFormValueFile_' + node.origin.name"
+                                      [placeholder]="'file_url_placeholder' | i18nextEager"
+                                      [(ngModel)]="node.origin.value.content"
+                                      [disabled]="node.origin.isDisabled"
+                                      [title]="node.origin.value.content"
+                                    />
+                                  </div>
+                                  <div *ngIf="node.origin.value.content" class="flex items-center gap-[4px] text-[12px] text-[#808080]">
+                                    <nz-icon nzType="link" nzTheme="outline" class="text-[14px]"></nz-icon>
+                                    <span nz-ellipsis style="flex: 1">{{ node.origin.value.content }}</span>
+                                    <nz-icon
+                                      nzType="close-circle"
+                                      nzTheme="fill"
+                                      class="cursor-pointer text-[14px]"
+                                      (click)="node.origin.value.content = ''; pluginFileInput.value = ''"
+                                    ></nz-icon>
+                                  </div>
+                                  <div *ngIf="!node.origin.value.content" class="text-[12px] text-[#808080]">
+                                    {{ node.origin.type | fileDesc }}
+                                  </div>
+                                </div>
+                              </div>
+
                               <div class="w-full relative" *ngIf="node.origin.type === 'number'">
                                 <input
                                   class="combo-select-right"

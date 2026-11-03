@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.common.security.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -120,6 +121,46 @@ public class SsoAuthenticationServiceTest {
         assertEquals("Test User", result.get().getUserName());
         assertEquals("domain1", result.get().getDomainId());
         assertEquals("proj1", result.get().getProjectId());
+        // SSO 响应未返回 domain_name 时应兜底为 "0"，不得为 null（issue #1514）
+        assertNotNull(result.get().getDomainName());
+        assertEquals("0", result.get().getDomainName());
+    }
+
+    @Test
+    void authenticate_missingDomainName_shouldDefaultToZero() {
+        mockExchangeReturn(buildSsoResponse("user1", "Test User", "domain1", "proj1"), HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertNotNull(result.get().getDomainName());
+        assertEquals("0", result.get().getDomainName());
+    }
+
+    @Test
+    void authenticate_customDomainNameClaim_shouldMapCustomField() {
+        AuthProperties.UserInfoConfig.ClaimsConfig claimsConfig = authProperties.getUserInfo().getClaims();
+        claimsConfig.setDomainName("domain_name");
+        Map<String, Object> ssoResponse = buildSsoResponse("user1", "Test User", "domain1", "proj1");
+        ssoResponse.put("domain_name", "my-domain");
+        mockExchangeReturn(ssoResponse, HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertEquals("my-domain", result.get().getDomainName());
+    }
+
+    @Test
+    void authenticate_customDomainNameDefault_shouldUseConfiguredDefault() {
+        AuthProperties.UserInfoConfig.DefaultsConfig defaultsConfig = authProperties.getUserInfo().getDefaults();
+        defaultsConfig.setDomainName("fallback-domain");
+        mockExchangeReturn(buildSsoResponse("user1", "Test User", "domain1", "proj1"), HttpStatus.OK);
+
+        Optional<SimpleUser> result = service.authenticate("valid-token");
+
+        assertTrue(result.isPresent());
+        assertEquals("fallback-domain", result.get().getDomainName());
     }
 
     @Test

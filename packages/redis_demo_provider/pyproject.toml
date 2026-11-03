@@ -1,0 +1,29 @@
+[project]
+name = "redis-demo-provider"
+version = "0.1.0"
+description = "openJiuwen Redis 自研 Provider 演示/样板（fakeredis 形态 + Wrapper 形态；不进生产镜像）"
+requires-python = ">=3.11"
+dependencies = [
+    "redis-spi",
+    "fakeredis>=2.26",
+]
+
+[project.optional-dependencies]
+# 形态二（Wrapper）依赖 redis-native；只用形态一时无需安装
+wrapper = ["redis-native"]
+test = ["pytest>=7.0"]
+
+[project.entry-points."openjiuwen.redis_providers"]
+acme_demo = "redis_demo_provider.provider:AcmeDemoProvider"
+acme_wrapper = "redis_demo_provider.wrapper:WrapperDemoProvider"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+redis-spi = { path = "../redis_spi", editable = true }
+redis-native = { path = "../redis_native", editable = true }
+
+[tool.setuptools.packages.find]
+include = ["redis_demo_provider*"]

@@ -42,6 +42,14 @@ import {
   validateFileSize,
   FileItem,
 } from '@routes/agent-center/multiUpload.utils';
+import {
+  createUrlFileItem,
+  getUrlDisplayName,
+} from '@routes/agent-center/file-url.utils';
+import {
+  FileUrlInputComponent,
+  FileUrlMode,
+} from '@shared/components/file-url-input/file-url-input.component';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { formatUploadSizeMb } from '@routes/agent-center/utils';
 import { UploadFileIconComponent } from '@shared/components/upload-file-icon/upload-file-icon.component';
@@ -91,6 +99,7 @@ interface IFormObj {
     NzIconModule,
     NzToolTipModule,
     NzSpinModule,
+    FileUrlInputComponent,
   ],
   providers: [
     {
@@ -155,6 +164,12 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
 
   public display = '';
 
+  /** file 参数录入模式：本地上传 | URL 链接（仅 image/video 子类型可切换） */
+  public urlMode: FileUrlMode = 'upload';
+
+  /** 编辑 URL 条目的回填请求（每次新对象触发 file-url-input 载入输入框） */
+  public urlEditReq: { url: string } | null = null;
+
   constructor(
     public cdr: ChangeDetectorRef,
     public i18n: I18NextEagerPipe,
@@ -177,6 +192,7 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
       this.value = this.param.value.default ?? ''; // 开始节点设置默认值，显示value.default
     }
     this.desc = this.param.description ?? '';
+    this.urlMode = 'upload';
     this.initParam();
   }
 
@@ -354,6 +370,69 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  /** URL 模式新增条目（file-url-input 已完成协议头/扩展名校验与去重） */
+  public onAddUrlEntries(urls: string[]): void {
+    // 互斥：已存在本地上传条目时禁止再录入 URL（file-url-input 已阻断，双保险）
+    if (!urls.length || this.hasLocalFileEntries()) {
+      return;
+    }
+    const newItems = urls.map((url) => createUrlFileItem(url));
+    this.fileList = this.isMulti ? [...this.fileList, ...newItems] : newItems;
+    this.saveFile();
+    this.cdr.detectChanges();
+  }
+
+  /** 互斥：是否已存在本地上传来源的条目（URL 条目带 fromUrl: true 标记） */
+  public hasLocalFileEntries(): boolean {
+    return this.fileList.some((item) => item.fromUrl !== true);
+  }
+
+  /** 互斥：是否已存在 URL 录入来源的条目（含默认值回填） */
+  public hasUrlFileEntries(): boolean {
+    return this.fileList.some((item) => item.fromUrl === true);
+  }
+
+  /** 供 URL 去重：当前已录入条目的 URL 列表 */
+  public getExistingUrls(): string[] {
+    return this.fileList
+      .filter((item) => item.progress === 'succeeded')
+      .map((item) => item.url)
+      .filter(Boolean);
+  }
+
+  /**
+   * 编辑已录入的 URL 条目（原位编辑）：条目保留在列表中，切到 URL 模式
+   * 并把 URL 回填输入框，用户修改后点「保存」提交（onSaveUrlEntry），
+   * 点「取消」或切换页签放弃编辑（条目原值不受影响）。
+   */
+  public editUrlEntry(event: Event, index: number): void {
+    event.stopPropagation();
+    const fileItem = this.fileList[index];
+    if (!fileItem?.url || fileItem.fromUrl !== true || this.isUploading) {
+      return;
+    }
+    this.urlMode = 'url';
+    this.urlEditReq = { url: fileItem.url };
+    this.cdr.detectChanges();
+  }
+
+  /** 编辑态保存：按原 URL 定位条目并原位替换为新 URL */
+  public onSaveUrlEntry(edit: { originalUrl: string; url: string }): void {
+    const index = this.fileList.findIndex(
+      (item) => item.fromUrl === true && item.url === edit.originalUrl,
+    );
+    if (index < 0) {
+      return;
+    }
+    this.fileList = this.fileList.map((item, i) =>
+      i === index
+        ? { ...item, url: edit.url, name: getUrlDisplayName(edit.url) }
+        : item,
+    );
+    this.saveFile();
+    this.cdr.detectChanges();
+  }
+
   saveFile() {
     if (
       this.param.type.includes('file') ||
@@ -420,6 +499,8 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         fileId: uuidV4(),
         type: '',
         controller: null,
+        // 默认值即 URL，按 URL 条目标记（互斥判定/链接图标/编辑入口）
+        fromUrl: true,
       };
     });
   }

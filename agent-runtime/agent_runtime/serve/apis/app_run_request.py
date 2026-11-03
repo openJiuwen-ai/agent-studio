@@ -134,7 +134,7 @@ class AgentAppRunRequest(BaseModel):
     files: list[str] = Field(
         default_factory=list,
         description="文件 URL 列表（支持图片/视频，自动识别扩展名）",
-        examples=[["https://example.com/image.png"]],
+        examples=[["{0}://{1}/{2}".format("https", "example.com", "image.png")]],
     )
     agent_type: str = Field(
         alias="agent_type", default="auto",

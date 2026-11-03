@@ -370,7 +370,7 @@ POST /v1/{project_id}/agent-manager/workflows/chat/{short_code}?workspace_id={wo
 
 | 参数 | 必选 | 类型 | 描述 |
 |------|------|------|------|
-| inputs | 是 | Map<String,Object> | 用户提出的问题，作为运行工作流的输入 |
+| inputs | 是 | Map<String,Object> | 用户提出的问题，作为运行工作流的输入；其中 file 类型参数值接受可直接访问的 URL（image/video 子类型） |
 | plugin_configs | 否 | Array of PluginConfig | 插件配置信息 |
 
 **PluginConfig**

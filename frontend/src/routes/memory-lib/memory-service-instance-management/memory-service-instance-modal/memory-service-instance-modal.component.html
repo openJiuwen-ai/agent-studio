@@ -1,0 +1,58 @@
+<nz-modal
+  [nzVisible]="visible"
+  [nzTitle]="isEdit() ? ('memory.instance.modal.editTitle' | i18nextEager) : ('memory.instance.modal.createTitle' | i18nextEager)"
+  [nzWidth]="560"
+  [nzMaskClosable]="false"
+  [nzOkLoading]="loading()"
+  [nzOkText]="isEdit() ? ('save' | i18nextEager) : ('memory.instance.modal.register' | i18nextEager)"
+  [nzCancelText]="'cancel' | i18nextEager"
+  (nzOnOk)="onSubmit()"
+  (nzOnCancel)="onCancel()"
+>
+  <ng-container *nzModalContent>
+    <nz-spin [nzSpinning]="loading()">
+      <form nz-form nzLayout="vertical" [formGroup]="formGroup" class="instance-form">
+        <nz-form-item>
+          <nz-form-label nzRequired>{{ 'memory.instance.field.name' | i18nextEager }}</nz-form-label>
+          <nz-form-control [nzErrorTip]="'memory.instance.field.name.required' | i18nextEager">
+            <input
+              nz-input
+              formControlName="name"
+              maxlength="128"
+              style="width: 100%"
+              [placeholder]="'memory.instance.field.name.placeholder' | i18nextEager"
+            />
+          </nz-form-control>
+        </nz-form-item>
+
+        <nz-form-item>
+          <nz-form-label nzRequired>{{ 'memory.instance.field.baseUrl' | i18nextEager }}</nz-form-label>
+          <nz-form-control [nzErrorTip]="'memory.instance.field.baseUrl.required' | i18nextEager">
+            <input
+              nz-input
+              formControlName="base_url"
+              maxlength="512"
+              style="width: 100%"
+              [placeholder]="'memory.instance.field.baseUrl.placeholder' | i18nextEager"
+            />
+          </nz-form-control>
+        </nz-form-item>
+
+        <nz-form-item class="!mb-0">
+          <nz-form-label>API Key</nz-form-label>
+          <nz-form-control>
+            <input
+              nz-input
+              type="password"
+              formControlName="api_key"
+              style="width: 100%"
+              [placeholder]="
+                (isEdit() ? 'memory.instance.field.apiKey.placeholder.edit' : 'memory.instance.field.apiKey.placeholder.create') | i18nextEager
+              "
+            />
+          </nz-form-control>
+        </nz-form-item>
+      </form>
+    </nz-spin>
+  </ng-container>
+</nz-modal>

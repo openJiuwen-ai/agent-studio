@@ -1535,6 +1535,8 @@ After creating a workflow, the initial state contains Start, LLM, and End nodes.
 
 The workflow has multiple built-in basic nodes. You can also add "Plugin" nodes to execute specific tasks. For plugin node usage, see Using Plugins in Workflows.
 
+> **Node Block Configuration**: Which nodes are blocked depends on the actual environment variable configuration. Blocked nodes do not appear in the "Add Node" list. You can modify the block list via the `front_page_block_nodes` environment variable (comma-separated node type names).
+
 For canvas interface operations, see Canvas Operation Instructions.
 
 Step 1 In the workflow panel, click "Add Node" and select the target node.
@@ -2064,6 +2066,11 @@ The Agent node provides large model capabilities and large model tool calling ca
 #### Agent Node Description
 
 You can configure deployed models in the node. Users can have the model process tasks by writing prompts and binding plugins.
+
+#### Prerequisites
+
+- Only conversational workflows support the Agent node; task workflows do not.
+- You have already built a workflow. If not, refer to Build a Workflow.
 
 **Table 5-14 Agent Node Configuration**
 

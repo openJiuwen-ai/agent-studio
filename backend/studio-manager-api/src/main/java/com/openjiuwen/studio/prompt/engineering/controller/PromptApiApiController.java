@@ -8,7 +8,6 @@ import com.openjiuwen.studio.prompt.engineering.dto.CreatePromptResp;
 import com.openjiuwen.studio.prompt.engineering.dto.GetPromptListsQo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptNewListVo;
 import com.openjiuwen.studio.prompt.engineering.dto.PePromptTemplateNewVo;
-import com.openjiuwen.studio.prompt.engineering.dto.QueryCustomPromptApiActionsQo;
 import com.openjiuwen.studio.prompt.engineering.service.IPromptApiService;
 
 import org.slf4j.Logger;
@@ -37,11 +36,6 @@ public class PromptApiApiController implements PromptApiApi {
     @Override
     public ResponseEntity<PePromptNewListVo> getPromptLists(String projectId, GetPromptListsQo getPromptListsQo) {
         return ResponseModel.success(promptApiService.getPromptLists(projectId, getPromptListsQo));
-    }
-
-    @Override
-    public ResponseEntity<PePromptTemplateNewVo> queryCustomPromptApiActions(String projectId, String promptId, QueryCustomPromptApiActionsQo queryCustomPromptApiActionsQo) {
-        return ResponseModel.success(promptApiService.queryCustomPromptApiActions(projectId, promptId, queryCustomPromptApiActionsQo));
     }
 
     @Override

@@ -15,6 +15,7 @@ import { AggregationNodeComponent } from './components/aggregation-node/aggregat
 import { BranchNodeComponent } from './components/branch-node/branch-node.component';
 import { ChildFlowComponent } from './components/child-flow-node/child-flow.component';
 import { CodeNodeComponent } from './components/code-node/code-node.component';
+import { TemplateTransformNodeComponent } from './components/template-transform-node/template-transform-node.component';
 import { CommentNodeComponent } from './components/comment-node/comment-node.component';
 import { ControllerNodeComponent } from './components/controller-node/controller-node.component';
 import { EmptyNodeComponent } from './components/empty-node/empty-node.component';
@@ -44,6 +45,7 @@ import { WorkflowNodeComponent } from './components/workflow-node/workflow-node.
 import { FLOW_COLORS, NODE_NAMES, NODE_SIZE } from './flow.const';
 import { TargetMarker } from './utils/flow-utils';
 import { StreamTransformNodeComponent } from './components/stream-transform-node/stream-transform-node.component';
+import { HttpNodeComponent } from './components/http-node/http-node.component';
 
 interface IControlParams {
   pos: 'top' | 'right' | 'bottom' | 'left';
@@ -68,6 +70,7 @@ export class FlowNodeRegisterService {
     this.registerEmptyNode(injector);
     this.registerBranchNode(injector);
     this.registerCodeNode(injector);
+    this.registerTemplateTransformNode(injector);
     this.registerChildFlow(injector);
     this.registerQuestionerNode(injector);
     this.registerIntentNode(injector);
@@ -97,6 +100,7 @@ export class FlowNodeRegisterService {
     this.registerParamExtractionNode(injector);
     this.registerCommentNode(injector);
     this.registerStreamTransformNode(injector);
+    this.registerHttpNode(injector);
   }
 
   public unregisterComponents() {
@@ -256,6 +260,16 @@ export class FlowNodeRegisterService {
     );
   }
 
+  private registerTemplateTransformNode(injector: Injector) {
+    register(
+      this.commonRegisterNode(
+        'op-templatetransform-node',
+        injector,
+        TemplateTransformNodeComponent,
+      ),
+    );
+  }
+
   private registerCodeNode(injector: Injector) {
     register(
       this.commonRegisterNode('op-code-node', injector, CodeNodeComponent),
@@ -327,6 +341,12 @@ export class FlowNodeRegisterService {
         injector,
         StreamTransformNodeComponent,
       ),
+    );
+  }
+
+  private registerHttpNode(injector: Injector) {
+    register(
+      this.commonRegisterNode('op-http-node', injector, HttpNodeComponent),
     );
   }
 

@@ -10,6 +10,7 @@ Covers:
 """
 
 import asyncio
+import gzip
 import json
 import types
 
@@ -306,6 +307,40 @@ def test_build_chat_upstream_body_no_thinking_leaves_absent():
         {"model": "x", "messages": []}, "real-model", True,
     )
     assert "thinking" not in up_body
+
+
+class _CompressedStreamResponse:
+    """区分原始压缩字节与解码后字节，锁定流式转发必须使用 aiter_bytes。"""
+
+    def __init__(self, body: bytes):
+        self.body = body
+        self.compressed_body = gzip.compress(body)
+
+    async def aiter_bytes(self):
+        yield self.body
+
+    async def aiter_raw(self):
+        yield self.compressed_body
+
+
+def test_iter_relay_decodes_compressed_sse_stream():
+    from agent_builder.serve.apis.model_service_api import (
+        _iter_relay_with_reasoning_transform,
+    )
+
+    body = (
+        b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
+        b"data: [DONE]\n\n"
+    )
+
+    async def collect():
+        chunks = []
+        response = _CompressedStreamResponse(body)
+        async for chunk in _iter_relay_with_reasoning_transform(response):
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    assert asyncio.run(collect()) == body
 
 
 def test_check_auth_headers_api_key_uses_api_key_field():

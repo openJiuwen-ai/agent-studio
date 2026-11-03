@@ -139,6 +139,12 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
 
   public mcpInputParams = null;
 
+  /** 创建时绑定环境变量的属性名集合（来自工具 input schema 的 env_var_ref；当前 MCP 入参不携带该绑定，属前向兼容） */
+  public envVarRefNames: Set<string> = new Set();
+
+  /** 渲染用入参（过滤掉创建时已绑定环境变量的入参），与 mcpInputParams 共享同一对象引用 */
+  public displayMcpInputParams: IWorkflowField[] = [];
+
   constructor(
     private readonly i18n: I18NextEagerPipe,
     protected override nodeServ: NodeService,
@@ -261,6 +267,7 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
         });
         console.log('toolList loaded:', this.toolList);
         this.getToolInfo(this.toolName);
+        this.buildEnvVarRefNames();
         if (res.server_config) {
           try {
             const serverConfig = JSON.parse(res.server_config);
@@ -310,6 +317,7 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
     if (!item) {
       return;
     }
+    this.buildEnvVarRefNames(item.input);
     this.inputParams = [
       ...this.inputParams.filter(item => item.location === 'Headers'),
       ...NodeUtils.initInputs(reqSchemaStrMCPField(item.input), this.nameRefOptions),
@@ -320,8 +328,31 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
     }
     this.inputParamsFormatter();
     this.mcpInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location === 'Input')), 0);
+    this.displayMcpInputParams = this.mcpInputParams.filter(item => !this.isEnvRefParam(item));
     this.outputParams = resSchemaStrMCPField(item.output);
     this.onSave();
+  }
+
+  /**
+   * 收集当前工具 input schema 顶层携带 env_var_ref 的属性名，
+   * 与插件面板"仅隐藏创建时绑定入参"的判定口径保持一致。
+   */
+  private buildEnvVarRefNames(inputSchemaStr?: string): void {
+    const set = new Set<string>();
+    const raw = inputSchemaStr ?? this.toolList.find(item => item.name === this.toolName)?.input;
+    if (raw) {
+      try {
+        NodeUtils.collectEnvVarRefNames(typeof raw === 'string' ? JSON.parse(raw) : raw, set);
+      } catch (e) {
+        // 忽略非法 schema，按未绑定处理
+      }
+    }
+    this.envVarRefNames = set;
+  }
+
+  /** 是否为创建时已绑定环境变量、需要在面板隐藏的入参；用户手动选择的环境变量引用不受影响 */
+  public isEnvRefParam(param: IWorkflowField): boolean {
+    return NodeUtils.isEnvVarRefField(param) && this.envVarRefNames.has(param.name ?? '');
   }
 
   public onRefUpdate(info: IParamRef[]) {
@@ -334,6 +365,7 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
     }
     this.inputParamsFormatter();
     this.mcpInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location === 'Input')), 0);
+    this.displayMcpInputParams = this.mcpInputParams.filter(item => !this.isEnvRefParam(item));
     this.isInit = false;
   }
 

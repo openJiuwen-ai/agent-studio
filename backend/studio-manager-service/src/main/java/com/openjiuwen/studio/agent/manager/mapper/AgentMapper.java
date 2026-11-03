@@ -4,6 +4,7 @@
 
 package com.openjiuwen.studio.agent.manager.mapper;
 
+import com.openjiuwen.studio.agent.common.dto.TriggerConfig;
 import com.openjiuwen.studio.agent.manager.dto.AgentApplicationInfo;
 import com.openjiuwen.studio.agent.manager.dto.AgentVersionListItem;
 import com.openjiuwen.studio.agent.manager.dto.SearchCriteria;
@@ -15,6 +16,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -86,6 +88,10 @@ public interface AgentMapper {
      * @return int
      */
     int updateByPrimaryKeySelective(Agent record);
+
+    int updateTriggerList(@Param("projectId") String projectId, @Param("workspaceId") String workspaceId,
+        @Param("agentId") String agentId, @Param("triggerList") List<TriggerConfig> triggerList,
+        @Param("updatedOn") Date updatedOn);
 
     /**
      * 根据主键从数据库删除agent
@@ -165,7 +171,7 @@ public interface AgentMapper {
     int selectByDomainId(@Param("domainId") String domainId, @Param("status") String status,
         @Param("publishedOn") Timestamp date);
 
-    void updateProjectIdByAgentIds(String opSvcProjectId, List<String> agentIds);
+    void updateProjectIdByAgentIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("agentIds") List<String> agentIds);
 
     void updateAgentShareStatus(@Param("agentId") String agentId, @Param("status") int status);
 

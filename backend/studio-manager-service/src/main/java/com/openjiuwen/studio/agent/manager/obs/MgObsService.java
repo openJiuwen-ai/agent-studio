@@ -79,6 +79,22 @@ public class MgObsService implements CommonObsService {
         return downloadObsFile(objectKey);
     }
 
+    @Override
+    public String getObjectOrNull(String objectKey) {
+        // 唯一收敛点：发布元数据读取（PublishUtils.getPublish）用此方法，404→null 让 getPublish 返回 null
+        // （符合其"获取失败返回 null"契约 → 导出未发布资源判 EXPORT_RESOURCE_NOT_EXISTS(400)）。
+        // 其余下载走 getObject/downloadObsFile（404→抛 OBS_FAILED），避免解引用 null NPE。
+        try {
+            return fileStore.readOrNull(path(objectKey));
+        } catch (AgentStudioException e) {
+            // readOrNull 已抛 OBS_FAILED（5xx），透传不二次包装；404 在 readOrNull 内已返回 null，不到此。
+            throw e;
+        } catch (Exception e) {
+            log.error("getObjectOrNull failed!", e);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
+        }
+    }
+
     @Scheduled(fixedDelay = 24 * 60 * 60 * 1000)
     public void cleanObsObjects() {
         final long millis = TimeUnit.DAYS.toMillis(7);
@@ -146,9 +162,13 @@ public class MgObsService implements CommonObsService {
     public String downloadObsFile(String relativePath) {
         try {
             return fileStore.read(path(relativePath));
+        } catch (AgentStudioException e) {
+            // 透传: read 抛 OBS_FAILED（404 与 5xx 均抛，透传 cause），不二次包装丢 cause。
+            // 404→null 语义已收敛到 getObjectOrNull（发布元数据读取专用），此处 404 是数据不一致故障，500 合理。
+            throw e;
         } catch (Exception e) {
-            log.error("download file from obs failed!");
-            throw new AgentStudioException(StudioError.OBS_FAILED);
+            log.error("download file from obs failed!", e);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
         }
     }
 

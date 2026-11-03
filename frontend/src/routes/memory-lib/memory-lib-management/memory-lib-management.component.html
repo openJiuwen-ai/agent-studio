@@ -1,89 +1,114 @@
 <div class="memory-management">
-  <div class="memory-management-title-wrapper">
-    <div class="title-container">
-      {{ 'memory.management.titleWithCount' | i18nextEager: { count: totalNumber() } }}
-    </div>
-    <div class="memory-operation-container">
-      @if (!isFirstLoading() && !isNoDataGuideShow()) {
-        <div
-          class="guide-collapse-btn flex items-center cursor-pointer"
-          (click)="isShowGuide.set(!isShowGuide())">
-          <span nz-icon [nzType]="isShowGuide() ? 'down' : 'up'" class="mr-[4px]"></span>
-          {{ 'create_guide' | i18nextEager }}
-        </div>
-      }
-      <button
-        nz-button
-        nzType="primary"
-        [disabled]="memoryLibService.subscribeBtnDisabled()"
-        (click)="createMemoryLib()"
-      >
-        {{ 'memory.create.button' | i18nextEager }}
-      </button>
-    </div>
-  </div>
+  <select-memory-create-type
+    #selectCreateType
+    (openBuiltinMemoryLib)="createBuiltinMemoryLib()"
+    (openExternalMemoryLib)="connectExternalMemoryLib()"
+  ></select-memory-create-type>
 
-  @if (isShowGuide() && !isFirstLoading() && !isNoDataGuideShow()) {
-    <div class="guide-container guide-collapse-content" [class]="guideClass()">
-      <app-no-data-guide [type]="'memoryLib'" [isSmall]="true"></app-no-data-guide>
-    </div>
-  }
+  <nz-tabs [(nzSelectedIndex)]="subTabIndex" (nzSelectedIndexChange)="onSubTabChange($event)">
+    <nz-tab [nzTitle]="'memory.management.title' | i18nextEager"></nz-tab>
+    <nz-tab [nzTitle]="'memory.tab.memoryServiceInstance' | i18nextEager"></nz-tab>
+  </nz-tabs>
 
-  @if (!isNoDataGuideShow()) {
-    <div class="memory-management-list-operation">
-      <nz-input-group [nzSuffix]="suffixIconSearch" class="create-search">
-        <input
-          type="text"
-          nz-input
-          [placeholder]="'memory.list.search.placeholder' | i18nextEager"
-          [(ngModel)]="searchText"
-          (ngModelChange)="searchKbs()"
-        />
-      </nz-input-group>
-      <ng-template #suffixIconSearch>
-        <span nz-icon nzType="search"></span>
-      </ng-template>
-
-      <button nz-button nzType="default" (click)="queryLibs()">
-        <span nz-icon nzType="reload"></span>
-      </button>
-    </div>
-  }
-
-  <nz-spin [nzSpinning]="loading()" class="memory-display-wrapper min-h-[200px]">
-    @if (libs().length) {
-      <div class="memory-display-container">
-        <div class="memory-display-content">
-          <memory-lib-list [libs]="libs()" (dataChange)="queryLibs()"></memory-lib-list>
-        </div>
-
-        <div class="pagination-container">
-          <nz-pagination
-            [nzPageIndex]="currentPage()"
-            [nzTotal]="totalNumber()"
-            [nzPageSize]="pageSize().size"
-            [nzShowSizeChanger]="true"
-            [nzHideOnSinglePage]="false"
-            (nzPageIndexChange)="onPageIndexChange($event)"
-            (nzPageSizeChange)="onPageSizeChange($event)"
-          ></nz-pagination>
+  @if (currentSubTabId === 'memoryRepo') {
+    <div class="memory-repo-list mt-5">
+      <div class="mb-[24px] flex w-full items-center justify-between">
+        <span class="text-[20px] font-bold leading-[30px]">
+          {{ 'memory.management.title' | i18nextEager }}
+          @if (totalNumber()) {
+            <span class="ml-2">({{ totalNumber() }})</span>
+          }
+        </span>
+        <div class="flex gap-[16px]">
+          @if (!isFirstLoading() && !isNoDataGuideShow()) {
+            <div
+              class="guide-collapse-btn flex items-center cursor-pointer"
+              (click)="isShowGuide.set(!isShowGuide())">
+              <span nz-icon [nzType]="isShowGuide() ? 'down' : 'up'" class="mr-[4px]"></span>
+              {{ 'create_guide' | i18nextEager }}
+            </div>
+          }
+          <button
+            nz-button
+            nzType="primary"
+            [disabled]="memoryLibService.subscribeBtnDisabled()"
+            (click)="createMemoryLib()"
+          >
+            {{ 'memory.create.button' | i18nextEager }}
+          </button>
         </div>
       </div>
-    } @else {
-      <div class="no-data-container">
-        @if (searchNameIsEmpty()) {
-          <app-no-data-guide [type]="'memoryLib'"></app-no-data-guide>
+
+      <div
+        class="overflow-hidden guide-collapse-content shrink-0"
+        [ngClass]="{ 'h-[188px]': isShowGuide(), 'h-[0px]': !isShowGuide(), 'mb-[24px]': isShowGuide() }"
+        *ngIf="!isNoDataGuideShow() && !isFirstLoading()">
+        <app-no-data-guide [type]="'memoryLib'" [isSmall]="true"></app-no-data-guide>
+      </div>
+
+      <div class="memory-top-operate" *ngIf="!isFirstLoading() && !isNoDataGuideShow()">
+        <div class="memory-search">
+          <nz-input-search (nzSearch)="searchKbs()">
+            <input
+              nz-input
+              [placeholder]="'memory.list.search.placeholder' | i18nextEager"
+              [ngModel]="searchText()"
+              (ngModelChange)="onSearchTextChange($event)"
+            />
+          </nz-input-search>
+        </div>
+
+        <button nz-button nzType="default" (click)="queryLibs()">
+          <span nz-icon nzType="reload"></span>
+        </button>
+      </div>
+
+      <nz-spin [nzSpinning]="loading()" class="memory-display-wrapper min-h-[200px]">
+        @if (libs().length) {
+          <div class="memory-display-container">
+            <div class="memory-display-content">
+              <memory-lib-list
+                [libs]="libs()"
+                (dataChange)="queryLibs()"
+                (editMemoryLib)="editMemoryLib($event)"
+              ></memory-lib-list>
+            </div>
+
+            <div class="flex-right">
+              <nz-pagination
+                class="page-area card-page"
+                *ngIf="totalNumber() > pageSize().size"
+                [nzPageIndex]="currentPage()"
+                [nzTotal]="totalNumber()"
+                [nzPageSize]="pageSize().size"
+                [nzPageSizeOptions]="pageSize().options"
+                nzShowSizeChanger
+                (nzPageIndexChange)="onPageIndexChange($event)"
+                (nzPageSizeChange)="onPageSizeChange($event)"
+              ></nz-pagination>
+            </div>
+          </div>
         } @else {
-          <app-new-common-no-data-with-btn
-            [type]="'filterNoData'"
-            [tutorialType]="'memoryLib'"
-            [noDataBtnStr]="'memory.create.button' | i18nextEager"
-            [secondLineData]="'memory.noData.text.createTip' | i18nextEager"
-            (create)="createMemoryLib()"
-            (clear)="noDataSearch()"
-          />
+          <div class="no-data-container">
+            @if (searchNameIsEmpty()) {
+              <app-no-data-guide [type]="'memoryLib'"></app-no-data-guide>
+            } @else {
+              <app-new-common-no-data-with-btn
+                [type]="'filterNoData'"
+                [tutorialType]="'memoryLib'"
+                [noDataBtnStr]="'memory.create.button' | i18nextEager"
+                [secondLineData]="'memory.noData.text.createTip' | i18nextEager"
+                (create)="createMemoryLib()"
+                (clear)="noDataSearch()"
+              />
+            }
+          </div>
         }
-      </div>
-    }
-  </nz-spin>
+      </nz-spin>
+    </div>
+  } @else {
+    <div class="mt-5 h-full">
+      <memory-service-instance-management></memory-service-instance-management>
+    </div>
+  }
 </div>

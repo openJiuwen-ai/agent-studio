@@ -9,6 +9,8 @@ import com.openjiuwen.studio.agent.manager.dto.ImportStudioSkillResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsResponseBody;
 
+import java.io.InputStream;
+
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -60,4 +62,17 @@ public interface ISkillManagementService {
      * @param projectId projectId
      */
     GetStudioSkillDetailsResponseBody showStudioSkillDetail(String skillId, String workspaceId, String projectId);
+
+    /**
+     * 流式读取指定 Skill 最新版本的 zip 制品包内容。
+     *
+     * <p>供前端详情页文件目录树展示使用，避免前端跨域直接请求 OBS 签名 URL。
+     * 返回的 InputStream 由调用方负责关闭。</p>
+     *
+     * @param skillId skillId
+     * @param workspaceId workspaceId
+     * @param projectId projectId
+     * @return OBS zip 字节流
+     */
+    InputStream getSkillPackageContent(String skillId, String workspaceId, String projectId);
 }

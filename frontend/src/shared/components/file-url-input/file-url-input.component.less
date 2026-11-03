@@ -1,0 +1,86 @@
+.file-url-input {
+  .url-mode-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .url-mode-tab {
+      padding: 2px 12px;
+      font-size: 12px;
+      line-height: 20px;
+      color: #808080;
+      background: #fff;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+
+      &-active {
+        color: #1476ff;
+        background: rgba(20, 118, 255, 0.06);
+        border-color: #1476ff;
+      }
+
+      &-disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  .url-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .url-blocked-tip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      line-height: 18px;
+      color: #808080;
+      background: #fafafa;
+      border: 1px dashed #c2c2c2;
+      border-radius: 8px;
+    }
+
+    .url-textarea {
+      width: 100%;
+      resize: vertical;
+    }
+
+    .url-pane-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+
+      .url-accept-hint {
+        overflow: hidden;
+        font-size: 12px;
+        color: #808080;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .url-pane-actions {
+        display: flex;
+        gap: 8px;
+      }
+    }
+
+    .url-error {
+      font-size: 12px;
+      line-height: 18px;
+      color: #f23030;
+    }
+
+    .url-dedup-tip {
+      font-size: 12px;
+      line-height: 18px;
+      color: #fa8c16;
+    }
+  }
+}

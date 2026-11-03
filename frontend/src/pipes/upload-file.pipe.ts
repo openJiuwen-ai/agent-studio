@@ -25,7 +25,7 @@ const formatAudio =
 const formatVideo =
   '.mp4,.avi,.rmvb,.mkv,.flv,.f4v,.wmv,.3gp';
 
-const fileUploadAcc = {
+export const fileUploadAcc = {
   'file/default':
     '.docx,.doc,.pdf,.txt,.xls,.xlsx,.csv,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.svg,.mp3,.m4a,.wav,.mp4,.mov,.webm,.jsonl',
   'file/doc': '.docx,.doc,.pdf',

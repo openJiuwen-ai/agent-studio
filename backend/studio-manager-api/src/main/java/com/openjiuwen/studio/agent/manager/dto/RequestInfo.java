@@ -57,7 +57,7 @@ public class RequestInfo implements Serializable {
     private String pathParams = null;
 
     @JsonProperty("input_schema")
-    @Schema(description = "输入Schema", example = "{}")
+    @Schema(description = "请求输入参数Schema（JSON字符串），用于定义工具调用时的请求参数结构。", example = "\"{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"city\\\":{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"城市名称\\\",\\\"location\\\":\\\"Body\\\"}}}\"")
     @Length(max = 200000)
     private String inputSchema = null;
 

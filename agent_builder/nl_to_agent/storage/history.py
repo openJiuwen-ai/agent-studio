@@ -5,11 +5,20 @@ import json
 from typing import List
 
 from common_utils.common_config import RedisSettings
-from common_utils.redis_manager import RedisClientManager, get_redis_client
+from common_utils.redis_manager import RedisClientManager
 from agent_builder.adapter.logger_rt_bridge import logger as rt_logger
 from agent_builder.adapter.singleton import Singleton
 
 from .base import BaseConversationMemory
+
+try:
+    from redis_spi import accessor
+    from redis_spi.types import Duration
+except ImportError:  # 适配层包未安装（独立环境）：server_fastapi 启动期
+    # 回退 legacy 客户端；本模块的异步存储路径不可用——调用期显式
+    # 报错，而非 import 期即崩（否则 server_fastapi 的回退分支不可达）
+    accessor = None
+    Duration = None
 
 
 class HistoryStorage(metaclass=Singleton):
@@ -47,7 +56,7 @@ class HistoryStorage(metaclass=Singleton):
 
 
 class AsyncHistoryStorage(metaclass=Singleton):
-    """异步对话历史存储"""
+    """异步对话历史存储（Redis Provider SPI 面）"""
 
     _initialized = False
     _async_redis_client = None
@@ -61,14 +70,19 @@ class AsyncHistoryStorage(metaclass=Singleton):
 
     async def _get_async_redis_client(self):
         if AsyncHistoryStorage._async_redis_client is None:
-            AsyncHistoryStorage._async_redis_client = get_redis_client()
+            if accessor is None:
+                raise RuntimeError(
+                    "redis adapter packages not installed; "
+                    "async history storage requires redis_spi"
+                )
+            AsyncHistoryStorage._async_redis_client = accessor.get_redis()
         return AsyncHistoryStorage._async_redis_client
 
     async def add(self, key: str, value: dict) -> bool:
         redis_client = await self._get_async_redis_client()
         ttl = RedisSettings().datasource_ttl_seconds
         await redis_client.rpush(key, json.dumps(value, ensure_ascii=False))
-        await redis_client.expire(key, ttl)
+        await redis_client.expire(key, Duration.seconds(ttl))
         return True
 
     async def get_all(self, key: str) -> List[str]:
@@ -177,8 +191,8 @@ class SessionStorage(metaclass=Singleton):
 class AsyncSessionStorage(metaclass=Singleton):
     """异步会话状态存储：封装 agent/resource/plugin_dict/workflow_dict 4 个键的 get/set/delete。
 
-    使用 get_redis_client() 获取异步 Redis 客户端，支持单机/集群/哨兵三种模式，
-    与 AsyncHistoryStorage 共用同一 Redis 连接（由 RedisClientManager 单例管理）。
+    使用 redis_spi.accessor 获取 Provider 异步客户端（SPI 协议面），
+    与 AsyncHistoryStorage 共用同一进程级装配。
     """
 
     _initialized = False
@@ -198,7 +212,12 @@ class AsyncSessionStorage(metaclass=Singleton):
     @staticmethod
     async def _get_async_redis_client():
         if AsyncSessionStorage._async_redis_client is None:
-            AsyncSessionStorage._async_redis_client = get_redis_client()
+            if accessor is None:
+                raise RuntimeError(
+                    "redis adapter packages not installed; "
+                    "async session storage requires redis_spi"
+                )
+            AsyncSessionStorage._async_redis_client = accessor.get_redis()
         return AsyncSessionStorage._async_redis_client
 
     @staticmethod
@@ -236,16 +255,16 @@ class AsyncSessionStorage(metaclass=Singleton):
     ) -> bool:
         """保存会话状态。"""
         redis_client = await AsyncSessionStorage._get_async_redis_client()
-        ttl = RedisSettings().datasource_ttl_seconds
-        await redis_client.set(f"agent:{task_id}", state, ex=ttl)
+        ttl = Duration.seconds(RedisSettings().datasource_ttl_seconds)
+        await redis_client.set(f"agent:{task_id}", state, duration=ttl)
         await redis_client.set(
-            f"resource:{task_id}", json.dumps(resource_config), ex=ttl
+            f"resource:{task_id}", json.dumps(resource_config), duration=ttl
         )
         await redis_client.set(
-            f"plugin_dict:{task_id}", json.dumps(plugin_dict), ex=ttl
+            f"plugin_dict:{task_id}", json.dumps(plugin_dict), duration=ttl
         )
         await redis_client.set(
-            f"workflow_dict:{task_id}", json.dumps(workflow_dict), ex=ttl
+            f"workflow_dict:{task_id}", json.dumps(workflow_dict), duration=ttl
         )
         return True
 

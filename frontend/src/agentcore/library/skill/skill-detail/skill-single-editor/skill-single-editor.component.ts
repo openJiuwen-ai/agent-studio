@@ -82,7 +82,7 @@ export class SkillSingleEditorComponent {
   isResizing = false;
   skillEditorTab = SkillEditorTab;
   loading = false;
-  packageUrl = input.required<string>();
+  skillIdInput = input.required<string>();
 
   readonly myMarkedOptions: MarkedOptions = {
     renderer: (() => {
@@ -105,10 +105,10 @@ export class SkillSingleEditorComponent {
     private _customEditorService: CustomEditorService
   ) {
     effect(() => {
-      const url = this.packageUrl();
-      if (url) {
+      const skillId = this.skillIdInput();
+      if (skillId) {
         this.resetData();
-        this.loadPackage(url);
+        this.loadPackage(skillId);
       }
     });
     this.setupMarkdownRenderer();
@@ -267,6 +267,10 @@ export class SkillSingleEditorComponent {
   }
 
   openSkillMd() {
+    if (!this.innerData[0]) {
+      // 文件树为空（如下载失败或 zip 解压异常），避免后续访问 .path 抛 TypeError
+      return;
+    }
     const skillMd = this.findNodeByContext(this.innerData[0], this.selectedFileData?.path ?? '', `${this.innerData[0].path}/SKILL.md`);
     if (skillMd) {
       this.onNodeSelect(skillMd);
@@ -298,9 +302,9 @@ export class SkillSingleEditorComponent {
     return res;
   }
 
-  async loadPackage(packageUrl: string) {
+  async loadPackage(skillId: string) {
     this.loading = true;
-    const fileTreeData = await this._customEditorService.downloadAndUnzip(packageUrl);
+    const fileTreeData = await this._customEditorService.downloadAndUnzipBySkillId(skillId);
     this.loading = false;
     if (fileTreeData[0]) {
       fileTreeData[0].expanded = true;

@@ -20,6 +20,7 @@ import asyncio
 import base64
 import ast
 import json
+import os
 import re
 import time
 from typing import Any, List, Optional, AsyncGenerator
@@ -28,6 +29,7 @@ from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error, ExecutionError
 from jiuwen.common.exception.status_code import StatusCode as JiuWenStatusCode
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.prompt.agent.common.utils import convert_json_schema
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.foundation.prompt import PromptTemplate
@@ -679,12 +681,35 @@ class LLMChain(WorkflowComponent):
                 "- Make sure your explanation is concise and easy to understand, "
                 "not verbose.\n"
                 "- Strictly return the answer in a valid json format only, and "
-                '"DO NOT ADD ANY COMMENTS BEFORE OR AFTER IT".\n'
+                '"DO NOT ADD ANY COMMENTS BEFORE OR AFTER IT" '
+                "to ensure it could be formatted as a JSON instance that "
+                "conforms to the JSON schema below. Here is the JSON schema:"
+                "${json_schema}.\n"
                 "The question is: ${query}."
             )
             instruction = response_format.get("jsonInstruction") or default_instruction
             if not instruction.strip():
                 instruction = default_instruction
+            # 将 outputs 配置转换为 JSON schema 并注入到指令中,
+            # 与 orchestration 栈 format_prompt 的 default_request 保持一致,
+            # 确保模型能感知正确的输出结构,对用户提示词中的格式错误有容错能力。
+            try:
+                outputs_list = self._get_outputs_list_from_conf()
+                json_schema = convert_json_schema(outputs_list)
+            except (KeyError, TypeError, AttributeError) as e:
+                raise build_error(
+                    StatusCode.COMPONENT_LLM_CONFIG_INVALID,
+                    error_msg="Failed to convert outputs config to JSON schema",
+                ) from e
+            # 先替换 ${query} 再替换 ${json_schema}:若 outputs 的 description
+            # 字段包含 ${query} 字面量,先替换 schema 会使该字面量在第二次
+            # replace 时被用户内容误替换,污染注入的 schema。
+            messages[last_user_idx]["content"] = instruction.replace(
+                "${query}", user_content
+            ).replace(
+                "${json_schema}", json.dumps(json_schema, ensure_ascii=False)
+            )
+            return messages
         else:
             return messages
 
@@ -961,6 +986,8 @@ class LLMChain(WorkflowComponent):
             scope_id = self._session.get_global_state("memory_repo_id")
             if not scope_id:
                 return
+            # Read full memory_config for backend_type dispatch (EXTERNAL → ExternalMemoryClient)
+            memory_config = self._session.get_global_state("memory_config") or {}
             gv = self._session.get_global_state("global_variables") or {}
             user_id = ""
             if isinstance(gv, dict):
@@ -982,7 +1009,8 @@ class LLMChain(WorkflowComponent):
             from agent_runtime.memory.memory_retrieval import retrieve_memory_prompt
 
             memory_prompt = await retrieve_memory_prompt(
-                user_id=user_id, scope_id=scope_id, query=query
+                user_id=user_id, scope_id=scope_id, query=query,
+                memory_config=memory_config,
             )
             if not memory_prompt:
                 return
@@ -1001,15 +1029,39 @@ class LLMChain(WorkflowComponent):
                 exc_info=True,
             )
 
+    # 与节点 conf.allowLiteralBraces 任一为真即开启；便于 K8S/现场用环境变量全局放开
+    _ALLOW_LITERAL_BRACES_ENV = "ALLOW_LITERAL_BRACES"
+
+    def _allow_literal_braces(self) -> bool:
+        """未声明/非安全名的 {{...}} 按字面量保留。
+
+        由环境变量 ``ALLOW_LITERAL_BRACES``（1/true/yes/on）控制；画布不再提供开关。
+        仍兼容旧 IR 中 ``allowLiteralBraces=true``（OR）。
+
+        仅本 openjiuwen extension 路径完整支持（校验 + _render_prompt 保留字面量）；
+        legacy orchestration LLM 不放宽校验，避免静默丢内容。
+        """
+        if bool(self._conf.get("allowLiteralBraces", False)):
+            return True
+        return os.getenv(self._ALLOW_LITERAL_BRACES_ENV, "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
     def _validate_prompt_template(self, template: str) -> None:
         """
         在 invoke 之前校验模板源，拦截危险占位符（如 query.__class__、表达式等）。
         只依赖模板字符串，不依赖运行时 inputs。
+        allowLiteralBraces=True 时：仅对「看起来像合法变量名」的占位符做危险校验，
+        其余 {{...}} 视为字面量，跳过。
         """
         if not template:
             return
 
         texts: list[str] = [template]
+        allow_literal = self._allow_literal_braces()
 
         placeholder_find_pattern = re.compile(r"\{\{([^{}]*)\}\}")
         placeholder_safe_pattern = re.compile(
@@ -1019,6 +1071,16 @@ class LLMChain(WorkflowComponent):
         for text in texts:
             for match in placeholder_find_pattern.finditer(text):
                 placeholder = match.group(1).strip()
+
+                if allow_literal:
+                    # 字面量模式：非安全标识符直接放过；安全名仍拦截 __ 等危险写法
+                    if not placeholder_safe_pattern.fullmatch(placeholder):
+                        continue
+                    if "__" in placeholder:
+                        raise ValueError(
+                            f"Invalid or dangerous placeholder: '{placeholder}'"
+                        )
+                    continue
 
                 if (
                     not placeholder
@@ -1043,12 +1105,14 @@ class LLMChain(WorkflowComponent):
         )
 
     def _render_prompt(self, template: str, inputs: dict) -> str:
-        """渲染提示模板，校验未定义变量"""
+        """渲染提示模板；默认校验未定义变量，allowLiteralBraces 时保留未替换花括号。"""
         result = self._normalize_template_placeholders(template)
         for key, value in inputs.items():
             placeholder = f"{{{{{key}}}}}"
             if placeholder in result:
                 result = result.replace(placeholder, str(value))
+        if self._allow_literal_braces():
+            return result
         # 校验：如果还有未替换的 {{...}}，说明引用了不存在的变量
         remaining = re.findall(r'\{\{([^{}]*)\}\}', result)
         if remaining:

@@ -39,11 +39,15 @@ from jiuwen.orchestration.common.perf_log import wf_performance_buffer
 from jiuwen.orchestration.flow.stream.base import StreamCode
 from jiuwen.planner.common.exception import LLMInvocationFailedException
 from jiuwen.planner.common.stream_post_utils import (
+    build_finish_reason,
+    build_usage_metadata,
     convert_ai_message_to_llm_output,
     create_trace_manager,
     MODEL_STAT,
     MODEL_USAGE,
     LATENCY,
+    USAGE_METADATA,
+    FINISH_REASON,
 )
 from jiuwen.plugin import Param
 from jiuwen.plugin.models.function import Function
@@ -55,7 +59,6 @@ from jiuwen.prompt import TemplateManager, Prompt, Template
 DEFAULT_INTENT = "意图不明"
 WORKFLOW_HANDLER_TYPE = "WORKFLOW"
 AGENT_HANDLER_TYPE = "AGENT"
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 def _get_config_info(model_name: str):
@@ -242,9 +245,9 @@ class IntentionDetectModule:
         if (
             hasattr(result.llm_message, "usage_metadata")
             and result.llm_message.usage_metadata
+            and hasattr(result.llm_message.usage_metadata, "latency")
         ):
-            if hasattr(result.llm_message.usage_metadata, "latency"):
-                llm_output["latency"] = result.llm_message.usage_metadata.latency
+            llm_output["latency"] = result.llm_message.usage_metadata.latency
 
         output_on_insights = copy.deepcopy(llm_output)
         output_on_insights.update(
@@ -254,6 +257,14 @@ class IntentionDetectModule:
                 MODEL_USAGE: result.model_usage,
             }
         )
+        # OTel 双写：按 core handler 约定键名补用量/成本/时延（缺数据时为空，跳过注入）
+        usage_metadata = getattr(result.llm_message, "usage_metadata", None)
+        usage_dict = build_usage_metadata(usage_metadata)
+        if usage_dict:
+            output_on_insights[USAGE_METADATA] = usage_dict
+        finish_reason = build_finish_reason(usage_metadata)
+        if finish_reason:
+            output_on_insights[FINISH_REASON] = finish_reason
 
         return output_on_insights
 
@@ -1386,7 +1397,10 @@ class IntentionDetectModule:
         """处理工作流"""
         # 处理传入的active_workflows中的工作流
         workflows_to_process = []
-        if active_workflows:
+        # None=未提供（使用全部业务工作流）；空列表=显式权限收窄
+        # （无业务工作流候选，仅剩闲聊/全局意图/子Agent，识别失败走 DEFAULT 兜底），
+        # 不能按 falsy 判断，否则空列表会回退全量导致越权
+        if active_workflows is not None:
             for workflow_id in active_workflows:
                 workflow_context = self.context_manager.get_workflow_context_by_id(
                     workflow_id, WorkflowType.GENERAL

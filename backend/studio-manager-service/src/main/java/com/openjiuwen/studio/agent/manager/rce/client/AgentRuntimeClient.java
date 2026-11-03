@@ -35,7 +35,8 @@ import java.util.List;
  * agent runtime服务client
  *
  */
-@FeignClient(name = "agentRuntime", url = "${feign.client.config.agentRuntime.url:}")
+@FeignClient(name = "agentRuntime", url = "${feign.client.config.agentRuntime.url:}",
+    configuration = RuntimeCorrelationFeignConfig.class)
 public interface AgentRuntimeClient {
     /**
      * 同步应用发布信息接口

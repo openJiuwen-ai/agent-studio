@@ -29,6 +29,7 @@ import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -154,7 +155,15 @@ public class JiuWenService {
             .retrieve()
             .onStatus(status -> !status.is2xxSuccessful(),
                 response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                    log.error("generatorAgentOrWorkflow error: {}", errorBody);
+                    log.error("generatorAgentOrWorkflow error");
+                    // 按上游状态码映射：4xx 保持客户端错误语义，不压成 5xx
+                    HttpStatusCode statusCode = response.statusCode();
+                    if (statusCode.value() == 404) {
+                        return Mono.error(new AgentStudioException(StudioError.RESOURCE_NOT_EXISTS));
+                    }
+                    if (statusCode.is4xxClientError()) {
+                        return Mono.error(new AgentStudioException(StudioError.METHOD_ARGUMENT_NOT_VALID));
+                    }
                     return Mono.error(new AgentStudioException(StudioError.JIU_WEN_SERVICE_EXCEPTION));
                 }))
             .bodyToFlux(String.class)

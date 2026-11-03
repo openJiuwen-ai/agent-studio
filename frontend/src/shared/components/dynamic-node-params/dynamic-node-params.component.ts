@@ -42,6 +42,13 @@ import {
 import { NodeUtils } from '@routes/agent-center/app-flow/components/utils';
 import { checkFileTypeAndSize } from '@routes/agent-center/utils';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import {
+  createUrlFileItem,
+  getUrlDisplayName,
+  hasLocalFileItems,
+  hasUrlFileItems,
+} from '@routes/agent-center/file-url.utils';
+import { FileUrlInputComponent } from '@shared/components/file-url-input/file-url-input.component';
 
 @Component({
   selector: 'dynamic-node-params',
@@ -60,6 +67,7 @@ import { AgentConfigService } from '@routes/agent-center/agent-config.service';
     UploadFileIconComponent,
     UploadFileAccPipe,
     UploadFileDescPipe,
+    FileUrlInputComponent,
   ],
   providers: [
     {
@@ -136,16 +144,19 @@ export class DynamicNodeParamsComponent {
             let uploadDatas = [];
             try {
               const urlArr = JSON.parse(isFileExist);
+              // 默认值即 URL 列表，回填条目按 URL 条目标记（互斥判定/链接图标/编辑入口）
               uploadDatas = urlArr.map((item, i) => ({
                 fileId: uuidV4(),
                 name: names[i] || this.getFileNameByUrl(item),
                 url: item,
+                fromUrl: true,
               }));
             } catch (e) {
               uploadDatas = isFileExist.split(',').map((item, i) => ({
                 fileId: uuidV4(),
                 name: names[i] || this.getFileNameByUrl(item),
                 url: item,
+                fromUrl: true,
               }));
             }
             return {
@@ -173,6 +184,8 @@ export class DynamicNodeParamsComponent {
                   item.value.display || this.getFileNameByUrl(value.default),
                 progress: 'succeeded',
                 url: value.default,
+                // 默认值即 URL，按 URL 条目标记（互斥判定/链接图标/编辑入口）
+                fromUrl: true,
               },
             };
           }
@@ -353,6 +366,12 @@ export class DynamicNodeParamsComponent {
   /** 根据控件名称，获取formGroup表单中的输入值 */
   public getControlValue(controlName: string) {
     return this.parameterFromGroup.get([`${controlName}`])?.value;
+  }
+
+  /** 根据控件名称，判断表单控件是否未被用户编辑过（pristine），用于区分默认值与用户手输 */
+  public isControlPristine(controlName: string): boolean {
+    const control = this.parameterFromGroup.get([`${controlName}`]);
+    return !!control && control.pristine;
   }
 
   /** 根据控件名称，获取 <ngx-monaco-editor> 编辑器双向绑定的输入值 */
@@ -862,8 +881,30 @@ export class DynamicNodeParamsComponent {
   /** 多文件上传是否展示添加按钮 */
   public isShowMultiBtn(inputItem) {
     return (
-      inputItem.type?.includes('array<file') && inputItem.uploadDatas?.length > 0
+      inputItem.type?.includes('array<file') &&
+      inputItem.uploadDatas?.length > 0 &&
+      inputItem.urlMode !== 'url' &&
+      // 互斥：已存在 URL 录入条目时不再追加本地上传（需先清空文件）
+      !hasUrlFileItems(inputItem.uploadDatas)
     );
+  }
+
+  /**
+   * 互斥：当前参数是否已存在本地上传来源的条目。
+   * 多文件按条目 fromUrl 标记判定；单文件本地上传路径 file 恒有值
+   * （URL 录入与默认值回填均不带 file）。
+   */
+  public hasLocalFileEntries(inputItem): boolean {
+    return inputItem.type?.includes('array<file')
+      ? hasLocalFileItems(inputItem.uploadDatas)
+      : !!inputItem.file;
+  }
+
+  /** 互斥：当前参数是否已存在 URL 录入来源的条目（含默认值回填） */
+  public hasUrlFileEntries(inputItem): boolean {
+    return inputItem.type?.includes('array<file')
+      ? hasUrlFileItems(inputItem.uploadDatas)
+      : inputItem.uploadData?.fromUrl === true;
   }
 
   /** 清空多文件参数的全部已上传文件 */
@@ -885,6 +926,95 @@ export class DynamicNodeParamsComponent {
     );
     if (element) {
       element.nativeElement.click();
+    }
+  }
+
+  /** URL 模式新增条目（file-url-input 已完成协议头/扩展名校验与去重） */
+  public onAddUrlEntries(inputItem: any, urls: string[]): void {
+    // 互斥：已存在本地上传条目时禁止再录入 URL（file-url-input 已阻断，双保险）
+    if (!urls.length || this.hasLocalFileEntries(inputItem)) {
+      return;
+    }
+    inputItem.isEmpty = false;
+    if (inputItem.type?.includes('array<file')) {
+      inputItem.uploadDatas = [
+        ...(inputItem.uploadDatas || []),
+        ...urls.map((url) => createUrlFileItem(url)),
+      ];
+      this.parameterFromGroup.controls[inputItem.name]?.setValue(
+        inputItem.uploadDatas,
+      );
+    } else {
+      // 单文件：对齐上传成功路径（控件值 = inputItem，getDynamicParams 取 uploadData.url）
+      inputItem.uploadData = {
+        name: getUrlDisplayName(urls[0]),
+        progress: 'succeeded',
+        url: urls[0],
+        fromUrl: true,
+      };
+      inputItem.file = undefined;
+      this.parameterFromGroup.controls[inputItem.name]?.setValue(inputItem);
+      this.appFlowServe.setFileList(inputItem);
+    }
+  }
+
+  /** 供 URL 去重：当前已录入条目的 URL 列表（回填条目无 progress 字段，按 url 非空判断） */
+  public getExistingUrls(inputItem: any): string[] {
+    if (inputItem.type?.includes('array<file')) {
+      return (inputItem.uploadDatas || [])
+        .map((item) => item.url)
+        .filter(Boolean);
+    }
+    return inputItem.uploadData?.url ? [inputItem.uploadData.url] : [];
+  }
+
+  /**
+   * 编辑已录入的 URL 条目（原位编辑）：条目保留在列表中，切到 URL 模式
+   * 并把 URL 回填输入框，用户修改后点「保存」提交（onSaveUrlEntry），
+   * 点「取消」或切换页签放弃编辑（条目原值不受影响）。
+   */
+  public editUrlEntry(inputItem: any, fileItem?: any): void {
+    const url = fileItem?.url || inputItem.uploadData?.url;
+    if (!url || this.isUploading) {
+      return;
+    }
+    inputItem.urlMode = 'url';
+    inputItem.urlEditReq = { url };
+  }
+
+  /** 编辑态保存：按原 URL 定位条目并原位替换为新 URL（同步控件值） */
+  public onSaveUrlEntry(
+    inputItem: any,
+    edit: { originalUrl: string; url: string },
+  ): void {
+    if (inputItem.type?.includes('array<file')) {
+      const uploadDatas = inputItem.uploadDatas || [];
+      const index = uploadDatas.findIndex(
+        (item) => item.fromUrl === true && item.url === edit.originalUrl,
+      );
+      if (index < 0) {
+        return;
+      }
+      inputItem.uploadDatas = uploadDatas.map((item, i) =>
+        i === index
+          ? { ...item, url: edit.url, name: getUrlDisplayName(edit.url) }
+          : item,
+      );
+      this.parameterFromGroup.controls[inputItem.name]?.setValue(
+        inputItem.uploadDatas,
+      );
+    } else {
+      if (inputItem.uploadData?.url !== edit.originalUrl) {
+        return;
+      }
+      inputItem.uploadData = {
+        ...inputItem.uploadData,
+        url: edit.url,
+        name: getUrlDisplayName(edit.url),
+      };
+      // 单文件：对齐新增路径（控件值 = inputItem，getDynamicParams 取 uploadData.url）
+      this.parameterFromGroup.controls[inputItem.name]?.setValue(inputItem);
+      this.appFlowServe.setFileList(inputItem);
     }
   }
 

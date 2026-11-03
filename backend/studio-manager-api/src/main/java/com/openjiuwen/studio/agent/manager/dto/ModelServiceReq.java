@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 import org.hibernate.validator.constraints.Length;
@@ -30,23 +32,27 @@ public class ModelServiceReq implements Serializable {
 
     @JsonProperty("provider_id")
     @Schema(description = "供应商ID", example = "provider_001")
+    @NotBlank
     @Length(max = 40)
     private String providerId = null;
 
     @JsonProperty("service_name")
     @Schema(description = "服务名称", example = "my-service")
+    @NotNull
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\\\\\/:| -]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String serviceName = null;
 
     @JsonProperty("model_name")
     @Schema(description = "模型名称", example = "gpt-4")
+    @NotNull
     @Pattern(
         regexp = "^[\\u4e00-\\u9fa5a-zA-Z0-9](?:[\\u4e00-\\u9fa5a-zA-Z0-9_.\\\\\\/:| -@]{0,62}[\\u4e00-\\u9fa5a-zA-Z0-9_-])?$")
     private String modelName = null;
 
     @JsonProperty("model_type")
     @Schema(description = "模型类型", example = "LLM")
+    @NotNull
     @Pattern(regexp = "(LLM|Text-Embedding|RERANK|IMAGE-TO-TEXT)")
     private String modelType = null;
 
@@ -62,6 +68,7 @@ public class ModelServiceReq implements Serializable {
 
     @JsonProperty("api_url")
     @Schema(description = "API地址", example = "https://api.example.com/v1")
+    @NotBlank
     @Length(max = 255)
     private String apiUrl = null;
 
@@ -91,6 +98,7 @@ public class ModelServiceReq implements Serializable {
 
     @JsonProperty("interface_protocol")
     @Schema(description = "接口协议", example = "OpenAI")
+    @NotBlank
     private String interfaceProtocol = null;
 
     @JsonProperty("is_support_stream")

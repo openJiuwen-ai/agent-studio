@@ -149,7 +149,7 @@ class PluginAdapterImplTest {
             // 告诉 Mock：当代码请求 DomainID 时，返回 "test_domain_id"
             mockedRequestContext.when(RequestContextUtils::getRequestUserDomainId).thenReturn("test_domain_id");
 
-            when(redisClient.get(any(), any())).thenReturn("5");
+            when(redisClient.get(anyString())).thenReturn("5");
             when(pluginMapper.selectByPrimaryIdAndToolIdsWithSearchCriteria(any(), any(), any(),
                     eq(null))).thenReturn(pluginEntities);
             when(shareInnerService.getOriginSharedInfoByResourceId(anyList())).thenReturn(shareResourceEntities);
@@ -432,5 +432,64 @@ class PluginAdapterImplTest {
 
             pluginAdapterImpl.anonymizeAuthInfo(authInfo);
         }
+    }
+
+    /**
+     * 用例描述：验证 isNewTool 在 pluginEntity 为 null 时返回 false
+     * 预制条件：无
+     * 输入参数：pluginEntity = null
+     * 预期结果：返回 false
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testIsNewToolShouldReturnFalseWhenPluginEntityIsNull() throws Exception {
+        // When
+        boolean result = pluginAdapterImpl.isNewTool(null);
+
+        // Then
+        assertFalse(result);
+    }
+
+    /**
+     * 用例描述：验证 isNewTool 在 pluginEntity.requestInfo 为 null 时返回 false
+     * 预制条件：创建 PluginEntity，requestInfo 设为 null
+     * 输入参数：pluginEntity（requestInfo = null）
+     * 预期结果：返回 false
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testIsNewToolShouldReturnFalseWhenRequestInfoIsNull() throws Exception {
+        // Given
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setRequestInfo(null);
+
+        // When
+        boolean result = pluginAdapterImpl.isNewTool(pluginEntity);
+
+        // Then
+        assertFalse(result);
+    }
+
+    /**
+     * 用例描述：验证 isNewTool 在 pluginEntity.requestInfo 不含 basic_info 时返回 false
+     * 预制条件：创建 PluginEntity，requestInfo 设为不含 basic_info 的 JSON
+     * 输入参数：pluginEntity（requestInfo = '{"tool_id":"test"}'）
+     * 预期结果：返回 false
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void testIsNewToolShouldReturnFalseWhenRequestInfoWithoutBasicInfo() throws Exception {
+        // Given
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setRequestInfo("{\"tool_id\":\"test\"}");
+
+        // When
+        boolean result = pluginAdapterImpl.isNewTool(pluginEntity);
+
+        // Then
+        assertFalse(result);
     }
 }

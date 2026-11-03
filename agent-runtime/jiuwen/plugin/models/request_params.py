@@ -7,15 +7,13 @@ from typing import List
 
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.common.exception.status_code import StatusCode
-from jiuwen.common.log.base import logger, get_x_request_id, get_x_execution_id
-from openjiuwen.core.common.logging import workflow_logger
+from jiuwen.common.log.base import logger
 from jiuwen.common.types import ValueTypeEnum
-from jiuwen.orchestration.flow.constant import X_REQUEST_ID, X_EXECUTION_ID
-from agent_runtime.context.request_context import inject_traceparent
 from jiuwen.plugin.common import exception, constant
 from jiuwen.plugin.handlers.handler_manager import HandlerManager
 from jiuwen.plugin.models.api_utils import ApiUtils
 from jiuwen.plugin.models.param import Param
+from agent_runtime.context.request_context import strip_correlation_headers
 
 
 class ParamLocation(Enum):
@@ -140,10 +138,10 @@ class RequestParamsCreator:
         # 获取api_cert
         request_params.api_cert = self._api_cert
 
-        request_params.headers[X_REQUEST_ID] = get_x_request_id()
-        request_params.headers[X_EXECUTION_ID] = get_x_execution_id()
-        inject_traceparent(request_params.headers)
-        workflow_logger.debug(f"Plugin request headers: {request_params.headers}")
+        # D-02（SYNC-01 P3.4）：不向第三方（插件/MCP）传播平台关联 Header
+        # （X-Request-Id / X-Execution-Id / traceparent）——鉴权钩子保留。
+        # B07：配置/输入预置的同名伪造值也在最终边界剥离（大小写不敏感）。
+        strip_correlation_headers(request_params.headers)
 
         return request_params
 

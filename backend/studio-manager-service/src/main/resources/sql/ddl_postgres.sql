@@ -1107,6 +1107,35 @@ CREATE TABLE IF NOT EXISTS t_memory_repo (
     created_user_name varchar(255) NOT NULL,
     last_update_user_id varchar(64) DEFAULT NULL,
     last_update_user_name varchar(255) DEFAULT NULL,
+    memory_backend_type varchar(16) NOT NULL DEFAULT 'BUILTIN',
+    memory_service_instance_id varchar(64) DEFAULT NULL,
+    scope_model_config TEXT NULL,
+    create_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+-- migrate: add new columns to existing t_memory_repo (safe for re-run)
+ALTER TABLE t_memory_repo ADD COLUMN IF NOT EXISTS memory_backend_type varchar(16) NOT NULL DEFAULT 'BUILTIN';
+ALTER TABLE t_memory_repo ADD COLUMN IF NOT EXISTS memory_service_instance_id varchar(64) DEFAULT NULL;
+ALTER TABLE t_memory_repo ADD COLUMN IF NOT EXISTS scope_model_config TEXT NULL;
+
+-- memory service instance table (external agent-memory registration)
+CREATE TABLE IF NOT EXISTS t_memory_service_instance (
+    id varchar(64) NOT NULL,
+    name varchar(128) NOT NULL,
+    base_url varchar(512) NOT NULL,
+    api_key varchar(1024) DEFAULT NULL,
+    workspace_id varchar(64) NOT NULL,
+    project_id varchar(64) NOT NULL,
+    domain_id varchar(64) NOT NULL,
+    health_status varchar(16) DEFAULT 'UNKNOWN',
+    last_check_at TIMESTAMP NULL DEFAULT NULL,
+    deploy_meta TEXT NULL,
+    created_user_id varchar(64) NOT NULL,
+    created_user_name varchar(255) NOT NULL,
+    last_update_user_id varchar(64) DEFAULT NULL,
+    last_update_user_name varchar(255) DEFAULT NULL,
     create_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
@@ -2089,3 +2118,13 @@ CREATE INDEX IF NOT EXISTS idx_t_mapping_tool_function_updated_on ON t_mapping_t
 CREATE INDEX IF NOT EXISTS idx_create_time ON t_task (create_time);
 CREATE INDEX IF NOT EXISTS idx_status_time ON t_task (status, create_time);
 CREATE INDEX IF NOT EXISTS idx_finish_time ON t_task (finish_time);
+
+CREATE TABLE IF NOT EXISTS t_polling_trigger_state (
+    trigger_id          VARCHAR(64)   NOT NULL,
+    last_seen_hash      CHAR(64)      NULL,
+    last_checked_at     TIMESTAMP     NULL,
+    created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (trigger_id)
+);
+COMMENT ON TABLE t_polling_trigger_state IS 'Polling触发器运行状态表';

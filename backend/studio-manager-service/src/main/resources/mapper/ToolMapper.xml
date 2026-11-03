@@ -31,6 +31,7 @@
         <result column="credential_status" jdbcType="VARCHAR" property="credentialStatus"/>
         <result column="customize_node" jdbcType="TINYINT" property="customizeNode"/>
         <result column="published" jdbcType="TINYINT" property="published"/>
+        <result column="call_mode" jdbcType="VARCHAR" property="callMode"/>
         <association property="credentials" javaType="com.openjiuwen.studio.agent.manager.dto.ToolCredential">
             <id property="id" column="c_id"/>
             <result property="authKeys" column="c_auth_keys" typeHandler="com.openjiuwen.studio.agent.manager.mapper.handler.AuthKeyInfoListHandler"/>
@@ -97,7 +98,8 @@
         creator,
         creator_id,
         created_on,
-        updated_on
+        updated_on,
+        call_mode
     </sql>
     <select id="selectToolEntityWithCredential" parameterType="map" resultMap="BaseResultMap">
         select
@@ -120,6 +122,7 @@
             t.last_version_id,
             t.auth_required,
             t.metadata,
+            t.call_mode,
             t.creator,
             t.customize_node,
             t.creator_id,
@@ -188,7 +191,8 @@
         t.updated_on,
         t.published,
         t.trace_id,
-        t.workspace_id
+        t.workspace_id,
+        t.call_mode
         FROM t_tool t
         where tool_id = #{toolId,jdbcType=VARCHAR}
         <if test="projectId != null and projectId != ''">
@@ -333,7 +337,7 @@
         insert into t_tool (tool_id, project_id, workspace_id, tool_display_name, tool_chinese_name, tool_desc, icon, request_info,
                             auth_info, visibility, input_schema, output_schema, is_input_list, is_output_list,
                             intf_type,
-                            type, metadata, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free, category)
+                            type, metadata, call_mode, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free, category)
         values (#{toolId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=VARCHAR}, #{toolDisplayName,jdbcType=VARCHAR},
                 #{toolChineseName,jdbcType=VARCHAR},
                 #{toolDesc,jdbcType=VARCHAR}, #{icon,jdbcType=VARCHAR}, #{requestInfo,jdbcType=VARCHAR},
@@ -341,14 +345,14 @@
                 #{outputSchema,jdbcType=VARCHAR},
                 #{isInputList,jdbcType=VARCHAR}, #{isOutputList,jdbcType=VARCHAR}, #{intfType,jdbcType=VARCHAR},
                 #{type,jdbcType=VARCHAR},
-                #{metadata,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
+                #{metadata,jdbcType=VARCHAR}, #{callMode,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
                 #{iconName,jdbcType=VARCHAR}, #{testStatus,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR}, #{authRequired,jdbcType=BOOLEAN}, #{traceId,jdbcType=VARCHAR}, #{published,jdbcType=TINYINT}, #{isFree,jdbcType=TINYINT}, #{category,jdbcType=VARCHAR})
     </insert>
     <insert id="insertPlugin" parameterType="com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity">
         insert into t_tool (tool_id, project_id, workspace_id, tool_display_name, tool_chinese_name, tool_desc, icon, request_info,
                             auth_info, visibility, input_schema, output_schema, is_input_list, is_output_list,
                             intf_type,
-                            type, metadata, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free,category)
+                            type, metadata, call_mode, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free,category)
         values (#{pluginId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=VARCHAR}, #{pluginDisplayName,jdbcType=VARCHAR},
                 #{pluginChineseName,jdbcType=VARCHAR},
                 #{pluginDesc,jdbcType=VARCHAR}, #{icon,jdbcType=VARCHAR}, #{requestInfo,jdbcType=VARCHAR},
@@ -356,7 +360,7 @@
                 #{outputSchema,jdbcType=VARCHAR},
                 #{isInputList,jdbcType=VARCHAR}, #{isOutputList,jdbcType=VARCHAR}, #{intfType,jdbcType=VARCHAR},
                 #{type,jdbcType=VARCHAR},
-                #{metadata,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
+                #{metadata,jdbcType=VARCHAR}, #{callMode,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
                 #{iconName,jdbcType=VARCHAR}, #{testStatus,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR}, #{authRequired,jdbcType=BOOLEAN}, #{traceId,jdbcType=VARCHAR}, #{published,jdbcType=TINYINT}, #{isFree,jdbcType=TINYINT}, #{category,jdbcType=VARCHAR})
     </insert>
 
@@ -408,6 +412,9 @@
             </if>
             <if test="metadata != null">
                 metadata = #{metadata,jdbcType=VARCHAR},
+            </if>
+            <if test="callMode != null">
+                call_mode = #{callMode,jdbcType=VARCHAR},
             </if>
             <if test="createdOn != null">
                 created_on = #{createdOn,jdbcType=TIMESTAMP},

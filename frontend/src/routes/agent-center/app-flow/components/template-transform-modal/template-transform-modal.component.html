@@ -1,0 +1,127 @@
+<div class="flex h-full w-full flex-col" (keydown)="handleKeyDown($event)">
+  <div class="mb-[16px] block">
+    <div class="flex w-[calc(100%-38px)] items-center justify-between">
+      <div class="flex items-center gap-[8px]">
+        <img class="model-config-icon" [src]="icon" alt="template-transform" />
+        <edit-name [(name)]="nodeInfo.name" (onBlurConfirm)="updateName()"></edit-name>
+      </div>
+      <div class="flex items-center gap-[16px]" *ngIf="!isFlowReadonly">
+        <div (click)="onClickTest()" class="single-test-icon-modal" nz-tooltip [nzTooltipTitle]="'single-test' | i18nextEager"></div>
+      </div>
+    </div>
+    <node-description [nodeInfo]="nodeInfo" (descriptionChange)="updateView()"></node-description>
+    <div class="mt-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
+  </div>
+
+  <div class="relative h-full w-full flex-1 overflow-auto pr-[16px]">
+    <meta-acc-block class="mt-2 block w-full" [title]="'input_params' | i18nextEager">
+      <ng-template #content>
+        <div class="mt-2 flex items-center gap-2">
+          <div class="w-1/3 text-label">{{ 'param_name' | i18nextEager }}</div>
+          <div class="flex w-2/3 items-center gap-2 text-label">
+            <div class="flex h-fit w-full items-center">
+              <div class="w-[35%]">{{ 'type' | i18nextEager }}</div>
+              <div class="w-[65%]">{{ 'value' | i18nextEager }}</div>
+            </div>
+          </div>
+        </div>
+        <form #inputForm="ngForm">
+          <div *ngFor="let param of inputParams; index as i" class="mt-2 flex items-start gap-2">
+            <div class="w-1/3">
+              <input
+                style="width: 100%"
+                type="text"
+                [name]="'inputFormName' + i"
+                nz-input
+                [maxlength]="paramNameMaxLen"
+                [(ngModel)]="param.name"
+                [title]="param.name"
+                (focus)="rememberName(i)"
+                (ngModelChange)="changeUpdateTime()"
+                (blur)="onNameBlur(i)"
+                [placeholder]="'input_placeholder' | i18nextEager"
+                [valueValidityValidator]="getInputNames(i)"
+                [class.input-error]="
+                  inputForm?.controls['inputFormName' + i]?.invalid &&
+                  (inputForm?.controls['inputFormName' + i]?.dirty || inputForm?.controls['inputFormName' + i]?.touched)
+                "
+              />
+              <div
+                *ngIf="
+                  inputForm?.controls['inputFormName' + i]?.invalid &&
+                  (inputForm?.controls['inputFormName' + i]?.dirty || inputForm?.controls['inputFormName' + i]?.touched)
+                "
+                class="error-tip"
+              >
+                {{ inputForm?.controls['inputFormName' + i]?.errors?.serviceName?.tiErrorMessage }}
+              </div>
+            </div>
+            <div class="flex w-2/3 items-start gap-[8px]">
+              <div class="flex w-[calc(100%-16px)]">
+                <div class="w-[35%]">
+                  <nz-select
+                    class="combo-select-left"
+                    style="width: 100%"
+                    [name]="'inputFormType' + i"
+                    [nzOptions]="$any(inputSourceOptions)"
+                    [(ngModel)]="param.value.type"
+                    nzLabelKey="value"
+                    (ngModelChange)="onInputValueTypeChange(param)"
+                  ></nz-select>
+                </div>
+                <div class="w-[65%]">
+                  <input
+                    *ngIf="param.value.type === 'literal'"
+                    class="combo-select-right"
+                    style="width: 100%"
+                    [name]="'inputFormValue' + i"
+                    type="text"
+                    nz-input
+                    [(ngModel)]="param.value.content"
+                    (ngModelChange)="changeUpdateTime()"
+                    (blur)="handelSave()"
+                    [placeholder]="'input_placeholder' | i18nextEager"
+                  />
+                  <input-tree-select
+                    *ngIf="param.value.type === 'ref'"
+                    style="width: 100%"
+                    [(ngModel)]="param.value.content"
+                    [options]="param.refs"
+                    [name]="'inputFormValue' + i"
+                    (select)="treeSelect()"
+                    [placeholder]="'select_placeholder' | i18nextEager"
+                  ></input-tree-select>
+                </div>
+              </div>
+              <span
+                (click)="deleteInputParam(i)"
+                style="font-size: 16px; cursor: pointer; padding-top: 6px"
+                nz-icon
+                nzType="minus-circle"
+                nzTheme="outline"
+              ></span>
+            </div>
+          </div>
+        </form>
+        <div class="mt-2 cursor-pointer text-[#1476ff]" (click)="addInputParam()">+ {{ 'add_params' | i18nextEager }}</div>
+      </ng-template>
+    </meta-acc-block>
+
+    <meta-acc-block class="mt-4 block w-full" [title]="'code' | i18nextEager" [ngStyle]="{ height: '400px' }">
+      <ng-template #content>
+        <div class="mb-2 text-xs text-[#808080]">{{ 'template_transform_jinja_tip' | i18nextEager }}</div>
+        <form [formGroup]="modelFormGroup" class="editor-body">
+          <div class="editor-wrapper">
+            <ngx-monaco-editor [options]="editorOptions" formControlName="template"></ngx-monaco-editor>
+          </div>
+        </form>
+      </ng-template>
+    </meta-acc-block>
+
+    <meta-acc-block class="mt-4 block w-full" [title]="'output_params' | i18nextEager">
+      <ng-template #content>
+        <div class="mt-2 text-sm">output · string · {{ 'template_transform_output' | i18nextEager }}</div>
+      </ng-template>
+    </meta-acc-block>
+  </div>
+</div>

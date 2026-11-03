@@ -75,6 +75,16 @@
     </div>
     <div class="right-area flex-1 justify-end">
       <span
+        *ngIf="!isFlowReadonly"
+        class="icon-border inline-flex items-center justify-center cursor-pointer"
+        nz-tooltip
+        [nzTooltipTitle]="'trigger_setting' | i18nextEager"
+        nzTooltipPlacement="bottom"
+        (click)="openTriggerDrawer()"
+      >
+        <img alt="" width="16" height="16" [src]="changeUrl('assets/agent-center/agent/trigger-icon.svg')" />
+      </span>
+      <span
         class="icon-border inline-flex items-center justify-center cursor-pointer"
         nz-tooltip
         [nzTooltipTitle]="'release_history' | i18nextEager"

@@ -20,11 +20,19 @@ import { AssetGenerateLoadingIconComponent } from '@shared/components/assets/ass
 import { NoDataIconComponent } from '@shared/components/no-data-icon/no-data-icon.component';
 import { AssetAlertIconComponent } from '@shared/components/assets/asset-alert-icon/asset-alert-icon.component';
 import { initializeReqItem, pluginSchemaStr2Path } from '@routes/agent-center/app-plugin/utils';
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
+import { EnvironmentVariablesManagementService } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
 import { NzModalRef } from 'ng-zorro-antd/modal';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
+
+/** 加密环境变量的脱敏占位符：回填后通过必填校验，提交后由后端按默认环境解密解析 */
+const ENV_VAR_SECRET_MASK = '******';
+
+/** 运行时环境变量占位符前缀：加密变量提交该占位符，由后端按默认环境解密解析 */
+const ENV_VAR_PLACEHOLDER_PREFIX = '${_env.plugin_url_params.';
 
 @Component({
   selector: 'plugin-debug-modal',
@@ -89,6 +97,21 @@ export class PluginDebugModalComponent {
   public isLoading = false;
 
   public showResponseJson=false;
+
+  /** 绑定的环境变量在当前默认环境中缺失的参数清单（切换默认环境后常见），用于弹窗提示 */
+  public envVarMissingList: { paramName: string; varName: string }[] = [];
+
+  /** 当前默认环境名，用于缺失提示 */
+  public defaultEnvName = '';
+
+  /** 是否存在默认环境（存在绑定关系但未设置默认环境时为 false，用于提示） */
+  public hasDefaultEnv = true;
+
+  /** 调测参数是否已就绪（环境变量回填完成）；未就绪前禁止调测，避免提交空参数或未回填参数 */
+  public isParamsReady = false;
+
+  /** 环境变量加载是否失败（接口异常）：用于提示，并保证强转默认值不被误当作手填值提交 */
+  public envVarLoadFailed = false;
   constructor(
     private i18n: I18NextEagerPipe,
     private commonLogic: agentCommonLogic,
@@ -96,14 +119,112 @@ export class PluginDebugModalComponent {
     private appPluginRepoServe: AppPluginRepoService,
     private clipboard: Clipboard,
     private agentDataServe: AgentDataService,
+    private envManagementService: EnvManagementService,
+    private envVarService: EnvironmentVariablesManagementService,
   ) {}
 
   ngOnInit() {
     //插件路径参数
     let pluginPathArgs = pluginSchemaStr2Path(this.pluginBodyParams?.request_info?.basic_info?.input_schema)
     pluginPathArgs = pluginPathArgs.map((item) => initializeReqItem(item))
-    this.requestArgToDynamicForm = [...this.requestArgs,...pluginPathArgs];
-    this.registerJSONValidationSchema();
+    // requestArgs 为 @Input（与父组件共享引用）：浅拷贝每项并单独复制 value，回填环境变量时
+    // 不会污染父组件状态（避免影响父组件展示、保存或再次打开弹窗的初始值）
+    const requestArgToDynamicForm = [...this.requestArgs, ...pluginPathArgs].map((item) => ({
+      ...item,
+      value: { ...(item?.value || {}) },
+    }));
+    // 回填绑定的环境变量值：非加密变量直接填充，加密变量前端拿不到明文，交由后端按默认环境解析
+    this.applyBoundEnvVarValues(requestArgToDynamicForm).then((list) => {
+      this.requestArgToDynamicForm = list;
+      // 参数就绪后才允许调测，避免异步回填完成前提交空参数/未回填参数
+      this.isParamsReady = true;
+      this.registerJSONValidationSchema();
+    });
+  }
+
+  /**
+   * 回填 requestArgs 中通过 env_var_ref 绑定的环境变量值（取当前默认环境）。
+   * 加密变量（secret=true）接口只会返回 ****** 占位符，前端无法拿到明文，回填脱敏占位符由后端解析；
+   * 绑定的变量在默认环境中不存在时（如切换默认环境后），记录到 envVarMissingList 用于提示。
+   */
+  private async applyBoundEnvVarValues(list: any[]): Promise<any[]> {
+    if (!list?.some((item) => item?.env_var_ref)) {
+      return list;
+    }
+    this.envVarMissingList = [];
+    this.hasDefaultEnv = true;
+    this.envVarLoadFailed = false;
+    this.defaultEnvName = '';
+    try {
+      const envRes = await this.envManagementService.getEnvironmentList({
+        offset: 0,
+        limit: 99,
+        isDefault: true,
+      });
+      const envInfo = envRes?.env_info || [];
+      const defaultEnv = envInfo.find((env: any) => env.isDefault) || envInfo[0];
+      if (!defaultEnv?.id) {
+        this.hasDefaultEnv = false;
+        // 无默认环境时全部绑定字段均不可解析：登记后提交时会剔除被动态表单强转的 0/false，
+        // 避免其被后端误判为用户手填值而跳过回填与缺失拦截
+        this.collectBoundFieldNames(list);
+        return list;
+      }
+      this.defaultEnvName = defaultEnv.name || defaultEnv.id;
+      const varRes = await this.envVarService.getEnvVariablesDetail(defaultEnv.id);
+      const varMap = new Map<string, { content: string; secret: boolean }>();
+      (varRes?.variables || []).forEach((variable: any) => {
+        if (variable?.name) {
+          varMap.set(variable.name, {
+            content: variable?.value?.content ?? '',
+            secret: variable?.value?.secret === true,
+          });
+        }
+      });
+      list.forEach((item) => {
+        if (!item?.env_var_ref) {
+          return;
+        }
+        const matched = varMap.get(item.env_var_ref);
+        if (!matched) {
+          // 绑定的环境变量在当前默认环境中不存在（常见于切换默认环境后），记录用于提示
+          this.envVarMissingList.push({ paramName: item.name, varName: item.env_var_ref });
+          return;
+        }
+        item.envVarBound = true;
+        // 加密变量前端拿不到明文，回填脱敏占位符 ******：既能通过必填校验，又由后端按默认环境解密解析；
+        // 用户仍可手动覆盖该值（手动输入优先）。
+        if (matched.secret || matched.content === ENV_VAR_SECRET_MASK) {
+          item.envVarBoundSecret = true;
+          item.value = { ...(item.value || {}), default: ENV_VAR_SECRET_MASK };
+          item.controlValue = ENV_VAR_SECRET_MASK;
+          return;
+        }
+        if (!matched.content) {
+          // 变量存在但内容为空：同样视为不可解析，登记缺失清单，
+          // 避免非 string 字段被动态表单强转为 0/false 后当作手填值下发、后端跳过环境变量解析
+          this.envVarMissingList.push({ paramName: item.name, varName: item.env_var_ref });
+          return;
+        }
+        item.value = { ...(item.value || {}), default: matched.content };
+        item.controlValue = matched.content;
+      });
+    } catch (e) {
+      // 环境变量加载失败：绑定字段视为不可解析（避免强转出的 0/false 被当作手填值静默下发），并给出提示
+      this.envVarLoadFailed = true;
+      this.collectBoundFieldNames(list);
+    }
+    return list;
+  }
+
+  /** 将全部绑定字段登记为「当前环境不可解析」，供提交时剔除被动态表单强转的默认值 */
+  private collectBoundFieldNames(list: any[]): void {
+    this.envVarMissingList = [];
+    list.forEach((item: any) => {
+      if (item?.env_var_ref) {
+        this.envVarMissingList.push({ paramName: item.name, varName: item.env_var_ref });
+      }
+    });
   }
 
   /** 按钮禁用：rawResponse为空 或者 errorMessage为空 */
@@ -115,6 +236,10 @@ export class PluginDebugModalComponent {
   }
 
   public async onDebugging() {
+    // 安全兜底：参数未就绪（环境变量回填未完成）时直接返回，避免提交空参数或未回填参数
+    if (!this.isParamsReady) {
+      return;
+    }
     this.isLoading = false;
     let dynamicFormPass = true;
     // 检查基础类型入参
@@ -274,7 +399,66 @@ export class PluginDebugModalComponent {
 
   /** 点击【开始调测】，获取表单key-value，作为插件调测接口的入参 */
   private getDebugBodyParams() {
-    return this.dynamicFormIns?.getDynamicParams();
+    const params = this.dynamicFormIns?.getDynamicParams() || {};
+    // 加密环境变量字段保留 ****** 展示（通过必填校验），提交时替换为运行时占位符，
+    // 由后端按默认环境解密解析；用户手填的值原样提交。
+    this.requestArgToDynamicForm.forEach((item: any) => {
+      if (!item?.env_var_ref) {
+        return;
+      }
+      if (item.envVarBoundSecret && this.isUntouchedSecretField(item, params[item.name])) {
+        params[item.name] = `${ENV_VAR_PLACEHOLDER_PREFIX}${item.env_var_ref}}`;
+        return;
+      }
+      // 变量缺失的绑定字段：未手动修改时字段值只可能来自 schema 默认值 / 表单强转的 0/false / 脱敏掩码，
+      // 均不代表用户输入，提交时剔除该字段，交后端按必填性走缺失拦截（报错）或放行（非必填）
+      if (this.isMissingBoundVar(item.name) && this.isUntouchedMissingValue(item)) {
+        delete params[item.name];
+      }
+    });
+    return params;
+  }
+
+  /** 判断参数绑定的环境变量是否在当前默认环境中缺失 */
+  private isMissingBoundVar(paramName: string): boolean {
+    return this.envVarMissingList.some((missing) => missing.paramName === paramName);
+  }
+
+  /**
+   * 判断变量缺失的绑定字段是否「未手动修改」。
+   * 变量缺失时字段值只可能来自 schema 显式默认值、动态表单强转出的 0/false、或脱敏显示掩码 ******，
+   * 均不代表用户输入（且会干扰后端"变量缺失"判定）；未编辑（pristine）时一律不提交该字段，
+   * 交后端按必填性走缺失拦截/放行，与弹窗的缺失警示保持一致；用户手输的值（控件已 dirty）原样提交。
+   */
+  private isUntouchedMissingValue(item: any): boolean {
+    return this.dynamicFormIns?.isControlPristine(item?.name) === true;
+  }
+
+  /**
+   * 判断加密绑定字段是否仍为「未手动修改」的默认态。
+   * 动态表单会把非 string 类型默认值强制转换（integer/number 的 ****** → 0，boolean → false），
+   * 因此除固定掩码外还需识别这些转换后形态，否则掩码会被当成用户输入而无法替换为运行时占位符，
+   * 导致 0/false 被当作真实值下发且后端不再回填该加密变量。
+   * 类型强转后的 0/false 与用户真实输入无法从值本身区分，须结合表单控件 pristine 状态判定：
+   * 仅当控件未被用户编辑过时才视为默认态，用户手输的 0/false 原样提交（手动输入优先）。
+   */
+  private isUntouchedSecretField(item: any, submitted: any): boolean {
+    if (submitted === ENV_VAR_SECRET_MASK) {
+      // 掩码需结合 pristine 判定：用户手动输入的 ****** 原样提交（手动输入优先）；
+      // 未手动修改时才替换为运行时占位符，交由后端按默认环境解析
+      return this.dynamicFormIns?.isControlPristine(item.name) === true;
+    }
+    if (item?.type === 'integer' || item?.type === 'number') {
+      return (
+        typeof submitted === 'number' &&
+        (Number.isNaN(submitted) || submitted === 0) &&
+        this.dynamicFormIns?.isControlPristine(item.name) === true
+      );
+    }
+    if (item?.type === 'boolean') {
+      return submitted === false && this.dynamicFormIns?.isControlPristine(item.name) === true;
+    }
+    return false;
   }
 
   private registerJSONValidationSchema() {

@@ -204,14 +204,13 @@ public class SkillManagementServiceTest {
     @Test
     void testImportStudioSkill_Success() throws Exception {
         MultipartFile mockMultipartFile = mock(MultipartFile.class);
-        when(mockMultipartFile.getOriginalFilename()).thenReturn("test-skill.zip");
 
         File tempZipFile = File.createTempFile("agentBuilder-import-test-", ".zip");
         java.nio.file.Files.write(tempZipFile.toPath(), "mock-zip-content".getBytes(StandardCharsets.UTF_8));
         tempZipFile.deleteOnExit();
 
         Map<String, Object> mockFrontmatter = new HashMap<>();
-        mockFrontmatter.put("name", "Test Skill");
+        mockFrontmatter.put("name", "test-skill");
         mockFrontmatter.put("description", "A test skill");
 
         try (MockedStatic<MultipartFileToZipUtils> mockedZipUtil = mockStatic(MultipartFileToZipUtils.class);
@@ -222,24 +221,31 @@ public class SkillManagementServiceTest {
             mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("user-001");
             mockedReq.when(RequestContextUtils::getRequestUserName).thenReturn("tester");
             mockedZipUtil.when(() -> MultipartFileToZipUtils.convertToZipFile(any())).thenReturn(tempZipFile);
-            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class))).thenAnswer(i -> null);
-            mockedValidationUtil.when(ZipValidationUtils::getFrontmatter).thenReturn(mockFrontmatter);
+            // validateZipFile 直接返回 mockFrontmatter（取代原 getFrontmatter 静态变量方案）
+            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class)))
+                .thenAnswer(invocation -> mockFrontmatter);
+            // repackIfFlat 单文件夹结构返回原 zipFile（引用相等），覆盖 §5.2 "单文件夹包（回归）"分支
+            mockedValidationUtil.when(() -> ZipValidationUtils.repackIfFlat(any(File.class), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
             when(skillMapper.insert(any(SkillEntity.class))).thenReturn(1);
             when(skillVersionMapper.insert(any(SkillVersionEntity.class))).thenReturn(1);
             lenient().when(mgObsService.uploadObsFile(anyString(), any(InputStream.class), anyInt()))
-                .thenReturn("user-001/skills/a1bc4d53-9965-4ff7-bb8c-4ec9649fc808/a1bc4d53-9965-4ff7-bb8c-4ec9649fc808/agentBuilder-import-test-13846229055125705451.zip");
+                .thenReturn("user-001/skills/a1bc4d53-9965-4ff7-bb8c-4ec9649fc808/a1bc4d53-9965-4ff7-bb8c-4ec9649fc808/test-skill.zip");
             lenient().when(mgObsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong()))
                 .thenReturn("https://obs-url.com");
             ImportStudioSkillResponseBody result = skillManagementService.importStudioSkill("mock-workspace-id",
                 "mock-project-id", mockMultipartFile);
 
             assertNotNull(result);
-            assertEquals("Test Skill", result.getSkillName());
+            assertEquals("test-skill", result.getSkillName());
             assertEquals("A test skill", result.getDescription());
             assertNotNull(result.getVersionName());
             assertEquals(7, result.getVersionName().length());
             verify(skillMapper, times(1)).insert(any(SkillEntity.class));
             verify(skillVersionMapper, times(1)).insert(any(SkillVersionEntity.class));
+            // 验证 OBS 路径使用 skillName + ".zip"（不再用 multipartFile.getOriginalFilename()）
+            verify(mgObsService).uploadObsFile(org.mockito.ArgumentMatchers.contains("test-skill.zip"),
+                any(InputStream.class), anyInt());
         }
     }
 
@@ -286,22 +292,21 @@ public class SkillManagementServiceTest {
             mockedZipUtil.when(() -> MultipartFileToZipUtils.convertToZipFile(any()))
                 .thenReturn(mockZipFile);
 
-            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class))).thenAnswer(invocation -> {
-                Map<String, Object> frontmatter = new HashMap<>();
-                frontmatter.put("name", "Test Skill");
-                frontmatter.put("description", "A test skill");
-                return null;
-            });
+            // validateZipFile 直接返回 mockFrontmatter（取代原 getFrontmatter 静态变量方案）
+            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class)))
+                .thenAnswer(invocation -> {
+                    Map<String, Object> frontmatter = new HashMap<>();
+                    frontmatter.put("name", "test-skill");
+                    frontmatter.put("description", "A test skill");
+                    return frontmatter;
+                });
 
-            // Mock ZipValidationUtils.getFrontmatter
-            mockedValidationUtil.when(ZipValidationUtils::getFrontmatter).thenAnswer(invocation -> {
-                Map<String, Object> frontmatter = new HashMap<>();
-                frontmatter.put("name", "Test Skill");
-                frontmatter.put("description", "A test skill");
-                return frontmatter;
-            });
+            // repackIfFlat 返回原 mockZipFile（避免真实解压 mock 对象）
+            mockedValidationUtil.when(() -> ZipValidationUtils.repackIfFlat(any(File.class), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-            // 验证异常
+            // 验证异常：new FileInputStream(mockZipFile) 在 mock 上会抛 NPE（原测试同样依赖此行为），
+            // catch 块捕获后抛 UPLOAD_FILE_TO_OBS_FAILED
             AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
                 skillManagementService.importStudioSkill("mock-workspace-id", "mock-project-id", mockFile);
             });
@@ -462,5 +467,58 @@ public class SkillManagementServiceTest {
         }, "failed to generate temporary URL");
     }
 
+    @Test
+    void testImportStudioSkill_FlatPackage_RepacksToSkillNameStructure() throws Exception {
+        // 平铺包导入集成测试：mock repackIfFlat 返回新的临时 zip 文件，
+        // 验证 OBS 上传入参为重打包后的 zip（finalZipFile != zipFile），
+        // obsKey 末尾为 {skillName}.zip。
+        MultipartFile mockMultipartFile = mock(MultipartFile.class);
+
+        File originalZip = File.createTempFile("flat-original-", ".zip");
+        java.nio.file.Files.write(originalZip.toPath(), "original".getBytes(StandardCharsets.UTF_8));
+        originalZip.deleteOnExit();
+
+        // 模拟 repackIfFlat 返回的重打包临时 zip
+        File repackedZip = File.createTempFile("flat-repacked-", ".zip");
+        java.nio.file.Files.write(repackedZip.toPath(), "repacked".getBytes(StandardCharsets.UTF_8));
+        repackedZip.deleteOnExit();
+
+        Map<String, Object> mockFrontmatter = new HashMap<>();
+        mockFrontmatter.put("name", "flat-skill");
+        mockFrontmatter.put("description", "A flat-pack skill");
+
+        try (MockedStatic<MultipartFileToZipUtils> mockedZipUtil = mockStatic(MultipartFileToZipUtils.class);
+            MockedStatic<ZipValidationUtils> mockedValidationUtil = mockStatic(ZipValidationUtils.class);
+            MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-001");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("user-001");
+            mockedReq.when(RequestContextUtils::getRequestUserName).thenReturn("tester");
+            mockedZipUtil.when(() -> MultipartFileToZipUtils.convertToZipFile(any())).thenReturn(originalZip);
+            mockedValidationUtil.when(() -> ZipValidationUtils.validateZipFile(any(File.class)))
+                .thenAnswer(invocation -> mockFrontmatter);
+            // 模拟平铺包重打包：返回新的 repackedZip（与 originalZip 引用不同）
+            mockedValidationUtil.when(() -> ZipValidationUtils.repackIfFlat(any(File.class), anyString()))
+                .thenAnswer(invocation -> repackedZip);
+            when(skillMapper.insert(any(SkillEntity.class))).thenReturn(1);
+            when(skillVersionMapper.insert(any(SkillVersionEntity.class))).thenReturn(1);
+            lenient().when(mgObsService.uploadObsFile(anyString(), any(InputStream.class), anyInt()))
+                .thenReturn("user-001/skills/flat/flat-skill.zip");
+            lenient().when(mgObsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong()))
+                .thenReturn("https://obs-url.com");
+
+            ImportStudioSkillResponseBody result = skillManagementService.importStudioSkill("mock-workspace-id",
+                "mock-project-id", mockMultipartFile);
+
+            assertNotNull(result);
+            assertEquals("flat-skill", result.getSkillName());
+            // 验证 OBS 路径末尾为 flat-skill.zip（使用 skillName，不再用原始文件名 flat-original.zip）
+            // 且 uploadObsFile 入参为重打包后的 zip（finalZipFile != originalZip）
+            verify(mgObsService).uploadObsFile(
+                org.mockito.ArgumentMatchers.argThat(key -> key.endsWith("flat-skill.zip")),
+                any(InputStream.class),
+                anyInt());
+        }
+    }
 
 }

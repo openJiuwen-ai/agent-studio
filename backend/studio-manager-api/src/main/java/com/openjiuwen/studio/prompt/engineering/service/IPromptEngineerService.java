@@ -98,15 +98,6 @@ public interface IPromptEngineerService {
     PromptBaseInfo resumePromptTask(String projectId, String taskId, String workspaceId);
 
     /**
-     * startPromptTask
-     *
-     * @param projectId projectId
-     * @param taskId taskId
-     * @param workspaceId workspaceId
-     */
-    PromptBaseInfo startPromptTask(String projectId, String taskId, String workspaceId);
-
-    /**
      * updatePromptTaskDraft
      *
      * @param projectId projectId

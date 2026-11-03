@@ -142,8 +142,8 @@ The script automatically pulls and exports the following images:
 |-------|---------|
 | mysql | 8.0 |
 | redis | 7 |
-| minio/minio | RELEASE.2024-11-07T00-52-20Z |
-| minio/mc | RELEASE.2024-11-05T11-29-45Z |
+| pgsty/silo | RELEASE.2026-10-18T00-00-00Z |
+| pgsty/mc | RELEASE.2026-10-18T00-00-00Z |
 
 After export, transfer the `~/dep-images/` directory to the target machine's `dep-images/` directory.
 
@@ -314,7 +314,7 @@ needs to be merged into `.env`; that file is no longer used separately.
 
 - **L1/L2 (VictoriaLogs)**: Configured via `VICTORIA_LOGS_RETENTION`, default 7 days, auto-cleaned after expiry.
 - Java, Python runtime, and NGINX logs use real event timestamps from the log body; first import of historical logs won't pollute "recent logs" queries.
-- Both are independent from application local audit (180 days).
+- Both are independent from the application audit log (180-day retention by default). The audit log is disabled by default; to enable it, set `STUDIO_OPERATION_LOG_SWITCH=true` in `.env`. See the [Audit Log Guide](./audit-log-guide.md) for details.
 
 ### 7.4 More
 

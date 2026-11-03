@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import logging
 
 from agent_runtime.common.ir_interfaces import KnowledgeBaseConfigProvider
+from agent_runtime.common.config import settings
 from agent_runtime.context.request_context import _request_ctx
 from storage import get_storage_provider
 from common_utils.crypto_tool import CryptTool
@@ -69,10 +70,10 @@ class KBRetrievalConfig:
 _OBS_CONNECTION_PATH_TEMPLATE = "kb-connection/ir/connection/{connection_id}.json"
 _OBS_KB_PATH_TEMPLATE = "kb-connection/ir/knowledge-base/{knowledge_base_id}.json"
 
-# L1 缓存：进程内内存缓存，TTL 控制
+# L1 缓存：进程内内存缓存，TTL 控制（默认 300s，可通过环境变量 KB_CONFIG_CACHE_TTL 调整）
 _cache: Dict[str, dict] = {}
 _cache_ts: Dict[str, float] = {}
-_CACHE_TTL_SECONDS = 300  # 5 分钟
+_CACHE_TTL_SECONDS = settings.cache.kb_config_cache_ttl
 
 
 def _get_cached(key: str) -> Optional[dict]:

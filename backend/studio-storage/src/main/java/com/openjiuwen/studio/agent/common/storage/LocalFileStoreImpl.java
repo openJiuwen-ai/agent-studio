@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -84,6 +85,23 @@ public class LocalFileStoreImpl implements FileStore {
             return Files.readString(file, StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.error("read file failed: {}", path, e);
+            throw new RuntimeException("read file failed: " + path, e);
+        }
+    }
+
+    @Override
+    public String readOrNull(String path) {
+        // LOCAL 模式：NoSuchFileException（文件不存在=未发布）归一为 null（与 OBS readOrNull 的 404+NoSuchKey 语义对齐），
+        // 让 PublishUtils.getPublish 在 storage.type=LOCAL 下也能把"未发布"归一为 null → 导出返 400（而非 500）。
+        // 其他 IOException（真实 IO 故障，如权限/磁盘）抛出，不掩盖。
+        Path file = resolve(path);
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (NoSuchFileException e) {
+            log.warn("local file not found, treat as absent: {}", path);
+            return null;
+        } catch (IOException e) {
+            log.error("readOrNull file failed: {}", path, e);
             throw new RuntimeException("read file failed: " + path, e);
         }
     }

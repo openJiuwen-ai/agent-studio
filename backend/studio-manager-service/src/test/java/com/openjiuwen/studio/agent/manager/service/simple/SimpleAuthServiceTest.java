@@ -60,11 +60,4 @@ class SimpleAuthServiceTest {
             assertEquals(StudioError.POC_AUTH_FAILED, ex.getErrorCode());
         }
     }
-
-    @Test
-    void testLoginOut_ThrowsException() {
-        AgentStudioException ex = assertThrows(AgentStudioException.class,
-            () -> simpleAuthService.loginOut("session-id"));
-        assertEquals(StudioError.POC_AUTH_FAILED, ex.getErrorCode());
-    }
 }

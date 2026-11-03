@@ -14,6 +14,20 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from enum import Enum
+
+
+class ContextSource(str, Enum):
+    """请求上下文的入口来源标记（COM-05）。
+
+    仅由内部入口代码设置，不从外部输入读取；默认 NONE 以区分"尚未建立"
+    与"已建立的 Flask direct"。mounted 形态下外层 FastAPI 中间件已建立
+    上下文，Flask before_request 据此桥接而非二次建立。
+    """
+
+    NONE = "NONE"
+    FASTAPI_MOUNT = "FASTAPI_MOUNT"
+    FLASK_DIRECT = "FLASK_DIRECT"
 
 
 @dataclass
@@ -29,6 +43,10 @@ class RequestContext:
     # 已加载的环境变量（load_environment_variables 产出；由 populate_request_context
     # 中间件按 X-Environment-Id 加载写入，供 StudioModelClient 解析 apiUrl 占位符）
     env_variables: dict = field(default_factory=dict)
+    # COM-05: Builder 固定外层 request_id 槽位；缺失时输出空串，不回退 trace_id。
+    request_id: str = ""
+    # 入口来源标记（mounted 桥接 / Flask direct / 未建立）
+    source: ContextSource = ContextSource.NONE
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(
@@ -56,3 +74,11 @@ def get_request_customer_headers() -> dict:
 def get_env_variables() -> dict:
     """环境变量 getter，供 model_service ports 注入（StudioModelClient 解析 apiUrl 占位符）。"""
     return _request_ctx.get().env_variables or {}
+
+
+def get_request_id() -> str:
+    """返回当前请求的 request_id；无上下文或 COM-05 尚未选定时返回空串。
+
+    调用方据此输出空槽，不得以 trace_id 或其他字段回填（DEF-05）。
+    """
+    return _request_ctx.get().request_id or ""

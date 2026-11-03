@@ -22,7 +22,6 @@ SYSTEM_PROMPT = """# 角色
 1. 如果需要向用户提问，直接返回你的问题。
 2. 如果不需要询问，请以markdown格式返回一个json字典。
 """
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
 
 
 class AskUserModule:

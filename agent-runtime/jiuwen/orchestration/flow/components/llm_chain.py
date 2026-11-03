@@ -59,8 +59,6 @@ _TYPE = "type"
 _INSTRUCTION_NAME = "instruction_name"
 _TEMPLATE_NAME = "template_name"
 
-LOG_VERBOSE_MODE = os.getenv("LOG_VERBOSE", "false").lower() == "true"
-
 
 class LLMChainModelConfig(BaseModel):
     model_name: StrictStr = Field(alias="modelName")
@@ -865,6 +863,10 @@ class LLMChain(Invokable):
         """
         在 invoke 之前校验模板源，拦截危险占位符（如 query.__class__、表达式等）。
         只依赖模板字符串，不依赖运行时 inputs。
+
+        注意：allowLiteralBraces 仅在 openjiuwen extension LLM 路径完整生效
+        （校验 + 渲染保留字面量）。本 legacy 路径不做半吊子放宽，避免校验通过后
+        assembler 静默抹掉未声明占位符。
         """
         template = getattr(prompt_instance, "template", None)
         if template is None:
@@ -949,9 +951,7 @@ class LLMChain(Invokable):
             raise JiuWenBaseException(
                 error_code=StatusCode.WORKFLOW_LLM_INIT_ERROR.code,
                 message=StatusCode.WORKFLOW_LLM_INIT_ERROR.errmsg.format(
-                    msg=format_pydantic_validation_error_message(e)
-                    if LOG_VERBOSE_MODE
-                    else str(type(e).__name__)
+                    msg=str(type(e).__name__)
                 ),
             ) from e
 

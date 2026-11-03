@@ -77,6 +77,9 @@ public class ToolEntity {
     @JsonProperty("metadata")
     private String metadata;
 
+    @JsonProperty("call_mode")
+    private String callMode;
+
     @JsonProperty("creator")
     private String creator;
 

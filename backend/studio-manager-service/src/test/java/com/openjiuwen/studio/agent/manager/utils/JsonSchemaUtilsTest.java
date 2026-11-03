@@ -168,4 +168,27 @@ class JsonSchemaUtilsTest {
         String schema = "{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}";
         assertTrue(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
     }
+
+    @Test
+    void testIsJsonSchemaValid_FileParamWithoutDefaultValue() {
+        // FEAT-073：file/<子类型> 为合法类型标识，按前缀放行
+        String schema = "{\"type\":\"object\",\"properties\":{\"pic\":{\"type\":\"file/image\",\"description\":\"pic\",\"location\":\"Body\"}}}";
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_FileParamWithDefaultValue() {
+        // FEAT-073 回归：file/<子类型> 带 default 时不得经
+        // JsonSchemaType.valueOf("FILE/IMAGE")（IllegalArgumentException→接口500），
+        // 其默认值为文件 URL 字符串，无类型格式校验，直接放行
+        String schema = "{\"type\":\"object\",\"properties\":{\"pic\":{\"type\":\"file/image\",\"description\":\"pic\",\"location\":\"Body\",\"default\":\"https://example.com/a.png\"}}}";
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_FileArrayParamWithDefaultValue() {
+        // array<file/image> 的 items 带 default 同样放行
+        String schema = "{\"type\":\"object\",\"properties\":{\"pics\":{\"type\":\"array\",\"description\":\"pics\",\"location\":\"Body\",\"items\":{\"type\":\"file/image\",\"description\":\"pic\",\"location\":\"Body\",\"default\":\"https://example.com/a.png\"}}}}";
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+    }
 }

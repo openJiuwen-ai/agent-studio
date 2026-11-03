@@ -1,5 +1,5 @@
 import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild, ChangeDetectorRef } from '@angular/core';
-import { FormBuilder, NgForm } from '@angular/forms';
+import { AbstractControl, FormBuilder, NgForm } from '@angular/forms';
 import { I18nNamespace } from '@i18n';
 import { RefSelectedRequireDirective } from '@shared/directives/common-validator.directive';
 import {
@@ -692,16 +692,34 @@ export class LLMModalComponent extends ModalBaseComponent implements OnInit, OnD
     if (names && names.indexOf(param.name) > -1) {
       names.splice(names.indexOf(param.name), 1);
     }
-    return { existingValues: names };
+    return { existingValues: names ?? [] };
   }
 
   onNameChange() {
     window.setTimeout(() => {
-      this.inputForm?.form?.markAsDirty();
-      this.outputForm?.form?.markAsDirty();
+      // 改名后重跑同组兄弟控件的校验：Angular 模板驱动校验器仅在控件"自身值变化"时才重跑，
+      // 消除一次冲突（改掉冲突一方）时，曾冲突、自身值未变的一方不会自动重跑，会残留"重复"误报。
+      // 关键：FormGroup.updateValueAndValidity() 只重跑 FormGroup 自身校验并向上冒泡，
+      // 不会向下遍历重跑子 FormControl 的校验器，因此必须逐个对 FormControl 调用
+      // updateValueAndValidity() 才能真正清除兄弟控件的残留误报。setTimeout 确保此前由
+      // input 事件触发的 change detection 已用最新数据刷新了各控件的 existingValues 绑定。
+      const forms: (NgForm | undefined)[] = [this.inputForm, this.outputForm];
       if (this.isVisionModel) {
-        this.inputFormVision?.form?.markAsDirty();
+        forms.push(this.inputFormVision);
       }
+      forms.forEach(form => {
+        const group = form?.form;
+        if (!group) {
+          return;
+        }
+        const controls = group.controls;
+        const controlList: AbstractControl[] =
+          controls instanceof Map ? Array.from(controls.values()) : Object.values(controls);
+        controlList.forEach((control: AbstractControl) => {
+          control.updateValueAndValidity({ emitEvent: false });
+        });
+        group.markAsDirty();
+      });
     });
   }
 

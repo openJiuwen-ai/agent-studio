@@ -42,6 +42,7 @@ public class IRAdapter {
         IR_NODE_ADAPTER_MAP.put(NodeType.START.getType(), new StartNodeAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.LLM.getType(), new LLMNodeAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.CODE.getType(), new CodeNodeAdapter());
+        IR_NODE_ADAPTER_MAP.put(NodeType.TEMPLATE_TRANSFORM.getType(), new TemplateTransformNodeAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.BRANCH.getType(), new BranchNodeAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.END.getType(), new EndNodeAdapter());
         IR_NODE_ADAPTER_MAP.put(NodeType.MESSAGE.getType(), new MessageNodeAdapter());

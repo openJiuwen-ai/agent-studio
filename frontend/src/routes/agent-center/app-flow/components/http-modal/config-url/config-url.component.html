@@ -1,0 +1,73 @@
+<meta-acc-block class="block">
+  <ng-template #blockTitle>
+    <div class="flex items-center gap-[4px] font-bold">
+      <span>API</span>
+      <span nz-icon nzType="question-circle" nzTheme="outline"
+        nz-tooltip [nzTooltipTitle]="'address_api_interface' | i18nextEager"
+        style="font-size: 14px; color: #808080; cursor: pointer;">
+      </span>
+    </div>
+  </ng-template>
+
+  <ng-template #content>
+    <div class="mt-2 flex items-center gap-2">
+      <div class="w-1/4 text-label">{{ 'request_method' | i18nextEager }}</div>
+      <div class="w-1/4 text-label">{{ 'domain_name' | i18nextEager }}</div>
+      <div class="w-1/2 text-label">{{ 'path' | i18nextEager }}</div>
+    </div>
+    <form #apiForm="ngForm">
+      <div class="mt-2 flex items-start gap-2">
+        <div class="w-1/4">
+          <nz-select
+            style="width: 100%"
+            [(ngModel)]="configs.method"
+            name="method"
+            (ngModelChange)="onSaveChange()"
+          >
+            <nz-option *ngFor="let opt of methodOptions" [nzLabel]="opt.label" [nzValue]="opt.value"></nz-option>
+          </nz-select>
+        </div>
+        <div class="w-1/4">
+          <input
+            nz-input
+            name="endpoint"
+            required
+            urlValidator
+            [(ngModel)]="configs.endpoint"
+            [placeholder]="'please_enter_url' | i18nextEager"
+            [title]="configs.endpoint"
+            (ngModelChange)="changeUpdateTime()"
+            (blur)="onSaveChange()"
+            [class.input-error]="apiForm?.controls['endpoint']?.invalid && (apiForm?.controls['endpoint']?.dirty || apiForm?.controls['endpoint']?.touched)"
+          />
+          <div *ngIf="apiForm?.controls['endpoint']?.invalid && (apiForm?.controls['endpoint']?.dirty || apiForm?.controls['endpoint']?.touched)" class="error-tip">
+            {{apiForm?.controls['endpoint']?.errors?.serviceName?.tiErrorMessage}}
+          </div>
+        </div>
+        <div class="flex w-1/2">
+          <div class="w-[12%]">
+            <input
+              nz-input
+              class="combo-select-left"
+              style="text-align: center;"
+              disabled
+              name="prefix"
+              [(ngModel)]="prefix"
+            />
+          </div>
+          <div class="w-[88%]">
+            <input
+              nz-input
+              class="combo-select-right"
+              name="path"
+              [(ngModel)]="path"
+              [placeholder]="'path_placeholder' | i18nextEager"
+              [title]="path"
+              (ngModelChange)="onPathChange()"
+            />
+          </div>
+        </div>
+      </div>
+    </form>
+  </ng-template>
+</meta-acc-block>

@@ -18,4 +18,6 @@ public class DatasourceExecuteResp implements Serializable {
     private List<Map<String, Object>> outputList = new ArrayList<>();
 
     private int rowNum;
+
+    private String markdownTable;
 }

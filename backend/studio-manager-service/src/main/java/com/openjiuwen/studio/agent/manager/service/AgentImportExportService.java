@@ -1771,6 +1771,8 @@ public class AgentImportExportService {
             transferResource.setFilename("tools.jsonl");
             transferResource.setLength((long) bytes.length);
             return transferResource;
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to export the plug-in.", e);
             throw new AgentStudioException(StudioError.TOOL_EXPORT_FILE);

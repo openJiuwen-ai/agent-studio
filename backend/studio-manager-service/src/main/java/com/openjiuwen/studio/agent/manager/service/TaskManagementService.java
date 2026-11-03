@@ -80,9 +80,6 @@ public class TaskManagementService implements ITaskManagementService {
         TaskEntity taskEntity = getTaskEntityById(projectId, workflowId, taskId, workspaceId);
 
         CancelTaskRsp cancelTaskRsp = new CancelTaskRsp().setId(taskId).setWorkflowId(workflowId);
-        if (StringUtils.isEmpty(taskEntity.getId())) {
-            return cancelTaskRsp.setStatus(TaskStatus.FAILED).setMessage("Please check your permission!");
-        }
         // 取消初始化和允许中任务，同时释放线程池和连接池
         if (Strings.CS.equals(taskEntity.getStatus(), TaskStatus.INIT.getValue()) || Strings.CS.equals(
                 taskEntity.getStatus(), TaskStatus.RUNNING.getValue())) {
@@ -95,10 +92,10 @@ public class TaskManagementService implements ITaskManagementService {
             taskRuntimeService.cancelTask(taskId);
             setUserQueryToHistory(workflowId, taskEntity.getConversationId(), currentDate, "会话取消",
                     MessageRole.ASSISTANT.name().toLowerCase(Locale.ROOT));
-            return cancelTaskRsp.setStatus(TaskStatus.valueOf(taskEntity.getStatus()))
+            return cancelTaskRsp.setStatus(TaskStatus.fromValue(taskEntity.getStatus()))
                     .setMessage(taskEntity.getMessage());
         } else {
-            return cancelTaskRsp.setStatus(TaskStatus.valueOf(taskEntity.getStatus()))
+            return cancelTaskRsp.setStatus(TaskStatus.fromValue(taskEntity.getStatus()))
                     .setMessage("Task status is not init or running!");
         }
     }
@@ -170,9 +167,7 @@ public class TaskManagementService implements ITaskManagementService {
     public CommonDeleteRsp deleteTask(String projectId, String workflowId, String taskId, String workspaceId) {
         TaskEntity taskEntity = getTaskEntityById(projectId, workflowId, taskId, workspaceId);
         CommonDeleteRsp commonDeleteRsp = new CommonDeleteRsp().setId(taskId);
-        if (!StringUtils.isEmpty(taskEntity.getId())) {
-            asyncTaskMapper.deleteByIds(Collections.singletonList(taskId));
-        }
+        asyncTaskMapper.deleteByIds(Collections.singletonList(taskId));
         return commonDeleteRsp;
     }
 
@@ -204,10 +199,7 @@ public class TaskManagementService implements ITaskManagementService {
                 Duration.ofDays(taskAsyncExpireDays));
 
         TaskEntity taskEntity = getTaskEntityById(projectId, workflowId, taskId, workspaceId);
-        if (StringUtils.isEmpty(taskEntity.getId())) {
-            throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_TASK_NOT_FOUND);
-        }
-        checkStatus(TaskStatus.valueOf(taskEntity.getStatus()), taskEntity.getType());
+        checkStatus(TaskStatus.fromValue(taskEntity.getStatus()), taskEntity.getType());
         Date currentTime = new Date(System.currentTimeMillis());
         taskEntity.setStatus(TaskStatus.INIT.getValue());
         taskEntity.setUpdateTime(currentTime);
@@ -254,7 +246,7 @@ public class TaskManagementService implements ITaskManagementService {
                 .build();
         List<TaskEntity> taskEntities = asyncTaskMapper.getTaskEntity(filter, null, null);
         if (taskEntities.isEmpty()) {
-            return TaskEntity.builder().build();
+            throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_TASK_NOT_FOUND);
         }
         return taskEntities.get(0);
     }
@@ -264,7 +256,7 @@ public class TaskManagementService implements ITaskManagementService {
                 .setName(taskEntity.getName())
                 .setType(taskEntity.getType())
                 .setIsPublished(taskEntity.getIsPublished())
-                .setStatus(TaskStatus.valueOf(taskEntity.getStatus()))
+                .setStatus(TaskStatus.fromValue(taskEntity.getStatus()))
                 .setCreateTime(taskEntity.getCreateTime())
                 .setFinishTime(taskEntity.getFinishTime());
     }
@@ -276,7 +268,7 @@ public class TaskManagementService implements ITaskManagementService {
                 .setIsPublished(taskEntity.getIsPublished())
                 .setInputs(JSONObject.parseObject(taskEntity.getInputs()))
                 .setOutputs(JSONObject.parseObject(taskEntity.getOutputs()))
-                .setStatus(TaskStatus.valueOf(taskEntity.getStatus()))
+                .setStatus(TaskStatus.fromValue(taskEntity.getStatus()))
                 .setMessage(StringUtils.isEmpty(taskEntity.getMessage()) ? null : taskEntity.getMessage())
                 .setCreateTime(taskEntity.getCreateTime())
                 .setUpdateTime(taskEntity.getUpdateTime())
@@ -291,6 +283,9 @@ public class TaskManagementService implements ITaskManagementService {
     }
 
     public void checkStatus(TaskStatus currentStatus, String workflowType) {
+        if (currentStatus == null) {
+            throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_NOT_PENDING);
+        }
         switch (currentStatus) {
             case INIT, RUNNING:
                 throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_NOT_PENDING);

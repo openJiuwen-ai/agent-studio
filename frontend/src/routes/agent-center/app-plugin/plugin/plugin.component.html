@@ -59,7 +59,7 @@
           <div
             class="!flex flex-col gap-4 h-[80%]"
             style="background: #ffffff; padding: 24px; margin-top: 12px"
-            *ngIf="plugin && plugin?.call_mode !== 'functiongraph'"
+            *ngIf="plugin && (plugin?.call_mode === 'api' || !plugin?.call_mode)"
           >
             <div class="flex flex-between">
               <div class="text-sm font-bold text-label">

@@ -22,4 +22,14 @@ public class MgAsyncService {
     public void callRunAgentStream(Runnable runnable) {
         runnable.run();
     }
+
+    /**
+     * Submits a Polling check to its dedicated executor. The check itself runs synchronously on that executor thread.
+     *
+     * @param runnable Polling URL check
+     */
+    @Async("pollingCheckExecutor")
+    public void callPollingCheck(Runnable runnable) {
+        runnable.run();
+    }
 }

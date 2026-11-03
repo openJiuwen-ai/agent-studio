@@ -1,0 +1,83 @@
+<div class="file-url-input" *ngIf="showUrlTab">
+  <div class="url-mode-tabs">
+    <span
+      class="url-mode-tab"
+      [class.url-mode-tab-active]="mode === 'upload'"
+      [class.url-mode-tab-disabled]="disabled"
+      (click)="switchMode('upload')"
+    >
+      {{ 'url_mode_local' | i18nextEager }}
+    </span>
+    <span
+      class="url-mode-tab"
+      [class.url-mode-tab-active]="mode === 'url'"
+      [class.url-mode-tab-disabled]="disabled"
+      (click)="switchMode('url')"
+    >
+      {{ 'url_mode_url' | i18nextEager }}
+    </span>
+  </div>
+
+  <div class="url-pane" *ngIf="mode === 'url'">
+    <div class="url-blocked-tip" *ngIf="localEntriesExist">
+      {{ 'url_blocked_by_local_files' | i18nextEager }}
+    </div>
+    <ng-container *ngIf="!localEntriesExist">
+      <textarea
+        class="url-textarea"
+        nz-input
+        [(ngModel)]="urlText"
+        [rows]="isMulti ? 3 : 1"
+        [placeholder]="
+          (isMulti ? 'url_input_placeholder_multi' : 'url_input_placeholder_single')
+            | i18nextEager
+        "
+      ></textarea>
+      <div class="url-pane-footer">
+        <span class="url-accept-hint" [title]="acceptHint">
+          {{ acceptHint }}
+        </span>
+        <ng-container *ngIf="!editingUrl; else editActions">
+          <button
+            nz-button
+            nzSize="small"
+            type="button"
+            [disabled]="disabled"
+            (click)="onAdd()"
+          >
+            {{ 'add' | i18nextEager }}
+          </button>
+        </ng-container>
+        <ng-template #editActions>
+          <span class="url-pane-actions">
+            <button
+              nz-button
+              nzSize="small"
+              type="button"
+              [disabled]="disabled"
+              (click)="onCancelEdit()"
+            >
+              {{ 'cancel' | i18nextEager }}
+            </button>
+            <button
+              nz-button
+              nzSize="small"
+              nzType="primary"
+              type="button"
+              [disabled]="disabled"
+              (click)="onAdd()"
+            >
+              {{ 'save' | i18nextEager }}
+            </button>
+          </span>
+        </ng-template>
+      </div>
+      <div class="url-error" *ngIf="error">
+        {{ error | i18nextEager: errorParams }}
+      </div>
+      <div class="url-dedup-tip" *ngIf="dedupedTip">
+        {{ 'url_dedup_tip' | i18nextEager }}
+      </div>
+    </ng-container>
+  </div>
+</div>

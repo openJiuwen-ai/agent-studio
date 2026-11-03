@@ -9,6 +9,7 @@ from typing import List, Dict, Optional, Any
 
 import regex
 from agent_builder.common.logging.base import logger
+from agent_builder.serve.common.concurrency import submit_with_log_vars
 from agent_builder.common.status import TaskStatus
 from agent_builder.prompt.common.config import LLMModelInfo
 from agent_builder.prompt.mmapo.apo_evaluator import ApoEvaluatorWithRef
@@ -178,7 +179,7 @@ class ApoOptimizer(JointOptimizer):
         with ThreadPoolExecutor(
             max_workers=min(WORKERS_NUM, len(all_prompts))
         ) as executor:
-            futures = [executor.submit(worker, prompt) for prompt in all_prompts]
+            futures = [submit_with_log_vars(executor, worker, prompt) for prompt in all_prompts]
             for future in as_completed(futures):
                 result = future.result()
                 mc_sampled_prompts += result
@@ -226,7 +227,7 @@ class ApoOptimizer(JointOptimizer):
             max_workers=min(WORKERS_NUM, len(self._candidates))
         ) as executor:
             futures = {
-                executor.submit(process_candidate, prompt): prompt
+                submit_with_log_vars(executor, process_candidate, prompt): prompt
                 for prompt in self._candidates
             }
             for future in as_completed(futures):

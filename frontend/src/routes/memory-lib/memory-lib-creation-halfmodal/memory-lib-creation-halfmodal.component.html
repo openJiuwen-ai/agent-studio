@@ -7,8 +7,10 @@
   <nz-spin [nzSpinning]="loading()">
     <div class="memory-lib-creation-content">
       <!-- 基础信息区块 -->
-      <section class="creation-section">
-        <h3 class="section-title">{{ 'memory.create.basic.title' | i18nextEager }}</h3>
+      <div class="mb-6">
+        <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
+          {{ 'memory.create.basic.title' | i18nextEager }}
+        </div>
 
         <form nz-form nzLayout="vertical" [formGroup]="basicInfoFormGroup">
           <nz-form-item>
@@ -21,16 +23,21 @@
           <nz-form-item>
             <nz-form-label nzRequired>{{ 'memory.detail.name' | i18nextEager }}</nz-form-label>
             <nz-form-control [nzErrorTip]="nameErrorTpl">
-              <input nz-input formControlName="name" [placeholder]="'memory.detail.name' | i18nextEager" />
+              <input
+                nz-input
+                type="text"
+                formControlName="name"
+                maxlength="50"
+                style="width: 100%"
+                [placeholder]="'input_placeholder' | i18nextEager"
+              />
               <ng-template #nameErrorTpl let-control>
-                <div class="error-message-container">
-                  @if (control.hasError('required')) {
-                    名称必须输入
-                  }
-                  @if (control.hasError('name')) {
-                    {{ control.getError('name').tiErrorMessage }}
-                  }
-                </div>
+                @if (control.hasError('required')) {
+                  {{ 'memory.create.errorTip.nameRequired' | i18nextEager }}
+                }
+                @if (control.hasError('name')) {
+                  {{ control.getError('name').tiErrorMessage }}
+                }
               </ng-template>
               <div class="tip-text mt-1">
                 {{ 'memory.create.tip.nameRegxWithNumber' | i18nextEager: { currentNameLength } }}
@@ -40,28 +47,34 @@
 
           <nz-form-item>
             <nz-form-label>{{ 'memory.create.descriptionOptional' | i18nextEager }}</nz-form-label>
-            <nz-form-control nzHasFeedback>
+            <nz-form-control>
               <textarea
                 nz-input
                 formControlName="description"
                 [nzAutosize]="{ minRows: 3, maxRows: 6 }"
                 [placeholder]="'memory.create.descriptionPlaceholder' | i18nextEager"
                 maxlength="1000"
+                style="width: 100%; resize: vertical"
               ></textarea>
             </nz-form-control>
           </nz-form-item>
         </form>
-      </section>
+      </div>
 
       <!-- 策略配置区块 -->
-      <section class="creation-section">
-        <div class="section-header">
-          <h3 class="section-title">
-            {{ 'memory.create.title.lmtStrategy' | i18nextEager }}
-            <span nz-icon nzType="question-circle" nzTheme="outline" nz-tooltip></span>
-          </h3>
-          <p class="section-description">{{ 'memory.create.title.lmtStrategyDescription' | i18nextEager }}</p>
+      <div class="mb-6">
+        <div class="section-header mb-2 flex items-center gap-[4px] text-[16px] font-bold text-gray-800">
+          <span>{{ 'memory.create.title.lmtStrategy' | i18nextEager }}</span>
+          <span
+            class="link-tip-class"
+            nz-icon
+            nzType="question-circle"
+            nzTheme="outline"
+            nz-tooltip
+            [nzTooltipTitle]="helpConfig.iconTip"
+          ></span>
         </div>
+        <p class="section-description mb-4">{{ 'memory.create.title.lmtStrategyDescription' | i18nextEager }}</p>
 
         <form [formGroup]="ltmRetrievalStrategyFormGroup">
           <nz-form-item>
@@ -70,22 +83,20 @@
             </nz-form-control>
           </nz-form-item>
         </form>
-      </section>
+      </div>
 
       <!-- 提取频率配置区块 -->
-      <section class="creation-section">
-        <div class="section-header">
-          <h3 class="section-title">
-            {{ 'memory.create.title.extractionFrequency' | i18nextEager }}
-          </h3>
-          <p class="section-description">{{ 'memory.create.title.extractionFrequencyDescription' | i18nextEager }}</p>
+      <div class="mb-6">
+        <div class="section-header mb-2 text-[16px] font-bold text-gray-800">
+          {{ 'memory.create.title.extractionFrequency' | i18nextEager }}
         </div>
+        <p class="section-description mb-4">{{ 'memory.create.title.extractionFrequencyDescription' | i18nextEager }}</p>
 
         <form nz-form nzLayout="vertical" [formGroup]="extractionFrequencyFormGroup">
           <div class="extraction-frequency-row">
             <nz-form-item class="extraction-frequency-item">
               <nz-form-label>{{ 'memory.create.conversationRound' | i18nextEager }}</nz-form-label>
-              <nz-form-control [nzErrorTip]="'范围1~30'">
+              <nz-form-control [nzErrorTip]="'memory.create.errorTip.range.conversationRound' | i18nextEager">
                 <div class="input-with-unit">
                   <nz-input-number
                     formControlName="conversation_round"
@@ -101,7 +112,7 @@
 
             <nz-form-item class="extraction-frequency-item">
               <nz-form-label>{{ 'memory.create.timeSpan' | i18nextEager }}</nz-form-label>
-              <nz-form-control [nzErrorTip]="'范围5~60'">
+              <nz-form-control [nzErrorTip]="'memory.create.errorTip.range.timeSpan' | i18nextEager">
                 <div class="input-with-unit">
                   <nz-input-number
                     formControlName="time_span"
@@ -116,7 +127,7 @@
             </nz-form-item>
           </div>
         </form>
-      </section>
+      </div>
     </div>
   </nz-spin>
 </div>
@@ -124,7 +135,7 @@
 <!-- 页脚结构 -->
 <div class="com-drawer-footer">
   <button nz-button nzType="default" (click)="dismiss()">{{ 'cancel' | i18nextEager }}</button>
-  <button nz-button nzType="primary" class="ml-[8px]" (click)="close()">
+  <button nz-button nzType="primary" (click)="close()">
     {{ 'ok' | i18nextEager }}
   </button>
 </div>

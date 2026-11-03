@@ -4,6 +4,12 @@
 
 package com.openjiuwen.studio.agent.manager.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.manager.entity.Session;
 import com.openjiuwen.studio.agent.manager.entity.User;
 import com.openjiuwen.studio.agent.manager.repository.SessionRepository;
@@ -13,16 +19,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 会话服务层 - 支持自定义超时机制
+ *
+ * 会话用户缓存统一走 RedisClient（Provider 单栈），以 JSON 字符串存储，
+ * 不再依赖 RedisTemplate 第二栈。
  */
 @Service
 @Slf4j
@@ -31,9 +39,18 @@ public class SessionService {
 
     private static final String REDIS_SESSION_PREFIX = "session:";
 
+    /** 会话用户 JSON 序列化器（User 含 LocalDateTime 字段，需 JavaTimeModule）
+     *  宽容未知字段：旧 RedisTemplate Jackson 默认类型的存量缓存条目含
+     *  @class 等额外属性，FAIL_ON_UNKNOWN_PROPERTIES 会让解析失败→按
+     *  cache miss 处理，升级瞬间存量会话全部失效（用户被登出）。 */
+    private static final ObjectMapper SESSION_MAPPER = new ObjectMapper()
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
     private final SessionRepository sessionRepository;
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisClient redisClient;
 
     // 从配置文件中注入超时时间
     @Value("${app.auth.session.absolute-timeout:86400}")
@@ -68,7 +85,7 @@ public class SessionService {
 
         // 存储到Redis（使用绝对超时时间）
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        redisTemplate.opsForValue().set(redisKey, user, absoluteTimeoutSeconds, TimeUnit.SECONDS);
+        redisClient.set(redisKey, writeUserJson(user), Duration.ofSeconds(absoluteTimeoutSeconds));
 
 
         return savedSession;
@@ -86,12 +103,12 @@ public class SessionService {
 
         // 更新Redis中的用户对象（如果需要）
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(redisKey))) {
-            // 获取当前用户信息
-            User user = (User) redisTemplate.opsForValue().get(redisKey);
-            if (user != null) {
+        if (redisClient.exists(redisKey)) {
+            // 原文续期即可，无需反序列化往返
+            String userJson = redisClient.get(redisKey);
+            if (userJson != null) {
                 // 重新设置Redis，使用绝对超时时间
-                redisTemplate.opsForValue().set(redisKey, user, absoluteTimeoutSeconds, TimeUnit.SECONDS);
+                redisClient.set(redisKey, userJson, Duration.ofSeconds(absoluteTimeoutSeconds));
             }
         }
 
@@ -107,7 +124,7 @@ public class SessionService {
 
         // 检查Redis中是否存在
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        if (Boolean.FALSE.equals(redisTemplate.hasKey(redisKey))) {
+        if (!redisClient.exists(redisKey)) {
             return false;
         }
 
@@ -146,8 +163,7 @@ public class SessionService {
         }
 
         String redisKey = REDIS_SESSION_PREFIX + sessionId;
-        User user = (User) redisTemplate.opsForValue().get(redisKey);
-        return Optional.ofNullable(user);
+        return Optional.ofNullable(readUserJson(redisClient.get(redisKey)));
     }
 
     /**
@@ -172,6 +188,32 @@ public class SessionService {
      */
     private String generateSessionId() {
         return java.util.UUID.randomUUID().toString();
+    }
+
+    /**
+     * 会话用户序列化为 JSON（失败抛出，阻断创建流程）
+     */
+    private String writeUserJson(User user) {
+        try {
+            return SESSION_MAPPER.writeValueAsString(user);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Session user serialization failed: " + user.getUsername(), e);
+        }
+    }
+
+    /**
+     * 会话用户反序列化（缓存值损坏按未命中处理，不影响会话校验）
+     */
+    private User readUserJson(String userJson) {
+        if (userJson == null) {
+            return null;
+        }
+        try {
+            return SESSION_MAPPER.readValue(userJson, User.class);
+        } catch (JsonProcessingException e) {
+            log.warn("Session user cache deserialization failed, treated as cache miss", e);
+            return null;
+        }
     }
 
 }

@@ -7,7 +7,9 @@ import lombok.Getter;
 
 public enum PluginCallModeEnum {
 
-    API("api", "api类型插件");
+    API("api", "api类型插件"),
+
+    CUSTOM("custom", "自定义插件");
 
     @Getter
     private String code;

@@ -387,6 +387,11 @@ public interface Constants {
     String ESN_OBS_PATH = "abc/56A894768BBC281CEE9CF911490E620";
 
     /**
+     * 系统用户免校验标记 request attribute key
+     */
+    String SYSTEM_USER_SKIP_ATTR = "SYSTEM_USER_SKIP";
+
+    /**
      * 服务部署环境类型
      */
     interface EnvType {

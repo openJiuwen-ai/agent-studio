@@ -35,6 +35,24 @@ public class AsyncConfig {
     @Value("${spring.pools.asyncExecutor.queueCapacity}")
     private int queueCapacity;
 
+    @Value("${spring.pools.pollingCheckExecutor.maxPoolSize}")
+    private int pollingCheckMaxPoolSize;
+
+    @Value("${spring.pools.pollingCheckExecutor.corePoolSize}")
+    private int pollingCheckCorePoolSize;
+
+    @Value("${spring.pools.pollingCheckExecutor.keepAliveSeconds}")
+    private int pollingCheckKeepAliveSeconds;
+
+    @Value("${spring.pools.pollingCheckExecutor.threadNamePrefix}")
+    private String pollingCheckThreadNamePrefix;
+
+    @Value("${spring.pools.pollingCheckExecutor.queueCapacity}")
+    private int pollingCheckQueueCapacity;
+
+    @Value("${spring.pools.pollingCheckExecutor.awaitTerminationSeconds}")
+    private int pollingCheckAwaitTerminationSeconds;
+
     @Bean
     public ThreadPoolTaskExecutor mcpTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -90,6 +108,26 @@ public class AsyncConfig {
         return taskExecutor;
     }
 
+    /**
+     * Creates the executor used to fetch polling URLs and compare content hashes.
+     *
+     * @return polling check executor
+     */
+    @Bean
+    public ThreadPoolTaskExecutor pollingCheckExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(pollingCheckCorePoolSize);
+        executor.setMaxPoolSize(pollingCheckMaxPoolSize);
+        executor.setQueueCapacity(pollingCheckQueueCapacity);
+        executor.setKeepAliveSeconds(pollingCheckKeepAliveSeconds);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setThreadNamePrefix(pollingCheckThreadNamePrefix);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(pollingCheckAwaitTerminationSeconds);
+        return executor;
+    }
+
     @Bean
     public ThreadPoolTaskExecutor mcpUpdateTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -107,6 +145,27 @@ public class AsyncConfig {
         // 设置拒绝策略
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         // 等待所有任务结束后再关闭线程池
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        return executor;
+    }
+
+    /**
+     * 调试记录（insight）实时持久化的旁路线程池。
+     * 用于把 {@code WorkflowInstanceService.saveInsightMessageAsync} 从 OkHttp SSE 回调线程上挪走，
+     * 避免 Redis 写入阻塞 runtime→前端的事件透传（passThrough）。
+     * 拒绝策略用 DiscardPolicy：调试记录是尽力而为的旁路写，队列满时丢弃本次实时快照即可，
+     * 终态保存（saveInstance）仍走同步路径保证工作流结束状态落盘。
+     */
+    @Bean("insightPersistenceExecutor")
+    public ThreadPoolTaskExecutor insightPersistenceExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        // 旁路写非关键路径，队列适当放大以减少丢弃
+        executor.setQueueCapacity(queueCapacity * 4);
+        executor.setKeepAliveSeconds(keepAliveSeconds);
+        executor.setThreadNamePrefix("insightPersist-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         return executor;
     }

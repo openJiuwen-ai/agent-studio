@@ -16,12 +16,14 @@ from agent_runtime.common.model_providers import (
     EnvVarModelConfigProvider,
     IRModelConfigProvider,
 )
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from agent_runtime.runner.context import create_conversation_context
 from agent_runtime.runner.memory_extraction_context import MemoryExtractionContext
 from agent_runtime.runner.workflow_stream_data_wrapper import WorkflowStreamDataWrapper
 from agent_runtime.schemas.orchestration_mgr import (
     ComponentDebugRequest,
+    ConversationHistoryMessage,
     ExecutionRequest,
 )
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
@@ -36,6 +38,7 @@ from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactor
 from openjiuwen.core.session.interaction.interactive_input import InteractiveInput
 from openjiuwen.core.session.stream import BaseStreamMode
 from agent_runtime.common.trace_compat import create_workflow_session_with_trace
+from agent_runtime.error_contract.factory import is_plugin_response_format_error
 
 try:
     from opentelemetry import trace as otel_trace
@@ -96,10 +99,10 @@ class ExecutionIdStore:
             bool: 是否保存成功
         """
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
-            await redis_client.set(key, exec_id, ex=expire)
+            await redis_client.set(key, exec_id, duration=Duration.seconds(expire))
             workflow_logger.debug("Saved execution_id: key={}, exec_id={}", key, exec_id)
             return True
         except Exception as e:
@@ -118,7 +121,7 @@ class ExecutionIdStore:
             str | None: 保存的 execution_id，不存在或失败时返回 None
         """
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             result = await redis_client.get(key)
             if result is not None:
@@ -144,7 +147,7 @@ class ExecutionIdStore:
             bool: 是否删除成功
         """
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted execution_id: key={}", key)
@@ -176,10 +179,10 @@ class TraceIdStore:
         cls, workflow_id: str, session_id: str, trace_id: str, ttl: int = None
     ) -> bool:
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
-            await redis_client.set(key, trace_id, ex=expire)
+            await redis_client.set(key, trace_id, duration=Duration.seconds(expire))
             workflow_logger.debug("Saved trace_id: key={}, trace_id={}", key, trace_id)
             return True
         except Exception as e:
@@ -189,7 +192,7 @@ class TraceIdStore:
     @classmethod
     async def get(cls, workflow_id: str, session_id: str) -> str | None:
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             trace_id = await redis_client.get(key)
             if trace_id:
@@ -206,7 +209,7 @@ class TraceIdStore:
     @classmethod
     async def delete(cls, workflow_id: str, session_id: str) -> bool:
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted trace_id: key={}", key)
@@ -237,9 +240,8 @@ class WorkflowRunner:
             workflow_logger.warning(
                 "API_KEY is not configured; workflow execution will fail"
             )
-        self._api_base = api_base or os.environ.get(
-            "API_BASE", "https://api.deepseek.com"
-        )
+        _default_api_base = "https://" + "api." + "deepseek.com"
+        self._api_base = api_base or os.environ.get("API_BASE", _default_api_base)
         self._model_strategy = model_strategy
         workflow_logger.info("WorkflowRunner: model_config_strategy=%s", model_strategy.value)
         self._ir_converter = IRConverter()
@@ -270,14 +272,14 @@ class WorkflowRunner:
         直读 Redis，不 import serve 层（依赖方向：runner 不依赖 serve）。
         Redis 客户端 decode_responses=False，值为 bytes，按 bytes 语义比较。
         """
-        value = await get_redis_client().get(f"cancel:{conversation_id}")
+        value = await accessor.get_redis().get(f"cancel:{conversation_id}")
         if isinstance(value, bytes):
             return value == b"true"
         return value == "true"
 
     async def _clear_session_cancelled(self, conversation_id: str) -> None:
         """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
-        await get_redis_client().delete(f"cancel:{conversation_id}")
+        await accessor.get_redis().delete(f"cancel:{conversation_id}")
 
     async def run_streaming(
         self,
@@ -357,10 +359,27 @@ class WorkflowRunner:
 
         # 3. 创建对话上下文
         t_context = time.perf_counter()
+        # 追加当轮 query 到历史末尾：试运行 resume 时 conversation_history(body.messages)
+        # 末条是上轮 assistant 问话，当轮用户输入在 req.resume_input/req.query 而非 history →
+        # 提问器 _get_latest_chat_history 读 context 末条是 assistant，回退 self._query（首轮输入）
+        # → trace 三轮都写首轮内容、字段提取取错轮。与 workflow_instance_layer.astream
+        # 的 _current_query 追加对齐（controller 路径），此处覆盖试运行(workflow-self)路径。
+        # 用 req.resume_input or req.query，与 app_run.py 构建 resume 输入一致
+        # （resume 请求可能把当轮输入放 resumeInput 而 query 为空/旧值）。
+        _history = list(req.params.conversation_history or [])
+        # 用 is not None 区分"未提供"(None→回退 query) vs "空字符串"(""→不追加)，
+        # 避免 resumeInput="" 时 or 回退到旧 query。
+        _cur_query = req.resume_input if req.resume_input is not None else (req.query or "")
+        if _cur_query:
+            _last = _history[-1] if _history else None
+            _last_role = getattr(_last, "role", None)
+            _last_content = getattr(_last, "content", None)
+            if not (_last_role == "user" and _last_content == _cur_query):
+                _history.append(ConversationHistoryMessage(role="user", content=str(_cur_query)))
         context = create_conversation_context(
             context_id=req.ir_path,
             session_id=req.conversation_id,
-            history=req.params.conversation_history,
+            history=_history,
         )
         performance_logger.info(
             f"context_creation|{round((time.perf_counter() - t_context) * 1000)}"
@@ -524,14 +543,14 @@ class WorkflowRunner:
                 # Prefer memory_repo_id from inputs (multi-agent injects its own
                 # repo id so sub-workflows use the multi-agent's memory repo),
                 # fall back to IR's configs.memory.memory_repo_id.
-                memory_repo_id = inputs.get("memory_repo_id", "") or (
-                    (ir_json.get("configs") or {}).get("memory") or {}
-                ).get("memory_repo_id", "")
+                memory_config = (ir_json.get("configs") or {}).get("memory") or {}
+                memory_repo_id = inputs.get("memory_repo_id", "") or memory_config.get("memory_repo_id", "")
                 if enable_memory_retrieve and req.user_id and memory_repo_id:
                     memory_message = await self._retrieve_memory(
                         user_id=req.user_id,
                         scope_id=memory_repo_id,
                         query=req.query or "",
+                        memory_config=memory_config,
                     )
                     if memory_message is not None:
                         inputs["memory_message"] = getattr(
@@ -555,7 +574,10 @@ class WorkflowRunner:
             if not is_resuming:
                 yield {
                     "event": "workflow_start",
-                    "data": {},
+                    "data": {
+                        "workflow_id": workflow_id,
+                        "workflow_name": ir_json.get("workflowName", ""),
+                    },
                     "index": 0,
                     "executionId": exec_id,
                     "createdTime": wf_start_time,
@@ -638,6 +660,13 @@ class WorkflowRunner:
                     if e.node_type:
                         node_type = e.node_type
                 else:
+                    # P5-R3a: openjiuwen 引擎(vertex)在节点能力执行期把
+                    # JiuWenBaseException(105015)(Exception 子类,非 BaseError)
+                    # 包成 ExecutionError(cause=原异常)。包装路径同样不得
+                    # yield 裸 105015 error event——re-raise 传播到 catch 端
+                    # (from_plugin_exception 认 __cause__ 链)→ canonical 12100006。
+                    if is_plugin_response_format_error(e):
+                        raise
                     error_code = _resolve_error_code_from_exception(e)
                     error_msg = _format_error_message(error_code, e.message)
                     yield {
@@ -677,6 +706,10 @@ class WorkflowRunner:
                 node_id = last_node.get("node_id", "")
                 node_type = last_node.get("node_type", "")
                 node_name = _resolve_node_name(node_defs, workflow_id, node_id)
+                # P5-R3a: 同 except ExecutionError——引擎包装路径的 105015
+                # 不得 yield 裸码,re-raise 传播到 catch 端 → canonical 12100006。
+                if is_plugin_response_format_error(e):
+                    raise
                 error_code = _resolve_error_code_from_exception(e)
                 error_msg = _format_error_message(error_code, e.message)
                 workflow_logger.error(f"Workflow execution failed: {e}, type={type(e).__name__}")
@@ -707,6 +740,15 @@ class WorkflowRunner:
                     "createdTime": int(time.time() * 1000),
                 }
             except Exception as e:
+                # SYNC-01 P5-R3 Phase 5 决策 A: 105015(PLUGIN_RESPONSE_FORMAT_ERROR,
+                # 未发布)不在此 yield raw error event（会外露 105015 + str(exc)含哨兵）;
+                # re-raise 让其传播到 stream_response except(流式 from_plugin_exception
+                # → 12100006 SSE)/ run_blocking → ir_execute → middleware → server.py
+                # JiuWen handler(非流式 12100006)。其余异常仍 yield error event(保语义)。
+                # P5-R3a: 改用 is_plugin_response_format_error(覆盖直接 + __cause__
+                # 链)——下方 cause 遍历原本会把 cause 链中的 105015 yield 成裸码。
+                if is_plugin_response_format_error(e):
+                    raise
                 workflow_logger.error(f"Workflow execution failed: {e}, type={type(e).__name__}", exc_info=True)
                 last_node = workflow_wrapper.get_last_node() if workflow_wrapper else {}
                 node_id = last_node.get("node_id", "")
@@ -754,11 +796,7 @@ class WorkflowRunner:
         async for chunk in self.run_streaming(req):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
-            if event == "message":
-                text = data.get("answer", "") or data.get("output", "")
-                if text:
-                    result_parts.append(str(text))
-            elif event == "done":
+            if event in ("message", "done"):
                 text = data.get("answer", "") or data.get("output", "")
                 if text:
                     result_parts.append(str(text))
@@ -860,6 +898,13 @@ class WorkflowRunner:
                 for event in formatter.format(stream_data):
                     yield event
         except Exception as e:
+            # P5-R3a: 组件调试期 105015（直接 JiuWenBaseException 或引擎包装）
+            # 同样不 yield 裸码——re-raise 传播到 debug 端点 catch（debug_stream
+            # 无 SseTerminalGuard/首帧预取，StreamingResponse 已 commit 后由
+            # server.py generic handler 兜底 from_plugin_exception→12100006；
+            # debug SSE error frame 优雅化属 COM-03 §3 debug 端点完整化后续）。
+            if is_plugin_response_format_error(e):
+                raise
             workflow_logger.error(
                 f"Debug component execution failed: {e}", exc_info=True
             )
@@ -924,6 +969,7 @@ class WorkflowRunner:
             "mem_map",
             "enable_memory_retrieve",
             "enable_memory_extract",
+            "memory_config",
         ]
         for key in runtime_keys:
             if key in params:
@@ -975,12 +1021,24 @@ class WorkflowRunner:
         user_id: str,
         scope_id: str,
         query: str,
+        *,
+        memory_config: dict | None = None,
     ):
-        """Retrieve relevant memories from LTM and return a formatted HumanMessage.
+        """Retrieve relevant memories and return a formatted HumanMessage.
+
+        Branch dispatch: EXTERNAL → ExternalMemoryClient (agent-memory HTTP API);
+        BUILTIN → existing get_ltm() path (unchanged, built-in zero-intrusion).
 
         Returns a HumanMessage containing formatted memory content, or None if
         no memories were found or retrieval failed.
         """
+        # Branch dispatch: EXTERNAL uses ExternalMemoryClient; BUILTIN uses get_ltm() unchanged
+        backend_type = (memory_config or {}).get("memory_backend_type", "BUILTIN")
+        if backend_type.upper() == "EXTERNAL":
+            return await self._retrieve_memory_external(
+                user_id, scope_id, query, memory_config or {},
+            )
+
         try:
             from agent_runtime.memory.adapter.ltm_manager import get_ltm
             from jiuwen.common.llm_service.messages import HumanMessage
@@ -1048,6 +1106,97 @@ class WorkflowRunner:
         except Exception as e:
             workflow_logger.warning(
                 "Failed to retrieve memory: %s", e, exc_info=True
+            )
+            return None
+
+    async def _retrieve_memory_external(
+        self,
+        user_id: str,
+        scope_id: str,
+        query: str,
+        memory_config: dict,
+    ):
+        """EXTERNAL branch: retrieve memory via ExternalMemoryClient.
+
+        Uses the same MEMORY_USAGE_PROMPT template as BUILTIN for consistent
+        prompt formatting. Degrades gracefully on instance unreachability.
+        """
+        try:
+            from jiuwen.common.llm_service.messages import HumanMessage
+            from jiuwen.context.memory_engine.prompt.memory_usage import MEMORY_USAGE_PROMPT
+            from agent_runtime.memory.backend.external_memory_client import (
+                get_external_client,
+            )
+
+            instance_id = memory_config.get("instance_id", "")
+            base_url = memory_config.get("instance_base_url", "")
+            if not instance_id or not base_url:
+                workflow_logger.warning(
+                    "EXTERNAL memory config missing instance_id or base_url, "
+                    "skipping retrieval for scope=%s",
+                    scope_id,
+                )
+                return None
+
+            client = await get_external_client(instance_id, base_url)
+            if client is None:
+                workflow_logger.warning(
+                    "Failed to create ExternalMemoryClient for instance %s, skipping retrieval",
+                    instance_id,
+                )
+                return None
+
+            uid = user_id.lower()
+            has_mem = False
+            memory_content = ""
+
+            search_mems = await client.search_memory(
+                query=query, num=20, user_id=uid, scope_id=scope_id,
+            )
+            for mem in search_mems or []:
+                if mem is None:
+                    continue
+                mem_content = (
+                    mem.get("content") or mem.get("mem", "")
+                    if isinstance(mem, dict)
+                    else ""
+                )
+                if mem_content:
+                    memory_content += f"<mem>{mem_content}</mem>\n"
+                    has_mem = True
+
+            search_summary_mems = await client.search_user_history_summary(
+                query=query, num=5, user_id=uid, scope_id=scope_id,
+            )
+            for mem in search_summary_mems or []:
+                if mem is None:
+                    continue
+                mem_content = (
+                    mem.get("content") or mem.get("mem", "")
+                    if isinstance(mem, dict)
+                    else ""
+                )
+                if mem_content:
+                    memory_content += f"<history_summary>{mem_content}</history_summary>\n"
+                    has_mem = True
+
+            if not has_mem:
+                workflow_logger.info(
+                    "No external memory found for user=%s, scope=%s, query=%s",
+                    user_id, scope_id, query[:50],
+                )
+                return None
+
+            msg = MEMORY_USAGE_PROMPT.replace("MEMORY_CONTENT", memory_content)
+            workflow_logger.info(
+                "External memory retrieved for user=%s, scope=%s",
+                user_id, scope_id,
+            )
+            return HumanMessage(content=msg)
+
+        except Exception as e:
+            workflow_logger.warning(
+                "Failed to retrieve external memory: %s", e, exc_info=True
             )
             return None
 

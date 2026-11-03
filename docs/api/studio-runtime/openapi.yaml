@@ -40,7 +40,7 @@ paths:
             application/json:
               schema: {}
         '400':
-          description: 请求体校验失败返回 error_code=02001003 四字段错误体
+          description: 请求体校验失败返回 openjiuwen.12100001 五字段 canonical 错误体
         '422':
           description: Validation Error
           content:
@@ -52,7 +52,7 @@ paths:
       - execution_app
       summary: 删除执行实例
       description: Restful API for delete Agent instance and Workflow instance by
-        executionId.
+        conversationId.
       operationId: delete_ir_execution_instance_v1_orchestration_ir_execute_delete
       requestBody:
         content:
