@@ -3,12 +3,14 @@
 
 """插件/MCP 参数松校验开关（PLUGIN_MCP_LOOSE_PARAM_VALIDATION）单元测试。
 
-覆盖四层：
+覆盖五层：
 1. 开关解析（默认关 / true 变体 / 非 true 值）
 2. 新引擎 FlowApi._format_api_inputs（未知参数默认抛错；松校验跳过且打
    WARNING——带参数名，迁移期可据此收集清理清单）
 3. 新引擎 FlowMcp._format_api_inputs（同上）
-4. 旧引擎（orchestration）FlowApi / FlowMcp 的同款行为
+4. 新引擎 FlowCustomApi._format_api_inputs（callMode=custom 的自定义插件
+   节点走此组件——ir_converter 按 callMode 分派，与 FlowApi 同契约）
+5. 旧引擎（orchestration）FlowApi / FlowMcp 的同款行为
 """
 
 import asyncio
@@ -19,6 +21,7 @@ import pytest
 
 from jiuwen.common.exception import JiuWenBaseException as CommonJiuWenBaseException
 from jiuwen.extension.workflow_node.flow_api import FlowApi, FlowApiStatusCode
+from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 from jiuwen.orchestration.flow.components.flow_api import FlowApi as OldFlowApi
@@ -146,7 +149,42 @@ class TestFlowMcpLooseValidation:
         assert errors == []
 
 
-# ─── 4. 旧引擎（orchestration） ────────────────────────────────────────
+# ─── 4. 新引擎 FlowCustomApi（callMode=custom 的插件节点） ────────────
+
+
+def _make_flow_custom_api():
+    comp = FlowCustomApi()
+    comp._api = SimpleNamespace(params=[_make_param()])
+    return comp
+
+
+class TestFlowCustomApiLooseValidation:
+    def test_unknown_param_raises_by_default(self, monkeypatch):
+        monkeypatch.delenv(ENV_KEY, raising=False)
+        comp = _make_flow_custom_api()
+        with pytest.raises(JiuWenBaseException) as ei:
+            asyncio.run(comp._format_api_inputs({"query": "a", "extra": "b"}))
+        assert ei.value.error_code == FlowApiStatusCode.WORKFLOW_API_INPUTS_ERROR.value[0]
+
+    def test_loose_on_skips_and_logs_warning_with_param_name(self, monkeypatch):
+        monkeypatch.setenv(ENV_KEY, "true")
+        records = []
+        monkeypatch.setattr(
+            "jiuwen.extension.workflow_node.flow_custom_api.workflow_logger",
+            _mock_workflow_logger(records),
+        )
+        comp = _make_flow_custom_api()
+        result = asyncio.run(comp._format_api_inputs({"query": "a", "extra": "b"}))
+        assert result == {"query": "a"}
+        warnings = [r for r in records if r[0] == "WARNING"]
+        errors = [r for r in records if r[0] == "ERROR"]
+        assert len(warnings) == 1
+        assert "skip undefined param" in warnings[0][1]
+        assert warnings[0][2]["metadata"]["param_name"] == "extra"
+        assert errors == []
+
+
+# ─── 5. 旧引擎（orchestration） ────────────────────────────────────────
 
 
 def _make_old_flow_api():

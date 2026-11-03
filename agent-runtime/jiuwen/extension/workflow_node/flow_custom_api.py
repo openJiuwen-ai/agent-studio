@@ -41,6 +41,7 @@ from jiuwen.extension.wrapper.custom_plugin_tool import (
     convert_ir_to_custom_card,
 )
 from jiuwen.plugin.models.param import Param
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from openjiuwen.core.common.logging import LogEventType, workflow_logger
 from openjiuwen.core.context_engine import ModelContext
@@ -319,6 +320,19 @@ class FlowCustomApi(WorkflowComponent):
                 expected_type = param.type
                 api_inputs[param.name] = transform_type(value, expected_type, name)
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 与 FlowApi/FlowMcp 同款行为——未知参数打 WARNING（带参数名）
+                    # 后跳过，自定义插件照常被调用（评审修订 2026-11-03：
+                    # callMode=custom 的插件节点走本组件，漏掉会造成"同一个开关，
+                    # 一部分插件节点好一部分仍报错"的行为分叉）
+                    workflow_logger.warning(
+                        "FlowCustomApi loose param validation: skip undefined param",
+                        event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                        component_type_str="FlowCustomApi",
+                        metadata={"param_name": name},
+                    )
+                    continue
                 workflow_logger.error(
                     "FlowCustomApi _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
