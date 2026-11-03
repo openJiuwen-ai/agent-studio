@@ -34,6 +34,9 @@ import { WORKFLOW_SVGS } from '@routes/agent-center/app-flow/flow.const';
 import { CommonUtils } from 'src/utils/common.util';
 import { ApplicationType } from '@enums/agent-center.enum';
 import {
+  AGENT_MODE_CODE,
+} from '@routes/agent-center/app-agent/agent-bot-page/agent-bot-page.constant';
+import {
   CONTROLLER_SUB_CONTROLLER_LIMIT,
   CONTROLLER_SUB_FLOW_LIMIT,
   SubAgentModel,
@@ -308,10 +311,11 @@ export class AddMultipleAgentModalComponent implements OnInit {
 
   private initSingleAgentList(): void {
     this.isLoading = true;
+    // 不按 sub_type 过滤：通用(common)与规划(planexecute)单智能体均可作为子智能体，
+    // deepresearch 已由后端默认排除。卡片 mode/标签按各智能体实际 sub_type 动态展示。
     const params = {
       ...this.getListPageParams(),
       type: 'agent',
-      sub_type: 'planexecute',
       name: this.shareSearchKey || '',
     };
     this.appFlowRepoServe
@@ -323,13 +327,15 @@ export class AddMultipleAgentModalComponent implements OnInit {
             const id = item.id;
             const checked =
               this.agentSelected.findIndex((agent) => agent.id === id) > -1;
+            const subType = this.normalizeSubType(item.sub_type);
+            const isPlanningMode = subType === AGENT_MODE_CODE.PLANNING_MODE;
 
             const agent = {
               id: id,
               name: item.name,
               type: ApplicationType.SINGLE_AGENT,
               subAgentType: ApplicationType.SINGLE_AGENT,
-              mode: 'PlanExecute',
+              mode: isPlanningMode ? 'PlanExecute' : AGENT_MODE_CODE.GENERAL_MODE,
               description: item.description,
               avatar: item.icon || WORKFLOW_SVGS.Agent,
               creator: item.creator,
@@ -337,7 +343,11 @@ export class AddMultipleAgentModalComponent implements OnInit {
               version_name: item.version_name,
               checked,
               disable: false,
-              tags: [this.i18n.transform('agent_planning_mode')],
+              tags: [
+                this.i18n.transform(
+                  isPlanningMode ? 'agent_planning_mode' : 'agent_mode_gen',
+                ),
+              ],
             };
             agent.disable = this.getCardDisable(agent);
             return agent;
@@ -349,6 +359,14 @@ export class AddMultipleAgentModalComponent implements OnInit {
       .finally(() => {
         this.isLoading = false;
       });
+  }
+
+  /** 归一 sub_type：null/undefined/空串/'agent' → common（与版本对比投影的归一规则一致） */
+  private normalizeSubType(raw: string): string {
+    const s = (raw ?? '').trim();
+    return s === '' || s === AGENT_MODE_CODE.GENERAL_MODE
+      ? AGENT_MODE_CODE.GENERAL_MODE
+      : s;
   }
 
   private initWorkFlowList(): void {

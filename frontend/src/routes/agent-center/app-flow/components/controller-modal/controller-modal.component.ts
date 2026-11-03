@@ -655,8 +655,10 @@ export class ControllerModalComponent
     this.associationAgentCtx = this.nodeInfo.configs.agents?.map(
       (agent) => {
         const { configs } = agent;
-        const applicationType = agent.mode === 'PlanExecute'
-          ? ApplicationType.SINGLE_AGENT : ApplicationType.MULTI_AGENT;
+        // 单智能体成员的 mode 可为 'PlanExecute'（规划模式）或 'agent'（通用模式，
+        // 历史存量数据均为 'PlanExecute'）；'Controller' 为多智能体成员
+        const applicationType = agent.mode === 'Controller'
+          ? ApplicationType.MULTI_AGENT : ApplicationType.SINGLE_AGENT;
 
         return {
           id: agent.id,
@@ -835,19 +837,30 @@ export class ControllerModalComponent
     return [agent];
   }
 
+  /**
+   * 单智能体成员节点 mode：按该智能体实际 sub_type 映射，
+   * planexecute → 'PlanExecute'，其余(common) → 'agent'（与画布单智能体节点约定一致）。
+   * 详情接口(AgentInfo)返回 sub_type，历史数据可能为 null/'agent'，统一归一处理。
+   */
+  private getSubAgentMode(agentInfo: any): string {
+    const subType = (agentInfo?.sub_type ?? '').trim();
+    return subType === 'planexecute' ? 'PlanExecute' : 'agent';
+  }
+
   private getSubSingleAgent(agent) {
     const agentInfo = this.select_agent_detail_map.get(agent.id);
+    const memberMode = this.getSubAgentMode(agentInfo);
     const agentDetail = {
       node_id: `node_${uuidV4()}`,
       id: agentInfo.agent_id,
       name: agentInfo.name,
-      mode: 'PlanExecute',
+      mode: memberMode,
       type: 'agent',
       configs: {
         node_id: '',
         id: agentInfo.agent_id,
         name: agentInfo.name,
-        mode: 'PlanExecute',
+        mode: memberMode,
         type: ApplicationType.SINGLE_AGENT,
         description: agentInfo.description,
         version: agent.version_id,
