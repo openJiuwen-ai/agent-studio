@@ -204,6 +204,7 @@ public class McpClientService {
             // 比如: http://ip:port/custom -> path="/custom" -> 覆盖
             // 比如: http://ip:port -> path="" -> 不覆盖，使用SDK默认的/mcp
             String path = url.getPath();
+            String query = url.getQuery();
             // 健壮性逻辑：
             // A. 不为空
             // B. 不仅仅是 "/" (如果是跟路径，就视为没填，用SDK默认的)
@@ -215,6 +216,13 @@ public class McpClientService {
                 }
 
                 customEndpoint = path;
+            } else if (StringUtils.isNotBlank(query)) {
+                // 无自定义 path 但带查询串时，使用 SDK 默认端点 /mcp，避免丢失查询串
+                customEndpoint = "/mcp";
+            }
+            // 保留 URL 查询串（如 ?key=xxx），否则鉴权参数会被丢弃导致服务端鉴权失败
+            if (customEndpoint != null && StringUtils.isNotBlank(query)) {
+                customEndpoint = customEndpoint + "?" + query;
             }
             log.info("Parsed Streamable config -> Base: [{}], CustomEndpoint: [{}]", finalBaseUrl, customEndpoint);
 
