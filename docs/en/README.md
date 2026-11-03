@@ -23,9 +23,15 @@ Step-by-step guides for newcomers, numbered by recommended reading order.
 
 Guides for solving specific tasks, using semantic names.
 
-- [Deploy Service](how-to/deploy-service.md) — Docker Compose and Kubernetes installation and deployment
+- [Deploy Service](how-to/deploy-service.md) — Overall deployment entry: Docker Compose and Kubernetes installation and deployment
+- [Docker Compose Deployment](how-to/deploy-docker-compose.md) — Docker Compose installation and deployment
+- [Kubernetes Deployment](how-to/deploy-k8s.md) — Kubernetes installation and deployment
 - [Beta5 Upgrade Deployment](how-to/upgrade-from-beta4.md) — Upgrading from Beta4 and earlier
 - [Development Guide](how-to/development-guide.md) — Encryption extension, SSO auth, storage configuration
+- [Custom Plugin Development Guide](how-to/custom-plugin-development-guide.md) — Developing and integrating custom plugins
+- [Knowledge Base Integration Guide](how-to/knowledge-base-guide.md) — Knowledge base creation, upload, and retrieval integration
+- [SQL Custom Node Configuration Guide](how-to/sql-node-guide.md) — SQL custom node configuration
+- [Audit Log Guide](how-to/audit-log-guide.md) — Audit log usage and configuration
 - [Asset Plaza Preset](how-to/asset-plaza-preset.md) — Application template, model, MCP, plugin and other asset presetting
 - [Observability Deployment](how-to/configure-opentelemetry.md) — OpenTelemetry trace pipeline integration
 - [Troubleshooting](how-to/troubleshooting.md) — Workflow and agent runtime issue locating
