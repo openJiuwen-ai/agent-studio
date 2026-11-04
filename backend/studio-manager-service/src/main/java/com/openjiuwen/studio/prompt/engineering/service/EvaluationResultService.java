@@ -41,7 +41,6 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
@@ -254,7 +253,7 @@ public class EvaluationResultService {
      * <ul>
      *   <li>动态表头——列名 i18n key 预解析(原 easypoi 的 i18nHandler 渲染链);</li>
      *   <li>嵌套集合扁平化——每行 = 变量 × 提示词结果,父列(testNum/预期结果)
-     *       经 SameValueVerticalMergeStrategy 纵向合并(原 needMerge);</li>
+     *       经 EntityBlockMergeStrategy 纵向合并(原 needMerge);</li>
      *   <li>列宽按原注解 width 对齐;</li>
      *   <li>导出校验(DDE 特殊字符前缀检查)在写流前对扁平行值执行,语义与
      *       原 validateExportExcel(Workbook) 一致。</li>
@@ -268,11 +267,9 @@ public class EvaluationResultService {
         flattenRows(rows, flatRows, entityRowRanges);
         ExcelUtil.validateExportValues(flatRows);
         // 评审修订 2026-11-04 v2:预计算合并区(写流前,基于实体行区间)——
-        // v1 的 SameValueVerticalMergeStrategy 有两个缺陷:跨实体合并
-        // (相邻实体同值时合并区跨越边界)+ finish() 在 doWrite() 后调
-        // (workbook 已序列化,合并不可见)。v2 改为 EntityBlockMergeStrategy
-        // 在 afterSheetCreate 一次性应用预计算区,语义与 easypoi needMerge
-        // 对齐(仅同一父记录内合并,不跨实体)。
+        // 原 v1 策略已删除(两个缺陷:跨实体合并+doWrite后补合并不可见)。
+        // v2 改为 EntityBlockMergeStrategy 在 afterSheetCreate 一次性应用
+        // 预计算区,语义与 easypoi needMerge 对齐(仅同一父记录内合并)。
         List<CellRangeAddress> mergeRegions = EntityBlockMergeStrategy.buildMergeRegions(
             entityRowRanges, Set.of(0, 3));
         try {

@@ -1,7 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
  */
-
 package com.openjiuwen.studio.agent.agentbase.client;
 
 import java.io.IOException;
@@ -9,30 +8,46 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * MIT keytab 文件 principal 读取器(镜像瘦身第一部分 1A,2026-11-04)。
+ * MIT keytab 文件 principal 读取器(镜像瘦身第一部分 1A,2026-11-04;
+ * 评审修订 v4 2026-11-05:组件数 u16 修正 + 截断即抛 + principal 去重)。
  *
  * <p>背景:原经 hadoop-common 的
  * {@code org.apache.hadoop.security.authentication.util.KerberosUtil.getPrincipalNames}
  * 读取 keytab principal;去除 hadoop 依赖后改为内置解析(文件整体读入后按格式切片,
  * keytab 为 KB 级小文件)。
  *
- * <p>keytab 二进制格式(MIT krb5 通用格式,JDK ktab / MIT ktutil / Windows ktpass 均兼容):
+ * <p>keytab 二进制格式(MIT krb5 通用格式,JDK ktab / MIT ktutil / Windows ktpass 均兼容;
+ * 参照 MIT krb5 ktfile.c 与 Apache Kerby KeytabInputStream.readPrincipal 的读取口径):
  * <pre>
  * u16 文件版本(0x0501 或 0x0502)
  * 重复条目:
- *   版本 0x0502 时先有 u32 entryLen(0 或到 EOF 结束)
- *   u32 组件数
+ *   版本 0x0502 时先有 u32 entryLen(0=结束标记,非零须在文件范围内)
+ *   u16 组件数(v1 含 realm 须减 1,v2 不含 realm 直接用)
  *   域 realm(u16 len + bytes)
  *   组件数 × 组件(u16 len + bytes)
  *   u32 principal 类型
  *   u32 时间戳、u8 kvno、u16 加密类型、u16 密钥长度、密钥(本读取器跳过)
  * </pre>
- * principal 字符串 = {@code 组件1/组件2/...@REALM}(与 KerberosUtil 输出形态一致,
- * 供 Kerberos LoginModule 的 principal 选项使用)。解析失败抛 IOException
+ *
+ * <p>评审 v4 修正(2026-11-05):
+ * <ul>
+ *   <li>组件数从 u32(4字节)改为 <b>u16(2字节)</b>——原实现用 getInt 读 4 字节,
+ *       真实 keytab(ktab/ktutil 生成)的组件数是 2 字节,4 字节读法会错位导致
+ *       解析失败;测试的 buildEntry 同步修正为 shortToBytes;</li>
+ *   <li>v1(0x0501)组件数含 realm,须减 1(对齐 Kerby readPrincipal);</li>
+ *   <li>截断/损坏立即抛 IOException(不再静默返回部分结果);</li>
+ *   <li>principal 去重(LinkedHashSet,同一 principal 多 enctype 时不重复返回,
+ *       对齐原 Hadoop/Kerby Set 语义)。</li>
+ * </ul>
+ *
+ * <p>principal 字符串 = {@code 组件1/组件2/...@REALM}(与 KerberosUtil 输出形态一致,
+ * 供 Kerberos LoginModule 的 principal 选项使用)。解析失败/空结果抛 IOException
  * (调用方沿用原"Fail to get principal"日志与异常路径)。
  */
 public final class KeytabPrincipalReader {
@@ -46,12 +61,12 @@ public final class KeytabPrincipalReader {
     }
 
     /**
-     * 读取 keytab 全部 principal 并按模式过滤。
+     * 读取 keytab 全部 principal 并按模式过滤(去重)。
      *
      * @param keytabFile keytab 文件路径
      * @param pattern 过滤模式(null 时不过滤)
-     * @return 匹配的 principal 数组(可能为空,不为 null)
-     * @throws IOException 文件不可读或版本非法
+     * @return 匹配且去重后的 principal 数组(可能为空,不为 null)
+     * @throws IOException 文件不可读、版本非法、结构损坏或无匹配 principal
      */
     public static String[] getPrincipalNames(String keytabFile, Pattern pattern) throws IOException {
         byte[] file = Files.readAllBytes(Paths.get(keytabFile));
@@ -62,64 +77,75 @@ public final class KeytabPrincipalReader {
         if (version != KEYTAB_VNO_1 && version != KEYTAB_VNO_2) {
             throw new IOException("unsupported keytab version: 0x" + Integer.toHexString(version));
         }
-        List<String> names = new ArrayList<>();
+        Set<String> names = new LinkedHashSet<>();
         int pos = 2;
         while (pos < file.length) {
             if (version == KEYTAB_VNO_2) {
                 if (pos + 4 > file.length) {
-                    break;
+                    throw new IOException("truncated keytab: entry length header cut at offset " + pos);
                 }
                 int entryLen = getInt(file, pos);
                 pos += 4;
-                if (entryLen <= 0 || pos + entryLen > file.length) {
+                if (entryLen == 0) {
                     break;
                 }
-                addIfMatches(names, pattern, parsePrincipal(file, pos));
+                if (entryLen < 0 || pos + entryLen > file.length) {
+                    throw new IOException("corrupt keytab: entry length " + entryLen
+                            + " exceeds file boundary at offset " + (pos - 4));
+                }
+                String principal = parsePrincipal(file, pos, version);
+                if (principal != null) {
+                    addIfMatches(names, pattern, principal);
+                }
                 pos += entryLen;
             } else {
-                // 0x0501:无长度前缀,逐条目推进
-                int next = addV1Entry(names, pattern, file, pos);
+                int next = addV1Entry(names, pattern, file, pos, version);
                 if (next < 0) {
-                    break;
+                    throw new IOException("corrupt keytab: v1 entry invalid at offset " + pos);
                 }
                 pos = next;
             }
         }
-        String[] result = names.toArray(new String[0]);
-        if (result.length == 0) {
-            // 评审修订 2026-11-04:空结果抛 IOException 而非返回空数组——
-            // 调用方 doKerberosLogin 的 [0] 取首元素,空数组会抛
-            // ArrayIndexOutOfBoundsException 绕过外层 IOException catch,
-            // 与类注释"解析失败抛 IOException"契约不一致
+        if (names.isEmpty()) {
             throw new IOException("no valid principals found in keytab: " + keytabFile);
         }
-        return result;
+        return names.toArray(new String[0]);
     }
 
-    private static void addIfMatches(List<String> names, Pattern pattern, String principal) {
-        if (principal != null && (pattern == null || pattern.matcher(principal).matches())) {
+    private static void addIfMatches(Set<String> names, Pattern pattern, String principal) {
+        if (pattern == null || pattern.matcher(principal).matches()) {
             names.add(principal);
         }
     }
 
     /**
-     * 从 entry 起始位置解析 principal(组件数+realm+组件)。
-     * 返回 null 表示该位置不是合法 principal 条目。
+     * 从 entry 起始位置解析 principal(u16 组件数 + realm + 组件)。
+     * 返回 null 表示该位置不是合法 principal 条目(如组件数非法)。
      */
-    private static String parsePrincipal(byte[] file, int pos) {
-        int count = getInt(file, pos);
+    private static String parsePrincipal(byte[] file, int pos, int version) {
+        // 评审 v4:组件数是 u16(2字节),非 u32——MIT krb5 ktfile.c 与
+        // Kerby KeytabInputStream.readPrincipal 均调用 readShort
+        int count = getShort(file, pos);
         if (count <= 0 || count > MAX_COMPONENTS) {
             return null;
         }
-        int p = pos + 4;
+        int p = pos + 2;
+
+        // v1(0x0501)组件数含 realm,须减 1(对齐 Kerby:if(version==V501) count--)
+        int componentCount = (version == KEYTAB_VNO_1) ? count - 1 : count;
+        if (componentCount <= 0) {
+            return null;
+        }
+
         int realmEnd = readString16End(file, p);
         if (realmEnd < 0) {
             return null;
         }
         String realm = new String(file, p + 2, realmEnd - p - 2, StandardCharsets.UTF_8);
         p = realmEnd;
-        List<String> components = new ArrayList<>(count);
-        for (int i = 0; i < count; i++) {
+
+        List<String> components = new ArrayList<>(componentCount);
+        for (int i = 0; i < componentCount; i++) {
             int end = readString16End(file, p);
             if (end < 0) {
                 return null;
@@ -135,15 +161,17 @@ public final class KeytabPrincipalReader {
      *
      * @return 下一条目起始位置;-1 表示当前条目非法或缓冲越界
      */
-    private static int addV1Entry(List<String> names, Pattern pattern, byte[] file, int pos) {
-        String principal = parsePrincipal(file, pos);
+    private static int addV1Entry(Set<String> names, Pattern pattern, byte[] file, int pos, int version) {
+        String principal = parsePrincipal(file, pos, version);
         if (principal == null) {
             return -1;
         }
-        int count = getInt(file, pos);
-        int p = pos + 4;
+        // 重新走一遍字段以计算 nextPos(组件数 u16 + realm + 组件 + 类型+时间戳+kvno+enctype+keylen+key)
+        int count = getShort(file, pos);
+        int componentCount = (version == KEYTAB_VNO_1) ? count - 1 : count;
+        int p = pos + 2;
         p = readString16End(file, p);
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < componentCount; i++) {
             p = readString16End(file, p);
         }
         if (p < 0) {
@@ -154,7 +182,7 @@ public final class KeytabPrincipalReader {
         if (p + 2 > file.length) {
             return -1;
         }
-        int keyLen = ((file[p] & 0xFF) << 8) | (file[p + 1] & 0xFF);
+        int keyLen = getShort(file, p);
         p += 2 + keyLen;
         if (p > file.length) {
             return -1;
@@ -169,6 +197,14 @@ public final class KeytabPrincipalReader {
         }
         return ((file[pos] & 0xFF) << 24) | ((file[pos + 1] & 0xFF) << 16)
                 | ((file[pos + 2] & 0xFF) << 8) | (file[pos + 3] & 0xFF);
+    }
+
+    /** u16 读取(评审 v4:组件数/加密类型/密钥长度均为 u16,非 u32)。 */
+    private static int getShort(byte[] file, int pos) {
+        if (pos + 2 > file.length) {
+            return -1;
+        }
+        return ((file[pos] & 0xFF) << 8) | (file[pos + 1] & 0xFF);
     }
 
     /**
