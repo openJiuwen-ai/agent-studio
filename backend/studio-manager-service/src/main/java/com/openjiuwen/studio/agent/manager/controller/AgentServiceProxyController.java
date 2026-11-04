@@ -740,6 +740,7 @@ public class AgentServiceProxyController {
         @PathVariable("project_id") String projectId,
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("agent_id") String agentId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,64}$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("conversation_id") String conversationId,
         @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
@@ -762,6 +763,7 @@ public class AgentServiceProxyController {
         @PathVariable("project_id") String projectId,
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("workflow_id") String workflowId,
+        @Pattern(regexp = "^[a-zA-Z0-9_()-]{1,64}$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
         @PathVariable("conversation_id") String conversationId,
         @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
