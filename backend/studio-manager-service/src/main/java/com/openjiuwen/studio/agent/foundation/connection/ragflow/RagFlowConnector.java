@@ -88,9 +88,10 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
         ListDatasetResponseBody result = this.connectorClient.doRequest(basicRequest, request,
             ListDatasetResponseBody.class);
 
-        // 下游返回空体（204/经网关剥离 body 等）时 doRequest 会得到 null，
-        // 按 RAG_FLOW_CONNECT_ERROR 业务异常收口，避免 NPE 暴露为 500
-        if (result == null || ResponseConstants.SUCCESS_CODE != result.getCode()) {
+        // 下游返回空体（204/经网关剥离 body 等）时 doRequest 会得到 null；
+        // 异构响应可能缺 code 字段（getCode() 为 null，SUCCESS_CODE 为 int，
+        // 直接 != 会拆箱 NPE）。统一按 RAG_FLOW_CONNECT_ERROR 业务异常收口。
+        if (result == null || !Integer.valueOf(ResponseConstants.SUCCESS_CODE).equals(result.getCode())) {
             log.error("Call rag flow to list dataset failed. Because of {}",
                 result == null ? "empty response body" : result.getMessage());
             throw new AgentBaseException(ErrorCode.RAG_FLOW_CONNECT_ERROR);
@@ -133,9 +134,11 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
                 this.connectorClient.doRequest(basicRequest, httpEntity, RagFlowCommonResponseBody.class)),
             new TypeReference<>() { });
 
-        if (result == null) {
-            // 下游返回空体时 toJson(null) 解析回 null，按连接错误收口而非 NPE
-            log.error("Call rag flow to retrieve chunk failed. Because of empty response body");
+        if (result == null || result.getCode() == null) {
+            // 下游返回空体（toJson(null) 解析回 null）或缺 code 字段，
+            // 按连接错误收口，避免后续比较拆箱 NPE
+            log.error("Call rag flow to retrieve chunk failed. Because of {}",
+                result == null ? "empty response body" : result.getMessage());
             throw new AgentBaseException(ErrorCode.RAG_FLOW_CONNECT_ERROR);
         }
         if (ResponseConstants.SUCCESS_CODE == result.getCode()) {
