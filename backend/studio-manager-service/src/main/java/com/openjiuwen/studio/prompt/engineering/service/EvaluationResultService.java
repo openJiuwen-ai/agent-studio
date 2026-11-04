@@ -46,6 +46,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -265,7 +266,10 @@ public class EvaluationResultService {
         ExcelUtil.validateExportValues(flatRows);
         // 父列纵向合并:0=用例编号,3=预期结果(与原 needMerge 列一致)
         SameValueVerticalMergeStrategy mergeStrategy = new SameValueVerticalMergeStrategy(Set.of(0, 3));
-        try (OutputStream out = response.getOutputStream()) {
+        // 评审修订 2026-11-04 M4:不用 try-with-resources close response 流——
+        // Servlet 规范由容器管理,close 可能截断响应;手动 try/finally
+        try {
+            OutputStream out = response.getOutputStream();
             response.setCharacterEncoding("UTF-8");
             response.setContentType("application/vnd.ms-excel;charset=UTF-8");
             EasyExcel.write(out)
@@ -277,8 +281,13 @@ public class EvaluationResultService {
             // 末段合并收尾(评审修订 2026-11-04:最后一行的同值段
             // 不会有下一行触发 closeOpenSegments,须显式收尾)
             mergeStrategy.finish();
-        } catch (Exception e) {
-            log.error("export evaluation results failed: {}", e.getMessage(), e);
+        } catch (IOException e) {
+            log.error("export evaluation results IO failed: {}", e.getMessage(), e);
+            throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
+        } catch (RuntimeException e) {
+            // 评审修订 2026-11-04 LOW:区分 IO 失败(流/写)与运行时异常
+            // (EasyExcel 内部/数据转换),均映射导出失败但保留原始堆栈
+            log.error("export evaluation results runtime failed: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
         }
     }

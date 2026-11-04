@@ -56,6 +56,9 @@ public final class K8sRestClient {
     private static final String CA_CERT_FILE = SERVICEACCOUNT_DIR + "/ca.crt";
     private static final String PODS_URL_FORMAT = "https://%s:%s/api/v1/pods";
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    /** 瞬时失败重试次数(评审修订 2026-11-04 LOW:原 client-java 内建重试) */
+    private static final int MAX_RETRIES = 2;
+    private static final long RETRY_DELAY_MS = 1000;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -88,13 +91,7 @@ public final class K8sRestClient {
                 .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .build();
-        HttpResponse<String> response;
-        try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("k8s pods request interrupted", e);
-        }
+        HttpResponse<String> response = sendWithRetry(client, request);
         if (response.statusCode() / 100 != 2) {
             throw new IOException("k8s pods request failed: HTTP " + response.statusCode());
         }
@@ -141,6 +138,34 @@ public final class K8sRestClient {
         String host = System.getenv("KUBERNETES_SERVICE_HOST");
         String port = System.getenv("KUBERNETES_SERVICE_PORT");
         return host != null && !host.isEmpty() && port != null && !port.isEmpty();
+    }
+
+    /**
+     * 带重试的 HTTP 发送(评审修订 2026-11-04 LOW:瞬时网络抖动重试,
+     * 对齐原 client-java 的内建重试;仅 IOException 重试,中断不重)。
+     */
+    private static HttpResponse<String> sendWithRetry(HttpClient client, HttpRequest request)
+            throws IOException {
+        IOException lastError = null;
+        for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                return client.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("k8s pods request interrupted", e);
+            } catch (IOException e) {
+                lastError = e;
+                if (attempt < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS * (attempt + 1));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("k8s pods retry interrupted", ie);
+                    }
+                }
+            }
+        }
+        throw new IOException("k8s pods request failed after " + (MAX_RETRIES + 1) + " attempts", lastError);
     }
 
     private static HttpClient getOrCreateClient() throws IOException {
