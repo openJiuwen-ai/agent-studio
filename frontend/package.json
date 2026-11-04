@@ -131,6 +131,9 @@
     "vitest": "^3.2.4",
     "jsdom": "^26.1.0"
   },
+  "overrides": {
+    "@assistant-ui/store": "0.2.13"
+  },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
       "prettier --write"
