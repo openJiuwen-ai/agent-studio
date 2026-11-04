@@ -18,7 +18,6 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.hadoop.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -77,7 +76,7 @@ public class ResourceCleanMaster {
         ObjectMapper objectMapper = new ObjectMapper();
         cleanResources = objectMapper.readValue(resource.getInputStream(), CleanResource[].class);
 
-        timeWindow = Arrays.stream(StringUtils.split(timeWindowStr, ',')).map(s -> Integer.parseInt(s)).toList();
+        timeWindow = Arrays.stream(timeWindowStr.split(",")).map(s -> Integer.parseInt(s)).toList();
     }
 
     /**

@@ -4,8 +4,6 @@
 
 package com.openjiuwen.studio.agent.common.utils;
 
-import static org.apache.commons.configuration2.io.FileOptionsProvider.CURRENT_USER;
-
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.security.properties.AuthProperties;
@@ -30,6 +28,14 @@ import java.util.Optional;
  */
 @Slf4j
 public class RequestContextUtils {
+    /**
+     * request attribute 键:当前用户(瘦身修订 2026-11-04——原值取自
+     * commons-configuration2 的 FileOptionsProvider.CURRENT_USER,系历史
+     * IDE 误导入;该依赖仅此处使用,以等值本地常量替代后不再引入
+     * commons-configuration2)。
+     */
+    private static final String CURRENT_USER = "CURRENT_USER";
+
     private static final ThreadLocal<SimpleUser> THREAD_LOCAL_IAM_CTX = new ThreadLocal<>();
 
     private static final ThreadLocal<Map<String, String>> THREAD_LOCAL_HEADER = new ThreadLocal<>();
