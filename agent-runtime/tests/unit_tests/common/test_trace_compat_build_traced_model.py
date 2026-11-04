@@ -11,11 +11,16 @@
   （跨执行复用的组件/模型）落 DEFINITION_SCOPED_SESSION_ID 且不绑构建期
   请求 trace，请求级场景（react 每执行新建）透传当次会话 id、trace 走
   请求上下文；
+- identity 归因：core 装饰器支持 identity 参数时透传（业务 workflow_id/
+  agent_id 附到独立/子 llm span，write-if-absent）；旧 core 不支持时自动
+  丢弃 identity 保 span（不得因 TypeError 把整段装饰降级成裸模型）；
 - 探测 / 导入 / 建会话 / 装饰任何一步失败都降级返回裸模型，绝不阻断业务；
 - 六个裸 Model 构造点全部经工厂接线，资源注册路径（get_model 已装饰）除外。
 """
 
 import ast
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -47,9 +52,10 @@ class _StubSession:
 
 @pytest.fixture(autouse=True)
 def _restore_capability_cache():
-    """每个用例后复位能力探测缓存，避免用例间串扰。"""
+    """每个用例后复位能力/identity 探测缓存，避免用例间串扰。"""
     yield
     trace_compat._LLM_SHELL_MERGE_CAPABLE = None
+    trace_compat._DECORATOR_ACCEPTS_IDENTITY = None
 
 
 @pytest.fixture
@@ -61,8 +67,8 @@ def gate_open(monkeypatch):
 def stub_decorate(monkeypatch):
     calls = []
 
-    def _decorate(model, session):
-        calls.append((model, session))
+    def _decorate(model, session, identity=None):
+        calls.append((model, session, identity))
         return ("decorated", model, session)
 
     import openjiuwen.core.session.tracer as core_tracer
@@ -220,6 +226,118 @@ class TestDegrade:
         assert stub_decorate == []
 
 
+class TestIdentityPassThrough:
+    """identity 归因键：新 core 透传，旧 core 丢 identity 保 span。"""
+
+    @staticmethod
+    def test_probe_reflects_core_signature(monkeypatch):
+        """探测读真实签名：有 identity 参数判支持，无则不支持（缓存复位后）。"""
+        mod_new = types.ModuleType("openjiuwen.core.session.tracer")
+        mod_new.decorate_model_with_trace = lambda model, session, identity=None: model
+        monkeypatch.setitem(sys.modules, "openjiuwen.core.session.tracer", mod_new)
+        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", None)
+        assert trace_compat._decorator_accepts_identity() is True
+
+        mod_old = types.ModuleType("openjiuwen.core.session.tracer")
+        mod_old.decorate_model_with_trace = lambda model, session: model
+        monkeypatch.setitem(sys.modules, "openjiuwen.core.session.tracer", mod_old)
+        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", None)
+        assert trace_compat._decorator_accepts_identity() is False
+
+    @staticmethod
+    def test_identity_forwarded_when_core_accepts(gate_open, stub_decorate, monkeypatch):
+        """新 core：identity 透传给装饰器（llm span 附业务归因键）。"""
+        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", True)
+        identity = {"workflow_id": "wf-1", "agent_id": "app-1"}
+        build_traced_model(object(), session=_StubSession(), identity=identity)
+        assert stub_decorate[-1][2] is identity
+
+    @staticmethod
+    def test_old_core_drops_identity_keeps_spans(gate_open, stub_decorate, monkeypatch):
+        """旧 core（无 identity 参数）：丢 identity 仍装饰——不得因 TypeError
+        把整段装饰降级成裸模型（span 全丢比缺身份键严重得多）。"""
+        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", False)
+        model = object()
+        result = build_traced_model(model, session=_StubSession(), identity={"workflow_id": "wf-1"})
+        assert result[0] == "decorated"
+        assert stub_decorate[-1][2] is None
+
+    @staticmethod
+    def test_no_identity_no_extra_call_shape(gate_open, stub_decorate):
+        """不传 identity：行为与旧签名完全一致（identity=None 不进装饰器）。"""
+        build_traced_model(object(), session=_StubSession())
+        assert stub_decorate[-1][2] is None
+
+
+class TestWorkflowIdentity:
+    """workflow_identity_from_session：只取 workflow_id，component_* 刻意不取。
+
+    core 的组件壳分类器（_ambient_component_shell）以
+    openjiuwen.workflow.component_id 判壳：llm span 带上它会在嵌套调用时被
+    误当可合并壳（两次真实调用并成一个 span）。该约束在此钉死。
+    """
+
+    @staticmethod
+    def test_session_workflow_id_extracted():
+        session = type("S", (), {"get_workflow_id": staticmethod(lambda: "wf-biz-1")})()
+        assert trace_compat.workflow_identity_from_session(session) == {"workflow_id": "wf-biz-1"}
+
+    @staticmethod
+    def test_component_keys_never_extracted():
+        session = type(
+            "S",
+            (),
+            {
+                "get_workflow_id": staticmethod(lambda: "wf-1"),
+                "get_component_id": staticmethod(lambda: "node-9"),
+                "get_component_type": staticmethod(lambda: "LLMComponent"),
+            },
+        )()
+        assert trace_compat.workflow_identity_from_session(session) == {"workflow_id": "wf-1"}
+
+    @staticmethod
+    def test_missing_empty_raising_yield_none():
+        assert trace_compat.workflow_identity_from_session(None) is None
+        empty = type("S", (), {"get_workflow_id": staticmethod(lambda: "")})()
+        assert trace_compat.workflow_identity_from_session(empty) is None
+        no_method = object()
+        assert trace_compat.workflow_identity_from_session(no_method) is None
+
+        class _Broken:
+            def get_workflow_id(self):
+                raise RuntimeError("no inner session")
+
+        assert trace_compat.workflow_identity_from_session(_Broken()) is None
+
+
+class TestResolveTraceIdentity:
+    """resolve_trace_identity：显式注入优先，缺省从执行期 Session 提取。"""
+
+    @staticmethod
+    def test_explicit_injection_wins_over_session():
+        component = type("C", (), {"_trace_identity": {"workflow_id": "wf-biz"}})()
+        # 调试场景 Session 的 workflow_id 是 node_id：显式注入的业务 id 必须赢
+        session = type("S", (), {"get_workflow_id": staticmethod(lambda: "node-1")})()
+        assert trace_compat.resolve_trace_identity(component, session) == {"workflow_id": "wf-biz"}
+
+    @staticmethod
+    def test_session_fallback_via_component_attribute():
+        session = type("S", (), {"get_workflow_id": staticmethod(lambda: "wf-run")})()
+        component = type("C", (), {"_session": session})()
+        assert trace_compat.resolve_trace_identity(component) == {"workflow_id": "wf-run"}
+
+    @staticmethod
+    def test_explicit_session_argument_preferred_over_attribute():
+        session = type("S", (), {"get_workflow_id": staticmethod(lambda: "wf-arg")})()
+        other = type("S", (), {"get_workflow_id": staticmethod(lambda: "wf-attr")})()
+        component = type("C", (), {"_session": other})()
+        assert trace_compat.resolve_trace_identity(component, session) == {"workflow_id": "wf-arg"}
+
+    @staticmethod
+    def test_nothing_available_returns_none():
+        assert trace_compat.resolve_trace_identity(object()) is None
+
+
 def _find_calls_by_name(tree, func_name: str):
     """按函数名收集 ast.Call 节点（显式循环，多判据不进推导式）。"""
     calls = []
@@ -236,7 +354,9 @@ class TestSiteWiring:
     SITES = {
         "agent_runtime/runner/react_agent_runner.py": 1,
         "jiuwen/extension/workflow_node/llm_chain.py": 1,
-        "jiuwen/extension/workflow_node/questioner.py": 1,
+        # questioner 活副本（agent_runtime 包）：jiuwen/ 下的同名文件是死副本，
+        # 不得接线（双接线=双计风险），此处钉住活副本唯一接线
+        "agent_runtime/extension/workflow_node/questioner.py": 1,
         "jiuwen/extension/workflow_node/intent_detection.py": 1,
         "jiuwen/extension/workflow_node/flow_extractor.py": 1,
         # ir_converter: LLMReAct 节点经工厂；资源注册路径的 Model( 由
@@ -270,6 +390,16 @@ class TestSiteWiring:
             )
 
     @staticmethod
+    def test_dead_questioner_copy_stays_unwired():
+        """jiuwen/ 下的 questioner 是死副本（无调用路径）：接线必须只落在
+        agent_runtime 活副本——死副本接线是检视发现的真实缺陷（span 从未
+        发射），此处防止回归。"""
+        source = (
+            _RUNTIME_ROOT / "jiuwen/extension/workflow_node/questioner.py"
+        ).read_text(encoding="utf-8")
+        assert _find_calls_by_name(ast.parse(source), "build_traced_model") == []
+
+    @staticmethod
     def test_definition_scoped_components_use_definition_session():
         """定义级组件（跨执行复用）的装饰会话一律 DEFINITION_SCOPED_SESSION_ID。
 
@@ -278,7 +408,7 @@ class TestSiteWiring:
         """
         sites = [
             "jiuwen/extension/workflow_node/llm_chain.py",
-            "jiuwen/extension/workflow_node/questioner.py",
+            "agent_runtime/extension/workflow_node/questioner.py",
             "jiuwen/extension/workflow_node/intent_detection.py",
             "jiuwen/extension/workflow_node/flow_extractor.py",
         ]

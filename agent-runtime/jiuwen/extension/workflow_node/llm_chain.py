@@ -149,13 +149,19 @@ class LLMChain(WorkflowComponent):
             # 每次真实调用补一个带 usage/ttft 的 llm span（首调并入组件壳/
             # 无壳新建，由 core 能力门控）。组件实例是定义级产物（跨执行
             # 复用）：装饰会话绑任一执行的会话 id，后续执行都会错归属，
-            # 故统一走定义级会话；执行期归因由组件壳/ambient 父链承担
+            # 故统一走定义级会话；执行期归因由组件壳/ambient 父链承担，
+            # 业务 workflow_id 经 identity 附到独立/子 span（壳自身值优先）
             from agent_runtime.common.trace_compat import (
                 DEFINITION_SCOPED_SESSION_ID,
                 build_traced_model,
+                resolve_trace_identity,
             )
 
-            return build_traced_model(model, session_id=DEFINITION_SCOPED_SESSION_ID)
+            return build_traced_model(
+                model,
+                session_id=DEFINITION_SCOPED_SESSION_ID,
+                identity=resolve_trace_identity(self, self._session),
+            )
 
         except ValidationError as e:
             raise build_error(
