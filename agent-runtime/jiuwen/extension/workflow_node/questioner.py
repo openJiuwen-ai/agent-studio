@@ -1190,12 +1190,16 @@ class Questioner(WorkflowComponent):
                 model_config=llm_comp_config.model_config,
             )
             # 每次真实调用补一个带 usage/ttft 的 llm span（Questioner 反思为
-            # 1+N 次调用：首调并入组件壳、后续为壳下子 span，均由 core 门控）
-            from agent_runtime.common.trace_compat import build_traced_model
+            # 1+N 次调用：首调并入组件壳、后续为壳下子 span，均由 core 门控）。
+            # 组件实例是定义级产物（跨执行复用）：装饰会话绑任一执行的会话
+            # id，后续执行都会错归属，故统一走定义级会话
+            from agent_runtime.common.trace_compat import (
+                DEFINITION_SCOPED_SESSION_ID,
+                build_traced_model,
+            )
 
             self._model = build_traced_model(
-                self._model,
-                session_id=self._session.get_session_id() if self._session else None,
+                self._model, session_id=DEFINITION_SCOPED_SESSION_ID
             )
             self._initialized = True
         except Exception as e:
