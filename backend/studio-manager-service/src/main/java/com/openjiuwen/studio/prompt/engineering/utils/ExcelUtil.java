@@ -320,4 +320,27 @@ public class ExcelUtil {
         }
         return true;
     }
+
+    /**
+     * 导出值前置校验(瘦身修订 2026-11-04 1C)。
+     *
+     * <p>EasyExcel 动态表头模式下无 Workbook 中间产物,原
+     * validateExportExcel(Workbook) 的 DDE 特殊字符前缀检查改为对
+     * 扁平行值在写流前执行——语义一致(=,+,-,@ 起头拒绝导出),
+     * 失败抛原 EXPORT_EXCEL_VALIDATE_FAILED。
+     *
+     * @param flatRows 扁平化导出行(值列,不含表头)
+     */
+    public static void validateExportValues(List<List<Object>> flatRows) {
+        for (int indOfRow = NUM_ZERO; indOfRow < flatRows.size(); indOfRow++) {
+            List<Object> row = flatRows.get(indOfRow);
+            for (int indOfCell = NUM_ZERO; indOfCell < row.size(); indOfCell++) {
+                Object value = row.get(indOfCell);
+                if (value != null && StringUtil.isStartWithSpecialCharacter(String.valueOf(value))) {
+                    log.error("row {} col {} is start with special character", indOfRow + NUM_ONE, indOfCell + NUM_ONE);
+                    throw new AgentStudioException(StudioError.EXPORT_EXCEL_VALIDATE_FAILED);
+                }
+            }
+        }
+    }
 }
