@@ -120,7 +120,9 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
     """Open the retriever trace span; returns the tracer span handle.
 
     start 事件未送达（trigger 抛错被吞）时返回 None：调用侧据 None 跳过
-    后续 end/error 事件，避免产生只有 end 没有 start 的半开 span。
+    后续 end/error 事件，避免产生只有 end 没有 start 的半开 span；同时
+    注销 create_agent_span 留在 span manager 的登记，避免永不 start/end
+    的悬空记录（last_span 也会被它污染）。
     """
     span = tracer.tracer_agent_span_manager.create_agent_span()
     inputs: Dict[str, Any] = {"query": query}
@@ -136,7 +138,13 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         inputs=inputs,
         instance_info={"class_name": "knowledge_retrieval_tool"},
     )
-    return span if started else None
+    if not started:
+        try:
+            tracer.tracer_agent_span_manager.pop_span(span.invoke_id)
+        except Exception:  # noqa: BLE001 - 注销失败不影响降级路径
+            pass
+        return None
+    return span
 
 
 async def _run_retrieval(

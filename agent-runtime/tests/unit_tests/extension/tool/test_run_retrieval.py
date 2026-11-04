@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from agent_runtime.extension.tool import knowledge_retrieval_tool as krt
@@ -110,10 +112,14 @@ async def test_run_retrieval_custom_source_skips_normalization(monkeypatch):
 class _StubSpanManager:
     def __init__(self):
         self.created = 0
+        self.popped = []
 
     def create_agent_span(self):
         self.created += 1
-        return object()
+        return SimpleNamespace(invoke_id=f"inv-{self.created}")
+
+    def pop_span(self, invoke_id):
+        self.popped.append(invoke_id)
 
 
 class _StubTracer:
@@ -375,3 +381,5 @@ async def test_run_retrieval_start_event_failure_skips_end(monkeypatch):
     # start 未送达：end 事件不补发（span 已判死），业务照常
     assert tracer.events == []
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+    # 判死的同时注销登记：span manager 不留永不 start/end 的悬空记录
+    assert tracer.span_manager.popped == ["inv-1"]
