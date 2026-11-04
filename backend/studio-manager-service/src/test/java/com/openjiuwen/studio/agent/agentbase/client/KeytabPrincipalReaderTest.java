@@ -16,9 +16,16 @@ import java.nio.file.Path;
 import java.util.regex.Pattern;
 
 /**
- * KeytabPrincipalReader 单测(评审修订 2026-11-04):构造 0x0501/0x0502
- * keytab 字节流验证解析——principal 字符串、多条目、模式过滤、
- * 非法输入 fail-fast。
+ * KeytabPrincipalReader 单测(评审 v4 2026-11-05:组件数 u16 修正后同步重写)。
+ *
+ * <p>构造符合 MIT keytab 标准字节流的黄金样本:
+ * <ul>
+ *   <li>组件数:u16(2字节,评审 v3 误用 u32/v4 修正)</li>
+ *   <li>v1(0x0501):组件数含 realm(须+1)</li>
+ *   <li>v2(0x0502):组件数不含 realm</li>
+ *   <li>principal 去重:同一 principal 多 enctype 不重复</li>
+ *   <li>截断/损坏:立即抛 IOException</li>
+ * </ul>
  */
 class KeytabPrincipalReaderTest {
 
@@ -27,8 +34,7 @@ class KeytabPrincipalReaderTest {
 
     @Test
     void v2_singleEntry_parsesPrincipal() throws IOException {
-        // keytab 0x0502:1 条目,principal = "user@REALM"
-        byte[] keytab = buildV2Keytab(buildEntry("user", 1, "REALM", 1, 1));
+        byte[] keytab = buildV2Keytab(buildV2Entry("user", 1, "REALM", 1, 1));
         Path file = tempDir.resolve("test.kt");
         Files.write(file, keytab);
         String[] names = KeytabPrincipalReader.getPrincipalNames(file.toString(), null);
@@ -37,8 +43,7 @@ class KeytabPrincipalReaderTest {
 
     @Test
     void v2_multiComponent_parsesJoinedPrincipal() throws IOException {
-        // principal = "host/server.example.com@REALM"(2 组件)
-        byte[] keytab = buildV2Keytab(buildEntry("host", 2, "REALM", 2, 1));
+        byte[] keytab = buildV2Keytab(buildV2Entry("host", 2, "REALM", 2, 1));
         Path file = tempDir.resolve("multi.kt");
         Files.write(file, keytab);
         String[] names = KeytabPrincipalReader.getPrincipalNames(file.toString(), null);
@@ -46,21 +51,26 @@ class KeytabPrincipalReaderTest {
     }
 
     @Test
-    void v2_multipleEntries_returnsAll() throws IOException {
-        byte[] keytab = concat(buildV2KeytabHeader(),
-            lengthPrefix(buildEntry("user1", 1, "REALM", 1, 1)),
-            lengthPrefix(buildEntry("user2", 1, "REALM", 2, 1)));
-        Path file = tempDir.resolve("multi-entry.kt");
+    void v2_multipleEntries_deduplicatesSamePrincipal() throws IOException {
+        // 同一 principal 两个 enctype(评审建议:去重,对齐 Kerby Set 语义)
+        byte[] keytab = concat(
+            v2Header(),
+            v2LengthPrefix(buildV2Entry("user1", 1, "REALM", 1, 18)),  // enctype 18
+            v2LengthPrefix(buildV2Entry("user1", 1, "REALM", 2, 17)),  // enctype 17
+            v2LengthPrefix(buildV2Entry("user2", 1, "REALM", 1, 18)));
+        Path file = tempDir.resolve("dedup.kt");
         Files.write(file, keytab);
         String[] names = KeytabPrincipalReader.getPrincipalNames(file.toString(), null);
-        assertArrayEquals(new String[]{"user1@REALM", "user2@REALM"}, names);
+        assertArrayEquals(new String[]{"user1@REALM", "user2@REALM"}, names,
+            "同一 principal 不同 enctype 须去重");
     }
 
     @Test
     void v2_patternFilter_returnsMatchingOnly() throws IOException {
-        byte[] keytab = concat(buildV2KeytabHeader(),
-            lengthPrefix(buildEntry("host1", 1, "REALM", 1, 1)),
-            lengthPrefix(buildEntry("user1", 1, "REALM", 2, 1)));
+        byte[] keytab = concat(
+            v2Header(),
+            v2LengthPrefix(buildV2Entry("host1", 1, "REALM", 1, 1)),
+            v2LengthPrefix(buildV2Entry("user1", 1, "REALM", 2, 1)));
         Path file = tempDir.resolve("filter.kt");
         Files.write(file, keytab);
         String[] names = KeytabPrincipalReader.getPrincipalNames(file.toString(),
@@ -86,11 +96,8 @@ class KeytabPrincipalReaderTest {
     }
 
     @Test
-    void v2_noMatchingPrincipals_throwsIOExceptionNotEmptyArray() throws IOException {
-        // 评审修订:空结果(无匹配 principal)须抛 IOException 而非返回空数组——
-        // 调用方 [0] 取首元素,空数组会 AIOOBE 绕过外层 catch
-        byte[] keytab = concat(buildV2KeytabHeader(),
-            lengthPrefix(buildEntry("host1", 1, "REALM", 1, 1)));
+    void v2_noMatchingPrincipals_throwsIOException() throws IOException {
+        byte[] keytab = buildV2Keytab(buildV2Entry("host1", 1, "REALM", 1, 1));
         Path file = tempDir.resolve("no-match.kt");
         Files.write(file, keytab);
         IOException ex = assertThrows(IOException.class,
@@ -101,46 +108,62 @@ class KeytabPrincipalReaderTest {
     }
 
     @Test
-    void v2_truncatedFile_throwsIOExceptionNotEmptyArray() throws IOException {
-        // 评审修订:截断文件(条目不完整)也须抛 IOException
-        byte[] keytab = concat(buildV2KeytabHeader(), new byte[]{0, 0, 0, 50, 1, 2}); // entryLen=50 但只有2字节
+    void v2_truncatedEntry_throwsIOException() throws IOException {
+        // 评审 v4:截断条目立即抛,不再静默返回部分结果
+        byte[] keytab = concat(v2Header(), new byte[]{0, 0, 0, 50, 1, 2});
         Path file = tempDir.resolve("truncated.kt");
+        Files.write(file, keytab);
+        IOException ex = assertThrows(IOException.class,
+            () -> KeytabPrincipalReader.getPrincipalNames(file.toString(), null));
+        assertTrue(ex.getMessage().contains("exceeds file boundary"),
+            "应报截断: " + ex.getMessage());
+    }
+
+    @Test
+    void v2_partialThenTruncated_throwsIOException() throws IOException {
+        // 评审 v4:前若干条目完整+末尾截断 → 抛 IOException(非静默返回部分结果)
+        byte[] keytab = concat(
+            v2Header(),
+            v2LengthPrefix(buildV2Entry("user1", 1, "REALM", 1, 1)),
+            new byte[]{0, 0, 0, 99, 5});  // entryLen=99 但只有1字节
+        Path file = tempDir.resolve("partial-truncated.kt");
         Files.write(file, keytab);
         assertThrows(IOException.class,
             () -> KeytabPrincipalReader.getPrincipalNames(file.toString(), null));
     }
 
-    // ==== keytab 字节构造 ====
+    // ==== keytab 字节构造(评审 v4:组件数用 u16=shortToBytes,非 u32)====
 
     private static byte[] buildV2Keytab(byte[] entry) {
-        return concat(buildV2KeytabHeader(), lengthPrefix(entry));
+        return concat(v2Header(), v2LengthPrefix(entry));
     }
 
-    private static byte[] buildV2KeytabHeader() {
+    private static byte[] v2Header() {
         return new byte[]{0x05, 0x02};
     }
 
-    private static byte[] lengthPrefix(byte[] entry) {
+    private static byte[] v2LengthPrefix(byte[] entry) {
         return concat(intToBytes(entry.length), entry);
     }
 
     /**
-     * 构造 v2 条目(不含长度前缀):组件数 + realm + 组件 + 类型 + 时间戳 + kvno + 加密类型 + 密钥。
+     * 构造 v2 条目(不含长度前缀)。
+     * 评审 v4:组件数用 u16(2字节),对齐 MIT keytab 标准格式。
      */
-    private static byte[] buildEntry(String firstComponent, int componentCount, String realm,
-            int nameType, int kvno) {
-        byte[] countBytes = intToBytes(componentCount);
+    private static byte[] buildV2Entry(String firstComponent, int componentCount, String realm,
+            int nameType, int enctype) {
+        byte[] countBytes = shortToBytes(componentCount);
         byte[] realmBytes = string16(realm);
         byte[] component1 = string16(firstComponent);
         byte[] component2 = componentCount > 1 ? string16("server.example.com") : new byte[0];
         byte[] typeBytes = intToBytes(nameType);
         byte[] timestamp = intToBytes(0);
-        byte[] kvnoByte = new byte[]{(byte) kvno};
-        byte[] enctype = shortToBytes(18);
+        byte[] kvnoByte = new byte[]{0x01};
+        byte[] enctypeBytes = shortToBytes(enctype);
         byte[] keylen = shortToBytes(1);
         byte[] key = new byte[]{0x01};
         return concat(countBytes, realmBytes, component1, component2, typeBytes,
-            timestamp, kvnoByte, enctype, keylen, key);
+            timestamp, kvnoByte, enctypeBytes, keylen, key);
     }
 
     private static byte[] intToBytes(int value) {
