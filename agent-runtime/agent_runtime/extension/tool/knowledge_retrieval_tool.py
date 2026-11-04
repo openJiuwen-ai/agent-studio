@@ -92,9 +92,11 @@ def _resolve_retrieval_tracer():
         tracer = session.tracer()
     except Exception:  # noqa: BLE001
         return None
-    if tracer is not None and tracer.agent_handler_valid():
-        return tracer
-    return None
+    try:
+        handler_valid = tracer is not None and tracer.agent_handler_valid()
+    except Exception:  # noqa: BLE001 - tracing must never break retrieval
+        return None
+    return tracer if handler_valid else None
 
 
 async def _trace_retrieval_event(tracer, event_name: str, span, **payload):
@@ -151,7 +153,15 @@ async def _run_retrieval(
     trace_tracer = _resolve_retrieval_tracer()
     trace_span = None
     if trace_tracer is not None:
-        trace_span = await _trace_retrieval_start(trace_tracer, str(query), knowledge_base_ids, retrieval_config)
+        # 开 span 同样不许打断检索：create_agent_span / 事件载荷准备任一步
+        # 抛错都降级为无遥测继续业务（与 _trace_retrieval_event 同口径）
+        try:
+            trace_span = await _trace_retrieval_start(
+                trace_tracer, str(query), knowledge_base_ids, retrieval_config
+            )
+        except Exception as e:  # noqa: BLE001 - tracing must never break retrieval
+            workflow_logger.warning("retrieval trace start failed: %s", e)
+            trace_span = None
     try:
         results = await component.search_knowledge_repo(
             adapter=adapter,

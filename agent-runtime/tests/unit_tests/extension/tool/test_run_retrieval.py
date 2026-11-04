@@ -294,3 +294,55 @@ async def test_run_retrieval_invalid_handler_skips_events(monkeypatch):
     assert tracer.events == []
     assert tracer.span_manager.created == 0
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_handler_valid_raising_skips_events(monkeypatch):
+    """agent_handler_valid 自身抛错：按无 handler 处理，检索不受影响。"""
+
+    def boom():
+        raise RuntimeError("handler registry corrupted")
+
+    tracer = _StubTracer()
+    tracer.agent_handler_valid = boom
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    assert tracer.events == []
+    assert tracer.span_manager.created == 0
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_span_start_failure_degrades(monkeypatch):
+    """create_agent_span 抛错：开 span 被吞掉，检索照常返回。"""
+    tracer = _StubTracer()
+
+    class _BrokenSpanManager:
+        def create_agent_span(self):
+            raise RuntimeError("span manager down")
+
+    tracer.span_manager = _BrokenSpanManager()
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    assert tracer.events == []  # start 失败后 end 也不再发
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1  # 业务不受影响
