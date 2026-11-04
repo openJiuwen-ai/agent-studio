@@ -85,6 +85,12 @@ def _llm_shell_merge_capable() -> bool:
     return _LLM_SHELL_MERGE_CAPABLE
 
 
+# 定义级产物（工作流 IR 转换出的组件/模型，跨执行复用）的会话身份：构建时
+# 不存在按会话归因的真实 id，绑定任一请求的 id 都会错归属，故显式落此常量；
+# 会话归因由执行期 trace 树（span 挂在真实组件壳/工作流 trace 下）承担。
+DEFINITION_SCOPED_SESSION_ID = "workflow-llm"
+
+
 def build_traced_model(model, session=None, session_id: str = None):
     """把裸 core Model 交给 openjiuwen 装饰器，补齐每次调用的 llm span。
 
@@ -99,14 +105,15 @@ def build_traced_model(model, session=None, session_id: str = None):
         return model
     try:
         from openjiuwen.core.session.tracer import decorate_model_with_trace
-    except Exception:  # noqa: BLE001 - 旧 core 无该入口
+    except Exception as e:  # noqa: BLE001 - 旧 core 无该入口
+        logger.warning("build_traced_model: decorate entry missing, bare model kept: %s", e)
         return model
     try:
         if session is None:
             session = create_agent_session_with_trace(
-                session_id=session_id or get_x_request_id() or "workflow-llm"
+                session_id=session_id or get_x_request_id() or DEFINITION_SCOPED_SESSION_ID
             )
         return decorate_model_with_trace(model, session)
-    except Exception:  # noqa: BLE001 - 遥测失败不得阻断模型创建
-        logger.warning("build_traced_model: trace decoration degraded to bare model")
+    except Exception as e:  # noqa: BLE001 - 遥测失败不得阻断模型创建
+        logger.warning("build_traced_model: trace decoration degraded to bare model: %s", e)
         return model

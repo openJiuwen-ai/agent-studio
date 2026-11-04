@@ -735,8 +735,11 @@ class ReActAgentRunner:
         try:
             from agent_runtime.common.trace_compat import build_traced_model
 
+            # 会话口径与本文件执行会话创建一致（conversation_id 空时同落
+            # default_session），避免装饰会话与执行会话身份分叉
             llm = build_traced_model(
-                await self._create_llm(ir_json), session_id=req.conversation_id
+                await self._create_llm(ir_json),
+                session_id=req.conversation_id or "default_session",
             )
         except Exception as e:
             workflow_logger.error(f"Failed to create LLM: {e}")
