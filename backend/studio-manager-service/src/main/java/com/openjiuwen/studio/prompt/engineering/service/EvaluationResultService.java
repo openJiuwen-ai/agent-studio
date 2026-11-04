@@ -30,10 +30,10 @@ import com.openjiuwen.studio.prompt.engineering.mapper.PeEvaluationTaskMapper;
 import com.openjiuwen.studio.prompt.engineering.utils.DateUtil;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelI18nHandler;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelUtil;
+import com.openjiuwen.studio.prompt.engineering.utils.EntityBlockMergeStrategy;
 import com.openjiuwen.studio.prompt.engineering.utils.FixedColumnWidthStyleStrategy;
 import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
 import com.openjiuwen.studio.prompt.engineering.utils.PromptUtil;
-import com.openjiuwen.studio.prompt.engineering.utils.SameValueVerticalMergeStrategy;
 import com.openjiuwen.studio.prompt.engineering.vo.ResultNumCount;
 
 import com.alibaba.excel.EasyExcel;
@@ -42,6 +42,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
@@ -262,12 +263,18 @@ public class EvaluationResultService {
     void exportByEasyExcel(List<EvaluationResultsExportExcel> rows, II18nHandler i18nHandler,
             String sheetName) {
         List<List<String>> head = buildExportHead(i18nHandler);
-        List<List<Object>> flatRows = flattenRows(rows);
+        List<List<Object>> flatRows = new ArrayList<>();
+        List<int[]> entityRowRanges = new ArrayList<>();
+        flattenRows(rows, flatRows, entityRowRanges);
         ExcelUtil.validateExportValues(flatRows);
-        // 父列纵向合并:0=用例编号,3=预期结果(与原 needMerge 列一致)
-        SameValueVerticalMergeStrategy mergeStrategy = new SameValueVerticalMergeStrategy(Set.of(0, 3));
-        // 评审修订 2026-11-04 M4:不用 try-with-resources close response 流——
-        // Servlet 规范由容器管理,close 可能截断响应;手动 try/finally
+        // 评审修订 2026-11-04 v2:预计算合并区(写流前,基于实体行区间)——
+        // v1 的 SameValueVerticalMergeStrategy 有两个缺陷:跨实体合并
+        // (相邻实体同值时合并区跨越边界)+ finish() 在 doWrite() 后调
+        // (workbook 已序列化,合并不可见)。v2 改为 EntityBlockMergeStrategy
+        // 在 afterSheetCreate 一次性应用预计算区,语义与 easypoi needMerge
+        // 对齐(仅同一父记录内合并,不跨实体)。
+        List<CellRangeAddress> mergeRegions = EntityBlockMergeStrategy.buildMergeRegions(
+            entityRowRanges, Set.of(0, 3));
         try {
             OutputStream out = response.getOutputStream();
             response.setCharacterEncoding("UTF-8");
@@ -275,18 +282,13 @@ public class EvaluationResultService {
             EasyExcel.write(out)
                 .head(head)
                 .sheet(sheetName)
-                .registerWriteHandler(mergeStrategy)
+                .registerWriteHandler(new EntityBlockMergeStrategy(mergeRegions))
                 .registerWriteHandler(new FixedColumnWidthStyleStrategy(buildColumnWidths(), 8))
                 .doWrite(flatRows);
-            // 末段合并收尾(评审修订 2026-11-04:最后一行的同值段
-            // 不会有下一行触发 closeOpenSegments,须显式收尾)
-            mergeStrategy.finish();
         } catch (IOException e) {
             log.error("export evaluation results IO failed: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
         } catch (RuntimeException e) {
-            // 评审修订 2026-11-04 LOW:区分 IO 失败(流/写)与运行时异常
-            // (EasyExcel 内部/数据转换),均映射导出失败但保留原始堆栈
             log.error("export evaluation results runtime failed: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
         }
@@ -305,22 +307,28 @@ public class EvaluationResultService {
     }
 
     /**
-     * 扁平化:每行 = 变量(第 i 个) × 提示词结果(第 i 个)。
+     * 扁平化(评审修订 2026-11-04 v2):每行 = 变量(第 i 个) × 提示词结果(第 i 个)。
      * 两个集合按各自下标对齐(超出补空)——与 easypoi 多 ExcelCollection
      * 的"逐行配对、不足留空"展开形态一致。
+     * 同时输出实体行区间(供 EntityBlockMergeStrategy 预计算合并区)。
+     *
+     * @param rows 输入实体列表
+     * @param flatRows 输出:扁平化数据行
+     * @param entityRowRanges 输出:每个实体的 [startRow, endRow] 数据行索引(0 起,不含表头)
      */
-    static List<List<Object>> flattenRows(List<EvaluationResultsExportExcel> rows) {
-        List<List<Object>> flat = new ArrayList<>();
+    static void flattenRows(List<EvaluationResultsExportExcel> rows,
+            List<List<Object>> flatRows, List<int[]> entityRowRanges) {
         for (EvaluationResultsExportExcel row : rows) {
             List<VariableExport> vars = row.getVariableExportList() == null
                 ? Collections.emptyList() : row.getVariableExportList();
             List<PromptEvaluationResultExport> prompts = row.getPromptEvaluationResultExportList() == null
                 ? Collections.emptyList() : row.getPromptEvaluationResultExportList();
+            int startRow = flatRows.size();
             int lineCount = Math.max(vars.size(), prompts.size());
             for (int i = 0; i < lineCount; i++) {
                 VariableExport var = i < vars.size() ? vars.get(i) : null;
                 PromptEvaluationResultExport prompt = i < prompts.size() ? prompts.get(i) : null;
-                flat.add(Arrays.asList(
+                flatRows.add(Arrays.asList(
                     row.getTestNum(),
                     var == null ? "" : var.getVariableKey(),
                     var == null ? "" : var.getVariableValue(),
@@ -330,8 +338,8 @@ public class EvaluationResultService {
                     prompt == null ? "" : prompt.getGenerateResult(),
                     prompt == null ? "" : prompt.getEvalResult()));
             }
+            entityRowRanges.add(new int[]{startRow, flatRows.size() - 1});
         }
-        return flat;
     }
 
     /**
