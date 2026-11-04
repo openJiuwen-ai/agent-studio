@@ -63,6 +63,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
@@ -220,21 +221,25 @@ public class OpenJiuwenKBService implements KnowledgeRepoService {
         }
         knowledgeFileMapper.insertFile(fileEntity);
 
-        // 捕获 customer headers 供后台 Feign 调用使用
+        // 捕获 customer headers 与 MDC 关联上下文（request-id/trace_id），供后台 Feign 调用使用
         Map<String, String> customerHeaders = new HashMap<>(RequestContextUtils.getCustomerHeaders());
+        Map<String, String> correlationContext = MDC.getCopyOfContextMap();
         String obsPath = fileEntity.getObsPath();
 
         // 异步上传到 openjiuwen agent-runtime，前端立即看到 RUNNING 状态
         obsTaskExecutor.execute(() -> asyncUploadToOpenJiuwen(
-            kbId, fileId, originalName, obsPath, customerHeaders));
+            kbId, fileId, originalName, obsPath, customerHeaders, correlationContext));
 
         return fileId;
     }
 
     private void asyncUploadToOpenJiuwen(String kbId, String fileId, String fileName,
-        String obsPath, Map<String, String> customerHeaders) {
+        String obsPath, Map<String, String> customerHeaders, Map<String, String> correlationContext) {
         try {
             RequestContextUtils.setCustomerHeaders(customerHeaders);
+            if (correlationContext != null) {
+                MDC.setContextMap(correlationContext);
+            }
 
             if (obsPath == null) {
                 log.error("OBS path is null, cannot upload, fileId: {}", fileId);
@@ -268,6 +273,7 @@ public class OpenJiuwenKBService implements KnowledgeRepoService {
             knowledgeFileMapper.updateFileStatus(fileId, "ERROR", null, System.currentTimeMillis());
         } finally {
             RequestContextUtils.setCustomerHeaders(null);
+            MDC.clear();
         }
     }
 

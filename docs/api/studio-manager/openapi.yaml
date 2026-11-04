@@ -8197,6 +8197,9 @@ paths:
         required: true
         schema:
           type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_()-]{1,64}$"
       - name: workspace_id
         in: query
         required: true
@@ -13474,6 +13477,9 @@ paths:
         required: true
         schema:
           type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: workspace_id
         in: query
         required: true
@@ -13707,6 +13713,47 @@ paths:
             application/json:
               schema:
                 type: object
+  /v1/{project_id}/agent-manager/agents/runtime-asset/export:
+    post:
+      tags:
+      - agent-management-api-controller
+      summary: 导出运行时资产
+      description: 按应用维度（agent/controller/workflow）导出全部运行依赖资产，打包成 ZIP。复用 t_mapping
+        依赖图，输出 ZIP + manifest.json，供运行态加载。
+      operationId: exportRuntimeAsset
+      parameters:
+      - name: project_id
+        in: path
+        description: 项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeAssetExportParams"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
   /v1/{project_id}/agent-manager/agents/resource/export:
     post:
       tags:
@@ -17868,6 +17915,42 @@ paths:
       responses:
         "200":
           description: OK
+  /v1/{project_id}/agent-manager/skills/{skill_id}/package-content:
+    get:
+      tags:
+      - skill-management-api-controller
+      summary: 下载Skill制品包内容
+      description: 流式返回指定Skill最新版本的zip制品包字节流，供前端解压展示文件目录树。该接口代理后端从OBS读取zip并转发，避免前端跨域直接请求OBS签名URL。
+      operationId: getSkillPackageContent
+      parameters:
+      - name: skill_id
+        in: path
+        description: Skill ID。
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      - name: workspace_id
+        in: query
+        description: 空间ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
+      - name: project_id
+        in: path
+        description: 项目ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,40}$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/zip:
+              schema:
+                $ref: "#/components/schemas/StreamingResponseBody"
   /v1/{project_id}/agent-manager/resource/{app_id}/versions:
     get:
       tags:
@@ -28753,6 +28836,26 @@ components:
           type: string
         event_id:
           type: string
+    RuntimeAssetExportParams:
+      type: object
+      properties:
+        resource_type:
+          type: string
+          description: 导出类型：agent(单智能体) / controller(多智能体) / workflow(工作流)
+          example: agent
+          pattern: ^(agent|controller|workflow)$
+        resource_id:
+          type: string
+          description: 要导出的应用 ID（智能体 ID 或工作流 ID）
+          example: agent-uuid-001
+          pattern: "^[a-zA-Z0-9_-]+$"
+        version:
+          type: string
+          description: 版本号，缺省或 "latest" 导出当前发布版本
+          example: 1728465600000
+      required:
+      - resource_id
+      - resource_type
     ExportChildResource:
       type: object
       properties:
@@ -28870,11 +28973,11 @@ components:
       type: object
       additionalProperties: {}
       properties:
-        empty:
-          type: boolean
         innerMap:
           type: object
           additionalProperties: {}
+        empty:
+          type: boolean
     Audio2TextReq:
       type: object
       properties:
@@ -29303,6 +29406,8 @@ components:
           type: array
           items:
             type: string
+        outputFormat:
+          type: string
     DatasourceExecuteResp:
       type: object
       properties:
@@ -29314,6 +29419,8 @@ components:
         rowNum:
           type: integer
           format: int32
+        markdownTable:
+          type: string
     LicenseReport:
       type: object
       properties:
@@ -32038,6 +32145,8 @@ components:
           $ref: "#/components/schemas/StudioSkillInfo"
           description: 技能
           example: {}
+    StreamingResponseBody:
+      type: object
     ResourceVersionResponseBody:
       type: object
       properties:

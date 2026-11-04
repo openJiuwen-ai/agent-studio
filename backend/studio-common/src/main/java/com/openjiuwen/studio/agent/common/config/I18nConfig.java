@@ -21,7 +21,7 @@ public class I18nConfig {
     @Primary
     public MessageSource messageSource() {
         ResourceBundleMessageSource messageSource = new ResourceBundleMessageSource();
-        messageSource.setBasenames("i18n/studio-messages", "messages");
+        messageSource.setBasenames("i18n/studio-messages", "messages", "agent-base-i18n/messages");
         messageSource.setDefaultEncoding("UTF-8");
         // 设置缓存时间 1h
         messageSource.setCacheSeconds(3600);

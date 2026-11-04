@@ -163,6 +163,14 @@ public enum ErrorCode {
     DEFAULT_KNOWLEDGE_BASE_CONNECTION_UNSUPPORTED(HttpStatus.BAD_REQUEST.value(), "0027",
         "Only the default knowledge base connection is supported for configuration."),
 
+    /**
+     * 知识库类型为平台级互斥选择（OpenJiuwen 与 Other 内部库不支持并存）。
+     * 已存在引用默认连接的存量知识库实例时，禁止切换默认连接类型（切换将破坏存量实例检索）。
+     */
+    DEFAULT_KNOWLEDGE_BASE_CONNECTION_TYPE_SWITCH_FORBIDDEN(HttpStatus.BAD_REQUEST.value(), "0028",
+        "Knowledge base type is a platform-level exclusive option: existing instances use the default connection, "
+            + "switching the type is not supported."),
+
     /********************************************** 业务通用的一些错误码 *************************************************/
 
     /**

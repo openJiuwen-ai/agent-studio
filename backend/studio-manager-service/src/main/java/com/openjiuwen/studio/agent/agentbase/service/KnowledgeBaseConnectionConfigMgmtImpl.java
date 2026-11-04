@@ -318,6 +318,14 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
                 KnowledgeBaseConnectionEntity connection = dbConnections.get(0);
                 KnowledgeBaseConnectorEntity connector = connectorMapper.find(connectorId);
 
+                // 类型互斥约束（平台级互斥选择）：OpenJiuwen 类型无参数可改，连接文件中的 model_config
+                // 由建库链路维护。存在引用默认连接的存量实例时，启动同步不得覆盖连接文件（否则抹掉
+                // model_config 破坏存量实例检索），仅在无实例时初始化模板文件。
+                if (CollectionUtils.isNotEmpty(knowledgeBaseMapper.selectByConnectionId(DEFAULT_CONNECTION_ID))) {
+                    log.info("Skip OpenJiuwenInside OBS sync while knowledge base instances exist");
+                    return;
+                }
+
                 kbConnectionStorageService.writeConnectionToObs(
                     connection,
                     connector != null ? connector.getType() : "inside",
@@ -556,6 +564,25 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             log.error("do not support to update config default knowledge base connection with connectionId [{}]",
                 body.getConnectorId());
             throw new AgentBaseException(ErrorCode.DEFAULT_KNOWLEDGE_BASE_CONNECTION_UNSUPPORTED);
+        }
+        // 类型互斥约束（平台级互斥选择）：OpenJiuwen 与 Other 内部库实例不支持并存。
+        // 存在引用该默认连接的存量实例时：①禁止切换连接类型（否则将破坏存量实例检索）；
+        // ②OpenJiuwen 类型无任何可修改参数，同类型保存不产生有效变更，幂等返回，
+        //   避免重写连接文件抹掉建库域写入的 model_config。
+        KnowledgeBaseConnectionEntity currentConnection = connectionMapper.findById(kbConnectionId);
+        if (currentConnection != null) {
+            boolean instancesExist = CollectionUtils.isNotEmpty(
+                knowledgeBaseMapper.selectByConnectionId(kbConnectionId));
+            if (instancesExist
+                && !StringUtils.equals(currentConnection.getConnectorId(), body.getConnectorId())) {
+                log.error("Forbid switching default connection type from [{}] to [{}] while instances exist",
+                    currentConnection.getConnectorId(), body.getConnectorId());
+                throw new AgentBaseException(ErrorCode.DEFAULT_KNOWLEDGE_BASE_CONNECTION_TYPE_SWITCH_FORBIDDEN);
+            }
+            if (instancesExist && OPENJIUWEN_INSIDE.getValue().equals(body.getConnectorId())) {
+                log.info("OpenJiuwen default connection has no mutable params, no-op update while instances exist");
+                return new UpdateDefaultKnowledgeBaseConnectionResponse().setId(kbConnectionId);
+            }
         }
         // 校验参数与连接器中定义的参数是否一致并加密
         List<ConnectionParamInfo> connectionParamInfos = knowledgeBaseConnectionValidateService.checkAndEncryptedParams(

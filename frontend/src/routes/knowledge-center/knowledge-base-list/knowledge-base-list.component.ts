@@ -326,9 +326,18 @@ export class KnowledgeBaseListComponent implements OnInit, AfterViewInit, OnDest
   public getBadgeStatus(iconType: string): string {
     const statusMap: any = {
       'success': 'success',
+      'active': 'success',
       'error': 'error',
+      'alarmFatal': 'error',
+      'alarmHigh': 'error',
       'warn': 'warning',
+      'alarmMedium': 'warning',
+      'alarmLow': 'warning',
       'info': 'processing',
+      'creating': 'processing',
+      'cancel': 'default',
+      'freeze': 'default',
+      'alarmPrompt': 'default',
       'default': 'default',
     };
     return statusMap[iconType] || 'default';
