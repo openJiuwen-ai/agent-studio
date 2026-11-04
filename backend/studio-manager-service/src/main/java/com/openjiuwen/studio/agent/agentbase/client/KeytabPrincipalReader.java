@@ -85,7 +85,15 @@ public final class KeytabPrincipalReader {
                 pos = next;
             }
         }
-        return names.toArray(new String[0]);
+        String[] result = names.toArray(new String[0]);
+        if (result.length == 0) {
+            // 评审修订 2026-11-04:空结果抛 IOException 而非返回空数组——
+            // 调用方 doKerberosLogin 的 [0] 取首元素,空数组会抛
+            // ArrayIndexOutOfBoundsException 绕过外层 IOException catch,
+            // 与类注释"解析失败抛 IOException"契约不一致
+            throw new IOException("no valid principals found in keytab: " + keytabFile);
+        }
+        return result;
     }
 
     private static void addIfMatches(List<String> names, Pattern pattern, String principal) {
