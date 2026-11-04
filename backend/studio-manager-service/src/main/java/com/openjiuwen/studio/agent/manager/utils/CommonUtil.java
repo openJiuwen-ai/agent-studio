@@ -306,19 +306,23 @@ public class CommonUtil {
             java.net.URI uri = new java.net.URI(url);
             String path = uri.getPath();
             if (path == null || path.isEmpty() || "/".equals(path)) {
-                // 无 host（如 "localhost:8080" 会被解析为 scheme=localhost、host=null）
-                // 时无法安全重建 URL，保持原样返回，避免改写成丢端口的畸形地址
-                if (uri.getHost() == null) {
+                // getRawAuthority() 为 null 才是真正"无 authority"（如
+                // "localhost:8080" 被解析为 scheme=localhost、ssp=8080），
+                // 无法安全重建 URL，保持原样返回，避免改写成丢端口的畸形地址。
+                // 不能用 getHost()==null 判定：registry-based authority
+                // （如主机名含下划线的 http://my_mcp_host:8080）getHost()
+                // 也返回 null，但这类地址有完整 host:port，应照常补 /mcp。
+                if (uri.getRawAuthority() == null) {
                     return url;
                 }
                 String newPath = "/mcp";
                 String query = uri.getQuery();
                 String fragment = uri.getFragment();
+                // 用 authority 字符串构造，兼容 registry-based authority
+                //（getHost()==null、主机名含下划线等场景）
                 java.net.URI newUri = new java.net.URI(
                         uri.getScheme(),
-                        uri.getUserInfo(),
-                        uri.getHost(),
-                        uri.getPort(),
+                        uri.getRawAuthority(),
                         newPath,
                         query,
                         fragment

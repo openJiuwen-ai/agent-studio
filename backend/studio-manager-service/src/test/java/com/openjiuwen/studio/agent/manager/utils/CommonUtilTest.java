@@ -339,12 +339,22 @@ class CommonUtilTest {
 
     @Test
     void testParseUrlFromMcpConfig_NoSchemeUrlLeftUnchanged() {
-        // "localhost:8080" 被解析为 scheme=localhost、host=null，无法安全补 /mcp；
+        // "localhost:8080" 被解析为 scheme=localhost、rawAuthority=null，无法安全补 /mcp；
         // 应保持原样，而不是改写成丢端口的畸形地址 "localhost:/mcp"
         com.alibaba.fastjson2.JSONObject config = new com.alibaba.fastjson2.JSONObject();
         config.put("url", "localhost:8080");
         String result = CommonUtil.parseUrlFromMcpConfig(config, 0);
         assertEquals("localhost:8080", result);
+    }
+
+    @Test
+    void testParseUrlFromMcpConfig_RegistryBasedAuthorityStillAppendsMcp() {
+        // 主机名含下划线属 registry-based authority（getHost()==null），
+        // 但 rawAuthority 完整、有真实 host:port，应照常补 /mcp 且端口不丢失
+        com.alibaba.fastjson2.JSONObject config = new com.alibaba.fastjson2.JSONObject();
+        config.put("url", "http://my_mcp_host:8080");
+        String result = CommonUtil.parseUrlFromMcpConfig(config, 0);
+        assertEquals("http://my_mcp_host:8080/mcp", result);
     }
 
     @Test
