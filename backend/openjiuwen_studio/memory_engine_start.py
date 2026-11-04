@@ -57,7 +57,19 @@ class MemoryEngineManager:
             )
             logger.info("✅ milvus vector store created")
         elif vector_db_type == "chroma":
-            vector_store = create_vector_store(vector_db_type, persist_directory=data_dir)
+            try:
+                vector_store = create_vector_store(vector_db_type, persist_directory=data_dir)
+            except ImportError as exc:
+                # chromadb depends on native Rust bindings. On Windows these
+                # require the Microsoft Visual C++ 2015-2022 Redistributable, and
+                # a missing runtime surfaces as a low-level "DLL load failed"
+                # ImportError. Raise an actionable message instead.
+                raise RuntimeError(
+                    "Failed to initialize the Chroma vector store because a native "
+                    "dependency could not be loaded. On Windows, install the "
+                    "'Microsoft Visual C++ 2015-2022 Redistributable (x64)' and retry. "
+                    f"Original error: {exc}"
+                ) from exc
             logger.info("✅ chroma vector store created")
         else:
             raise ValueError(f"Unknown vector db type: {vector_db_type}, please set VECTOR_DB_TYPE to milvus or chroma")
