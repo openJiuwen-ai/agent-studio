@@ -1656,9 +1656,12 @@ export class ControllerModalComponent
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
     if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      // 成员 mode 按最新版本 sub_type 动态映射后，通用模式成员同样可安全升级；
-      // 仅 deepresearch 不支持作为子智能体，不提示升级
-      return hasNewVersion && app.latest_version_app_sub_type !== 'deepresearch';
+      // 与 flow.component 的升级铃铛判定保持一致：sub_type 存在且非
+      // deepresearch 才提示（成员 mode 动态映射后通用模式成员同样可
+      // 安全升级）；字段可选，缺失/空串时不提示，避免对未知子类型
+      // 误触发升级（既有行为）
+      return hasNewVersion && !!app.latest_version_app_sub_type
+        && app.latest_version_app_sub_type !== 'deepresearch';
     }
     return hasNewVersion;
   }
