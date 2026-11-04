@@ -744,7 +744,7 @@ class LLMChain(WorkflowComponent):
 
     async def _stream_thinking_enabled(
         self, language_model_inputs, output_id, node_id, session,
-        oj_telemetry: Optional[TraceManager] = None,
+        oj_telemetry: Optional[_OjTelemetryGuard] = None,
     ):
         """思考开关 enabled: reasoning 真流式 + content 假流式（预消费）"""
         (
@@ -812,7 +812,7 @@ class LLMChain(WorkflowComponent):
     async def _stream_real_time(
         self, language_model_inputs, output_id, node_id, session,
         output_reasoning=True,
-        oj_telemetry: Optional[TraceManager] = None,
+        oj_telemetry: Optional[_OjTelemetryGuard] = None,
     ):
         """真流式路径 — thinking 非 enabled 时走此路径
 
