@@ -119,6 +119,7 @@ from jiuwen.extension.workflow_node.utils import WorkflowMetadata
 from jiuwen.serve.controllers.execution.ir_parallel_utils import (
     ParallelJoinPlan,
     _sanitize_node_id,
+    build_dead_lane_skip_plan,
     build_parallel_join_plan,
     collect_parallel_join_nodes,
 )
@@ -776,6 +777,22 @@ class _ParallelInvokeLaneDoneComponent(WorkflowComponent):
     def skip_trace(self) -> bool:
         return True
 
+    async def invoke(self, inputs, session, context):
+        return {}
+
+
+class _LaneSkipComponent(WorkflowComponent):
+    """No-op marker that compensates a structurally inactive parallel lane.
+
+    Appended to an outer mutually-exclusive branch arm which can only activate a
+    strict subset of a parallel join's lanes (cross-branch lane reuse). Firing
+    this skip feeds the dead lane's lane-done marker so the join's hard AND
+    barrier ``[done_a, done_b, ...] -> join`` can complete on that arm instead
+    of deadlocking. It carries no data and is hidden from the trace.
+    """
+
+    def skip_trace(self) -> bool:
+        return True
 
     async def invoke(self, inputs, session, context):
         return {}
@@ -1699,8 +1716,87 @@ class IRConverter:
 
         node_by_id = {node.get("id"): node for node in components if node.get("id")}
         connections = _normalize_list(ir_data.get("connections") or [])
-        parallel_join_nodes = collect_parallel_join_nodes(connections, node_by_id)
-        parallel_join_plan = build_parallel_join_plan(connections, node_by_id)
+
+        # Pre-collect every loop body component ID *before* any lane planning.
+        # loopBody entries may be either inline node dicts or plain string IDs
+        # referencing top-level components. The root workflow must never plan
+        # parallel-join / dead-lane compensation for edges whose both endpoints
+        # live inside a loop body: those lanes are owned by the body's LoopGroup
+        # (see the jiuwen.loop branch in _create_component), otherwise their
+        # _parallel_done / _lane_skip markers get registered on the root graph
+        # with no body branch to feed them and leak as orphan components.
+        _loop_body_ids: set[str] = set()
+        # body 组件 id -> 所属 loop 节点 id，用于跨边界错误路由给出精确定位。
+        _body_id_to_loop_id: dict[str, str] = {}
+        for _ln in components:
+            if _ln.get("type") != "jiuwen.loop":
+                continue
+            _loop_id = _ln.get("id") or ""
+            for _b in (_ln.get("configs") or {}).get("loopBody") or []:
+                if isinstance(_b, str):
+                    _loop_body_ids.add(_b)
+                    if _loop_id:
+                        _body_id_to_loop_id.setdefault(_b, _loop_id)
+                elif isinstance(_b, dict) and _b.get("id"):
+                    _loop_body_ids.add(_b["id"])
+                    if _loop_id:
+                        _body_id_to_loop_id.setdefault(_b["id"], _loop_id)
+
+        def _conn_endpoint_id(endpoint: object) -> str:
+            return ((endpoint or {}).get("componentId") or "").strip() if isinstance(
+                endpoint, dict
+            ) else ""
+
+        # Root scope: drop inter-body connections so the lane machinery below
+        # only reasons about the outer workflow. Body-internal fork/joins are
+        # planned separately inside LoopGroup.
+        root_connections = []
+        for _conn in connections:
+            _src_in_body = _conn_endpoint_id((_conn.get("source") or {})) in _loop_body_ids
+            _dst_in_body = _conn_endpoint_id((_conn.get("target") or {})) in _loop_body_ids
+            # Drop connections whose two endpoints both sit inside one loop body.
+            if _src_in_body and _dst_in_body:
+                continue
+            # A @@ error-route whose source lives in a loop body cannot be
+            # synthesized on the root workflow: the source node exists only
+            # inside the isolated LoopGroup subgraph.
+            #   - target 也在同一 body 内：已被上面的「两端皆在 body」过滤交给
+            #     LoopGroup 的 error_branch 机制接线；
+            #   - target 在 body 之外（跨边界）：LoopGroup 图里不存在该出口节点，
+            #     根图里又不存在源节点，没有任何运行时接线语义。旧逻辑在此静默
+            #     continue，等于悄悄吞掉用户配置的错误路由（misconfiguration 被
+            #     掩盖，线上表现为错误处理“不生效”却无任何提示）。改为编译期
+            #     fail-fast 显式报错，让用户改为 body 内目标或先出 loop 再分流。
+            if _src_in_body and "@@" in (
+                (_conn.get("source") or {}).get("branchId") or ""
+            ):
+                _cross_branch_id = (
+                    (_conn.get("source") or {}).get("branchId") or ""
+                ).strip()
+                _cross_src = _conn_endpoint_id(_conn.get("source") or {})
+                _cross_dst = _conn_endpoint_id(_conn.get("target") or {})
+                raise ValueError(
+                    "cross-boundary error route is not supported: error branch "
+                    f"'{_cross_branch_id}' from loop-body node '{_cross_src}' "
+                    f"(loop '{_body_id_to_loop_id.get(_cross_src, '?')}') targets "
+                    f"node '{_cross_dst}' outside the loop body. A '${{node}}@@...' "
+                    "error route cannot cross a LoopGroup boundary: route it to a "
+                    "node inside the loop body, or move the error handling after "
+                    "the loop node."
+                )
+            root_connections.append(_conn)
+        parallel_join_nodes = collect_parallel_join_nodes(root_connections, node_by_id)
+        parallel_join_plan = build_parallel_join_plan(root_connections, node_by_id)
+        # Cross-branch lane reuse: an outer branch arm may activate only a
+        # strict subset of a parallel join's lanes (e.g. nested 判断 whose
+        # if/elseIf arms each reuse one lane of an outer default fork). The
+        # join's hard AND [done...] barrier would then wait forever for the
+        # inactive lanes' done markers -> the join silently never runs. Plan
+        # no-op skip nodes appended to those arms that fire the dead lanes'
+        # done markers instead.
+        dead_lane_skip_plan = build_dead_lane_skip_plan(
+            root_connections, parallel_join_plan
+        )
         # lane 机制接管的汇聚点不再叠加 wait_for_all：join 由 [done 列表] ->
         # join_target 的列表边 barrier 完成 AND 等待。若叠加 wait_for_all，
         # 入边会再经过 _resolve_barrier_groups 的 CNF 分组，在「判断节点分支
@@ -1716,7 +1812,7 @@ class IRConverter:
         }
         if _lane_join_targets:
             _rewritten_keys = set(parallel_join_plan.terminal_to_done)
-            for _conn in connections:
+            for _conn in root_connections:
                 _src = ((_conn.get("source") or {}).get("componentId") or "").strip()
                 _dst = ((_conn.get("target") or {}).get("componentId") or "").strip()
                 if not _src or not _dst or _dst not in _lane_join_targets:
@@ -1757,7 +1853,7 @@ class IRConverter:
 
         # Pre-compute stream connection targets from explicit IR connections.
         stream_input_target_ids: set[str] = set()
-        for connection in connections:
+        for connection in root_connections:
             source = ((connection.get("source") or {}).get("componentId") or "").strip()
             target = ((connection.get("target") or {}).get("componentId") or "").strip()
             branch_id = ((connection.get("source") or {}).get("branchId") or "").strip()
@@ -1789,7 +1885,7 @@ class IRConverter:
                 stream_input_target_ids.add(target)
 
         parallel_stream_done_inputs: dict[str, dict] = {}
-        for connection in connections:
+        for connection in root_connections:
             source = ((connection.get("source") or {}).get("componentId") or "").strip()
             target = ((connection.get("target") or {}).get("componentId") or "").strip()
             branch_id = ((connection.get("source") or {}).get("branchId") or "").strip()
@@ -1831,15 +1927,6 @@ class IRConverter:
             parallel_join_plan, parallel_stream_done_inputs, ir_stream_source_ids
         )
 
-        # Pre-collect all loop body component IDs so that root-level connection
-        # processing can skip inter-body connections (they belong to LoopGroup, not main workflow).
-        _loop_body_ids: set[str] = set()
-        for _n in components:
-            if _n.get("type") == "jiuwen.loop":
-                for _bid in (_n.get("configs") or {}).get("loopBody") or []:
-                    if isinstance(_bid, str) and _bid in node_by_id:
-                        _loop_body_ids.add(_bid)
-
         pending_end_nodes: list[dict] = []
         pending_branch_nodes: list[dict] = []
         for idx, node in enumerate(components):
@@ -1879,6 +1966,23 @@ class IRConverter:
                 lane_done = _ParallelInvokeLaneDoneComponent()
                 workflow.add_workflow_comp(done_node_id, lane_done, inputs_schema={})
             component_by_id[done_node_id] = lane_done
+
+        # Register dead-lane skip markers. Only invoke (non-streaming) lane
+        # dones are compensable with a plain batch skip edge; a TRANSFORM
+        # lane-done expects stream frames and a batch trigger would raise
+        # 112052, so streaming-lane reuse is left untouched (separate problem).
+        effective_lane_skips = [
+            skip
+            for skip in dead_lane_skip_plan.skips
+            if skip.done_node not in parallel_stream_done_inputs
+        ]
+        for skip in effective_lane_skips:
+            if skip.skip_node in component_by_id:
+                continue
+            lane_skip = _LaneSkipComponent()
+            workflow.add_workflow_comp(skip.skip_node, lane_skip, inputs_schema={})
+            component_by_id[skip.skip_node] = lane_skip
+        _lane_skip_done_edges = {(s.skip_node, s.done_node) for s in effective_lane_skips}
 
         # Register mixed-lane sentinel components. Each sentinel sits between a
         # non-stream terminal and its lane-done: terminal -> sentinel (batch),
@@ -1925,6 +2029,16 @@ class IRConverter:
             if target in end_node_ids:
                 batch_connection_targets.add(target)
             branch_connections.append((source, target, branch_id))
+
+        # Dead-lane compensation: append each skip node to its outer arm's
+        # branch target list. Grouping by (source, branch_id) merges it with the
+        # arm's real target into ONE add_branch([...]) call, so the branch
+        # router emits both on that arm (a second add_branch with the same
+        # condition would be shadowed by the first matching branch).
+        for skip in effective_lane_skips:
+            branch_connections.append(
+                (skip.branch_node, skip.skip_node, skip.branch_id)
+            )
 
         IRConverter._add_branch_connections_with_default_last(
             component_by_id, node_by_id, branch_connections
@@ -1981,8 +2095,21 @@ class IRConverter:
             else:
                 workflow.add_connection(source, target)
 
+        # Dead-lane compensation edges: skip -> the dead lane's done marker.
+        # The invoke lane-done triggers on ANY incoming edge (OR), so this
+        # satisfies it on the mutually-exclusive arm; genuinely active lanes
+        # still satisfy their own done via their real terminal. The join's AND
+        # barrier then sees every done exactly once per run.
+        for skip_node, done_node in _lane_skip_done_edges:
+            workflow.add_connection(skip_node, done_node)
+            existing_connections.add((skip_node, done_node))
+
         error_branch_groups: dict[str, list[tuple[str, str]]] = {}
-        for connection in connections:
+        # 只遍历 root_connections：inline loopBody 内部的 @@ 错误分支边两端都
+        # 属于 LoopGroup，若在此注册到根 workflow 会产生孤立的
+        # {body_node}_error_branch 组件（其源节点根本不在根图）或触发构建校验
+        # 失败。body 内错误路由由 LoopGroup 的接线自行负责。
+        for connection in root_connections:
             _bid = ((connection.get("source") or {}).get("branchId") or "").strip()
             if _bid and "@@" in _bid:
                 _src = (
@@ -2443,6 +2570,39 @@ class IRConverter:
             # are wired, so add_workflow_comp → register_branch_targets sees full routers.
             pending_loop_branch_nodes: list[dict] = []
 
+            # Collect body-internal raw connections (configs + root-level IR) up
+            # front, BEFORE registering body components, so the parallel fallback
+            # wait_for_all set is known at registration time. The lane machinery
+            # fully replaces the AND wait only for fully-covered joins; every other
+            # join keeps wait_for_all (the root workflow path subtracts the managed
+            # set the same way). Previously the loop-body fallback never passed any
+            # parallel_join_nodes, so a fallback join had no wait_for_all at all and
+            # could fire early / repeatedly.
+            loop_body_ids = set(loop_body_by_id.keys())
+            loop_body_raw_connections = IRConverter._collect_loop_body_raw_connections(
+                configs.get("connections") or [],
+                ir_connections,
+                loop_body_ids,
+            )
+            body_parallel_join_nodes = collect_parallel_join_nodes(
+                loop_body_raw_connections, loop_body_by_id
+            )
+            if body_parallel_join_nodes:
+                _body_plan = build_parallel_join_plan(
+                    loop_body_raw_connections, loop_body_by_id
+                )
+                if _body_plan.joins:
+                    _body_managed = set()
+                    for spec in IRConverter._select_managed_loop_body_join_specs(
+                        _body_plan,
+                        loop_body_raw_connections,
+                        loop_body_by_id,
+                    ):
+                        _body_managed.add(spec.join_target)
+                    body_parallel_join_nodes = (
+                        body_parallel_join_nodes - _body_managed
+                    )
+
             # Add loop body components
             loop_component_by_id = {}
             for body_node in loop_body:
@@ -2453,44 +2613,74 @@ class IRConverter:
                     pending_branch_nodes=pending_loop_branch_nodes,
                     node_by_id=node_by_id,
                     ir_connections=ir_connections,
+                    parallel_join_nodes=body_parallel_join_nodes,
                 )
                 if body_comp is not None:
                     loop_component_by_id[body_node.get("id")] = body_comp
 
             # Collect loop body branch connections from configs and top-level IR.
             loop_body_connections = configs.get("connections") or []
-            loop_body_ids = set(loop_body_by_id.keys())
             loop_branch_connections: list[tuple[str, str, str]] = []
             loop_regular_connections: list[tuple[str, str]] = []
-            for conn in loop_body_connections:
-                src = ((conn.get("source") or {}).get("componentId") or "").strip()
-                tgt = ((conn.get("target") or {}).get("componentId") or "").strip()
-                bid = ((conn.get("source") or {}).get("branchId") or "").strip()
-                if not src or not tgt:
-                    continue
-                if bid:
-                    loop_branch_connections.append((src, tgt, bid))
-                    continue
-                loop_regular_connections.append((src, tgt))
 
-            # The IR stores loop body inter-component connections at the root level, NOT inside
-            # the loop node's configs. Without this, body components are disconnected in LoopGroup.
-            for conn in ir_connections or []:
-                src = ((conn.get("source") or {}).get("componentId") or "").strip()
-                tgt = ((conn.get("target") or {}).get("componentId") or "").strip()
-                bid = ((conn.get("source") or {}).get("branchId") or "").strip()
-                if not src or not tgt:
-                    continue
+            # loop_body_raw_connections is already built above (pre-registration);
+            # populate the scalar branch/regular wiring lists in the same single
+            # pass over both sources, with virtual _input/_output anchors filtered.
+            def _classify_body_conn(conn: dict) -> None:
+                _src = ((conn.get("source") or {}).get("componentId") or "").strip()
+                _tgt = ((conn.get("target") or {}).get("componentId") or "").strip()
+                if not _src or not _tgt:
+                    return
                 # Skip virtual _input/_output connections (handled below for start/end nodes)
-                if src == f"{node_id}_input" or tgt == f"{node_id}_output":
-                    continue
-                # Only process connections where both endpoints are loop body components
-                if src not in loop_body_ids or tgt not in loop_body_ids:
-                    continue
-                if bid:
-                    loop_branch_connections.append((src, tgt, bid))
-                    continue
-                loop_regular_connections.append((src, tgt))
+                if _src == f"{node_id}_input" or _tgt == f"{node_id}_output":
+                    return
+                if _src not in loop_body_ids or _tgt not in loop_body_ids:
+                    return
+                _bid = ((conn.get("source") or {}).get("branchId") or "").strip()
+                if _bid:
+                    if (_src, _tgt, _bid) not in loop_branch_connections:
+                        loop_branch_connections.append((_src, _tgt, _bid))
+                elif (_src, _tgt) not in loop_regular_connections:
+                    loop_regular_connections.append((_src, _tgt))
+
+            for conn in loop_body_connections:
+                _classify_body_conn(conn)
+            for conn in ir_connections or []:
+                _classify_body_conn(conn)
+
+            # Plan & wire the body's own parallel fork/join lanes INSIDE the
+            # LoopGroup. This mirrors the root lane machinery but is scoped to
+            # body components: dead-lane skips / lane-done markers register on
+            # loop_group, and lane-rewritten terminal edges are removed from
+            # the plain body wiring so the AND barrier ([done...] -> join) is
+            # the only path into each lane-managed join.
+            (
+                loop_branch_connections,
+                loop_regular_connections,
+            ) = IRConverter._wire_loop_body_parallel_lanes(
+                loop_group,
+                loop_body_raw_connections,
+                loop_body_by_id,
+                loop_component_by_id,
+                loop_branch_connections,
+                loop_regular_connections,
+            )
+
+            # Split @@ error-routes off the normal branch list before wiring
+            # if/elseIf/default: non-branch sources (message/llm/code ...) have
+            # no add_branch, so _add_branch_connection silently drops them, and
+            # even for jiuwen.branch sources the error arm must not be mounted
+            # on the condition component's if/default router. Mirror the root
+            # path: synthesize a dedicated {src}_error_branch BranchComponent.
+            loop_error_branch_groups: dict[str, list[tuple[str, str]]] = {}
+            loop_branch_connections, _normal_loop_branches = [], loop_branch_connections
+            for _src, _tgt, _bid in _normal_loop_branches:
+                if "@@" in _bid:
+                    _group = loop_error_branch_groups.setdefault(_src, [])
+                    if (_tgt, _bid) not in _group:
+                        _group.append((_tgt, _bid))
+                else:
+                    loop_branch_connections.append((_src, _tgt, _bid))
 
             IRConverter._add_branch_connections_with_default_last(
                 loop_component_by_id,
@@ -2500,6 +2690,32 @@ class IRConverter:
             IRConverter._register_pending_branch_nodes(
                 loop_group, pending_loop_branch_nodes
             )
+
+            # Register synthesized error routers only AFTER the pending branch
+            # nodes joined the group: an error arm's target may itself be a
+            # deferred jiuwen.branch component, and add_workflow_comp validates
+            # that every edge endpoint already exists in the LoopGroup graph.
+            for _src_id, _branches in loop_error_branch_groups.items():
+                _branch_comp = BranchComponent()
+                _branch_node_id = f"{_src_id}_error_branch"
+                _branches.sort(
+                    key=lambda item: IRConverter._branch_registration_sort_key(
+                        _src_id, item[1], loop_body_by_id
+                    )
+                )
+                for _target, _branch_id in _branches:
+                    _source_node = loop_body_by_id.get(_src_id) or {}
+                    _source_type = _source_node.get("type", "")
+                    _cond = _resolve_branch_condition(
+                        _source_node, _source_type, _branch_id
+                    )
+                    _branch_comp.add_branch(_cond, _target, branch_id=_branch_id)
+                loop_group.add_workflow_comp(
+                    _branch_node_id,
+                    _branch_comp,
+                    inputs_schema={"userFields": {"passthrough": "${" + _src_id + "}"}},
+                )
+                loop_group.add_connection(_src_id, _branch_node_id)
 
             for src, tgt in loop_regular_connections:
                 loop_group.add_connection(src, tgt)
@@ -3074,6 +3290,214 @@ class IRConverter:
             0,
             IRConverter._branch_connection_sort_key(source, branch_id, node_by_id),
         )
+
+    @staticmethod
+    def _loop_body_stream_source_ids(
+        loop_body_by_id: dict[str, dict],
+    ) -> set[str]:
+        """Mirror the root streaming-producer detection, scoped to a loop body."""
+        llm_types = {
+            "jiuwen.llm",
+            "jiuwen.llm_chain",
+            "jiuwen.llmChain",
+            "jiuwen.LLMComponent",
+        }
+        stream_ids: set[str] = set()
+        for nid, node in loop_body_by_id.items():
+            ntype = node.get("type", "")
+            cfgs = node.get("configs") or {}
+            llm_stream = ntype in llm_types and bool(cfgs.get("stream", False))
+            api_stream = ntype in getattr(
+                IRConverter, "_STREAMING_API_TYPES", set()
+            ) and bool(cfgs.get("streaming", False))
+            if llm_stream or api_stream:
+                stream_ids.add(nid)
+        return stream_ids
+
+    @staticmethod
+    def _collect_loop_body_raw_connections(
+        body_config_connections: list[dict] | None,
+        ir_connections: list[dict] | None,
+        loop_body_ids: set[str],
+    ) -> list[dict]:
+        """汇总 loop body 内部连接（configs.connections + 根级 IR 连接），去重。
+
+        仅保留两端都是 body 组件的连接；虚拟 ``{node}_input`` / ``{node}_output``
+        锚点不是 body 组件，天然被两端过滤排除。抽成 helper 是为了在 body 组件
+        【注册之前】就能对汇聚点做并行规划（注册时要据此设置 wait_for_all）。
+        """
+        raw: list[dict] = []
+
+        def _consider(conn: dict) -> None:
+            src = ((conn.get("source") or {}).get("componentId") or "").strip()
+            tgt = ((conn.get("target") or {}).get("componentId") or "").strip()
+            if not src or not tgt:
+                return
+            if src not in loop_body_ids or tgt not in loop_body_ids:
+                return
+            bid = ((conn.get("source") or {}).get("branchId") or "").strip()
+            key = (src, tgt, bid)
+            if any(
+                (
+                    ((c.get("source") or {}).get("componentId") or "").strip(),
+                    ((c.get("target") or {}).get("componentId") or "").strip(),
+                    ((c.get("source") or {}).get("branchId") or "").strip(),
+                )
+                == key
+                for c in raw
+            ):
+                return
+            raw.append(conn)
+
+        for conn in body_config_connections or []:
+            _consider(conn)
+        for conn in ir_connections or []:
+            _consider(conn)
+        return raw
+
+    @staticmethod
+    def _select_managed_loop_body_join_specs(
+        plan: "ParallelJoinPlan",
+        loop_body_raw_connections: list[dict],
+        loop_body_by_id: dict[str, dict],
+    ) -> list[Any]:
+        """从并行 plan 中选出会在 LoopGroup 内被 lane 机制真正接管的汇聚 spec。
+
+        口径必须与根工作流路径一致：(1) 汇聚点是纯 invoke（非流式）路径；
+        (2) 该汇聚点的每条入边都能被 ``terminal_to_done`` 改写到某条 lane-done
+        （全覆盖）。任何一条未覆盖的直达/条件入边都会让接管退化为独立触发边，
+        因此这类汇聚点整体放弃接管，交回 legacy 接线 + wait_for_all。
+
+        注册 body 组件前调用本方法，即可得到「不会被 lane 接管、因此必须保留
+        wait_for_all」的汇聚集合（collect_parallel_join_nodes 减去本集合）。
+        """
+        body_stream_ids = IRConverter._loop_body_stream_source_ids(loop_body_by_id)
+        capable = getattr(IRConverter, "_STREAM_INPUT_CAPABLE_TARGET_TYPES", set())
+        aggregates = getattr(IRConverter, "_AGGREGATE_TYPES", set())
+
+        managed_specs: list[Any] = []
+        for spec in plan.joins.values():
+            join_type = loop_body_by_id.get(spec.join_target, {}).get("type", "")
+            stream_capable_join = join_type in capable and join_type not in aggregates
+            has_stream_terminal = False
+            for lane in spec.lanes:
+                for terminal_source, _bid in lane.terminals:
+                    if stream_capable_join and terminal_source in body_stream_ids:
+                        has_stream_terminal = True
+                        break
+                if has_stream_terminal:
+                    break
+            if not has_stream_terminal:
+                managed_specs.append(spec)
+
+        if not managed_specs:
+            return []
+
+        managed_join_targets = {spec.join_target for spec in managed_specs}
+        _rewritten_keys = set(plan.terminal_to_done)
+        for _conn in loop_body_raw_connections:
+            _src = ((_conn.get("source") or {}).get("componentId") or "").strip()
+            _dst = ((_conn.get("target") or {}).get("componentId") or "").strip()
+            if not _src or not _dst or _dst not in managed_join_targets:
+                continue
+            if _src.endswith("_input") or _dst.endswith("_output"):
+                continue
+            _bid = ((_conn.get("source") or {}).get("branchId") or "").strip() or None
+            if (_src, _dst, _bid) not in _rewritten_keys:
+                managed_join_targets.discard(_dst)
+        return [spec for spec in managed_specs if spec.join_target in managed_join_targets]
+
+    @staticmethod
+    def _wire_loop_body_parallel_lanes(
+        loop_group: "LoopGroup",
+        loop_body_raw_connections: list[dict],
+        loop_body_by_id: dict[str, dict],
+        loop_component_by_id: dict[str, Any],
+        loop_branch_connections: list[tuple[str, str, str]],
+        loop_regular_connections: list[tuple[str, str]],
+    ) -> tuple[list[tuple[str, str, str]], list[tuple[str, str]]]:
+        """Plan & wire body-internal parallel fork/join lanes inside LoopGroup.
+
+        Returns the (possibly rewritten) branch/regular connection lists.
+        Streaming lanes inside loop bodies are left on the legacy wiring
+        (transform lane-dones are not supported inside LoopGroup yet); only
+        pure-invoke parallel joins are lane-managed here.
+        """
+        if not loop_body_raw_connections:
+            return loop_branch_connections, loop_regular_connections
+
+        plan = build_parallel_join_plan(
+            loop_body_raw_connections, loop_body_by_id
+        )
+        if not plan.joins:
+            return loop_branch_connections, loop_regular_connections
+
+        skip_plan = build_dead_lane_skip_plan(loop_body_raw_connections, plan)
+        managed_specs = IRConverter._select_managed_loop_body_join_specs(
+            plan, loop_body_raw_connections, loop_body_by_id
+        )
+        if not managed_specs:
+            return loop_branch_connections, loop_regular_connections
+
+        managed_join_targets = {spec.join_target for spec in managed_specs}
+
+        # 1) Register invoke lane-done markers inside the LoopGroup.
+        for spec in managed_specs:
+            for lane in spec.lanes:
+                done_id = lane.done_node
+                if done_id in loop_component_by_id:
+                    continue
+                lane_done = _ParallelInvokeLaneDoneComponent()
+                loop_group.add_workflow_comp(done_id, lane_done, inputs_schema={})
+                loop_component_by_id[done_id] = lane_done
+
+        # 2) Rewrite terminal -> join edges into terminal -> done edges.
+        new_branch: list[tuple[str, str, str]] = []
+        for src, tgt, bid in loop_branch_connections:
+            done_id = plan.rewrite_target(src, tgt, bid)
+            if done_id is not None and tgt in managed_join_targets:
+                new_branch.append((src, done_id, bid))
+            else:
+                new_branch.append((src, tgt, bid))
+        loop_branch_connections = new_branch
+
+        new_regular: list[tuple[str, str]] = []
+        for src, tgt in loop_regular_connections:
+            done_id = plan.rewrite_target(src, tgt)
+            if done_id is not None and tgt in managed_join_targets:
+                new_regular.append((src, done_id))
+            else:
+                new_regular.append((src, tgt))
+        loop_regular_connections = new_regular
+
+        # 3) Dead-lane compensation: register skip markers, append each to its
+        #    outer arm's branch targets, and edge skip -> dead lane's done.
+        for skip in skip_plan.skips:
+            if skip.done_node not in loop_component_by_id:
+                # Compensates a streaming/non-managed lane: unsupported here.
+                continue
+            if skip.skip_node not in loop_component_by_id:
+                lane_skip = _LaneSkipComponent()
+                loop_group.add_workflow_comp(
+                    skip.skip_node, lane_skip, inputs_schema={}
+                )
+                loop_component_by_id[skip.skip_node] = lane_skip
+            loop_branch_connections.append(
+                (skip.branch_node, skip.skip_node, skip.branch_id)
+            )
+            loop_regular_connections.append(
+                (skip.skip_node, skip.done_node)
+            )
+
+        # 4) AND barrier: [lane-done, ...] -> join target via a list-source
+        #    edge. The plain body wiring loop only emits scalar edges, so add
+        #    the list barrier directly on the LoopGroup.
+        for spec in managed_specs:
+            done_nodes = [lane.done_node for lane in spec.lanes]
+            if len(done_nodes) >= 2:
+                loop_group.add_connection(done_nodes, spec.join_target)
+
+        return loop_branch_connections, loop_regular_connections
 
     @staticmethod
     def _add_branch_connections_with_default_last(
