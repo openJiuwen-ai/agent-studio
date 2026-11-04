@@ -6024,11 +6024,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           item.parent_node_type = ag_wf_list.find((wf) => wf.node_id === item?.id)
             ?.parent_node_type ?? 'controller';
         }
-        // 单智能体节点：与编排弹窗 isNeedUpdate 判定对齐，最新版本须为
-        // planexecute 类型才提示升级（否则升级后成员 mode='PlanExecute' 与实际版本类型不符）
+        // 单智能体节点：与编排弹窗 isNeedUpdate 判定对齐，最新版本非 deepresearch
+        // 即提示升级（成员 mode 按最新版本 sub_type 动态映射，通用/规划均可安全升级；
+        // deepresearch 仍不支持作为子智能体，不提示）
         const isSubAgentUpdatable =
           item.type !== 'Agent' ||
-          matchedFlow?.latest_version_app_sub_type === 'planexecute';
+          matchedFlow?.latest_version_app_sub_type !== 'deepresearch';
         // 新增!version_id，用于兼容存量数据。绑定的资源是开发态，没有版本号
         if (
           matchedFlow &&

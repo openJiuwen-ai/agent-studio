@@ -655,8 +655,15 @@ export class ControllerModalComponent
     this.associationAgentCtx = this.nodeInfo.configs.agents?.map(
       (agent) => {
         const { configs } = agent;
-        const applicationType = agent.mode === 'PlanExecute'
-          ? ApplicationType.SINGLE_AGENT : ApplicationType.MULTI_AGENT;
+        // 成员类型判定：configs.type === 'agent' 为单智能体（getSubSingleAgent 写入），
+        // 多智能体成员 configs 无 type 字段（getSubMultiAgent 不写入）但外层 mode 恒为
+        // 'Controller'。不依赖外层 mode === 'PlanExecute' 判单智能体——mode 现按子类型
+        // 动态映射，通用单智能体成员 mode 为 'agent'，旧判据会把它们错归为多智能体
+        const applicationType = configs.type === ApplicationType.SINGLE_AGENT
+          ? ApplicationType.SINGLE_AGENT
+          : (agent.mode === 'Controller'
+            ? ApplicationType.MULTI_AGENT
+            : ApplicationType.SINGLE_AGENT);
 
         return {
           id: agent.id,

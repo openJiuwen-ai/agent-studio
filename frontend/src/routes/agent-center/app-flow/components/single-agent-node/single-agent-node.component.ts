@@ -195,6 +195,9 @@ export class SingleAgentNodeComponent
             id: this.nodeInfo?.id,
             name: agentInfo.name,
             type: 'Agent',
+            // 外层 mode 与 configs.mode 同步（flow.component 的 subAgentsBodyUpdate$
+            // 重建成员条目时读取外层 mode，flow-item/initAgents 均消费该值）
+            mode: memberMode,
             configs: {
               node_id: '',
               id: agentInfo.agent_id,
