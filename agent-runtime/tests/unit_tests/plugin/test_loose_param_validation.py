@@ -109,6 +109,9 @@ class TestFlowApiLooseValidation:
         assert "skip undefined param" in warnings[0][1]
         assert warnings[0][2]["metadata"]["param_name"] == "extra"
         assert errors == []
+        # 评审修订 2026-11-04（PR#2577）：松校验跳过的 WARNING 不带 event_type
+        # ——防按 event_type 聚合的日志/告警把迁移期兼容性跳过计入组件错误指标
+        assert "event_type" not in warnings[0][2]
 
     @staticmethod
     def test_none_valued_extra_param_always_skipped_without_log(monkeypatch):
@@ -164,6 +167,9 @@ class TestFlowMcpLooseValidation:
         assert "skip undefined param" in warnings[0][1]
         assert warnings[0][2]["metadata"]["param_name"] == "extra"
         assert errors == []
+        # 评审修订 2026-11-04（PR#2577）：松校验跳过的 WARNING 不带 event_type
+        # ——防按 event_type 聚合的日志/告警把迁移期兼容性跳过计入组件错误指标
+        assert "event_type" not in warnings[0][2]
 
 
 # ─── 4. 新引擎 FlowCustomApi（callMode=custom 的插件节点） ────────────
@@ -202,6 +208,9 @@ class TestFlowCustomApiLooseValidation:
         assert "skip undefined param" in warnings[0][1]
         assert warnings[0][2]["metadata"]["param_name"] == "extra"
         assert errors == []
+        # 评审修订 2026-11-04（PR#2577）：松校验跳过的 WARNING 不带 event_type
+        # ——防按 event_type 聚合的日志/告警把迁移期兼容性跳过计入组件错误指标
+        assert "event_type" not in warnings[0][2]
 
 
 # ─── 5. 旧引擎（orchestration） ────────────────────────────────────────

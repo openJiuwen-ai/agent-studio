@@ -325,10 +325,11 @@ class FlowCustomApi(WorkflowComponent):
                     # 与 FlowApi/FlowMcp 同款行为——未知参数打 WARNING（带参数名）
                     # 后跳过，自定义插件照常被调用（评审修订 2026-11-03：
                     # callMode=custom 的插件节点走本组件，漏掉会造成"同一个开关，
-                    # 一部分插件节点好一部分仍报错"的行为分叉）
+                    # 一部分插件节点好一部分仍报错"的行为分叉）。
+                    # 评审修订（2026-11-04 PR#2577）：不带 event_type——防按
+                    # event_type 聚合时兼容性跳过被计入组件错误指标。
                     workflow_logger.warning(
                         "FlowCustomApi loose param validation: skip undefined param",
-                        event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                         component_type_str="FlowCustomApi",
                         metadata={"param_name": name},
                     )

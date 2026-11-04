@@ -76,7 +76,8 @@ def is_loose_param_validation_enabled() -> bool:
     环境变量 ``PLUGIN_MCP_LOOSE_PARAM_VALIDATION`` 为 true（大小写不敏感、
     允许首尾空白）时开启；未设置或其他值一律关闭（默认严格校验：
     未定义参数名抛 WORKFLOW_API_INPUTS_ERROR / WORKFLOW_MCP_INPUTS_ERROR）。
-    每次调用实时读取环境变量，改值须重启进程生效。
+    每次调用实时读取环境变量，改值即时生效（无需重启进程）——评审修订
+    2026-11-04：删除与此矛盾的"须重启"表述。
     """
     return str(os.getenv(_LOOSE_PARAM_VALIDATION_ENV, "")).strip().lower() == "true"
 
