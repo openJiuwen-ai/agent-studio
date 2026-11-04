@@ -32,6 +32,14 @@ class ServerSettings(BaseSettings):
     docs_enabled: bool = Field(default=False, validation_alias="API_DOCS_ENABLED")
     # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出
     performance_log_enabled: bool = Field(default=True, validation_alias="PERFORMANCE_LOG_ENABLED")
+    # 性能日志级别，默认 WARNING (静默)；设为 INFO 才真正打印 perf 指标
+    performance_log_level: str = Field(default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL")
+
+    @field_validator("performance_log_level", mode="before")
+    @classmethod
+    def _perf_level_default(cls, v):
+        """空字符串按默认 WARNING 处理。"""
+        return v or "WARNING"
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
