@@ -1,4 +1,3 @@
-import io
 import os
 import sys
 import time
@@ -8,6 +7,17 @@ from contextlib import asynccontextmanager
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.append(backend_dir)
+
+# Reconfigure stdio to UTF-8 in place before importing modules that emit logs,
+# so startup messages containing non-ASCII characters do not raise
+# UnicodeEncodeError on consoles using a legacy code page (e.g. GBK/cp936, the
+# default on many Windows systems). Reconfiguring in place keeps the logging
+# StreamHandler(stream=sys.stdout) bound to the same, now UTF-8, stream.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError, OSError):
+        pass
 
 import uvicorn
 from dotenv import load_dotenv
@@ -76,9 +86,6 @@ from openjiuwen_studio.core.manager.redis_manager.redis_client import redis_mana
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.runner.runner_config import get_runner_config
 from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerConfig
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 @asynccontextmanager
