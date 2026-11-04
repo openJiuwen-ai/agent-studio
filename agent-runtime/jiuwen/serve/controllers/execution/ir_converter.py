@@ -940,7 +940,10 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
         FlowAgent 实例。
     """
     from agent_runtime.common.model_adapters import adapt_react_agent_config
-    from agent_runtime.common.trace_compat import build_traced_model
+    from agent_runtime.common.trace_compat import (
+        DEFINITION_SCOPED_SESSION_ID,
+        build_traced_model,
+    )
     from jiuwen.extension.wrapper.restful_api_loader import load_restful_api_from_ir
     from openjiuwen.core.foundation.llm import Model as SDKModel
     from openjiuwen.core.runner import Runner
@@ -949,11 +952,15 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     provider = _get_model_config_provider()
     adapted_conf = adapt_react_agent_config(configs)
     llm_comp_config = await provider.get_llm_config(adapted_conf)
+    # 转换产物是定义级组件（跨执行复用），构建时不存在真实会话 id——显式落
+    # 定义级常量而非退 x-request-id（请求级 id 盖在复用模型上会错归属）；
+    # 会话归因由执行期 trace 树承担（span 挂真实工作流组件壳/trace 下）
     model = build_traced_model(
         SDKModel(
             model_client_config=llm_comp_config.model_client_config,
             model_config=llm_comp_config.model_config,
-        )
+        ),
+        session_id=DEFINITION_SCOPED_SESSION_ID,
     )
     # LLMReAct 内部 ReAct 循环的每次模型调用经装饰器各产一个带 usage/ttft
     # 的 llm span（首调并入 LLM 类组件壳、后续为壳下子 span，由 core 门控）

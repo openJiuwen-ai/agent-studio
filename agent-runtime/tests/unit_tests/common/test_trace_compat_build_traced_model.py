@@ -64,7 +64,7 @@ def stub_decorate(monkeypatch):
 
     import openjiuwen.core.session.tracer as core_tracer
 
-    monkeypatch.setattr(core_tracer, "decorate_model_with_trace", _decorate)
+    monkeypatch.setattr(core_tracer, "decorate_model_with_trace", _decorate, raising=False)
     return calls
 
 
@@ -118,7 +118,7 @@ class TestDegrade:
         """旧 core 无 decorate_model_with_trace 入口：降级返回裸模型。"""
         import openjiuwen.core.session.tracer as core_tracer
 
-        monkeypatch.delattr(core_tracer, "decorate_model_with_trace")
+        monkeypatch.delattr(core_tracer, "decorate_model_with_trace", raising=False)
         model = object()
         assert build_traced_model(model) is model
 
@@ -206,13 +206,9 @@ class TestSiteWiring:
         for node in ast.walk(invoke):
             if isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if (
-                        isinstance(target, ast.Attribute)
-                        and target.attr == "_session"
-                        and isinstance(target.value, ast.Name)
-                        and target.value.id == "self"
-                    ):
-                        store_line = node.lineno
+                    if isinstance(target, ast.Attribute) and target.attr == "_session":
+                        if isinstance(target.value, ast.Name) and target.value.id == "self":
+                            store_line = node.lineno
             if isinstance(node, ast.Call):
                 func = node.func
                 if isinstance(func, ast.Attribute) and func.attr == "_initialize_model":
