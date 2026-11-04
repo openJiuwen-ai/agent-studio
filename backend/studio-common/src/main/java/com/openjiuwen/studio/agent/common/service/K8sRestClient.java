@@ -54,7 +54,7 @@ public final class K8sRestClient {
     private static final String SERVICEACCOUNT_DIR = "/var/run/secrets/kubernetes.io/serviceaccount";
     private static final String TOKEN_FILE = SERVICEACCOUNT_DIR + "/token";
     private static final String CA_CERT_FILE = SERVICEACCOUNT_DIR + "/ca.crt";
-    private static final String PODS_URL_FORMAT = "https://%s:%s/api/v1/pods";
+    private static final String PODS_URL_FORMAT = "https://kubernetes.default.svc:%s/api/v1/pods";
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
     /** 瞬时失败重试次数(评审修订 2026-11-04 LOW:原 client-java 内建重试) */
     private static final int MAX_RETRIES = 2;
@@ -85,8 +85,11 @@ public final class K8sRestClient {
         }
         String token = Files.readString(Path.of(TOKEN_FILE), StandardCharsets.UTF_8).trim();
         HttpClient client = getOrCreateClient();
+        // 评审修订 2026-11-04:用 Service DNS(kubernetes.default.svc)替代
+        // KUBERNETES_SERVICE_HOST(ClusterIP)——前者在 apiserver 证书 SAN 中
+        // 稳定命中,后者(IP)在部分集群/前置 TLS 代理下不在 SAN 导致握手失败
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(String.format(PODS_URL_FORMAT, host, port)))
+                .uri(URI.create(String.format(PODS_URL_FORMAT, port)))
                 .header("Authorization", "Bearer " + token)
                 .timeout(REQUEST_TIMEOUT)
                 .GET()
