@@ -437,7 +437,7 @@ async def test_async_ir_to_workflow_with_memory_refs_builds_correctly():
 
     original_create = getattr(IRConverter, "_create_component")
 
-    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None, trace_identity=None):
+    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None):
         node_type = node.get("type")
         if node_type == "jiuwen.code":
             return _MockCode(), node_type, dict(node.get("configs") or {})
