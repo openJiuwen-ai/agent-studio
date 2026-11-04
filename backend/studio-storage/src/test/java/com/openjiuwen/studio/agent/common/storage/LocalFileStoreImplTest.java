@@ -75,7 +75,7 @@ class LocalFileStoreImplTest {
         // 兼容空 bucket 配置：调用方会拼出 "/bucket/..." 形式的键
         fileStore.write("/bucket/ok.txt", "content");
 
-        assertTrue(Files.exists(baseDir.resolve("bucket/ok.txt")));
+        assertTrue(Files.exists(tempDir.resolve("bucket/ok.txt")));
     }
 
     @Test
