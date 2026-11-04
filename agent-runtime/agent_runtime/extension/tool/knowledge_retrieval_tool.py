@@ -117,14 +117,29 @@ async def _trace_retrieval_event(tracer, event_name: str, span, **payload) -> bo
 
 
 def _drop_retrieval_span(tracer, span):
-    """注销 create_agent_span 留在 span manager 的登记。
+    """注销登记 + 尽力结束已开启的 otel span。
 
-    start/end/error 事件任一未送达时兜底调用：避免留下永不 start/end 的
-    悬空记录（last_span 也会被它污染）。注销失败同样不得影响降级路径。
+    start/end/error 事件任一未送达时兜底调用：注销 create_agent_span 留在
+    span manager 的登记（避免永不 start/end 的悬空记录，last_span 也会被它
+    污染）。end/error 未送达时 otel handler 手中的 otel span 已开启且再无
+    关闭时机——若已注册 handler 暴露 drop_agent_span（core !3570/!3571 起），
+    再显式结束它（OK 状态 + drop 标记事件），否则半开 span 永久滞留。
+    旧 core 无该接口时退化为仅注销登记。全部尽力而为，不得影响降级路径。
     """
     try:
         tracer.tracer_agent_span_manager.pop_span(span.invoke_id)
     except Exception:  # noqa: BLE001 - 注销失败不影响降级路径
+        pass
+    try:
+        # 公共注册表遍历（TracerHandlerRegistry 为 core 公共 API）；
+        # 逐 handler 探测，未提供 drop_agent_span 的实现直接跳过
+        from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+        for handler in TracerHandlerRegistry.get_agent_handlers().values():
+            drop = getattr(handler, "drop_agent_span", None)
+            if callable(drop):
+                drop(span.invoke_id)
+    except Exception:  # noqa: BLE001 - 结束失败不影响降级路径
         pass
 
 

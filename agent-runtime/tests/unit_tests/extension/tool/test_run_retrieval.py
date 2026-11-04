@@ -433,3 +433,85 @@ async def test_run_retrieval_error_event_failure_pops_registration(monkeypatch):
     # start 已送达；error 未送达但登记已注销
     assert [e[1] for e in tracer.events] == ["on_retriever_start"]
     assert tracer.span_manager.popped == ["inv-1"]
+
+
+@pytest.mark.asyncio
+async def test_drop_retrieval_span_calls_handler_drop(monkeypatch):
+    """end 未送达且 handler 提供 drop_agent_span：显式结束半开 otel span。"""
+    from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+    dropped = []
+
+    from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
+
+    def _noop(self, *args, **kwargs):  # noqa: ANN001 - stub 事件全量哑实现
+        pass
+
+    # 抽象基类：全量事件哑实现，仅显式提供 drop_agent_span
+    _DropHandler = type(
+        "_DropHandler",
+        (TraceExtAgentHandler,),
+        {
+            **{name: _noop for name in TraceExtAgentHandler.__abstractmethods__},
+            "drop_agent_span": lambda self, invoke_id: dropped.append(invoke_id),
+        },
+    )
+
+    TracerHandlerRegistry.register_handler("otel_agent_test_drop", _DropHandler())
+    try:
+        tracer = _StubTracer(fail_events={"on_retriever_end"})
+        _patch_traced_session(monkeypatch, tracer)
+        sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+        _patch_lake_search_flow(monkeypatch, sample)
+
+        await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+    finally:
+        TracerHandlerRegistry.clear()
+
+    # 注销登记 + 结束 handler 侧已开启的 otel span（同一 invoke_id）
+    assert tracer.span_manager.popped == ["inv-1"]
+    assert dropped == ["inv-1"]
+
+
+@pytest.mark.asyncio
+async def test_drop_retrieval_span_old_core_degrades(monkeypatch):
+    """旧 core handler 无 drop_agent_span：探测跳过，不抛错。"""
+    from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
+    from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+    def _noop(self, *args, **kwargs):  # noqa: ANN001 - stub 事件全量哑实现
+        pass
+
+    # 旧 core 语义：无 drop_agent_span，其余事件接口照常存在
+    _OldCoreHandler = type(
+        "_OldCoreHandler",
+        (TraceExtAgentHandler,),
+        {name: _noop for name in TraceExtAgentHandler.__abstractmethods__},
+    )
+
+    TracerHandlerRegistry.register_handler("otel_agent_test_old", _OldCoreHandler())
+    try:
+        tracer = _StubTracer(fail_events={"on_retriever_end"})
+        _patch_traced_session(monkeypatch, tracer)
+        sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+        _patch_lake_search_flow(monkeypatch, sample)
+
+        out = await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+    finally:
+        TracerHandlerRegistry.clear()
+
+    # 降级：仅注销登记，业务照常
+    assert tracer.span_manager.popped == ["inv-1"]
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
