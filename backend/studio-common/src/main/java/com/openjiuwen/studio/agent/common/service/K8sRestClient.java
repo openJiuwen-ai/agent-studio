@@ -59,6 +59,12 @@ public final class K8sRestClient {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /** 惰性单例(评审修订 2026-11-04:LicenseControlSchedule 定时调用,每
+     *  次 new HttpClient 会重复构建 SSL 上下文/连接池——单例复用)。
+     *  首次调用初始化(需读 ServiceAccount CA);初始化失败不缓存,
+     *  下次调用重试(集群凭据可能挂载晚于进程启动)。 */
+    private static volatile HttpClient sharedClient;
+
     private K8sRestClient() {
     }
 
@@ -75,10 +81,7 @@ public final class K8sRestClient {
             throw new IOException("not running in kubernetes: KUBERNETES_SERVICE_HOST/PORT absent");
         }
         String token = Files.readString(Path.of(TOKEN_FILE), StandardCharsets.UTF_8).trim();
-        HttpClient client = HttpClient.newBuilder()
-                .sslContext(buildSslContext())
-                .connectTimeout(REQUEST_TIMEOUT)
-                .build();
+        HttpClient client = getOrCreateClient();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(String.format(PODS_URL_FORMAT, host, port)))
                 .header("Authorization", "Bearer " + token)
@@ -138,6 +141,22 @@ public final class K8sRestClient {
         String host = System.getenv("KUBERNETES_SERVICE_HOST");
         String port = System.getenv("KUBERNETES_SERVICE_PORT");
         return host != null && !host.isEmpty() && port != null && !port.isEmpty();
+    }
+
+    private static HttpClient getOrCreateClient() throws IOException {
+        HttpClient existing = sharedClient;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (K8sRestClient.class) {
+            if (sharedClient == null) {
+                sharedClient = HttpClient.newBuilder()
+                        .sslContext(buildSslContext())
+                        .connectTimeout(REQUEST_TIMEOUT)
+                        .build();
+            }
+            return sharedClient;
+        }
     }
 
     private static SSLContext buildSslContext() throws IOException {

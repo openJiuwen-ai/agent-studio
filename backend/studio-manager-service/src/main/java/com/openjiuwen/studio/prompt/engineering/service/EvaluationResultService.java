@@ -236,7 +236,6 @@ public class EvaluationResultService {
 
         String time = DateUtil.format(new Date());
 
-        String fileName = "EvaluationResultExport_" + evaluationTaskName + "_" + time + ".xlsx";
         String fileNameHeader = "EvaluationResultExport_" + time + ".xlsx";
         response.setContentType("application/octet-stream;charset=utf-8");
         response.setHeader("Content-Disposition", "attachment;filename=" + fileNameHeader);
@@ -259,7 +258,7 @@ public class EvaluationResultService {
      *       原 validateExportExcel(Workbook) 一致。</li>
      * </ul>
      */
-    private void exportByEasyExcel(List<EvaluationResultsExportExcel> rows, II18nHandler i18nHandler,
+    void exportByEasyExcel(List<EvaluationResultsExportExcel> rows, II18nHandler i18nHandler,
             String sheetName) {
         List<List<String>> head = buildExportHead(i18nHandler);
         List<List<Object>> flatRows = flattenRows(rows);
@@ -273,8 +272,11 @@ public class EvaluationResultService {
                 .head(head)
                 .sheet(sheetName)
                 .registerWriteHandler(mergeStrategy)
-                .registerWriteHandler(new FixedColumnWidthStyleStrategy(buildColumnWidths()))
+                .registerWriteHandler(new FixedColumnWidthStyleStrategy(buildColumnWidths(), 8))
                 .doWrite(flatRows);
+            // 末段合并收尾(评审修订 2026-11-04:最后一行的同值段
+            // 不会有下一行触发 closeOpenSegments,须显式收尾)
+            mergeStrategy.finish();
         } catch (Exception e) {
             log.error("export evaluation results failed: {}", e.getMessage(), e);
             throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
@@ -298,7 +300,7 @@ public class EvaluationResultService {
      * 两个集合按各自下标对齐(超出补空)——与 easypoi 多 ExcelCollection
      * 的"逐行配对、不足留空"展开形态一致。
      */
-    private static List<List<Object>> flattenRows(List<EvaluationResultsExportExcel> rows) {
+    static List<List<Object>> flattenRows(List<EvaluationResultsExportExcel> rows) {
         List<List<Object>> flat = new ArrayList<>();
         for (EvaluationResultsExportExcel row : rows) {
             List<VariableExport> vars = row.getVariableExportList() == null

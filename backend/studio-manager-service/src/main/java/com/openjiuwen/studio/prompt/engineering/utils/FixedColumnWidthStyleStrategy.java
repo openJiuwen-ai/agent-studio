@@ -29,22 +29,27 @@ public class FixedColumnWidthStyleStrategy implements SheetWriteHandler {
     /**
      * 构造固定列宽策略。
      *
-     * @param columnWidths 列索引 → 宽度(字符数);缺省列用默认 12
+     * @param columnWidths 列索引 → 宽度(字符数)
+     * @param totalColumns 总列数(含未在 map 中的列——评审修订 2026-11-04:
+     *        原实现只设到 map 最大列,后续列连默认宽都不设,与"缺省 12"
+     *        意图不一致)
      */
-    public FixedColumnWidthStyleStrategy(Map<Integer, Integer> columnWidths) {
+    public FixedColumnWidthStyleStrategy(Map<Integer, Integer> columnWidths, int totalColumns) {
         this.columnWidths = columnWidths;
+        this.totalColumns = totalColumns;
     }
+
+    private final int totalColumns;
 
     @Override
     public void afterSheetCreate(WriteWorkbookHolder writeWorkbookHolder, WriteSheetHolder writeSheetHolder) {
         Sheet sheet = writeSheetHolder.getSheet();
-        // 表头行高与默认行风格交给 EasyExcel;此处仅列宽
-        int maxColumn = columnWidths.keySet().stream().max(Integer::compareTo).orElse(0) + 1;
-        for (int column = 0; column < maxColumn; column++) {
+        // 全部列宽逐列设置(map 中的用指定值,其余用默认 12)
+        for (int column = 0; column < totalColumns; column++) {
             int width = columnWidths.getOrDefault(column, DEFAULT_WIDTH);
             sheet.setColumnWidth(column, width * WIDTH_UNIT);
         }
-        // 触发列宽应用到已存在的表头行(EasyExcel 表头先行写入)
+        // 表头行高(EasyExcel 表头先行写入)
         Row headerRow = sheet.getRow(0);
         if (headerRow != null) {
             headerRow.setHeightInPoints(20);
