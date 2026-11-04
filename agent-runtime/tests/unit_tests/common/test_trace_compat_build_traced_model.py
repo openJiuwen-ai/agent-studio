@@ -131,7 +131,7 @@ class TestCapabilityProbe:
     def test_probe_exact_capability_string_opens_gate(monkeypatch):
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", "1")
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", "1", raising=False)
         monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", None)
         assert trace_compat._llm_shell_merge_capable() is True
 
@@ -141,7 +141,7 @@ class TestCapabilityProbe:
         """版本化字符串契约：非 "1"（含 truthy bool/int）一律按未达标处理。"""
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", wrong)
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", wrong, raising=False)
         monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", None)
         assert trace_compat._llm_shell_merge_capable() is False
 

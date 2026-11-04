@@ -116,6 +116,18 @@ async def _trace_retrieval_event(tracer, event_name: str, span, **payload) -> bo
     return True
 
 
+def _drop_retrieval_span(tracer, span):
+    """注销 create_agent_span 留在 span manager 的登记。
+
+    start/end/error 事件任一未送达时兜底调用：避免留下永不 start/end 的
+    悬空记录（last_span 也会被它污染）。注销失败同样不得影响降级路径。
+    """
+    try:
+        tracer.tracer_agent_span_manager.pop_span(span.invoke_id)
+    except Exception:  # noqa: BLE001 - 注销失败不影响降级路径
+        pass
+
+
 async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retrieval_config):
     """Open the retriever trace span; returns the tracer span handle.
 
@@ -139,10 +151,7 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         instance_info={"class_name": "knowledge_retrieval_tool"},
     )
     if not started:
-        try:
-            tracer.tracer_agent_span_manager.pop_span(span.invoke_id)
-        except Exception:  # noqa: BLE001 - 注销失败不影响降级路径
-            pass
+        _drop_retrieval_span(tracer, span)
         return None
     return span
 
@@ -200,15 +209,20 @@ async def _run_retrieval(
             )
     except Exception as e:
         if trace_tracer is not None and trace_span is not None:
-            await _trace_retrieval_event(trace_tracer, "on_retriever_error", trace_span, error=e)
+            # error 事件未送达时与 start 失败路径对称注销，避免悬空登记
+            delivered = await _trace_retrieval_event(trace_tracer, "on_retriever_error", trace_span, error=e)
+            if not delivered:
+                _drop_retrieval_span(trace_tracer, trace_span)
         raise
     if trace_tracer is not None and trace_span is not None:
-        await _trace_retrieval_event(
+        delivered = await _trace_retrieval_event(
             trace_tracer,
             "on_retriever_end",
             trace_span,
             outputs={"document_count": len(results)},
         )
+        if not delivered:
+            _drop_retrieval_span(trace_tracer, trace_span)
     retrieval_id = uuid.uuid4().hex
     for index, result in enumerate(results, start=1):
         result.retrieval_id = retrieval_id

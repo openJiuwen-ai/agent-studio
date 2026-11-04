@@ -383,3 +383,53 @@ async def test_run_retrieval_start_event_failure_skips_end(monkeypatch):
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
     # 判死的同时注销登记：span manager 不留永不 start/end 的悬空记录
     assert tracer.span_manager.popped == ["inv-1"]
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_end_event_failure_pops_registration(monkeypatch):
+    """on_retriever_end 触发失败：与 start 失败路径对称注销登记，不留悬空记录。"""
+    tracer = _StubTracer(fail_events={"on_retriever_end"})
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    # start 已送达；end 未送达但登记已注销，业务照常
+    assert [e[1] for e in tracer.events] == ["on_retriever_start"]
+    assert tracer.span_manager.popped == ["inv-1"]
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_error_event_failure_pops_registration(monkeypatch):
+    """on_retriever_error 触发失败：同样对称注销；业务异常照常上抛。"""
+    from agent_runtime.extension.workflow_node import flow_knowledge_retrieval as fkr
+
+    tracer = _StubTracer(fail_events={"on_retriever_error"})
+    _patch_traced_session(monkeypatch, tracer)
+    _patch_lake_search_flow(monkeypatch, [])
+
+    async def boom(self, **kwargs):
+        raise RuntimeError("search failed")
+
+    monkeypatch.setattr(fkr.FlowKnowledgeRetrieval, "search_knowledge_repo", boom)
+
+    with pytest.raises(RuntimeError, match="search failed"):
+        await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+
+    # start 已送达；error 未送达但登记已注销
+    assert [e[1] for e in tracer.events] == ["on_retriever_start"]
+    assert tracer.span_manager.popped == ["inv-1"]
