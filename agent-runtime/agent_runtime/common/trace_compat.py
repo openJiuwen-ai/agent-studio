@@ -128,7 +128,9 @@ def build_traced_model(model, session=None, session_id: str = None):
         return model
     try:
         if session is None:
-            resolved = session_id or get_x_request_id() or DEFINITION_SCOPED_SESSION_ID
+            # 无显式 session_id 一律落定义级：不得退 x-request-id——定义级模型
+            # 跨执行复用，绑构建期请求会把后续执行错归该请求的 trace/会话。
+            resolved = session_id or DEFINITION_SCOPED_SESSION_ID
             if resolved == DEFINITION_SCOPED_SESSION_ID:
                 # 定义级产物：会话 id 与 trace 都不绑构建期请求，归因由执行期
                 # ambient 壳/rail 父链承担（绑首次请求会把后续执行错归其 trace）
