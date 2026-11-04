@@ -450,7 +450,7 @@ class Extractor(WorkflowComponent):
 
         self.chat_manager = session.get_global_state(WORKFLOW_CHAT_MANAGER)
 
-        self.llm = self._create_llm_instance()
+        self.llm = self._create_llm_instance(session_id=session.get_session_id())
 
         self.node_field = ExtractorField()
 
@@ -559,7 +559,7 @@ class Extractor(WorkflowComponent):
             ],
         )
 
-    def _create_llm_instance(self) -> Model:
+    def _create_llm_instance(self, session_id: str = None) -> Model:
         """创建 LLM 实例"""
         model_name = self.extractor_config.model_name
         model_type = self.extractor_config.model_type
@@ -608,8 +608,9 @@ class Extractor(WorkflowComponent):
         from agent_runtime.common.trace_compat import build_traced_model
 
         # 每次真实调用补一个带 usage/ttft 的 llm span（extractor 组件壳非
-        # chat 壳：llm span 作为子 span 嵌在组件壳下；会话 id 退请求级）
-        return build_traced_model(Model(client_config, model_config))
+        # chat 壳：llm span 作为子 span 嵌在组件壳下；真实会话 id 由 init
+        # 透传，缺会话时工厂退请求级）
+        return build_traced_model(Model(client_config, model_config), session_id=session_id)
 
     async def create_prompt_template_input(self, chat_history: list) -> dict:
         """
