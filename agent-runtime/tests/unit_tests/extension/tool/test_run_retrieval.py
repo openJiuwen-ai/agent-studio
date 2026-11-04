@@ -117,10 +117,11 @@ class _StubSpanManager:
 
 
 class _StubTracer:
-    def __init__(self, fail_trigger=False):
+    def __init__(self, fail_trigger=False, fail_events=None):
         self.span_manager = _StubSpanManager()
         self.events = []
         self.fail_trigger = fail_trigger
+        self.fail_events = fail_events or set()
 
     @property
     def tracer_agent_span_manager(self):
@@ -131,7 +132,7 @@ class _StubTracer:
         return True
 
     async def trigger(self, handler, event_name, span=None, **payload):
-        if self.fail_trigger:
+        if self.fail_trigger or event_name in self.fail_events:
             raise RuntimeError("otel exporter down")
         self.events.append((handler, event_name, span, payload))
 
@@ -146,7 +147,11 @@ class _StubSession:
 
 def _patch_traced_session(monkeypatch, tracer):
     session = _StubSession(tracer)
-    monkeypatch.setattr(krt, "get_current_session", lambda: session)
+    # get_current_session 已下沉为 _resolve_retrieval_tracer 内惰性导入，
+    # patch 源模块属性（导入发生在调用时，取到的是补丁值）
+    import openjiuwen.core.session as core_session
+
+    monkeypatch.setattr(core_session, "get_current_session", lambda: session)
 
 
 def _patch_lake_search_flow(monkeypatch, sample, normalize=None):
@@ -209,7 +214,9 @@ async def test_run_retrieval_emits_retriever_span(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_retrieval_no_session_skips_events(monkeypatch):
     """无会话 tracer：不发事件，业务结果不受影响。"""
-    monkeypatch.setattr(krt, "get_current_session", lambda: None)
+    import openjiuwen.core.session as core_session
+
+    monkeypatch.setattr(core_session, "get_current_session", lambda: None)
     sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
     _patch_lake_search_flow(monkeypatch, sample)
 
@@ -328,7 +335,8 @@ async def test_run_retrieval_span_start_failure_degrades(monkeypatch):
     tracer = _StubTracer()
 
     class _BrokenSpanManager:
-        def create_agent_span(self):
+        @staticmethod
+        def create_agent_span():
             raise RuntimeError("span manager down")
 
     tracer.span_manager = _BrokenSpanManager()
@@ -346,3 +354,24 @@ async def test_run_retrieval_span_start_failure_degrades(monkeypatch):
 
     assert tracer.events == []  # start 失败后 end 也不再发
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1  # 业务不受影响
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_start_event_failure_skips_end(monkeypatch):
+    """on_retriever_start 触发失败：span 判死（None），不再发 end——无半开 span。"""
+    tracer = _StubTracer(fail_events={"on_retriever_start"})
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    # start 未送达：end 事件不补发（span 已判死），业务照常
+    assert tracer.events == []
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1

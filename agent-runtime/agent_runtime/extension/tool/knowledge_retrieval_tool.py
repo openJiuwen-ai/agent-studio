@@ -16,8 +16,6 @@ from jiuwen.plugin.models.function import Function
 from jiuwen.plugin.models.param import Param
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.tool.base import Input, Output, Tool, ToolCard
-from openjiuwen.core.session import get_current_session
-from openjiuwen.core.session.tracer.handler import TracerHandlerName
 
 _RETRIEVAL_NAME = "retrieval"
 _QUERY = "query"
@@ -83,6 +81,9 @@ def _resolve_retrieval_tracer():
     handler 可用时才发 retriever 事件；无会话或 handler 未注册时静默跳过。
     """
     try:
+        # 惰性导入：旧 core 缺该符号时按无会话降级，模块导入不得因此失败
+        from openjiuwen.core.session import get_current_session
+
         session = get_current_session()
     except Exception:  # noqa: BLE001 - tracing must never break retrieval
         return None
@@ -99,16 +100,28 @@ def _resolve_retrieval_tracer():
     return tracer if handler_valid else None
 
 
-async def _trace_retrieval_event(tracer, event_name: str, span, **payload):
-    """Fire one tracer event; failures never propagate into the business flow."""
+async def _trace_retrieval_event(tracer, event_name: str, span, **payload) -> bool:
+    """Fire one tracer event; failures never propagate into the business flow.
+
+    返回事件是否送达 handler（start 事件据此决定 span 生死，避免半开 span）。
+    """
     try:
+        # 惰性导入：旧 core 缺该符号时按事件失败降级，模块导入不得因此失败
+        from openjiuwen.core.session.tracer.handler import TracerHandlerName
+
         await tracer.trigger(TracerHandlerName.TRACE_AGENT.value, event_name, span=span, **payload)
     except Exception as e:  # noqa: BLE001
         workflow_logger.warning("retrieval trace event '%s' failed: %s", event_name, e)
+        return False
+    return True
 
 
 async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retrieval_config):
-    """Open the retriever trace span; returns the tracer span handle."""
+    """Open the retriever trace span; returns the tracer span handle.
+
+    start 事件未送达（trigger 抛错被吞）时返回 None：调用侧据 None 跳过
+    后续 end/error 事件，避免产生只有 end 没有 start 的半开 span。
+    """
     span = tracer.tracer_agent_span_manager.create_agent_span()
     inputs: Dict[str, Any] = {"query": query}
     top_k = retrieval_config.get("topK") if isinstance(retrieval_config, dict) else None
@@ -116,14 +129,14 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         inputs["top_k"] = top_k
     if knowledge_base_ids:
         inputs["knowledge_base_ids"] = list(knowledge_base_ids)
-    await _trace_retrieval_event(
+    started = await _trace_retrieval_event(
         tracer,
         "on_retriever_start",
         span,
         inputs=inputs,
         instance_info={"class_name": "knowledge_retrieval_tool"},
     )
-    return span
+    return span if started else None
 
 
 async def _run_retrieval(
