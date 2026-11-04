@@ -25,13 +25,17 @@ async def ensure_openjiuwen_workflow_registered(
 
     Returns a ``LazyWorkflow`` shell — the actual IR -> Workflow graph build is
     deferred to the first ``stream``/``invoke`` call (see ``LazyWorkflow``).
-    Registration therefore has zero build cost; the per-request fresh build
-    happens lazily on first execution. Reusing a Workflow object across runs
-    is unsafe because agent-core mutates internal state (abilities, vertex
-    sessions, compiled Pregel graph) during execution, and the reset between
-    runs is only partial — leading to NoneType errors on the second
-    invocation, so we still remove-and-reregister the LazyWorkflow shell per
-    request to get a fresh deferred-build wrapper.
+
+    The shell is resolved through ``aget_or_create_workflow_instance``: for
+    published IR the *same* shell is handed out across requests, so the
+    expensive ``build_openjiuwen_workflow_from_ir`` runs once per
+    (ir_path, IR content) instead of once per request. Cross-request reuse of
+    the built graph is safe because execution-time state is sessionized by the
+    static_graph_patch set; unpublished IR and the downgraded path still build
+    a fresh shell every call.
+
+    The registry entry is still removed-and-reregistered per request so a
+    stale entry never outlives the IR it was built from.
     """
     workflow_id = workflow_id or workflow_ir.get("workflowId")
     tag = agent_id or None
@@ -41,9 +45,17 @@ async def ensure_openjiuwen_workflow_registered(
     _remove_workflow_if_exists(workflow_id, tag)
 
     from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+    from jiuwen.serve.controllers.execution.workflow_instance_cache import (
+        aget_or_create_workflow_instance,
+    )
 
-    workflow = await IRConverter.ir_to_workflow(workflow_ir)
-    _attach_workflow_ir_path(workflow, _resolve_workflow_ir_path(workflow_ir))
+    ir_path = _resolve_workflow_ir_path(workflow_ir)
+    workflow = await aget_or_create_workflow_instance(
+        ir_path,
+        workflow_ir,
+        build=IRConverter.async_ir_to_workflow,
+    )
+    _attach_workflow_ir_path(workflow, ir_path)
 
     result = Runner.resource_mgr.add_workflow(
         card=workflow.card,

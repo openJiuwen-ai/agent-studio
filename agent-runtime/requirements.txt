@@ -17,7 +17,14 @@ spiffworkflow==2.0.1
 pydantic-core==2.46.3
 elasticsearch==8.19.3
 jieba==0.42.1
-openjiuwen==0.1.17.post2
+# openjiuwen 暂指向 agent-core 修复分支（fix/0.1.17.post2-compile-reentrant，
+# 最新 commit d131d4f4：compile 可重入 + 执行期状态 ContextVar 化 + 结构解析
+# 跨编译缓存 + 执行路径反射特征预解析（静态图实例复用的引擎前置）+
+# Pregel 执行路径日志降噪 + callback traits 预解析与订阅门控）。待修复合入
+# openJiuwen/agent-core@develop 后改回 PyPI 版本 pin。
+# 注意：git+https 依赖要求构建镜像时装 git（见 studio-runtime 各 Dockerfile，
+# 随编译工具链临时安装、装完卸载）。
+openjiuwen @ git+https://gitcode.com/taoliankuan123/agent-core.git@d131d4f490f4eb1137b9cd4b2ccba97d4ceb48c4
 milvus-lite==3.1.1
 agent-sandbox==0.0.30
 opensearch-py==2.8.0
