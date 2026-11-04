@@ -14,10 +14,10 @@ import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.util.CellRangeAddress;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 同值纵向合并策略(瘦身修订 2026-11-04 1C,EasyExcel 版)。
@@ -33,9 +33,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SameValueVerticalMergeStrategy implements CellWriteHandler {
 
     private final Set<Integer> mergeColumns;
-    private final Map<Integer, String> lastValues = new ConcurrentHashMap<>();
-    private final Map<Integer, Integer> mergeStartRows = new ConcurrentHashMap<>();
+    private final Map<Integer, String> lastValues = new HashMap<>();
+    private final Map<Integer, Integer> mergeStartRows = new HashMap<>();
     private int lastRowIndex = -1;
+    private Sheet currentSheet;
 
     /**
      * 构造合并策略。
@@ -46,6 +47,17 @@ public class SameValueVerticalMergeStrategy implements CellWriteHandler {
         this.mergeColumns = mergeColumns;
     }
 
+    /**
+     * 收尾:合并末段(评审修订 2026-11-04——closeOpenSegments 只在新行
+     * 开始时被调用,末行起的不闭合段会在无后续行时永远丢失)。
+     * 调用方须在 EasyExcel doWrite() 之后调用本方法。
+     */
+    public void finish() {
+        if (currentSheet != null && lastRowIndex >= 0) {
+            closeOpenSegments(currentSheet, lastRowIndex);
+        }
+    }
+
     @Override
     public void afterCellDispose(WriteSheetHolder writeSheetHolder, WriteTableHolder writeTableHolder,
             java.util.List<WriteCellData<?>> cellDataList, Cell cell, Head head, Integer relativeRowIndex,
@@ -53,6 +65,7 @@ public class SameValueVerticalMergeStrategy implements CellWriteHandler {
         if (Boolean.TRUE.equals(isHead) || !mergeColumns.contains(cell.getColumnIndex())) {
             return;
         }
+        currentSheet = writeSheetHolder.getSheet();
         int sheetRowIndex = cell.getRowIndex();
         // 新行开始:先把上一行各列的未闭合段收尾
         if (sheetRowIndex != lastRowIndex) {
