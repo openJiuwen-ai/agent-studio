@@ -306,6 +306,11 @@ public class CommonUtil {
             java.net.URI uri = new java.net.URI(url);
             String path = uri.getPath();
             if (path == null || path.isEmpty() || "/".equals(path)) {
+                // 无 host（如 "localhost:8080" 会被解析为 scheme=localhost、host=null）
+                // 时无法安全重建 URL，保持原样返回，避免改写成丢端口的畸形地址
+                if (uri.getHost() == null) {
+                    return url;
+                }
                 String newPath = "/mcp";
                 String query = uri.getQuery();
                 String fragment = uri.getFragment();
