@@ -30,7 +30,8 @@ class _StubSession:
         def tracer(self):
             return self
 
-        def span(self):
+        @staticmethod
+        def span():
             return None
 
         @staticmethod
@@ -68,7 +69,8 @@ def stub_decorate(monkeypatch):
 
 
 class TestGate:
-    def test_gate_closed_returns_bare_model(self, monkeypatch, stub_decorate):
+    @staticmethod
+    def test_gate_closed_returns_bare_model(monkeypatch, stub_decorate):
         """能力门槛不达标：原模型原样返回，不导入装饰入口、不建会话。"""
         monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", False)
 
@@ -80,7 +82,8 @@ class TestGate:
         assert build_traced_model(model) is model
         assert stub_decorate == []
 
-    def test_gate_open_decorates_model(self, gate_open, stub_decorate, monkeypatch):
+    @staticmethod
+    def test_gate_open_decorates_model(gate_open, stub_decorate, monkeypatch):
         """门槛达标：新建轻量会话并装饰，session_id 透传。"""
         created = {}
 
@@ -96,7 +99,8 @@ class TestGate:
         assert isinstance(result[2], _StubSession)
         assert created["session_id"] == "conv-1"
 
-    def test_explicit_session_reused_no_fresh_one(self, gate_open, stub_decorate, monkeypatch):
+    @staticmethod
+    def test_explicit_session_reused_no_fresh_one(gate_open, stub_decorate, monkeypatch):
         """显式传入 session：直接复用，不再新建轻量会话。"""
         monkeypatch.setattr(
             trace_compat,
@@ -109,7 +113,8 @@ class TestGate:
 
 
 class TestDegrade:
-    def test_decorate_entry_missing_returns_bare(self, gate_open, monkeypatch):
+    @staticmethod
+    def test_decorate_entry_missing_returns_bare(gate_open, monkeypatch):
         """旧 core 无 decorate_model_with_trace 入口：降级返回裸模型。"""
         import openjiuwen.core.session.tracer as core_tracer
 
@@ -117,7 +122,8 @@ class TestDegrade:
         model = object()
         assert build_traced_model(model) is model
 
-    def test_session_creation_failure_returns_bare(self, gate_open, stub_decorate, monkeypatch):
+    @staticmethod
+    def test_session_creation_failure_returns_bare(gate_open, stub_decorate, monkeypatch):
         """轻量会话创建抛错：吞掉并返回裸模型，绝不阻断模型创建。"""
 
         def _explode(*args, **kwargs):
@@ -127,6 +133,16 @@ class TestDegrade:
         model = object()
         assert build_traced_model(model) is model
         assert stub_decorate == []
+
+
+def _find_calls_by_name(tree, func_name: str):
+    """按函数名收集 ast.Call 节点（显式循环，多判据不进推导式）。"""
+    calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == func_name:
+                calls.append(node)
+    return calls
 
 
 class TestSiteWiring:
@@ -146,19 +162,14 @@ class TestSiteWiring:
     @pytest.mark.parametrize("rel_path", sorted(SITES))
     def test_model_construction_routed_through_factory(self, rel_path):
         source = (_RUNTIME_ROOT / rel_path).read_text(encoding="utf-8")
-        calls = [
-            node
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "build_traced_model"
-        ]
+        calls = _find_calls_by_name(ast.parse(source), "build_traced_model")
         assert len(calls) == self.SITES[rel_path], (
             f"{rel_path}: expected {self.SITES[rel_path]} build_traced_model call(s), "
             f"found {len(calls)}"
         )
 
-    def test_resource_registration_model_stays_bare(self):
+    @staticmethod
+    def test_resource_registration_model_stays_bare():
         """ir_converter 资源注册（get_model 出口已装饰）不得再包工厂。"""
         source = (
             _RUNTIME_ROOT / "jiuwen/serve/controllers/execution/ir_converter.py"
@@ -169,13 +180,43 @@ class TestSiteWiring:
                 continue
             if "resource" not in node.name and "register" not in node.name:
                 continue
-            nested = [
-                n
-                for n in ast.walk(node)
-                if isinstance(n, ast.Call)
-                and isinstance(n.func, ast.Name)
-                and n.func.id == "build_traced_model"
-            ]
-            assert nested == [], (
+            assert _find_calls_by_name(node, "build_traced_model") == [], (
                 f"{node.name}: resource registration must not double-wrap models"
             )
+
+    @staticmethod
+    def test_questioner_session_stored_before_model_init():
+        """questioner.invoke 先落 self._session 再初始化模型（首调读 _session 的回归守护）。"""
+        source = (
+            _RUNTIME_ROOT / "jiuwen/extension/workflow_node/questioner.py"
+        ).read_text(encoding="utf-8")
+        invoke = None
+        questioner = None
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.ClassDef) and node.name == "Questioner":
+                questioner = node
+                break
+        assert questioner is not None, "class Questioner not found"
+        for node in ast.walk(questioner):
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "invoke":
+                invoke = node
+                break
+        assert invoke is not None, "Questioner.invoke not found"
+        store_line = init_line = None
+        for node in ast.walk(invoke):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if (
+                        isinstance(target, ast.Attribute)
+                        and target.attr == "_session"
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == "self"
+                    ):
+                        store_line = node.lineno
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Attribute) and func.attr == "_initialize_model":
+                    init_line = node.lineno
+        assert store_line is not None, "invoke must store self._session first"
+        assert init_line is not None, "invoke must call _initialize_model"
+        assert store_line < init_line
