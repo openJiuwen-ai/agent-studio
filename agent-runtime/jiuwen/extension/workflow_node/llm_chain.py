@@ -146,7 +146,14 @@ class LLMChain(WorkflowComponent):
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
-            return model
+            # 每次真实调用补一个带 usage/ttft 的 llm span（有壳合并/无壳新建，
+            # 由 core 能力门控；初始化时 _session 尚未落则退请求级会话）
+            from agent_runtime.common.trace_compat import build_traced_model
+
+            return build_traced_model(
+                model,
+                session_id=self._session.get_session_id() if self._session else None,
+            )
 
         except ValidationError as e:
             raise build_error(
@@ -161,8 +168,9 @@ class LLMChain(WorkflowComponent):
 
     async def invoke(self, inputs: dict[str, Any], session, context):
         """LLM 组件非流式调用接口"""
-        await self._initialize_if_needed()
+        # 先落 session 再按需初始化：模型工厂在首调建装饰器时能带上真实会话 id
         self._session = session
+        await self._initialize_if_needed()
         self._context = context
 
         inputs_data = inputs.get(USER_FIELDS, {})
@@ -206,8 +214,9 @@ class LLMChain(WorkflowComponent):
           None     → _is_thinking_enabled()=False 且 type 未设置 → content 真流式 + reasoning 真流式
           disabled → _is_thinking_enabled()=False 且 type=disabled → content 真流式，丢弃 reasoning
         """
-        await self._initialize_if_needed()
+        # 先落 session 再按需初始化：同 invoke 路径（真实会话 id 进模型工厂）
         self._session = session
+        await self._initialize_if_needed()
         node_id = session.get_component_id()
         self._context = context
         self._stream_final_output = None

@@ -781,9 +781,15 @@ class IntentDetection(WorkflowComponent):
         provider = _get_model_config_provider()
         llm_comp_config = await provider.get_llm_config(adapted_conf)
 
-        return Model(
-            model_client_config=llm_comp_config.model_client_config,
-            model_config=llm_comp_config.model_config,
+        from agent_runtime.common.trace_compat import build_traced_model
+
+        return build_traced_model(
+            Model(
+                model_client_config=llm_comp_config.model_client_config,
+                model_config=llm_comp_config.model_config,
+            ),
+            # conversation_id 在 handle 首行落定，惰性建模型时必已可用
+            session_id=self.conversation_id,
         )
 
     async def get_llm_result(self, current_inputs: dict) -> str:

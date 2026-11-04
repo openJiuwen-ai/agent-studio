@@ -605,7 +605,11 @@ class Extractor(WorkflowComponent):
                 error_msg="Either extension config (api_key, api_base) or model_map is required",
             )
 
-        return Model(client_config, model_config)
+        from agent_runtime.common.trace_compat import build_traced_model
+
+        # 每次真实调用补一个带 usage/ttft 的 llm span（extractor 组件壳非
+        # chat 壳：llm span 作为子 span 嵌在组件壳下；会话 id 退请求级）
+        return build_traced_model(Model(client_config, model_config))
 
     async def create_prompt_template_input(self, chat_history: list) -> dict:
         """

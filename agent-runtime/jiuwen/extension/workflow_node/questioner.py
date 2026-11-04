@@ -1189,6 +1189,14 @@ class Questioner(WorkflowComponent):
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
+            # 每次真实调用补一个带 usage/ttft 的 llm span（Questioner 反思为
+            # 1+N 次调用：首调并入组件壳、后续为壳下子 span，均由 core 门控）
+            from agent_runtime.common.trace_compat import build_traced_model
+
+            self._model = build_traced_model(
+                self._model,
+                session_id=self._session.get_session_id() if self._session else None,
+            )
             self._initialized = True
         except Exception as e:
             workflow_logger.error(

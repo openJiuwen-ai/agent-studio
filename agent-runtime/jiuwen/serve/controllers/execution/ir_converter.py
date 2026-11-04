@@ -940,6 +940,7 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
         FlowAgent 实例。
     """
     from agent_runtime.common.model_adapters import adapt_react_agent_config
+    from agent_runtime.common.trace_compat import build_traced_model
     from jiuwen.extension.wrapper.restful_api_loader import load_restful_api_from_ir
     from openjiuwen.core.foundation.llm import Model as SDKModel
     from openjiuwen.core.runner import Runner
@@ -948,10 +949,14 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     provider = _get_model_config_provider()
     adapted_conf = adapt_react_agent_config(configs)
     llm_comp_config = await provider.get_llm_config(adapted_conf)
-    model = SDKModel(
-        model_client_config=llm_comp_config.model_client_config,
-        model_config=llm_comp_config.model_config,
+    model = build_traced_model(
+        SDKModel(
+            model_client_config=llm_comp_config.model_client_config,
+            model_config=llm_comp_config.model_config,
+        )
     )
+    # LLMReAct 内部 ReAct 循环的每次模型调用经装饰器各产一个带 usage/ttft
+    # 的 llm span（首调并入 LLM 类组件壳、后续为壳下子 span，由 core 门控）
 
     # ② plugins[] → List[Tool]
     tools = []

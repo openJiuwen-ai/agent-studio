@@ -729,9 +729,15 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Failed to load workflow configuration: {e}")
             return
 
-        # 创建 LLM 模型
+        # 创建 LLM 模型（经 build_traced_model 装饰：ReAct 循环每次模型调用
+        # 各产一个带 usage/ttft 的 llm span；react 无组件壳，走独立 span 路径，
+        # core 能力门控不达标时退裸模型）
         try:
-            llm = await self._create_llm(ir_json)
+            from agent_runtime.common.trace_compat import build_traced_model
+
+            llm = build_traced_model(
+                await self._create_llm(ir_json), session_id=req.conversation_id
+            )
         except Exception as e:
             workflow_logger.error(f"Failed to create LLM: {e}")
             yield adapter.adapt_error(f"Failed to create LLM: {e}")
