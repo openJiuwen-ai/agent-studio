@@ -842,14 +842,22 @@ export class ControllerModalComponent
    * planexecute → 'PlanExecute'，其余(common) → 'agent'（与画布单智能体节点约定一致）。
    * 详情接口(AgentInfo)返回 sub_type，历史数据可能为 null/'agent'，统一归一处理。
    */
-  private getSubAgentMode(agentInfo: any): string {
+  private getSubAgentMode(agentInfo: any, existingMode?: string): string {
+    // sub_type 明确返回时按映射覆盖；缺失/null/空串/未知值时回退沿用成员既有
+    // mode，避免详情接口未返回 sub_type 时把存量 PlanExecute 成员重写为 'agent'
     const subType = (agentInfo?.sub_type ?? '').trim();
-    return subType === 'planexecute' ? 'PlanExecute' : 'agent';
+    if (subType === 'planexecute') {
+      return 'PlanExecute';
+    }
+    if (subType === 'agent' || subType === 'common') {
+      return 'agent';
+    }
+    return existingMode ?? 'agent';
   }
 
   private getSubSingleAgent(agent) {
     const agentInfo = this.select_agent_detail_map.get(agent.id);
-    const memberMode = this.getSubAgentMode(agentInfo);
+    const memberMode = this.getSubAgentMode(agentInfo, agent.mode);
     const agentDetail = {
       node_id: `node_${uuidV4()}`,
       id: agentInfo.agent_id,
@@ -1648,7 +1656,9 @@ export class ControllerModalComponent
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
     if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      return hasNewVersion && app.latest_version_app_sub_type === 'planexecute';
+      // 成员 mode 按最新版本 sub_type 动态映射后，通用模式成员同样可安全升级；
+      // 仅 deepresearch 不支持作为子智能体，不提示升级
+      return hasNewVersion && app.latest_version_app_sub_type !== 'deepresearch';
     }
     return hasNewVersion;
   }

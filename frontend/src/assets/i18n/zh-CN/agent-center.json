@@ -2759,6 +2759,7 @@
   "cardnodecomponent_17": "该卡片已经有新版本{{last_version_name}}",
   "addmultipleagentmodalcomponent_21": "输入关键字搜索",
   "addmultipleagentmodalcomponent_23": "正在编排此智能体暂不支持重复嵌入，请添加其他智能体",
+  "agent_deep_not_support_sub_agent": "深度研究类智能体暂不支持作为子智能体",
   "flowitemcomponent_25": "该智能体已经有新版本{{name}}",
   "flowitemcomponent_26": "该工作流已经有新版本{{name}}",
   "flowitemcomponent_23": "该工作流版本不存在，版本号{{validVersion}}，您可删除",

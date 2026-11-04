@@ -328,6 +328,9 @@ export class AddMultipleAgentModalComponent implements OnInit {
             const checked =
               this.agentSelected.findIndex((agent) => agent.id === id) > -1;
             const subType = this.normalizeSubType(item.sub_type);
+            // deepresearch 暂不支持作为子智能体：置灰禁用（后端已默认排除，
+            // 此处前端兜底过滤，消除对后端契约的隐式依赖）
+            const isDeepResearch = subType === AGENT_MODE_CODE.DEEP_MODE;
             const isPlanningMode = subType === AGENT_MODE_CODE.PLANNING_MODE;
 
             const agent = {
@@ -342,7 +345,10 @@ export class AddMultipleAgentModalComponent implements OnInit {
               version_id: item.version_id,
               version_name: item.version_name,
               checked,
-              disable: false,
+              disable: isDeepResearch,
+              tip: isDeepResearch
+                ? this.i18n.transform('agent_deep_not_support_sub_agent')
+                : '',
               tags: [
                 this.i18n.transform(
                   isPlanningMode ? 'agent_planning_mode' : 'agent_mode_gen',

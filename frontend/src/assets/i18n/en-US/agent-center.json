@@ -2733,6 +2733,7 @@
   "cardnodecomponent_17": "This card already has a new version {{last_version_name}}",
   "addmultipleagentmodalcomponent_21": "Enter keyword to search",
   "addmultipleagentmodalcomponent_23": "This agent is being arranged and does not currently support repeated embedding. Please add another agent.",
+  "agent_deep_not_support_sub_agent": "Deep research agents cannot be used as sub-agents yet.",
   "flowitemcomponent_25": "The agent already has a new version.{{name}}",
   "flowitemcomponent_26": "The agent already has a new version.{{name}}",
   "flowitemcomponent_23": "The workflow version does not exist. Version number:{{validVersion}},You can delete it.",
