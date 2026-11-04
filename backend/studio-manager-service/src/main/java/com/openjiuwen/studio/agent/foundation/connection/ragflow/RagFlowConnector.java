@@ -88,8 +88,11 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
         ListDatasetResponseBody result = this.connectorClient.doRequest(basicRequest, request,
             ListDatasetResponseBody.class);
 
-        if (ResponseConstants.SUCCESS_CODE != result.getCode()) {
-            log.error("Call rag flow to list dataset failed. Because of {}", result.getMessage());
+        // 下游返回空体（204/经网关剥离 body 等）时 doRequest 会得到 null，
+        // 按 RAG_FLOW_CONNECT_ERROR 业务异常收口，避免 NPE 暴露为 500
+        if (result == null || ResponseConstants.SUCCESS_CODE != result.getCode()) {
+            log.error("Call rag flow to list dataset failed. Because of {}",
+                result == null ? "empty response body" : result.getMessage());
             throw new AgentBaseException(ErrorCode.RAG_FLOW_CONNECT_ERROR);
         }
 
@@ -130,6 +133,11 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
                 this.connectorClient.doRequest(basicRequest, httpEntity, RagFlowCommonResponseBody.class)),
             new TypeReference<>() { });
 
+        if (result == null) {
+            // 下游返回空体时 toJson(null) 解析回 null，按连接错误收口而非 NPE
+            log.error("Call rag flow to retrieve chunk failed. Because of empty response body");
+            throw new AgentBaseException(ErrorCode.RAG_FLOW_CONNECT_ERROR);
+        }
         if (ResponseConstants.SUCCESS_CODE == result.getCode()) {
             PageResult<ExternalRetrieveResultInfo> response = new PageResult<>();
             int total = Optional.ofNullable(result.getData()).map(RetrieveChunksResponseBody::getTotal).orElse(0);

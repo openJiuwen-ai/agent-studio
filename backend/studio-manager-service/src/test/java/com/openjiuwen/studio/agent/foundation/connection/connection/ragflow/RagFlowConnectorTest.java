@@ -27,6 +27,8 @@ import com.openjiuwen.studio.agent.foundation.connection.model.KnowledgeBaseRetr
 import com.openjiuwen.studio.agent.foundation.connection.model.RetrieveKnowledgeBaseReq;
 import com.openjiuwen.studio.agent.foundation.connection.ragflow.RagFlowConnector;
 import com.openjiuwen.studio.agent.foundation.connection.ragflow.entity.response.DatasetBasicInfo;
+import com.openjiuwen.studio.agent.foundation.connection.ragflow.entity.response.ListDatasetResponseBody;
+import com.openjiuwen.studio.agent.foundation.base.exception.AgentBaseException;
 import com.openjiuwen.studio.agent.common.dto.knowledge.ragflow.response.RagFlowCommonResponseBody;
 
 import org.junit.jupiter.api.AfterEach;
@@ -70,13 +72,13 @@ class RagFlowConnectorTest {
 
     @Test
     void test_listKnowledgeBase_should_return_not_null_when_condition() throws Exception {
-        RagFlowCommonResponseBody<List<DatasetBasicInfo>> ragFlowCommonResponseBody = new RagFlowCommonResponseBody();
-        ragFlowCommonResponseBody.setCode(0);
-        List<DatasetBasicInfo> data2 = new ArrayList<>();
-        ragFlowCommonResponseBody.setData(data2);
-        ragFlowCommonResponseBody.setMessage("string");
-        when(connectorClient.doRequest(any(), any(), eq(RagFlowCommonResponseBody.class))).thenReturn(
-            ragFlowCommonResponseBody);
+        // 产品按 ListDatasetResponseBody.class 反序列化，stub 需与之一致
+        ListDatasetResponseBody listDatasetResponseBody = new ListDatasetResponseBody();
+        listDatasetResponseBody.setCode(0);
+        listDatasetResponseBody.setData(new ArrayList<>());
+        listDatasetResponseBody.setMessage("string");
+        when(connectorClient.doRequest(any(), any(), eq(ListDatasetResponseBody.class))).thenReturn(
+            listDatasetResponseBody);
 
         // When
         PageResult<ExternalKnowledgeBaseInfo> result1 = ragFlowConnector.listKnowledgeBase(null, "string", 0, 10);
@@ -86,14 +88,13 @@ class RagFlowConnectorTest {
     }
 
     @Test
-    void test_listKnowledgeBase_should_throws__null_pointer_exception_when_objects_is_null() throws Exception {
-        assertThrows(NullPointerException.class, () -> {
-            when(connectorClient.doRequest(any(BasicRequest.class), any(HttpEntity.class),
-                eq(RagFlowCommonResponseBody.class))).thenReturn(null);
+    void test_listKnowledgeBase_should_throw_business_exception_when_response_body_is_null() throws Exception {
+        // 下游空体（doRequest 返回 null）按 RAG_FLOW_CONNECT_ERROR 收口，而非 NPE
+        when(connectorClient.doRequest(any(BasicRequest.class), any(HttpEntity.class),
+            eq(ListDatasetResponseBody.class))).thenReturn(null);
 
-            // When
-            PageResult<ExternalKnowledgeBaseInfo> result = ragFlowConnector.listKnowledgeBase(null, null,
-                (Integer) null, (Integer) null);
+        assertThrows(AgentBaseException.class, () -> {
+            PageResult<ExternalKnowledgeBaseInfo> result = ragFlowConnector.listKnowledgeBase(null, null, 0, 10);
         });
     }
 
