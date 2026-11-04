@@ -100,3 +100,197 @@ async def test_run_retrieval_custom_source_skips_normalization(monkeypatch):
 
     assert normalize_called["v"] is False  # CUSTOM 跳过归一化
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+# --------------------------------------------------------------------------
+# retriever span 发射（_run_retrieval 遥测，镜像 APIEmbedding 范式）
+# --------------------------------------------------------------------------
+
+
+class _StubSpanManager:
+    def __init__(self):
+        self.created = 0
+
+    def create_agent_span(self):
+        self.created += 1
+        return object()
+
+
+class _StubTracer:
+    def __init__(self, fail_trigger=False):
+        self.span_manager = _StubSpanManager()
+        self.events = []
+        self.fail_trigger = fail_trigger
+
+    @property
+    def tracer_agent_span_manager(self):
+        return self.span_manager
+
+    @staticmethod
+    def agent_handler_valid():
+        return True
+
+    async def trigger(self, handler, event_name, span=None, **payload):
+        if self.fail_trigger:
+            raise RuntimeError("otel exporter down")
+        self.events.append((handler, event_name, span, payload))
+
+
+class _StubSession:
+    def __init__(self, tracer):
+        self._tracer = tracer
+
+    def tracer(self):
+        return self._tracer
+
+
+def _patch_traced_session(monkeypatch, tracer):
+    session = _StubSession(tracer)
+    monkeypatch.setattr(krt, "get_current_session", lambda: session)
+
+
+def _patch_lake_search_flow(monkeypatch, sample, normalize=None):
+    """LakeSearch 非 CUSTOM 知识源：search 返回 sample，normalize 可定制。"""
+    from agent_runtime.extension.workflow_node import flow_knowledge_retrieval as fkr
+
+    async def fake_ensure(self):
+        return {
+            "connection": {"connector_type": "LakeSearch"},
+            "knowledge_bases": [{"knowledge_base_id": "kb-1"}],
+            "retrieval_params": {},
+        }
+
+    async def fake_search(self, **kwargs):
+        return list(sample)
+
+    async def fake_normalize(self, results, kbs, params):
+        return normalize(results) if normalize else results
+
+    monkeypatch.setattr(fkr.FlowKnowledgeRetrieval, "ensure_kb_config", fake_ensure)
+    monkeypatch.setattr(fkr.FlowKnowledgeRetrieval, "search_knowledge_repo", fake_search)
+    monkeypatch.setattr(
+        fkr.FlowKnowledgeRetrieval, "normalize_results_like_java", fake_normalize
+    )
+    monkeypatch.setattr(krt.KBAdapterFactory, "create", lambda *a, **k: object())
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_emits_retriever_span(monkeypatch):
+    """有会话 tracer 时：start（query/top_k/知识库）→ end（归一化后条数）。"""
+    tracer = _StubTracer()
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [
+        KBSearchResult(text="t1", score=0.9, knowledge_base_id="kb-1"),
+        KBSearchResult(text="t2", score=0.8, knowledge_base_id="kb-1"),
+    ]
+    # 归一化丢弃一条，document_count 应为归一化后的真实条数
+    _patch_lake_search_flow(monkeypatch, sample, normalize=lambda rs: rs[:1])
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={"topK": 5},
+        tag_overrides={},
+    )
+
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+    assert tracer.span_manager.created == 1  # 一次检索恰一个 span
+    names = [e[1] for e in tracer.events]
+    assert names == ["on_retriever_start", "on_retriever_end"]
+    handler, _, span, payload = tracer.events[0]
+    assert handler == "tracer_agent"
+    assert span is not None
+    assert payload["inputs"] == {"query": "hello", "top_k": 5, "knowledge_base_ids": ["kb-1"]}
+    assert payload["instance_info"] == {"class_name": "knowledge_retrieval_tool"}
+    assert tracer.events[1][3]["outputs"] == {"document_count": 1}
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_no_session_skips_events(monkeypatch):
+    """无会话 tracer：不发事件，业务结果不受影响。"""
+    monkeypatch.setattr(krt, "get_current_session", lambda: None)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_error_emits_retriever_error(monkeypatch):
+    """检索抛错：发 on_retriever_error 后原样上抛。"""
+    from agent_runtime.extension.workflow_node import flow_knowledge_retrieval as fkr
+
+    tracer = _StubTracer()
+    _patch_traced_session(monkeypatch, tracer)
+    _patch_lake_search_flow(monkeypatch, [])
+
+    async def boom(self, **kwargs):
+        raise RuntimeError("search failed")
+
+    monkeypatch.setattr(fkr.FlowKnowledgeRetrieval, "search_knowledge_repo", boom)
+
+    with pytest.raises(RuntimeError, match="search failed"):
+        await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+
+    assert [e[1] for e in tracer.events] == ["on_retriever_start", "on_retriever_error"]
+    assert isinstance(tracer.events[1][3]["error"], RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_trigger_failure_degrades(monkeypatch):
+    """tracer.trigger 抛错：事件被吞掉，检索结果不受影响。"""
+    tracer = _StubTracer(fail_trigger=True)
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1  # 遥测失败不阻断业务
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_invalid_handler_skips_events(monkeypatch):
+    """agent_handler_valid 为 False（OTel 未注册）：不发事件。"""
+    tracer = _StubTracer()
+
+    def invalid():
+        return False
+
+    tracer.agent_handler_valid = invalid
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    out = await _run_retrieval(
+        query="hello",
+        connection_id="conn-1",
+        knowledge_base_ids=["kb-1"],
+        retrieval_config={},
+        tag_overrides={},
+    )
+
+    assert tracer.events == []
+    assert tracer.span_manager.created == 0
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1

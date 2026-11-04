@@ -16,6 +16,8 @@ from jiuwen.plugin.models.function import Function
 from jiuwen.plugin.models.param import Param
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.tool.base import Input, Output, Tool, ToolCard
+from openjiuwen.core.session import get_current_session
+from openjiuwen.core.session.tracer.handler import TracerHandlerName
 
 _RETRIEVAL_NAME = "retrieval"
 _QUERY = "query"
@@ -68,6 +70,60 @@ def _resolve_retrieval_params(ir_data: dict) -> Dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------------------
+# Retrieval trace events（agent 侧 retriever span，镜像 core APIEmbedding 范式）
+# --------------------------------------------------------------------------
+
+
+def _resolve_retrieval_tracer():
+    """Session tracer for retrieval trace events, or None.
+
+    _run_retrieval 无组件壳（workflow 的 jiuwen.knowledgeRetrieval 节点有自己的
+    节点壳，不走这里）：agent 工具 / 插件函数路径下，会话上下文存在且 OTel
+    handler 可用时才发 retriever 事件；无会话或 handler 未注册时静默跳过。
+    """
+    try:
+        session = get_current_session()
+    except Exception:  # noqa: BLE001 - tracing must never break retrieval
+        return None
+    if session is None:
+        return None
+    try:
+        tracer = session.tracer()
+    except Exception:  # noqa: BLE001
+        return None
+    if tracer is not None and tracer.agent_handler_valid():
+        return tracer
+    return None
+
+
+async def _trace_retrieval_event(tracer, event_name: str, span, **payload):
+    """Fire one tracer event; failures never propagate into the business flow."""
+    try:
+        await tracer.trigger(TracerHandlerName.TRACE_AGENT.value, event_name, span=span, **payload)
+    except Exception as e:  # noqa: BLE001
+        workflow_logger.warning("retrieval trace event '%s' failed: %s", event_name, e)
+
+
+async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retrieval_config):
+    """Open the retriever trace span; returns the tracer span handle."""
+    span = tracer.tracer_agent_span_manager.create_agent_span()
+    inputs: Dict[str, Any] = {"query": query}
+    top_k = retrieval_config.get("topK") if isinstance(retrieval_config, dict) else None
+    if top_k is not None:
+        inputs["top_k"] = top_k
+    if knowledge_base_ids:
+        inputs["knowledge_base_ids"] = list(knowledge_base_ids)
+    await _trace_retrieval_event(
+        tracer,
+        "on_retriever_start",
+        span,
+        inputs=inputs,
+        instance_info={"class_name": "knowledge_retrieval_tool"},
+    )
+    return span
+
+
 async def _run_retrieval(
     query: str,
     connection_id: str,
@@ -92,19 +148,35 @@ async def _run_retrieval(
 
     connector_type = connection_config.get("connector_type", "LakeSearch")
     adapter = KBAdapterFactory.create(connector_type)
-    results = await component.search_knowledge_repo(
-        adapter=adapter,
-        query=str(query),
-        connection_config=connection_config,
-        knowledge_bases=loaded_kbs,
-        retrieval_params=retrieval_params,
-    )
-    # CUSTOM 知识源不做 file_id 虚拟化 / 图片处理
-    if not component.is_custom_source(connection_config):
-        results = await component.normalize_results_like_java(
-            results,
-            loaded_kbs,
-            retrieval_params,
+    trace_tracer = _resolve_retrieval_tracer()
+    trace_span = None
+    if trace_tracer is not None:
+        trace_span = await _trace_retrieval_start(trace_tracer, str(query), knowledge_base_ids, retrieval_config)
+    try:
+        results = await component.search_knowledge_repo(
+            adapter=adapter,
+            query=str(query),
+            connection_config=connection_config,
+            knowledge_bases=loaded_kbs,
+            retrieval_params=retrieval_params,
+        )
+        # CUSTOM 知识源不做 file_id 虚拟化 / 图片处理
+        if not component.is_custom_source(connection_config):
+            results = await component.normalize_results_like_java(
+                results,
+                loaded_kbs,
+                retrieval_params,
+            )
+    except Exception as e:
+        if trace_tracer is not None and trace_span is not None:
+            await _trace_retrieval_event(trace_tracer, "on_retriever_error", trace_span, error=e)
+        raise
+    if trace_tracer is not None and trace_span is not None:
+        await _trace_retrieval_event(
+            trace_tracer,
+            "on_retriever_end",
+            trace_span,
+            outputs={"document_count": len(results)},
         )
     retrieval_id = uuid.uuid4().hex
     for index, result in enumerate(results, start=1):
