@@ -945,6 +945,7 @@ class PlanExecuteMode(BaseMode):
                 llm=self.model,
                 functions=tools or [],
                 trace_handlers=getattr(self, "_trace_handlers", None),
+                messages=messages,
             )
             await emit_trace_event(trace_manager, "on_llm_start", messages)
             finish_usage = {}

@@ -112,6 +112,7 @@ class TaskUnderstandingModule:
             llm=self.llm,
             functions=[],
             trace_handlers=(runtime_data or {}).get("trace_handlers"),
+            messages=llm_input["messages"],
         )
         try:
             await emit_trace_event(

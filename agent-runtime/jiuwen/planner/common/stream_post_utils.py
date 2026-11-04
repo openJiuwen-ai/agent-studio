@@ -434,17 +434,25 @@ def create_trace_manager(
     return TraceManager.generate_manager(trace_handlers, instance_info)
 
 
-def create_trace_manager_safely(llm: BaseChatModel, functions, trace_handlers):
+def create_trace_manager_safely(
+    llm: BaseChatModel, functions, trace_handlers, messages: Optional[List[dict]] = None
+):
     """create_trace_manager 的兜底版：初始化失败返回 None（遥测停用）。
 
     generate_manager 对非法 trace_handlers 形态可能抛错；plan/invoke 等
     业务路径原本没有遥测依赖，初始化异常外传会把遥测故障变成业务故障
     （规划重抛 / 理解兜底被跳过 / 步骤落入 error 分支）。失败只告警，
     配合 emit_trace_event 的 None 容忍静默停用事件发射。
+
+    messages 透传给 create_trace_manager 补 message_count：调用点紧随其
+    后以同一批消息触发 on_llm_start，漏传会让这些 LLM span 缺消息数。
     """
     try:
         return create_trace_manager(
-            llm=llm, functions=functions, trace_handlers=trace_handlers
+            llm=llm,
+            functions=functions,
+            trace_handlers=trace_handlers,
+            messages=messages,
         )
     except Exception as e:
         logger.warning(

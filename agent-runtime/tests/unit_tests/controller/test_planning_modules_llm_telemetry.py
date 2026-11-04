@@ -719,3 +719,48 @@ class TestQwenChatTimestamps:
         delta_ms = _iso_delta_ms(usage.first_token_time, usage.requests_start_time)
         assert delta_ms is not None
         assert delta_ms >= 0
+
+
+class TestSafelyWrapperForwardsMessages:
+    """兜底包装透传 messages：调用点紧跟 on_llm_start(messages)，漏传会缺 message_count。"""
+
+    def test_safely_wrapper_forwards_messages_to_instance_info(self, monkeypatch):
+        captured = {}
+
+        def fake_generate_manager(trace_handlers, instance_info):
+            captured.update(instance_info)
+            return object()
+
+        monkeypatch.setattr(
+            spu.TraceManager, "generate_manager", staticmethod(fake_generate_manager)
+        )
+
+        class _BareLLM:
+            pass
+
+        spu.create_trace_manager_safely(
+            llm=_BareLLM(),
+            functions=[],
+            trace_handlers=None,
+            messages=[{"role": "user", "content": "hi"}, {"role": "user", "content": "q"}],
+        )
+
+        assert captured["message_count"] == 2
+
+    def test_safely_wrapper_without_messages_keeps_key_absent(self, monkeypatch):
+        captured = {}
+
+        def fake_generate_manager(trace_handlers, instance_info):
+            captured.update(instance_info)
+            return object()
+
+        monkeypatch.setattr(
+            spu.TraceManager, "generate_manager", staticmethod(fake_generate_manager)
+        )
+
+        class _BareLLM:
+            pass
+
+        spu.create_trace_manager_safely(llm=_BareLLM(), functions=[], trace_handlers=None)
+
+        assert "message_count" not in captured

@@ -215,6 +215,7 @@ class TaskPlanModule:
             llm=self.llm,
             functions=[],
             trace_handlers=(runtime_data or {}).get("trace_handlers"),
+            messages=llm_input["messages"],
         )
         # try 只罩 LLM 调用与其遥测：解析/构建失败属业务错误，按原语义直接
         # 抛出，不得在同一 trace 上补发 on_llm_error（避免 end/error 双终止，
