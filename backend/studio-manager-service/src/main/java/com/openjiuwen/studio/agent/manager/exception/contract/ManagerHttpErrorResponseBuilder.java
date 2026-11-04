@@ -78,7 +78,22 @@ public class ManagerHttpErrorResponseBuilder {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Request-Id", descriptor.getRequestId());
 
-        return new ResponseEntity<>(rsp, headers, HttpStatus.valueOf(descriptor.getHttpStatus()));
+        return new ResponseEntity<>(rsp, headers, resolveHttpStatus(descriptor.getHttpStatus()));
+    }
+
+    /**
+     * descriptor 状态 → HttpStatus 安全解析（评审修订 2026-11-04）。
+     * <p>
+     * {@code HttpStatus.valueOf(int)} 对未注册状态（499/599 等）抛
+     * {@code IllegalArgumentException}——透传/兜底路径把本应正常返回的下游错误
+     * 升级为未处理异常；且 safeBuild 的 catch 分支再次构造响应时同样会抛。
+     * {@code HttpStatus.resolve(int)} 对未注册状态返回 null——此处回退 502
+     * （下游失败族语义），错误体仍正常返回。全局唯一状态出口：HTTP/SSE
+     * 构建器与兜底分支一律经由本方法。
+     */
+    public static HttpStatus resolveHttpStatus(int statusCode) {
+        HttpStatus resolved = HttpStatus.resolve(statusCode);
+        return resolved != null ? resolved : HttpStatus.BAD_GATEWAY;
     }
 
     /**

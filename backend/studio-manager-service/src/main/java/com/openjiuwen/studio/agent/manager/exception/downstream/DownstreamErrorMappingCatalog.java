@@ -39,13 +39,18 @@ public final class DownstreamErrorMappingCatalog {
      *       {@code jiuwen/common/exception/status_code.py} 全集，如 101003）；</li>
      *   <li>{@code 999999}——Runtime 错误帧未知码兜底（其自身 i18n 有三段文案）；</li>
      *   <li>{@code 12\d{5,6}}——Runtime error_contract 自有目录（121007/12100001~06）；</li>
-     *   <li>{@code 0\d{7}}——应用层 8 位码族（02001003/02201021 等，与 Manager i18n 共库）。</li>
+     *   <li>{@code 02\d{6}}——应用层 8 位码族（02001003/02201021/02501037 等，
+     *       与 Manager i18n 共库）。评审修订（2026-11-04）：由宽泛 {@code 0\d{7}}
+     *       收敛为 {@code 02} 前缀——Manager/Runtime 共库的应用层码全部落在
+     *       openjiuwen.02 前缀族（common 02001x、workflow 0220x、model 0250x），
+     *       其余 0 头形态不在共库范围，不入信任面（防未登记 0 头码携带
+     *       自由三段文案进入透传）。</li>
      * </ul>
      * 刻意不信任：8 位 {@code 13} 头（Builder canonical 族——跨服务不信任，
      * 修复 2026-10-27 格式门放行 {@code 13100006} 误入 RUNTIME 的回归）、
      * 任意 7 位、任意其他前缀。
      */
-    static final String RUNTIME_CANONICAL_SHAPE = "1[0-2]\\d{4}|999999|12\\d{5,6}|0\\d{7}";
+    static final String RUNTIME_CANONICAL_SHAPE = "1[0-2]\\d{4}|999999|12\\d{5,6}|02\\d{6}";
 
     /**
      * DEF-06 发布的 Builder canonical 码——Manager 当前识别的下游原码。

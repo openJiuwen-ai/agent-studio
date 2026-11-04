@@ -117,8 +117,13 @@ public class ManagerErrorDescriptorFactory {
     }
 
     /**
-     * 统一构造入口（COM-04 §5.2 修订二期，2026-11-02）：按错误码挂依赖组件标签
-     * （OBS/SQL 数据库等 manager 直接访问的依赖失败走统一族格式），其余走原格式。
+     * 统一构造入口（COM-04 §5.2 修订二期，2026-11-02；评审修订 2026-11-04）。
+     * <p>
+     * 评审修订（2026-11-04）：Manager 自有码（SQL/OBS/Redis 族）不再挂依赖组件
+     * 标签——统一族格式会把既有接口的具体 error_msg 替换为族前缀
+     * "下游依赖访问失败。"并改写 error_reason 结构，属破坏性对外契约变更（自检
+     * 未做前向兼容评估）。自有码保持原三段 i18n 契约；组件标签只保留在真实
+     * 下游路径（{@code DownstreamErrorMapper} 按服务身份判定，不由码族反推）。
      */
     private ErrorDescriptor newDescriptor(ErrorDefinition defn, String requestId,
                                           List<ErrorDetail> safeDetails, Throwable cause) {
@@ -126,7 +131,7 @@ public class ManagerErrorDescriptorFactory {
             defn.getErrorCode(), defn.getHttpStatus(),
             defn.getMessageKey(), defn.getReasonKey(), defn.getSuggestionKey(),
             requestId, safeDetails, null, null, cause, null,
-            DependencyComponentLabels.forManagerErrorCode(defn.getErrorCode())
+            null
         );
     }
 

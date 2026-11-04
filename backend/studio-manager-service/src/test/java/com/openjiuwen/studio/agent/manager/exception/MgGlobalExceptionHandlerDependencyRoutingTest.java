@@ -62,37 +62,42 @@ class MgGlobalExceptionHandlerDependencyRoutingTest {
 
     @Test
     void dataAccessException_redisFamily_routes_to_redis_code_and_label() {
-        // Spring Data Redis 异常继承 DataAccessException——须分流，否则误标 mysql
+        // Spring Data Redis 异常继承 DataAccessException——须分流，否则误标 mysql。
+        // 评审修订（2026-11-04）：Manager 自有码不再走统一族格式——分流路由保留
+        // （Redis 码不被误判 SQL），文案恢复原三段 i18n 契约。
         RedisConnectionFailureException ex = new RedisConnectionFailureException("connection refused");
         ResponseEntity<ErrorRsp> resp = handler().handleDataAccessException(ex);
         ErrorRsp body = resp.getBody();
         assertEquals("openjiuwen.02001051", body.getErrorCode());
-        assertEquals("下游依赖访问失败。", body.getErrorMsg());
-        assertTrue(body.getErrorReason().startsWith("组件redis："),
-            "error_reason must carry redis component label, got: " + body.getErrorReason());
+        assertEquals("Redis访问失败。", body.getErrorMsg());
+        assertEquals("Redis连接或读写失败。", body.getErrorReason());
+        assertEquals("请检查Redis服务状态。", body.getErrorSuggestion());
     }
 
     @Test
     void dataAccessException_nonRedis_routes_to_sql_code_and_mysql_label() {
+        // 评审修订（2026-11-04）：SQL 码分流保留，文案恢复原三段 i18n 契约
+        // （不再挂 mysql 组件标签/族前缀——防破坏性对外契约变更）。
         DataAccessResourceFailureException ex = new DataAccessResourceFailureException("db down");
         ResponseEntity<ErrorRsp> resp = handler().handleDataAccessException(ex);
         ErrorRsp body = resp.getBody();
         assertEquals("openjiuwen.02001042", body.getErrorCode());
-        assertEquals("下游依赖访问失败。", body.getErrorMsg());
-        assertTrue(body.getErrorReason().startsWith("组件mysql："),
-            "error_reason must carry mysql component label, got: " + body.getErrorReason());
+        assertEquals("SQL执行失败。", body.getErrorMsg());
+        assertEquals("数据库访问失败。", body.getErrorReason());
+        assertEquals("请检查数据库。", body.getErrorSuggestion());
     }
 
     @Test
     void redissonException_routes_to_redis_code_and_label() {
-        // Redisson 自身异常族不继承 DataAccessException——走专用 handler（handleException）
+        // Redisson 自身异常族不继承 DataAccessException——走专用 handler（handleException）。
+        // 评审修订（2026-11-04）：路由保留，文案恢复原三段 i18n 契约。
         org.redisson.client.RedisException ex =
             new org.redisson.client.RedisException("node disconnected");
         ResponseEntity<ErrorRsp> resp = handler().handleException(ex);
         ErrorRsp body = resp.getBody();
         assertEquals("openjiuwen.02001051", body.getErrorCode());
-        assertEquals("下游依赖访问失败。", body.getErrorMsg());
-        assertTrue(body.getErrorReason().startsWith("组件redis："),
-            "error_reason must carry redis component label, got: " + body.getErrorReason());
+        assertEquals("Redis访问失败。", body.getErrorMsg());
+        assertEquals("Redis连接或读写失败。", body.getErrorReason());
+        assertEquals("请检查Redis服务状态。", body.getErrorSuggestion());
     }
 }

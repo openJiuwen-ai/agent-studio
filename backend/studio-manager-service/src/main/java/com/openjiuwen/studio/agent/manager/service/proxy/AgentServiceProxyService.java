@@ -452,12 +452,18 @@ public class AgentServiceProxyService {
         } catch (Exception parseEx) {
             log.warn("Failed to parse Feign error body.", parseEx);
         }
-        // 无法从 Feign 异常解析出 builder 的 error body 时（builder 不可达等）：
-        // 与 runtime 掉线同构（用户裁定，2026-11-02）——走 DownstreamErrorMapper
-        // 兜底 02001131/502 + BUILDER 组件标签；02501037 不再用于 builder 掉线
-        // （回归其本职：上游模型探活失败的业务码）。
-        DownstreamFailure failure = DownstreamFailure.transportFailure(
-            DownstreamService.BUILDER, Transport.FEIGN, e);
+        // 无法从 Feign 异常解析出 builder 的 error body 时，按"下游是否已应答"分流
+        // （评审修订 2026-11-04）：
+        // - status>0：builder 已应答（HTTP 层 4xx/5xx，响应体非结构化或无 error_code）——
+        //   非 transport failure：构造 HTTP_RESPONSE 相位并携带原状态，由 mapper 保留
+        //   原状态透传（文案仍为 02001131 族），4xx 业务错误不再被统一成 502/02001131 状态；
+        // - status<=0：builder 不可达等真传输失败——与 runtime 掉线同构（用户裁定
+        //   2026-11-02）走 DownstreamErrorMapper 兜底 02001131/502 + BUILDER 组件标签。
+        DownstreamFailure failure = e.status() > 0
+            ? DownstreamFailure.httpResponse(
+                DownstreamService.BUILDER, Transport.FEIGN, e.status(), null, e)
+            : DownstreamFailure.transportFailure(
+                DownstreamService.BUILDER, Transport.FEIGN, e);
         ErrorDescriptor descriptor = downstreamMapper.map(failure, requestIdOrUnknown());
         return renderDownstreamErrorOrSafeFallback(descriptor);
     }

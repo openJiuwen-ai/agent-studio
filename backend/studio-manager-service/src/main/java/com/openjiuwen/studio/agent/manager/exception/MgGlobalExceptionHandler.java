@@ -110,7 +110,8 @@ public class MgGlobalExceptionHandler {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Request-Id", descriptor.getRequestId());
             return new ResponseEntity<>(rsp, headers,
-                HttpStatus.valueOf(descriptor.getHttpStatus()));
+                com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder
+                    .resolveHttpStatus(descriptor.getHttpStatus()));
         }
     }
 

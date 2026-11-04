@@ -88,9 +88,19 @@ public final class DownstreamErrorMapper {
                 passthrough = new PassthroughText(message, reason, suggestion);
             }
         }
-        // 2. 未命中/无原码/未知码/transport failure → 默认 02001131/502
+        // 2. 未命中/无原码/未知码/transport failure → 默认 02001131 族文案。
+        //    评审修订（2026-11-04）：仅"无可信原码"的 HTTP_RESPONSE 形态保留原
+        //    下游状态（文案仍为 02001131 族）——Feign 体不可解析/无 error_code 但
+        //    下游已应答的 4xx 业务错误不再被统一成 502；可信原码路径（Builder
+        //    canonical 八码默认映射 02001131/502 为 DEF-06 已发布契约、RUNTIME
+        //    透传走 1b 状态语义）维持既有 502/透传行为不回退。transport failure
+        //    （状态 null）与越界/未注册状态仍为 502（收敛复用 passthroughHttpStatus，
+        //    499/599 等不会透传到响应构建器）。
         if (chosen == null) {
-            chosen = catalog.defaultDownstreamFailure();
+            ErrorDefinition fallback = catalog.defaultDownstreamFailure();
+            chosen = trustedCode == null
+                ? withPreservedHttpStatus(fallback, failure.getDownstreamHttpStatus())
+                : fallback;
         }
 
         // 3. 构造 descriptor：cause + downstreamService + (可信时) downstreamErrorCode
@@ -125,6 +135,24 @@ public final class DownstreamErrorMapper {
             return downstreamStatus;
         }
         return 502;
+    }
+
+    /**
+     * 默认兜底定义的状态保留（评审修订 2026-11-04）：仅当下游已应答且携带
+     * 4xx/5xx 时以原状态替换兜底定义的 502（文案族不变）；未注册状态由
+     * {@code ManagerHttpErrorResponseBuilder.resolveHttpStatus} 在渲染层收敛。
+     * 状态与兜底一致时原样返回定义，避免多余拷贝。
+     */
+    private static ErrorDefinition withPreservedHttpStatus(
+            ErrorDefinition fallback, Integer downstreamStatus) {
+        if (downstreamStatus == null) {
+            return fallback;
+        }
+        int status = passthroughHttpStatus(downstreamStatus);
+        if (status == fallback.getHttpStatus()) {
+            return fallback;
+        }
+        return new ErrorDefinition(fallback.getErrorCode(), status, fallback.getI18nKey());
     }
 
     /**

@@ -74,7 +74,9 @@ class DownstreamErrorMapperTest {
             DownstreamService.BUILDER, Transport.WEBCLIENT, 500, null, null);
         ErrorDescriptor d = mapper.map(f, REQUEST_ID);
         assertEquals("openjiuwen.02001131", d.getErrorCode());
-        assertEquals(502, d.getHttpStatus());
+        // 评审修订（2026-11-04）：无可信原码但下游已应答（HTTP_RESPONSE 相位）时
+        // 保留原状态——4xx 业务错误不再被统一成 502；transport failure 仍为 502
+        assertEquals(500, d.getHttpStatus());
         assertEquals(DownstreamService.BUILDER, ErrorDescriptorDiagnostics.getDownstreamService(d));
         assertNull(ErrorDescriptorDiagnostics.getDownstreamErrorCode(d));
     }

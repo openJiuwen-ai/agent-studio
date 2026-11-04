@@ -168,27 +168,33 @@ class ManagerHttpErrorResponseBuilderTest {
 
     @Test
     void unifiedFamilyFormatForManagerSqlCode() {
-        // factory 对 SQL_EXECUTE_FAILED 挂 mysql 标签（manager 直接访问数据库失败）
+        // 评审修订（2026-11-04）：Manager 自有码不再挂依赖组件标签——统一族格式
+        // 会把既有接口的具体 error_msg 替换为族前缀并改写 error_reason 结构，
+        // 属破坏性对外契约变更。自有码保持原三段 i18n 契约（见
+        // ManagerErrorDescriptorFactory.newDescriptor 评审注释）。
         com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory f =
             new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory(
                 new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog());
         ErrorDescriptor d = f.fromStudioError(
             com.openjiuwen.studio.agent.common.enums.StudioError.SQL_EXECUTE_FAILED,
             new RuntimeException("connection refused"));
-        org.junit.jupiter.api.Assertions.assertEquals("mysql", d.getDownstreamComponentLabel());
+        org.junit.jupiter.api.Assertions.assertNull(d.getDownstreamComponentLabel());
 
         ManagerHttpErrorResponseBuilder b = new ManagerHttpErrorResponseBuilder((key, args, locale) -> {
             if ("openjiuwen.02001042".equals(key)) {
                 return "SQL执行失败。";
             }
+            if ("openjiuwen.02001042.reason".equals(key)) {
+                return "数据库执行失败的具体原因。";
+            }
             if ("openjiuwen.02001042.suggestion".equals(key)) {
                 return "请检查数据库状态。";
             }
-            return key; // 其余（含族 key）视为未命中 → 字面量兜底
+            return key; // 其余 key 视为未命中
         });
         ResponseEntity<ErrorRsp> resp = b.build(d, Locale.CHINA);
-        assertEquals("下游依赖访问失败。", resp.getBody().getErrorMsg());
-        assertEquals("组件mysql：SQL执行失败。", resp.getBody().getErrorReason());
+        assertEquals("SQL执行失败。", resp.getBody().getErrorMsg());
+        assertEquals("数据库执行失败的具体原因。", resp.getBody().getErrorReason());
         assertEquals("请检查数据库状态。", resp.getBody().getErrorSuggestion());
     }
 

@@ -651,9 +651,10 @@ class AgentServiceProxyServiceTest {
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
             ResponseEntity<?> responseEntity = (ResponseEntity<?>) result;
-            // 新行为(评审修订 2026-11-03 三轮):兜底 02001131/502 统一
-            // (原路径透传 e.status()=503 并报 02501037)
-            assertEquals(502, responseEntity.getStatusCode().value());
+            // 新行为(评审修订 2026-11-04 四轮):Feign 已应答(status>0)时按
+            // HTTP_RESPONSE 相位处理——文案族仍为 02001131,但保留原状态
+            // (503 不再统一成 502;真传输失败 status<=0 才 502)
+            assertEquals(503, responseEntity.getStatusCode().value());
             ErrorRsp errorRsp = (ErrorRsp) responseEntity.getBody();
             assertNotNull(errorRsp);
             assertEquals("openjiuwen.02001131", errorRsp.getErrorCode());
