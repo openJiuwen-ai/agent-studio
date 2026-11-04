@@ -1491,6 +1491,20 @@ export class ControllerModalComponent
     agent.version_id = update.version;
     agent.version_name = update.name;
     agent.name = update.resourceName;
+    // 版本升级后按最新版本详情的 sub_type 同步成员 mode 与类型分类，
+    // 弹窗未关闭时 flow-item 标签即时反映新类型（与保存链路的映射一致）
+    const agentInfo = this.select_agent_detail_map.get(agent.id);
+    if (agentInfo) {
+      const subType = (agentInfo.sub_type ?? '').trim();
+      if (subType === 'planexecute') {
+        agent.mode = 'PlanExecute';
+        agent.subAgentType = ApplicationType.SINGLE_AGENT;
+      } else if (subType === 'agent' || subType === 'common') {
+        agent.mode = 'agent';
+        agent.subAgentType = ApplicationType.SINGLE_AGENT;
+      }
+      // sub_type 缺失/未知时保持原 mode 不变
+    }
     this.associationAgentCtx = [...this.associationAgentCtx];
     this.onSelectSubAgent(agent, true);
   }

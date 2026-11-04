@@ -183,14 +183,17 @@ export class SingleAgentNodeComponent
           agentInfo.version_name = this.last_version_name;
 
           // configs 与编排弹窗 getSubSingleAgent 生成的单智能体成员 DSL 同构；
-          // mode 按最新版本实际 sub_type 动态映射（planexecute → 'PlanExecute'，
-          // 其余 → 'agent'），与编排弹窗保持一致；
-          // 保留画布节点已有 intent（与 SubController 画布升级先例一致），
-          // fromShare/valid 等其余字段由 createMultiAgentTree 的
-          // getMergedConfigs 从画布节点旧 configs 合并回来
-          const memberMode = ((agentInfo as any)?.sub_type ?? '').trim() === 'planexecute'
+          // mode 按最新版本实际 sub_type 的已知取值白名单映射：
+          // 'planexecute' → 'PlanExecute'，'agent'/'common' → 'agent'；
+          // sub_type 缺失/null/空串/未知值时回退沿用画布节点当前 mode
+          // （this.nodeInfo.configs.mode），与编排弹窗 getSubSingleAgent
+          // 的兜底策略一致，避免存量 PlanExecute 成员被悄悄重写为 'agent'
+          const subType = ((agentInfo as any)?.sub_type ?? '').trim();
+          const memberMode = subType === 'planexecute'
             ? 'PlanExecute'
-            : 'agent';
+            : (subType === 'agent' || subType === 'common'
+              ? 'agent'
+              : (this.nodeInfo.configs?.mode ?? 'agent'));
           const bodyParams = {
             id: this.nodeInfo?.id,
             name: agentInfo.name,
