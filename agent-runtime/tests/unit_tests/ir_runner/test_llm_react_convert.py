@@ -213,3 +213,101 @@ class TestLlmReactInWorkflow:
         # 不抛 "unsupported workflow component type for openjiuwen workflow: jiuwen.LLMReAct"
         assert isinstance(component_info.component, FlowAgent)
         assert component_info.node_type == "jiuwen.LLMReAct"
+
+
+class TestTraceIdentityChannel:
+    """业务身份经模块级 ContextVar 传递（不新增 _create_component 形参）。
+
+    契约：_create_component 的签名必须保持向后兼容——大量存量测试（含外部
+    在途分支）按旧签名 mock 它，任何新增 kwarg 都会令其 TypeError（CI 实证
+    过一次）。身份改由 _TRACE_IDENTITY 通道传入，对 mock 完全透明。
+    """
+
+    def test_create_component_signature_has_no_identity_kwarg(self):
+        """签名契约：不得出现 identity 相关形参。"""
+        import inspect
+
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
+
+        params = inspect.signature(IRConverter._create_component).parameters
+        assert "trace_identity" not in params, (
+            "_create_component 不得新增 identity 形参：存量 mock 按旧签名定义，"
+            "新增 kwarg 会令其 TypeError（改用 _TRACE_IDENTITY ContextVar）"
+        )
+
+    @pytest.mark.asyncio
+    async def test_identity_flows_via_context_var_to_react_model(self):
+        """ContextVar 置值 → react 分支构建 model 时身份送达 build_traced_model。"""
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            IRConverter,
+            _TRACE_IDENTITY,
+        )
+
+        with open(FIXTURE, encoding="utf-8") as f:
+            ir = json.load(f)
+        agent_node = next(c for c in ir["components"] if c["type"] == "jiuwen.LLMReAct")
+
+        mock_provider = AsyncMock()
+        mock_provider.get_llm_config = AsyncMock(return_value=MagicMock())
+        captured: dict = {}
+
+        def fake_build_traced_model(model, session=None, session_id=None, identity=None):
+            captured["identity"] = identity
+            return model
+
+        with patch(
+            "jiuwen.serve.controllers.execution.ir_converter._get_model_config_provider",
+            return_value=mock_provider,
+        ), patch(
+            "agent_runtime.common.trace_compat.build_traced_model",
+            side_effect=fake_build_traced_model,
+        ), patch(
+            "openjiuwen.core.foundation.llm.Model", return_value=MagicMock()
+        ), patch("openjiuwen.core.runner.Runner"), patch(
+            "jiuwen.extension.wrapper.restful_api_loader.load_restful_api_from_ir",
+            return_value="Gaud_Map",
+        ):
+            token = _TRACE_IDENTITY.set({"workflow_id": "wf-biz-1"})
+            try:
+                await IRConverter._create_component(agent_node, None)
+            finally:
+                _TRACE_IDENTITY.reset(token)
+
+        assert captured.get("identity") == {"workflow_id": "wf-biz-1"}
+
+    @pytest.mark.asyncio
+    async def test_identity_defaults_to_none_without_context(self):
+        """未置值（普通转换路径由 _add_component 包裹置值）→ identity=None。"""
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            IRConverter,
+            _TRACE_IDENTITY,
+        )
+
+        with open(FIXTURE, encoding="utf-8") as f:
+            ir = json.load(f)
+        agent_node = next(c for c in ir["components"] if c["type"] == "jiuwen.LLMReAct")
+
+        mock_provider = AsyncMock()
+        mock_provider.get_llm_config = AsyncMock(return_value=MagicMock())
+        captured: dict = {}
+
+        def fake_build_traced_model(model, session=None, session_id=None, identity=None):
+            captured["identity"] = identity
+            return model
+
+        with patch(
+            "jiuwen.serve.controllers.execution.ir_converter._get_model_config_provider",
+            return_value=mock_provider,
+        ), patch(
+            "agent_runtime.common.trace_compat.build_traced_model",
+            side_effect=fake_build_traced_model,
+        ), patch(
+            "openjiuwen.core.foundation.llm.Model", return_value=MagicMock()
+        ), patch("openjiuwen.core.runner.Runner"), patch(
+            "jiuwen.extension.wrapper.restful_api_loader.load_restful_api_from_ir",
+            return_value="Gaud_Map",
+        ):
+            assert _TRACE_IDENTITY.get() is None
+            await IRConverter._create_component(agent_node, None)
+
+        assert captured.get("identity") is None

@@ -235,7 +235,7 @@ class _MockLLM(WorkflowComponent):
 async def _build_workflow(ir: dict):
     original_create = getattr(IRConverter, "_create_component")
 
-    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None, trace_identity=None):
+    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None):
         if node.get("type") == "jiuwen.llm":
             return _MockLLM(), "jiuwen.llm", dict(node.get("configs") or {})
         return await original_create(

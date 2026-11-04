@@ -11,6 +11,7 @@ import re
 import secrets
 import copy
 from collections import defaultdict
+from contextvars import ContextVar
 from typing import Any, AsyncIterator, Dict, Iterable, List, NamedTuple, Optional
 
 from agent_runtime.extension.workflow_node.flow_code import FlowCode
@@ -943,6 +944,14 @@ def _workflow_trace_identity(workflow) -> dict | None:
     if workflow_name:
         identity["workflow_name"] = workflow_name
     return identity or None
+
+
+# IR 转换期的业务身份通道：_add_component / 单组件调试在调用
+# _create_component 前置值，仅 LLMReAct 分支消费（构建期装饰 model）。
+# 走 ContextVar 而非新增 _create_component 形参：该方法被大量测试按
+# 旧签名 mock（外部在途分支亦然），任何新 kwarg 都会令其 TypeError；
+# ContextVar 对 mock 透明，identity 未置时降级为 None。
+_TRACE_IDENTITY: ContextVar[dict | None] = ContextVar("oj_ir_trace_identity", default=None)
 
 
 async def _convert_llm_react_node(configs: dict, node_id: str, identity: dict = None):
@@ -2325,13 +2334,12 @@ class IRConverter:
         *,
         node_by_id: dict[str, dict] | None = None,
         ir_connections: list[dict] | None = None,
-        trace_identity: dict | None = None,
     ) -> tuple[Any, str, dict]:
         """纯组件创建，不依赖 Workflow。
 
-        ``trace_identity`` 仅被 LLMReAct 分支消费（构建期装饰 model，无执行期
-        Session 可供懒提取）；其余 LLM 组件为懒初始化，执行期经
-        resolve_trace_identity 从 Session 取业务身份。
+        LLMReAct 分支经模块级 ContextVar（_TRACE_IDENTITY）读取业务身份
+        （构建期装饰 model，无执行期 Session 可供懒提取）；其余 LLM 组件为
+        懒初始化，执行期经 resolve_trace_identity 从 Session 取业务身份。
 
         返回 (component_instance, node_type, configs)。
         """
@@ -2456,7 +2464,7 @@ class IRConverter:
             )
 
         if node_type == "jiuwen.LLMReAct":
-            component = await _convert_llm_react_node(configs, node_id, identity=trace_identity)
+            component = await _convert_llm_react_node(configs, node_id, identity=_TRACE_IDENTITY.get())
             return component, node_type, configs
 
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
@@ -2818,15 +2826,20 @@ class IRConverter:
             _attach_node_def(component, node, configs)
             return component
 
-        component, resolved_type, configs = await IRConverter._create_component(
-            node,
-            global_model,
-            node_by_id=node_by_id,
-            ir_connections=ir_connections,
-            # card.id 即业务 workflowId（跨执行稳定）：react 子 llm span 的
-            # 业务归因来源；懒初始化组件无需（执行期从 Session 提取）
-            trace_identity=_workflow_trace_identity(workflow),
-        )
+        # card.id 即业务 workflowId（跨执行稳定）：react 子 llm span 的
+        # 业务归因来源；懒初始化组件无需（执行期从 Session 提取）。
+        # 走 ContextVar 传递而非新增 _create_component 形参（签名兼容，
+        # 见 _TRACE_IDENTITY 注释）
+        _identity_token = _TRACE_IDENTITY.set(_workflow_trace_identity(workflow))
+        try:
+            component, resolved_type, configs = await IRConverter._create_component(
+                node,
+                global_model,
+                node_by_id=node_by_id,
+                ir_connections=ir_connections,
+            )
+        finally:
+            _TRACE_IDENTITY.reset(_identity_token)
         _attach_node_def(component, node, configs)
 
         if resolved_type == "EI.http":
@@ -3409,7 +3422,7 @@ class IRConverter:
         global_model = (ir_data.get("configs") or {}).get("model")
         # 单组件调试的业务身份：Session 的 workflow_id 是 node_id（openjiuwen
         # execute_single_component 即此口径），业务 workflowId 只存在于 IR——
-        # 显式注入两条通路：react 走 trace_identity（构建期装饰 model），
+        # 显式注入两条通路：react 走 _TRACE_IDENTITY（构建期装饰 model），
         # 懒初始化组件走 _trace_identity 属性（首调 resolve_trace_identity
         # 优先读取）。组件归属（node_id/type）走 metadata，不占
         # workflow.component_id（core 壳分类器判据，llm span 不得携带）
@@ -3425,9 +3438,12 @@ class IRConverter:
                 "component_id": component_id,
                 "component_type": node_type,
             }
-        component, _, configs = await IRConverter._create_component(
-            node, global_model, trace_identity=debug_identity or None
-        )
+        # 与 _add_component 同口径：react 构建期身份走 ContextVar（签名兼容）
+        _identity_token = _TRACE_IDENTITY.set(debug_identity or None)
+        try:
+            component, _, configs = await IRConverter._create_component(node, global_model)
+        finally:
+            _TRACE_IDENTITY.reset(_identity_token)
         if debug_identity:
             try:
                 component._trace_identity = debug_identity
