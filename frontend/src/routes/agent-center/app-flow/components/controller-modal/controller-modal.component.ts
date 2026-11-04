@@ -844,17 +844,25 @@ export class ControllerModalComponent
 
   private getSubSingleAgent(agent) {
     const agentInfo = this.select_agent_detail_map.get(agent.id);
+    // 成员 mode 按详情接口返回的 sub_type 动态映射；缺失/null/空串时
+    // 回退沿用成员既有 mode，避免把存量 PlanExecute 成员重写为 'agent'
+    const subType = (agentInfo?.sub_type ?? '').trim();
+    const memberMode = subType === 'planexecute'
+      ? 'PlanExecute'
+      : (subType === 'agent' || subType === 'common'
+        ? 'agent'
+        : (agent.mode ?? 'PlanExecute'));
     const agentDetail = {
       node_id: `node_${uuidV4()}`,
       id: agentInfo.agent_id,
       name: agentInfo.name,
-      mode: 'PlanExecute',
+      mode: memberMode,
       type: 'agent',
       configs: {
         node_id: '',
         id: agentInfo.agent_id,
         name: agentInfo.name,
-        mode: 'PlanExecute',
+        mode: memberMode,
         type: ApplicationType.SINGLE_AGENT,
         description: agentInfo.description,
         version: agent.version_id,
@@ -1642,7 +1650,11 @@ export class ControllerModalComponent
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
     if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      return hasNewVersion && app.latest_version_app_sub_type === 'planexecute';
+      // 与 flow.component 的升级铃铛判定保持一致：非 deepresearch 即提示
+      // （成员 mode 动态映射后通用模式成员同样可安全升级）；
+      // sub_type 缺失时不提示，避免对未知子类型误触发升级
+      return hasNewVersion && !!app.latest_version_app_sub_type
+        && app.latest_version_app_sub_type !== 'deepresearch';
     }
     return hasNewVersion;
   }
