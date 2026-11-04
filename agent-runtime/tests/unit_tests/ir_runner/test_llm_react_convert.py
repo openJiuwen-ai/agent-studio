@@ -43,6 +43,11 @@ class TestConvertLlmReactNode:
             "jiuwen.extension.wrapper.restful_api_loader.load_restful_api_from_ir",
             return_value="tool_id_1",
         ), patch(
+            # 遥测装饰与 core 能力态耦合（能装饰时注入 _TraceProxy）：字段映射
+            # 测试只关心映射，透传解耦；装饰接线由 AST 契约测试钉住
+            "agent_runtime.common.trace_compat.build_traced_model",
+            side_effect=lambda model, **kwargs: model,
+        ), patch(
             "openjiuwen.core.foundation.llm.Model", return_value=mock_model
         ) as mock_model_cls, patch(
             "openjiuwen.core.runner.Runner"

@@ -926,7 +926,26 @@ def _resolve_intent_fields(
     return intent_name, intent_description
 
 
-async def _convert_llm_react_node(configs: dict, node_id: str):
+def _workflow_trace_identity(workflow) -> dict | None:
+    """从 Workflow 提取业务工作流身份（workflow_id / workflow_name）。
+
+    供 IR 转换期构建的 traced model 做 LLM span 归因：react 组件壳下的
+    子 llm span 因此带上业务 workflow_id（首调并入壳时壳自身值优先，
+    core 侧 write-if-absent）。card.id 即 ir 的 workflowId（agent IR 时
+    为 agentId），跨执行稳定，可安全用于定义级产物。
+    """
+    card = getattr(workflow, "card", None)
+    identity = {}
+    workflow_id = str(getattr(card, "id", "") or "")
+    workflow_name = str(getattr(card, "name", "") or "")
+    if workflow_id:
+        identity["workflow_id"] = workflow_id
+    if workflow_name:
+        identity["workflow_name"] = workflow_name
+    return identity or None
+
+
+async def _convert_llm_react_node(configs: dict, node_id: str, identity: dict = None):
     """把旧版 jiuwen.LLMReAct 节点 IR 转成 FlowAgent。
 
     映射 camelCase configs → FlowAgentConfig + tools + Model，复用现有 FlowAgent
@@ -935,6 +954,8 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     Args:
         configs: LLMReAct 节点的 configs（含 systemPrompt/model/plugins/maxIteration/...）。
         node_id: 节点 id，作为 resource_mgr tag。
+        identity: LLM span 业务归因键（workflow_id/...，见 _workflow_trace_identity），
+            单组件调试（无工作流壳）时是 llm span 唯一的业务身份来源。
 
     Returns:
         FlowAgent 实例。
@@ -954,13 +975,16 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     llm_comp_config = await provider.get_llm_config(adapted_conf)
     # 转换产物是定义级组件（跨执行复用），构建时不存在真实会话 id——显式落
     # 定义级常量而非退 x-request-id（请求级 id 盖在复用模型上会错归属）；
-    # 会话归因由执行期 trace 树承担（span 挂真实工作流组件壳/trace 下）
+    # 会话归因由执行期 trace 树承担（span 挂真实工作流组件壳/trace 下）；
+    # ``identity`` 携带业务 workflow_id（card.id 跨执行稳定）：单组件调试
+    # 无工作流壳，react 的 llm span 全靠它保持业务可查
     model = build_traced_model(
         SDKModel(
             model_client_config=llm_comp_config.model_client_config,
             model_config=llm_comp_config.model_config,
         ),
         session_id=DEFINITION_SCOPED_SESSION_ID,
+        identity=identity,
     )
     # LLMReAct 内部 ReAct 循环的每次模型调用经装饰器各产一个带 usage/ttft
     # 的 llm span（首调并入 LLM 类组件壳、后续为壳下子 span，由 core 门控）
@@ -2301,8 +2325,13 @@ class IRConverter:
         *,
         node_by_id: dict[str, dict] | None = None,
         ir_connections: list[dict] | None = None,
+        trace_identity: dict | None = None,
     ) -> tuple[Any, str, dict]:
         """纯组件创建，不依赖 Workflow。
+
+        ``trace_identity`` 仅被 LLMReAct 分支消费（构建期装饰 model，无执行期
+        Session 可供懒提取）；其余 LLM 组件为懒初始化，执行期经
+        resolve_trace_identity 从 Session 取业务身份。
 
         返回 (component_instance, node_type, configs)。
         """
@@ -2427,7 +2456,7 @@ class IRConverter:
             )
 
         if node_type == "jiuwen.LLMReAct":
-            component = await _convert_llm_react_node(configs, node_id)
+            component = await _convert_llm_react_node(configs, node_id, identity=trace_identity)
             return component, node_type, configs
 
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
@@ -2794,6 +2823,9 @@ class IRConverter:
             global_model,
             node_by_id=node_by_id,
             ir_connections=ir_connections,
+            # card.id 即业务 workflowId（跨执行稳定）：react 子 llm span 的
+            # 业务归因来源；懒初始化组件无需（执行期从 Session 提取）
+            trace_identity=_workflow_trace_identity(workflow),
         )
         _attach_node_def(component, node, configs)
 
@@ -3375,7 +3407,34 @@ class IRConverter:
                 message=StatusCode.COMPONENT_TYPE_ERROR.errmsg,
             )
         global_model = (ir_data.get("configs") or {}).get("model")
-        component, _, configs = await IRConverter._create_component(node, global_model)
+        # 单组件调试的业务身份：Session 的 workflow_id 是 node_id（openjiuwen
+        # execute_single_component 即此口径），业务 workflowId 只存在于 IR——
+        # 显式注入两条通路：react 走 trace_identity（构建期装饰 model），
+        # 懒初始化组件走 _trace_identity 属性（首调 resolve_trace_identity
+        # 优先读取）。组件归属（node_id/type）走 metadata，不占
+        # workflow.component_id（core 壳分类器判据，llm span 不得携带）
+        debug_identity = {}
+        _wf_id = str(ir_data.get("workflowId") or "")
+        _wf_name = str(ir_data.get("workflowName") or "")
+        if _wf_id:
+            debug_identity["workflow_id"] = _wf_id
+        if _wf_name:
+            debug_identity["workflow_name"] = _wf_name
+        if debug_identity:
+            debug_identity["metadata"] = {
+                "component_id": component_id,
+                "component_type": node_type,
+            }
+        component, _, configs = await IRConverter._create_component(
+            node, global_model, trace_identity=debug_identity or None
+        )
+        if debug_identity:
+            try:
+                component._trace_identity = debug_identity
+            except AttributeError:
+                # __slots__ 组件无法挂属性：跳过（遥测归因是可选增强，
+                # 不得阻断组件创建）
+                pass
 
         # SubWorkflow 需要加载子工作流
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:

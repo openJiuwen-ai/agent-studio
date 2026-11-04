@@ -103,7 +103,67 @@ def _llm_shell_merge_capable() -> bool:
 DEFINITION_SCOPED_SESSION_ID = "workflow-llm"
 
 
-def build_traced_model(model, session=None, session_id: str = None):
+# 一次性探测 core 装饰器是否支持 identity 归因参数（core 侧随壳合并 PR 引入：
+# decorate_model_with_trace(model, agent_session, identity=None)，把
+# workflow_id 等业务身份键 flat 并入 instance_info，由 handler 在 span 上
+# write-if-absent 盖属性）。旧 core 无该参数：传了会在调用点抛 TypeError，
+# 把整段装饰降级成裸模型（span 全丢），故必须先探测再决定是否透传。
+_DECORATOR_ACCEPTS_IDENTITY = None
+
+
+def _decorator_accepts_identity() -> bool:
+    """core 装饰器是否接受 identity 参数（结果进程内缓存）。"""
+    global _DECORATOR_ACCEPTS_IDENTITY
+    if _DECORATOR_ACCEPTS_IDENTITY is None:
+        accepted = False
+        try:
+            from openjiuwen.core.session.tracer import decorate_model_with_trace
+
+            accepted = "identity" in inspect.signature(decorate_model_with_trace).parameters
+        except Exception:  # noqa: BLE001 - 旧 core 无该入口时按不支持处理
+            accepted = False
+        _DECORATOR_ACCEPTS_IDENTITY = accepted
+    return _DECORATOR_ACCEPTS_IDENTITY
+
+
+def workflow_identity_from_session(session) -> dict | None:
+    """从 openjiuwen Session 提取工作流身份（workflow_id）。
+
+    正常执行 Session.get_workflow_id() 返回业务工作流 id（workflow.py 落卡
+    片 id）；单组件调试的 Session 以 node_id 充当 workflow_id，业务 id 需由
+    调试构建路径显式注入（见 resolve_trace_identity 的 ``_trace_identity``）。
+
+    只提取 workflow_id：component_* 身份键刻意不提取——core 的组件壳分类器
+    （_ambient_component_shell）以 openjiuwen.workflow.component_id 判壳，
+    llm span 带上它会在嵌套调用时被误当可合并壳；组件级归因走 metadata。
+    任何读取失败返回 None，绝不抛出。
+    """
+    try:
+        workflow_id = session.get_workflow_id() if session is not None else None
+    except Exception:  # noqa: BLE001 - 身份提取失败不构成遥测失败
+        return None
+    if workflow_id:
+        return {"workflow_id": str(workflow_id)}
+    return None
+
+
+def resolve_trace_identity(component, session=None) -> dict | None:
+    """组件级 LLM 归因身份解析：显式注入优先，缺省从执行期 Session 提取。
+
+    - ``component._trace_identity``：构建路径显式注入的业务身份（单组件调试
+      场景——Session 的 workflow_id 是 node_id，业务 workflowId 只存在于 IR，
+      由 create_single_component_info 在构建期挂上）；
+    - 否则 ``workflow_identity_from_session``：执行期 Session 的业务工作流 id
+      （懒初始化组件首调时 Session 已在手上）。
+    """
+    explicit = getattr(component, "_trace_identity", None)
+    if explicit:
+        return explicit
+    effective = session if session is not None else getattr(component, "_session", None)
+    return workflow_identity_from_session(effective)
+
+
+def build_traced_model(model, session=None, session_id: str = None, identity: dict = None):
     """把裸 core Model 交给 openjiuwen 装饰器，补齐每次调用的 llm span。
 
     - 能力门槛：core 不具备壳合并能力时原样返回裸模型（宁可无 span 不双计）；
@@ -116,6 +176,10 @@ def build_traced_model(model, session=None, session_id: str = None):
       复用，绑定任一请求都会错归属）：无显式 session_id 时落
       ``DEFINITION_SCOPED_SESSION_ID`` 且不绑请求 trace；react 这类每执行
       新建模型的请求级场景传当次会话 id，trace 沿用请求上下文；
+    - ``identity`` 透传业务归因键（workflow_id / agent_id / ...，core 侧
+      write-if-absent 盖属性）：独立/子 llm span 带上业务身份，合并进组件
+      壳时壳自身值优先。旧 core 装饰器无该参数时自动退化为不传（保留
+      span，仅缺身份键），不因 TypeError 丢整段装饰；
     - 遥测侧任何失败（探测 / 导入 / 建会话 / 装饰）都降级返回裸模型，
       绝不影响模型创建与业务语义。
     """
@@ -139,6 +203,8 @@ def build_traced_model(model, session=None, session_id: str = None):
                 )
             else:
                 session = create_agent_session_with_trace(session_id=resolved)
+        if identity and _decorator_accepts_identity():
+            return decorate_model_with_trace(model, session, identity=identity)
         return decorate_model_with_trace(model, session)
     except Exception as e:  # noqa: BLE001 - 遥测失败不得阻断模型创建
         logger.warning("build_traced_model: trace decoration degraded to bare model: %s", e)

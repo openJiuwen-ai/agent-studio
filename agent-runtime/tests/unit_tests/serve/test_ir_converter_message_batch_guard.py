@@ -225,7 +225,7 @@ async def test_batch_only_message_registered_as_batch():
     ir = _build_ir(msg_ref="${node_start.userFields.query}")
     original_create = getattr(IRConverter, "_create_component")
 
-    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None):
+    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None, trace_identity=None):
         if node.get("type") == "jiuwen.llm":
             return _MockLLM(), "jiuwen.llm", dict(node.get("configs") or {})
         return await original_create(
@@ -258,7 +258,7 @@ async def test_stream_ref_message_still_registered_as_stream():
     ir = _build_ir(msg_ref="${node_llm.raw_output}")
     original_create = getattr(IRConverter, "_create_component")
 
-    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None):
+    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None, trace_identity=None):
         if node.get("type") == "jiuwen.llm":
             return _MockLLM(), "jiuwen.llm", dict(node.get("configs") or {})
         return await original_create(
@@ -377,7 +377,7 @@ DONE_CODE = "_parallel_done__P1__node_msg__node_code"
 
 
 def _mock_llm_create(original_create):
-    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None):
+    async def _mock_create(node, global_model, *, node_by_id=None, ir_connections=None, trace_identity=None):
         if node.get("type") == "jiuwen.llm":
             return _MockLLM(), "jiuwen.llm", dict(node.get("configs") or {})
         return await original_create(
