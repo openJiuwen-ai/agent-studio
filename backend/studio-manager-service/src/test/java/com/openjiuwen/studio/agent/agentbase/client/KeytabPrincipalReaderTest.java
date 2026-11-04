@@ -85,6 +85,31 @@ class KeytabPrincipalReaderTest {
             "应报版本非法: " + ex.getMessage());
     }
 
+    @Test
+    void v2_noMatchingPrincipals_throwsIOExceptionNotEmptyArray() throws IOException {
+        // 评审修订:空结果(无匹配 principal)须抛 IOException 而非返回空数组——
+        // 调用方 [0] 取首元素,空数组会 AIOOBE 绕过外层 catch
+        byte[] keytab = concat(buildV2KeytabHeader(),
+            lengthPrefix(buildEntry("host1", 1, "REALM", 1, 1)));
+        Path file = tempDir.resolve("no-match.kt");
+        Files.write(file, keytab);
+        IOException ex = assertThrows(IOException.class,
+            () -> KeytabPrincipalReader.getPrincipalNames(file.toString(),
+                Pattern.compile("nomatch.*")));
+        assertTrue(ex.getMessage().contains("no valid principals"),
+            "应报空结果: " + ex.getMessage());
+    }
+
+    @Test
+    void v2_truncatedFile_throwsIOExceptionNotEmptyArray() throws IOException {
+        // 评审修订:截断文件(条目不完整)也须抛 IOException
+        byte[] keytab = concat(buildV2KeytabHeader(), new byte[]{0, 0, 0, 50, 1, 2}); // entryLen=50 但只有2字节
+        Path file = tempDir.resolve("truncated.kt");
+        Files.write(file, keytab);
+        assertThrows(IOException.class,
+            () -> KeytabPrincipalReader.getPrincipalNames(file.toString(), null));
+    }
+
     // ==== keytab 字节构造 ====
 
     private static byte[] buildV2Keytab(byte[] entry) {
