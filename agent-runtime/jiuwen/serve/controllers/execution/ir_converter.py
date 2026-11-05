@@ -3737,12 +3737,19 @@ class IRConverter:
             or agent_id
             or ""
         )
+        resolved_agent_name = (
+            extension.get("agentCoreAgentName")
+            or extension.get("agent_core_agent_name")
+            or extension.get("agent_name")
+            or ""
+        )
         await IRConverter._register_agent_core_llm_model(model_id, model_configs)
         return AgentCoreModelLayer(
             runtime=ModelWrapper(),
             default_model_id=model_id,
             default_session_id=session_id,
             default_agent_id=resolved_agent_id,
+            default_agent_name=resolved_agent_name,
         )
 
     @staticmethod

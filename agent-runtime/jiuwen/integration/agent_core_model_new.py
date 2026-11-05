@@ -56,11 +56,13 @@ class AgentCoreModelLayer:
         default_model_id: str = "",
         default_session_id: str = "",
         default_agent_id: str = "",
+        default_agent_name: str = "",
     ):
         self.runtime = runtime or ModelWrapper()
         self.default_model_id = default_model_id
         self.default_session_id = default_session_id
         self.default_agent_id = default_agent_id
+        self.default_agent_name = default_agent_name
 
     @property
     def model_name(self) -> str:
@@ -89,6 +91,7 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> LanguageModelOutput:
         """Synchronously invoke model through the same layer contract."""
+        kwargs = {**self._ambient_span_refs(), **kwargs}
         return self._run_async_blocking(
             self.ainvoke(
                 inputs,
@@ -110,6 +113,8 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> LanguageModelOutput:
         """Invoke model through a jiuwen-compatible async interface."""
+        if "agent_name" not in kwargs and self.default_agent_name:
+            kwargs = {**kwargs, "agent_name": self.default_agent_name}
         call = self._normalize_call(
             inputs=inputs,
             model_id=model_id,
@@ -140,6 +145,8 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> AsyncIterable[LanguageModelOutput]:
         """Stream model output through a jiuwen-compatible async interface."""
+        if "agent_name" not in kwargs and self.default_agent_name:
+            kwargs = {**kwargs, "agent_name": self.default_agent_name}
         call = self._normalize_call(
             inputs=inputs,
             model_id=model_id,
@@ -168,6 +175,7 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> Iterable[LanguageModelOutput]:
         """Synchronously stream model output through the same layer contract."""
+        kwargs = {**self._ambient_span_refs(), **kwargs}
         async_iterable = self.astream(
             inputs,
             model_id=model_id,
@@ -413,6 +421,31 @@ class AgentCoreModelLayer:
     @staticmethod
     async def _collect_async_iterable(async_iterable: AsyncIterable[Any]) -> list[Any]:
         return [item async for item in async_iterable]
+
+    @staticmethod
+    def _ambient_span_refs() -> dict[str, str]:
+        """Capture the caller's current OTel span as explicit parent refs.
+
+        嵌入双写桥下 llm span 的父级若依赖环境回退，会被链路中的上下文
+        污染破坏（create_agent_session 实证：current span 被换成死根，
+        recording=False）。同步入口（桥线程启动前、node executor 上下文
+        内）显式捕获 (trace_id, span_id, trace_flags)，随 kwargs 走与
+        agent_id 同一条 get_model(identity=) 通道——core 端显式 > 逻辑 >
+        环境三级定父。无合法 recording span 时不注入，wire 形态不变。
+        """
+        try:
+            from opentelemetry import trace as _otel_trace
+
+            span_context = _otel_trace.get_current_span().get_span_context()
+            if not span_context.is_valid or span_context.span_id == 0:
+                return {}
+            return {
+                "parent_trace_id": f"{span_context.trace_id:032x}",
+                "parent_span_id": f"{span_context.span_id:016x}",
+                "parent_trace_flags": f"{span_context.trace_flags:02x}",
+            }
+        except Exception:
+            return {}
 
     @staticmethod
     def _run_in_bridge_thread(fn: Callable[[], None]) -> None:

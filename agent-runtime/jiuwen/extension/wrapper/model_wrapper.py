@@ -343,21 +343,40 @@ class ModelWrapper:
 
     @staticmethod
     def _trace_identity_kwargs(kwargs: dict) -> dict:
-        """调用方 kwargs 里的 agent_id → core llm span 归因参数片段。
+        """调用方 kwargs 里的归因信息 → core llm span 身份与显式父级片段。
 
         双写桥场景会话是裸会话（无 agent card），core rail 的 common-info
-        路径取不到控制器层 agent_id——壳下 llm span 缺身份即此缺口；经
-        get_model(identity=) 显式带入（core 在 span 上 write-if-absent 盖
-        gen_ai.agent.* 属性）。能力探测复用 _decorator_accepts_identity：
+        路径取不到控制器层 agent_id/agent_name——壳下 llm span 缺身份即此
+        缺口；经 get_model(identity=) 显式带入（core 在 span 上
+        write-if-absent 盖 gen_ai.agent.* 属性）。同一条通道还携带
+        (parent_trace_id, parent_span_id[, parent_trace_flags])：嵌入桥的
+        llm span 逻辑父不在 core agent handler 的 span manager 表里，环境
+        回退会被链路中的上下文污染破坏（部署实证：与 node span 并列、
+        误挂死根），core 据显式 refs 构造 NonRecordingSpan 父——显式 >
+        逻辑 > 环境三级。能力探测复用 _decorator_accepts_identity：
         decorate_model_with_trace 与 get_model 的 identity 参数由同一对
         core 双子（!3570/!3571）引入，旧 core 无该参数，盲传会让 get_model
-        抛 TypeError 打断模型调用。无 agent_id 或无能力 → 空片段，调用
-        形态与既有完全一致。
+        抛 TypeError 打断模型调用。无 agent_id 且无父 refs、或无能力 →
+        空片段，调用形态与既有完全一致。
         """
         agent_id = kwargs.get("agent_id") or ""
-        if not agent_id or not _decorator_accepts_identity():
+        agent_name = kwargs.get("agent_name") or ""
+        parent_span_id = kwargs.get("parent_span_id") or ""
+        parent_trace_id = kwargs.get("parent_trace_id") or ""
+        if (not agent_id and not parent_span_id) or not _decorator_accepts_identity():
             return {}
-        return {"identity": {"agent_id": str(agent_id)}}
+        identity: dict = {}
+        if agent_id:
+            identity["agent_id"] = str(agent_id)
+        if agent_name:
+            identity["agent_name"] = str(agent_name)
+        if parent_span_id and parent_trace_id:
+            identity["parent_span_id"] = str(parent_span_id)
+            identity["parent_trace_id"] = str(parent_trace_id)
+            parent_trace_flags = kwargs.get("parent_trace_flags")
+            if parent_trace_flags is not None:
+                identity["parent_trace_flags"] = str(parent_trace_flags)
+        return {"identity": identity}
 
     async def ainvoke(
         self, inputs: InputType, model_id: str, session_id: str, **kwargs
