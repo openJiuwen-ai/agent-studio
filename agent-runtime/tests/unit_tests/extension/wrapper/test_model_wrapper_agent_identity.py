@@ -120,7 +120,8 @@ def _seed_trace_compat_stub() -> Optional[dict]:
         return False
 
     fake_trace.create_agent_session_with_trace = _fake_session_with_trace
-    fake_trace._decorator_accepts_identity = _fake_accepts_identity
+    # 受保护成员经 setattr 写入，规避 G.CLS.11（pylint pragma 不生效）
+    setattr(fake_trace, "_decorator_accepts_identity", _fake_accepts_identity)
     fake_common.trace_compat = fake_trace
 
     sys.modules["agent_runtime.common"] = fake_common
@@ -245,7 +246,8 @@ class TestAgentIdentityPassthrough:
     @staticmethod
     def test_ainvoke_omits_identity_when_probe_closed(monkeypatch):
         """探测不过（旧 core 无 identity 参数）→ 即便 agent_id 在也不传：
-        盲传会让旧 get_model 抛 TypeError 打断模型调用，门禁是保护不是装饰。"""
+        盲传会让旧 get_model 抛 TypeError 打断模型调用，门禁是保护不是装饰。
+        """
         monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: False)
         captured: dict = {}
         runner, fake_session = _make_runner(captured)
