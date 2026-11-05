@@ -164,6 +164,7 @@ services:
       redis_host: ${REDIS_HOST:-}
       redis_password: ${REDIS_PASSWORD:-}
       redis_port: ${REDIS_PORT:-6379}
+      redis_mode: ${REDIS_MODE:-single}
       cluster_node_list: ${REDIS_CLUSTER_NODES:-}
       redis_master_name: ${REDIS_SENTINEL_MASTER:-}
       redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}

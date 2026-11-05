@@ -39,10 +39,13 @@ spec:
             # - name: spring_datasource_driver_class_name
             #   value: 'org.postgresql.Driver'
             # ======== [必填] Redis ========
-            # 单机模式：配置 redis_host、redis_port、redis_password
-            # 集群模式：配置 cluster_node_list、redis_password
-            # 哨兵模式：配置 redis_host、redis_master_name、redis_sentinel_ports、redis_password
+            # 单机模式：配置 redis_host、redis_port、redis_password、redis_mode=single
+            # 集群模式：配置 cluster_node_list、redis_password、redis_mode=cluster
+            # 哨兵模式：配置 redis_host、redis_master_name、redis_sentinel_ports、redis_password、redis_mode=sentinel
+            # redis_mode 仅用于显式声明，实际模式仍由 cluster_node_list / node_addr_list 是否非空判断
             # Redis服务地址，单机模式为Redis节点IP，哨兵模式为哨兵节点IP
+            - name: redis_mode
+              value: 'single'
             - name: redis_host
               value: ''
             - name: redis_password

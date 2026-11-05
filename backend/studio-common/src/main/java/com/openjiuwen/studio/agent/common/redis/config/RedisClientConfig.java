@@ -16,6 +16,9 @@ import jakarta.annotation.PostConstruct;
 @Configuration
 @Data
 public class RedisClientConfig {
+    @Value("${redis.mode:single}")
+    private String redisMode;
+
     @Value("${redis.host}")
     private String redisHost;
 
