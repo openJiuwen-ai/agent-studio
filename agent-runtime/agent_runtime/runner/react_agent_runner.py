@@ -737,14 +737,13 @@ class ReActAgentRunner:
 
             # 独立 span 无壳可依附：identity 带上 agentId/agentName，llm span
             # 直接可按业务 agent 维度查询
-            identity = {
-                k: str(v)
-                for k, v in {
-                    "agent_id": ir_json.get("agentId", ""),
-                    "agent_name": ir_json.get("agentName", ""),
-                }.items()
-                if v
-            }
+            identity = {}
+            for identity_key, identity_value in (
+                ("agent_id", ir_json.get("agentId", "")),
+                ("agent_name", ir_json.get("agentName", "")),
+            ):
+                if identity_value:
+                    identity[identity_key] = str(identity_value)
             # 会话口径与本文件执行会话创建一致（conversation_id 空时同落
             # default_session），避免装饰会话与执行会话身份分叉
             llm = build_traced_model(

@@ -3446,7 +3446,9 @@ class IRConverter:
             _TRACE_IDENTITY.reset(_identity_token)
         if debug_identity:
             try:
-                component._trace_identity = debug_identity
+                # 内部协议属性：读取侧 resolve_trace_identity 经 getattr 取，
+                # 写入侧对称走 setattr
+                setattr(component, "_trace_identity", debug_identity)
             except AttributeError:
                 # __slots__ 组件无法挂属性：跳过（遥测归因是可选增强，
                 # 不得阻断组件创建）
