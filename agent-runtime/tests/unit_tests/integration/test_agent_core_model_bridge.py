@@ -110,7 +110,8 @@ class TestBridgeStreamingContract:
         """回归（jdfff 11-05 🔴）：join 先行把整条流缓冲完才吐首块。
 
         生产者在首块后永久挂起（流保持打开）：join-first 形态下 next()
-        永不返回（3 秒超时必红）；增量形态下立得首块。"""
+        永不返回（3 秒超时必红）；增量形态下立得首块。
+        """
         async def _never_ending_stream():
             yield "first"
             await asyncio.Event().wait()  # 永不置位：流保持打开

@@ -132,7 +132,8 @@ class TestCapabilityProbe:
     traced model factory getattr 探测）。改前探测用了不存在的
     LLM_SPAN_DECORATOR_CAPABILITY + 数值比较，双错叠加让门控静默常闭
     （jdfff 11-05 🔴）；旧用例还以 int 1 注入、把字符串 "1" 断言为关门，
-    恰好把两个错同时钉死成契约。"""
+    恰好把两个错同时钉死成契约。
+    """
 
     @staticmethod
     def test_probe_absent_constant_means_old_core(monkeypatch):
@@ -157,7 +158,8 @@ class TestCapabilityProbe:
     @pytest.mark.parametrize("wrong", [0, -1, 2, "0", "2", "", None, True])
     def test_probe_non_qualifying_values_keep_gate_closed(monkeypatch, wrong):
         """非 "1" 取值一律关门：core 只发布过字符串 "1"，其余视为不认识
-        （数值比较在 str 常量上还会 TypeError，前度即栽在类型比较上）。"""
+        （数值比较在 str 常量上还会 TypeError，前度即栽在类型比较上）。
+        """
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
         monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", wrong, raising=False)

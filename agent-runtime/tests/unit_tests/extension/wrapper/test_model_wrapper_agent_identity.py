@@ -414,7 +414,8 @@ class TestParentRefsPassthrough:
         """无 agent_id 且只有半对 refs → 整个 identity 片段不发（jdfff 11-05）。
 
         改前门禁只查 parent_span_id：半对也放行，落到
-        {"identity": {}} 空参数——与既有调用形态不一致。"""
+        {"identity": {}} 空参数——与既有调用形态不一致。
+        """
         monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: True)
         captured: dict = {}
         runner, fake_session = _make_runner(captured)
