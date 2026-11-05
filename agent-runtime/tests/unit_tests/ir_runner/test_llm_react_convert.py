@@ -319,3 +319,96 @@ class TestTraceIdentityChannel:
             await create_component(agent_node, None)
 
         assert captured.get("identity") is None
+
+    @pytest.mark.asyncio
+    async def test_loop_group_inherits_outer_workflow_identity(self):
+        """LoopGroup 递归路径（jdfff 检视项）：循环体容器取不到 card 身份，
+        _add_component 不得用 None 覆盖外层已置的业务身份——体内组件
+        构建时应继承外层 workflow_id。"""
+        from openjiuwen.core.workflow.components.flow.loop.loop_comp import LoopGroup
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            IRConverter,
+            _TRACE_IDENTITY,
+        )
+
+        seen: dict = {}
+
+        async def fake_create_component(node, global_model, **kwargs):
+            seen["identity"] = _TRACE_IDENTITY.get()
+            return MagicMock(), "test.unknown", {}
+
+        add_component = getattr(IRConverter, "_add_component")
+        node = {
+            "id": "n-loop-body-react",
+            "type": "test.unknown",
+            "configs": {},
+            "inputs": {},
+            "outputs": {},
+        }
+
+        with patch.object(
+            IRConverter, "_create_component", new=fake_create_component
+        ), patch(
+            "jiuwen.serve.controllers.execution.ir_converter._attach_node_def"
+        ), patch(
+            "jiuwen.serve.controllers.execution.ir_converter._add_workflow_comp_with_exception"
+        ):
+            token = _TRACE_IDENTITY.set({"workflow_id": "wf-outer"})
+            try:
+                # 循环体递归：workflow 参数是空构造的 LoopGroup（无 card）
+                await add_component(LoopGroup(), node, None)
+                # 未置新值：外层身份全程未被覆盖
+                assert _TRACE_IDENTITY.get() == {"workflow_id": "wf-outer"}
+            finally:
+                _TRACE_IDENTITY.reset(token)
+
+        assert seen.get("identity") == {"workflow_id": "wf-outer"}
+
+    @pytest.mark.asyncio
+    async def test_business_workflow_identity_set_and_restored(self):
+        """业务 Workflow（有 card）：置自身身份，且调用结束恢复外层值。"""
+        from jiuwen.serve.controllers.execution.ir_converter import (
+            IRConverter,
+            _TRACE_IDENTITY,
+        )
+
+        seen: dict = {}
+
+        async def fake_create_component(node, global_model, **kwargs):
+            seen["identity"] = _TRACE_IDENTITY.get()
+            return MagicMock(), "test.unknown", {}
+
+        add_component = getattr(IRConverter, "_add_component")
+        workflow = MagicMock()
+        workflow.card.id = "wf-biz"
+        workflow.card.name = "biz-flow"
+        node = {
+            "id": "n-plain",
+            "type": "test.unknown",
+            "configs": {},
+            "inputs": {},
+            "outputs": {},
+        }
+
+        with patch.object(
+            IRConverter, "_create_component", new=fake_create_component
+        ), patch(
+            "jiuwen.serve.controllers.execution.ir_converter._attach_node_def"
+        ), patch(
+            "jiuwen.serve.controllers.execution.ir_converter._add_workflow_comp_with_exception"
+        ):
+            token = _TRACE_IDENTITY.set({"workflow_id": "wf-outer"})
+            try:
+                await add_component(workflow, node, None)
+                # 调用内：组件看到的是 workflow 自身业务身份
+                assert seen.get("identity") == {
+                    "workflow_id": "wf-biz",
+                    "workflow_name": "biz-flow",
+                }
+                # 返回后：恢复外层已置值（不泄漏 wf-biz 给后续节点）
+                assert _TRACE_IDENTITY.get() == {"workflow_id": "wf-outer"}
+            finally:
+                _TRACE_IDENTITY.reset(token)
+
+        # 本用例的 set 也已复位
+        assert _TRACE_IDENTITY.get() is None

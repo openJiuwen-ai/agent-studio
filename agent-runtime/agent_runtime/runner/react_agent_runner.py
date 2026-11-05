@@ -729,28 +729,12 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Failed to load workflow configuration: {e}")
             return
 
-        # 创建 LLM 模型（经 build_traced_model 装饰：ReAct 循环每次模型调用
-        # 各产一个带 usage/ttft 的 llm span；react 无组件壳，走独立 span 路径，
-        # core 能力门控不达标时退裸模型）
+        # 创建 LLM 模型。
+        # 注：react 路径不接 build_traced_model——多智能体同步桥线程下装饰
+        # 会话的 ambient 上下文与执行 trace 树脱钩，产孤儿 llm span（缺参
+        # 追问链复现）；react 覆盖待后续接线承接，本模块维持裸模型。
         try:
-            from agent_runtime.common.trace_compat import build_traced_model
-
-            # 独立 span 无壳可依附：identity 带上 agentId/agentName，llm span
-            # 直接可按业务 agent 维度查询
-            identity = {}
-            for identity_key, identity_value in (
-                ("agent_id", ir_json.get("agentId", "")),
-                ("agent_name", ir_json.get("agentName", "")),
-            ):
-                if identity_value:
-                    identity[identity_key] = str(identity_value)
-            # 会话口径与本文件执行会话创建一致（conversation_id 空时同落
-            # default_session），避免装饰会话与执行会话身份分叉
-            llm = build_traced_model(
-                await self._create_llm(ir_json),
-                session_id=req.conversation_id or "default_session",
-                identity=identity or None,
-            )
+            llm = await self._create_llm(ir_json)
         except Exception as e:
             workflow_logger.error(f"Failed to create LLM: {e}")
             yield adapter.adapt_error(f"Failed to create LLM: {e}")
