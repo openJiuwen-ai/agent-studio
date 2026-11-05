@@ -744,7 +744,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
                       id: agents.id,
                       node_id: agents.node_id,
                       type: agents.type,
-                      mode: agents.mode,
+                      // 采纳最新成员详情的 mode（与 configs.mode 同步），
+                      // 不再沿用旧外层 mode，消除升级后两者的分歧
+                      mode: new_sub_detail.mode ?? agents.mode,
                       name: new_sub_detail.name,
                       configs: new_sub_detail.configs,
                     } as any;
@@ -6024,11 +6026,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           item.parent_node_type = ag_wf_list.find((wf) => wf.node_id === item?.id)
             ?.parent_node_type ?? 'controller';
         }
-        // 单智能体节点：与编排弹窗 isNeedUpdate 判定对齐，最新版本须为
-        // planexecute 类型才提示升级（否则升级后成员 mode='PlanExecute' 与实际版本类型不符）
+        // 单智能体节点：与编排弹窗 isNeedUpdate 判定对齐，最新版本非 deepresearch
+        // 即提示升级（与列表归一口径一致：sub_type 缺失/未知按通用模式处理，
+        // 升级后 memberMode 亦按 'agent' 映射，添加—升级链路口径一致）；
+        // deepresearch 仍不支持作为子智能体，不提示
         const isSubAgentUpdatable =
           item.type !== 'Agent' ||
-          matchedFlow?.latest_version_app_sub_type === 'planexecute';
+          matchedFlow?.latest_version_app_sub_type !== 'deepresearch';
         // 新增!version_id，用于兼容存量数据。绑定的资源是开发态，没有版本号
         if (
           matchedFlow &&
