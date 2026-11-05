@@ -116,29 +116,44 @@ async def _trace_retrieval_event(tracer, event_name: str, span, **payload) -> bo
     return True
 
 
-def _drop_retrieval_span(tracer, span):
-    """注销登记 + 尽力结束已开启的 otel span。
+def _unregister_retrieval_span(tracer, span):
+    """仅注销登记（start 未送达路径专用）。
 
-    start/end/error 事件任一未送达时兜底调用：注销 create_agent_span 留在
+    start 事件未送达时 otel span 从未开启，只需注销 create_agent_span 留在
     span manager 的登记（避免永不 start/end 的悬空记录，last_span 也会被它
-    污染）。end/error 未送达时 otel handler 手中的 otel span 已开启且再无
-    关闭时机——若已注册 handler 暴露 drop_agent_span（core !3570/!3571 起），
-    再显式结束它（OK 状态 + drop 标记事件），否则半开 span 永久滞留。
-    旧 core 无该接口时退化为仅注销登记。全部尽力而为，不得影响降级路径。
+    污染）；此时不得再向 handler 发 drop——那会给未开启的 span 发结束事件
+    （jdfff 11-05：依赖 core 对未知 invoke_id 的幂等容错才不产虚假记录）。
     """
     try:
         tracer.tracer_agent_span_manager.pop_span(span.invoke_id)
     except Exception:  # noqa: BLE001 - 注销失败不影响降级路径
         pass
+
+
+def _drop_retrieval_span(tracer, span):
+    """注销登记 + 尽力结束已开启的 otel span（end/error 未送达路径）。
+
+    仅适用于 start 已送达的 span（start 未达走 _unregister_retrieval_span）：
+    end/error 未送达时 otel handler 手中的 otel span 已开启且再无关闭
+    时机——若已注册 handler 暴露 drop_agent_span（core !3570/!3571 起），
+    再显式结束它（OK 状态 + drop 标记事件），否则半开 span 永久滞留。
+    旧 core 无该接口时退化为仅注销登记。全部尽力而为，不得影响降级路径。
+    """
+    _unregister_retrieval_span(tracer, span)
     try:
         # 公共注册表遍历（TracerHandlerRegistry 为 core 公共 API）；
-        # 逐 handler 探测，未提供 drop_agent_span 的实现直接跳过
+        # 逐 handler 探测，未提供 drop_agent_span 的实现直接跳过；
+        # 逐 handler 隔离异常——一个 handler 清理失败不拖累其余
+        # （jdfff 11-05：原单 try 会让首个抛错的 handler 中断整轮清理）
         from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
 
         for handler in TracerHandlerRegistry.get_agent_handlers().values():
-            drop = getattr(handler, "drop_agent_span", None)
-            if callable(drop):
-                drop(span.invoke_id)
+            try:
+                drop = getattr(handler, "drop_agent_span", None)
+                if callable(drop):
+                    drop(span.invoke_id)
+            except Exception:  # noqa: BLE001 - 单 handler 失败不拖累其余
+                pass
     except Exception:  # noqa: BLE001 - 结束失败不影响降级路径
         pass
 
@@ -166,7 +181,8 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         instance_info={"class_name": "knowledge_retrieval_tool"},
     )
     if not started:
-        _drop_retrieval_span(tracer, span)
+        # start 未送达：otel span 从未开启，只注销登记，不发 drop
+        _unregister_retrieval_span(tracer, span)
         return None
     return span
 
@@ -222,20 +238,32 @@ async def _run_retrieval(
                 loaded_kbs,
                 retrieval_params,
             )
-    except Exception as e:
+    except BaseException as e:  # noqa: BLE001 - CancelledError 是 BaseException
         if trace_tracer is not None and trace_span is not None:
-            # error 事件未送达时与 start 失败路径对称注销，避免悬空登记
-            delivered = await _trace_retrieval_event(trace_tracer, "on_retriever_error", trace_span, error=e)
+            # error 事件未送达时兜底收尾已开启的 otel span；BaseException
+            # 口径：asyncio 取消同样要走收尾，否则半开 span 滞留
+            # （jdfff 11-05：原 except Exception 漏掉 CancelledError）
+            try:
+                delivered = await _trace_retrieval_event(
+                    trace_tracer, "on_retriever_error", trace_span, error=e
+                )
+            except BaseException:  # noqa: BLE001 - 取消落在 trigger 内同样要收尾
+                _drop_retrieval_span(trace_tracer, trace_span)
+                raise
             if not delivered:
                 _drop_retrieval_span(trace_tracer, trace_span)
         raise
     if trace_tracer is not None and trace_span is not None:
-        delivered = await _trace_retrieval_event(
-            trace_tracer,
-            "on_retriever_end",
-            trace_span,
-            outputs={"document_count": len(results)},
-        )
+        try:
+            delivered = await _trace_retrieval_event(
+                trace_tracer,
+                "on_retriever_end",
+                trace_span,
+                outputs={"document_count": len(results)},
+            )
+        except BaseException:  # noqa: BLE001 - 取消落在 trigger 内同样要收尾
+            _drop_retrieval_span(trace_tracer, trace_span)
+            raise
         if not delivered:
             _drop_retrieval_span(trace_tracer, trace_span)
     retrieval_id = uuid.uuid4().hex

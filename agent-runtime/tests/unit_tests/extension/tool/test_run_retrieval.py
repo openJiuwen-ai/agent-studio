@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -515,3 +516,168 @@ async def test_drop_retrieval_span_old_core_degrades(monkeypatch):
     # 降级：仅注销登记，业务照常
     assert tracer.span_manager.popped == ["inv-1"]
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_start_event_failure_never_calls_handler_drop(monkeypatch):
+    """start 未送达：只注销登记，不向 handler 发 drop（jdfff 11-05）。
+
+    otel span 从未开启——此时发 drop 是给未知 invoke_id 发结束事件，只能
+    靠 core 幂等容错兜底。改前 start 失败与 end 失败共用 _drop_retrieval_span。"""
+    from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
+    from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+    dropped = []
+
+    def _noop(self, *args, **kwargs):  # noqa: ANN001 - stub 事件全量哑实现
+        pass
+
+    _DropHandler = type(
+        "_StartFailDropHandler",
+        (TraceExtAgentHandler,),
+        {
+            **{name: _noop for name in TraceExtAgentHandler.__abstractmethods__},
+            "drop_agent_span": lambda self, invoke_id: dropped.append(invoke_id),
+        },
+    )
+
+    TracerHandlerRegistry.register_handler("otel_agent_test_start_fail", _DropHandler())
+    try:
+        tracer = _StubTracer(fail_events={"on_retriever_start"})
+        _patch_traced_session(monkeypatch, tracer)
+        sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+        _patch_lake_search_flow(monkeypatch, sample)
+
+        out = await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+    finally:
+        TracerHandlerRegistry.clear()
+
+    assert tracer.span_manager.popped == ["inv-1"]  # 悬空登记仍要注销
+    assert dropped == []  # 但不得给未开启的 span 发 drop
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_drop_loop_survives_raising_handler(monkeypatch):
+    """逐 handler 隔离：一个 handler 的 drop 抛错不拖累其余（jdfff 11-05）。
+
+    改前整轮 drop 共用一个 try：首个抛错的 handler 会中断其后全部清理。"""
+    from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
+    from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+    calls = []
+
+    def _noop(self, *args, **kwargs):  # noqa: ANN001 - stub 事件全量哑实现
+        pass
+
+    def _angry_drop(self, invoke_id):  # noqa: ANN001
+        calls.append("angry")
+        raise RuntimeError("exporter already shut down")
+
+    def _healthy_drop(self, invoke_id):  # noqa: ANN001
+        calls.append("healthy")
+
+    _AngryHandler = type(
+        "_AngryHandler",
+        (TraceExtAgentHandler,),
+        {
+            **{name: _noop for name in TraceExtAgentHandler.__abstractmethods__},
+            "drop_agent_span": _angry_drop,
+        },
+    )
+    _HealthyHandler = type(
+        "_HealthyHandler",
+        (TraceExtAgentHandler,),
+        {
+            **{name: _noop for name in TraceExtAgentHandler.__abstractmethods__},
+            "drop_agent_span": _healthy_drop,
+        },
+    )
+
+    TracerHandlerRegistry.register_handler("otel_agent_test_angry", _AngryHandler())
+    TracerHandlerRegistry.register_handler("otel_agent_test_healthy", _HealthyHandler())
+    try:
+        tracer = _StubTracer(fail_events={"on_retriever_end"})
+        _patch_traced_session(monkeypatch, tracer)
+        sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+        _patch_lake_search_flow(monkeypatch, sample)
+
+        out = await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+    finally:
+        TracerHandlerRegistry.clear()
+
+    # 无论注册顺序，抛错 handler 之后另一个仍被清理到
+    assert set(calls) == {"angry", "healthy"}
+    assert tracer.span_manager.popped == ["inv-1"]
+    assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_cancelled_closes_span(monkeypatch):
+    """检索中取消（CancelledError 是 BaseException）：span 照常收尾后原样上抛。
+
+    改前 except Exception 漏接取消：取消直达调用方、span 半开滞留（jdfff 11-05）。"""
+    from agent_runtime.extension.workflow_node import flow_knowledge_retrieval as fkr
+
+    # error 事件也失败 → 走兜底 drop，验证取消路径的收尾闭环
+    tracer = _StubTracer(fail_events={"on_retriever_error"})
+    _patch_traced_session(monkeypatch, tracer)
+    _patch_lake_search_flow(monkeypatch, [])
+
+    async def cancelled(self, **kwargs):  # noqa: ANN001
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(fkr.FlowKnowledgeRetrieval, "search_knowledge_repo", cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+
+    assert [e[1] for e in tracer.events] == ["on_retriever_start"]
+    assert tracer.span_manager.popped == ["inv-1"]  # 兜底收尾，不留半开
+
+
+@pytest.mark.asyncio
+async def test_end_trigger_cancelled_still_drops(monkeypatch):
+    """取消恰好落在 on_retriever_end 的 trigger 里：同样兜底收尾后原样上抛。"""
+    from agent_runtime.extension.workflow_node import flow_knowledge_retrieval as fkr  # noqa: F401
+
+    class _CancelOnEndTracer(_StubTracer):
+        async def trigger(self, handler, event_name, span=None, **payload):
+            if event_name == "on_retriever_end":
+                raise asyncio.CancelledError()
+            return await super().trigger(handler, event_name, span=span, **payload)
+
+    tracer = _CancelOnEndTracer()
+    _patch_traced_session(monkeypatch, tracer)
+    sample = [KBSearchResult(text="t", score=0.9, knowledge_base_id="kb-1")]
+    _patch_lake_search_flow(monkeypatch, sample)
+
+    with pytest.raises(asyncio.CancelledError):
+        await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+
+    assert [e[1] for e in tracer.events] == ["on_retriever_start"]
+    assert tracer.span_manager.popped == ["inv-1"]
