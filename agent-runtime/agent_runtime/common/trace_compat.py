@@ -9,7 +9,7 @@ openjiuwen 0.1.16 的 create_workflow_session / create_agent_session 尚不接�
 
 build_traced_model 把裸 core Model 交给 openjiuwen 装饰器（on_llm_start /
 on_llm_end，携带 usage 与 ttft），按 core 装饰器测量能力门控：旧 core 上探不到
-OtelAgentHandler.LLM_SPAN_MERGE_CAPABILITY 时原样返回裸模型——旧 handler
+OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY 时原样返回裸模型——旧 handler
 读不到容器级 usage 兄弟键，装饰只会白发 span 且层间无去重。
 """
 
@@ -74,13 +74,15 @@ def create_workflow_session_with_trace(session_id: str = None, trace_id: str = N
 # ---------------------------------------------------------------------------
 
 # 一次性探测 core 是否具备装饰器测量 llm span 的消费能力
-# （OtelAgentHandler.LLM_SPAN_MERGE_CAPABILITY，core 侧纯新增线引入）。
+# （OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY，core 侧纯新增线引入）。
 # 旧 core 无该常量：handler 读不到容器级 usage_metadata 兄弟键，装饰器发射的
 # llm span 只见事件不见数据（usage/ttft 全丢），且层间双计只能靠后端去重规则
 # 兜底；探测不到即退回裸模型，把覆盖缺口封闭在 core 升级窗口内。
-# 注意：常量名与取值以 core !3570/!3571 实际发布为准（字符串 "1"，非数值），
-# 探测必须用同名常量 + 字符串判等——名字对不上或数值比较 TypeError 都会让
-# 门控静默常闭（jdfff 11-05 🔴）。
+# 常量契约以 core !3570/!3571 合入 head 为准（d896e39f1/848dd77a9 起）：
+# int 版本号（=1，consumed shape 变化时 bump），数值比较 >= 1 判开。11-06
+# 曾对着已撤回的合并线旧提交误核实（11-04 短暂存在 LLM_SPAN_MERGE_CAPABILITY，
+# 随合并逻辑一并撤回）改成 MERGE 字符串判等——对着真 head 恒探不到、门控
+# 静默常闭；跨仓核实必须对着 API 权威 PR head，勿信本地陈旧 ref/安装副本。
 _LLM_SPAN_DECORATOR_CAPABLE = None
 
 
@@ -92,8 +94,7 @@ def _llm_span_decorator_capable() -> bool:
         try:
             from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-            merge_capability = getattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", "")
-            capable = str(merge_capability).strip() == "1"
+            capable = getattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", 0) >= 1
         except Exception:  # noqa: BLE001 - 旧 core 无 tracer_otel 扩展时按无能力处理
             capable = False
         _LLM_SPAN_DECORATOR_CAPABLE = capable
@@ -175,7 +176,7 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
     - ``session`` 显式传入则直接复用（当前生产调用点均传 session_id 由工厂
       建轻量会话，该参数供测试与后续接线预留）。轻量会话不触碰任何既有
       会话——OTel 父链按调用时 ambient 上下文解析（组件壳/rail span 下的
-      真实子 span，见 core LLM_SPAN_MERGE_CAPABILITY），与会话对象无关，
+      真实子 span，见 core LLM_SPAN_DECORATOR_CAPABILITY 旁注释），与会话对象无关，
       不会因执行会话与装饰会话是两个对象而分叉 trace；层间双计由后端
       "优先计子、无子再计桥" 规则去重；
     - 轻量会话的会话身份与 trace 均不得绑定构建期请求（定义级产物跨执行
