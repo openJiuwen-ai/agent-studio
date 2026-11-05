@@ -118,6 +118,10 @@ class IntentionDetectModule:
         self.intent_id_to_child_category_map = {}
         self.workflow_handler = None
 
+        # 标志位：标记本轮 invoke() 是否实际执行了意图识别（非指定意图分支）
+        # 由 controller_planner.stream() 在调用前重置为 False，在 invoke() 识别分支中设为 True
+        self._intent_detected_this_turn = False
+
         self.enable_multi_layer_detection = False
         if plan_config.intent_identification:
             self.enable_multi_layer_detection = (
@@ -384,6 +388,8 @@ class IntentionDetectModule:
 
         # 如果指定意图处理失败或没有指定意图，使用默认识别方式
         if intent_function is None:
+            # 标记本轮执行了意图识别（非指定意图分支）
+            self._intent_detected_this_turn = True
             # 多级意图匹配
             if self.enable_multi_layer_detection:
                 layered_start = time.perf_counter()

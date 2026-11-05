@@ -177,6 +177,8 @@ item_code_to_conversation_event_type = {
     # PlanExecute 统计和汇总事件映射
     StreamCode.STATISTIC_DATA.value: ConversationEvent.STATISTIC_DATA,
     StreamCode.SUMMARY_RESPONSE.value: ConversationEvent.SUMMARY_RESPONSE,
+    # 意图识别
+    StreamCode.INTENT_MSG.value: ConversationEvent.INTENT_MSG,
 }
 
 

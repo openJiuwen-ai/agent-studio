@@ -41,6 +41,7 @@ STREAM_CODE_TO_EVENT = {
     StreamCode.CONTROLLER_AGENT_HANDOFF_MESSAGE.value: "agent_handoff",
     StreamCode.CONTROLLER_AGENT_INTERRUPT_MESSAGE.value: "agent_interrupted",
     StreamCode.TASK_TERMINATED_MESSAGE.value: "task_terminated",
+    StreamCode.INTENT_MSG.value: "intent",
 }
 
 

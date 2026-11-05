@@ -24,6 +24,7 @@ from jiuwen.controller.task_planner.planning_modules.task_understanding_module i
 from jiuwen.controller.task_planner.rule_modules.rule_module import RuleModule
 from jiuwen.controller.task_planner.task_planner import TaskPlanner
 from jiuwen.controller.task_planner.task_queue import TaskQueue
+from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 
 
 @dataclass
@@ -178,19 +179,49 @@ class ControllerPlanner(TaskPlanner):
                     self.task_id,
                 )
             if message.message_type == MessageType.USER_INPUT:
+                self.intention_detect_module._intent_detected_this_turn = False
                 intent_workflow_task = await self._get_intent_based_workflow(
                     [], self.last_message, True
                 )
+                if self.intention_detect_module._intent_detected_this_turn:
+                    yield self._build_intent_stream_data()
                 if intent_workflow_task:
                     yield intent_workflow_task
                 return
             return
 
         # 执行下一个工作流
+        self.intention_detect_module._intent_detected_this_turn = False
         task = await self._get_next_workflow(message)
+        if self.intention_detect_module._intent_detected_this_turn:
+            yield self._build_intent_stream_data()
         if task:
             yield task
             return
+
+    def _build_intent_stream_data(self) -> StreamData:
+        """构造 intent 事件 StreamData，携带当前意图识别结果。"""
+        detected_intent = self.context_manager.get_latest_intent()
+        return StreamData(
+            code=StreamCode.INTENT_MSG.value,
+            msg="intent",
+            data={
+                "intent_id": "",
+                "res": detected_intent or "",
+                "intentResponse": {
+                    "responseData": [
+                        {
+                            "answer": detected_intent or "",
+                            "pageData": {
+                                "status": "",
+                                "type": "",
+                            },
+                        }
+                    ]
+                },
+            },
+            execution_id=self.task_id,
+        )
 
     def reset(self):
         """重置规划器状态"""
