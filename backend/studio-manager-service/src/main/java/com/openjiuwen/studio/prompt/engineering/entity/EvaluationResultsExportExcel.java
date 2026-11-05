@@ -17,10 +17,8 @@ import com.openjiuwen.studio.prompt.engineering.dto.PePromptResultVo;
 import com.openjiuwen.studio.prompt.engineering.dto.PromptEvaluationResult;
 import com.openjiuwen.studio.prompt.engineering.enums.EvaluationMethodType;
 
-import cn.afterturn.easypoi.excel.annotation.Excel;
-import cn.afterturn.easypoi.excel.annotation.ExcelCollection;
-import cn.afterturn.easypoi.excel.annotation.ExcelTarget;
-import cn.afterturn.easypoi.handler.inter.II18nHandler;
+import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
+
 import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -35,37 +33,34 @@ import java.util.stream.Collectors;
 
 
 /**
- * 评估结果导出
+ * 评估结果导出(瘦身修订 2026-11-04 1C:easypoi 注解移除,导出改为
+ * EvaluationResultService 的 EasyExcel 动态表头——嵌套集合扁平化 +
+ * 父列纵向合并,视觉语义与原 easypoi needMerge 一致)
  *
  */
 @Data
 @Builder
 @Validated
 @Accessors(chain = true)
-@ExcelTarget("evaluationTaskResultsExportTable")
 public class EvaluationResultsExportExcel {
     /**
-     * 用例编号
+     * 用例编号(导出列:纵向合并)
      */
-    @Excel(name = "excel.export.evaluation.test.num", needMerge = true, isWrap = false)
     private int testNum;
 
     /**
      * 变量信息
      */
-    @ExcelCollection(name = "excel.export.evaluation.variable.info")
     private List<VariableExport> variableExportList;
 
     /**
-     * 预期结果
+     * 预期结果(导出列:纵向合并,列宽 50)
      */
-    @Excel(name = "excel.export.evaluation.result.expect", needMerge = true, width = 50.0d)
     private String expectResult;
 
     /**
      * 提示词结果导出列表
      */
-    @ExcelCollection(name = "excel.export.evaluation.result.list")
     private List<PromptEvaluationResultExport> promptEvaluationResultExportList;
 
     public static List<EvaluationResultsExportExcel> convertToEvaluationResultsExcelRows(

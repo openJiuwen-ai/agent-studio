@@ -21,6 +21,8 @@ import com.openjiuwen.studio.prompt.engineering.dto.VariableVo;
 import com.openjiuwen.studio.prompt.engineering.entity.EvaluationResultsExportExcel;
 import com.openjiuwen.studio.prompt.engineering.entity.PeEvaluationResult;
 import com.openjiuwen.studio.prompt.engineering.entity.PeEvaluationTask;
+import com.openjiuwen.studio.prompt.engineering.entity.PromptEvaluationResultExport;
+import com.openjiuwen.studio.prompt.engineering.entity.VariableExport;
 import com.openjiuwen.studio.prompt.engineering.entity.PePrompt;
 import com.openjiuwen.studio.prompt.engineering.enums.EvaluationTaskStatus;
 import com.openjiuwen.studio.prompt.engineering.mapper.DatasetMapper;
@@ -28,29 +30,34 @@ import com.openjiuwen.studio.prompt.engineering.mapper.PeEvaluationTaskMapper;
 import com.openjiuwen.studio.prompt.engineering.utils.DateUtil;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelI18nHandler;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelUtil;
+import com.openjiuwen.studio.prompt.engineering.utils.EntityBlockMergeStrategy;
+import com.openjiuwen.studio.prompt.engineering.utils.FixedColumnWidthStyleStrategy;
+import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
 import com.openjiuwen.studio.prompt.engineering.utils.PromptUtil;
 import com.openjiuwen.studio.prompt.engineering.vo.ResultNumCount;
 
-import cn.afterturn.easypoi.excel.ExcelExportUtil;
-import cn.afterturn.easypoi.excel.entity.ExportParams;
-import cn.afterturn.easypoi.excel.entity.enmus.ExcelType;
-import cn.afterturn.easypoi.handler.inter.II18nHandler;
+import com.alibaba.excel.EasyExcel;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -230,16 +237,119 @@ public class EvaluationResultService {
 
         String time = DateUtil.format(new Date());
 
-        String fileName = "EvaluationResultExport_" + evaluationTaskName + "_" + time + ".xlsx";
         String fileNameHeader = "EvaluationResultExport_" + time + ".xlsx";
         response.setContentType("application/octet-stream;charset=utf-8");
         response.setHeader("Content-Disposition", "attachment;filename=" + fileNameHeader);
         String sheetName = i18nHandler.getLocaleName(LOCAL_NAME_EVALUATION_TASK) + " " + evaluationTaskName + " "
             + i18nHandler.getLocaleName(LOCAL_NAME_EXPORT_RESULT);
-        ExportParams exportParams = new ExportParams(fileName, sheetName, ExcelType.XSSF);
-        exportParams.setI18nHandler(i18nHandler);
-        Workbook workbook = ExcelExportUtil.exportExcel(exportParams, EvaluationResultsExportExcel.class, rows);
-        ExcelUtil.exportExcelFile(workbook, response, StudioError.EXPORT_EVALUATION_RESULT_FAILED);
+        exportByEasyExcel(rows, i18nHandler, sheetName);
         return null;
+    }
+
+    /**
+     * EasyExcel 导出(瘦身修订 2026-11-04 1C:原 easypoi ExcelExportUtil 移除)。
+     *
+     * <p>与原 easypoi 输出语义对齐:
+     * <ul>
+     *   <li>动态表头——列名 i18n key 预解析(原 easypoi 的 i18nHandler 渲染链);</li>
+     *   <li>嵌套集合扁平化——每行 = 变量 × 提示词结果,父列(testNum/预期结果)
+     *       经 EntityBlockMergeStrategy 纵向合并(原 needMerge);</li>
+     *   <li>列宽按原注解 width 对齐;</li>
+     *   <li>导出校验(DDE 特殊字符前缀检查)在写流前对扁平行值执行,语义与
+     *       原 validateExportExcel(Workbook) 一致。</li>
+     * </ul>
+     */
+    void exportByEasyExcel(List<EvaluationResultsExportExcel> rows, II18nHandler i18nHandler,
+            String sheetName) {
+        List<List<String>> head = buildExportHead(i18nHandler);
+        List<List<Object>> flatRows = new ArrayList<>();
+        List<int[]> entityRowRanges = new ArrayList<>();
+        flattenRows(rows, flatRows, entityRowRanges);
+        ExcelUtil.validateExportValues(flatRows);
+        // 评审修订 2026-11-04 v2:预计算合并区(写流前,基于实体行区间)——
+        // 原 v1 策略已删除(两个缺陷:跨实体合并+doWrite后补合并不可见)。
+        // v2 改为 EntityBlockMergeStrategy 在 afterSheetCreate 一次性应用
+        // 预计算区,语义与 easypoi needMerge 对齐(仅同一父记录内合并)。
+        List<CellRangeAddress> mergeRegions = EntityBlockMergeStrategy.buildMergeRegions(
+            entityRowRanges, Set.of(0, 3));
+        try {
+            OutputStream out = response.getOutputStream();
+            response.setCharacterEncoding("UTF-8");
+            response.setContentType("application/vnd.ms-excel;charset=UTF-8");
+            EasyExcel.write(out)
+                .head(head)
+                .sheet(sheetName)
+                .registerWriteHandler(new EntityBlockMergeStrategy(mergeRegions))
+                .registerWriteHandler(new FixedColumnWidthStyleStrategy(buildColumnWidths(), 8))
+                .doWrite(flatRows);
+        } catch (IOException e) {
+            log.error("export evaluation results IO failed: {}", e.getMessage(), e);
+            throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
+        } catch (RuntimeException e) {
+            log.error("export evaluation results runtime failed: {}", e.getMessage(), e);
+            throw new AgentStudioException(StudioError.EXPORT_EVALUATION_RESULT_FAILED);
+        }
+    }
+
+    private static List<List<String>> buildExportHead(II18nHandler i18nHandler) {
+        return Arrays.asList(
+            List.of(i18nHandler.getLocaleName("excel.export.evaluation.test.num")),
+            List.of(i18nHandler.getLocaleName("excel.export.variable.key")),
+            List.of(i18nHandler.getLocaleName("excel.export.variable.value")),
+            List.of(i18nHandler.getLocaleName("excel.export.evaluation.result.expect")),
+            List.of(i18nHandler.getLocaleName("excel.export.prompt.name")),
+            List.of(i18nHandler.getLocaleName("excel.export.prompt.content")),
+            List.of(i18nHandler.getLocaleName("excel.export.generate.result")),
+            List.of(i18nHandler.getLocaleName("excel.export.eval.result")));
+    }
+
+    /**
+     * 扁平化(评审修订 2026-11-04 v2):每行 = 变量(第 i 个) × 提示词结果(第 i 个)。
+     * 两个集合按各自下标对齐(超出补空)——与 easypoi 多 ExcelCollection
+     * 的"逐行配对、不足留空"展开形态一致。
+     * 同时输出实体行区间(供 EntityBlockMergeStrategy 预计算合并区)。
+     *
+     * @param rows 输入实体列表
+     * @param flatRows 输出:扁平化数据行
+     * @param entityRowRanges 输出:每个实体的 [startRow, endRow] 数据行索引(0 起,不含表头)
+     */
+    static void flattenRows(List<EvaluationResultsExportExcel> rows,
+            List<List<Object>> flatRows, List<int[]> entityRowRanges) {
+        for (EvaluationResultsExportExcel row : rows) {
+            List<VariableExport> vars = row.getVariableExportList() == null
+                ? Collections.emptyList() : row.getVariableExportList();
+            List<PromptEvaluationResultExport> prompts = row.getPromptEvaluationResultExportList() == null
+                ? Collections.emptyList() : row.getPromptEvaluationResultExportList();
+            int startRow = flatRows.size();
+            int lineCount = Math.max(vars.size(), prompts.size());
+            for (int i = 0; i < lineCount; i++) {
+                VariableExport var = i < vars.size() ? vars.get(i) : null;
+                PromptEvaluationResultExport prompt = i < prompts.size() ? prompts.get(i) : null;
+                flatRows.add(Arrays.asList(
+                    row.getTestNum(),
+                    var == null ? "" : var.getVariableKey(),
+                    var == null ? "" : var.getVariableValue(),
+                    Objects.toString(row.getExpectResult(), ""),
+                    prompt == null ? "" : prompt.getPromptName(),
+                    prompt == null ? "" : prompt.getPromptContent(),
+                    prompt == null ? "" : prompt.getGenerateResult(),
+                    prompt == null ? "" : prompt.getEvalResult()));
+            }
+            entityRowRanges.add(new int[]{startRow, flatRows.size() - 1});
+        }
+    }
+
+    /**
+     * 列宽(字符数,与原 easypoi width 注解对齐:varKey 30/varValue 100/
+     * expectResult 50/promptContent 25/generateResult 75,其余默认 12)。
+     */
+    private static Map<Integer, Integer> buildColumnWidths() {
+        Map<Integer, Integer> widths = new HashMap<>();
+        widths.put(1, 30);
+        widths.put(2, 100);
+        widths.put(3, 50);
+        widths.put(5, 25);
+        widths.put(6, 75);
+        return widths;
     }
 }

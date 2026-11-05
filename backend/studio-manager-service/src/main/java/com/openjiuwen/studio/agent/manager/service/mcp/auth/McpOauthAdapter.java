@@ -20,9 +20,9 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.curator.shaded.com.google.common.cache.Cache;
-import org.apache.curator.shaded.com.google.common.cache.CacheBuilder;
 import org.apache.hc.core5.net.URIBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

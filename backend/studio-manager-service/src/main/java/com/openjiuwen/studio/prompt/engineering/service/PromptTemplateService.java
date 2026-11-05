@@ -60,7 +60,7 @@ import com.openjiuwen.studio.prompt.engineering.utils.HttpUtil;
 import com.openjiuwen.studio.prompt.engineering.utils.StringUtil;
 import com.openjiuwen.studio.prompt.engineering.vo.TemplateDownloadVo;
 
-import cn.afterturn.easypoi.handler.inter.II18nHandler;
+import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;

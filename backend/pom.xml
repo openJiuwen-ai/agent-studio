@@ -57,7 +57,6 @@
         <redisson.version>3.39.0</redisson.version>
         <mcp.sdk.version>0.16.0</mcp.sdk.version>
         <tomcat-embed-core.version>10.1.57</tomcat-embed-core.version>
-        <hadoop.version>3.4.2</hadoop.version>
         <http.version>4.5.14</http.version>
         <org.jetbrains.version>26.0.1</org.jetbrains.version>
         <io-netty-version>4.1.137.Final</io-netty-version>
@@ -207,45 +206,6 @@
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-stdlib-common</artifactId>
                 <version>${kotlin.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-common</artifactId>
-                <version>${hadoop.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>commons-io</groupId>
-                        <artifactId>commons-io</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.bouncycastle</groupId>
-                        <artifactId>bcprov-jdk15on</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.slf4j</groupId>
-                        <artifactId>slf4j-reload4j</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>ch.qos.reload4j</groupId>
-                        <artifactId>reload4j</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-server</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-servlet</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-util</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-webapp</artifactId>
-                    </exclusion>
-                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.apache.avro</groupId>

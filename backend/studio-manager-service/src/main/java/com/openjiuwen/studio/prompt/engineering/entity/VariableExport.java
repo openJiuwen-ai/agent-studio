@@ -6,8 +6,6 @@ package com.openjiuwen.studio.prompt.engineering.entity;
 
 import com.openjiuwen.studio.prompt.engineering.dto.VariableVo;
 
-import cn.afterturn.easypoi.excel.annotation.Excel;
-import cn.afterturn.easypoi.excel.annotation.ExcelTarget;
 import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -15,25 +13,23 @@ import lombok.experimental.Accessors;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * 变量信息
+ * 变量信息(瘦身修订 2026-11-04 1C:easypoi @Excel 注解移除,导出列名由
+ * EvaluationResultService 动态表头预解析——见 II18nHandler 迁移说明)
  *
  */
 @Data
 @Accessors(chain = true)
 @Builder
 @Validated
-@ExcelTarget("变量信息")
 public class VariableExport {
     /**
-     * 变量key
+     * 变量key(导出列宽 30)
      */
-    @Excel(name = "excel.export.variable.key", width = 30.0d)
     private String variableKey;
 
     /**
-     * 变量值
+     * 变量值(导出列宽 100)
      */
-    @Excel(name = "excel.export.variable.value", width = 100.0d)
     private String variableValue;
 
     public static VariableExport convertToVariableExport(VariableVo variableVo) {
