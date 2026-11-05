@@ -156,8 +156,9 @@ class TestCapabilityProbe:
     @staticmethod
     @pytest.mark.parametrize("wrong", [0, -1, "1"])
     def test_probe_non_qualifying_values_keep_gate_closed(monkeypatch, wrong):
-        """"1" 是已撤回合并线的字符串常量：str 与 int 比较抛 TypeError，
-        按无能力处理（该线从未部署，探到也不该开门）。"""
+        """字符串 "1" 是已撤回合并线的常量：str 与 int 比较抛 TypeError，
+        按无能力处理（该线从未部署，探到也不该开门）。
+        """
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
         monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", wrong, raising=False)
@@ -421,7 +422,8 @@ class TestSiteWiring:
     def test_react_runner_stays_bare():
         """react 路径刻意不接线：多智能体同步桥线程下装饰会话的 ambient 上下文
         与执行 trace 树脱钩，产孤儿 llm span（缺参追问链复现）。react 覆盖
-        待后续接线承接，接线回归时删本用例并恢复 SITES 条目。"""
+        待后续接线承接，接线回归时删本用例并恢复 SITES 条目。
+        """
         source = (
             _RUNTIME_ROOT / "agent_runtime/runner/react_agent_runner.py"
         ).read_text(encoding="utf-8")

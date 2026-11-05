@@ -324,7 +324,8 @@ class TestTraceIdentityChannel:
     async def test_loop_group_inherits_outer_workflow_identity(self):
         """LoopGroup 递归路径（jdfff 检视项）：循环体容器取不到 card 身份，
         _add_component 不得用 None 覆盖外层已置的业务身份——体内组件
-        构建时应继承外层 workflow_id。"""
+        构建时应继承外层 workflow_id。
+        """
         from openjiuwen.core.workflow.components.flow.loop.loop_comp import LoopGroup
         from jiuwen.serve.controllers.execution.ir_converter import (
             IRConverter,
