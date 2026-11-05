@@ -735,6 +735,13 @@
             <artifactId>commons-collections</artifactId>
             <version>3.2.2</version>
         </dependency>
+        <!-- Apache Kerby keytab 解析(评审 v5 2026-11-05:手写解析器连续出 bug,
+             改用 Kerby 库——Hadoop 内部同款实现,36KB,替代 187 行手写代码) -->
+        <dependency>
+            <groupId>org.apache.kerby</groupId>
+            <artifactId>kerb-util</artifactId>
+            <version>2.0.3</version>
+        </dependency>
         <!-- javax.annotation(@PostConstruct/@Resource):JDK11+ 不自带,24 个类
              使用,原经 hadoop-common/client-java 传递供给 -->
         <dependency>
