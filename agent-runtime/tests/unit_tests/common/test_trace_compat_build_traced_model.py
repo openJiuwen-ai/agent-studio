@@ -233,13 +233,21 @@ class TestIdentityPassThrough:
     def test_probe_reflects_core_signature(monkeypatch):
         """探测读真实签名：有 identity 参数判支持，无则不支持（缓存复位后）。"""
         mod_new = types.ModuleType("openjiuwen.core.session.tracer")
-        mod_new.decorate_model_with_trace = lambda model, session, identity=None: model
+
+        def _decorate_new(model, session, identity=None):
+            return model
+
+        mod_new.decorate_model_with_trace = _decorate_new
         monkeypatch.setitem(sys.modules, "openjiuwen.core.session.tracer", mod_new)
         monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", None)
         assert trace_compat._decorator_accepts_identity() is True
 
         mod_old = types.ModuleType("openjiuwen.core.session.tracer")
-        mod_old.decorate_model_with_trace = lambda model, session: model
+
+        def _decorate_old(model, session):
+            return model
+
+        mod_old.decorate_model_with_trace = _decorate_old
         monkeypatch.setitem(sys.modules, "openjiuwen.core.session.tracer", mod_old)
         monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", None)
         assert trace_compat._decorator_accepts_identity() is False
@@ -254,8 +262,7 @@ class TestIdentityPassThrough:
 
     @staticmethod
     def test_old_core_drops_identity_keeps_spans(gate_open, stub_decorate, monkeypatch):
-        """旧 core（无 identity 参数）：丢 identity 仍装饰——不得因 TypeError
-        把整段装饰降级成裸模型（span 全丢比缺身份键严重得多）。"""
+        """旧 core：丢 identity 仍装饰——span 全丢比缺身份键严重得多。"""
         monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", False)
         model = object()
         result = build_traced_model(model, session=_StubSession(), identity={"workflow_id": "wf-1"})
@@ -304,7 +311,8 @@ class TestWorkflowIdentity:
         assert trace_compat.workflow_identity_from_session(no_method) is None
 
         class _Broken:
-            def get_workflow_id(self):
+            @staticmethod
+            def get_workflow_id():
                 raise RuntimeError("no inner session")
 
         assert trace_compat.workflow_identity_from_session(_Broken()) is None
@@ -391,9 +399,7 @@ class TestSiteWiring:
 
     @staticmethod
     def test_dead_questioner_copy_stays_unwired():
-        """jiuwen/ 下的 questioner 是死副本（无调用路径）：接线必须只落在
-        agent_runtime 活副本——死副本接线是检视发现的真实缺陷（span 从未
-        发射），此处防止回归。"""
+        """jiuwen/ 下 questioner 是死副本：接线只落 agent_runtime 活副本，防回归。"""
         source = (
             _RUNTIME_ROOT / "jiuwen/extension/workflow_node/questioner.py"
         ).read_text(encoding="utf-8")
