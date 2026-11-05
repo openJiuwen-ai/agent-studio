@@ -128,9 +128,12 @@ export class FlowItemComponent {
       return;
     }
     if(this.itemFlow.subAgentType === ApplicationType.SINGLE_AGENT) {
+      // 单智能体成员按实际 mode 展示：'PlanExecute' 为规划模式，'agent' 为通用模式
+      // （历史存量数据均为 'PlanExecute'）
+      const isPlanningMode = (this.itemFlow as SubAgentModel).mode === 'PlanExecute';
       this.tags = [
         this.i18n.transform('single_agent'),
-        this.i18n.transform('agent_planning_mode')
+        this.i18n.transform(isPlanningMode ? 'agent_planning_mode' : 'agent_mode_gen')
       ];
       return;
     }

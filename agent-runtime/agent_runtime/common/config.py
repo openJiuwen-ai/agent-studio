@@ -32,6 +32,14 @@ class ServerSettings(BaseSettings):
     docs_enabled: bool = Field(default=False, validation_alias="API_DOCS_ENABLED")
     # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出
     performance_log_enabled: bool = Field(default=True, validation_alias="PERFORMANCE_LOG_ENABLED")
+    # 性能日志级别，默认 WARNING (静默)；设为 INFO 才真正打印 perf 指标
+    performance_log_level: str = Field(default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL")
+
+    @field_validator("performance_log_level", mode="before")
+    @classmethod
+    def _perf_level_default(cls, v):
+        """空字符串按默认 WARNING 处理。"""
+        return v or "WARNING"
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -425,6 +433,13 @@ class CodeExecutionSettings(BaseSettings):
     allow_local_exec: bool = Field(
         default=False,
         validation_alias="ALLOW_LOCAL_CODE_EXEC",
+    )
+    # 本地执行的兜底超时（秒）：异常处理未配 exceptionProcess.timeout 时使用。
+    # 与沙箱超时（SECURITY_SANDBOX_TIMEOUT）解耦，避免混用。
+    local_exec_timeout: int = Field(
+        default=900,
+        gt=0,
+        validation_alias="LOCAL_CODE_EXEC_TIMEOUT",
     )
 
     model_config = SettingsConfigDict(

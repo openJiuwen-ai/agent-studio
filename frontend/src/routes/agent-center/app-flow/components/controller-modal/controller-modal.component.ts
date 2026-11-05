@@ -655,8 +655,15 @@ export class ControllerModalComponent
     this.associationAgentCtx = this.nodeInfo.configs.agents?.map(
       (agent) => {
         const { configs } = agent;
-        const applicationType = agent.mode === 'PlanExecute'
-          ? ApplicationType.SINGLE_AGENT : ApplicationType.MULTI_AGENT;
+        // 成员类型判定：configs.type === 'agent' 为单智能体（getSubSingleAgent 写入），
+        // 多智能体成员 configs 无 type 字段（getSubMultiAgent 不写入）但外层 mode 恒为
+        // 'Controller'。不依赖外层 mode === 'PlanExecute' 判单智能体——mode 现按子类型
+        // 动态映射，通用单智能体成员 mode 为 'agent'，旧判据会把它们错归为多智能体
+        const applicationType = configs.type === ApplicationType.SINGLE_AGENT
+          ? ApplicationType.SINGLE_AGENT
+          : (agent.mode === 'Controller'
+            ? ApplicationType.MULTI_AGENT
+            : ApplicationType.SINGLE_AGENT);
 
         return {
           id: agent.id,
@@ -835,19 +842,38 @@ export class ControllerModalComponent
     return [agent];
   }
 
+  /**
+   * 单智能体成员节点 mode：按该智能体实际 sub_type 映射，
+   * planexecute → 'PlanExecute'，其余(common) → 'agent'（与画布单智能体节点约定一致）。
+   * 详情接口(AgentInfo)返回 sub_type，历史数据可能为 null/'agent'，统一归一处理。
+   */
+  private getSubAgentMode(agentInfo: any, existingMode?: string): string {
+    // sub_type 明确返回时按映射覆盖；缺失/null/空串/未知值时回退沿用成员既有
+    // mode，避免详情接口未返回 sub_type 时把存量 PlanExecute 成员重写为 'agent'
+    const subType = (agentInfo?.sub_type ?? '').trim();
+    if (subType === 'planexecute') {
+      return 'PlanExecute';
+    }
+    if (subType === 'agent' || subType === 'common') {
+      return 'agent';
+    }
+    return existingMode ?? 'agent';
+  }
+
   private getSubSingleAgent(agent) {
     const agentInfo = this.select_agent_detail_map.get(agent.id);
+    const memberMode = this.getSubAgentMode(agentInfo, agent.mode);
     const agentDetail = {
       node_id: `node_${uuidV4()}`,
       id: agentInfo.agent_id,
       name: agentInfo.name,
-      mode: 'PlanExecute',
+      mode: memberMode,
       type: 'agent',
       configs: {
         node_id: '',
         id: agentInfo.agent_id,
         name: agentInfo.name,
-        mode: 'PlanExecute',
+        mode: memberMode,
         type: ApplicationType.SINGLE_AGENT,
         description: agentInfo.description,
         version: agent.version_id,
@@ -1476,6 +1502,24 @@ export class ControllerModalComponent
     agent.version_id = update.version;
     agent.version_name = update.name;
     agent.name = update.resourceName;
+    // 单智能体成员升级时按最新版本 sub_type 同步 mode 与类型；
+    // 此处读到的详情可能是升级前缓存（详情刷新在 onSelectSubAgent 内
+    // 异步完成），sub_type 缺失/未知时保持原 mode 不变，避免误改写；
+    // mode/subAgentType 属单智能体成员语义，多智能体成员（Controller）
+    // 不做重映射。刷新完成后的权威同步由保存链路兜底。
+    if (agent.subAgentType === ApplicationType.SINGLE_AGENT) {
+      const agentInfo = this.select_agent_detail_map.get(agent.id);
+      if (agentInfo) {
+        const subType = (agentInfo.sub_type ?? '').trim();
+        if (subType === 'planexecute') {
+          agent.mode = 'PlanExecute';
+          agent.subAgentType = ApplicationType.SINGLE_AGENT;
+        } else if (subType === 'agent' || subType === 'common') {
+          agent.mode = 'agent';
+          agent.subAgentType = ApplicationType.SINGLE_AGENT;
+        }
+      }
+    }
     this.associationAgentCtx = [...this.associationAgentCtx];
     this.onSelectSubAgent(agent, true);
   }
@@ -1635,7 +1679,10 @@ export class ControllerModalComponent
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
     if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      return hasNewVersion && app.latest_version_app_sub_type === 'planexecute';
+      // 与列表归一口径对齐：列表把 sub_type 缺失/未知的智能体按通用模式
+      // 展示与添加，升级判定同样按非 deepresearch 即提示，升级后 memberMode
+      // 亦按 'agent' 映射，添加—升级链路口径一致，不存在"能加但永不提示"
+      return hasNewVersion && app.latest_version_app_sub_type !== 'deepresearch';
     }
     return hasNewVersion;
   }

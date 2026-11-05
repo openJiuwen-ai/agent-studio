@@ -5,6 +5,7 @@ Joint optimizer
 """
 
 import copy
+import math
 import random
 import re
 import threading
@@ -43,6 +44,13 @@ from agent_builder.adapter.exception_bridge import JiuWenBaseException
 from agent_builder.adapter.task_info import TaskInfo
 
 CANCEL_EVENT = "cancel_event"
+
+
+def _get_history_field(item, field_name, default=None):
+    """读取 history 元素字段，兼容 History(BaseModel) 对象与 dict 两种形态。"""
+    if isinstance(item, dict):
+        return item.get(field_name, default)
+    return getattr(item, field_name, default)
 
 
 @dataclass
@@ -916,7 +924,19 @@ class JointOptimizer:
                             "content"
                         ]
                 history_record.original_placeholder = original_placeholder
-                progress_info["history"].append(history_record)
+                # 去重兜底：候选文本与评分完全相同的记录不重复登记，
+                # 覆盖指令精炼轮模型原样返回仍被登记的残留场景
+                duplicated = any(
+                    _get_history_field(item, "filled_prompt")
+                    == history_record.filled_prompt
+                    and math.isclose(
+                        _get_history_field(item, "success_rate") or 0,
+                        history_record.success_rate or 0,
+                    )
+                    for item in progress_info["history"]
+                )
+                if not duplicated:
+                    progress_info["history"].append(history_record)
 
             job_id = progress_info["id"]
             ContextManager().set_checkpoint(job_id, progress_info)
@@ -1100,23 +1120,27 @@ class JointOptimizer:
         if acc_tmp is None:
             return None
 
-        if acc_tmp > self.acc_base:
+        if acc_tmp >= self.acc_base:
             self.sampled_incorrect_data = sampled_incorrect_data
             self.acc_base = acc_tmp
             self.params.examples = examples_tmp or []
             self.params.cot_examples = cot_examples_tmp or []
             self.params.full_prompt = full_prompt
 
-        return History(
-            optimized_prompt=self.params.base_instruction,
-            optimized_placeholder=placeholder_to_dict(self.params.placeholder),
-            examples=self._prepare_examples(examples_tmp)
-            + self._prepare_examples(cot_examples_tmp),
-            filled_prompt=full_prompt,
-            success_rate=acc_tmp,
-            iteration_round=self.iter_num,
-            evaluations=evaluations,
-        )
+            return History(
+                optimized_prompt=self.params.base_instruction,
+                optimized_placeholder=placeholder_to_dict(self.params.placeholder),
+                examples=self._prepare_examples(examples_tmp)
+                + self._prepare_examples(cot_examples_tmp),
+                filled_prompt=full_prompt,
+                success_rate=acc_tmp,
+                iteration_round=self.iter_num,
+                evaluations=evaluations,
+            )
+
+        # 示例精炼未带来提升：指令与示例均未变更，不登记新版本，
+        # 避免多轮示例精炼登记出候选文本完全相同的重复版本
+        return None
 
     def _refine_task_iteratively(
         self, progress_info: Dict[str, Any], begin_iter: int = 0
