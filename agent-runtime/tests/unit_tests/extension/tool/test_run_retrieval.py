@@ -523,7 +523,8 @@ async def test_start_event_failure_never_calls_handler_drop(monkeypatch):
     """start 未送达：只注销登记，不向 handler 发 drop（jdfff 11-05）。
 
     otel span 从未开启——此时发 drop 是给未知 invoke_id 发结束事件，只能
-    靠 core 幂等容错兜底。改前 start 失败与 end 失败共用 _drop_retrieval_span。"""
+    靠 core 幂等容错兜底。改前 start 失败与 end 失败共用 _drop_retrieval_span。
+    """
     from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
     from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
 
@@ -567,7 +568,8 @@ async def test_start_event_failure_never_calls_handler_drop(monkeypatch):
 async def test_drop_loop_survives_raising_handler(monkeypatch):
     """逐 handler 隔离：一个 handler 的 drop 抛错不拖累其余（jdfff 11-05）。
 
-    改前整轮 drop 共用一个 try：首个抛错的 handler 会中断其后全部清理。"""
+    改前整轮 drop 共用一个 try：首个抛错的 handler 会中断其后全部清理。
+    """
     from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
     from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
 
@@ -628,7 +630,8 @@ async def test_drop_loop_survives_raising_handler(monkeypatch):
 async def test_run_retrieval_cancelled_closes_span(monkeypatch):
     """检索中取消（CancelledError 是 BaseException）：span 照常收尾后原样上抛。
 
-    改前 except Exception 漏接取消：取消直达调用方、span 半开滞留（jdfff 11-05）。"""
+    改前 except Exception 漏接取消：取消直达调用方、span 半开滞留（jdfff 11-05）。
+    """
     from agent_runtime.extension.workflow_node import flow_knowledge_retrieval as fkr
 
     # error 事件也失败 → 走兜底 drop，验证取消路径的收尾闭环
