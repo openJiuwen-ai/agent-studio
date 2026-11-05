@@ -294,6 +294,12 @@ class FlowApi(WorkflowComponent):
             # 并保留原始错误码，使引擎透传、异常恢复(_format_inner_exception)、
             # 调试包装器(_build_error_stream_data)均能识别
             if _err_ignore(self._conf):
+                try:
+                    # 异常抑制仅"不中断流程"，错误事实须保留在 trace 上（Jaeger 标红）
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    # 观测失败不得反噬被抑制的业务分支
+                    workflow_logger.debug("FlowApi trace_error failed: %s", trace_exc)
                 return {USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise JiuWenBaseException(
                 error_code=e.error_code,
@@ -302,8 +308,12 @@ class FlowApi(WorkflowComponent):
                 node_name=e.node_name,
                 node_type=e.node_type,
             ) from e
-        except JiuWenBaseException:
+        except JiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowApi trace_error failed: %s", trace_exc)
                 return {USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise
         except Exception as e:
@@ -316,6 +326,10 @@ class FlowApi(WorkflowComponent):
                 metadata={"api_id": self._api_id},
             )
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowApi trace_error failed: %s", trace_exc)
                 return {USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise _build_flow_api_error(
                 FlowApiStatusCode.WORKFLOW_API_EXECUTE_ERROR,
@@ -384,6 +398,12 @@ class FlowApi(WorkflowComponent):
             # 并保留原始错误码，使引擎透传、异常恢复(_format_inner_exception)、
             # 调试包装器(_build_error_stream_data)均能识别
             if _err_ignore(self._conf):
+                try:
+                    # 异常抑制仅"不中断流程"，错误事实须保留在 trace 上（Jaeger 标红）
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    # 观测失败不得反噬被抑制的业务分支
+                    workflow_logger.debug("FlowApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -398,8 +418,12 @@ class FlowApi(WorkflowComponent):
                 node_name=e.node_name,
                 node_type=e.node_type,
             ) from e
-        except JiuWenBaseException:
+        except JiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -418,6 +442,10 @@ class FlowApi(WorkflowComponent):
                 metadata={"api_id": self._api_id},
             )
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
