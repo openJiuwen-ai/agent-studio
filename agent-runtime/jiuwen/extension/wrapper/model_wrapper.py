@@ -26,7 +26,10 @@ from openjiuwen.core.foundation.llm.schema.tool_call import ToolCall
 from openjiuwen.core.foundation.tool.schema import ToolInfo
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.agent import create_agent_session
-from agent_runtime.common.trace_compat import create_agent_session_with_trace
+from agent_runtime.common.trace_compat import (
+    _decorator_accepts_identity,
+    create_agent_session_with_trace,
+)
 
 BJ_TZ = datetime.timezone(datetime.timedelta(hours=8), name="Asia/Beijing")
 
@@ -338,6 +341,24 @@ class ModelWrapper:
         # 构建 AIMessage
         return AIMessage(**convert_dict), tool_calls
 
+    @staticmethod
+    def _trace_identity_kwargs(kwargs: dict) -> dict:
+        """调用方 kwargs 里的 agent_id → core llm span 归因参数片段。
+
+        双写桥场景会话是裸会话（无 agent card），core rail 的 common-info
+        路径取不到控制器层 agent_id——壳下 llm span 缺身份即此缺口；经
+        get_model(identity=) 显式带入（core 在 span 上 write-if-absent 盖
+        gen_ai.agent.* 属性）。能力探测复用 _decorator_accepts_identity：
+        decorate_model_with_trace 与 get_model 的 identity 参数由同一对
+        core 双子（!3570/!3571）引入，旧 core 无该参数，盲传会让 get_model
+        抛 TypeError 打断模型调用。无 agent_id 或无能力 → 空片段，调用
+        形态与既有完全一致。
+        """
+        agent_id = kwargs.get("agent_id") or ""
+        if not agent_id or not _decorator_accepts_identity():
+            return {}
+        return {"identity": {"agent_id": str(agent_id)}}
+
     async def ainvoke(
         self, inputs: InputType, model_id: str, session_id: str, **kwargs
     ) -> LanguageModelOutput:
@@ -370,7 +391,9 @@ class ModelWrapper:
         messages, tools = self._convert_input_to_model_format(inputs)
         agent_session = create_agent_session_with_trace(session_id=session_id)
         model = await Runner.resource_mgr.get_model(
-            model_id=model_id, session=agent_session
+            model_id=model_id,
+            session=agent_session,
+            **self._trace_identity_kwargs(kwargs),
         )
         if model is None:
             raise ModelError(
@@ -453,7 +476,9 @@ class ModelWrapper:
         tc_id = ""
         agent_session = create_agent_session_with_trace(session_id=session_id)
         model = await Runner.resource_mgr.get_model(
-            model_id=model_id, session=agent_session
+            model_id=model_id,
+            session=agent_session,
+            **self._trace_identity_kwargs(kwargs),
         )
         if model is None:
             raise ModelError(

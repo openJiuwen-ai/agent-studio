@@ -130,7 +130,13 @@ def _seed_trace_compat_stub() -> Optional[dict]:
     async def _fake_session_with_trace(session_id=None, **kwargs):
         return None
 
+    def _fake_accepts_identity():
+        # model_wrapper 顶层还导入能力探测函数（agent 身份归因透传用）；
+        # 存根默认「不支持」——旧 core 形态，与既有用例的调用形态一致
+        return False
+
     fake_trace.create_agent_session_with_trace = _fake_session_with_trace
+    fake_trace._decorator_accepts_identity = _fake_accepts_identity
     fake_common.trace_compat = fake_trace
 
     sys.modules["agent_runtime.common"] = fake_common
