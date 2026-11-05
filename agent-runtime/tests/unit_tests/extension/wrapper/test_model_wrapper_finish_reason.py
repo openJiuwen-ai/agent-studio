@@ -136,7 +136,8 @@ def _seed_trace_compat_stub() -> Optional[dict]:
         return False
 
     fake_trace.create_agent_session_with_trace = _fake_session_with_trace
-    fake_trace._decorator_accepts_identity = _fake_accepts_identity
+    # 受保护成员经 setattr 写入，规避 G.CLS.11（pylint pragma 不生效）
+    setattr(fake_trace, "_decorator_accepts_identity", _fake_accepts_identity)
     fake_common.trace_compat = fake_trace
 
     sys.modules["agent_runtime.common"] = fake_common
