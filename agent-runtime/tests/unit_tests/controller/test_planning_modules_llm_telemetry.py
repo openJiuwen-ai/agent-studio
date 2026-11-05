@@ -423,8 +423,12 @@ class TestPlanExecuteStreamLlmEmit:
         assert payload[MODEL_USAGE]["total_tokens"] == 30
         assert payload[USAGE_METADATA]["first_token_time"] == pytest.approx(0.2)
         assert payload[FINISH_REASON] == "stop"
-        # 两个内容块 → TPOT 可算（真实掐表，只锁存在性与非负）
-        assert payload[USAGE_METADATA]["inter_token_latency_ms"] >= 0
+        # 两个内容块 → TPOT 可算（真实掐表，只锁存在性与非负）。
+        # 注意：真实时钟下两内容块时差可能恰为 0，按 stream_post_utils 契约
+        # （tpot>0 才注入 inter_token_latency_ms 键）此时键不产出；
+        # 该键的存在性由 test_stream_tpot_unit_is_milliseconds（假钟）锁定。
+        _tpot = payload[USAGE_METADATA].get("inter_token_latency_ms")
+        assert _tpot is None or _tpot >= 0
 
     @staticmethod
     def test_stream_tpot_unit_is_milliseconds(monkeypatch):

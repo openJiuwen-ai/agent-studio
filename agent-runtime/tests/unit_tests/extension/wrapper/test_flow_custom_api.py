@@ -52,6 +52,7 @@ def _make_session():
     """创建 mock session。"""
     session = MagicMock()
     session.trace = AsyncMock()
+    session.trace_error = AsyncMock()
     session.get_session_id = MagicMock(return_value="session-123")
     return session
 
