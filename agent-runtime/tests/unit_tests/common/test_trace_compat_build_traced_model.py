@@ -4,9 +4,10 @@
 """Tests for trace_compat.build_traced_model — 裸 Model 装饰工厂。
 
 契约：
-- 能力门槛：core handler 消费不了装饰器测量数据（LLM_SPAN_DECORATOR_CAPABILITY
+- 能力门槛：core handler 消费不了装饰器测量数据（LLM_SPAN_MERGE_CAPABILITY
   探测不到）时原样返回裸模型——旧 core 上宁可无 span 也不白发；探测是 getattr +
-  ``>= 1`` 版本比较（版本化 int 契约，前向兼容）；
+  字符串判等（core !3570/!3571 发布契约：常量值 "1"，handler.py docstring 明示
+  供本工厂 getattr 探测）；
 - session 显式传入则直接复用；否则新建轻量 agent session：定义级产物
   （跨执行复用的组件/模型）落 DEFINITION_SCOPED_SESSION_ID 且不绑构建期
   请求 trace，请求级场景（react 每执行新建）透传当次会话 id、trace 走
@@ -124,44 +125,42 @@ class TestGate:
 
 
 class TestCapabilityProbe:
-    """真实探测分支（getattr + >= 1 版本比较）——不只直接注入缓存值。"""
+    """真实探测分支（getattr + 字符串判等）——不只直接注入缓存值。
+
+    常量名与取值以 core !3570/!3571 发布为准：OtelAgentHandler.
+    LLM_SPAN_MERGE_CAPABILITY = "1"（handler.py docstring 明示供 agent-studio
+    traced model factory getattr 探测）。改前探测用了不存在的
+    LLM_SPAN_DECORATOR_CAPABILITY + 数值比较，双错叠加让门控静默常闭
+    （jdfff 11-05 🔴）；旧用例还以 int 1 注入、把字符串 "1" 断言为关门，
+    恰好把两个错同时钉死成契约。"""
 
     @staticmethod
     def test_probe_absent_constant_means_old_core(monkeypatch):
-        """旧 core 无 LLM_SPAN_DECORATOR_CAPABILITY 常量：探测判为无能力。"""
+        """旧 core 无 LLM_SPAN_MERGE_CAPABILITY 常量：探测判为无能力。"""
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.delattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", raising=False)
+        monkeypatch.delattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", raising=False)
         monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
         assert trace_compat._llm_span_decorator_capable() is False
 
     @staticmethod
-    def test_probe_capability_int_opens_gate(monkeypatch):
+    @pytest.mark.parametrize("capable_value", ["1", " 1 "])
+    def test_probe_published_string_opens_gate(monkeypatch, capable_value):
+        """core 发布契约：字符串 "1" 开门（首尾空白容忍）。"""
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", 1, raising=False)
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", capable_value, raising=False)
         monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
         assert trace_compat._llm_span_decorator_capable() is True
 
     @staticmethod
-    @pytest.mark.parametrize("capable_int", [2, 3])
-    def test_probe_higher_version_still_opens_gate(monkeypatch, capable_int):
-        """版本化 int 契约：>= 1 均视为可消费（前向兼容）。"""
-        from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
-
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", capable_int, raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
-        assert trace_compat._llm_span_decorator_capable() is True
-
-    @staticmethod
-    @pytest.mark.parametrize("wrong", [0, -1, "1"])
+    @pytest.mark.parametrize("wrong", [0, -1, 2, "0", "2", "", None, True])
     def test_probe_non_qualifying_values_keep_gate_closed(monkeypatch, wrong):
-        """字符串 "1" 是已撤回合并线的常量：str 与 int 比较抛 TypeError，
-        按无能力处理（该线从未部署，探到也不该开门）。
-        """
+        """非 "1" 取值一律关门：core 只发布过字符串 "1"，其余视为不认识
+        （数值比较在 str 常量上还会 TypeError，前度即栽在类型比较上）。"""
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", wrong, raising=False)
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", wrong, raising=False)
         monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
         assert trace_compat._llm_span_decorator_capable() is False
 
