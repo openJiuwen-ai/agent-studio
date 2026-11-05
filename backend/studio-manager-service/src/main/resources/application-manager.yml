@@ -484,6 +484,12 @@ env-management:
     limit-quota: ${env_mgmt_variables_limit_quota:500}
     max-upload-file-size-kb: ${env_mgmt_max_upload_file_size_kb:10240}
 
+manager:
+  # 定制:转发 runtime/builder 的 OkHttp 出站请求时跳过的入站 header 名单(逗号分隔,大小写不敏感)。
+  # 空/缺省 = 不过滤(全量透传旧行为)。域名入口按 Host 路由类部署的标准值:
+  # host,connection,keep-alive,transfer-encoding,content-length,accept-encoding
+  skip-outbound-header-list: ${manager_skip_outbound_header_list:}
+
 file:
   img-type: ${file_img_type:.png,.jpg,.jpeg,.bmp,.gif}
   icon-type: ${file_icon_type:.jpg,.jpeg,.png,.gif}

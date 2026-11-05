@@ -391,6 +391,7 @@ export interface PublishedMultiAgent {
   icon: string;
   description: string;
   creator: string;
+  sub_type?: string;
   version_id: string;
   version_name: string;
 }

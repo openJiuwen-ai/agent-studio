@@ -26,6 +26,7 @@ import { PermissionService } from '@services/permission.service';
 import { MasOperatorService } from '@services/mas-operator.service';
 import { LinkInterceptorService } from '@services/LinkInterceptorService';
 import { ModelManagementService } from '@services/repositories/model-management-new';
+import { environment } from 'src/environment/environment';
 import { StorageService } from '@shared/services/cfdata.service';
 import { initHistoryInterceptor } from "../utils/utils";
 
@@ -283,6 +284,37 @@ export class AppComponent implements OnInit {
 
   //如果url参数带用户信息，取出调health接口setCookie，后清除url参数
   async resetUserData() {
+    // iframe SSO 极简接入（定制，默认关）：嵌入方在 iframe src 的 hash 查询串携带
+    // <参数名>=<token>（如 #/home/?id=xx&access_token=eyJ...），解析后原样写入同名
+    // Cookie，须早于下方首个 getHealth 执行。参数名按大小写不敏感匹配（/i，与后端
+    // Cookie 提取的 equalsIgnoreCase 语义一致），token 值保持原样。
+    // 开关与名字：environment.iframeSsoTokenParam（部署侧环境变量 IFRAME_SSO_TOKEN_PARAM
+    // 经 start.sh 注入；空/缺省 = 关闭）；该值同时是 URL 参数名与 Cookie 名，必须与后端
+    // 环境变量 auth_sso_header 同值对齐（后端 SsoAuthenticationFilter 按 auth.sso.header
+    // 的值做头/Cookie 提取），否则三级提取全部落空（全量 401）。
+    // 契约与限制（有意极简，无安全门控/回读校验/换 token 处理）：
+    // 1. token 以 URL 原样（未 percent-encoding）拼入且不含 '&'，否则会截断；
+    // 2. 按字符串切分而非 URLSearchParams——后者会把 '+' 解码为空格、'%xx' 解码，
+    //    静默损坏凭证；
+    // 3. Cookie path 固定 '/' 为功能必需：页面在 base href（/openjiuwen/）下而 API
+    //    走 /v1、/v2 反代，path 若随 base href 则 API 请求不携带 Cookie（勿改）；
+    // 4. 仅适用同站点 http/https 拓扑（默认 Lax 的 Cookie 在跨站 iframe 中不被请求
+    //    携带，跨站点部署须 https + SameSite=None，此处未处理）。
+    const tokenParam = environment.iframeSsoTokenParam;
+    if (tokenParam) {
+      const authMatch = window.location.hash.match(new RegExp(`([?&])${tokenParam}=([^&]*)`, 'i'));
+      if (authMatch && authMatch[2]) {
+        const token = authMatch[2];
+        document.cookie = `${tokenParam}=${token}; path=/`;
+        // 写入后从地址栏剥除，防凭证驻留历史记录（'?' 边界时保留 '?' 维持 hash
+        // 查询结构，'&' 边界时整段摘除）
+        const stripped =
+          authMatch[1] === '&'
+            ? window.location.hash.replace(authMatch[0], '')
+            : window.location.hash.replace(authMatch[0], '?').replace('?&', '?');
+        history.replaceState(null, '', window.location.pathname + stripped);
+      }
+    }
     const url = new URL(window.location.href);
     const params = new URLSearchParams(url.search);
 

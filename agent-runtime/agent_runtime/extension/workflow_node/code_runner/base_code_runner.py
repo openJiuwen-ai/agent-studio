@@ -2,10 +2,24 @@
 
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
 
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
+
+
+@dataclass
+class CodeRunResult:
+    """代码执行结果（含 function_log），避免依赖实例级共享状态。
+
+    所有 runner 的 run() 统一返回此对象，调用方从返回值获取 function_log，
+    而非读取 self.function_log——后者在并发调用下会被覆盖。
+    向后兼容：runner 仍会同步设置 self.function_log 供未改造的调用方使用。
+    """
+
+    result: dict
+    function_log: str = ""
 
 
 class CodeRunner(ABC):
@@ -16,7 +30,7 @@ class CodeRunner(ABC):
     """
 
     @abstractmethod
-    async def run(self, user_code: str, inputs: dict, timeout: int = 900) -> dict:
+    async def run(self, user_code: str, inputs: dict, timeout: int = 900) -> CodeRunResult:
         """
         执行用户代码并返回结果
 
@@ -26,7 +40,7 @@ class CodeRunner(ABC):
             timeout: 超时时间（秒）
 
         Returns:
-            dict: main 函数的返回值
+            CodeRunResult: 包含 result(dict) 和 function_log(str) 的结果对象
 
         Raises:
             Exception: 执行失败或返回值非法

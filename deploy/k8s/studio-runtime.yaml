@@ -135,6 +135,9 @@ spec:
             # 是否允许本地代码执行（默认 false，仅限可信内网设为 true）
             - name: ALLOW_LOCAL_CODE_EXEC
               value: 'false'
+            # 本地代码执行兜底超时（秒）
+            - name: LOCAL_CODE_EXEC_TIMEOUT
+              value: '900'
             # ======== [选填] OpenSearch（启用记忆库时必填） ========
             # 格式: host:port，多节点用逗号分隔
             - name: OPENSEARCH_HOSTS
@@ -221,6 +224,9 @@ spec:
             # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
             - name: PERFORMANCE_LOG_ENABLED
               value: 'true'
+            # 性能日志级别：默认 WARNING（不打印）；设为 INFO 打开性能指标
+            - name: PERFORMANCE_LOG_LEVEL
+              value: 'WARNING'
             # 意图识别工作流开关
             - name: ENABLE_INTENT_WORKFLOW
               value: 'true'

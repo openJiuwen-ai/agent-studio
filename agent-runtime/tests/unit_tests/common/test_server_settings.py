@@ -41,3 +41,37 @@ class TestServerSettingsPerformanceLog:
         with patch.dict(os.environ, {"PERFORMANCE_LOG_ENABLED": ""}):
             s = ServerSettings(_env_file=None)
             assert s.performance_log_enabled is True
+
+
+class TestServerSettingsPerformanceLogLevel:
+    @staticmethod
+    def test_default_warning_when_env_absent():
+        """未配置 PERFORMANCE_LOG_LEVEL 时默认 WARNING（perf 日志静默）。"""
+        saved = os.environ.pop("PERFORMANCE_LOG_LEVEL", None)
+        try:
+            s = ServerSettings(_env_file=None)
+            assert s.performance_log_level == "WARNING"
+        finally:
+            if saved is not None:
+                os.environ["PERFORMANCE_LOG_LEVEL"] = saved
+
+    @staticmethod
+    def test_env_override_info():
+        """PERFORMANCE_LOG_LEVEL=INFO 时开启 perf 日志打印。"""
+        with patch.dict(os.environ, {"PERFORMANCE_LOG_LEVEL": "INFO"}):
+            s = ServerSettings(_env_file=None)
+            assert s.performance_log_level == "INFO"
+
+    @staticmethod
+    def test_env_override_lowercase_normalized():
+        """小写值保持原样传入，由调用方 upper() 归一化。"""
+        with patch.dict(os.environ, {"PERFORMANCE_LOG_LEVEL": "info"}):
+            s = ServerSettings(_env_file=None)
+            assert s.performance_log_level == "info"
+
+    @staticmethod
+    def test_empty_string_defaults_warning():
+        """K8s YAML 空字符串 value: '' 应回退为默认值 WARNING。"""
+        with patch.dict(os.environ, {"PERFORMANCE_LOG_LEVEL": ""}):
+            s = ServerSettings(_env_file=None)
+            assert s.performance_log_level == "WARNING"

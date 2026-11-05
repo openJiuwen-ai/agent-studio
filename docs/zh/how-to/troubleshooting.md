@@ -170,7 +170,7 @@ Fail to run agent because [{}]
 
 关注底层执行引擎的详细过程和错误：
 
-**性能阶段日志**（`performance_logger`，INFO 级别，默认可见）：
+**性能阶段日志**（`performance_logger`，设置 `PERFORMANCE_LOG_LEVEL=INFO` 开启，默认静默）：
 
 ```
 ir_convert|{ms}              # IR转换耗时
@@ -256,6 +256,7 @@ agent_group_stream|{ms}
 | 环境变量 | 默认值 | 调试值 | 作用 |
 |----------|--------|--------|------|
 | `WORKFLOW_LOG_LEVEL` | WARNING | **DEBUG** | 工作流/单智能体执行全流程日志 + 请求体 |
+| `PERFORMANCE_LOG_LEVEL` | WARNING | **INFO** | 性能阶段日志（IR加载/阶段耗时/首Token延迟等） |
 | `GRAPH_LOG_LEVEL` | WARNING | **DEBUG** | 图执行引擎日志 |
 | `LLM_LOG_LEVEL` | WARNING | **DEBUG** | LLM 调用详情（请求/响应/Token/耗时） |
 | `LOG_VERBOSE` | false | **true** | 打印完整异常堆栈 |
@@ -267,6 +268,8 @@ K8s 环境变量配置参考：
 env:
   - name: WORKFLOW_LOG_LEVEL
     value: "DEBUG"
+  - name: PERFORMANCE_LOG_LEVEL
+    value: "INFO"
   - name: GRAPH_LOG_LEVEL
     value: "DEBUG"
   - name: LLM_LOG_LEVEL

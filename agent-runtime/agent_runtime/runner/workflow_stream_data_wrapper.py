@@ -42,10 +42,20 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "FlowTemplateTransform": "TemplateTransform",
     "jiuwen.templateTransform": "TemplateTransform",
     "ComplexIntentDetection": "EI.ComplexIntentDetection",
+    "jiuwen.plugin": "Api",
     "FlowStreamTransform": "jiuwen.paramExtraction",
     "FlowMcp": "jiuwen.mcp",
     "FlowSql": "jiuwen.sql",
 }
+
+
+def _normalize_component_display_type(raw_type: str) -> str:
+    """自定义插件组件类型（custom.*/FlowCustomApi）与 IR 插件类型统一归一为 manager 可识别的 Api。"""
+    if raw_type and raw_type.startswith("custom."):
+        return "Api"
+    if raw_type == "FlowCustomApi":
+        return "Api"
+    return _DEBUG_EVENT_RETURN_TO_SERVICE.get(raw_type, raw_type)
 
 _SKIP_COMPONENT_KEY: list[str] = [
     "_break_branch_",
@@ -939,9 +949,7 @@ class WorkflowStreamDataWrapper:
         loop_index = (raw_loop_index + 1) if raw_loop_index is not None else None
         invoke_id = payload.get("invokeId", "")
         component_type_raw = payload.get("componentType", "")
-        component_type_mapped = _DEBUG_EVENT_RETURN_TO_SERVICE.get(
-            component_type_raw, component_type_raw
-        )
+        component_type_mapped = _normalize_component_display_type(component_type_raw)
         component_id = payload.get("componentId", "")
 
         parent_invoke_id = payload.get("parentInvokeId", "")
@@ -1015,8 +1023,7 @@ class WorkflowStreamDataWrapper:
             "agentId": payload.get("workflowId", ""),
             "componentId": payload.get("componentId", ""),
             "componentName": name,
-            "componentType": _DEBUG_EVENT_RETURN_TO_SERVICE.get(
-                payload.get("componentType", "unknown"),
+            "componentType": _normalize_component_display_type(
                 payload.get("componentType", ""),
             ),
             "agentParentInvokeId": "",

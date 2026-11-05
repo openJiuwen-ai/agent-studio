@@ -2,13 +2,18 @@ import asyncio
 import base64
 import io
 import json
+import logging
 import math
 import os
+import ssl
+import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
 from jiuwen.common.utils.utils import illegal_url
 from jiuwen.extension.wrapper.plugin_base import PluginBase
+
+logger = logging.getLogger(__name__)
 
 
 class SSRFSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -21,6 +26,22 @@ class SSRFSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
                 f"Redirect URL is illegal or points to an internal network address: {newurl}"
             )
         return super().redirect_request(*args, **kwargs)
+
+
+class UntrustedCertError(RuntimeError):
+    """HTTPS 证书校验失败（自签/不受信证书），与图片 404 区分开。"""
+
+
+def list_plugin_fonts():
+    """扫描插件目录 fonts/ 子目录下的字体文件，支持插件包自包含中文字体。"""
+    font_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+    if not os.path.isdir(font_dir):
+        return []
+    return sorted(
+        os.path.join(font_dir, f)
+        for f in os.listdir(font_dir)
+        if f.lower().endswith((".ttf", ".ttc", ".otf"))
+    )
 
 
 class FlowDrawBox(PluginBase):
@@ -42,7 +63,7 @@ class FlowDrawBox(PluginBase):
     _DEFAULT_FONT_SIZE = 16
     _ALLOWED_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".ico")
 
-    FONT_CANDIDATES = [
+    FONT_CANDIDATES = list_plugin_fonts() + [
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
@@ -61,8 +82,14 @@ class FlowDrawBox(PluginBase):
             return {"output": await asyncio.to_thread(self._draw_boxes, inputs)}
 
         coordinates = inputs.get("coordinates", [])
-        if isinstance(coordinates, str):
-            coordinates = json.loads(coordinates)
+        if coordinates is None or (isinstance(coordinates, str) and not coordinates.strip()):
+            # 空坐标输入与 schema 非必填/默认空串契约一致，按空列表处理
+            coordinates = []
+        elif isinstance(coordinates, str):
+            try:
+                coordinates = json.loads(coordinates)
+            except json.JSONDecodeError as e:
+                return {"output": {"success": False, "error": f"coordinates JSON 解析失败: {e}", "error_code": 400}}
 
         handler = {
             "calculate_area": self._calc_area,
@@ -87,12 +114,14 @@ class FlowDrawBox(PluginBase):
         if not image_input:
             return {"success": False, "error": "image is required", "error_code": 400}
 
-        annotations_input = inputs.get("annotations")
-        if annotations_input is None:
-            return {"success": False, "error": "annotations is required", "error_code": 400}
-
         try:
-            image_bytes = self._resolve_image_bytes(image_input)
+            # verify_ssl 显式布尔校验：仅 bool 值生效，非 bool（如 "false"/null）回退默认 True
+            raw_verify_ssl = inputs.get("verify_ssl", True)
+            verify_ssl = raw_verify_ssl if isinstance(raw_verify_ssl, bool) else True
+            if not verify_ssl:
+                # 关闭证书校验仅用于测试/内网自签场景：降级需可审计（日志 + 返回值标注）
+                logger.warning("draw_boxes: HTTP(S) certificate verification disabled by verify_ssl=false")
+            image_bytes = self._resolve_image_bytes(image_input, verify_ssl)
             with Image.open(io.BytesIO(image_bytes)) as img:
                 width, height = img.size
                 if width > self._MAX_IMAGE_SIZE or height > self._MAX_IMAGE_SIZE:
@@ -102,22 +131,31 @@ class FlowDrawBox(PluginBase):
                         "error_code": 413,
                     }
                 image = img.copy()
+        except UntrustedCertError as e:
+            return {"success": False, "error": str(e), "error_code": 400}
         except Exception as e:
             return {"success": False, "error": f"Image loading failed: {e}", "error_code": 404}
 
-        try:
-            annotations_data = (
-                json.loads(annotations_input)
-                if isinstance(annotations_input, str)
-                else annotations_input
-            )
-            annotations = (
-                annotations_data.get("annotations", [])
-                if isinstance(annotations_data, dict)
-                else annotations_data
-            )
-        except (json.JSONDecodeError, TypeError) as e:
-            return {"success": False, "error": f"Invalid annotation format: {e}", "error_code": 422}
+        annotations_input = inputs.get("annotations")
+        # 空标注输入"仅绘制图像不画框"（与 schema 非必填/默认空串契约一致）
+        if annotations_input is None or (
+            isinstance(annotations_input, str) and not annotations_input.strip()
+        ):
+            annotations = []
+        else:
+            try:
+                annotations_data = (
+                    json.loads(annotations_input)
+                    if isinstance(annotations_input, str)
+                    else annotations_input
+                )
+                annotations = (
+                    annotations_data.get("annotations", [])
+                    if isinstance(annotations_data, dict)
+                    else annotations_data
+                )
+            except (json.JSONDecodeError, TypeError) as e:
+                return {"success": False, "error": f"Invalid annotation format: {e}", "error_code": 422}
 
         if not isinstance(annotations, list):
             return {"success": False, "error": "annotations must be a list", "error_code": 422}
@@ -206,13 +244,17 @@ class FlowDrawBox(PluginBase):
         image.save(buf, format="PNG")
         image_base64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
-        return {
+        return_result = {
             "success": True,
             "annotation_count": drawn,
             "image_size": {"width": width, "height": height},
             "image_base64": image_base64,
             "message": f"Successfully drew {drawn} annotations",
         }
+        if "verify_ssl" in inputs:
+            # 降级审计：标注本次 HTTPS 证书校验是否被关闭
+            return_result["verify_ssl_disabled"] = not verify_ssl
+        return return_result
 
     @staticmethod
     def clamp(value, lo, hi):
@@ -231,7 +273,7 @@ class FlowDrawBox(PluginBase):
         if file_size > FlowDrawBox._MAX_DOWNLOAD_SIZE:
             raise ValueError(f"Image file too large (max {FlowDrawBox._MAX_DOWNLOAD_SIZE} bytes)")
 
-    def _resolve_image_bytes(self, image_input):
+    def _resolve_image_bytes(self, image_input, verify_ssl=True):
         """兼容文件对象(dict/JSON string) / URL / 本地路径 / base64 多种格式。"""
         if isinstance(image_input, dict):
             if "binary" in image_input:
@@ -245,7 +287,7 @@ class FlowDrawBox(PluginBase):
                 return data
             url = image_input.get("url")
             if url:
-                return self.fetch_url(url)
+                return self.fetch_url(url, verify_ssl)
             path = image_input.get("path")
             if path:
                 self.validate_image_path(path)
@@ -256,11 +298,11 @@ class FlowDrawBox(PluginBase):
         if isinstance(image_input, str):
             if image_input.startswith("{"):
                 try:
-                    return self._resolve_image_bytes(json.loads(image_input))
+                    return self._resolve_image_bytes(json.loads(image_input), verify_ssl)
                 except json.JSONDecodeError:
                     pass
             if image_input.startswith(("http://", "https://")):
-                return self.fetch_url(image_input)
+                return self.fetch_url(image_input, verify_ssl)
             if os.path.exists(image_input):
                 self.validate_image_path(image_input)
                 with open(image_input, "rb") as f:
@@ -278,33 +320,52 @@ class FlowDrawBox(PluginBase):
         raise ValueError(f"Unsupported image type: {type(image_input)}")
 
     @staticmethod
-    def fetch_url(url):
+    def fetch_url(url, verify_ssl=True):
         if illegal_url(url):
             raise ValueError("URL is illegal or points to an internal network address")
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
             raise ValueError(f"Only http/https URLs are allowed, got scheme: {parsed.scheme}")
-        opener = urllib.request.build_opener(SSRFSafeRedirectHandler)
-        with opener.open(url, timeout=30) as resp:
-            content_length = resp.headers.get("Content-Length")
-            if content_length:
-                try:
-                    cl_val = int(content_length)
-                except (TypeError, ValueError):
-                    cl_val = 0
-                if cl_val > FlowDrawBox._MAX_DOWNLOAD_SIZE:
-                    raise ValueError(f"Image file too large (max {FlowDrawBox._MAX_DOWNLOAD_SIZE} bytes)")
-            chunks = []
-            total = 0
-            while True:
-                chunk = resp.read(64 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > FlowDrawBox._MAX_DOWNLOAD_SIZE:
-                    raise ValueError(f"Image file too large (max {FlowDrawBox._MAX_DOWNLOAD_SIZE} bytes)")
-                chunks.append(chunk)
-            return b"".join(chunks)
+        handlers = [SSRFSafeRedirectHandler]
+        if not verify_ssl:
+            # 关闭证书校验（http/https 初始 URL 均注入，重定向到自签 https 时同样生效），
+            # 仅用于测试/内网自签证书场景，验证逻辑仍走同一 SSRF 防护链。
+            # 使用公开 API 构造不校验对端的上下文（避免依赖受保护的 _create_unverified_context）
+            unverified_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            unverified_context.check_hostname = False
+            unverified_context.verify_mode = ssl.CERT_NONE
+            handlers.append(urllib.request.HTTPSHandler(context=unverified_context))
+        opener = urllib.request.build_opener(*handlers)
+        try:
+            with opener.open(url, timeout=30) as resp:
+                content_length = resp.headers.get("Content-Length")
+                if content_length:
+                    try:
+                        cl_val = int(content_length)
+                    except (TypeError, ValueError):
+                        cl_val = 0
+                    if cl_val > FlowDrawBox._MAX_DOWNLOAD_SIZE:
+                        raise ValueError(f"Image file too large (max {FlowDrawBox._MAX_DOWNLOAD_SIZE} bytes)")
+                chunks = []
+                total = 0
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > FlowDrawBox._MAX_DOWNLOAD_SIZE:
+                        raise ValueError(f"Image file too large (max {FlowDrawBox._MAX_DOWNLOAD_SIZE} bytes)")
+                    chunks.append(chunk)
+                return b"".join(chunks)
+        except urllib.error.URLError as e:
+            # urlopen 会把 SSL 证书错误包装为 URLError(reason=SSLError)，解开单独归类
+            if isinstance(e.reason, ssl.SSLError):
+                raise UntrustedCertError(
+                    f"SSL certificate verification failed: {e.reason}. "
+                    "The certificate may be self-signed or untrusted. "
+                    "Use http/base64 image input, or set verify_ssl=false (test environments only)."
+                ) from e
+            raise
 
     def load_font(self, image_font, font_size):
         for path in self.FONT_CANDIDATES:
