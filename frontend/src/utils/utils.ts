@@ -276,10 +276,13 @@ export interface ICommonError{
   error_msg_front? : string,
 
   error_reason?:string,
-  error_suggestion?:string
+  error_suggestion?:string,
+
+  /** 字段级校验明细（如工具 schema 缺 description/location） */
+  details?: { error_code?: string; error_msg?: string }[];
 
 }
-   /**
+ /**
  * 构建错误信息的dom
  * @param error
  * @private
@@ -305,7 +308,17 @@ export function buildErrorMsgStr(error:ICommonError) {
   if(suggestion){
     err_dom += `${i18next.t('httpservice_5')}${suggestion}`;
   }
-  // 4.错误码
+  // 4. 字段级 details：当主文案未带上具体属性原因时补展示（REQ_015）
+  const details = error?.details;
+  if (Array.isArray(details) && details.length > 0) {
+    const detailMsgs = details
+      .map(d => d?.error_msg)
+      .filter((msg): msg is string => !!msg && !err_message.includes(msg));
+    if (detailMsgs.length > 0) {
+      err_dom += `<br/>${detailMsgs.join('<br/>')}`;
+    }
+  }
+  // 5.错误码
   const error_code = error?.error_code;
   if(error_code){
     err_dom += `${i18next.t('httpservice_8')}${error_code}`;
