@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import inspect
 import json
 import queue
 import threading
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterable, Iterable
+from typing import Any, AsyncIterable, Callable, Iterable
 
 from jiuwen.common.llm_service.language_model.base import InputType, LanguageModelOutput
 from jiuwen.extension.wrapper.model_wrapper import ModelWrapper
@@ -414,6 +415,25 @@ class AgentCoreModelLayer:
         return [item async for item in async_iterable]
 
     @staticmethod
+    def _run_in_bridge_thread(fn: Callable[[], None]) -> None:
+        """Run fn on a fresh thread carrying the caller's contextvars.
+
+        The sync bridge exists so sync controller code can await async model
+        calls while the caller's own event loop is running. A bare thread
+        starts with an EMPTY context, so OTel ambient spans, request ids and
+        other ContextVar state silently vanish mid-call: spans mis-parent
+        onto whatever context the new thread happens to have, traces split.
+        copy_context() on the caller side plus Context.run on the thread side
+        hands the bridge a private copy of that state — set/reset inside the
+        bridge never leaks back to the caller, and a per-call copy can never
+        bleed across requests.
+        """
+        caller_context = contextvars.copy_context()
+        thread = threading.Thread(target=caller_context.run, args=(fn,), daemon=True)
+        thread.start()
+        thread.join()
+
+    @staticmethod
     def _iter_async_blocking(async_iterable: AsyncIterable[Any]) -> Iterable[Any]:
         output_queue: queue.Queue[Any] = queue.Queue()
         sentinel = object()
@@ -430,7 +450,7 @@ class AgentCoreModelLayer:
             finally:
                 output_queue.put(sentinel)
 
-        threading.Thread(target=_runner, daemon=True).start()
+        AgentCoreModelLayer._run_in_bridge_thread(_runner)
         while True:
             item = output_queue.get()
             if item is sentinel:
@@ -455,9 +475,7 @@ class AgentCoreModelLayer:
             except BaseException as exc:
                 error_holder["error"] = exc
 
-        thread = threading.Thread(target=_runner, daemon=True)
-        thread.start()
-        thread.join()
+        AgentCoreModelLayer._run_in_bridge_thread(_runner)
         if "error" in error_holder:
             raise error_holder["error"]
         return result_holder.get("result")
