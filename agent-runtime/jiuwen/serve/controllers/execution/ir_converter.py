@@ -152,6 +152,7 @@ class _LLMModelIdentifiers(NamedTuple):
     task_id: str
     agent_id: str
     conversation_id: str
+    agent_name: str = ""
 
 _BASE_AGENT_SWITCH = "BASE_AGENT_SWITCH"
 _AGENT_CORE_REGISTERED_MODEL_IDS = set()
@@ -1394,6 +1395,7 @@ class IRConverter:
                         task_id=task_id,
                         conversation_id=conversation_id,
                         agent_id=current_metadata.id or "",
+                        agent_name=current_metadata.name or "",
                     ),
                 )
             else:
@@ -1598,6 +1600,7 @@ class IRConverter:
                     task_id=task_id,
                     conversation_id=conversation_id,
                     agent_id=ir_data.get("agentId", ""),
+                    agent_name=ir_data.get("agentName", ""),
                 ),
             )
         else:
@@ -4088,6 +4091,7 @@ class IRConverter:
                 identifiers.task_id,
                 identifiers.agent_id,
                 conversation_id=identifiers.conversation_id,
+                agent_name=identifiers.agent_name,
             )
 
         runtime_context = {
@@ -4136,7 +4140,11 @@ class IRConverter:
 
     @staticmethod
     async def _create_agent_core_llm_model(
-        model_configs: dict, task_id: str, agent_id: str, conversation_id: str = ""
+        model_configs: dict,
+        task_id: str,
+        agent_id: str,
+        conversation_id: str = "",
+        agent_name: str = "",
     ):
         """Create jiuwen model contract layer backed by openjiuwen's ModelWrapper."""
         # Keep openjiuwen-related imports lazy so the legacy ModelFactory path remains unchanged.
@@ -4171,6 +4179,7 @@ class IRConverter:
             extension.get("agentCoreAgentName")
             or extension.get("agent_core_agent_name")
             or extension.get("agent_name")
+            or agent_name
             or ""
         )
         await IRConverter._register_agent_core_llm_model(model_id, model_configs)
