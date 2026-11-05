@@ -4,9 +4,9 @@
 """Tests for trace_compat.build_traced_model — 裸 Model 装饰工厂。
 
 契约：
-- 能力门槛：core 不具备壳合并能力（LLM_SPAN_MERGE_CAPABILITY 探测不到）
-  时原样返回裸模型——旧 core 上宁可无 span 也不双计；探测是 getattr +
-  ``== "1"`` 精确匹配（版本化字符串契约，非 truthy 判定）；
+- 能力门槛：core handler 消费不了装饰器测量数据（LLM_SPAN_DECORATOR_CAPABILITY
+  探测不到）时原样返回裸模型——旧 core 上宁可无 span 也不白发；探测是 getattr +
+  ``>= 1`` 版本比较（版本化 int 契约，前向兼容）；
 - session 显式传入则直接复用；否则新建轻量 agent session：定义级产物
   （跨执行复用的组件/模型）落 DEFINITION_SCOPED_SESSION_ID 且不绑构建期
   请求 trace，请求级场景（react 每执行新建）透传当次会话 id、trace 走
@@ -15,7 +15,9 @@
   agent_id 附到独立/子 llm span，write-if-absent）；旧 core 不支持时自动
   丢弃 identity 保 span（不得因 TypeError 把整段装饰降级成裸模型）；
 - 探测 / 导入 / 建会话 / 装饰任何一步失败都降级返回裸模型，绝不阻断业务；
-- 六个裸 Model 构造点全部经工厂接线，资源注册路径（get_model 已装饰）除外。
+- 五个裸 Model 构造点全部经工厂接线，资源注册路径（get_model 已装饰）除外；
+  react 路径刻意不接线（多智能体同步桥线程下装饰会话与执行 trace 树脱钩
+  产孤儿 llm span，缺参追问链已复现），由独立用例钉死防回归。
 """
 
 import ast
@@ -54,13 +56,13 @@ class _StubSession:
 def _restore_capability_cache():
     """每个用例后复位能力/identity 探测缓存，避免用例间串扰。"""
     yield
-    trace_compat._LLM_SHELL_MERGE_CAPABLE = None
+    trace_compat._LLM_SPAN_DECORATOR_CAPABLE = None
     trace_compat._DECORATOR_ACCEPTS_IDENTITY = None
 
 
 @pytest.fixture
 def gate_open(monkeypatch):
-    monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", True)
+    monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", True)
 
 
 @pytest.fixture
@@ -81,7 +83,7 @@ class TestGate:
     @staticmethod
     def test_gate_closed_returns_bare_model(monkeypatch, stub_decorate):
         """能力门槛不达标：原模型原样返回，不导入装饰入口、不建会话。"""
-        monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", False)
+        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", False)
 
         def _boom(*args, **kwargs):
             raise AssertionError("gate closed must not create any session")
@@ -122,34 +124,45 @@ class TestGate:
 
 
 class TestCapabilityProbe:
-    """真实探测分支（getattr + == "1" 精确匹配）——不只直接注入缓存值。"""
+    """真实探测分支（getattr + >= 1 版本比较）——不只直接注入缓存值。"""
 
     @staticmethod
     def test_probe_absent_constant_means_old_core(monkeypatch):
-        """旧 core 无 LLM_SPAN_MERGE_CAPABILITY 常量：探测判为无能力。"""
+        """旧 core 无 LLM_SPAN_DECORATOR_CAPABILITY 常量：探测判为无能力。"""
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.delattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", None)
-        assert trace_compat._llm_shell_merge_capable() is False
+        monkeypatch.delattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", raising=False)
+        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
+        assert trace_compat._llm_span_decorator_capable() is False
 
     @staticmethod
-    def test_probe_exact_capability_string_opens_gate(monkeypatch):
+    def test_probe_capability_int_opens_gate(monkeypatch):
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", "1", raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", None)
-        assert trace_compat._llm_shell_merge_capable() is True
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", 1, raising=False)
+        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
+        assert trace_compat._llm_span_decorator_capable() is True
 
     @staticmethod
-    @pytest.mark.parametrize("wrong", ["2", True, 1])
-    def test_probe_non_exact_values_keep_gate_closed(monkeypatch, wrong):
-        """版本化字符串契约：非 "1"（含 truthy bool/int）一律按未达标处理。"""
+    @pytest.mark.parametrize("capable_int", [2, 3])
+    def test_probe_higher_version_still_opens_gate(monkeypatch, capable_int):
+        """版本化 int 契约：>= 1 均视为可消费（前向兼容）。"""
         from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", wrong, raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SHELL_MERGE_CAPABLE", None)
-        assert trace_compat._llm_shell_merge_capable() is False
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", capable_int, raising=False)
+        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
+        assert trace_compat._llm_span_decorator_capable() is True
+
+    @staticmethod
+    @pytest.mark.parametrize("wrong", [0, -1, "1"])
+    def test_probe_non_qualifying_values_keep_gate_closed(monkeypatch, wrong):
+        """"1" 是已撤回合并线的字符串常量：str 与 int 比较抛 TypeError，
+        按无能力处理（该线从未部署，探到也不该开门）。"""
+        from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
+
+        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", wrong, raising=False)
+        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
+        assert trace_compat._llm_span_decorator_capable() is False
 
 
 class TestDefinitionScopedTrace:
@@ -357,10 +370,9 @@ def _find_calls_by_name(tree, func_name: str):
 
 
 class TestSiteWiring:
-    """六个裸 Model 构造点全部经 build_traced_model 接线（AST 契约）。"""
+    """裸 Model 构造点经 build_traced_model 接线（AST 契约）。"""
 
     SITES = {
-        "agent_runtime/runner/react_agent_runner.py": 1,
         "jiuwen/extension/workflow_node/llm_chain.py": 1,
         # questioner 活副本（agent_runtime 包）：jiuwen/ 下的同名文件是死副本，
         # 不得接线（双接线=双计风险），此处钉住活副本唯一接线
@@ -402,6 +414,16 @@ class TestSiteWiring:
         """jiuwen/ 下 questioner 是死副本：接线只落 agent_runtime 活副本，防回归。"""
         source = (
             _RUNTIME_ROOT / "jiuwen/extension/workflow_node/questioner.py"
+        ).read_text(encoding="utf-8")
+        assert _find_calls_by_name(ast.parse(source), "build_traced_model") == []
+
+    @staticmethod
+    def test_react_runner_stays_bare():
+        """react 路径刻意不接线：多智能体同步桥线程下装饰会话的 ambient 上下文
+        与执行 trace 树脱钩，产孤儿 llm span（缺参追问链复现）。react 覆盖
+        待后续接线承接，接线回归时删本用例并恢复 SITES 条目。"""
+        source = (
+            _RUNTIME_ROOT / "agent_runtime/runner/react_agent_runner.py"
         ).read_text(encoding="utf-8")
         assert _find_calls_by_name(ast.parse(source), "build_traced_model") == []
 

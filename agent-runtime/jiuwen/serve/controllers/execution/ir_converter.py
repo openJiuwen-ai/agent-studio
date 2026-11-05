@@ -2829,8 +2829,12 @@ class IRConverter:
         # card.id 即业务 workflowId（跨执行稳定）：react 子 llm span 的
         # 业务归因来源；懒初始化组件无需（执行期从 Session 提取）。
         # 走 ContextVar 传递而非新增 _create_component 形参（签名兼容，
-        # 见 _TRACE_IDENTITY 注释）
-        _identity_token = _TRACE_IDENTITY.set(_workflow_trace_identity(workflow))
+        # 见 _TRACE_IDENTITY 注释）。LoopGroup 等非业务容器取不到 card 身份
+        # （_workflow_trace_identity 返回 None）：此时不覆盖、继承外层已置的
+        # 业务身份——循环体组件同属外层工作流，set(None) 会把体内 react 的
+        # 归因清空。
+        _node_identity = _workflow_trace_identity(workflow)
+        _identity_token = _TRACE_IDENTITY.set(_node_identity) if _node_identity is not None else None
         try:
             component, resolved_type, configs = await IRConverter._create_component(
                 node,
@@ -2839,7 +2843,8 @@ class IRConverter:
                 ir_connections=ir_connections,
             )
         finally:
-            _TRACE_IDENTITY.reset(_identity_token)
+            if _identity_token is not None:
+                _TRACE_IDENTITY.reset(_identity_token)
         _attach_node_def(component, node, configs)
 
         if resolved_type == "EI.http":

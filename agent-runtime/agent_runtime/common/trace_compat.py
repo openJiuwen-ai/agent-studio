@@ -8,9 +8,9 @@ openjiuwen 0.1.16 的 create_workflow_session / create_agent_session 尚不接�
 才透传 trace_id，保证升级前后均不会报错。
 
 build_traced_model 把裸 core Model 交给 openjiuwen 装饰器（on_llm_start /
-on_llm_end，携带 usage 与 ttft），按 core 壳合并能力门控：旧 core 上探不到
-OtelAgentHandler.LLM_SPAN_MERGE_CAPABILITY 时原样返回裸模型，避免
-"组件壳 + 独立 llm span" 双计。
+on_llm_end，携带 usage 与 ttft），按 core 装饰器测量能力门控：旧 core 上探不到
+OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY 时原样返回裸模型——旧 handler
+读不到容器级 usage 兄弟键，装饰只会白发 span 且层间无去重。
 """
 
 from __future__ import annotations
@@ -70,30 +70,30 @@ def create_workflow_session_with_trace(session_id: str = None, trace_id: str = N
 
 
 # ---------------------------------------------------------------------------
-# LLM span 覆盖：裸 Model -> 装饰器（usage / ttft / 壳合并）
+# LLM span 覆盖：裸 Model -> 装饰器（usage / ttft 测量）
 # ---------------------------------------------------------------------------
 
-# 一次性探测 core 是否具备 LLM 组件壳合并能力
-# （OtelAgentHandler.LLM_SPAN_MERGE_CAPABILITY，core 侧 PR 随壳合并逻辑引入）。
-# 旧 core 无该类常量：装饰器发射的 on_llm_start 无法并入组件壳，同一真实调用
-# 会同时出现组件壳与独立 llm span（双计）；探测不到即退回裸模型，把覆盖缺口
-# 封闭在 core 升级窗口内，杜绝新旧组合下的双计。
-_LLM_SHELL_MERGE_CAPABLE = None
+# 一次性探测 core 是否具备装饰器测量 llm span 的消费能力
+# （OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY，core 侧纯新增线引入）。
+# 旧 core 无该常量：handler 读不到容器级 usage_metadata 兄弟键，装饰器发射的
+# llm span 只见事件不见数据（usage/ttft 全丢），且层间双计只能靠后端去重规则
+# 兜底；探测不到即退回裸模型，把覆盖缺口封闭在 core 升级窗口内。
+_LLM_SPAN_DECORATOR_CAPABLE = None
 
 
-def _llm_shell_merge_capable() -> bool:
-    """core 是否具备 LLM 组件壳合并能力（结果进程内缓存）。"""
-    global _LLM_SHELL_MERGE_CAPABLE
-    if _LLM_SHELL_MERGE_CAPABLE is None:
+def _llm_span_decorator_capable() -> bool:
+    """core handler 是否能消费装饰器测量的 llm span（结果进程内缓存）。"""
+    global _LLM_SPAN_DECORATOR_CAPABLE
+    if _LLM_SPAN_DECORATOR_CAPABLE is None:
         capable = False
         try:
             from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
 
-            capable = getattr(OtelAgentHandler, "LLM_SPAN_MERGE_CAPABILITY", None) == "1"
+            capable = getattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", 0) >= 1
         except Exception:  # noqa: BLE001 - 旧 core 无 tracer_otel 扩展时按无能力处理
             capable = False
-        _LLM_SHELL_MERGE_CAPABLE = capable
-    return _LLM_SHELL_MERGE_CAPABLE
+        _LLM_SPAN_DECORATOR_CAPABLE = capable
+    return _LLM_SPAN_DECORATOR_CAPABLE
 
 
 # 定义级产物（工作流 IR 转换出的组件/模型，跨执行复用）的会话身份：构建时
@@ -103,7 +103,7 @@ def _llm_shell_merge_capable() -> bool:
 DEFINITION_SCOPED_SESSION_ID = "workflow-llm"
 
 
-# 一次性探测 core 装饰器是否支持 identity 归因参数（core 侧随壳合并 PR 引入：
+# 一次性探测 core 装饰器是否支持 identity 归因参数（core 侧纯新增线引入：
 # decorate_model_with_trace(model, agent_session, identity=None)，把
 # workflow_id 等业务身份键 flat 并入 instance_info，由 handler 在 span 上
 # write-if-absent 盖属性）。旧 core 无该参数：传了会在调用点抛 TypeError，
@@ -133,9 +133,9 @@ def workflow_identity_from_session(session) -> dict | None:
     片 id）；单组件调试的 Session 以 node_id 充当 workflow_id，业务 id 需由
     调试构建路径显式注入（见 resolve_trace_identity 的 ``_trace_identity``）。
 
-    只提取 workflow_id：component_* 身份键刻意不提取——core 的组件壳分类器
-    （_ambient_component_shell）以 openjiuwen.workflow.component_id 判壳，
-    llm span 带上它会在嵌套调用时被误当可合并壳；组件级归因走 metadata。
+    只提取 workflow_id：component_* 身份键刻意不提取——openjiuwen.workflow.
+    component_id 是后端区分组件壳 span 的判别键，内层 llm span 带上它会让
+    去重规则误判；组件级归因走 metadata。
     任何读取失败返回 None，绝不抛出。
     """
     try:
@@ -166,24 +166,26 @@ def resolve_trace_identity(component, session=None) -> dict | None:
 def build_traced_model(model, session=None, session_id: str = None, identity: dict = None):
     """把裸 core Model 交给 openjiuwen 装饰器，补齐每次调用的 llm span。
 
-    - 能力门槛：core 不具备壳合并能力时原样返回裸模型（宁可无 span 不双计）；
+    - 能力门槛：core handler 消费不了装饰器测量数据时原样返回裸模型（宁可
+      无 span 不白发）；
     - ``session`` 显式传入则直接复用（当前生产调用点均传 session_id 由工厂
       建轻量会话，该参数供测试与后续接线预留）。轻量会话不触碰任何既有
-      会话——OTel 父链按调用时 ambient 上下文解析（组件壳/rail span 合并，
-      见 core LLM_SPAN_MERGE_CAPABILITY），与会话对象无关，不会因执行会话
-      与装饰会话是两个对象而分叉 trace；
+      会话——OTel 父链按调用时 ambient 上下文解析（组件壳/rail span 下的
+      真实子 span，见 core LLM_SPAN_DECORATOR_CAPABILITY），与会话对象无关，
+      不会因执行会话与装饰会话是两个对象而分叉 trace；层间双计由后端
+      "优先计子、无子再计桥" 规则去重；
     - 轻量会话的会话身份与 trace 均不得绑定构建期请求（定义级产物跨执行
       复用，绑定任一请求都会错归属）：无显式 session_id 时落
-      ``DEFINITION_SCOPED_SESSION_ID`` 且不绑请求 trace；react 这类每执行
-      新建模型的请求级场景传当次会话 id，trace 沿用请求上下文；
+      ``DEFINITION_SCOPED_SESSION_ID`` 且不绑请求 trace；每执行新建模型的
+      请求级场景传当次会话 id，trace 沿用请求上下文；
     - ``identity`` 透传业务归因键（workflow_id / agent_id / ...，core 侧
-      write-if-absent 盖属性）：独立/子 llm span 带上业务身份，合并进组件
-      壳时壳自身值优先。旧 core 装饰器无该参数时自动退化为不传（保留
-      span，仅缺身份键），不因 TypeError 丢整段装饰；
+      write-if-absent 盖属性）：独立/子 llm span 带上业务身份。旧 core
+      装饰器无该参数时自动退化为不传（保留 span，仅缺身份键），不因
+      TypeError 丢整段装饰；
     - 遥测侧任何失败（探测 / 导入 / 建会话 / 装饰）都降级返回裸模型，
       绝不影响模型创建与业务语义。
     """
-    if not _llm_shell_merge_capable():
+    if not _llm_span_decorator_capable():
         return model
     try:
         from openjiuwen.core.session.tracer import decorate_model_with_trace
