@@ -1,0 +1,129 @@
+# -*- coding: UTF-8 -*-
+# Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# pylint: disable=protected-access
+"""同步桥上下文契约：桥内可见调用侧 contextvars，且桥内改动不回漏。
+
+背景（多智能体缺参追问链实证）：_run_async_blocking / _iter_async_blocking
+在运行中事件循环上开新线程执行异步调用，裸线程拿到的是空 context——
+OTel ambient span、x-request-id 等 ContextVar 全部丢失，span 认错父、
+trace 断裂（controller 触发工作流时 llm span 与 node span 并列、end 节点
+误挂 llm span 下即此机理）。_run_in_bridge_thread 用 copy_context + ctx.run
+把调用侧上下文的私有副本带过桥；本文件钉死该契约防回归。
+"""
+
+import contextvars
+
+import pytest
+from opentelemetry import context as otel_context
+from opentelemetry import trace as otel_trace
+
+from jiuwen.integration.agent_core_model_new import AgentCoreModelLayer
+
+_MARKER: contextvars.ContextVar[str] = contextvars.ContextVar("bridge_test_marker", default="")
+
+
+class TestBridgeCarriesCallerContext:
+    """桥这头设的 ContextVar，桥那头必须看得到（改前：空 → 必红）。"""
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_run_blocking_sees_caller_contextvar():
+        token = _MARKER.set("caller-value")
+        try:
+            seen = AgentCoreModelLayer._run_async_blocking(_read_marker_async())
+        finally:
+            _MARKER.reset(token)
+        assert seen == "caller-value"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_run_blocking_sees_caller_otel_span():
+        """OTel ambient 本身就架在 contextvars 上：同一条修复一并生效。"""
+        span = _make_otel_span("bridge-parent")
+        token = otel_context.attach(otel_trace.set_span_in_context(span))
+        try:
+            seen_name = AgentCoreModelLayer._run_async_blocking(_read_current_span_name_async())
+        finally:
+            otel_context.detach(token)
+        assert seen_name == "bridge-parent"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_iter_blocking_sees_caller_contextvar():
+        token = _MARKER.set("caller-stream")
+        try:
+            seen = []
+            for item in AgentCoreModelLayer._iter_async_blocking(_read_marker_stream()):
+                seen.append(item)
+        finally:
+            _MARKER.reset(token)
+        assert seen == ["caller-stream"]
+
+
+class TestBridgeIsolation:
+    """桥是私有副本：桥内 set 不得回漏调用侧，跨调用不得串扰。"""
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_set_inside_bridge_does_not_leak_back():
+        token = _MARKER.set("before")
+        try:
+            AgentCoreModelLayer._run_async_blocking(_set_marker_async("inside"))
+            assert _MARKER.get() == "before"
+        finally:
+            _MARKER.reset(token)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_bridge_result_and_error_paths_unchanged():
+        """既有行为回归：结果透传、异常透传不因过桥方式改变。"""
+        assert AgentCoreModelLayer._run_async_blocking(_echo_async(42)) == 42
+        with pytest.raises(ValueError, match="boom"):
+            AgentCoreModelLayer._run_async_blocking(_boom_async())
+
+    @staticmethod
+    def test_no_loop_branch_keeps_context_too():
+        """无运行循环分支（同线程 asyncio.run）本就携带上下文：两分支语义对齐。"""
+        token = _MARKER.set("same-thread")
+        try:
+
+            async def _read() -> str:
+                return _MARKER.get()
+
+            assert AgentCoreModelLayer._run_async_blocking(_read()) == "same-thread"
+        finally:
+            _MARKER.reset(token)
+
+
+# --- helpers ---------------------------------------------------------------
+
+async def _read_marker_async() -> str:
+    return _MARKER.get()
+
+
+async def _set_marker_async(value: str) -> None:
+    _MARKER.set(value)
+
+
+async def _echo_async(value: int) -> int:
+    return value
+
+
+async def _boom_async() -> None:
+    raise ValueError("boom")
+
+
+async def _read_current_span_name_async() -> str:
+    return otel_trace.get_current_span(otel_context.get_current()).name
+
+
+async def _read_marker_stream():
+    yield _MARKER.get()
+
+
+def _make_otel_span(name: str) -> otel_trace.Span:
+    """独立 TracerProvider（不经全局注册）产真实可命名 span：只需桥内可读 name。"""
+    from opentelemetry.sdk.trace import TracerProvider
+
+    tracer = TracerProvider().get_tracer("bridge-context-test")
+    return tracer.start_span(name=name)
