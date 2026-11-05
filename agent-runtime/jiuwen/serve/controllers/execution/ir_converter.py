@@ -2527,12 +2527,12 @@ class IRConverter:
 
         if node_type == "EI.http":
             from openjiuwen.core.workflow.components.tool.http import (
-                HTTPRequestComponent,
                 HttpComponentConfig,
                 HttpRequestParamConfig,
                 HttpRequestBodyConfig,
                 HttpContentType,
             )
+            from jiuwen.extension.workflow_node.http_observed import HttpObservedComponent
 
             url = configs.get("url", "")
             method = (configs.get("method") or "GET").upper()
@@ -2556,7 +2556,7 @@ class IRConverter:
                 body=body_config,
             )
             http_config = HttpComponentConfig(request_params=http_params)
-            return HTTPRequestComponent(http_config), node_type, configs
+            return HttpObservedComponent(http_config), node_type, configs
 
         raise ValueError(
             f"unsupported workflow component type for openjiuwen workflow: {node_type}"
