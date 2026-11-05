@@ -340,14 +340,17 @@ class ModelWrapper:
         逻辑 > 环境三级。能力探测复用 _decorator_accepts_identity：
         decorate_model_with_trace 与 get_model 的 identity 参数由同一对
         core 双子（!3570/!3571）引入，旧 core 无该参数，盲传会让 get_model
-        抛 TypeError 打断模型调用。无 agent_id 且无父 refs、或无能力 →
-        空片段，调用形态与既有完全一致。
+        抛 TypeError 打断模型调用。无 agent_id 且无成对父 refs（span_id 与
+        trace_id 必须同时在）、或无能力 → 空片段，调用形态与既有完全一致
+        （也不产生空 identity 参数）。
         """
         agent_id = kwargs.get("agent_id") or ""
         agent_name = kwargs.get("agent_name") or ""
         parent_span_id = kwargs.get("parent_span_id") or ""
         parent_trace_id = kwargs.get("parent_trace_id") or ""
-        if (not agent_id and not parent_span_id) or not _decorator_accepts_identity():
+        if (
+            not agent_id and not (parent_span_id and parent_trace_id)
+        ) or not _decorator_accepts_identity():
             return {}
         identity: dict = {}
         if agent_id:

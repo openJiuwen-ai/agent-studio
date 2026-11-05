@@ -408,3 +408,27 @@ class TestParentRefsPassthrough:
             )
         )
         assert _identity_kwargs(captured) == [{"agent_id": "agent-7"}]
+
+    @staticmethod
+    def test_span_id_alone_without_trace_id_yields_no_identity(monkeypatch):
+        """无 agent_id 且只有半对 refs → 整个 identity 片段不发（jdfff 11-05）。
+
+        改前门禁只查 parent_span_id：半对也放行，落到
+        {"identity": {}} 空参数——与既有调用形态不一致。"""
+        monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: True)
+        captured: dict = {}
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(
+            _model_wrapper, "create_agent_session_with_trace", fake_session
+        )
+        wrapper = ModelWrapper()
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}],
+                "m1",
+                "s1",
+                parent_span_id="cd" * 8,
+            )
+        )
+        assert _identity_kwargs(captured) == [None]

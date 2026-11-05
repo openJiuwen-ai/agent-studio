@@ -11,7 +11,9 @@ trace 断裂（controller 触发工作流时 llm span 与 node span 并列、end
 把调用侧上下文的私有副本带过桥；本文件钉死该契约防回归。
 """
 
+import asyncio
 import contextvars
+import threading
 
 import pytest
 from opentelemetry import context as otel_context
@@ -98,6 +100,39 @@ class TestBridgeIsolation:
             assert _run_async_blocking(_read()) == "same-thread"
         finally:
             _MARKER.reset(token)
+
+
+class TestBridgeStreamingContract:
+    """增量流式契约：生产者线程启动后必须立即进入消费循环。"""
+
+    @staticmethod
+    def test_first_chunk_arrives_while_stream_still_open():
+        """回归（jdfff 11-05 🔴）：join 先行把整条流缓冲完才吐首块。
+
+        生产者在首块后永久挂起（流保持打开）：join-first 形态下 next()
+        永不返回（3 秒超时必红）；增量形态下立得首块。"""
+        async def _never_ending_stream():
+            yield "first"
+            await asyncio.Event().wait()  # 永不置位：流保持打开
+
+        iterator = _iter_async_blocking(_never_ending_stream())
+        got = threading.Event()
+        holder: list = []
+
+        def _take_first():
+            holder.append(next(iterator))
+            got.set()
+
+        consumer = threading.Thread(target=_take_first, daemon=True)
+        consumer.start()
+        try:
+            assert got.wait(timeout=3), (
+                "first chunk must arrive while the stream is still open — "
+                "a join-before-consume bridge buffers the whole stream first"
+            )
+        finally:
+            iterator.close()
+        assert holder[0] == "first"
 
 
 # --- helpers ---------------------------------------------------------------

@@ -468,6 +468,16 @@ class AgentCoreModelLayer:
 
     @staticmethod
     def _iter_async_blocking(async_iterable: AsyncIterable[Any]) -> Iterable[Any]:
+        """Stream across the bridge incrementally — never join the producer first.
+
+        Same context-carrying bridge as _run_in_bridge_thread, but that
+        helper joins before returning, which is correct for a single
+        awaitable and wrong for a stream: joining before the first get()
+        buffers the whole stream into an unbounded queue, so the caller
+        would see the first chunk only after the stream ends (TTFT
+        destroyed). Start the producer thread and consume the queue as
+        chunks arrive.
+        """
         output_queue: queue.Queue[Any] = queue.Queue()
         sentinel = object()
 
@@ -483,7 +493,9 @@ class AgentCoreModelLayer:
             finally:
                 output_queue.put(sentinel)
 
-        AgentCoreModelLayer._run_in_bridge_thread(_runner)
+        caller_context = contextvars.copy_context()
+        thread = threading.Thread(target=caller_context.run, args=(_runner,), daemon=True)
+        thread.start()
         while True:
             item = output_queue.get()
             if item is sentinel:
