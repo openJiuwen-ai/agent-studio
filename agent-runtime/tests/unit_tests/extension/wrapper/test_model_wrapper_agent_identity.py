@@ -284,3 +284,127 @@ class TestAgentIdentityPassthrough:
         asyncio.run(_consume())
         assert captured["calls"], "get_model must be called"
         assert _identity_kwargs(captured) == [{"agent_id": "agent-9"}]
+
+
+class TestParentRefsPassthrough:
+    """kwargs 父级 refs → identity 同通道透传：层级（②）与身份（①）一次带齐。"""
+
+    @staticmethod
+    def test_ainvoke_forwards_agent_name_and_refs(monkeypatch):
+        """agent_id + agent_name + refs 齐全 → identity 一并带给 core。"""
+        monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: True)
+        captured: dict = {}
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(
+            _model_wrapper, "create_agent_session_with_trace", fake_session
+        )
+        wrapper = ModelWrapper()
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}],
+                "m1",
+                "s1",
+                agent_id="agent-7",
+                agent_name="问答智能体",
+                parent_trace_id="ab" * 16,
+                parent_span_id="cd" * 8,
+                parent_trace_flags="01",
+            )
+        )
+        assert _identity_kwargs(captured) == [
+            {
+                "agent_id": "agent-7",
+                "agent_name": "问答智能体",
+                "parent_trace_id": "ab" * 16,
+                "parent_span_id": "cd" * 8,
+                "parent_trace_flags": "01",
+            }
+        ]
+
+    @staticmethod
+    def test_ainvoke_forwards_refs_without_agent_id(monkeypatch):
+        """只有 refs（无 agent_id，如无身份的工作流 LLM 节点）→ 层级仍要修。"""
+        monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: True)
+        captured: dict = {}
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(
+            _model_wrapper, "create_agent_session_with_trace", fake_session
+        )
+        wrapper = ModelWrapper()
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}],
+                "m1",
+                "s1",
+                parent_trace_id="ab" * 16,
+                parent_span_id="cd" * 8,
+            )
+        )
+        assert _identity_kwargs(captured) == [
+            {"parent_trace_id": "ab" * 16, "parent_span_id": "cd" * 8}
+        ]
+
+    @staticmethod
+    def test_agent_name_alone_not_forwarded(monkeypatch):
+        """门禁：无 agent_id 且无 refs → 即便有 agent_name 也不传（wire 不变）。"""
+        monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: True)
+        captured: dict = {}
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(
+            _model_wrapper, "create_agent_session_with_trace", fake_session
+        )
+        wrapper = ModelWrapper()
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}], "m1", "s1", agent_name="仅名字"
+            )
+        )
+        assert _identity_kwargs(captured) == [None]
+
+    @staticmethod
+    def test_refs_ignored_when_probe_closed(monkeypatch):
+        """探测不过（旧 core）→ refs 也不传：旧 handler 不认识，盲传无收益。"""
+        monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: False)
+        captured: dict = {}
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(
+            _model_wrapper, "create_agent_session_with_trace", fake_session
+        )
+        wrapper = ModelWrapper()
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}],
+                "m1",
+                "s1",
+                agent_id="agent-7",
+                parent_trace_id="ab" * 16,
+                parent_span_id="cd" * 8,
+            )
+        )
+        assert _identity_kwargs(captured) == [None]
+
+    @staticmethod
+    def test_partial_refs_dropped(monkeypatch):
+        """span_id 无 trace_id → 层级键成对才有效，半对不进 identity。"""
+        monkeypatch.setattr(_model_wrapper, "_decorator_accepts_identity", lambda: True)
+        captured: dict = {}
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(
+            _model_wrapper, "create_agent_session_with_trace", fake_session
+        )
+        wrapper = ModelWrapper()
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}],
+                "m1",
+                "s1",
+                agent_id="agent-7",
+                parent_span_id="cd" * 8,
+            )
+        )
+        assert _identity_kwargs(captured) == [{"agent_id": "agent-7"}]
