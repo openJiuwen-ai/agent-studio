@@ -1502,19 +1502,23 @@ export class ControllerModalComponent
     agent.version_id = update.version;
     agent.version_name = update.name;
     agent.name = update.resourceName;
-    // 版本升级后按最新版本详情的 sub_type 同步成员 mode 与类型分类，
-    // 弹窗未关闭时 flow-item 标签即时反映新类型（与保存链路的映射一致）
-    const agentInfo = this.select_agent_detail_map.get(agent.id);
-    if (agentInfo) {
-      const subType = (agentInfo.sub_type ?? '').trim();
-      if (subType === 'planexecute') {
-        agent.mode = 'PlanExecute';
-        agent.subAgentType = ApplicationType.SINGLE_AGENT;
-      } else if (subType === 'agent' || subType === 'common') {
-        agent.mode = 'agent';
-        agent.subAgentType = ApplicationType.SINGLE_AGENT;
+    // 单智能体成员升级时按最新版本 sub_type 同步 mode 与类型；
+    // 此处读到的详情可能是升级前缓存（详情刷新在 onSelectSubAgent 内
+    // 异步完成），sub_type 缺失/未知时保持原 mode 不变，避免误改写；
+    // mode/subAgentType 属单智能体成员语义，多智能体成员（Controller）
+    // 不做重映射。刷新完成后的权威同步由保存链路兜底。
+    if (agent.subAgentType === ApplicationType.SINGLE_AGENT) {
+      const agentInfo = this.select_agent_detail_map.get(agent.id);
+      if (agentInfo) {
+        const subType = (agentInfo.sub_type ?? '').trim();
+        if (subType === 'planexecute') {
+          agent.mode = 'PlanExecute';
+          agent.subAgentType = ApplicationType.SINGLE_AGENT;
+        } else if (subType === 'agent' || subType === 'common') {
+          agent.mode = 'agent';
+          agent.subAgentType = ApplicationType.SINGLE_AGENT;
+        }
       }
-      // sub_type 缺失/未知时保持原 mode 不变
     }
     this.associationAgentCtx = [...this.associationAgentCtx];
     this.onSelectSubAgent(agent, true);
@@ -1675,12 +1679,10 @@ export class ControllerModalComponent
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
     if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      // 与 flow.component 的升级铃铛判定保持一致：sub_type 存在且非
-      // deepresearch 才提示（成员 mode 动态映射后通用模式成员同样可
-      // 安全升级）；字段可选，缺失/空串时不提示，避免对未知子类型
-      // 误触发升级（既有行为）
-      return hasNewVersion && !!app.latest_version_app_sub_type
-        && app.latest_version_app_sub_type !== 'deepresearch';
+      // 与列表归一口径对齐：列表把 sub_type 缺失/未知的智能体按通用模式
+      // 展示与添加，升级判定同样按非 deepresearch 即提示，升级后 memberMode
+      // 亦按 'agent' 映射，添加—升级链路口径一致，不存在"能加但永不提示"
+      return hasNewVersion && app.latest_version_app_sub_type !== 'deepresearch';
     }
     return hasNewVersion;
   }

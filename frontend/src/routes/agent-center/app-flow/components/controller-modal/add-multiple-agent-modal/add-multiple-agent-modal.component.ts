@@ -533,8 +533,9 @@ export class AddMultipleAgentModalComponent implements OnInit {
   }
 
   private getCardDisable(agent: SubApplication): boolean {
-    // deepresearch 暂不支持作为子智能体，始终置灰（不可被后续覆盖）
-    if (agent.tip) {
+    // deepresearch 暂不支持作为子智能体，始终置灰（不可被后续覆盖）。
+    // 依据 sub_type 本身判定而非 tip 文案，避免 i18n 缺失时禁用失效
+    if ((agent as any).mode === AGENT_MODE_CODE.DEEP_MODE) {
       return true;
     }
 
