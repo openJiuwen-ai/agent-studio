@@ -842,16 +842,27 @@ export class ControllerModalComponent
     return [agent];
   }
 
+  /**
+   * 单智能体成员节点 mode：按该智能体实际 sub_type 映射，
+   * planexecute → 'PlanExecute'，其余(common) → 'agent'（与画布单智能体节点约定一致）。
+   * 详情接口(AgentInfo)返回 sub_type，历史数据可能为 null/'agent'，统一归一处理。
+   */
+  private getSubAgentMode(agentInfo: any, existingMode?: string): string {
+    // sub_type 明确返回时按映射覆盖；缺失/null/空串/未知值时回退沿用成员既有
+    // mode，避免详情接口未返回 sub_type 时把存量 PlanExecute 成员重写为 'agent'
+    const subType = (agentInfo?.sub_type ?? '').trim();
+    if (subType === 'planexecute') {
+      return 'PlanExecute';
+    }
+    if (subType === 'agent' || subType === 'common') {
+      return 'agent';
+    }
+    return existingMode ?? 'agent';
+  }
+
   private getSubSingleAgent(agent) {
     const agentInfo = this.select_agent_detail_map.get(agent.id);
-    // 成员 mode 按详情接口返回的 sub_type 动态映射；缺失/null/空串时
-    // 回退沿用成员既有 mode，避免把存量 PlanExecute 成员重写为 'agent'
-    const subType = (agentInfo?.sub_type ?? '').trim();
-    const memberMode = subType === 'planexecute'
-      ? 'PlanExecute'
-      : (subType === 'agent' || subType === 'common'
-        ? 'agent'
-        : (agent.mode ?? 'PlanExecute'));
+    const memberMode = this.getSubAgentMode(agentInfo, agent.mode);
     const agentDetail = {
       node_id: `node_${uuidV4()}`,
       id: agentInfo.agent_id,
@@ -1664,9 +1675,10 @@ export class ControllerModalComponent
   private isNeedUpdate(version: string, app): boolean {
     const hasNewVersion = version < app.resource_latest_version;
     if(app.resource_type === ApplicationType.SINGLE_AGENT) {
-      // 与 flow.component 的升级铃铛判定保持一致：非 deepresearch 即提示
-      // （成员 mode 动态映射后通用模式成员同样可安全升级）；
-      // sub_type 缺失时不提示，避免对未知子类型误触发升级
+      // 与 flow.component 的升级铃铛判定保持一致：sub_type 存在且非
+      // deepresearch 才提示（成员 mode 动态映射后通用模式成员同样可
+      // 安全升级）；字段可选，缺失/空串时不提示，避免对未知子类型
+      // 误触发升级（既有行为）
       return hasNewVersion && !!app.latest_version_app_sub_type
         && app.latest_version_app_sub_type !== 'deepresearch';
     }
