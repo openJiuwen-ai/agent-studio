@@ -1,8 +1,8 @@
 import { getTestBed } from '@angular/core/testing';
 import {
-  BrowserDynamicTestingModule,
-  platformBrowserDynamicTesting,
-} from '@angular/platform-browser-dynamic/testing';
+  BrowserTestingModule,
+  platformBrowserTesting,
+} from '@angular/platform-browser/testing';
 
 // 初始化 Angular 测试环境。
 // zone.js/testing 由 `@angular/build:karma` 的 zoneTestingEntryPoint 自动加载，
@@ -18,6 +18,6 @@ w.AppWebPath = w.AppWebPath ?? '/';
 w.__x6_instances__ = w.__x6_instances__ ?? [];
 
 getTestBed().initTestEnvironment(
-  BrowserDynamicTestingModule,
-  platformBrowserDynamicTesting(),
+  BrowserTestingModule,
+  platformBrowserTesting(),
 );
