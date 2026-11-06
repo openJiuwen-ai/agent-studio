@@ -203,6 +203,81 @@ class TestIdentityPassThrough:
         assert stub_decorate[-1][2] is None
 
 
+class TestUserFactsSeeding:
+    """user_id 播种：source_metadata 随会话透传 + ContextVar 同源记录。"""
+
+    @staticmethod
+    def test_seeded_source_metadata_passthrough_and_ambient_record(monkeypatch):
+        """带 user_id 的 source_metadata：原样透传给 core 并记录 ambient 值。"""
+        seen = {}
+
+        def _fake_create(session_id=None, **kwargs):
+            seen.update(kwargs)
+            return "SESSION"
+
+        monkeypatch.setattr(trace_compat, "_create_agent_session", _fake_create)
+        try:
+            trace_compat.create_agent_session_with_trace(
+                session_id="s1", source_metadata={"user_id": "u-1"}
+            )
+            assert seen["source_metadata"] == {"user_id": "u-1"}
+            assert trace_compat.current_user_id() == "u-1"
+        finally:
+            trace_compat._CURRENT_USER_ID.set(None)
+
+    @staticmethod
+    def test_absent_or_empty_user_id_never_seeds(monkeypatch):
+        """未携带 / user_id 为空：不注入空键、不播种（不覆盖既有值）。"""
+        seen = {}
+
+        def _fake_create(session_id=None, **kwargs):
+            seen.update(kwargs)
+            return "SESSION"
+
+        monkeypatch.setattr(trace_compat, "_create_agent_session", _fake_create)
+        trace_compat.create_agent_session_with_trace(session_id="s1")
+        assert "source_metadata" not in seen
+        trace_compat.create_agent_session_with_trace(session_id="s2", source_metadata={})
+        assert seen.get("source_metadata") == {}
+        assert trace_compat.current_user_id() is None
+
+    @staticmethod
+    def test_seeded_value_survives_later_bare_session(monkeypatch):
+        """播种后 per-call 轻量会话（不带 source_metadata）不得抹掉 ambient 值。"""
+
+        def _fake_create(session_id=None, **kwargs):
+            return "SESSION"
+
+        monkeypatch.setattr(trace_compat, "_create_agent_session", _fake_create)
+        try:
+            trace_compat.create_agent_session_with_trace(
+                session_id="s1", source_metadata={"user_id": "u-1"}
+            )
+            trace_compat.create_agent_session_with_trace(session_id="s2")
+            assert trace_compat.current_user_id() == "u-1"
+        finally:
+            trace_compat._CURRENT_USER_ID.set(None)
+
+
+RUNNER_SEED_SITES = [
+    "agent_runtime/runner/controller_runner.py",
+    "agent_runtime/runner/react_agent_runner.py",
+]
+
+
+class TestRunnerUserIdSeeding:
+    """两 runner 建会话处播种 req.user_id（钉死，防接线回退）。"""
+
+    @staticmethod
+    def test_both_runners_seed_user_id_into_source_metadata():
+        for rel_path in RUNNER_SEED_SITES:
+            source = (_RUNTIME_ROOT / rel_path).read_text(encoding="utf-8")
+            assert (
+                'source_metadata={"user_id": req.user_id} if req.user_id else None'
+                in source
+            ), f"{rel_path}: runner must seed user_id into session source_metadata"
+
+
 class TestWorkflowIdentity:
     """workflow_identity_from_session：只取 workflow_id，component_* 刻意不取。
 

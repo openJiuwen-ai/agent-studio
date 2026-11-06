@@ -116,7 +116,11 @@ def _seed_trace_compat_stub() -> Optional[dict]:
     async def _fake_session_with_trace(session_id=None, **kwargs):
         return None
 
+    def _fake_current_user_id():
+        return None
+
     fake_trace.create_agent_session_with_trace = _fake_session_with_trace
+    fake_trace.current_user_id = _fake_current_user_id
     fake_common.trace_compat = fake_trace
 
     sys.modules["agent_runtime.common"] = fake_common
@@ -268,6 +272,32 @@ class TestIdentityFacts:
         """user_id（调用方有则带）→ core handler 落 gen_ai.user.id。"""
         captured: dict = {}
         wrapper = TestIdentityFacts._patch(monkeypatch, captured)
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}], "m1", "s1", user_id="u-9"
+            )
+        )
+        assert _identity_kwargs(captured) == [
+            {"conversation_id": "s1", "user_id": "u-9", "message_count": 1}
+        ]
+
+    @staticmethod
+    def test_user_id_ambient_fallback(monkeypatch):
+        """kwargs 未带 user_id → 回落 runner 建会话播种的 current_user_id()。"""
+        captured: dict = {}
+        wrapper = TestIdentityFacts._patch(monkeypatch, captured)
+        monkeypatch.setattr(_model_wrapper, "current_user_id", lambda: "u-ambient")
+        asyncio.run(wrapper.ainvoke([{"role": "user", "content": "hi"}], "m1", "s1"))
+        assert _identity_kwargs(captured) == [
+            {"conversation_id": "s1", "user_id": "u-ambient", "message_count": 1}
+        ]
+
+    @staticmethod
+    def test_user_id_explicit_kwargs_win_over_ambient(monkeypatch):
+        """显式 kwargs 与播种值并存 → 显式值优先（播种只兜底不覆盖）。"""
+        captured: dict = {}
+        wrapper = TestIdentityFacts._patch(monkeypatch, captured)
+        monkeypatch.setattr(_model_wrapper, "current_user_id", lambda: "u-ambient")
         asyncio.run(
             wrapper.ainvoke(
                 [{"role": "user", "content": "hi"}], "m1", "s1", user_id="u-9"

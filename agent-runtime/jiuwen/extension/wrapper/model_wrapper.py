@@ -28,6 +28,7 @@ from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.agent import create_agent_session
 from agent_runtime.common.trace_compat import (
     create_agent_session_with_trace,
+    current_user_id,
 )
 
 BJ_TZ = datetime.timezone(datetime.timedelta(hours=8), name="Asia/Beijing")
@@ -342,7 +343,10 @@ class ModelWrapper:
           before_model_call 同口径），core on_llm_start 平铺消费落
           gen_ai.request.* / 消息数属性；
         - conversation_id（= 会话 id，rail common-info 同口径）与
-          user_id（调用方有则带）：会话事实。
+          user_id：会话事实——kwargs 显式值优先，缺省回落 runner 建会话
+          时播种的 current_user_id()（source_metadata 同源；controller
+          规划链上游不携带 user_id，靠该兜底让装饰器路径 span 得
+          gen_ai.user.id）。
 
         本线要求配套新版 core（identity 参数贯通 get_model 链路），不再为
         旧 core 探测降级。无任何事实时返回空片段，调用形态与既有完全一致
@@ -357,7 +361,7 @@ class ModelWrapper:
             identity["agent_name"] = str(agent_name)
         if session_id:
             identity["conversation_id"] = str(session_id)
-        user_id = kwargs.get("user_id") or ""
+        user_id = kwargs.get("user_id") or current_user_id() or ""
         if user_id:
             identity["user_id"] = str(user_id)
         parent_span_id = kwargs.get("parent_span_id") or ""
