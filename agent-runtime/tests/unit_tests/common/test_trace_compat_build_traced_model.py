@@ -267,8 +267,10 @@ class TestCapabilityGate:
             return model
 
         class _Mgr:
-            # 旧 core resource_mgr.get_model 形态：keyword-only、无 identity
-            def get_model(self, model_id=None, *, tag=None, session=None):
+            # 旧 core resource_mgr.get_model 形态：keyword-only、无 identity。
+            # classmethod 而非 staticmethod：取绑定对象才走 __func__ 归一路径
+            @classmethod
+            def get_model(cls, model_id=None, *, tag=None, session=None):
                 return None
 
         assert trace_compat.callable_accepts_kwarg(_plain, "identity") is True
@@ -279,7 +281,8 @@ class TestCapabilityGate:
         bound = _Mgr().get_model
         assert trace_compat.callable_accepts_kwarg(bound, "identity") is False
         # 归一后缓存键是底层函数，绑定对象不重复建键
-        assert (_Mgr.get_model, "identity") in trace_compat._KWARG_SUPPORT_CACHE
+        underlying = getattr(_Mgr.get_model, "__func__")
+        assert (underlying, "identity") in trace_compat._KWARG_SUPPORT_CACHE
         assert (_plain, "identity") in trace_compat._KWARG_SUPPORT_CACHE
 
 
