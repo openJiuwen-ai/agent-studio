@@ -629,39 +629,59 @@ export function getValidatedFiles(
   return files;
 }
 
+const DAY_NAME_TO_LABEL_KEY: Record<string, string> = {
+  SUN: 'commonlogicagent_5',
+  MON: 'commonlogicagent_6',
+  TUE: 'commonlogicagent_7',
+  WED: 'commonlogicagent_8',
+  THU: 'commonlogicagent_9',
+  FRI: 'commonlogicagent_10',
+  SAT: 'commonlogicagent_11'
+};
+
 export function getDayOfWeekLabel(dayOfWeek: string): string {
+  // Quartz cron day-of-week 两种形式均支持：
+  // - 英文名称（SUN/MON/.../SAT，当前写入格式）
+  // - 数字（1=周日 ... 7=周六，Quartz 数字语义）
+  const nameKey = DAY_NAME_TO_LABEL_KEY[dayOfWeek];
+  if (nameKey) {
+    return i18next.t(nameKey, {
+      ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
+    });
+  }
   switch (dayOfWeek) {
-    case '0':
+    case '1':
       return i18next.t('commonlogicagent_5', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
-    case '1':
+    case '2':
       return i18next.t('commonlogicagent_6', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
 
-    case '2':
+    case '3':
       return i18next.t('commonlogicagent_7', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
-    case '3':
+    case '4':
       return i18next.t('commonlogicagent_8', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
-    case '4':
+    case '5':
       return i18next.t('commonlogicagent_9', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
-    case '5':
+    case '6':
       return i18next.t('commonlogicagent_10', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
-    case '6':
+    case '7':
       return i18next.t('commonlogicagent_11', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
     default:
-      throw new Error('');
+      // 未知值兜底返回原值，避免列表渲染异常
+      return dayOfWeek;
   }
 }
 
