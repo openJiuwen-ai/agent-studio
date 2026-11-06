@@ -113,7 +113,7 @@ class BaseChatModel(Invokable, Runnable[LanguageModelInput, LanguageModelOutput]
             raise ValueError("Get empty input from LLM invoke")
         if isinstance(inputs, str):
             messages = [HumanMessage(content=inputs)]
-        elif isinstance(inputs, List):
+        elif isinstance(inputs, list):
             if isinstance(inputs[0], dict):
                 messages = ModelUtil.switch_message(messages=inputs)
             elif isinstance(inputs[0], BaseMessage):
