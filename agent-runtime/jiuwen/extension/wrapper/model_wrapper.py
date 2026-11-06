@@ -27,7 +27,6 @@ from openjiuwen.core.foundation.tool.schema import ToolInfo
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.agent import create_agent_session
 from agent_runtime.common.trace_compat import (
-    _decorator_accepts_identity,
     create_agent_session_with_trace,
 )
 
@@ -326,44 +325,74 @@ class ModelWrapper:
         return AIMessage(**convert_dict), tool_calls
 
     @staticmethod
-    def _trace_identity_kwargs(kwargs: dict) -> dict:
-        """调用方 kwargs 里的归因信息 → core llm span 身份与显式父级片段。
+    def _trace_identity_kwargs(kwargs: dict, session_id: str = "", message_count: int | None = None) -> dict:
+        """调用方 kwargs 里的归因与调用事实 → core llm span identity 片段。
 
         双写桥场景会话是裸会话（无 agent card），core rail 的 common-info
         路径取不到控制器层 agent_id/agent_name——壳下 llm span 缺身份即此
         缺口；经 get_model(identity=) 显式带入（core 在 span 上
-        write-if-absent 盖 gen_ai.agent.* 属性）。同一条通道还携带
-        (parent_trace_id, parent_span_id[, parent_trace_flags])：嵌入桥的
-        llm span 逻辑父不在 core agent handler 的 span manager 表里，环境
-        回退会被链路中的上下文污染破坏（部署实证：与 node span 并列、
-        误挂死根），core 据显式 refs 构造 NonRecordingSpan 父——显式 >
-        逻辑 > 环境三级。能力探测复用 _decorator_accepts_identity：
-        decorate_model_with_trace 与 get_model 的 identity 参数由同一对
-        core 双子（!3570/!3571）引入，旧 core 无该参数，盲传会让 get_model
-        抛 TypeError 打断模型调用。无 agent_id 且无成对父 refs（span_id 与
-        trace_id 必须同时在）、或无能力 → 空片段，调用形态与既有完全一致
-        （也不产生空 identity 参数）。
+        write-if-absent 盖 gen_ai.agent.* 属性）。同一条通道还携带：
+
+        - (parent_trace_id, parent_span_id[, parent_trace_flags]) 显式父级：
+          嵌入桥的 llm span 逻辑父不在 core agent handler 的 span manager
+          表里，环境回退会被链路中的上下文污染破坏（部署实证：与 node
+          span 并列、误挂死根），core 据显式 refs 构造 NonRecordingSpan
+          父——显式 > 逻辑 > 环境三级；
+        - request_params / message_count：请求参数与消息数（与 rail 侧
+          before_model_call 同口径），core on_llm_start 平铺消费落
+          gen_ai.request.* / 消息数属性；
+        - conversation_id（= 会话 id，rail common-info 同口径）与
+          user_id（调用方有则带）：会话事实。
+
+        本线要求配套新版 core（identity 参数贯通 get_model 链路），不再为
+        旧 core 探测降级。无任何事实时返回空片段，调用形态与既有完全一致
+        （不产生空 identity 参数）。
         """
-        agent_id = kwargs.get("agent_id") or ""
-        agent_name = kwargs.get("agent_name") or ""
-        parent_span_id = kwargs.get("parent_span_id") or ""
-        parent_trace_id = kwargs.get("parent_trace_id") or ""
-        if (
-            not agent_id and not (parent_span_id and parent_trace_id)
-        ) or not _decorator_accepts_identity():
-            return {}
         identity: dict = {}
+        agent_id = kwargs.get("agent_id") or ""
         if agent_id:
             identity["agent_id"] = str(agent_id)
+        agent_name = kwargs.get("agent_name") or ""
         if agent_name:
             identity["agent_name"] = str(agent_name)
+        if session_id:
+            identity["conversation_id"] = str(session_id)
+        user_id = kwargs.get("user_id") or ""
+        if user_id:
+            identity["user_id"] = str(user_id)
+        parent_span_id = kwargs.get("parent_span_id") or ""
+        parent_trace_id = kwargs.get("parent_trace_id") or ""
         if parent_span_id and parent_trace_id:
             identity["parent_span_id"] = str(parent_span_id)
             identity["parent_trace_id"] = str(parent_trace_id)
             parent_trace_flags = kwargs.get("parent_trace_flags")
             if parent_trace_flags is not None:
                 identity["parent_trace_flags"] = str(parent_trace_flags)
-        return {"identity": identity}
+        request_params = ModelWrapper._llm_request_params(kwargs)
+        if request_params:
+            identity["request_params"] = request_params
+        if message_count is not None:
+            identity["message_count"] = int(message_count)
+        return {"identity": identity} if identity else {}
+
+    @staticmethod
+    def _llm_request_params(kwargs: dict) -> dict:
+        """模型调用参数 → core 侧 gen_ai.request.* 消费口径。
+
+        core handler 从 identity 平铺键 ``request_params`` 里读
+        temperature / top_p / top_k / max_tokens / stop_sequences /
+        reasoning_level（与 rail before_model_call 同键名）；按同一口径从
+        调用 kwargs 提取，缺的键不写。
+        """
+        params: dict = {}
+        for key in ("temperature", "top_p", "top_k", "max_tokens", "reasoning_level"):
+            value = kwargs.get(key)
+            if value is not None:
+                params[key] = value
+        stop = kwargs.get("stop")
+        if stop is not None:
+            params["stop_sequences"] = stop
+        return params
 
     async def ainvoke(
         self, inputs: InputType, model_id: str, session_id: str, **kwargs
@@ -399,7 +428,9 @@ class ModelWrapper:
         model = await Runner.resource_mgr.get_model(
             model_id=model_id,
             session=agent_session,
-            **self._trace_identity_kwargs(kwargs),
+            **self._trace_identity_kwargs(
+                kwargs, session_id=session_id, message_count=len(messages)
+            ),
         )
         if model is None:
             raise ModelError(
@@ -470,7 +501,9 @@ class ModelWrapper:
         model = await Runner.resource_mgr.get_model(
             model_id=model_id,
             session=agent_session,
-            **self._trace_identity_kwargs(kwargs),
+            **self._trace_identity_kwargs(
+                kwargs, session_id=session_id, message_count=len(messages)
+            ),
         )
         if model is None:
             raise ModelError(

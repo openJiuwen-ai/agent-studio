@@ -4,26 +4,22 @@
 """Tests for trace_compat.build_traced_model — 裸 Model 装饰工厂。
 
 契约：
-- 能力门槛：core handler 消费不了装饰器测量数据（LLM_SPAN_DECORATOR_CAPABILITY
-  探测不到）时原样返回裸模型——旧 core 上宁可无 span 也不白发；探测是 getattr +
-  数值版本比较 >= 1（core !3570/!3571 合入 head 契约：int 版本号，consumed
-  shape 变化时 bump；探测须用同名常量，名字对不上门控即静默常闭）；
+- 本线要求配套新版 core（identity 参数 + handler 数据面消费），能力/
+  签名探测降级已按 2026-11-06 决策撤除：装饰无条件进行，identity 有则
+  必透传；运行期任何失败（导入 / 建会话 / 装饰抛错，含旧 core 上
+  identity 参数缺失引发的 TypeError）整体降级返回裸模型，绝不阻断业务；
 - session 显式传入则直接复用；否则新建轻量 agent session：定义级产物
   （跨执行复用的组件/模型）落 DEFINITION_SCOPED_SESSION_ID 且不绑构建期
   请求 trace，请求级场景（react 每执行新建）透传当次会话 id、trace 走
   请求上下文；
-- identity 归因：core 装饰器支持 identity 参数时透传（业务 workflow_id/
-  agent_id 附到独立/子 llm span，write-if-absent）；旧 core 不支持时自动
-  丢弃 identity 保 span（不得因 TypeError 把整段装饰降级成裸模型）；
-- 探测 / 导入 / 建会话 / 装饰任何一步失败都降级返回裸模型，绝不阻断业务；
+- identity 归因：透传给装饰器（业务 workflow_id/agent_id 附到独立/子
+  llm span，write-if-absent）；
 - 五个裸 Model 构造点全部经工厂接线，资源注册路径（get_model 已装饰）除外；
   react 路径刻意不接线（多智能体同步桥线程下装饰会话与执行 trace 树脱钩
   产孤儿 llm span，缺参追问链已复现），由独立用例钉死防回归。
 """
 
 import ast
-import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -53,19 +49,6 @@ class _StubSession:
         self._inner = self._Inner()
 
 
-@pytest.fixture(autouse=True)
-def _restore_capability_cache():
-    """每个用例后复位能力/identity 探测缓存，避免用例间串扰。"""
-    yield
-    trace_compat._LLM_SPAN_DECORATOR_CAPABLE = None
-    trace_compat._DECORATOR_ACCEPTS_IDENTITY = None
-
-
-@pytest.fixture
-def gate_open(monkeypatch):
-    monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", True)
-
-
 @pytest.fixture
 def stub_decorate(monkeypatch):
     calls = []
@@ -80,23 +63,10 @@ def stub_decorate(monkeypatch):
     return calls
 
 
-class TestGate:
+class TestDecorate:
     @staticmethod
-    def test_gate_closed_returns_bare_model(monkeypatch, stub_decorate):
-        """能力门槛不达标：原模型原样返回，不导入装饰入口、不建会话。"""
-        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", False)
-
-        def _boom(*args, **kwargs):
-            raise AssertionError("gate closed must not create any session")
-
-        monkeypatch.setattr(trace_compat, "create_agent_session_with_trace", _boom)
-        model = object()
-        assert build_traced_model(model) is model
-        assert stub_decorate == []
-
-    @staticmethod
-    def test_gate_open_decorates_model(gate_open, stub_decorate, monkeypatch):
-        """门槛达标：新建轻量会话并装饰，session_id 透传。"""
+    def test_decorates_model_with_fresh_session(stub_decorate, monkeypatch):
+        """无条件装饰：新建轻量会话并装饰，session_id 透传。"""
         created = {}
 
         def _fake_create(session_id=None, **kwargs):
@@ -112,7 +82,7 @@ class TestGate:
         assert created["session_id"] == "conv-1"
 
     @staticmethod
-    def test_explicit_session_reused_no_fresh_one(gate_open, stub_decorate, monkeypatch):
+    def test_explicit_session_reused_no_fresh_one(stub_decorate, monkeypatch):
         """显式传入 session：直接复用，不再新建轻量会话。"""
         monkeypatch.setattr(
             trace_compat,
@@ -124,55 +94,11 @@ class TestGate:
         assert result[2] is session
 
 
-class TestCapabilityProbe:
-    """真实探测分支（getattr + 数值版本比较）——不只直接注入缓存值。
-
-    常量契约以 core !3570/!3571 合入 head 为准（d896e39f1/848dd77a9 起）：
-    OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY = 1，int 版本号（core 侧
-    注释明示 consumed shape 变化时 bump，供嵌入侧探测消费能力）。11-06 曾
-    对着已撤回合并线的 LLM_SPAN_MERGE_CAPABILITY = "1"（bd902844d，随合并
-    逻辑一并撤回）误核实，把探测改成 MERGE 字符串判等——对着真 head 恒探
-    不到、门控静默常闭；本组按真契约钉死：int >= 1 开门，其余取值（含字符
-    串形态与 MERGE 旧名）一律关门。
-    """
-
-    @staticmethod
-    def test_probe_absent_constant_means_old_core(monkeypatch):
-        """旧 core 无 LLM_SPAN_DECORATOR_CAPABILITY 常量：探测判为无能力。"""
-        from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
-
-        monkeypatch.delattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
-        assert trace_compat._llm_span_decorator_capable() is False
-
-    @staticmethod
-    @pytest.mark.parametrize("capable_value", [1, 2])
-    def test_probe_published_int_opens_gate(monkeypatch, capable_value):
-        """core 发布契约：int 版本号 >= 1 开门（2 = 未来 bump 形态仍开门）。"""
-        from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
-
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", capable_value, raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
-        assert trace_compat._llm_span_decorator_capable() is True
-
-    @staticmethod
-    @pytest.mark.parametrize("wrong", [0, -1, "1", "0", "", None])
-    def test_probe_non_qualifying_values_keep_gate_closed(monkeypatch, wrong):
-        """非 int>=1 形态一律关门：core 只发布过 int 版本号；字符串比较在
-        数值探测上 TypeError 落 except 即关门（未知形态宁关门不发错数据）。
-        """
-        from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
-
-        monkeypatch.setattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", wrong, raising=False)
-        monkeypatch.setattr(trace_compat, "_LLM_SPAN_DECORATOR_CAPABLE", None)
-        assert trace_compat._llm_span_decorator_capable() is False
-
-
 class TestDefinitionScopedTrace:
     """定义级会话不绑构建期请求 trace（跨执行复用，绑首请求会错归属）。"""
 
     @staticmethod
-    def test_definition_scoped_session_binds_no_request_trace(gate_open, stub_decorate, monkeypatch):
+    def test_definition_scoped_session_binds_no_request_trace(stub_decorate, monkeypatch):
         captured = {}
 
         def _fake_create(session_id=None, **kwargs):
@@ -188,7 +114,7 @@ class TestDefinitionScopedTrace:
         assert captured["kwargs"].get("trace_id") is trace_compat._DEFINITION_NO_TRACE
 
     @staticmethod
-    def test_request_scoped_session_keeps_ambient_trace(gate_open, stub_decorate, monkeypatch):
+    def test_request_scoped_session_keeps_ambient_trace(stub_decorate, monkeypatch):
         captured = {}
 
         def _fake_create(session_id=None, **kwargs):
@@ -221,8 +147,8 @@ class TestDefinitionScopedTrace:
 
 class TestDegrade:
     @staticmethod
-    def test_decorate_entry_missing_returns_bare(gate_open, monkeypatch):
-        """旧 core 无 decorate_model_with_trace 入口：降级返回裸模型。"""
+    def test_decorate_entry_missing_returns_bare(monkeypatch):
+        """core 无 decorate_model_with_trace 入口：降级返回裸模型。"""
         import openjiuwen.core.session.tracer as core_tracer
 
         monkeypatch.delattr(core_tracer, "decorate_model_with_trace", raising=False)
@@ -230,7 +156,7 @@ class TestDegrade:
         assert build_traced_model(model) is model
 
     @staticmethod
-    def test_session_creation_failure_returns_bare(gate_open, stub_decorate, monkeypatch):
+    def test_session_creation_failure_returns_bare(stub_decorate, monkeypatch):
         """轻量会话创建抛错：吞掉并返回裸模型，绝不阻断模型创建。"""
 
         def _explode(*args, **kwargs):
@@ -243,50 +169,34 @@ class TestDegrade:
 
 
 class TestIdentityPassThrough:
-    """identity 归因键：新 core 透传，旧 core 丢 identity 保 span。"""
+    """identity 归因键：有则必透传（探测降级已撤）。"""
 
     @staticmethod
-    def test_probe_reflects_core_signature(monkeypatch):
-        """探测读真实签名：有 identity 参数判支持，无则不支持（缓存复位后）。"""
-        mod_new = types.ModuleType("openjiuwen.core.session.tracer")
-
-        def _decorate_new(model, session, identity=None):
-            return model
-
-        mod_new.decorate_model_with_trace = _decorate_new
-        monkeypatch.setitem(sys.modules, "openjiuwen.core.session.tracer", mod_new)
-        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", None)
-        assert trace_compat._decorator_accepts_identity() is True
-
-        mod_old = types.ModuleType("openjiuwen.core.session.tracer")
-
-        def _decorate_old(model, session):
-            return model
-
-        mod_old.decorate_model_with_trace = _decorate_old
-        monkeypatch.setitem(sys.modules, "openjiuwen.core.session.tracer", mod_old)
-        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", None)
-        assert trace_compat._decorator_accepts_identity() is False
-
-    @staticmethod
-    def test_identity_forwarded_when_core_accepts(gate_open, stub_decorate, monkeypatch):
-        """新 core：identity 透传给装饰器（llm span 附业务归因键）。"""
-        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", True)
+    def test_identity_forwarded_unconditionally(stub_decorate):
+        """identity 原样透传给装饰器（llm span 附业务归因键与调用事实）。"""
         identity = {"workflow_id": "wf-1", "agent_id": "app-1"}
         build_traced_model(object(), session=_StubSession(), identity=identity)
         assert stub_decorate[-1][2] is identity
 
     @staticmethod
-    def test_old_core_drops_identity_keeps_spans(gate_open, stub_decorate, monkeypatch):
-        """旧 core：丢 identity 仍装饰——span 全丢比缺身份键严重得多。"""
-        monkeypatch.setattr(trace_compat, "_DECORATOR_ACCEPTS_IDENTITY", False)
+    def test_old_core_identity_type_error_degrades_to_bare(stub_decorate, monkeypatch):
+        """旧 core（identity 参数缺失）：装饰抛 TypeError → 整体降级返回裸
+        模型，不阻断模型创建——探测降级撤除后由运行期兜底承担组合兼容。"""
+        import openjiuwen.core.session.tracer as core_tracer
+
+        def _decorate_old_signature(model, session, identity=None):
+            raise TypeError(
+                "decorate_model_with_trace() got an unexpected keyword argument 'identity'"
+            )
+
+        monkeypatch.setattr(
+            core_tracer, "decorate_model_with_trace", _decorate_old_signature, raising=False
+        )
         model = object()
-        result = build_traced_model(model, session=_StubSession(), identity={"workflow_id": "wf-1"})
-        assert result[0] == "decorated"
-        assert stub_decorate[-1][2] is None
+        assert build_traced_model(model, session=_StubSession(), identity={"workflow_id": "wf-1"}) is model
 
     @staticmethod
-    def test_no_identity_no_extra_call_shape(gate_open, stub_decorate):
+    def test_no_identity_no_extra_call_shape(stub_decorate):
         """不传 identity：行为与旧签名完全一致（identity=None 不进装饰器）。"""
         build_traced_model(object(), session=_StubSession())
         assert stub_decorate[-1][2] is None
