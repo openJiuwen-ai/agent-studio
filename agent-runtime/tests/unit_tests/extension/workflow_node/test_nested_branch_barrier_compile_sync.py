@@ -26,7 +26,8 @@ def _empty_graph() -> SimpleNamespace:
 
 
 class TestNestedBarrierCompileSync:
-    def test_patched_signature_covers_live_core_compile_params(self):
+    @staticmethod
+    def test_patched_signature_covers_live_core_compile_params():
         """Whatever params the installed core _compile takes, the patched
         replacement must accept them all — core compile() calls it by keyword.
         """
@@ -34,7 +35,8 @@ class TestNestedBarrierCompileSync:
         patch_params = set(inspect.signature(nbp._compile_nested_patched).parameters)
         assert core_params <= patch_params
 
-    def test_nodes_forwarded_when_original_accepts_it(self, monkeypatch):
+    @staticmethod
+    def test_nodes_forwarded_when_original_accepts_it(monkeypatch):
         """Hotfix-line core: nodes must reach the original, not be swallowed."""
         calls = []
 
@@ -54,7 +56,8 @@ class TestNestedBarrierCompileSync:
             {"graph_store": "gs", "step_callback": "cb", "nodes": ["n1", "n2"]}
         ]
 
-    def test_nodes_dropped_when_original_lacks_it(self, monkeypatch):
+    @staticmethod
+    def test_nodes_dropped_when_original_lacks_it(monkeypatch):
         """Develop-line core has no nodes param — forwarding must degrade to the
         two-kwarg call instead of raising TypeError.
         """
