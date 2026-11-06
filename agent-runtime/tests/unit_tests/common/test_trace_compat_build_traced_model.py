@@ -169,7 +169,7 @@ class TestDegrade:
 
 
 class TestIdentityPassThrough:
-    """identity 归因键：有则必透传（探测降级已撤）。"""
+    """identity 归因键：core 支持时有则必透传。"""
 
     @staticmethod
     def test_identity_forwarded_unconditionally(stub_decorate):
@@ -180,8 +180,9 @@ class TestIdentityPassThrough:
 
     @staticmethod
     def test_old_core_identity_type_error_degrades_to_bare(stub_decorate, monkeypatch):
-        """旧 core（identity 参数缺失）：装饰抛 TypeError → 整体降级返回裸
-        模型，不阻断模型创建——探测降级撤除后由运行期兜底承担组合兼容。
+        """运行期 TypeError（签名接受 identity 但执行抛错）→ 整体降级返回
+        裸模型，不阻断模型创建——与签名能力门控（TestCapabilityGate）互补：
+        门控管旧签名，本用例管运行期失败。
         """
         import openjiuwen.core.session.tracer as core_tracer
 
@@ -201,6 +202,85 @@ class TestIdentityPassThrough:
         """不传 identity：行为与旧签名完全一致（identity=None 不进装饰器）。"""
         build_traced_model(object(), session=_StubSession())
         assert stub_decorate[-1][2] is None
+
+
+class TestCapabilityGate:
+    """新 studio × 旧 core 组合兼容：identity 参数按签名能力门控。
+
+    旧 core 装饰器无 identity 参数（且无 **kwargs），带上传即 TypeError。
+    门控退既有两参调用——普通 llm span 照产（不退裸模型、不刷告警），
+    四象限最差维持现状、绝不崩。
+    """
+
+    @staticmethod
+    def test_old_signature_decorates_without_identity(monkeypatch):
+        """旧 core 两参装饰器：identity 事实在手上也退两参调用，产出普通
+        span（非裸模型）。
+        """
+        import openjiuwen.core.session.tracer as core_tracer
+
+        calls = []
+
+        def _decorate_two_arg(model, session):
+            calls.append((model, session))
+            return ("decorated", model, session)
+
+        monkeypatch.setattr(
+            core_tracer, "decorate_model_with_trace", _decorate_two_arg, raising=False
+        )
+        model = object()
+        result = build_traced_model(
+            model, session=_StubSession(), identity={"workflow_id": "wf-1"}
+        )
+        assert len(calls) == 1, "必须恰好装饰一次"
+        assert calls[0][0] is model
+        assert result == ("decorated", model, calls[0][1]), "两参调用照常装饰"
+
+    @staticmethod
+    def test_var_keyword_decorator_accepts_identity(monkeypatch):
+        """**kwargs 形签名（无显式 identity 参数）同样放行透传。"""
+        import openjiuwen.core.session.tracer as core_tracer
+
+        seen = {}
+
+        def _decorate(model, session, **kwargs):
+            seen.update(kwargs)
+            return model
+
+        monkeypatch.setattr(core_tracer, "decorate_model_with_trace", _decorate, raising=False)
+        identity = {"workflow_id": "wf-2"}
+        build_traced_model(object(), session=_StubSession(), identity=identity)
+        assert seen.get("identity") is identity
+
+    @staticmethod
+    def test_probe_accepts_variants_and_caches():
+        """签名探测：显式/keyword-only/**kwargs 放行，无则拒；不可签名
+        保守拒；结果进进程级缓存（绑定方法归一到底层函数，键唯一）。
+        """
+        def _plain(model, session, identity=None):
+            return model
+
+        def _kwonly(model, session=None, *, identity=None):
+            return model
+
+        def _no_identity(model, session=None):
+            return model
+
+        class _Mgr:
+            # 旧 core resource_mgr.get_model 形态：keyword-only、无 identity
+            def get_model(self, model_id=None, *, tag=None, session=None):
+                return None
+
+        assert trace_compat.callable_accepts_kwarg(_plain, "identity") is True
+        assert trace_compat.callable_accepts_kwarg(_kwonly, "identity") is True
+        assert trace_compat.callable_accepts_kwarg(_no_identity, "identity") is False
+        assert trace_compat.callable_accepts_kwarg(None, "identity") is False
+
+        bound = _Mgr().get_model
+        assert trace_compat.callable_accepts_kwarg(bound, "identity") is False
+        # 归一后缓存键是底层函数，绑定对象不重复建键
+        assert (_Mgr.get_model, "identity") in trace_compat._KWARG_SUPPORT_CACHE
+        assert (_plain, "identity") in trace_compat._KWARG_SUPPORT_CACHE
 
 
 class TestUserFactsSeeding:

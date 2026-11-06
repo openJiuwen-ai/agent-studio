@@ -8,9 +8,10 @@ openjiuwen 0.1.16 的 create_workflow_session / create_agent_session 尚不接�
 才透传 trace_id，保证升级前后均不会报错。
 
 build_traced_model 把裸 core Model 交给 openjiuwen 装饰器（on_llm_start /
-on_llm_end，携带 usage 与 ttft）。本线要求配套新版 core（identity 参数 +
-handler 数据面消费），不再为旧 core 保留能力探测降级；遥测侧运行期失败仍
-整体降级返回裸模型（不阻断模型创建）。
+on_llm_end，携带 usage 与 ttft）。identity 通道（get_model / 装饰器的
+identity 参数）按 core 能力门控：callable_accepts_kwarg 一次性签名探测，
+旧 core 不支持时退既有两参调用形态——新旧 studio × 新旧 core 四象限最差
+维持现状、绝不崩；遥测侧运行期失败仍整体降级返回裸模型（不阻断模型创建）。
 """
 
 from __future__ import annotations
@@ -32,6 +33,38 @@ def _accepts_trace_id(sig_params) -> bool:
         if p.kind == inspect.Parameter.VAR_KEYWORD:
             return True
     return False
+
+
+# core 能力探测缓存：底层函数对象 → 是否接受某关键字参数。绑定方法先归一
+# 到 __func__（每次属性访问都会生成新绑定对象，不归一缓存永远打不中）。
+_KWARG_SUPPORT_CACHE: dict = {}
+
+
+def callable_accepts_kwarg(func, name: str) -> bool:
+    """一次性探测 callable 是否接受关键字参数 name（显式参数或 **kwargs）。
+
+    新旧 core 混布的守门人：旧 core 的 get_model / 装饰器签名没有
+    identity 参数且无 **kwargs，带上传即 TypeError。不支持时调用方退
+    既有参数形态——最差维持现状，绝不崩。签名不可得时保守返回 False。
+    """
+    func = getattr(func, "__func__", func)
+    key = (func, name)
+    cached = _KWARG_SUPPORT_CACHE.get(key)
+    if cached is None:
+        try:
+            params = inspect.signature(func).parameters
+            param = params.get(name)
+            cached = (
+                param is not None
+                and param.kind
+                in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            ) or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+            )
+        except (TypeError, ValueError):
+            cached = False
+        _KWARG_SUPPORT_CACHE[key] = cached
+    return cached
 
 
 # 本次运行的用户事实：runner 建会话时随 source_metadata 播种（req.user_id）。
@@ -152,8 +185,8 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
       请求级场景传当次会话 id，trace 沿用请求上下文；
     - ``identity`` 透传业务归因键（workflow_id / agent_id / request_params /
       message_count / 会话事实 / ...，core 侧 write-if-absent 盖属性）：
-      独立/子 llm span 带上业务身份与调用事实。本线要求配套新版 core
-      （identity 参数 + handler 数据面消费），不再为旧 core 探测降级；
+      独立/子 llm span 带上业务身份与调用事实；旧 core 装饰器无 identity
+      参数时按能力门控退两参调用（普通 llm span，不退裸模型）；
     - 遥测侧任何失败（导入 / 建会话 / 装饰）都降级返回裸模型，
       绝不影响模型创建与业务语义。
     """
@@ -175,7 +208,9 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
                 )
             else:
                 session = create_agent_session_with_trace(session_id=resolved)
-        if identity:
+        # 能力门控：旧 core 装饰器无 identity 参数——退两参调用仍产出普通
+        # llm span（不退裸模型、不刷告警），新 studio × 旧 core 最差=现状
+        if identity and callable_accepts_kwarg(decorate_model_with_trace, "identity"):
             return decorate_model_with_trace(model, session, identity=identity)
         return decorate_model_with_trace(model, session)
     except Exception as e:  # noqa: BLE001 - 遥测失败不得阻断模型创建
