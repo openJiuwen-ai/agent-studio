@@ -122,6 +122,10 @@ class IntentionDetectModule:
         # 由 controller_planner.stream() 在调用前重置为 False，在 invoke() 识别分支中设为 True
         self._intent_detected_this_turn = False
 
+        # 保存意图识别工作流 End 节点的完整 user_fields 输出
+        # 供 controller_planner._build_intent_stream_data() 读取后透传到 SSE intent 事件
+        self._intent_workflow_user_fields = {}
+
         self.enable_multi_layer_detection = False
         if plan_config.intent_identification:
             self.enable_multi_layer_detection = (
@@ -668,6 +672,7 @@ class IntentionDetectModule:
             (
                 intent_function,
                 candidate_intents,
+                self._intent_workflow_user_fields,
             ) = await self._detect_intent_with_workflow_method(
                 query, active_workflows, task_id, intent_config, **kwargs
             )
@@ -1159,6 +1164,8 @@ class IntentionDetectModule:
                     result["intent_id"] = user_fields.get("intent_id")
                     result["intent_name"] = user_fields.get("intent_name")
                     result["candidate_intents"] = user_fields.get("candidate_intents")
+                    # 保留完整的 user_fields，供 intent SSE 事件透传
+                    result["user_fields"] = user_fields
 
                     logger.info(
                         f"task_id: {task_id} | Workflow execution completed, detected intent_id: {result['intent_id']}"
@@ -1223,20 +1230,22 @@ class IntentionDetectModule:
             task_id: 任务ID
 
         Returns:
-            tuple: (intent_function, candidate_intents)
+            tuple: (intent_function, candidate_intents, user_fields)
                 - intent_function: 识别到的意图函数名称（字符串）
                 - candidate_intents: 候选意图列表
+                - user_fields: 工作流 End 节点的完整输出参数
         """
         logger.debug("task_id: %s | Parsing workflow output", task_id)
 
         if not workflow_output:
             logger.warning(f"task_id: {task_id} | Workflow output is empty")
-            return None, None
+            return None, None, None
 
         try:
             # 提取 intent_id 和 candidate_intents
             intent_id = workflow_output.get("intent_id")
             candidate_intents = workflow_output.get("candidate_intents")
+            user_fields = workflow_output.get("user_fields", {})
 
             logger.debug(
                 "task_id: %s | Extracted raw intent_id: %s, "
@@ -1269,14 +1278,14 @@ class IntentionDetectModule:
                     f"task_id: {task_id} | No intent_id found in workflow output"
                 )
 
-            return intent_function, candidate_intents
+            return intent_function, candidate_intents, user_fields
 
         except Exception as e:
             logger.error(
                 f"task_id: {task_id} | Failed to parse workflow output: {str(e)}",
                 exc_info=True,
             )
-            return None, None
+            return None, None, None
 
     def _build_intent_mappings_and_list(
         self, active_workflows: list, global_only: bool = False
