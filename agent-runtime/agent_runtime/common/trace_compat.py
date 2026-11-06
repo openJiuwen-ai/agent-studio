@@ -8,9 +8,9 @@ openjiuwen 0.1.16 的 create_workflow_session / create_agent_session 尚不接�
 才透传 trace_id，保证升级前后均不会报错。
 
 build_traced_model 把裸 core Model 交给 openjiuwen 装饰器（on_llm_start /
-on_llm_end，携带 usage 与 ttft），按 core 装饰器测量能力门控：旧 core 上探不到
-OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY 时原样返回裸模型——旧 handler
-读不到容器级 usage 兄弟键，装饰只会白发 span 且层间无去重。
+on_llm_end，携带 usage 与 ttft）。本线要求配套新版 core（identity 参数 +
+handler 数据面消费），不再为旧 core 保留能力探测降级；遥测侧运行期失败仍
+整体降级返回裸模型（不阻断模型创建）。
 """
 
 from __future__ import annotations
@@ -73,62 +73,11 @@ def create_workflow_session_with_trace(session_id: str = None, trace_id: str = N
 # LLM span 覆盖：裸 Model -> 装饰器（usage / ttft 测量）
 # ---------------------------------------------------------------------------
 
-# 一次性探测 core 是否具备装饰器测量 llm span 的消费能力
-# （OtelAgentHandler.LLM_SPAN_DECORATOR_CAPABILITY，core 侧纯新增线引入）。
-# 旧 core 无该常量：handler 读不到容器级 usage_metadata 兄弟键，装饰器发射的
-# llm span 只见事件不见数据（usage/ttft 全丢），且层间双计只能靠后端去重规则
-# 兜底；探测不到即退回裸模型，把覆盖缺口封闭在 core 升级窗口内。
-# 常量契约以 core !3570/!3571 合入 head 为准（d896e39f1/848dd77a9 起）：
-# int 版本号（=1，consumed shape 变化时 bump），数值比较 >= 1 判开。11-06
-# 曾对着已撤回的合并线旧提交误核实（11-04 短暂存在 LLM_SPAN_MERGE_CAPABILITY，
-# 随合并逻辑一并撤回）改成 MERGE 字符串判等——对着真 head 恒探不到、门控
-# 静默常闭；跨仓核实必须对着 API 权威 PR head，勿信本地陈旧 ref/安装副本。
-_LLM_SPAN_DECORATOR_CAPABLE = None
-
-
-def _llm_span_decorator_capable() -> bool:
-    """core handler 是否能消费装饰器测量的 llm span（结果进程内缓存）。"""
-    global _LLM_SPAN_DECORATOR_CAPABLE
-    if _LLM_SPAN_DECORATOR_CAPABLE is None:
-        capable = False
-        try:
-            from openjiuwen.extensions.tracer_otel.handler import OtelAgentHandler
-
-            capable = getattr(OtelAgentHandler, "LLM_SPAN_DECORATOR_CAPABILITY", 0) >= 1
-        except Exception:  # noqa: BLE001 - 旧 core 无 tracer_otel 扩展时按无能力处理
-            capable = False
-        _LLM_SPAN_DECORATOR_CAPABLE = capable
-    return _LLM_SPAN_DECORATOR_CAPABLE
-
-
 # 定义级产物（工作流 IR 转换出的组件/模型，跨执行复用）的会话身份：构建时
 # 不存在按会话归因的真实 id，绑定任一请求的 id（含 trace_id）都会错归属，
 # 故显式落此常量且不绑请求 trace；会话归因由执行期 trace 树（span 挂在
 # 真实组件壳/工作流 trace 下）承担。
 DEFINITION_SCOPED_SESSION_ID = "workflow-llm"
-
-
-# 一次性探测 core 装饰器是否支持 identity 归因参数（core 侧纯新增线引入：
-# decorate_model_with_trace(model, agent_session, identity=None)，把
-# workflow_id 等业务身份键 flat 并入 instance_info，由 handler 在 span 上
-# write-if-absent 盖属性）。旧 core 无该参数：传了会在调用点抛 TypeError，
-# 把整段装饰降级成裸模型（span 全丢），故必须先探测再决定是否透传。
-_DECORATOR_ACCEPTS_IDENTITY = None
-
-
-def _decorator_accepts_identity() -> bool:
-    """core 装饰器是否接受 identity 参数（结果进程内缓存）。"""
-    global _DECORATOR_ACCEPTS_IDENTITY
-    if _DECORATOR_ACCEPTS_IDENTITY is None:
-        accepted = False
-        try:
-            from openjiuwen.core.session.tracer import decorate_model_with_trace
-
-            accepted = "identity" in inspect.signature(decorate_model_with_trace).parameters
-        except Exception:  # noqa: BLE001 - 旧 core 无该入口时按不支持处理
-            accepted = False
-        _DECORATOR_ACCEPTS_IDENTITY = accepted
-    return _DECORATOR_ACCEPTS_IDENTITY
 
 
 def workflow_identity_from_session(session) -> dict | None:
@@ -171,30 +120,25 @@ def resolve_trace_identity(component, session=None) -> dict | None:
 def build_traced_model(model, session=None, session_id: str = None, identity: dict = None):
     """把裸 core Model 交给 openjiuwen 装饰器，补齐每次调用的 llm span。
 
-    - 能力门槛：core handler 消费不了装饰器测量数据时原样返回裸模型（宁可
-      无 span 不白发）；
     - ``session`` 显式传入则直接复用（当前生产调用点均传 session_id 由工厂
       建轻量会话，该参数供测试与后续接线预留）。轻量会话不触碰任何既有
       会话——OTel 父链按调用时 ambient 上下文解析（组件壳/rail span 下的
-      真实子 span，见 core LLM_SPAN_DECORATOR_CAPABILITY 旁注释），与会话对象无关，
-      不会因执行会话与装饰会话是两个对象而分叉 trace；层间双计由后端
-      "优先计子、无子再计桥" 规则去重；
+      真实子 span），与会话对象无关，不会因执行会话与装饰会话是两个对象
+      而分叉 trace；层间双计由后端 "优先计子、无子再计桥" 规则去重；
     - 轻量会话的会话身份与 trace 均不得绑定构建期请求（定义级产物跨执行
       复用，绑定任一请求都会错归属）：无显式 session_id 时落
       ``DEFINITION_SCOPED_SESSION_ID`` 且不绑请求 trace；每执行新建模型的
       请求级场景传当次会话 id，trace 沿用请求上下文；
-    - ``identity`` 透传业务归因键（workflow_id / agent_id / ...，core 侧
-      write-if-absent 盖属性）：独立/子 llm span 带上业务身份。旧 core
-      装饰器无该参数时自动退化为不传（保留 span，仅缺身份键），不因
-      TypeError 丢整段装饰；
-    - 遥测侧任何失败（探测 / 导入 / 建会话 / 装饰）都降级返回裸模型，
+    - ``identity`` 透传业务归因键（workflow_id / agent_id / request_params /
+      message_count / 会话事实 / ...，core 侧 write-if-absent 盖属性）：
+      独立/子 llm span 带上业务身份与调用事实。本线要求配套新版 core
+      （identity 参数 + handler 数据面消费），不再为旧 core 探测降级；
+    - 遥测侧任何失败（导入 / 建会话 / 装饰）都降级返回裸模型，
       绝不影响模型创建与业务语义。
     """
-    if not _llm_span_decorator_capable():
-        return model
     try:
         from openjiuwen.core.session.tracer import decorate_model_with_trace
-    except Exception as e:  # noqa: BLE001 - 旧 core 无该入口
+    except Exception as e:  # noqa: BLE001 - core 无该入口
         logger.warning("build_traced_model: decorate entry missing, bare model kept: %s", e)
         return model
     try:
@@ -210,7 +154,7 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
                 )
             else:
                 session = create_agent_session_with_trace(session_id=resolved)
-        if identity and _decorator_accepts_identity():
+        if identity:
             return decorate_model_with_trace(model, session, identity=identity)
         return decorate_model_with_trace(model, session)
     except Exception as e:  # noqa: BLE001 - 遥测失败不得阻断模型创建
