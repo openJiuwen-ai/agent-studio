@@ -69,6 +69,11 @@ class TestAdditionalQuestionsRequest:
         req = AdditionalQuestionsRequest.model_validate({"name": "test", "enable": True})
         assert req.name == "test"
 
+    @staticmethod
+    def test_null_prompt_is_optional():
+        req = AdditionalQuestionsRequest(name="test", prompt=None)
+        assert req.prompt is None
+
 
 class TestAdditionalQuestionsResponse:
     """Response schema validation tests."""
@@ -385,7 +390,104 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
 
     @pytest.fixture
     def service(self):
-        return AdditionalQuestionsService()
+        service = AdditionalQuestionsService()
+        service._load_ir = AsyncMock(return_value={
+            "configs": {
+                "modelConfig": {
+                    "modelName": "ms-id",
+                    "extension": {"authId": "auth-id"},
+                },
+            },
+        })
+        return service
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("prompt", [None, "", " \t\n", "  request rules  "])
+    @pytest.mark.parametrize("version_id", ["", "v1"])
+    async def test_generate_resolves_agent_prompt(self, service, prompt, version_id):
+        request = AdditionalQuestionsRequest(name="test", prompt=prompt, version_id=version_id)
+        ir_data = {
+            "configs": {
+                "modelConfig": {"modelName": "version-model"},
+                "additional_questions_config": {"prompt": "saved rules"},
+            },
+        }
+        service._load_ir.return_value = ir_data
+        history = [{"content": "question"}, {"content": "answer"}]
+
+        with patch.object(
+            service.conversation_reader, "get_history", return_value=history,
+        ), patch.object(
+            service.prompt_builder, "build", wraps=service.prompt_builder.build,
+        ) as build_prompt, patch.object(
+            service.model_invoker, "invoke", return_value='["next question"]',
+        ) as invoke_model:
+            result = await service.generate(self._DEFAULT_CTX, request, {})
+
+        expected_prompt = prompt if prompt and prompt.strip() else "saved rules"
+        assert build_prompt.call_args.kwargs["user_prompt"] == expected_prompt
+        assert invoke_model.call_args.args[0].model_service_id == "version-model"
+        assert expected_prompt in invoke_model.call_args.args[1]
+        assert result.questions == ["next question"]
+        assert request.prompt == prompt
+        assert ir_data["configs"]["additional_questions_config"]["prompt"] == "saved rules"
+        service._load_ir.assert_awaited_once_with("agent-1", "agent", version_id)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("questions_config", [None, {}, {"prompt": None}, {"prompt": ""}])
+    async def test_generate_handles_missing_saved_prompt(self, service, questions_config):
+        request = AdditionalQuestionsRequest(name="test")
+        service._load_ir.return_value["configs"]["additional_questions_config"] = questions_config
+        history = [{"content": "question"}, {"content": "answer"}]
+
+        with patch.object(
+            service.conversation_reader, "get_history", return_value=history,
+        ), patch.object(
+            service.prompt_builder, "build", wraps=service.prompt_builder.build,
+        ) as build_prompt, patch.object(
+            service.model_invoker, "invoke", return_value='["next question"]',
+        ):
+            result = await service.generate(self._DEFAULT_CTX, request, {})
+
+        assert build_prompt.call_args.kwargs["user_prompt"] == ""
+        assert result.questions == ["next question"]
+
+    @pytest.mark.asyncio
+    async def test_generate_supports_legacy_ir_without_followup_configuration(self, service):
+        request = AdditionalQuestionsRequest(name="test")
+        history = [{"content": "question"}, {"content": "answer"}]
+
+        with patch.object(
+            service.conversation_reader, "get_history", return_value=history,
+        ), patch.object(
+            service.model_invoker, "invoke", return_value='["next question"]',
+        ):
+            result = await service.generate(self._DEFAULT_CTX, request, {})
+
+        assert result.questions == ["next question"]
+
+    @pytest.mark.asyncio
+    async def test_generate_workflow_does_not_use_agent_prompt(self, service):
+        request = AdditionalQuestionsRequest(name="test")
+        ctx = AdditionalQuestionsContext("workflow", "wf-1", "proj-1", "conv-1", "ws-1")
+        service._load_ir.return_value = {
+            "configs": {
+                "model": {"modelName": "workflow-model"},
+                "additional_questions_config": {"prompt": "agent rules"},
+            },
+        }
+        history = [{"content": "question"}, {"content": "answer"}]
+
+        with patch.object(
+            service.conversation_reader, "get_history", return_value=history,
+        ), patch.object(
+            service.prompt_builder, "build", wraps=service.prompt_builder.build,
+        ) as build_prompt, patch.object(
+            service.model_invoker, "invoke", return_value='["next question"]',
+        ):
+            await service.generate(ctx, request, {})
+
+        assert build_prompt.call_args.kwargs["user_prompt"] == ""
 
     @pytest.mark.asyncio
     async def test_generate_returns_questions(self, service):
@@ -430,6 +532,7 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
             )
 
         assert result.questions == []
+        service._load_ir.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_generate_raises_when_name_empty(self, service):
@@ -551,8 +654,7 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
                 }
             }
         }
-        with patch.object(service, "_load_ir", return_value=ir_data):
-            config = await service._resolve_model_config("agent", "agent-1", {})
+        config = await service._resolve_model_config("agent", "agent-1", ir_data)
         assert config.model_service_id == "service-uuid"
         assert config.auth_id == "auth-uuid"
 
@@ -566,8 +668,7 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
                 }
             }
         }
-        with patch.object(service, "_load_ir", return_value=ir_data):
-            config = await service._resolve_model_config("workflow", "wf-1", {})
+        config = await service._resolve_model_config("workflow", "wf-1", ir_data)
         assert config.model_service_id == "service-uuid"
         assert config.auth_id == "auth-uuid"
 
@@ -599,6 +700,85 @@ class TestAdditionalQuestionsService:  # pylint: disable=protected-access
         result = service._format_history(messages)
         assert "你好！" in result
         assert "怎么样" in result
+
+
+class TestAdditionalQuestionsIRLoader:
+
+    @pytest.fixture
+    def service(self):
+        service = AdditionalQuestionsService()
+        history = [{"content": "question"}, {"content": "answer"}]
+        with patch.object(
+            service.conversation_reader, "get_history", return_value=history,
+        ), patch.object(
+            service.model_invoker, "invoke", return_value='["next question"]',
+        ):
+            yield service
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("prompt", [None, "", " \t\n", "request rules"])
+    @pytest.mark.parametrize("version_id", ["", "v1"])
+    @pytest.mark.parametrize("ir_path", ["", "custom/agent.json"])
+    async def test_missing_ir_fails_without_loading_draft(self, service, prompt, version_id, ir_path):
+        ctx = AdditionalQuestionsContext("agent", "agent-1", "proj-1", "conv-1", "ws-1")
+        request = AdditionalQuestionsRequest(name="test", prompt=prompt, version_id=version_id)
+        draft_ir = {"configs": {"modelConfig": {"modelName": "draft-model"}}}
+        with patch(
+            "agent_runtime.context.request_context._request_ctx",
+        ) as request_ctx, patch(
+            "agent_runtime.additional_questions.service.async_ir_load",
+            new_callable=AsyncMock, side_effect=[None, draft_ir],
+        ) as load_ir:
+            request_ctx.get.return_value.headers = {"x-ir-path": ir_path}
+            with pytest.raises(JiuWenBaseException) as exc_info:
+                await service.generate(ctx, request, {})
+
+        version_suffix = f"_{version_id}" if version_id else ""
+        expected_path = ir_path or f"agent/ir/agent-1/agent-1{version_suffix}.json"
+        load_ir.assert_awaited_once_with(expected_path)
+        service.model_invoker.invoke.assert_not_awaited()
+        assert exc_info.value.error_code == StatusCode.IR_DATA_JSON_LOAD_FAILED.code
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "version_id, expected_path",
+        [
+            ("", "agent/ir/agent-1/agent-1.json"),
+            ("v1", "agent/ir/agent-1/agent-1_v1.json"),
+        ],
+    )
+    async def test_loads_agent_configuration_for_requested_version(self, service, version_id, expected_path):
+        ctx = AdditionalQuestionsContext("agent", "agent-1", "proj-1", "conv-1", "ws-1")
+        request = AdditionalQuestionsRequest(name="test", version_id=version_id)
+        with patch(
+            "agent_runtime.context.request_context._request_ctx",
+        ) as request_ctx, patch(
+            "agent_runtime.additional_questions.service.async_ir_load",
+            new_callable=AsyncMock,
+            return_value={"configs": {"modelConfig": {"modelName": "ms-id"}}},
+        ) as load_ir:
+            request_ctx.get.return_value = None
+            result = await service.generate(ctx, request, {})
+
+        assert result.questions == ["next question"]
+        load_ir.assert_awaited_once_with(expected_path)
+
+    @pytest.mark.asyncio
+    async def test_explicit_ir_path_takes_precedence(self, service):
+        ctx = AdditionalQuestionsContext("agent", "agent-1", "proj-1", "conv-1", "ws-1")
+        request = AdditionalQuestionsRequest(name="test", version_id="v1")
+        with patch(
+            "agent_runtime.context.request_context._request_ctx",
+        ) as request_ctx, patch(
+            "agent_runtime.additional_questions.service.async_ir_load",
+            new_callable=AsyncMock,
+            return_value={"configs": {"modelConfig": {"modelName": "ms-id"}}},
+        ) as load_ir:
+            request_ctx.get.return_value.headers = {"x-ir-path": "custom/agent.json"}
+            result = await service.generate(ctx, request, {})
+
+        assert result.questions == ["next question"]
+        load_ir.assert_awaited_once_with("custom/agent.json")
 
 
 class TestAdditionalQuestionsAPIRoutes:

@@ -2506,6 +2506,7 @@ public class IrAdapterService {
         }
 
         configs.put("sysPromptTemplate", getSysPromptTemplate(agent));
+        configs.put("additional_questions_config", agent.getAdditionalQuestionsConfig());
         configs.put("inputVariables", agent.getInputVariables());
         configs.put("plugins", pluginConfigs);
         configs.put("mcps", mcpConfigs);

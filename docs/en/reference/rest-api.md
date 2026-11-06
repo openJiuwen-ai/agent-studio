@@ -90,6 +90,25 @@ The following are common headers for OpenJiuwen APIs:
 | X-Auth-Token | Yes | User token for authentication. See [5.6 Obtain Token](#56-obtain-token) |
 | stream | No | Whether to use streaming response, applies to Runtime conversation APIs only. Defaults to streaming; set to `false` to return non-streaming JSON response |
 
+### 2.4 Agent Follow-up Prompts
+
+For `POST /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions?workspace_id={workspace_id}`, `prompt` is optional:
+
+- A non-blank request `prompt` takes precedence for this call without changing the saved agent configuration.
+- An omitted, `null`, empty, or whitespace-only `prompt` uses the follow-up prompt from the runtime configuration identified by the path's `agent_id`.
+- If no follow-up prompt is configured, the built-in follow-up template is used.
+
+For example, this request uses the saved follow-up prompt:
+
+```json
+{
+  "name": "My agent",
+  "enable": true
+}
+```
+
+Omit `version_id` to use the draft runtime configuration, or specify a concrete version ID to use that version's follow-up prompt and model configuration. Runtime configurations generated before this update do not contain the follow-up configuration: save the agent again, and republish it when calling a published version. The requirements for `name` and `enable` remain unchanged. Workflow follow-up requests continue to use the request `prompt`.
+
 ## 3. Response Format
 
 ### 3.1 Success Response
