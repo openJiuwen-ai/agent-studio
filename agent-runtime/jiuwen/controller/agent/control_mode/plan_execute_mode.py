@@ -119,8 +119,6 @@ class PlanExecuteMode(BaseMode):
             # 保存当前请求上下文，便于工具执行时使用
             self._current_query = request.query
             self._runtime_context = request.runtime_context
-            # OTel：保留 trace_handlers 引用，供 StepExecute LLM 调用补遥测载荷
-            self._trace_handlers = request.trace_handlers
             self._workflow_req_params = {}
             self._conversation_id = None
             if request.runtime_context and hasattr(
@@ -917,18 +915,13 @@ class PlanExecuteMode(BaseMode):
         """流式调用LLM并收集响应"""
         llm_output = {"content": "", "role": "assistant"}
         content_parts = []
-        trace_manager = None
-        start_time = time.time()
 
         try:
             from jiuwen.common.llm_service.language_model.base import LanguageModelInput
             from jiuwen.common.llm_service.model_util import ModelUtil
             from jiuwen.common.llm_service.messages import AIMessage
             from jiuwen.planner.common.stream_post_utils import (
-                build_llm_end_payload,
                 convert_ai_message_to_llm_output,
-                create_trace_manager_safely,
-                emit_trace_event,
             )
 
             llm_messages = ModelUtil.switch_message(messages)
@@ -937,46 +930,7 @@ class PlanExecuteMode(BaseMode):
             )
             self._log_llm_input(messages, tools)
 
-            # OTel：StepExecute LLM 调用经 TraceManager 补用量/时延载荷；
-            # 事件经 emit_trace_event 隔离发射，manager 初始化走 safely 兜底，
-            # 遥测整体失效时步骤行为与接线前一致
-            trace_manager = create_trace_manager_safely(
-                llm=self.model,
-                functions=tools or [],
-                trace_handlers=getattr(self, "_trace_handlers", None),
-            )
-            await emit_trace_event(trace_manager, "on_llm_start", messages)
-            finish_usage = {}
-            # TPOT（inter-token）掐表：与 _format_yield_result 同语义——只统计
-            # 非 finish 的内容块，首末块间隔 /（块数-1），×1000 入毫秒键；
-            # 单块/零块无意义不产出
-            tpot_baseline = time.time()
-            first_chunk_elapsed = None
-            last_chunk_elapsed = None
-            chunk_count = 0
             async for item in self.model.astream(llm_input):
-                # 仅 finish 块（stop/function_call 等终止标记）携带真实用量；
-                # 中间块的 usage_metadata 为默认空值但 pydantic 模型恒真，
-                # 无差别暂存会把空值滞留到载荷、真实用量被覆盖静默丢弃
-                item_usage = getattr(item, "usage_metadata", None)
-                is_finish_block = item_usage is not None and (
-                    item_usage.finish_reason in ("stop", "function_call")
-                )
-                # 暂存条件必须与 is_finish_block 同源：qwen 中间块的
-                # finish_reason 为 "null"（非空），按"非空"暂存会块块覆盖，
-                # 逐块挂 usage 的模型实现下真实用量被空值静默替换
-                if is_finish_block:
-                    finish_usage["usage"] = item_usage
-                if (
-                    isinstance(item, AIMessage)
-                    and not is_finish_block
-                    and item.content
-                ):
-                    chunk_elapsed = time.time() - tpot_baseline
-                    if first_chunk_elapsed is None:
-                        first_chunk_elapsed = chunk_elapsed
-                    last_chunk_elapsed = chunk_elapsed
-                    chunk_count += 1
                 self._process_stream_item(
                     item,
                     llm_output,
@@ -987,29 +941,7 @@ class PlanExecuteMode(BaseMode):
 
             if not llm_output.get("content") and content_parts:
                 llm_output["content"] = "".join(content_parts)
-            if (
-                chunk_count > 1
-                and first_chunk_elapsed is not None
-                and last_chunk_elapsed is not None
-            ):
-                finish_usage["tpot_ms"] = (
-                    (last_chunk_elapsed - first_chunk_elapsed)
-                    * 1000
-                    / (chunk_count - 1)
-                )
-            await emit_trace_event(
-                trace_manager,
-                "on_llm_end",
-                build_llm_end_payload(
-                    llm_output.get("content", ""),
-                    finish_usage.get("usage"),
-                    round(time.time() - start_time, 2),
-                    tpot_ms=finish_usage.get("tpot_ms"),
-                ),
-            )
         except Exception as e:
-            if trace_manager is not None:
-                await emit_trace_event(trace_manager, "on_llm_error", e)
             logger.exception(
                 f"task_id: {self.task_id}| [StepExecute] LLM call failed: {e}"
             )
