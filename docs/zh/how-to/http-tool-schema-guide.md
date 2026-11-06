@@ -227,19 +227,31 @@ UI 中常见的 `array<string>`、`array<object>` 等是界面扁平写法，**�
 }
 ```
 
-### 4.3 非法：数组嵌套数组
+### 4.3 非法：属性下的数组嵌套数组
+
+嵌套数组校验在 `depth > 0` 时生效。入参属性挂在 `properties` 下时 depth ≥ 1，下列写法会失败：
 
 ```json
 {
-  "type": "array",
-  "items": {
-    "type": "array",
-    "items": { "type": "string" }
-  }
+  "type": "object",
+  "properties": {
+    "matrix": {
+      "type": "array",
+      "description": "二维矩阵",
+      "location": "Body",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  },
+  "required": ["matrix"]
 }
 ```
 
-会失败，错误细节类似：`The parameter [...] cannot be nested array.`
+错误细节类似：`The parameter [matrix] cannot be nested array.`
+
+说明：若**根节点**即为 `type: array` 且 `items` 再为 `array`（无外层 object 属性），当前实现里 items 深度仍为 0，**不会**触发上述嵌套数组校验（历史行为）。实际工具入参几乎总是根 `object` + `properties`，请以本节属性级示例为准。
 
 ### 4.4 嵌套深度与属性数量
 

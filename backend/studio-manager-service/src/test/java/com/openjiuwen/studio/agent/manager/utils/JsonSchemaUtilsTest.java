@@ -184,8 +184,8 @@ class JsonSchemaUtilsTest {
     }
 
     @Test
-    void testIsJsonSchemaValid_NestedArrayInArrayThrows() {
-        // 根为 array 时 items 深度仍为 0，历史行为：不触发嵌套数组校验
+    void testIsJsonSchemaValid_RootNestedArrayCurrentlyAllowed() {
+        // 根为 array 时 items 深度仍为 0，历史行为：不触发嵌套数组校验（与属性下嵌套数组不同）
         String schema = "{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}";
         assertTrue(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
     }

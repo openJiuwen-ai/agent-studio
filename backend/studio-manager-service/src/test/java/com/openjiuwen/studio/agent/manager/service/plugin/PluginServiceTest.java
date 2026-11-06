@@ -604,6 +604,43 @@ class PluginServiceTest {
         verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
     }
 
+    @Test
+    void testModifyTool_RejectsMissingParamDescription() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_desc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.modifyTool("proj-1", "ws-1", "tool-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[description]"));
+        verify(toolManagementService).checkToolInfo(eq("bad_desc_tool"), anyString(), anyString(), isNull(),
+            eq("blocking"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testModifyTool_RejectsEmptyOutputProperties() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_out_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            "{\"type\":\"object\",\"properties\":{}}");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.modifyTool("proj-1", "ws-1", "tool-1", req));
+        assertEquals(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
     private static final String VALID_OUTPUT_SCHEMA =
         "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"ok\"}}}";
 
