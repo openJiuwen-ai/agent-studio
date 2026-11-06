@@ -16,6 +16,7 @@ handler 数据面消费），不再为旧 core 保留能力探测降级；遥测
 from __future__ import annotations
 
 import inspect
+from contextvars import ContextVar
 
 from jiuwen.common.log.base import get_x_request_id, logger
 from openjiuwen.core.session.agent import create_agent_session as _create_agent_session
@@ -31,6 +32,18 @@ def _accepts_trace_id(sig_params) -> bool:
         if p.kind == inspect.Parameter.VAR_KEYWORD:
             return True
     return False
+
+
+# 本次运行的用户事实：runner 建会话时随 source_metadata 播种（req.user_id）。
+# 仅在有值时 set、绝不 clear——后续 per-call 轻量会话不带 source_metadata，
+# 不得抹掉已播种值；读取方：core rail 自读 session（react 引擎路径）、
+# ModelWrapper._trace_identity_kwargs 兜底（装饰器路径 handler 只认 identity）。
+_CURRENT_USER_ID = ContextVar("oj_current_user_id", default=None)
+
+
+def current_user_id():
+    """当前运行的用户 id（runner 播种；未播种返回 None）。"""
+    return _CURRENT_USER_ID.get()
 
 
 _agent_params = inspect.signature(_create_agent_session).parameters
@@ -50,7 +63,15 @@ def create_agent_session_with_trace(session_id: str = None, trace_id=None, **kwa
 
     trace_id 缺省（None）沿用请求上下文；显式传 ``_DEFINITION_NO_TRACE``
     表示不绑任何请求 trace（定义级会话专用）。
+
+    ``source_metadata``（core 基线参数，2026-03 起）原样透传；携带
+    ``user_id`` 时同步记录到 ``_CURRENT_USER_ID``（runner 建会话处播种，
+    rail 路径 core 自读 session、装饰器路径 ModelWrapper 兜底取用）。
     """
+    source_metadata = kwargs.get("source_metadata") or {}
+    user_id = source_metadata.get("user_id")
+    if user_id:
+        _CURRENT_USER_ID.set(str(user_id))
     if trace_id is None:
         trace_id = get_x_request_id()
     if trace_id is not _DEFINITION_NO_TRACE and _agent_accepts_trace_id and trace_id:
