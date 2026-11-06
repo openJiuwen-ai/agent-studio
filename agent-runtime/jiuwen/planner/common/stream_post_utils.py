@@ -366,11 +366,20 @@ def create_trace_manager(llm: BaseChatModel, functions, trace_handlers):
     """create trace manager"""
     model_class = type(llm).__name__
     model_name = llm.model_name if hasattr(llm, "model_name") else "undefined"
+    # OTel 消费端（core handler on_llm_start）把 class_name 当模型名使用：
+    # span 名 llm.<class_name> 与 gen_ai.request.model 均取自该键，core
+    # decorator 路径同键装的是探针解析出的模型名（decorate_model_with_trace）。
+    # agent-core 分支的 llm 是 AgentCoreModelLayer 包装类，legacy 分支是
+    # 工厂产出类——类名对模型身份均无意义，给真实 model_name，缺名再退
+    # 类名；instance_attributes.model 维持原语义供 insight 侧消费
+    resolved_model = (
+        model_name if model_name and model_name != "undefined" else model_class
+    )
 
     return TraceManager.generate_manager(
         trace_handlers,
         {
-            "class_name": model_class,
+            "class_name": resolved_model,
             "instance_attributes": dict(
                 model=model_name,
                 temperature=llm.temperature if hasattr(llm, "temperature") else 1.0,
