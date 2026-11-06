@@ -608,13 +608,19 @@ public class PluginBaseImpl implements IPluginBase {
                 } else {
                     // 未找到匹配的 tool_id
                     log.error("request info is null please check plugin {}", pluginEntity.getPluginId());
-                    throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
+                    String detail = String.format(
+                        "Plugin [%s] request_info has no tool matching tool_id [%s].",
+                        pluginEntity.getPluginId(), toolId);
+                    throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
                 }
             }
         } else if (!"custom".equals(pluginEntity.getCallMode())) {
             // 未知格式
             log.error("request info is null please check plugin {}", pluginEntity.getPluginId());
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
+            String detail = String.format(
+                "Plugin [%s] has empty request_info and call_mode is not custom.",
+                pluginEntity.getPluginId());
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
         }
         log.info(">>>buildToolByPlugin interface type");
         if (StringUtils.isNotBlank(pluginEntity.getIntfType()) && pluginEntity.getIntfType().contains("tool_id")) {
