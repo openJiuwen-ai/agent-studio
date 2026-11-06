@@ -27,6 +27,7 @@ from openjiuwen.core.foundation.tool.schema import ToolInfo
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.agent import create_agent_session
 from agent_runtime.common.trace_compat import (
+    callable_accepts_kwarg,
     create_agent_session_with_trace,
     current_user_id,
 )
@@ -348,10 +349,16 @@ class ModelWrapper:
           规划链上游不携带 user_id，靠该兜底让装饰器路径 span 得
           gen_ai.user.id）。
 
-        本线要求配套新版 core（identity 参数贯通 get_model 链路），不再为
-        旧 core 探测降级。无任何事实时返回空片段，调用形态与既有完全一致
-        （不产生空 identity 参数）。
+        本线配套新版 core（identity 参数贯通 get_model 链路）；旧 core 的
+        get_model 为 keyword-only 签名（无 identity 无 **kwargs），带上即
+        TypeError——按能力门控探测，不支持时不产出该参数、退既有两参调用
+        形态（新 studio × 旧 core 最差=现状，绝不崩；span 缺归因属性但模型
+        解析不受影响）。无任何事实时同样返回空片段（不产生空 identity 参数）。
         """
+        # 能力门控在事实解析之前：不支持时零开销短路
+        get_model = getattr(getattr(Runner, "resource_mgr", None), "get_model", None)
+        if not callable_accepts_kwarg(get_model, "identity"):
+            return {}
         identity: dict = {}
         agent_id = kwargs.get("agent_id") or ""
         if agent_id:

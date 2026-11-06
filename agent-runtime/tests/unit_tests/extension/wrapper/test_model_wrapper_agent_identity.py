@@ -6,9 +6,9 @@
 请求参数——壳下 llm span 因此缺 gen_ai.agent.* / gen_ai.conversation_id /
 gen_ai.request.*。修复：调用方 kwargs 里的归因信息 + 会话 id + 消息数 +
 请求参数经 get_model(identity=) 一次带给 core（handler 平铺消费，
-write-if-absent 盖属性）。2026-11-06 决策：本线要求配套新版 core
-（identity 参数贯通 get_model 链路），旧 core 探测降级已撤除——identity
-有事实即透传，不再探测签名。
+write-if-absent 盖属性）。旧 core 的 get_model 为 keyword-only 签名，带
+identity 即 TypeError——按 callable_accepts_kwarg 一次性签名探测门控，
+不支持时退既有两参调用（新 studio × 旧 core 最差=现状，绝不崩）。
 """
 
 import asyncio
@@ -172,8 +172,12 @@ def _core_final_message() -> AssistantMessage:
     )
 
 
-def _make_runner(captured: dict):
-    """resource_mgr 替身：记录 get_model 收到的全部 kwargs、回放假模型。"""
+def _make_runner(captured: dict, old_core: bool = False):
+    """resource_mgr 替身：记录 get_model 收到的全部 kwargs、回放假模型。
+
+    old_core=True 模拟旧 core 的 keyword-only 签名（无 identity、无
+    **kwargs）——新 studio × 旧 core 象限的崩溃回归形态。
+    """
 
     class _FakeModel:
         @staticmethod
@@ -184,10 +188,21 @@ def _make_runner(captured: dict):
         async def stream(messages, **kwargs):
             yield _core_final_message()
 
-    async def _get_model(model_id, session=None, **kwargs):
-        captured["model_id"] = model_id
-        captured.setdefault("calls", []).append(dict(kwargs))
-        return _FakeModel()
+    if old_core:
+
+        async def _get_model(model_id=None, *, tag=None, tag_match_strategy=None, session=None):
+            captured["model_id"] = model_id
+            captured.setdefault("calls", []).append(
+                {"tag": tag, "tag_match_strategy": tag_match_strategy, "session": session}
+            )
+            return _FakeModel()
+
+    else:
+
+        async def _get_model(model_id, session=None, **kwargs):
+            captured["model_id"] = model_id
+            captured.setdefault("calls", []).append(dict(kwargs))
+            return _FakeModel()
 
     class _FakeRunner:
         # SimpleNamespace 充当 resource_mgr 替身：属性即函数、无绑定语义，
@@ -327,16 +342,27 @@ class TestIdentityFacts:
 
 
 class TestIdentityFragmentShape:
-    """identity 片段形状：无事实不发（不产生空 identity 参数）。"""
+    """identity 片段形状：无事实不发（不产生空 identity 参数）。
+
+    需新 core 桩：片段构造受 get_model 签名能力门控，未打桩时探测到
+    真实旧签名会整体短路（见 TestOldCoreCapabilityGate）。
+    """
 
     @staticmethod
-    def test_no_facts_yields_empty_fragment():
-        identity_kwargs = getattr(ModelWrapper, "_trace_identity_kwargs")
+    def _identity_kwargs(monkeypatch):
+        captured: dict = {}
+        runner, _ = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        return getattr(ModelWrapper, "_trace_identity_kwargs")
+
+    @staticmethod
+    def test_no_facts_yields_empty_fragment(monkeypatch):
+        identity_kwargs = TestIdentityFragmentShape._identity_kwargs(monkeypatch)
         assert identity_kwargs({}) == {}
 
     @staticmethod
-    def test_message_count_none_omitted():
-        identity_kwargs = getattr(ModelWrapper, "_trace_identity_kwargs")
+    def test_message_count_none_omitted(monkeypatch):
+        identity_kwargs = TestIdentityFragmentShape._identity_kwargs(monkeypatch)
         out = identity_kwargs({}, session_id="s1")
         assert out == {"identity": {"conversation_id": "s1"}}
 
@@ -420,3 +446,48 @@ class TestParentRefsPassthrough:
         assert _identity_kwargs(captured) == [
             {"agent_id": "agent-7", "conversation_id": "s1", "message_count": 1}
         ]
+
+
+class TestOldCoreCapabilityGate:
+    """新 studio × 旧 core：get_model 不收 identity → 门控退两参，绝不崩。"""
+
+    @staticmethod
+    def _patch(monkeypatch, captured):
+        runner, fake_session = _make_runner(captured, old_core=True)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(_model_wrapper, "create_agent_session_with_trace", fake_session)
+        return ModelWrapper()
+
+    @staticmethod
+    def test_ainvoke_survives_old_core_signature(monkeypatch):
+        """崩溃回归：旧 core keyword-only get_model + 满身份事实——修复前
+        TypeError（unexpected keyword argument 'identity'）、模型解析直接
+        崩；门控后调用照常成功且 identity 键不出现（最差维持现状）。
+        """
+        captured: dict = {}
+        wrapper = TestOldCoreCapabilityGate._patch(monkeypatch, captured)
+        asyncio.run(
+            wrapper.ainvoke(
+                [{"role": "user", "content": "hi"}],
+                "m1",
+                "s1",
+                agent_id="agent-7",
+                user_id="u-1",
+                temperature=0.3,
+            )
+        )
+        assert captured["calls"], "get_model must still be called"
+        assert all("identity" not in call for call in captured["calls"])
+
+    @staticmethod
+    def test_fragment_short_circuits_before_fact_parsing(monkeypatch):
+        """能力门控短路在事实解析之前：旧 core 下片段恒空（{}）。"""
+        captured: dict = {}
+        TestOldCoreCapabilityGate._patch(monkeypatch, captured)
+        identity_kwargs = getattr(ModelWrapper, "_trace_identity_kwargs")
+        assert (
+            identity_kwargs(
+                {"agent_id": "a", "user_id": "u"}, session_id="s", message_count=3
+            )
+            == {}
+        )
