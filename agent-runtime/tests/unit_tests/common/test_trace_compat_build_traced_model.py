@@ -181,7 +181,8 @@ class TestIdentityPassThrough:
     @staticmethod
     def test_old_core_identity_type_error_degrades_to_bare(stub_decorate, monkeypatch):
         """旧 core（identity 参数缺失）：装饰抛 TypeError → 整体降级返回裸
-        模型，不阻断模型创建——探测降级撤除后由运行期兜底承担组合兼容。"""
+        模型，不阻断模型创建——探测降级撤除后由运行期兜底承担组合兼容。
+        """
         import openjiuwen.core.session.tracer as core_tracer
 
         def _decorate_old_signature(model, session, identity=None):

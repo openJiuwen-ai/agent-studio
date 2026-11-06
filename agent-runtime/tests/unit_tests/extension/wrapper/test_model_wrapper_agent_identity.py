@@ -215,7 +215,8 @@ class TestIdentityFacts:
     @staticmethod
     def test_ainvoke_carries_agent_and_conversation_facts(monkeypatch):
         """agent_id + 会话事实：conversation_id=会话 id（rail 同口径）、
-        message_count=消息条数，与身份一并带给 core。"""
+        message_count=消息条数，与身份一并带给 core。
+        """
         captured: dict = {}
         wrapper = TestIdentityFacts._patch(monkeypatch, captured)
         asyncio.run(
@@ -234,7 +235,8 @@ class TestIdentityFacts:
     @staticmethod
     def test_request_params_rail_key_convention(monkeypatch):
         """请求参数按 core gen_ai.request.* 消费口径：stop→stop_sequences，
-        未传的键（top_k/reasoning_level）不写。"""
+        未传的键（top_k/reasoning_level）不写。
+        """
         captured: dict = {}
         wrapper = TestIdentityFacts._patch(monkeypatch, captured)
         asyncio.run(
@@ -299,11 +301,13 @@ class TestIdentityFragmentShape:
 
     @staticmethod
     def test_no_facts_yields_empty_fragment():
-        assert ModelWrapper._trace_identity_kwargs({}) == {}
+        identity_kwargs = getattr(ModelWrapper, "_trace_identity_kwargs")
+        assert identity_kwargs({}) == {}
 
     @staticmethod
     def test_message_count_none_omitted():
-        out = ModelWrapper._trace_identity_kwargs({}, session_id="s1")
+        identity_kwargs = getattr(ModelWrapper, "_trace_identity_kwargs")
+        out = identity_kwargs({}, session_id="s1")
         assert out == {"identity": {"conversation_id": "s1"}}
 
 
