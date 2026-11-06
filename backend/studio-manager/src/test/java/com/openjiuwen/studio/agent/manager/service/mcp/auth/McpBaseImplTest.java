@@ -432,4 +432,128 @@ class McpBaseImplTest extends BaseTest {
         assertEquals(expected, result);
     }
 
+    // ==== FEAT-093 动态鉴权（scope=DYNAMIC）校验用例 ====
+
+    private AuthInfo buildDynamicAuthInfo(AuthKeyInfo... keys) {
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(List.of(keys));
+        return authInfo;
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：合法配置（仅 target_name，auth_key 为空）通过校验")
+    void test_validAuthInfo_dynamic_success() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+
+        mcpBase.validAuthInfo(buildDynamicAuthInfo(key));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：携带凭证值（auth_key 非空）拒绝保存")
+    void test_validAuthInfo_dynamic_with_value_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey("secret-value");
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 为空拒绝")
+    void test_validAuthInfo_dynamic_blank_target_name_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("");
+        key.setAuthKey(null);
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 重复（大小写不敏感）拒绝")
+    void test_validAuthInfo_dynamic_duplicate_target_name_rejected() {
+        AuthKeyInfo key1 = new AuthKeyInfo();
+        key1.setTargetName("Authorization");
+        key1.setAuthKey(null);
+        AuthKeyInfo key2 = new AuthKeyInfo();
+        key2.setTargetName("authorization");
+        key2.setAuthKey(null);
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key1, key2)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：domain 非 HEADERS 拒绝（值仅注入出站请求头层）")
+    void test_validAuthInfo_dynamic_query_domain_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.QUERY);
+        authInfo.setAuthKeys(List.of(key));
+
+        Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：auth_keys 为空拒绝")
+    void test_validAuthInfo_dynamic_empty_keys_rejected() {
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(List.of());
+
+        Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：更新校验直接返回新配置，不触发 auth_key 解密（值为空）")
+    void test_validIsNeedToUpdateAuthInfo_dynamic() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = buildDynamicAuthInfo(key);
+
+        AuthInfo result = mcpBase.validIsNeedToUpdateAuthInfo(authInfo, authInfo);
+
+        assertEquals(authInfo, result);
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：脱敏处理对 DYNAMIC 原样返回（auth_key 保持空）")
+    void test_anonymizeAuthInfo_dynamic() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = buildDynamicAuthInfo(key);
+
+        AuthInfo result = mcpBase.anonymizeAuthInfo(authInfo);
+
+        assertEquals("Authorization", result.getAuthKeys().get(0).getTargetName());
+        assertEquals(null, result.getAuthKeys().get(0).getAuthKey());
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：token 交换跳过空值 auth_key，不注入出站头")
+    void test_exchangeTokenByAuth_dynamic_skips_blank_key() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = buildDynamicAuthInfo(key);
+
+        Map<String, String> headers = new HashMap<>();
+
+        mcpBase.exchangeTokenByAuth(authInfo, headers, "http://example.com");
+
+        assertEquals(false, headers.containsKey("Authorization"));
+    }
+
 }

@@ -35,6 +35,7 @@ import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.common.enums.CredentialType;
 import com.openjiuwen.studio.agent.common.enums.KnowledgeSourceEnum;
 import com.openjiuwen.studio.agent.common.enums.NodeType;
@@ -335,6 +336,11 @@ public class IrAdapterService {
      * mcp默认YPE类型
      */
     private static final String MCP_METHOD = "Headers";
+
+    /**
+     * FEAT-093 动态鉴权参数描述（值由工作流编排期绑定，运行期注入出站请求头）
+     */
+    private static final String DYNAMIC_AUTH_PARAM_DESC = "dynamic auth credential, bind value in workflow";
 
     /**
      * ir路径
@@ -2150,7 +2156,49 @@ public class IrAdapterService {
             paramList.add(param);
         }
 
+        // FEAT-093 动态鉴权：auth_keys[].target_name 追加为 Headers 入参
+        // （值不落库，由工作流节点参数在编排期绑定 literal/ref，运行期经标准 Headers 参数链路注入出站请求头）
+        appendDynamicAuthParams(mcpEntity, paramList, headers.keySet(), shouldValidate);
+
         return paramList;
+    }
+
+    /**
+     * FEAT-093 动态鉴权参数转换：scope=DYNAMIC 时将 auth_keys 的 target_name
+     * 转为 method=Headers 的入参条目（与 server_config headers 参数同构），
+     * 供工作流编排侧绑值与运行期注入。
+     *
+     * @param mcpEntity mcp服务实体
+     * @param paramList 待追加的参数列表
+     * @param existingNames 已存在的参数名（server_config headers），用于去重
+     * @param shouldValidate 是否携带校验字段
+     */
+    private void appendDynamicAuthParams(McpServiceEntity mcpEntity, List<Map<String, Object>> paramList,
+        Set<String> existingNames, boolean shouldValidate) {
+        AuthInfo authInfo = mcpEntity.getAuthInfo();
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return;
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName) || existingNames.contains(targetName)) {
+                continue;
+            }
+            Map<String, Object> param = new HashMap<>();
+            param.put(NAME, targetName);
+            param.put(DESCRIPTION, DYNAMIC_AUTH_PARAM_DESC);
+            if (shouldValidate) {
+                param.put(VALIDATED, false);
+                param.put(VALIDATE_TYPE, MCP_VALIDATE_TYPE);
+                param.put(VALIDATE_RULE, "");
+            }
+            param.put(TYPE, MCP_TYPE);
+            param.put(METHOD, MCP_METHOD);
+            param.put(REQUIRED, false);
+            paramList.add(param);
+        }
     }
 
     private Object convertDefaultValue(String defaultValue, String type) {

@@ -180,6 +180,11 @@ export class AddMcpHalfModalComponent implements OnInit {
       label: this.i18n.transform('mcp_oauth_auth'),
       value: 'OAUTH',
     },
+    {
+      id: '4',
+      label: this.i18n.transform('mcp_dynamic_auth'),
+      value: 'DYNAMIC',
+    },
   ];
   authSecretPosition = [
     {
@@ -198,6 +203,8 @@ export class AddMcpHalfModalComponent implements OnInit {
     selectedAuthPos: 'HEADERS',
     authHeaderParams: [],
     authQueryParams: [],
+    /** FEAT-093 动态鉴权：仅配置出站头名（单列），凭证值不入库 */
+    dynamicAuthParams: [],
     authParams: {
       url: '',
       id: '',
@@ -313,6 +320,16 @@ export class AddMcpHalfModalComponent implements OnInit {
       this.mcpAuthConfigData.authParams.id = this.mcpModalSelected.auth_info.custom_oauth.client_id;
       this.mcpAuthConfigData.authParams.secret = this.mcpModalSelected.auth_info.custom_oauth.client_secret;
       this.mcpAuthConfigData.authParams.scope = this.mcpModalSelected.auth_info.custom_oauth.scope;
+      return;
+    }
+    if (this.mcpModalSelected.auth_info.scope === 'DYNAMIC') {
+      this.mcpAuthConfigData.selectedAuthType = 'DYNAMIC';
+      this.mcpAuthConfigData.dynamicAuthParams.length = 0;
+      for (let index = 0; index < this.mcpModalSelected.auth_info.auth_keys.length; index++) {
+        this.mcpAuthConfigData.dynamicAuthParams.push({
+          name: this.mcpModalSelected.auth_info.auth_keys[index].target_name,
+        });
+      }
       return;
     }
     if (this.mcpModalSelected.auth_info.scope === 'SERVICE') {
@@ -840,6 +857,21 @@ export class AddMcpHalfModalComponent implements OnInit {
         };
         return;
       }
+      if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+        // FEAT-093 动态鉴权：仅保存出站头名，auth_key 恒为空（平台不存储凭证值）
+        mcpData.auth_info = {
+          scope: 'DYNAMIC',
+          domain: 'HEADERS',
+          auth_keys: this.mcpAuthConfigData.dynamicAuthParams
+            .filter(param => param.name && param.name.trim())
+            .map(param => ({
+              target_name: param.name.trim(),
+              source_name: null,
+              auth_key: null,
+            })),
+        };
+        return;
+      }
     }
     return;
   }
@@ -1203,6 +1235,47 @@ export class AddMcpHalfModalComponent implements OnInit {
     return false;
   }
 
+  /** FEAT-093 是否展示动态鉴权参数表单（单列参数名） **/
+  isShowDynamicAuthConfig() {
+    return this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC';
+  }
+
+  /** FEAT-093 添加动态鉴权参数行（上限 5 条，与后端 auth_keys 约束一致） **/
+  handleClickAddDynamicAuthParams() {
+    if (this.mcpAuthConfigData.dynamicAuthParams.length >= 5) {
+      return;
+    }
+    this.mcpAuthConfigData.dynamicAuthParams.push({
+      name: '',
+    });
+    this.handleChangeDynamicAuthParam();
+  }
+
+  /** FEAT-093 删除动态鉴权参数行 **/
+  handleClickDeleteDynamicAuthParams(index: number) {
+    if (this.mcpAuthConfigData.dynamicAuthParams.length <= 0) {
+      return;
+    }
+    this.mcpAuthConfigData.dynamicAuthParams.splice(index, 1);
+    this.handleChangeDynamicAuthParam();
+  }
+
+  /** FEAT-093 动态鉴权参数校验：存在空名或重复名时禁用确认按钮 */
+  handleChangeDynamicAuthParam() {
+    if (this.mcpAuthConfigData.selectedAuthType !== 'DYNAMIC') {
+      this.isDisabledConfirmBtn = false;
+      return;
+    }
+    const params = this.mcpAuthConfigData.dynamicAuthParams;
+    if (params.length <= 0) {
+      this.isDisabledConfirmBtn = false;
+      return;
+    }
+    const names = params.map(param => (param.name || '').trim()).filter(Boolean);
+    this.isDisabledConfirmBtn = params.some(param => !(param.name || '').trim())
+      || new Set(names.map(name => name.toLowerCase())).size !== names.length;
+  }
+
   /** 是否展示密钥位置 **/
   isShowSecretPos() {
     return this.mcpAuthConfigData.selectedAuthType === 'SERVICE';
@@ -1260,6 +1333,10 @@ export class AddMcpHalfModalComponent implements OnInit {
     this.oauthErrors = { url: false, id: false, secret: false, scope: false };
     if (this.mcpAuthConfigData.selectedAuthType === 'SERVICE') {
       this.handleChangeAPIKeyRadio();
+      return;
+    }
+    if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+      this.handleChangeDynamicAuthParam();
       return;
     }
     this.isDisabledConfirmBtn = false;

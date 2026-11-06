@@ -1024,6 +1024,13 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         AuthInfo authInfo = null == serviceEntity.getAuth() ? new AuthInfo() : serviceEntity.getAuth();
 
+        // FEAT-093 动态鉴权：auth_keys 为权威配置（值不入库），不从 serverConfig 恢复，
+        // 避免 scope 被改写为 USER 导致运行期走用户级鉴权链路
+        if (AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            log.info("Dynamic auth scope, skip recovery from server config. Service ID: {}", serviceEntity.getId());
+            return;
+        }
+
         if (CollectionUtils.isEmpty(headerInfo)) {
             log.warn("Header info is empty, no auth keys to recover. Service ID: {}", serviceEntity.getId());
             return;

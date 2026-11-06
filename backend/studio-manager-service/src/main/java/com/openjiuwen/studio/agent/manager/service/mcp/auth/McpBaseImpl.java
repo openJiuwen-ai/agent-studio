@@ -230,6 +230,12 @@ public class McpBaseImpl implements IMcpBase {
             }
         }
 
+        // FEAT-093 动态鉴权：只配置出站头名（target_name），凭证值由工作流编排期绑定，禁止入库
+        if (!Objects.isNull(authInfo) && AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            validDynamicAuthInfo(authInfo);
+            return;
+        }
+
         // apikey 鉴权解密
         if (!Objects.isNull(authInfo) && !CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
             for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
@@ -245,6 +251,41 @@ public class McpBaseImpl implements IMcpBase {
         }
     }
 
+    /**
+     * FEAT-093 动态鉴权配置校验：
+     * - domain 仅支持 HEADERS（值注入仅在出站请求头层）
+     * - auth_keys 1~5 条，target_name 必填、长度 1~64、不重复
+     * - auth_key 必须为空（平台不存储凭证值）
+     *
+     * @param authInfo 鉴权信息
+     */
+    private void validDynamicAuthInfo(AuthInfo authInfo) {
+        if (!AuthInfo.DomainEnum.HEADERS.equals(authInfo.getDomain())) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth only supports HEADERS domain");
+        }
+        if (CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth requires at least one auth key entry");
+        }
+        Set<String> targetNames = new HashSet<>();
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is required and its length must be 1-64");
+            }
+            if (StringUtils.isNotBlank(authKeyInfo.getAuthKey())) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth must not persist credential value");
+            }
+            if (!targetNames.add(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is duplicated: " + targetName);
+            }
+        }
+    }
+
     @Override
     public AuthInfo validIsNeedToUpdateAuthInfo(AuthInfo newAuth, AuthInfo oldAuth) {
         log.info("Start to valid is need to update auth info!");
@@ -256,6 +297,11 @@ public class McpBaseImpl implements IMcpBase {
             if (SECRET_IS_NEED_SKIP.matcher(clientSecret).matches()) {
                 return null;
             }
+        }
+
+        // FEAT-093 动态鉴权：auth_key 恒为空，无需解密比对，始终按新配置更新
+        if (!Objects.isNull(newAuth) && AuthInfo.ScopeEnum.DYNAMIC.equals(newAuth.getScope())) {
+            return newAuth;
         }
 
         // apikey 鉴权解密
