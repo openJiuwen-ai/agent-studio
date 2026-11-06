@@ -307,6 +307,28 @@ class JointOptimizer:
                     raise e
         return None
 
+    @staticmethod
+    def _remaining_dataset_rows(dataset, sampled_cases):
+        """Exclude sampled rows without comparing evaluation-only metadata."""
+        remaining = list(enumerate(dataset))
+        case_keys = (
+            TuneConstant.QUESTION_KEY,
+            TuneConstant.LABEL_KEY,
+            TuneConstant.VARIABLE_KEY,
+        )
+        for sampled in sampled_cases:
+            order = sampled.get("order")
+            for position, (index, data) in enumerate(remaining):
+                same_case = (
+                    index == order
+                    if order is not None
+                    else all(data.get(key) == sampled.get(key) for key in case_keys)
+                )
+                if same_case:
+                    remaining.pop(position)
+                    break
+        return [data for _, data in remaining]
+
     def resample_examples(self, sampled_incorrect_data):
         """re-sample examples from dataset"""
         dataset = copy.deepcopy(self.dataset)
@@ -318,19 +340,7 @@ class JointOptimizer:
             return dataset
 
         num_to_add = min_len - len(sampled_incorrect_data)
-        unique_data = []
-        query_set = set()
-        for data in sampled_incorrect_data:
-            key = (
-                data["question"]
-                if not self.variable
-                else str(data[TuneConstant.VARIABLE_KEY])
-            )
-            if key not in query_set:
-                query_set.add(key)
-                unique_data.append(data)
-
-        remaining_data = [data for data in dataset if data not in unique_data]
+        remaining_data = self._remaining_dataset_rows(dataset, sampled_incorrect_data)
 
         sampled_data = random.sample(remaining_data, num_to_add)
 
@@ -597,9 +607,9 @@ class JointOptimizer:
             # 如果需要更多示例，从数据集中随机采样
             if len(sampled_examples) < num_examples:
                 remaining_examples = num_examples - len(sampled_examples)
-                remaining_dataset = [
-                    item for item in dataset if item not in sampled_examples
-                ]  # 确保不重复采样
+                remaining_dataset = self._remaining_dataset_rows(
+                    dataset, sampled_examples
+                )
                 sampled_examples.extend(
                     random.sample(remaining_dataset, remaining_examples)
                 )

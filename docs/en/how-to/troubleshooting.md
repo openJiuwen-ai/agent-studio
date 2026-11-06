@@ -357,3 +357,9 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+### Repeated Cases When Filling Prompt Optimization Examples
+
+Prompt optimization prioritizes failed cases before filling the remaining example slots from the dataset. A selected evaluation result should exclude its original dataset row from this fill pool, even though evaluation adds fields such as `order`, `score`, `predict` and `reason`, and removes `tools`.
+
+If the same failed row appears again while other rows are available, update to a version containing the evaluated-case sampling fix. Both error-case resampling and few-shot selection use the evaluation row index when available; records without an index are matched by question, reference answer and variables. Only one dataset occurrence is excluded per selected case, so distinct rows with the same question, or repeated rows supplied in the dataset, remain available as appropriate. The fix changes sample eligibility, not model scoring.
