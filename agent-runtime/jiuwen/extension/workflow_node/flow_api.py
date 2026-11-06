@@ -37,6 +37,7 @@ from jiuwen.extension.workflow_node.utils import (
 )
 from jiuwen.extension.wrapper.restful_api_loader import convert_ir_to_card
 from jiuwen.extension.wrapper.restful_api_new import RestfulApiToolNew
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from jiuwen.plugin.models.param import Param
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
@@ -505,6 +506,19 @@ class FlowApi(WorkflowComponent):
                 expected_type = param.type
                 api_inputs[param.name] = transform_type(value, expected_type, name)
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数打 WARNING（带参数名，迁移期可据此
+                    # 收集多余参数清理清单）后跳过，插件照常被调用。
+                    # 评审修订（2026-11-04 PR#2577）：不带 event_type——若挂
+                    # WORKFLOW_COMPONENT_ERROR，按 event_type 聚合的日志/告警会把
+                    # 迁移期大量兼容性跳过归类为组件错误，污染错误指标。
+                    workflow_logger.warning(
+                        "FlowApi loose param validation: skip undefined param",
+                        component_type_str="FlowApi",
+                        metadata={"param_name": name},
+                    )
+                    continue
                 workflow_logger.error(
                     "FlowApi _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
