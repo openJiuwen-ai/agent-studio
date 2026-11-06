@@ -175,32 +175,43 @@ export class TriggerHalfmodalComponent {
 
   public weekOptions = [
     {
+      // Quartz cron day-of-week 支持数字（1=周日 ... 7=周六）与英文名称
+      // （SUN/MON/.../SAT）两种形式。本组件写入统一使用英文名称：
+      // 与历史数字数据天然可区分，回显时可对存量数字按旧语义兼容换算，
+      // 新保存数据零漂移。label 仍按中文习惯周一→周日排列
       label: this.i18n.transform("commonlogicagent_6"),
-      value: "1"
+      value: "2",
+      cronName: "MON"
     },
     {
       label: this.i18n.transform("commonlogicagent_7"),
-      value: "2"
+      value: "3",
+      cronName: "TUE"
     },
     {
       label: this.i18n.transform("commonlogicagent_8"),
-      value: "3"
+      value: "4",
+      cronName: "WED"
     },
     {
       label: this.i18n.transform("commonlogicagent_9"),
-      value: "4"
+      value: "5",
+      cronName: "THU"
     },
     {
       label: this.i18n.transform("commonlogicagent_10"),
-      value: "5"
+      value: "6",
+      cronName: "FRI"
     },
     {
       label: this.i18n.transform("commonlogicagent_11"),
-      value: "6"
+      value: "7",
+      cronName: "SAT"
     },
     {
       label: this.i18n.transform("commonlogicagent_5"),
-      value: "7"
+      value: "1",
+      cronName: "SUN"
     }
   ];
 
@@ -993,7 +1004,10 @@ export class TriggerHalfmodalComponent {
         }
         if (periodType === "week") {
           const periodWeek = this.timeTriggerForm?.controls.periodWeek.value;
-          return `${seconds} ${minutes} ${hours} ? * ${periodWeek}`;
+          const cronName = this.weekOptions.find(
+            (option) => option.value === periodWeek
+          )?.cronName;
+          return `${seconds} ${minutes} ${hours} ? * ${cronName}`;
         }
         if (periodType === "month") {
           const periodMonthDay =
@@ -1041,7 +1055,31 @@ export class TriggerHalfmodalComponent {
           this.timeTriggerForm?.controls.periodType.setValue("week");
           this.onDateSelect({ value: "week" });
           this.timeTriggerForm?.controls.periodTime.setValue(newTimeDate);
-          this.timeTriggerForm?.controls.periodWeek.setValue(dayOfWeek);
+          // cron 星期域两种形式的回显：
+          // - 英文名称（MON/SUN 等，本组件修复后写入）→ 直接映射回选项 value，
+          //   新数据编辑零漂移
+          // - 数字（历史存量数据，旧语义"1=周一 ... 7=周日"）→ 按旧语义逆向
+          //   换算回用户当初选择的星期对应的 value（n=1..6 → n+1，n=7 → 1），
+          //   重新保存后写入英文名称，存量数据自愈
+          if (/^[A-Z]{3}$/.test(dayOfWeek)) {
+            const option = this.weekOptions.find(
+              (option) => option.cronName === dayOfWeek
+            );
+            this.timeTriggerForm?.controls.periodWeek.setValue(
+              option?.value ?? this.weekOptions[0].value
+            );
+          } else {
+            const legacyWeek = parseInt(dayOfWeek, 10);
+            if (!isNaN(legacyWeek) && legacyWeek >= 1 && legacyWeek <= 6) {
+              this.timeTriggerForm?.controls.periodWeek.setValue(
+                String(legacyWeek + 1)
+              );
+            } else if (legacyWeek === 7) {
+              this.timeTriggerForm?.controls.periodWeek.setValue("1");
+            } else {
+              this.timeTriggerForm?.controls.periodWeek.setValue(dayOfWeek);
+            }
+          }
           return "";
         }
         const dayIsNumeric = day !== "*" && day.match(/^\d+$/);
