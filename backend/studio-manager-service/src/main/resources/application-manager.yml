@@ -200,6 +200,9 @@ okhttp:
   max-requests: ${okhttp_max-requests:1000}
 
 redis:
+  # Redis 部署模式：single（单机，默认）/ cluster（集群）/ sentinel（哨兵）
+  # 仅用于显式声明，实际模式仍由 cluster_node_list / node_addr_list 是否非空判断
+  mode: ${redis_mode:single}
   host: ${redis_host:127.0.0.1}
   password: ${redis_password:}
   port: ${redis_port:6379}

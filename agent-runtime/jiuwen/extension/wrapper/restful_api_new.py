@@ -28,6 +28,7 @@ from jiuwen.common.configs.env_constants import (
     EXECUTION_NODE_TIMEOUT_KEY,
     JIUWEN_PROXY_ENABLE_KEY,
     PLUGIN_REQUEST_TIMEOUT_KEY,
+    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY,
 )
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
@@ -69,6 +70,39 @@ _ssl_context.set_ciphers(
     "ECDHE-RSA-AES128-GCM-SHA256"
 )
 _is_cert_loaded = False
+
+# 是否允许 unsafe legacy renegotiation（对接老 TLS 服务器时开启）
+_allow_legacy_renegotiation = os.environ.get(
+    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, ""
+).lower() == "true"
+
+# 允许 legacy renegotiation 时使用的 SSLContext（不复用 _ssl_context，因为它带了 OP_NO_RENEGOTIATION）
+_legacy_ssl_context: Optional[ssl.SSLContext] = None
+_legacy_ssl_context_cert_loaded = False
+
+
+def _build_legacy_ssl_context() -> ssl.SSLContext:
+    """构建允许 unsafe legacy renegotiation 的 SSLContext。
+
+    与 _ssl_context 的区别：
+    - 不设置 OP_NO_RENEGOTIATION
+    - 设置 OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION
+    """
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.options |= ssl.OP_NO_TLSv1
+    ctx.options |= ssl.OP_NO_TLSv1_1
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.options |= getattr(ssl, "OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION", 0x4)
+    return ctx
+
+
+def _get_legacy_ssl_context() -> ssl.SSLContext:
+    """获取允许 legacy renegotiation 的 SSLContext（单例）。"""
+    global _legacy_ssl_context
+    if _legacy_ssl_context is None:
+        _legacy_ssl_context = _build_legacy_ssl_context()
+    return _legacy_ssl_context
+
 
 DEFAULT_STREAM_PLUGIN_BUFSIZE = 64 * 1024
 
@@ -390,6 +424,7 @@ class RestfulApiToolNew(Tool):
             await trace_manager.on_plugin_start(inputs)
             request_params = self._request_params_creator.create(inputs, **kwargs)
             self._validate_request_params(request_params)
+            self._load_cert(request_params)
 
             request = self._create_post_request(request_params)
             connector = Connector().get_tcp_connector()
@@ -433,6 +468,10 @@ class RestfulApiToolNew(Tool):
             params=request_params.query_params_in_inputs,
             **request_params.request_arg,
         )
+        # 仅在 api_cert 为 SSLContext 时传 ssl（覆盖 connector 配置），
+        # 否则让 connector 的 ssl 配置生效（保持原有行为）
+        if isinstance(request_params.api_cert, ssl.SSLContext):
+            request["ssl"] = request_params.api_cert
 
         if request_params.file_params:
             form_data = aiohttp.FormData()
@@ -880,8 +919,35 @@ class RestfulApiToolNew(Tool):
         return merged_data
 
     def _load_cert(self, request_params: RequestParams):
-        """加载证书"""
-        global _is_cert_loaded
+        """加载证书。
+
+        - api_cert 为字符串（证书路径）：加载到 SSLContext
+        - api_cert 为 False（不校验证书）：使用默认行为
+        - 开启 PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION 时：
+          构造允许 unsafe legacy renegotiation 的 SSLContext
+        """
+        global _is_cert_loaded, _legacy_ssl_context_cert_loaded
+
+        # 开启 legacy renegotiation 时，统一使用 _legacy_ssl_context
+        if _allow_legacy_renegotiation:
+            legacy_ctx = _get_legacy_ssl_context()
+            if isinstance(request_params.api_cert, str):
+                # 有客户端证书，加载到 legacy SSLContext
+                if not _legacy_ssl_context_cert_loaded:
+                    legacy_ctx.load_cert_chain(certfile=request_params.api_cert)
+                    _legacy_ssl_context_cert_loaded = True
+                request_params.api_cert = legacy_ctx
+            elif request_params.api_cert is False:
+                # 不校验证书，但仍需要 legacy renegotiation 的 SSLContext
+                legacy_ctx.check_hostname = False
+                legacy_ctx.verify_mode = ssl.CERT_NONE
+                request_params.api_cert = legacy_ctx
+            elif request_params.api_cert is True:
+                # 校验证书，但也需要 legacy renegotiation 的 SSLContext
+                request_params.api_cert = legacy_ctx
+            return
+
+        # 原有逻辑
         if isinstance(request_params.api_cert, str):
             if not _is_cert_loaded:
                 _ssl_context.load_cert_chain(certfile=request_params.api_cert)

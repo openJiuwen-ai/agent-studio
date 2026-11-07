@@ -164,6 +164,7 @@ services:
       redis_host: ${REDIS_HOST:-}
       redis_password: ${REDIS_PASSWORD:-}
       redis_port: ${REDIS_PORT:-6379}
+      redis_mode: ${REDIS_MODE:-single}
       cluster_node_list: ${REDIS_CLUSTER_NODES:-}
       redis_master_name: ${REDIS_SENTINEL_MASTER:-}
       redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}
@@ -321,6 +322,7 @@ services:
       TGF_LOG_DIR: /opt/cloud/logs/
       PORT: ${SERVER_PORT:-31014}
       PLUGIN_SSL_API_CERT: ${PLUGIN_SSL_API_CERT:-false}
+      PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION: ${PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION:-false}
       WORKFLOW_EXECUTE_TIMEOUT: ${WORKFLOW_EXECUTE_TIMEOUT:-900}
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
