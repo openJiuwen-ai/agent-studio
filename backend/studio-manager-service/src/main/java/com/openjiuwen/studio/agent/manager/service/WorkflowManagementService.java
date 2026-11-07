@@ -2961,6 +2961,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
             // 取原工作流dsl与最新工作流dsl对比，如最新工作流auth为空（可能为get接口清理后），从原工作流取对应值填入
             WorkflowVO currentWorkflow = JSON.parseObject(workflowJson, WorkflowVO.class);
+            // DSL/IR 的 name 与顶层显示名保持一致(中文)，画布保存路径同样以服务端实体显示名为准
+            currentWorkflow.setName(workflowEntity.getName());
             workflowValidationService.validateWorkflowDetail(currentWorkflow, workflowId);
 
             // 校验记忆库id
