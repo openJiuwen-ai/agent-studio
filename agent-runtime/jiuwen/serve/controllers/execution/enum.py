@@ -131,7 +131,7 @@ class ConversationEvent(str, Enum):
     TASK_COMPLETE = "task_complete"
     
     # 意图识别
-    INTENT_MSG = "intent_msg"
+    INTENT_MSG = "intent"
 
 
 class AsyncExecutionStatus(Enum):
