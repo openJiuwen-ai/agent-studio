@@ -3595,7 +3595,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       this.appFlowServ.setStartNodeBtnClicked(true);
     }
     newFlowData.is_drag = !!config?.isDrag;
-    newFlowData.workflow_details.name = newFlowData?.code ?? '';
     newFlowData.update_time = this.appFlowServ.getVersionInfo();
     if (newFlowData) {
       delete newFlowData.avatar; // avatar没有修改并且是base64格式，接口禁止传入base64格式

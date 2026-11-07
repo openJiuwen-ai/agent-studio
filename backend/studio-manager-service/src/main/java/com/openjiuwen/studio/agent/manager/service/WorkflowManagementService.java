@@ -1025,8 +1025,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                     JsonUtils.json2Obj(contentReviewConfigs, Constants.MAP_TYPE_REFERENCE));
         }
 
-        // 当前九问提取name参数作为Agent绑定工作流，模型英文名效果更好
-        workflowVo.setName(workflowEntity.getCode());
+        // DSL/IR 的 name 与顶层显示名保持一致(中文),Agent 绑定/意图路由按 workflowId 定位,不依赖该字段
+        workflowVo.setName(workflowEntity.getName());
         String relativePath =
             obsService.uploadObsFile(workflowEntity.getId(), workflowEntity.getId(), CommonConstant.WORKFLOW,
                 JSON.toJSONString(workflowVo, JSONWriter.Feature.WriteMapNullValue), CommonConstant.Workflow.FLOW);
@@ -1127,8 +1127,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                     JsonUtils.json2Obj(contentReviewConfigs, Constants.MAP_TYPE_REFERENCE));
         }
 
-        // 更新用户名、描述，当前九问提取name参数作为Agent绑定工作流，模型英文名效果更好
-        workflowVo.setName(body.getCode());
+        // DSL/IR 的 name 与顶层显示名保持一致(中文),Agent 绑定/意图路由按 workflowId 定位,不依赖该字段
+        workflowVo.setName(body.getName());
         workflowVo.setDescription(body.getDescription());
 
         body.setWorkflowId(workflowId)
@@ -2998,8 +2998,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
                 // 改名情况需刷新dsl ir
                 WorkflowVO workflowVo = JSON.parseObject(workflowJson, WorkflowVO.class);
 
-                // 当前九问提取name参数作为Agent绑定工作流，模型英文名效果更好
-                workflowVo.setName(workflowEntity.getCode());
+                // DSL/IR 的 name 与顶层显示名保持一致(中文),Agent 绑定/意图路由按 workflowId 定位,不依赖该字段
+                workflowVo.setName(workflowEntity.getName());
                 workflowVo.setDescription(workflowEntity.getDescription());
                 workflowVo.setIcon(workflowEntity.getAvatar());
                 String flowPath = obsService.uploadObsFile(workflowId, workflowId, CommonConstant.WORKFLOW,
