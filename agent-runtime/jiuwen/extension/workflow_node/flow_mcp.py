@@ -416,7 +416,10 @@ class FlowMcp(WorkflowComponent):
                     # 显式报错——header 不参与 card schema 的 client-side
                     # 校验，静默跳过后下游没有任何报错点，与 Body 分支
                     # 必填参数由 MCPTool 校验报错的行为不一致
-                    if value is None:
+                    # FEAT-093：空串同 None 处理——引擎把未绑定的 ref 解析为
+                    # start 默认空串，注入空 Authorization 头会被下游鉴权层
+                    # 视为非法凭证，语义上"未提供"不应产生头
+                    if value is None or value == "":
                         if _is_param_required(param):
                             workflow_logger.error(
                                 f"{TAG} _format_api_inputs error: required header param value is None",

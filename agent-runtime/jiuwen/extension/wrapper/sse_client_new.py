@@ -146,6 +146,14 @@ class SSEClientNew(McpClient):
         )
         request_params = request_params_creator.create(inputs, **kwargs)
 
+        # FEAT-093 动态鉴权：FlowMcp 把 method=Headers 参数值经
+        # jiuwen_kwargs["runtime_auth"]["headers"] 下传（scope 无关通道）；
+        # _add_auth_params 仅在 IR auth scope=USER/SERVICE 时消费 runtime_auth，
+        # DYNAMIC（auth 为空）会整段跳过，故在此直接并入出站 headers
+        runtime_auth = kwargs.get("runtime_auth")
+        if isinstance(runtime_auth, dict) and isinstance(runtime_auth.get("headers"), dict):
+            request_params.headers.update(runtime_auth["headers"])
+
         self._replace_mcp_headers_extra(request_params, **kwargs)
 
         self._execute_auth_hook(request_params, kwargs.get("name"))

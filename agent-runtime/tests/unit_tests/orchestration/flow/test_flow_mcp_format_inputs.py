@@ -287,6 +287,34 @@ class TestFormatApiInputsHeaders:
         mcp._format_api_inputs({"auth_token": "tok123"})
         assert mcp._header_params["auth_token"] == "tok123"
 
+    @staticmethod
+    def test_empty_string_header_value_skipped():
+        """FEAT-093：method=Headers + 空串 → 跳过（不注入空 Authorization 头）
+
+        引擎把未绑定的 ref 解析为 start 默认空串（非 None），
+        空值头会被下游鉴权层视为非法凭证，"未提供"不应产生头。
+        """
+        params = [
+            MockParam("Authorization", param_type="string", method="Headers"),
+            MockParam("query", param_type="string", method="Body"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, _ = mcp._format_api_inputs({"Authorization": "", "query": "hello"})
+        assert "Authorization" not in mcp._header_params
+        assert result["query"] == "hello"
+
+    @staticmethod
+    def test_empty_string_required_header_raises():
+        """FEAT-093：method=Headers + required + 空串 → 与 None 一致显式报错"""
+        params = [
+            MockParam("Authorization", param_type="string", method="Headers", required=True),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        with pytest.raises(Exception):  # JiuWenBaseException 101876
+            mcp._format_api_inputs({"Authorization": ""})
+
 
 class TestFormatApiInputsParamNotFound:
     """Test _format_api_inputs when input param is not in tool_params"""
