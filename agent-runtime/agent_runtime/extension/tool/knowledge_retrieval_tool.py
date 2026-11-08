@@ -17,6 +17,12 @@ from jiuwen.plugin.models.param import Param
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.tool.base import Input, Output, Tool, ToolCard
 
+try:
+    from openjiuwen.core.session.tracer import TracerAgentUtils as _TracerAgentUtils
+except ImportError:
+    # 老版本 core 没有 retriever 事件助手：控制器路径检索自动降级为无 retrieval span
+    _TracerAgentUtils = None
+
 _RETRIEVAL_NAME = "retrieval"
 _QUERY = "query"
 _KNOWLEDGE_BASES = "knowledge_bases"
@@ -170,13 +176,52 @@ class KnowledgeRetrievalTool(Tool):
             ) else inputs.get(_QUERY, "")
         elif isinstance(inputs, str):
             query = inputs
-        return await _run_retrieval(
-            query=str(query or ""),
-            connection_id=self._connection_id,
-            knowledge_base_ids=self._knowledge_base_ids,
-            retrieval_config=self._retrieval_config,
-            tag_overrides=self._tag_overrides,
-        )
+        # session 由 ability_manager 调用时注入；携带时在 execute_tool span 下
+        # 补一对 retrieval 事件（核心侧 OTel handler 会开 retrieval 子 span）
+        session = kwargs.get("session")
+        span = await self._start_retrieval_span(session, query)
+        try:
+            result = await _run_retrieval(
+                query=str(query or ""),
+                connection_id=self._connection_id,
+                knowledge_base_ids=self._knowledge_base_ids,
+                retrieval_config=self._retrieval_config,
+                tag_overrides=self._tag_overrides,
+            )
+        except Exception as exc:
+            await self._end_retrieval_span_error(session, span, exc)
+            raise
+        await self._end_retrieval_span(session, span, result)
+        return result
+
+    async def _start_retrieval_span(self, session, query) -> Optional[object]:
+        """开启 retrieval 追踪；追踪不可用或失败时返回 None，不影响检索。"""
+        if _TracerAgentUtils is None or session is None:
+            return None
+        try:
+            return await _TracerAgentUtils.trace_retriever_start(
+                session, query=str(query) if query else None, instance_name=_RETRIEVAL_NAME
+            )
+        except Exception:
+            return None
+
+    async def _end_retrieval_span(self, session, span, result) -> None:
+        if _TracerAgentUtils is None or span is None or session is None:
+            return
+        try:
+            output_list = (result.get(constant.RESTFUL_DATA) or {}).get("output_list") or []
+            documents = [item.get("text", "") for item in output_list if isinstance(item, dict)]
+            await _TracerAgentUtils.trace_retriever_end(session, span, documents=documents)
+        except Exception:
+            pass
+
+    async def _end_retrieval_span_error(self, session, span, error) -> None:
+        if _TracerAgentUtils is None or span is None or session is None:
+            return
+        try:
+            await _TracerAgentUtils.trace_retriever_error(session, span, error)
+        except Exception:
+            pass
 
     async def stream(self, inputs: Input, **kwargs) -> AsyncIterator[Output]:
         yield await self.invoke(inputs, **kwargs)

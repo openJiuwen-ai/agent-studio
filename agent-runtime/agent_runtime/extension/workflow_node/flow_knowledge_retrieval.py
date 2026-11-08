@@ -104,6 +104,27 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         """获取组件类型标识"""
         return JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE
 
+    def trace_metadata(self) -> Optional[dict]:
+        """Export retrieval facts for the workflow trace span.
+
+        Vertex merges this into the node span metadata at component begin and
+        tracer_otel maps it onto GenAI semconv attributes: top_k ->
+        gen_ai.retrieval.top_k (must be int), knowledge_base_ids ->
+        gen_ai.data_source.id.  Values come from the IR config so they are
+        available before the OBS kb_config loads on first execution.
+        """
+        if self._conf is None:
+            return None
+        metadata: Dict = {"data_source_ids": list(self._conf.knowledge_base_ids)}
+        retrieval_config = self._conf.retrieval_config or {}
+        if self._kb_config is not None:
+            retrieval_config = self._kb_config.get("retrieval_params", retrieval_config)
+        try:
+            metadata["top_k"] = int(retrieval_config.get("topK"))
+        except (TypeError, ValueError):
+            pass
+        return metadata
+
     @staticmethod
     def _resolve_query_from_session(session: Session) -> str:
         try:
