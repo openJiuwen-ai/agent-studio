@@ -289,3 +289,118 @@ async def test_flow_mcp_noop_with_old_core_session(mock_mcp_client):
     assert result[USER_FIELDS]["isError"] is False
     mock_mcp_client["call_tool"].assert_awaited_once()
     _assert_no_plugin_events(tracer)
+
+
+# ─── stream 位点（流式执行模式）────────────────────────────────────────
+
+
+class _StubStreamApiTool(_StubApiTool):
+    """带 astream 的工具替身：流式产出两个 chunk。"""
+
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.astream_calls = []
+
+    async def astream(self, inputs, **kwargs):
+        self.astream_calls.append((inputs, kwargs))
+        yield {"errCode": 0, "data": "chunk-1"}
+        yield {"errCode": 0, "data": "chunk-2"}
+
+
+class _RecordingProxy:
+    """新 core 装饰代理替身：stream 位点必须经它的 astream（事件发射在
+    core 侧由 async_trace_stream 包装承担，studio 侧只钉调用契约）。"""
+
+    def __init__(self, tool):
+        self._tool = tool
+        self.astream_calls = []
+
+    async def invoke(self, inputs, **kwargs):
+        return await self._tool.invoke(inputs, **kwargs)
+
+    async def astream(self, inputs, **kwargs):
+        self.astream_calls.append((inputs, kwargs))
+        async for item in self._tool.astream(inputs, **kwargs):
+            yield item
+
+
+async def _passthrough_transform(api_outputs, session):
+    async for item in api_outputs:
+        yield item
+
+
+@pytest.mark.asyncio
+async def test_flow_api_stream_path_uses_decorated_astream():
+    """stream 调用点经装饰代理的 astream，入参与直连时一致。"""
+    tracer = _FakeTracer()
+    api_tool = _StubStreamApiTool("weather_api")
+    flow = _make_flow_api(api_tool)
+    proxy = _RecordingProxy(api_tool)
+    with patch.object(
+        flow, "_format_api_inputs", new=AsyncMock(return_value={"query": "hi"})
+    ), patch.object(flow, "_format_api_header", return_value={}), patch.object(
+        flow, "_transform_async_stream_data", new=_passthrough_transform
+    ), patch(
+        "jiuwen.extension.workflow_node.flow_api.decorate_tool_with_trace",
+        return_value=proxy,
+    ):
+        schemas = [
+            schema
+            async for schema in flow.stream(
+                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
+            )
+        ]
+
+    assert proxy.astream_calls == [
+        ({"query": "hi"}, {"runtime_auth": {"headers": {}}})
+    ]
+    assert len(schemas) == 2, "chunk 数据仍完整流出"
+
+
+@pytest.mark.asyncio
+async def test_flow_custom_api_stream_path_uses_decorated_astream():
+    """stream 调用点经装饰代理的 astream，入参与直连时一致。"""
+    tracer = _FakeTracer()
+    api_tool = _StubStreamApiTool("custom_plugin")
+    flow = _make_flow_custom_api(api_tool)
+    proxy = _RecordingProxy(api_tool)
+    with patch.object(
+        flow, "_format_api_inputs", new=AsyncMock(return_value={"query": "hi"})
+    ), patch.object(
+        flow, "_transform_async_stream_data", new=_passthrough_transform
+    ), patch(
+        "jiuwen.extension.workflow_node.flow_custom_api.decorate_tool_with_trace",
+        return_value=proxy,
+    ):
+        schemas = [
+            schema
+            async for schema in flow.stream(
+                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
+            )
+        ]
+
+    assert proxy.astream_calls == [({"query": "hi"}, {})]
+    assert len(schemas) == 2, "chunk 数据仍完整流出"
+
+
+@pytest.mark.asyncio
+async def test_flow_api_stream_old_core_passthrough():
+    """旧 core（装饰原样返回）：stream 仍直连工具 astream，不崩不漏数据。"""
+    tracer = _FakeTracer()
+    api_tool = _StubStreamApiTool("weather_api")
+    flow = _make_flow_api(api_tool)
+    with patch.object(
+        flow, "_format_api_inputs", new=AsyncMock(return_value={"query": "hi"})
+    ), patch.object(flow, "_format_api_header", return_value={}), patch.object(
+        flow, "_transform_async_stream_data", new=_passthrough_transform
+    ):
+        schemas = [
+            schema
+            async for schema in flow.stream(
+                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=False), None
+            )
+        ]
+
+    assert api_tool.astream_calls == [({"query": "hi"}, {"runtime_auth": {"headers": {}}})]
+    assert len(schemas) == 2
+    _assert_no_plugin_events(tracer)

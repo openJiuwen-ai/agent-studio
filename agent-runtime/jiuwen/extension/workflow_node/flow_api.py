@@ -362,7 +362,10 @@ class FlowApi(WorkflowComponent):
             if tmp_header:
                 cur_headers.update(tmp_header)
 
-            api_outputs = self._api.astream(
+            # 与 invoke 同口径：stream 路径也经 tracer 装饰（新 core 代理会包
+            # astream，首 chunk 起 execute_tool span；旧 core 代理原样透传）
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = api_tool.astream(
                 api_inputs, runtime_auth={"headers": cur_headers}
             )
             async for schema in self._transform_async_stream_data(api_outputs, session):

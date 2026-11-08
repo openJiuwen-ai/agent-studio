@@ -229,7 +229,10 @@ class FlowCustomApi(WorkflowComponent):
             inputs_data = inputs.get("userFields", {}) or {}
             api_inputs = await self._format_api_inputs(inputs_data, session=session)
 
-            api_outputs = self._api.astream(api_inputs)
+            # 与 invoke 同口径：stream 路径也经 tracer 装饰（新 core 代理会包
+            # astream，首 chunk 起 execute_tool span；旧 core 代理原样透传）
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = api_tool.astream(api_inputs)
             async for schema in self._transform_async_stream_data(api_outputs, session):
                 yield schema
 
