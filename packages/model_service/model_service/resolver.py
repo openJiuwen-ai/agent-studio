@@ -286,6 +286,27 @@ def _model_from_data(data: dict) -> ModelServiceBase:
     )
 
 
+async def query_model_display_name(model_id: str, refresh: bool = False) -> str:
+    """按 modelServiceId 查模型显示名（元数据 ``model_name`` 字段，走既有缓存）。
+
+    供遥测侧把 UUID 服务 id 映射成可读模型名（如 llm span 的
+    ``gen_ai.request.model``）；未配置 / 读取失败一律返回空串——显示名
+    缺失只意味着"不覆盖"，绝不构成调用方错误。
+    """
+    if not model_id:
+        return ""
+    try:
+        metadata = await _query_model_metadata(model_id, refresh)
+    except Exception as e:  # noqa: BLE001 - 显示名查询失败按未配置处理
+        _logger.warning("query model display name failed id=%s: %s", model_id, e)
+        return ""
+    if not metadata:
+        return ""
+    # 与 _build_strategy 同层：元数据经 "data" 包装，模型名在 data.model_name
+    data = metadata.get("data") or {}
+    return str(data.get("model_name") or "")
+
+
 async def _query_model_metadata(model_id: str, refresh: bool) -> Optional[dict]:
     """读取模型元数据：缓存 → OBS，带性能日志与降级。"""
     from openjiuwen.core.common.logging import performance_logger
