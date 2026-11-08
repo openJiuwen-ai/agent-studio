@@ -3,7 +3,7 @@
 """EventHandler — 流式数据封装处理主入口.
 
 Key adaptations for open-source:
-- Input: StreamingResponse.body_iterator from ir_execute (SSE bytes), not Java execution_response
+- Input: private structured events from app_run, with legacy SSE body_iterator compatibility
 - Handler type determined from IR mode or endpoint path
 """
 
@@ -31,6 +31,7 @@ from agent_runtime.event_handler.base.trace import Trace
 from agent_runtime.event_handler.base.enums import EventMapping
 from agent_runtime.event_handler.base.field_processor import FieldDataProcessor
 from agent_runtime.event_handler.base.conversation import ConversationManager
+from agent_runtime.serve.execution_events import ExecutionEventStream
 
 # workflow 流式模式的终态帧原始事件名：workflow_end 由引擎发出（process_workflow_end
 # 置位 dialogue_end/end_time），done 由 stream_response R-20 保证唯一且末尾。
@@ -206,17 +207,20 @@ class EventHandler:
             return False
 
     async def get_handler_body_iterator(self, handler_type: str, body_iterator: AsyncGenerator) -> AsyncGenerator:
-        """Process SSE stream from ir_execute, apply event transformation, yield transformed SSE bytes."""
-        # 落库任务是否已登记：loop 内前置登记（workflow 终态帧）与 loop 后兜底互斥，防双重登记
+        """Transform private events or legacy SSE into the public SSE byte stream.
+
+        落库任务是否已登记：loop 内前置登记（workflow 终态帧）与 loop 后兜底互斥，防双重登记
+        """
         persist_registered = False
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self.parse_sse_line(data)
+                data_dict = self._input_event(data)
                 if data_dict is None:
                     continue
 
-                output_event = event_handler.process_event(data_dict, self.trace)
+                output_event = self._process_event(event_handler, data_dict, streaming=True)
+
 
                 # workflow 流式模式的终态帧（workflow_end/done）在 loop 内转发给客户端，
                 # 而租约登记若留在 loop 后，存在「客户端已见终态、租约尚不可见」的窗口
@@ -273,6 +277,8 @@ class EventHandler:
             workflow_logger.error("".join(traceback.format_exception(e)))
             error_event = FieldDataProcessor.generate_error_event_field(self.trace)
             yield self.serialize_sse(error_event.model_dump(by_alias=True, exclude_none=True))
+        finally:
+            await self._close_body_iterator(body_iterator)
 
     async def get_stream_result(self, handler_type: str, body_iterator: AsyncGenerator) -> StreamingResponse:
         transformed_iterator = self.get_handler_body_iterator(
@@ -286,16 +292,17 @@ class EventHandler:
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self.parse_sse_line(data)
+                data_dict = self._input_event(data)
                 if data_dict is None:
                     continue
-                output_event = event_handler.process_event(data_dict, self.trace)
-                async for _ in self.generate_output_data(output_event):
-                    continue
+                # Only process_event mutates Trace; its output is not sent as SSE.
+                self._process_event(event_handler, data_dict, streaming=False)
             await self._persist_conversation()
         except Exception as e:
             workflow_logger.error("encapsulate non stream response failed.")
             workflow_logger.error("".join(traceback.format_exception(e)))
+        finally:
+            await self._close_body_iterator(body_iterator)
 
         # 对齐旧 Java runAgent：始终输出 end_time。事件流未显式设置时兜底取当前时间。
         if self.trace.end_time is None:
@@ -317,7 +324,7 @@ class EventHandler:
     @classmethod
     async def encapsulate_stream_response(
         cls,
-        response: StreamingResponse,
+        response: StreamingResponse | ExecutionEventStream,
         handler_type: str,
         request: Request,
         ir_path: str,
@@ -339,7 +346,7 @@ class EventHandler:
     @classmethod
     async def encapsulate_non_stream_response(
         cls,
-        response: StreamingResponse,
+        response: StreamingResponse | ExecutionEventStream,
         handler_type: str,
         request: Request,
         ir_path: str,
