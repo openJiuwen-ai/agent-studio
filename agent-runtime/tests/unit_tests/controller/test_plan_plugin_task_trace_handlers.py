@@ -45,3 +45,25 @@ def test_plugin_task_runtime_data_defaults_to_none():
     task = mode._create_plugin_task(plugin, {}, "call-2")
 
     assert task.input_data["runtime_data"]["trace_handlers"] is None
+
+
+def test_stream_entry_seeds_trace_handlers_from_stream_request():
+    """钉真实来源：stream 入口 StreamRequest(**kwargs).trace_handlers → self._trace_handlers。
+
+    透传用例（_make_mode 手工注入）只钉 runtime_data 形态；本用例驱动真实
+    stream 入口段（属性就地初始化 + StreamRequest 构造 + 上下文保存），
+    断言赋值发生在任何规划逻辑之前——入口段之后的规划逻辑在缺桩状态下
+    自然抛错，不参与断言。
+    """
+    import asyncio
+
+    handlers = [SimpleNamespace(name="otel_handler")]
+    mode = PlanExecuteMode.__new__(PlanExecuteMode)
+
+    agen = mode.stream(query="你好", trace_handlers=handlers)
+    try:
+        asyncio.run(asyncio.wait_for(agen.__anext__(), timeout=5))
+    except Exception:
+        pass
+
+    assert mode._trace_handlers is handlers, "trace_handlers 必须在 stream 入口由 StreamRequest 真实赋值"

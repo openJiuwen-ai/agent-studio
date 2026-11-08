@@ -435,3 +435,79 @@ def test_ainvoke_without_trace_handlers_no_events(mock_pool):
     result = asyncio.run(tool.ainvoke({"input": "v"}))
 
     assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+
+
+# A22-A25: ainvoke() — 遥测与业务隔离 + 失败口径（检视补强）
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_errcode_nonzero_fires_plugin_error(mock_pool):
+    """A22: 插件返回非 0 errCode → on_plugin_error（REST 包装器口径），非 on_plugin_end。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"errCode": 500, "errMessage": "custom"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({}, trace_handlers=[handler]))
+
+    assert result == {"errCode": 500, "errMessage": "custom"}
+    handler.on_plugin_start.assert_awaited_once()
+    handler.on_plugin_error.assert_awaited_once()
+    assert "custom" in str(handler.on_plugin_error.await_args.args[0])
+    handler.on_plugin_end.assert_not_awaited()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_trace_handlers_not_leaked_to_plugin(mock_pool):
+    """A23: trace_handlers 在包装器内弹出，不泄入插件实现入参。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    assert result["errCode"] == 0
+    assert "trace_handlers" not in mock_plugin.invoke.await_args.kwargs
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_handler_exception_does_not_fail_business(mock_pool):
+    """A24: 任一 handler 抛错只告警，成功调用不被误判进业务失败分支。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+    handler.on_plugin_start = AsyncMock(side_effect=RuntimeError("export down"))
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+    handler.on_plugin_end.assert_awaited_once()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.TraceManager")
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_manager_init_failure_disables_telemetry_only(mock_pool, mock_trace_manager):
+    """A25: manager 构造失败 → 遥测停用（返回 None），业务结果不受影响。"""
+    mock_trace_manager.generate_manager.side_effect = RuntimeError("bad handlers shape")
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[object()]))
+
+    assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
