@@ -3,7 +3,7 @@
 """EventHandler — 流式数据封装处理主入口.
 
 Key adaptations for open-source:
-- Input: StreamingResponse.body_iterator from ir_execute (SSE bytes), not Java execution_response
+- Input: private structured events from app_run, with legacy SSE body_iterator compatibility
 - Handler type determined from IR mode or endpoint path
 """
 
@@ -27,6 +27,7 @@ from agent_runtime.event_handler.base.trace import Trace
 from agent_runtime.event_handler.base.enums import EventMapping
 from agent_runtime.event_handler.base.field_processor import FieldDataProcessor
 from agent_runtime.event_handler.base.conversation import ConversationManager
+from agent_runtime.serve.execution_events import ExecutionEventStream
 
 
 class EventHandler:
@@ -136,6 +137,26 @@ class EventHandler:
         for item in items:
             yield cls.serialize_sse(item)
 
+    def _input_event(self, data):
+        # Structured events were already isolated/validated by the execution entry.
+        return data if isinstance(data, dict) else self.parse_sse_line(data)
+
+    def _process_event(self, processor, data: dict, *, streaming: bool):
+        if streaming and isinstance(processor, WorkflowEventsProcessor) and not self.trace.is_debug:
+            # Node messages are only returned by non-stream responses. History and
+            # outputs have separate owners and must still be collected.
+            return processor.process_event(data, self.trace, collect_node_messages=False)
+        return processor.process_event(data, self.trace)
+
+    @staticmethod
+    async def _close_body_iterator(body_iterator):
+        close = getattr(body_iterator, "aclose", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                workflow_logger.warning("Failed to close an event body iterator")
+
     async def _persist_conversation(self):
         """Persist conversation history and dialogue count."""
         if not self.conv_manager:
@@ -151,15 +172,15 @@ class EventHandler:
             workflow_logger.warning(f"Failed to persist conversation history: {e}")
 
     async def get_handler_body_iterator(self, handler_type: str, body_iterator: AsyncGenerator) -> AsyncGenerator:
-        """Process SSE stream from ir_execute, apply event transformation, yield transformed SSE bytes."""
+        """Transform private events or legacy SSE into the public SSE byte stream."""
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self.parse_sse_line(data)
+                data_dict = self._input_event(data)
                 if data_dict is None:
                     continue
 
-                output_event = event_handler.process_event(data_dict, self.trace)
+                output_event = self._process_event(event_handler, data_dict, streaming=True)
                 async for chunk in self.generate_output_data(output_event):
                     yield chunk
 
@@ -185,6 +206,8 @@ class EventHandler:
             workflow_logger.error("".join(traceback.format_exception(e)))
             error_event = FieldDataProcessor.generate_error_event_field(self.trace)
             yield self.serialize_sse(error_event.model_dump(by_alias=True, exclude_none=True))
+        finally:
+            await self._close_body_iterator(body_iterator)
 
     async def get_stream_result(self, handler_type: str, body_iterator: AsyncGenerator) -> StreamingResponse:
         transformed_iterator = self.get_handler_body_iterator(
@@ -198,16 +221,17 @@ class EventHandler:
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self.parse_sse_line(data)
+                data_dict = self._input_event(data)
                 if data_dict is None:
                     continue
-                output_event = event_handler.process_event(data_dict, self.trace)
-                async for _ in self.generate_output_data(output_event):
-                    continue
+                # Only process_event mutates Trace; its output is not sent as SSE.
+                self._process_event(event_handler, data_dict, streaming=False)
             await self._persist_conversation()
         except Exception as e:
             workflow_logger.error("encapsulate non stream response failed.")
             workflow_logger.error("".join(traceback.format_exception(e)))
+        finally:
+            await self._close_body_iterator(body_iterator)
 
         # 对齐旧 Java runAgent：始终输出 end_time。事件流未显式设置时兜底取当前时间。
         if self.trace.end_time is None:
@@ -229,7 +253,7 @@ class EventHandler:
     @classmethod
     async def encapsulate_stream_response(
         cls,
-        response: StreamingResponse,
+        response: StreamingResponse | ExecutionEventStream,
         handler_type: str,
         request: Request,
         ir_path: str,
@@ -251,7 +275,7 @@ class EventHandler:
     @classmethod
     async def encapsulate_non_stream_response(
         cls,
-        response: StreamingResponse,
+        response: StreamingResponse | ExecutionEventStream,
         handler_type: str,
         request: Request,
         ir_path: str,
