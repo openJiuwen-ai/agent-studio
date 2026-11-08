@@ -12,6 +12,7 @@ import time
 import traceback
 from typing import Dict, Type, AsyncGenerator, Any, Optional
 
+import anyio
 from pydantic import BaseModel
 from fastapi import Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -148,6 +149,32 @@ class EventHandler:
             return
         for item in items:
             yield cls.serialize_sse(item)
+
+    def _input_event(self, data):
+        # Structured events were already isolated/validated by the execution entry.
+        return data if isinstance(data, dict) else self.parse_sse_line(data)
+
+    def _process_event(self, processor, data: dict, *, streaming: bool):
+        if streaming and isinstance(processor, WorkflowEventsProcessor) and not self.trace.is_debug:
+            # Node messages are only returned by non-stream responses. History and
+            # outputs have separate owners and must still be collected.
+            return processor.process_event(data, self.trace, collect_node_messages=False)
+        return processor.process_event(data, self.trace)
+
+    @staticmethod
+    async def _close_body_iterator(body_iterator):
+        close = getattr(body_iterator, "aclose", None)
+        if close is not None:
+            try:
+                # Disconnect cancellation stays active at every await in AnyIO.
+                # Shield only finalization; the request cancellation still propagates.
+                with anyio.CancelScope(shield=True):
+                    await close()
+            except anyio.get_cancelled_exc_class():
+                workflow_logger.warning("Event body iterator close was cancelled", exc_info=True)
+                raise
+            except Exception:
+                workflow_logger.warning("Failed to close an event body iterator", exc_info=True)
 
     async def _persist_conversation(self, payload=None):
         """Persist conversation history and dialogue count.
