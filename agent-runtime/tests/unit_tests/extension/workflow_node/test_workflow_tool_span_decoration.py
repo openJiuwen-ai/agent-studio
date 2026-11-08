@@ -30,7 +30,7 @@ from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 USER_FIELDS = "userFields"
 
 
-# ─── core 协议替身 ────────────────────────────────────────────────────
+# ─── core 协议替身 ───
 
 
 class _FakeSpanManager:
@@ -89,7 +89,7 @@ class _StubApiTool:
         return await self.ainvoke(inputs, **kwargs)
 
 
-# ─── 断言辅助 ─────────────────────────────────────────────────────────
+# ─── 断言辅助 ───
 
 
 def _plugin_events(tracer):
@@ -119,7 +119,7 @@ def _assert_no_plugin_events(tracer):
     assert _plugin_events(tracer) == []
 
 
-# ─── FlowApi / FlowCustomApi ──────────────────────────────────────────
+# ─── FlowApi / FlowCustomApi ───
 
 
 def _make_flow_api(api_tool):
@@ -204,7 +204,7 @@ async def test_flow_custom_api_emits_plugin_span_with_new_core_session():
     _assert_full_plugin_span(tracer, "custom_plugin", {"query": "hi"})
 
 
-# ─── FlowMcp ─────────────────────────────────────────────────────────
+# ─── FlowMcp ───
 
 
 def _make_mcp_conf():
@@ -291,7 +291,7 @@ async def test_flow_mcp_noop_with_old_core_session(mock_mcp_client):
     _assert_no_plugin_events(tracer)
 
 
-# ─── stream 位点（流式执行模式）────────────────────────────────────────
+# ─── stream 位点（流式执行模式）───
 
 
 class _StubStreamApiTool(_StubApiTool):
@@ -308,8 +308,11 @@ class _StubStreamApiTool(_StubApiTool):
 
 
 class _RecordingProxy:
-    """新 core 装饰代理替身：stream 位点必须经它的 astream（事件发射在
-    core 侧由 async_trace_stream 包装承担，studio 侧只钉调用契约）。"""
+    """新 core 装饰代理替身：stream 位点必须经它的 astream。
+
+    事件发射在 core 侧由 async_trace_stream 包装承担，studio 侧只钉
+    调用契约。
+    """
 
     def __init__(self, tool):
         self._tool = tool
