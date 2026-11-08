@@ -6,6 +6,11 @@ FROM runtime-base-arm64:latest
 # 注：此处修改需同步修改studio-runtime.yaml中的runAsUser、runAsGroup、fsGroup
 RUN groupadd -g 1000 service && useradd -u 1000 -g service -s /bin/bash -m service
 
+# 显式安装 jemalloc（不依赖 base 镜像是否包含；若 base 已装则 apt 幂等跳过）
+RUN apt-get update && apt-get install -y --no-install-recommends libjemalloc2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ln -sf $(dpkg -L libjemalloc2 | grep 'libjemalloc\.so\.2$' | head -1) /usr/local/lib/libjemalloc.so.2
+
 ENV SERVICE_HOME=/opt/cloud/agent-runtime
 ENV PACKAGES_HOME=/usr/local/lib/python3.11/site-packages
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
@@ -61,4 +66,5 @@ RUN chmod 700 /opt/cloud/logs \
 
 USER 1000:1000
 
-CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]
+# jemalloc 仅对 Python 服务进程生效
+CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else LD_PRELOAD=/usr/local/lib/libjemalloc.so.2 ./bin/start.sh; fi"]

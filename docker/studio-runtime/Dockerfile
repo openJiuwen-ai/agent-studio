@@ -16,8 +16,9 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword libjemalloc2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ln -sf $(dpkg -L libjemalloc2 | grep 'libjemalloc\.so\.2$' | head -1) /usr/local/lib/libjemalloc.so.2
 
 # 安装 Python 依赖（临时安装编译工具链 + git，编译完成后卸载）
 # git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
@@ -80,4 +81,5 @@ RUN chmod 700 /opt/cloud/logs \
 
 USER 1000:1000
 
-CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]
+# jemalloc 仅对 Python 服务进程生效（不影响 nginx/cron/bash 等其他进程）
+CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else LD_PRELOAD=/usr/local/lib/libjemalloc.so.2 ./bin/start.sh; fi"]

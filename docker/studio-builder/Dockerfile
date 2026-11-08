@@ -17,8 +17,11 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget libpq-dev vim procps gawk hostname sed coreutils findutils bash \
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget libpq-dev vim procps gawk hostname sed coreutils findutils bash libjemalloc2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# jemalloc：dpkg 定位 + 符号链接（x86_64 和 ARM64 共用同一 Dockerfile）
+RUN ln -sf $(dpkg -L libjemalloc2 | grep 'libjemalloc\.so\.2$' | head -1) /usr/local/lib/libjemalloc.so.2
 
 # 先复制 requirements.txt，单独安装依赖以利用 Docker 层缓存
 COPY agent_builder/requirements.txt $SERVICE_HOME/app/agent_builder/requirements.txt
@@ -63,4 +66,5 @@ ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=31015
 
 # 参考 studio-runtime：先 init.sh（目录/TLS），再 start.sh（nohup 拉起服务 + 主循环保活）
-CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}; ./script/init.sh; exec ./script/start.sh"]
+# jemalloc 仅对 Python 服务进程生效
+CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}; ./script/init.sh; LD_PRELOAD=/usr/local/lib/libjemalloc.so.2 exec ./script/start.sh"]
