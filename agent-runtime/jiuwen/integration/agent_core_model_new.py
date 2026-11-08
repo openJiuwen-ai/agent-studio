@@ -55,11 +55,16 @@ class AgentCoreModelLayer:
         default_model_id: str = "",
         default_session_id: str = "",
         default_agent_id: str = "",
+        model_display_name: str = "",
     ):
         self.runtime = runtime or ModelWrapper()
         self.default_model_id = default_model_id
         self.default_session_id = default_session_id
         self.default_agent_id = default_agent_id
+        # 人读显示名（如 "DeepSeek-V3"）：注册模型时从 provider 的 client
+        # config 取出。OBS 网关下 default_model_id 是服务 id（UUID 形），
+        # 遥测/展示用名以本字段优先；为空串时消费方回退 model_name。
+        self.model_display_name = str(model_display_name or "")
 
     @property
     def model_name(self) -> str:
