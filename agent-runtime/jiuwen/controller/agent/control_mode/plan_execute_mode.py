@@ -1560,7 +1560,14 @@ class PlanExecuteMode(BaseMode):
             "arguments": arguments_str,
             "plugin": plugin,
             "tool_call_id": tool_call_id,
-            "runtime_data": {"plugins": [plugin]},
+            # OTel：透传 trace_handlers（StreamRequest 已保存），PluginHandler
+            # 经 **runtime_data 传入 plugin.ainvoke，各工具包装器内部
+            # TraceManager 据此发射 on_plugin_start/end——规划模式工具调用
+            # 此前缺 execute_tool span 的根因即此键缺失
+            "runtime_data": {
+                "plugins": [plugin],
+                "trace_handlers": getattr(self, "_trace_handlers", None),
+            },
             "time_dict": {},
         }
 

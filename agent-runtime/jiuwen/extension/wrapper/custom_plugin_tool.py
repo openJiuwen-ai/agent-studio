@@ -22,6 +22,8 @@ from pydantic import Field
 
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
+from jiuwen.insight.manager import TraceManager
+from jiuwen.insight.utils import get_instance_info
 from jiuwen.orchestration.flow.component_class_pool import component_class_pool
 from jiuwen.plugin.models.param import Param
 from openjiuwen.core.foundation.tool import Tool
@@ -123,12 +125,21 @@ class CustomPluginTool(Tool):
 
     async def ainvoke(self, inputs: dict, **kwargs) -> dict:
         """非流式执行：委托 PluginBase.invoke，包装为统一输出格式"""
+        # 与 RestfulApiToolNew/MCP 包装器同构：规划/工具模式下 ainvoke 收到
+        # runtime_data 透传的 trace_handlers 时经 TraceManager 发射插件事件，
+        # 无 handlers 时 generate_manager 兜底为空 manager，行为不变
+        trace_manager = self._create_tracer_manager(**kwargs)
         try:
+            await trace_manager.on_plugin_start(inputs)
             result = await self._plugin_instance.invoke(inputs, **kwargs)
             if isinstance(result, dict) and "errCode" in result:
-                return result
-            return {"data": result, "errCode": 0, "errMessage": ""}
+                exec_result = result
+            else:
+                exec_result = {"data": result, "errCode": 0, "errMessage": ""}
+            await trace_manager.on_plugin_end(exec_result)
+            return exec_result
         except Exception as e:
+            await trace_manager.on_plugin_error(e)
             logger.error(
                 "CustomPlugin[%s] invoke error: %s: %s",
                 self._component_type,
@@ -140,6 +151,13 @@ class CustomPluginTool(Tool):
                 "errCode": _CUSTOM_PLUGIN_ERROR_CODE,
                 "errMessage": f"Custom plugin execution failed: {type(e).__name__}",
             }
+
+    def _create_tracer_manager(self, **kwargs):
+        """创建追踪管理器（与 mcp_tool_wrapper 同构）"""
+        return TraceManager.generate_manager(
+            kwargs.pop("trace_handlers", None),
+            get_instance_info(self, blacklist=["auth", "headers"]),
+        )
 
     def stream(self, inputs: dict, **kwargs) -> AsyncIterator[str]:
         """Tool 接口：流式调用（委托 astream）"""
