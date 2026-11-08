@@ -12,6 +12,7 @@ import time
 import traceback
 from typing import Dict, Type, AsyncGenerator, Any, Optional
 
+import anyio
 from pydantic import BaseModel
 from fastapi import Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -153,9 +154,15 @@ class EventHandler:
         close = getattr(body_iterator, "aclose", None)
         if close is not None:
             try:
-                await close()
+                # Disconnect cancellation stays active at every await in AnyIO.
+                # Shield only finalization; the request cancellation still propagates.
+                with anyio.CancelScope(shield=True):
+                    await close()
+            except anyio.get_cancelled_exc_class():
+                workflow_logger.warning("Event body iterator close was cancelled", exc_info=True)
+                raise
             except Exception:
-                workflow_logger.warning("Failed to close an event body iterator")
+                workflow_logger.warning("Failed to close an event body iterator", exc_info=True)
 
     async def _persist_conversation(self):
         """Persist conversation history and dialogue count."""

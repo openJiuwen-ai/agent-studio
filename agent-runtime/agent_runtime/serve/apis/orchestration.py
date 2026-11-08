@@ -11,6 +11,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Union
 
+import anyio
+
 from agent_runtime.common.config import settings, ModelConfigStrategyType
 from agent_runtime.common.ir_exceptions import IRBuildException
 from agent_runtime.common.ir_interfaces import (
@@ -365,10 +367,11 @@ async def _prefetched_stream(_first, _gen):
         async for chunk in _gen:
             yield chunk
     finally:
-        try:
-            await _gen.aclose()
-        except Exception:
-            pass  # already closed or cleanup error — safe to ignore
+        with anyio.CancelScope(shield=True):
+            try:
+                await _gen.aclose()
+            except Exception:
+                workflow_logger.warning("Failed to close a prefetched execution stream", exc_info=True)
 
 
 @dataclass
@@ -505,16 +508,19 @@ async def stream_response(
             raise
     finally:
         # Closing an outer response must also close the owned runner generators.
-        try:
-            for iterator in (moderated_gen, raw_gen if raw_gen is not moderated_gen else None):
-                close = getattr(iterator, "aclose", None)
-                if close is not None:
-                    try:
-                        await close()
-                    except Exception:
-                        workflow_logger.warning("Failed to close an execution iterator")
-        finally:
-            await registry.unregister(req.conversation_id, task=entry_task)
+        # Cancellation can enter here while awaiting the runner, before the
+        # outer EventHandler can shield its own aclose(). Protect this boundary too.
+        with anyio.CancelScope(shield=True):
+            try:
+                for iterator in (moderated_gen, raw_gen if raw_gen is not moderated_gen else None):
+                    close = getattr(iterator, "aclose", None)
+                    if close is not None:
+                        try:
+                            await close()
+                        except Exception:
+                            workflow_logger.warning("Failed to close an execution iterator", exc_info=True)
+            finally:
+                await registry.unregister(req.conversation_id, task=entry_task)
 
 
 @dataclass
