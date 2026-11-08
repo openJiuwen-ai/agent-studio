@@ -48,6 +48,7 @@ from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.session.stream.base import OutputSchema
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 
@@ -155,7 +156,11 @@ class FlowCustomApi(WorkflowComponent):
                 need_confirm=self._enable_confirm and not confirmed,
             )
 
-            api_outputs = await self._api.ainvoke(formatted_inputs)
+            # 工作流内自定义插件不经 ToolMgr.get_tool 装饰，主动补一层 tracer
+            # 装饰以产出 execute_tool span；CustomPluginTool.invoke 直通 ainvoke，
+            # 行为不变。未注册 agent handler 或旧版 core 时装饰原样返回
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = await api_tool.invoke(formatted_inputs)
             outputs = {"userFields": self._format_api_outputs(api_outputs)}
 
             duration = round((time.perf_counter() - start_time) * 1000)

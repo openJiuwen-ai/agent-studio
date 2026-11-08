@@ -38,6 +38,7 @@ from openjiuwen.core.foundation.tool import MCPTool
 from openjiuwen.core.foundation.tool.mcp.base import McpServerConfig, McpToolCard
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session.node import Session
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 USER_FIELDS = "userFields"
@@ -351,6 +352,11 @@ class FlowMcp(WorkflowComponent):
         tool = self.api
         if schema_patches and self.api is not None:
             tool = self._build_patched_tool(schema_patches)
+
+        # 工作流内 MCP 工具直连 MCPTool，不经 ToolMgr.get_tool 装饰，
+        # 主动补一层 tracer 装饰以产出 execute_tool span；
+        # 未注册 agent handler 或旧版 core（NodeSession 无 span 协议）时原样返回
+        tool = decorate_tool_with_trace(tool, session)
 
         try:
             result = await tool.invoke(api_inputs)
