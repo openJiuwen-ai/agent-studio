@@ -368,6 +368,7 @@ class OBSModelConfigProvider(ModelConfigProvider):
             model_service_id=model_service_id,   # extra 字段，供 StudioModelClient 解析
             auth_id=auth_id,
             refresh=refresh,
+            model_display_name=await self._resolve_display_name(model_service_id),
         )
 
         # 4. 请求级超参数；真实 model_name 由 resolver 解析后在 _invoke_one_model 覆盖。
@@ -400,6 +401,21 @@ class OBSModelConfigProvider(ModelConfigProvider):
             model_config=model_request_config,
             cache_stream=True,
         )
+
+    @staticmethod
+    async def _resolve_display_name(model_service_id: str) -> str:
+        """模型显示名（元数据 model_name，走既有缓存）；缺失返回空串。
+
+        仅作遥测展示（llm span 的 gen_ai.request.model 用真名），不影响
+        路由——路由身份仍是 modelServiceId，真实 model_name 由 resolver
+        在 invoke 时解析覆盖。查询失败静默降级为空串（不覆盖探针结果）。
+        """
+        try:
+            from model_service import query_model_display_name
+
+            return await query_model_display_name(model_service_id)
+        except Exception:  # noqa: BLE001 - 显示名缺失不影响模型构建
+            return ""
 
 
 

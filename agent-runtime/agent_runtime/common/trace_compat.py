@@ -79,6 +79,19 @@ def current_user_id():
     return _CURRENT_USER_ID.get()
 
 
+def bind_current_user_id(user_id):
+    """绑定当前执行的用户 id（有值才绑，绝不清除既有值）。
+
+    供跨任务/线程边界的载体在执行入口回填：多智能体消息经队列与
+    ``asyncio.create_task`` 投递，处理任务继承的是消费循环上下文（用户
+    事实为空），由 ``SendMessageEnvelope.user_id`` 在
+    ``_process_send_message`` 入口回绑——下游 ``current_user_id`` 读取方
+    （ModelWrapper 兜底 / build_traced_model 注入）即恢复可见。
+    """
+    if user_id:
+        _CURRENT_USER_ID.set(str(user_id))
+
+
 _agent_params = inspect.signature(_create_agent_session).parameters
 _wf_params = inspect.signature(_create_workflow_session).parameters
 _agent_accepts_trace_id = _accepts_trace_id(_agent_params)
@@ -171,6 +184,23 @@ def resolve_trace_identity(component, session=None) -> dict | None:
     return workflow_identity_from_session(effective)
 
 
+def _model_display_name(model) -> str:
+    """读取 provider 随 client_config 带出的模型显示名；缺失返回空串。
+
+    探针两级同构（foundation 顶层 / 组件 config 包装），只为显示名，绝不
+    触碰 model_name（那是路由身份，OBS 生态装 modelServiceId）。
+    """
+    configs = (
+        getattr(model, "model_client_config", None),
+        getattr(getattr(model, "config", None), "model_client_config", None),
+    )
+    for cfg in configs:
+        name = getattr(cfg, "model_display_name", None) if cfg is not None else None
+        if name:
+            return str(name)
+    return ""
+
+
 def build_traced_model(model, session=None, session_id: str = None, identity: dict = None):
     """把裸 core Model 交给 openjiuwen 装饰器，补齐每次调用的 llm span。
 
@@ -208,6 +238,22 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
                 )
             else:
                 session = create_agent_session_with_trace(session_id=resolved)
+        # 身份增补（装饰前一次性完成，均为缺省才补、绝不覆盖显式值；有增补
+        # 才拷贝，无事实保持调用方 identity 引用原样透传）：
+        # - user_id：workflow 五节点身份只带 workflow 归因，用户事实经 runner
+        #   建会话播种的 current_user_id() 兜底注入（显式传入优先）；
+        # - class_name：模型显示名覆盖——OBS 模型服务生态下 model_name 装的
+        #   是 modelServiceId（UUID），provider 把元数据里的真实模型名随
+        #   client_config.model_display_name 带出，此处覆盖装饰器探针结果，
+        #   llm span 名与 gen_ai.request.model 显示真名（缺名不覆盖）。
+        user_id = "" if identity and identity.get("user_id") else (current_user_id() or "")
+        display_name = _model_display_name(model)
+        if user_id or display_name:
+            identity = dict(identity) if identity else {}
+            if user_id:
+                identity["user_id"] = str(user_id)
+            if display_name:
+                identity["class_name"] = display_name
         # 能力门控：旧 core 装饰器无 identity 参数——退两参调用仍产出普通
         # llm span（不退裸模型、不刷告警），新 studio × 旧 core 最差=现状
         if identity and callable_accepts_kwarg(decorate_model_with_trace, "identity"):
