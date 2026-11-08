@@ -440,7 +440,7 @@ def test_ainvoke_without_trace_handlers_no_events(mock_pool):
 # A22-A25: ainvoke() — 遥测与业务隔离 + 失败口径（检视补强）
 @patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
 def test_ainvoke_errcode_nonzero_fires_plugin_error(mock_pool):
-    """A22: 插件返回非 0 errCode → on_plugin_error（REST 包装器口径），非 on_plugin_end。"""
+    """A22: 非 0 errCode → on_plugin_error（REST 口径），非 on_plugin_end。"""
     mock_plugin = AsyncMock()
     mock_plugin.invoke = AsyncMock(return_value={"errCode": 500, "errMessage": "custom"})
     mock_pool.create_component_instance.return_value = mock_plugin
@@ -511,3 +511,42 @@ def test_ainvoke_manager_init_failure_disables_telemetry_only(mock_pool, mock_tr
     result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[object()]))
 
     assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+
+
+# A26-A27: 二轮检视补强（errCode 口径显式 != 0 / instance_info 排除对象值成员）
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_errcode_none_fires_plugin_error(mock_pool):
+    """A26: errCode=None（falsy 非 0）→ on_plugin_error，与 PluginHandler error_code != 0 口径一致。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"errCode": None, "errMessage": "unset"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({}, trace_handlers=[handler]))
+
+    assert result == {"errCode": None, "errMessage": "unset"}
+    handler.on_plugin_error.assert_awaited_once()
+    handler.on_plugin_end.assert_not_awaited()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_instance_info_excludes_object_members(mock_pool):
+    """A27: instance_info 不携带 _plugin_instance/_card——get_instance_info 整拷 __dict__，插件内部状态不得进遥测。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    instance_info = handler.on_plugin_start.await_args.args[0]
+    assert set(instance_info["instance_attributes"]).isdisjoint({"_plugin_instance", "_card"})
+    assert instance_info["class_name"] == "CustomPluginTool"

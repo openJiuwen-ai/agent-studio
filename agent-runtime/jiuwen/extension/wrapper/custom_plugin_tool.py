@@ -163,7 +163,7 @@ class CustomPluginTool(Tool):
                 exec_result = result
             else:
                 exec_result = {"data": result, "errCode": 0, "errMessage": ""}
-            if exec_result.get("errCode", 0):
+            if exec_result.get("errCode", 0) != 0:
                 await _emit_plugin_event(
                     trace_manager,
                     "on_plugin_error",
@@ -191,11 +191,16 @@ class CustomPluginTool(Tool):
 
         构造失败只告警并返回 None（遥测停用），异常不外传——对齐
         create_trace_manager_safely 的语义，遥测故障不变业务故障。
+        instance_info 显式排除对象值成员（插件实例 / 卡片）——
+        get_instance_info 逐键整拷 __dict__，黑名单只按顶层键精确
+        匹配，放行 _plugin_instance 会把插件内部状态整对象带进遥测。
         """
         try:
             return TraceManager.generate_manager(
                 trace_handlers,
-                get_instance_info(self, blacklist=["auth", "headers"]),
+                get_instance_info(
+                    self, blacklist=["auth", "headers", "_plugin_instance", "_card"]
+                ),
             )
         except Exception as e:
             logger.warning(

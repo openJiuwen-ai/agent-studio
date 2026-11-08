@@ -48,7 +48,7 @@ def test_plugin_task_runtime_data_defaults_to_none():
 
 
 def test_stream_entry_seeds_trace_handlers_from_stream_request():
-    """钉真实来源：stream 入口 StreamRequest(**kwargs).trace_handlers → self._trace_handlers。
+    """钉真实来源：stream 入口把 trace_handlers 存到 self._trace_handlers。
 
     透传用例（_make_mode 手工注入）只钉 runtime_data 形态；本用例驱动真实
     stream 入口段（属性就地初始化 + StreamRequest 构造 + 上下文保存），
@@ -66,4 +66,4 @@ def test_stream_entry_seeds_trace_handlers_from_stream_request():
     except Exception:
         pass
 
-    assert mode._trace_handlers is handlers, "trace_handlers 必须在 stream 入口由 StreamRequest 真实赋值"
+    assert mode._trace_handlers is handlers, "stream 入口必须真实赋值 trace_handlers"
