@@ -5,6 +5,7 @@
 # pylint: disable=protected-access  # 白盒单测：需直接访问 _settings / _create_*_client 等内部成员
 
 import pytest
+from unittest.mock import MagicMock
 
 from common_utils.common_config import RedisMode, RedisSettings
 from common_utils.redis_manager import (
@@ -122,6 +123,66 @@ class TestNodeParsingHelpers:
         inst._settings = settings
         with pytest.raises(ValueError):
             inst._create_sentinel_client()
+
+
+class TestGetPubsubClient:
+    """get_pubsub_client() 在不同模式下的行为。"""
+
+    @staticmethod
+    def test_single_mode_returns_existing_client(reset_common_utils_state):
+        """单机模式返回与 get_client() 相同的客户端。"""
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_HOST="127.0.0.1", REDIS_PORT=6379)
+        inst._settings = settings
+        inst._client = inst._create_single_client()
+        from common_utils.redis_manager import get_pubsub_client
+        assert get_pubsub_client() is inst._client
+
+    @staticmethod
+    def test_cluster_mode_creates_single_node_client(reset_common_utils_state, monkeypatch):
+        """集群模式创建连接到第一个节点的单机 Redis 客户端。"""
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster",
+            REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+            REDIS_PASSWORD="secret",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        client = get_pubsub_client()
+        assert captured["host"] == "h1"
+        assert captured["port"] == 7000
+        assert captured["password"] == "secret"
+        assert captured["decode_responses"] is False
+        assert isinstance(client, _FakeRedis)
+
+    @staticmethod
+    def test_cluster_mode_node_without_port_defaults_6379(reset_common_utils_state, monkeypatch):
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1,h2")
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        assert captured["host"] == "h1"
+        assert captured["port"] == 6379
 
 
 class TestNonTransactionPipeline:

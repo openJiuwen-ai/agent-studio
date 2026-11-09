@@ -343,3 +343,38 @@ def get_redis_client() -> Union[Redis, RedisCluster]:
 def get_sync_redis_client() -> Union[SyncRedis, SyncRedisCluster]:
     """获取同步 Redis 客户端的便捷函数。"""
     return RedisClientManager.get_instance().get_sync_client()
+
+
+def get_pubsub_client() -> Union[Redis, RedisCluster]:
+    """获取专用于 pubsub 订阅的 Redis 客户端。
+
+    集群模式下 RedisCluster（redis-py < 8.0.0）未实现 pubsub()，
+    取第一个集群节点创建单机 Redis 连接做 pubsub 订阅。
+    Redis Cluster 的 PUBLISH 会广播到所有节点，单节点 SUBSCRIBE 即可收到消息。
+    单机/哨兵模式直接返回现有客户端。
+    """
+    mgr = RedisClientManager.get_instance()
+    if mgr._settings is None:
+        return mgr.get_client()
+    if mgr._settings.mode == RedisMode.CLUSTER:
+        first_node = mgr._settings.cluster_nodes.split(",")[0].strip()
+        if ":" in first_node:
+            host, port = first_node.split(":", 1)
+            port = int(port)
+        else:
+            host, port = first_node, 6379
+        kwargs: dict = {
+            "host": host,
+            "port": port,
+            "db": 0,
+            "max_connections": mgr._settings.max_connections,
+            "socket_timeout": mgr._settings.socket_timeout,
+            "socket_connect_timeout": mgr._settings.socket_connect_timeout,
+            "decode_responses": False,
+        }
+        if mgr._settings.password:
+            kwargs["password"] = mgr._settings.password
+        if mgr._settings.ssl_enabled:
+            kwargs["ssl"] = mgr._create_ssl_context()
+        return Redis(**kwargs)
+    return mgr.get_client()
