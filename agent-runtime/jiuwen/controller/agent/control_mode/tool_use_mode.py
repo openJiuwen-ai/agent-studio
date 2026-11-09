@@ -12,13 +12,6 @@ from jiuwen.controller.common.message import Message
 from jiuwen.controller.common.task import Task
 from jiuwen.controller.utils.utils import MessageConverter
 
-# 连续不推进趟数硬上限：iterations 仅在收到 PLANNING 码时自增，队列回补、
-# 工具等待等趟型不计数——病态场景（工具长期 pending/任务反复重入队列，
-# 状态机不回 PLANNING）下 while 恒真、无界自旋。仅统计"连续不推进
-# iterations"的趟，任一推进趟清零：不覆盖任何 max_task_iterations 配置
-# 预算（正常推进任务始终按预算退出），病态自旋仍在 100 趟内收敛。
-_MAX_IDLE_TASK_PASSES = 100
-
 
 class ToolUseMode(BaseMode):
     def __init__(self, **kwargs):
@@ -98,22 +91,9 @@ class ToolUseMode(BaseMode):
         """
         current_message = initial_message
         iterations = 0
-        # 连续不推进趟计数：不推进 iterations 的趟（队列回补、工具等待等）
-        # 连续累计，推进趟清零——不覆盖预算，只兜无界自旋
-        idle_passes = 0
         runtime_data = initial_message.runtime_data
 
         while iterations < self.max_task_iterations:
-            # 连续不推进趟触顶：不再开启新趟（趟尾点数，见循环末尾）
-            if idle_passes >= _MAX_IDLE_TASK_PASSES:
-                logger.warning(
-                    "Task loop hit %s consecutive non-progress passes (iterations=%s), abort to avoid unbounded spin",
-                    _MAX_IDLE_TASK_PASSES,
-                    iterations,
-                    simple_log="Task loop exceeded idle passes cap, abort",
-                )
-                break
-            iterations_before = iterations
             # 与 base_mode._run_task_loop 保持一致，迭代开始信息为 DEBUG
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
@@ -162,10 +142,6 @@ class ToolUseMode(BaseMode):
                     simple_log="Stream task loop continue with current message",
                 )
             current_message = task_execution.last_message
-            if iterations == iterations_before:
-                idle_passes += 1
-            else:
-                idle_passes = 0
 
         # 如果达到最大迭代次数，返回超时错误
         yield RetCode.FAILED

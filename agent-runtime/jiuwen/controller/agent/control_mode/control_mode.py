@@ -26,14 +26,6 @@ from jiuwen.controller.utils.utils import MessageConverter
 from jiuwen.orchestration.flow.enum import StreamDataMsg
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 
-# 连续不推进趟数硬上限：iterations 仅在分发到"GENERAL 型且名字未重复"的
-# 工作流时自增——插件/MCP/消息趟与同名工作流重复趟均不计数，病态场景
-# （此类任务持续产出、状态机不推进 GENERAL 工作流）下 while 恒真、无界
-# 自旋。仅统计"连续不推进 iterations"的趟，任一推进趟清零：不覆盖任何
-# plan_config.max_iterations 配置预算（正常推进任务始终按预算退出），
-# 病态自旋仍在 100 趟内收敛。与 plan/tool_use 模式同款兜底范式。
-_MAX_IDLE_TASK_PASSES = 100
-
 
 class ControllerMode(BaseMode):
     def __init__(self, **kwargs):
@@ -430,19 +422,7 @@ class ControllerMode(BaseMode):
                 data={},
                 execution_id=self.task_id,
             )
-        # 连续不推进趟计数：不推进 iterations 的趟（插件/MCP/消息趟、同名
-        # 工作流重复趟）连续累计，推进趟清零——不覆盖预算，只兜无界自旋
-        idle_passes = 0
         while iterations < self.max_task_iterations:
-            # 连续不推进趟触顶：不再开启新趟（趟尾点数，见循环末尾）
-            if idle_passes >= _MAX_IDLE_TASK_PASSES:
-                logger.warning(
-                    f"task_id: {self.task_id}| Task loop hit "
-                    f"{_MAX_IDLE_TASK_PASSES} consecutive non-progress passes "
-                    f"(iterations={iterations}), abort"
-                )
-                break
-            iterations_before = iterations
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "task_id: %s|Stream task iteration %s: "
@@ -555,10 +535,6 @@ class ControllerMode(BaseMode):
                 yield self._create_intermediate_message()
                 yield self._create_interrupt_message()
                 return
-            if iterations == iterations_before:
-                idle_passes += 1
-            else:
-                idle_passes = 0
         # 达到最大迭代次数，执行结束工作流
         logger.warning(
             f"task_id: {self.task_id}| Reached max iterations ({self.max_task_iterations}), "
