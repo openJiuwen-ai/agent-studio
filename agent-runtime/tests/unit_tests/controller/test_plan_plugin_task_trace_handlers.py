@@ -62,7 +62,7 @@ def test_stream_entry_seeds_trace_handlers_from_stream_request():
 
     agen = mode.stream(query="你好", trace_handlers=handlers)
     try:
-        asyncio.run(asyncio.wait_for(agen.__anext__(), timeout=5))
+        asyncio.run(asyncio.wait_for(anext(agen), timeout=5))
     except Exception:
         pass
 
