@@ -421,7 +421,10 @@ class TestSubscriber:
     async def test_subscriber_uses_pubsub_client_not_redis(self):
         """集群模式下订阅使用 get_pubsub_client（单节点 Redis），而非 get_redis_client（RedisCluster）。"""
         cluster_client = _make_redis()  # RedisCluster — 有 async 命令方法
-        del cluster_client.pubsub  # 但没有 pubsub（redis-py < 8.0.0 的 RedisCluster）
+        # redis-py < 8.0.0 的异步 RedisCluster 没有 pubsub() 方法
+        type(cluster_client).pubsub = property(lambda self: (_ for _ in ()).throw(
+            AttributeError("'RedisCluster' object has no attribute 'pubsub'")
+        ))
 
         single_client = _make_redis()
         pubsub = self._make_pubsub(

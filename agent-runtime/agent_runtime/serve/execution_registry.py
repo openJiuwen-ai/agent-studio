@@ -238,10 +238,10 @@ class ExecutionRegistry:
         重建 pubsub 续订，仅 CancelledError（shutdown task.cancel）退出循环——
         否则订阅单点静默失效，跨实例取消广播将永远无人消费。
         """
-        pubsub_client = self._pubsub_client()
         while True:
             pubsub = None
             try:
+                pubsub_client = self._pubsub_client()
                 pubsub = pubsub_client.pubsub()
                 await pubsub.subscribe(CANCEL_CHANNEL)
                 workflow_logger.info(

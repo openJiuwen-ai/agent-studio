@@ -358,6 +358,8 @@ def get_pubsub_client() -> Union[Redis, RedisCluster]:
         return mgr.get_client()
     if mgr._settings.mode == RedisMode.CLUSTER:
         first_node = mgr._settings.cluster_nodes.split(",")[0].strip()
+        if not first_node:
+            raise ValueError("REDIS_CLUSTER_NODES first node is empty")
         if ":" in first_node:
             host, port = first_node.split(":", 1)
             port = int(port)
