@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import inspect
 import json
 import queue
 import threading
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterable, Iterable
+from typing import Any, AsyncIterable, Callable, Iterable
 
 from jiuwen.common.llm_service.language_model.base import InputType, LanguageModelOutput
 from jiuwen.extension.wrapper.model_wrapper import ModelWrapper
@@ -56,6 +57,7 @@ class AgentCoreModelLayer:
         default_session_id: str = "",
         default_agent_id: str = "",
         model_display_name: str = "",
+        default_agent_name: str = "",
     ):
         self.runtime = runtime or ModelWrapper()
         self.default_model_id = default_model_id
@@ -65,6 +67,7 @@ class AgentCoreModelLayer:
         # config 取出。OBS 网关下 default_model_id 是服务 id（UUID 形），
         # 遥测/展示用名以本字段优先；为空串时消费方回退 model_name。
         self.model_display_name = str(model_display_name or "")
+        self.default_agent_name = default_agent_name
 
     @property
     def model_name(self) -> str:
@@ -93,6 +96,7 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> LanguageModelOutput:
         """Synchronously invoke model through the same layer contract."""
+        kwargs = {**self._ambient_span_refs(), **kwargs}
         return self._run_async_blocking(
             self.ainvoke(
                 inputs,
@@ -114,6 +118,8 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> LanguageModelOutput:
         """Invoke model through a jiuwen-compatible async interface."""
+        if "agent_name" not in kwargs and self.default_agent_name:
+            kwargs = {**kwargs, "agent_name": self.default_agent_name}
         call = self._normalize_call(
             inputs=inputs,
             model_id=model_id,
@@ -144,6 +150,8 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> AsyncIterable[LanguageModelOutput]:
         """Stream model output through a jiuwen-compatible async interface."""
+        if "agent_name" not in kwargs and self.default_agent_name:
+            kwargs = {**kwargs, "agent_name": self.default_agent_name}
         call = self._normalize_call(
             inputs=inputs,
             model_id=model_id,
@@ -172,6 +180,7 @@ class AgentCoreModelLayer:
         **kwargs: Any,
     ) -> Iterable[LanguageModelOutput]:
         """Synchronously stream model output through the same layer contract."""
+        kwargs = {**self._ambient_span_refs(), **kwargs}
         async_iterable = self.astream(
             inputs,
             model_id=model_id,
@@ -419,7 +428,61 @@ class AgentCoreModelLayer:
         return [item async for item in async_iterable]
 
     @staticmethod
+    def _ambient_span_refs() -> dict[str, str]:
+        """Capture the caller's current OTel span as explicit parent refs.
+
+        嵌入双写桥下 llm span 的父级若依赖环境回退，会被链路中的上下文
+        污染破坏（create_agent_session 实证：current span 被换成死根，
+        recording=False）。同步入口（桥线程启动前、node executor 上下文
+        内）显式捕获 (trace_id, span_id, trace_flags)，随 kwargs 走与
+        agent_id 同一条 get_model(identity=) 通道——core 端显式 > 逻辑 >
+        环境三级定父。无合法 recording span 时不注入，wire 形态不变。
+        """
+        try:
+            from opentelemetry import trace as _otel_trace
+
+            span_context = _otel_trace.get_current_span().get_span_context()
+            if not span_context.is_valid or span_context.span_id == 0:
+                return {}
+            return {
+                "parent_trace_id": f"{span_context.trace_id:032x}",
+                "parent_span_id": f"{span_context.span_id:016x}",
+                "parent_trace_flags": f"{span_context.trace_flags:02x}",
+            }
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _run_in_bridge_thread(fn: Callable[[], None]) -> None:
+        """Run fn on a fresh thread carrying the caller's contextvars.
+
+        The sync bridge exists so sync controller code can await async model
+        calls while the caller's own event loop is running. A bare thread
+        starts with an EMPTY context, so OTel ambient spans, request ids and
+        other ContextVar state silently vanish mid-call: spans mis-parent
+        onto whatever context the new thread happens to have, traces split.
+        copy_context() on the caller side plus Context.run on the thread side
+        hands the bridge a private copy of that state — set/reset inside the
+        bridge never leaks back to the caller, and a per-call copy can never
+        bleed across requests.
+        """
+        caller_context = contextvars.copy_context()
+        thread = threading.Thread(target=caller_context.run, args=(fn,), daemon=True)
+        thread.start()
+        thread.join()
+
+    @staticmethod
     def _iter_async_blocking(async_iterable: AsyncIterable[Any]) -> Iterable[Any]:
+        """Stream across the bridge incrementally — never join the producer first.
+
+        Same context-carrying bridge as _run_in_bridge_thread, but that
+        helper joins before returning, which is correct for a single
+        awaitable and wrong for a stream: joining before the first get()
+        buffers the whole stream into an unbounded queue, so the caller
+        would see the first chunk only after the stream ends (TTFT
+        destroyed). Start the producer thread and consume the queue as
+        chunks arrive.
+        """
         output_queue: queue.Queue[Any] = queue.Queue()
         sentinel = object()
 
@@ -435,7 +498,9 @@ class AgentCoreModelLayer:
             finally:
                 output_queue.put(sentinel)
 
-        threading.Thread(target=_runner, daemon=True).start()
+        caller_context = contextvars.copy_context()
+        thread = threading.Thread(target=caller_context.run, args=(_runner,), daemon=True)
+        thread.start()
         while True:
             item = output_queue.get()
             if item is sentinel:
@@ -460,9 +525,7 @@ class AgentCoreModelLayer:
             except BaseException as exc:
                 error_holder["error"] = exc
 
-        thread = threading.Thread(target=_runner, daemon=True)
-        thread.start()
-        thread.join()
+        AgentCoreModelLayer._run_in_bridge_thread(_runner)
         if "error" in error_holder:
             raise error_holder["error"]
         return result_holder.get("result")

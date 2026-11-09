@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
+from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.models.api_utils import ApiUtils
@@ -33,7 +34,7 @@ from openjiuwen.core.foundation.tool.mcp.base import (
 from openjiuwen.core.foundation.tool.mcp.client.mcp_client import McpClient
 from agent_runtime.context.request_context import strip_correlation_headers
 
-mcp_time_out_seconds = float(os.getenv("MCP_TIME_OUT_SECONDS", 120))
+mcp_time_out_seconds = parse_mcp_time_out_seconds()
 
 
 def flatten_exception_group(eg: ExceptionGroup | BaseException) -> list[BaseException]:
@@ -333,13 +334,18 @@ class SSEClientNew(McpClient):
         )
         tmp_url = self._build_mcp_url(request_params)
 
+        # 节点超时与 MCP_TIME_OUT_SECONDS 取小
+        effective_timeout = mcp_time_out_seconds
+        if timeout > 0:
+            effective_timeout = min(mcp_time_out_seconds, timeout)
+
         logger.info(f"Calling tool '{tool_name}' via SSE with arguments: {arguments}")
 
         async with sse_client(
             tmp_url,
             headers=request_params.headers,
-            sse_read_timeout=mcp_time_out_seconds,
-            timeout=mcp_time_out_seconds,
+            sse_read_timeout=effective_timeout,
+            timeout=effective_timeout,
         ) as streams:
             async with ClientSession(*streams) as session:
                 await session.initialize()

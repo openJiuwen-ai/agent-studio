@@ -12,6 +12,9 @@ from agent_runtime.extension.workflow_node.code_runner.local_code_runner import 
 from agent_runtime.extension.workflow_node.code_runner.sandbox_code_runner import (
     SandboxCodeRunner,
 )
+from agent_runtime.extension.workflow_node.code_runner.base_code_runner import (
+    CodeRunResult,
+)
 
 
 def _mock_sys_op():
@@ -155,7 +158,7 @@ class TestFlowCodeSandboxFallback:
         flow_code = FlowCode(config)
 
         mock_runner = AsyncMock()
-        mock_runner.run = AsyncMock(return_value={"result": 1})
+        mock_runner.run = AsyncMock(return_value=CodeRunResult(result={"result": 1}, function_log=""))
         _set_code_runner(flow_code, mock_runner)
 
         mock_session = MagicMock()

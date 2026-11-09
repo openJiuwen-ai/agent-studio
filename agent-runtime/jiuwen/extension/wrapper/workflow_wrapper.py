@@ -52,6 +52,7 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "LoopComponent": "jiuwen.loop",
     "FlowApi": "Api",
     "FlowCustomApi": "Api",
+    "jiuwen.plugin": "Api",
     "FlowInput": "jiuwen.input",
     "ExceptionInfo": "jiuwen.exception",
     "LoopSetVariable": "jiuwen.setVariable",

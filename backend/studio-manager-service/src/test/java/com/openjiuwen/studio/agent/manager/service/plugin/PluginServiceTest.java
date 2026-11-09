@@ -533,6 +533,185 @@ class PluginServiceTest {
     }
 
     @Test
+    void testCreateTool_RejectsMissingParamDescription() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_desc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[description]"));
+        verify(toolManagementService).checkToolInfo(eq("bad_desc_tool"), anyString(), anyString(), isNull(),
+            eq("blocking"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsInvalidLocation() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_loc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Invalid\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[location]"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsNestedArray() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_matrix_tool",
+            "{\"type\":\"object\",\"properties\":{\"matrix\":{\"type\":\"array\",\"description\":\"二维\",\"location\":\"Body\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}},\"required\":[\"matrix\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The parameter [matrix] cannot be nested array.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsEmptyOutputProperties() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_out_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            "{\"type\":\"object\",\"properties\":{}}");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testModifyTool_RejectsMissingParamDescription() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_desc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.modifyTool("proj-1", "ws-1", "tool-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[description]"));
+        verify(toolManagementService).checkToolInfo(eq("bad_desc_tool"), anyString(), anyString(), isNull(),
+            eq("blocking"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testModifyTool_RejectsEmptyOutputProperties() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_out_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            "{\"type\":\"object\",\"properties\":{}}");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.modifyTool("proj-1", "ws-1", "tool-1", req));
+        assertEquals(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    private static final String VALID_OUTPUT_SCHEMA =
+        "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"ok\"}}}";
+
+    /** 插件存在 + 可 transform；schema 负向用例在 checkToolInfo 就会失败，不会写库。 */
+    private void stubPluginReadyForCreateTool() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        ToolRequestInfo requestInfo = new ToolRequestInfo();
+        requestInfo.setToolsInfoList(new ArrayList<>());
+        BasicInfo basicInfo = BasicInfo.builder().host("example.com").protocol("https").path("/api").build();
+        requestInfo.setBasicInfo(basicInfo);
+        pluginDTO.setToolRequestInfo(requestInfo);
+        pluginDTO.setToolInputSchemaList(new ArrayList<>());
+        pluginDTO.setToolOutputSchemaList(new ArrayList<>());
+        pluginDTO.setToolIntfTypeList(new ArrayList<>());
+        pluginDTO.setToolTestStatusList(new ArrayList<>());
+        pluginDTO.setIsInputList(new ArrayList<>());
+        pluginDTO.setIsOutputList(new ArrayList<>());
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+    }
+
+    /** 委托真实 checkToolInfo → JsonSchemaUtils，避免只测 mock 透传。 */
+    private void stubCheckToolInfoWithRealValidation() {
+        ToolManagementService real = new ToolManagementService(
+            mock(ToolMapper.class),
+            mock(MappingMapper.class),
+            mock(UrlCheckUtils.class),
+            mock(MgObsService.class),
+            mock(ReleaseVersionMapper.class),
+            mock(AgentCommonService.class),
+            mock(com.openjiuwen.studio.agent.manager.mapper.ToolCredentialMapper.class),
+            mock(MessageSource.class),
+            mock(com.openjiuwen.studio.agent.manager.mapper.AgentMapper.class),
+            mock(com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper.class),
+            mock(I18nUtil.class),
+            mock(PluginMapper.class),
+            mock(com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService.class));
+        ReflectionTestUtils.setField(real, "maxPropNum", 50);
+        ReflectionTestUtils.setField(real, "maxPropDepth", 5);
+        ReflectionTestUtils.setField(real, "toolNameBlackList", "");
+        doAnswer(invocation -> {
+            real.checkToolInfo(
+                invocation.getArgument(0),
+                invocation.getArgument(1),
+                invocation.getArgument(2),
+                invocation.getArgument(3),
+                invocation.getArgument(4));
+            return null;
+        }).when(toolManagementService).checkToolInfo(any(), any(), any(), any(), any());
+    }
+
+    private CreatePluginToolReq baseCreatePluginToolReq(String displayName, String inputSchema, String outputSchema) {
+        CreatePluginToolReq req = new CreatePluginToolReq();
+        req.setPluginId("p-1");
+        req.setToolDisplayName(displayName);
+        req.setToolChineseName("坏工具");
+        req.setToolDesc("schema 负向");
+        req.setIntfType("blocking");
+        RequestInfo ri = new RequestInfo();
+        ri.setUrl("https://example.com/api/x");
+        ri.setMethod(RequestInfo.MethodEnum.POST);
+        req.setRequestInfo(ri);
+        req.setInputSchema(inputSchema);
+        req.setOutputSchema(outputSchema);
+        return req;
+    }
+
+    @Test
     void testAdapterOldPlugin_FillMissingFields() {
         PluginEntity target = new PluginEntity();
         target.setPluginId("p-1");

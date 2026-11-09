@@ -10,6 +10,8 @@ Must be applied *after* ``apply_parallel_branch_grouping_patch``.
 from __future__ import annotations
 
 import asyncio
+import inspect
+import itertools
 
 from collections import defaultdict, deque
 from typing import Any
@@ -17,6 +19,11 @@ from typing import Any
 from openjiuwen.core.common.logging import workflow_logger as logger
 
 _NESTED_PATCH_APPLIED = False
+
+# 嵌套菱形笛卡尔配对允许生成的 CNF 子句数上限。DNF→CNF 的全组合展开子句数
+# 为 ∏|route|，在深层级联嵌套（n 个桶、每桶多前驱）上会指数膨胀；超过上限
+# 时告警并回退到 base 的单 AND 组（宁可放弃配对升级，也不拖垮编译期）。
+_MAX_DIAMOND_CNF_GROUPS = 256
 
 
 def _build_adjacency_list(self) -> dict[str, list[str]]:
@@ -166,6 +173,105 @@ def _build_condition_targets(self) -> dict[str, dict[str, set[str]]]:
     return out
 
 
+def _forward_reachable_bounded(
+    self, start_node: str, stop_at: str | None = None
+) -> set[str]:
+    """前向 BFS，可穿越条件分支边，但在 ``stop_at`` 节点处停止扩展。
+
+    判定前驱属于哪条互斥臂时，只关心它"能否到达汇聚点 stop_at"，绝不能
+    越过汇聚点继续向下——否则一条臂的前驱会经由汇聚点"污染"到另一条臂
+    的可达集合（嵌套菱形里 B-default 的 DD 会经汇聚点 X 变得从 B-if 也
+    可达，从而抹掉互斥签名）。
+    """
+    adj = getattr(self, "_adj_cache", None)
+    if adj is None:
+        adj = _build_adjacency_list(self)
+        self._adj_cache = adj  # type: ignore[attr-defined]
+
+    visited: set[str] = set()
+    queue: deque[str] = deque([start_node])
+    while queue:
+        node = queue.popleft()
+        if node in visited:
+            continue
+        visited.add(node)
+        if stop_at is not None and node == stop_at:
+            continue
+        for neighbor in adj.get(node, []):
+            if neighbor not in visited:
+                queue.append(neighbor)
+    return visited
+
+
+def _bounded_reach_has_cycle(
+    self, start_node: str, stop_at: str | None = None
+) -> bool:
+    """检测从 ``start_node`` 出发、在 ``stop_at`` 截断的前向区域内是否含环。
+
+    邻接表对判定分支节点**无条件展开全部臂**。无环图里从某条件目标出发不可
+    能逆流回到上游分支节点；但含 Loop 回边时，有界 BFS 会沿回边绕回某个判定
+    分支，再沿其另一臂漏出，把本不可达的前驱纳入 arm_reach，污染互斥/共行
+    签名（与 ``_always_executes`` / ``_build_branch_parent_patched`` 面临的
+    环拓扑问题同源）。
+
+    用迭代 DFS 的灰/黑染色判定有向回边：邻居落在 gray 集合（当前 DFS 栈上）
+    即存在环。``stop_at`` 节点视为叶子不再扩展，与有界可达的截断口径一致。
+    """
+    adj = getattr(self, "_adj_cache", None)
+    if adj is None:
+        adj = _build_adjacency_list(self)
+        self._adj_cache = adj  # type: ignore[attr-defined]
+
+    gray: set[str] = {start_node}
+    black: set[str] = set()
+    order: list[str] = [start_node]
+    indices: list[int] = [0]
+
+    def _neighbors_of(node: str) -> list[str]:
+        if stop_at is not None and node == stop_at:
+            return []
+        return adj.get(node, [])
+
+    while order:
+        node = order[-1]
+        neighbors = _neighbors_of(node)
+        index = indices[-1]
+        if index < len(neighbors):
+            nxt = neighbors[index]
+            indices[-1] = index + 1
+            if nxt in gray:
+                return True
+            if nxt in black:
+                continue
+            gray.add(nxt)
+            order.append(nxt)
+            indices.append(0)
+        else:
+            gray.discard(node)
+            black.add(node)
+            order.pop()
+            indices.pop()
+    return False
+
+
+def _bounded_region_has_polluting_cycle(
+    self, target_id: str, cond_targets: dict[str, dict[str, set[str]]]
+) -> bool:
+    """任一判定臂起点（含 legacy 分支目标）在汇聚点截断区域内可达环 => 该汇聚
+    点的臂可达签名可能被 loop 回边污染，嵌套菱形配对不可信。"""
+    starts: list[str] = []
+    for cmap in cond_targets.values():
+        for targets in cmap.values():
+            starts.extend(targets)
+    for bn, targets in self.branch_targets.items():
+        if bn in cond_targets:
+            continue
+        starts.extend(targets)
+    return any(
+        _bounded_reach_has_cycle(self, start, target_id) for start in starts
+    )
+
+
 def _always_executes(
     co: set[tuple[str, str]],
     branch_all_conds: dict[str, set[str]],
@@ -229,6 +335,235 @@ def _classify_coexec(
     if not in_or_group:
         return "noop"
     return "latch" if needs_latch else "standalone"
+
+
+def _compute_route_signatures(
+    self, target_id: str, source_list: list[set[str]]
+) -> tuple[
+    list[tuple[frozenset, list[str]]],
+    list[str],
+    dict[str, set[str]],
+]:
+    """按"有界可达路径签名"把直接前驱分桶。
+
+    返回 ``(routes, shared, pred_multi_arm)``：
+
+    - ``routes``：每项为 ``(signature, predecessors)``。``signature`` 是
+      ``frozenset[(branch_node, arm)]``——前驱在这些判定分支上**恰好**只从
+      单臂可达；同一签名的多个前驱是同一条执行路径上的 co-executing 前驱
+      （需要全部完成）。
+    - ``shared``：不受任何判定分支约束的前驱（必经/共享节点，签名为空集）。
+    - ``pred_multi_arm``：``p -> {该前驱在其上多臂可达的判定分支}``。多臂
+      可达分两种，不能一概归 shared：分支本身只存活于外层某单臂内时是良性
+      的（如真菱形 lane 头 P 的两臂都到 D1，而 P 只在 B-if 臂内）；只有在
+      **贯穿全部路由的外层锚点**上多臂可达，才是汇合后的共行前驱。条件4
+      据此外层锚点裁决，排除共行拓扑。
+
+    有界 BFS 在汇聚点 ``target_id`` 处截断，避免一条臂的前驱经汇聚点污染
+    另一条臂的可达集合。
+    """
+    cond_targets = _build_condition_targets(self)
+
+    arm_reach: list[tuple[str, str, set[str]]] = []
+    # 每个「真」判定分支（带 router 条件）的各臂可达集合，用于判定一个分支
+    # 节点是否被外层判定的某条单臂支配（inner branch）。
+    cond_arm_reach: dict[str, list[set[str]]] = defaultdict(list)
+    for bn, cmap in cond_targets.items():
+        for cond_id, targets in cmap.items():
+            reach: set[str] = set()
+            for t in targets:
+                reach |= _forward_reachable_bounded(self, t, target_id)
+            arm_reach.append((bn, cond_id, reach))
+            cond_arm_reach[bn].append(reach)
+    for bn, targets in self.branch_targets.items():
+        if bn in cond_targets:
+            continue
+        for t in targets:
+            arm_reach.append(
+                (bn, f"__target__:{t}", _forward_reachable_bounded(self, t, target_id))
+            )
+
+    # inner branch：该分支节点本身只从某个外层判定的**恰好一条臂**可达，即它
+    # 被约束在该外层单臂内部。lane 头分支（真菱形的 P/Q，只存活于 B-if）是
+    # inner；汇合点之后的分支（外层两臂都可达 Y，Y 再分叉）不是 inner。
+    branch_node_ids = set(self.branches.keys())
+    inner_branches: set[str] = set()
+    for outer_arms in cond_arm_reach.values():
+        if len(outer_arms) < 2:
+            continue
+        for bn in branch_node_ids:
+            containing = sum(1 for reach in outer_arms if bn in reach)
+            if containing == 1:
+                inner_branches.add(bn)
+
+    all_predecessors: set[str] = set()
+    for g in source_list:
+        all_predecessors |= g
+
+    buckets: dict[frozenset, set[str]] = defaultdict(set)
+    # 前驱 -> 在哪些判定分支上多臂可达（不论该分支是否 inner）。
+    pred_multi_arm: dict[str, set[str]] = defaultdict(set)
+    # 前驱 -> 在哪些「非 inner」判定分支上多臂可达。在非 inner 分支上多臂
+    # 可达意味着它是外层多臂汇合后的共行节点（如 S/U 经汇合点 Y 对外层 X
+    # 两臂都可达），必须归 shared；而在 inner 分支（lane 头 P）上多臂可达是
+    # 良性的，该分支整体只活在某外层单臂内，不影响外层互斥性。
+    shared_candidates: set[str] = set()
+    for p in all_predecessors:
+        arms_per_branch: dict[str, set[str]] = defaultdict(set)
+        for bn, arm, reach in arm_reach:
+            if p in reach:
+                arms_per_branch[bn].add(arm)
+        for bn, arms in arms_per_branch.items():
+            if len(arms) >= 2:
+                pred_multi_arm[p].add(bn)
+                if bn not in inner_branches:
+                    shared_candidates.add(p)
+        signature = frozenset(
+            (bn, next(iter(arms)))
+            for bn, arms in arms_per_branch.items()
+            if len(arms) == 1
+        )
+        buckets[signature].add(p)
+
+    # 两类 shared：签名为空集（不受任何判定约束的必经节点），以及在非 inner
+    # 分支上多臂可达的汇合后共行前驱（从各签名桶中剔除）。
+    shared_preds = set(buckets.pop(frozenset(), set())) | shared_candidates
+    routes = [
+        (sig, sorted(preds - shared_candidates))
+        for sig, preds in buckets.items()
+        if preds - shared_candidates
+    ]
+    return routes, sorted(shared_preds), pred_multi_arm
+
+
+def _resolve_barrier_groups_hybrid(
+    self, target_id: str, source_list: list[set[str]]
+) -> list[set[str]]:
+    """在既有 co-exec/latch 解析之上，叠加嵌套菱形的笛卡尔配对。
+
+    绝大多数拓扑（普通并行 fork、单判定多臂汇聚、共行前驱 latch/standalone、
+    同一外层臂内的嵌套分叉、环拓扑回退等）继续走
+    :func:`_resolve_barrier_groups_nested_patched` 的成熟结论；只有当下面
+    **全部**条件成立时，才判定为嵌套菱形并用笛卡尔积展开，以修复"外层一臂
+    内并行 lane 与另一外层互斥直达臂共享汇聚"导致的重复执行/死锁：
+
+    1. 至少识别出 2 条非空执行路径（签名不同的前驱桶）；
+    2. 其中至少一条路径含 ≥2 个 co-executing 前驱（某外层臂内部并行 fork
+       的多个 lane done）；
+    3. 不存在 ``shared`` 前驱——排除汇合后共行前驱、部分条件覆盖（如 2/3
+       出口汇聚）、case-C latch、环污染等应由既有逻辑处理的拓扑；
+    4. 至少存在**同一个判定分支节点（外层互斥锚点）**，使全部路径在该节点
+       上绑定的臂构成**臂↔路径一一对应**（``len(arms) == route_count``，每条
+       路径恰好一个互不相同的臂）。这条是嵌套菱形区别于"同一外层臂内的嵌套
+       分叉"的关键：菱形的并行 lane 在外层分支的 if 臂、直达前驱在 default
+       臂；而同臂内的嵌套分叉（如 ir13：default 臂既扇出内层分支又扇出并行
+       节点）各前驱在外层分支上同属一臂，必须整体 AND 等待，不能配对。
+       仅要求 ``len(arms) >= 2`` 并不够：若 route_count 多于锚点臂数（如外层
+       if 臂内既有并行 fork 又有内层判断产生额外子路由、default 臂直达），共
+       享同一外层臂的子路由彼此并不互斥，全笛卡尔积会让汇聚点被部分前驱提前
+       满足——因此必须严格一一对应。
+
+    满足时 DNF ``(routeA: p1 ∧ p2) ∨ (routeB: q)`` 展开为 CNF
+    ``[{p1,q},{p2,q}]``：任一外层路径完成都恰好满足全部 OR 组一次。
+    """
+    base = _resolve_barrier_groups_nested_patched(self, target_id, source_list)
+    if not self.branch_targets or not source_list:
+        return base
+
+    # 环拓扑保护（走读意见）：含 Loop 回边时，有界 BFS 会沿回边绕回判定分支、
+    # 再沿另一臂漏出，污染 arm_reach / inner_branches / shared 的判定，可能把
+    # 共行前驱误判为互斥路由（或反之），让嵌套菱形条件被错误满足并生成不安全
+    # 的笛卡尔配对。检测到任一判定臂起点在汇聚点截断区域内可达环时，整体回退
+    # 到 base 的成熟结论（与 _always_executes / _build_branch_parent_patched
+    # 的环保护口径一致），绝不升级配对。
+    if _bounded_region_has_polluting_cycle(
+        self, target_id, _build_condition_targets(self)
+    ):
+        return base
+
+    routes, shared, pred_multi_arm = _compute_route_signatures(
+        self, target_id, source_list
+    )
+
+    # 条件 1、2、3
+    if len(routes) < 2 or shared or not any(len(preds) >= 2 for _, preds in routes):
+        return base
+
+    # 条件 4：存在**同一个分支节点（外层互斥锚点）贯穿全部路径**，这些路径
+    # 在该节点上绑定彼此不同的臂，且**没有任何前驱在该锚点上多臂可达**。
+    #
+    # 「贯穿全部路径 + 锚点对所有前驱都是干净单臂」缺一不可：
+    # - 真菱形（外层 B：if 臂内部并行 fork、default 臂直达汇聚）：D1/D2 的
+    #   签名都锚定 B-if，直达前驱 DD 锚定 B-default，且三者在 B 上都只单臂
+    #   可达（D1 虽在 lane 头 P 的两臂可达，但 P 只存活于 B-if 内，与 B 锚
+    #   点无关）—— B 是干净锚点，展开为笛卡尔配对；
+    # - 同一外层臂内的内层分叉（ir13）：D1/D2/E1/E2 在外层 B 上同属
+    #   B-default（单臂），内层判定 I 只出现在 D1/D2 两条路由、并不贯穿
+    #   E1/E2 所在的并行桶 —— 没有贯穿全部路由的互斥锚点，回退 base；
+    # - 汇合后共行前驱（外层 X 两臂先合流到 Y，Y 再分叉 S/U）：S/U 经汇合
+    #   点 Y 对 X 两臂都可达（在 X 上多臂可达，记于 pred_multi_arm）。一旦
+    #   X 作为贯穿各桶的锚点，就会因存在「在 X 上多臂可达」的共行前驱而不
+    #   干净，判定不成立 —— 共行前驱绝不参与笛卡尔配对，交回 base 处理。
+    route_count = len(routes)
+    all_preds = {p for _sig, preds in routes for p in preds}
+    arms_by_branch: dict[str, set[str]] = defaultdict(set)
+    routes_seen_by_branch: dict[str, set[int]] = defaultdict(set)
+    # branch -> arm -> 绑定到该 (branch, arm) 的路由集合。嵌套菱形要求每条
+    # 路由在锚点上占用一个**互不相同**的臂（臂↔路由一一对应）；若两条路由
+    # 共享同一锚点臂，它们其实同属一条外层激活路径、并不互斥，不得配对。
+    arm_routes_by_branch: dict[str, dict[str, set[int]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+    for route_index, (signature, _preds) in enumerate(routes):
+        for bn, arm in signature:
+            arms_by_branch[bn].add(arm)
+            routes_seen_by_branch[bn].add(route_index)
+            arm_routes_by_branch[bn][arm].add(route_index)
+
+    def _anchor_is_clean(bn: str) -> bool:
+        # 锚点 bn 必须对每一个前驱都是「恰从单臂可达」：任何前驱在 bn 上多
+        # 臂可达，说明它是 bn 两臂汇合后的共行节点，配对会让 wait_for_all
+        # 在该前驱先到的路径上被提前满足。
+        return all(bn not in pred_multi_arm.get(p, ()) for p in all_preds)
+
+    def _arms_match_routes_one_to_one(bn: str) -> bool:
+        # 锚点贯穿全部路由（上面已校验），且不同臂数恰为路由数、每个臂只被
+        # 一条路由绑定——这两点合起来保证臂与路由是双射，所有路由才两两互斥。
+        arm_map = arm_routes_by_branch.get(bn, {})
+        return (
+            len(arms_by_branch[bn]) == route_count
+            and all(len(owners) == 1 for owners in arm_map.values())
+        )
+
+    is_nested_diamond = any(
+        len(routes_seen_by_branch[bn]) == route_count
+        and _arms_match_routes_one_to_one(bn)
+        and _anchor_is_clean(bn)
+        for bn in arms_by_branch
+    )
+    if not is_nested_diamond:
+        return base
+
+    # 规模护栏：全组合展开的子句数为各路由桶大小的乘积，深层嵌套下指数
+    # 膨胀。超过上限时放弃配对，回退 base 的成熟结论，避免编译期 CPU/内存
+    # 被海量 CNF 组拖垮。
+    combo_count = 1
+    for _sig, preds in routes:
+        combo_count *= len(preds)
+        if combo_count > _MAX_DIAMOND_CNF_GROUPS:
+            logger.warning(
+                "nested-diamond CNF expansion at target %s yields %s groups "
+                "(> %s cap); fallback to base barrier groups",
+                target_id,
+                combo_count,
+                _MAX_DIAMOND_CNF_GROUPS,
+            )
+            return base
+
+    result: list[set[str]] = []
+    for combo in itertools.product(*[preds for _sig, preds in routes]):
+        result.append(set(combo))
+    return result if result else base
 
 
 def _resolve_barrier_groups_nested_patched(
@@ -410,7 +745,7 @@ def _make_filtered_selector(original_selector, skip_targets: set[str]):
     return _filtered
 
 
-def _compile_nested_patched(self, graph_store=None, step_callback=None):
+def _compile_nested_patched(self, graph_store=None, step_callback=None, nodes=None):
     """Patched ``PregelGraph._compile`` — skip redundant conditional edges to
     multi-input join nodes.
 
@@ -526,16 +861,6 @@ def _compile_nested_patched(self, graph_store=None, step_callback=None):
                     cond_pred_map[t].add(bn_id)
 
     branch_node_ids: set[str] = set(self.branches.keys())
-
-    def _is_standalone(p: str) -> bool:
-        """True if *p* is not owned by any branch condition or legacy branch."""
-        for nodes in reachable_cond.values():
-            if p in nodes:
-                return False
-        for nodes in reachable_legacy.values():
-            if p in nodes:
-                return False
-        return True
 
     def _pred_covers(p: str, b_node: str, c_id: str, join_target: str) -> bool:
         """True if regular pred *p* fires when condition (b_node, c_id) is taken.
@@ -720,13 +1045,37 @@ def _compile_nested_patched(self, graph_store=None, step_callback=None):
                     if not safe:
                         break
             else:
-                # Multiple groups: every group must have at least one
-                # standalone member. Standalone members fire on ALL paths,
-                # so whenever J is reached via any group, all other groups
-                # are also satisfied. Without this, J could be reached via
-                # group A while group B has no firing member → deadlock.
-                for g in groups:
-                    if not any(_is_standalone(p) for p in g):
+                # Multiple CNF groups (e.g. nested-diamond cartesian pairing
+                # [{D1,DD},{D2,DD}]). The legacy "every group must contain a
+                # standalone member" contract rejects the new pairing outright
+                # (in a nested diamond every predecessor is condition-owned),
+                # silently abandoning the barrier upgrade.
+                #
+                # Per-arm group-coverage instead. For EACH arm c of branch_node
+                # count the groups that contain a predecessor guaranteed to
+                # fire on that arm (_pred_covers):
+                # - targeting arm (bears the direct conditional edge to t,
+                #   which selector filtering removes): t must still be reached
+                #   via regular preds, so EVERY group must be covered —
+                #   otherwise filtering loses t on that arm;
+                # - non-targeting arm: t can only be reached via regular preds.
+                #   Either no group fires (t simply not reached on this arm) or
+                #   EVERY group fires — a partial coverage means t is reached
+                #   while some group can never complete (e.g. arm B-if reaches
+                #   J only via a standalone pred Z, while the {C} group is
+                #   exclusive to B-default) → barrier deadlock.
+                for c_id in bn_conds:
+                    covered = 0
+                    for g in groups:
+                        if any(
+                            _pred_covers(p, branch_node, c_id, t) for p in g
+                        ):
+                            covered += 1
+                    if c_id in targeting_conds:
+                        if covered != len(groups):
+                            safe = False
+                            break
+                    elif 0 < covered < len(groups):
                         safe = False
                         break
 
@@ -760,9 +1109,19 @@ def _compile_nested_patched(self, graph_store=None, step_callback=None):
         # Keep partial filtering — filter safe selectors, leave unsafe ones.
 
     # Step 2: Run original _compile (only safe targets are in self.waits).
-    compiled = _original_compile(
-        self, graph_store=graph_store, step_callback=step_callback
-    )
+    # core d8cd86e12（0.1.17_hotfix 线）给 PregelGraph._compile 加了 nodes
+    # 形参且 compile() 以关键字传入；本补丁整体替换 _compile，签名不同步
+    # 会让工作流在编译期 TypeError（表现为点执行无响应）。develop 线 core
+    # 尚无该形参，探测后按需转发，两条 core 线都可加载本补丁
+    # （test_nested_branch_barrier_compile_sync 钉住转发语义）。
+    if "nodes" in inspect.signature(_original_compile).parameters:
+        compiled = _original_compile(
+            self, graph_store=graph_store, step_callback=step_callback, nodes=nodes
+        )
+    else:
+        compiled = _original_compile(
+            self, graph_store=graph_store, step_callback=step_callback
+        )
 
     # Step 3: Replace ConditionalRouter selectors on safe branch nodes.
     for branch_node, targets_to_skip in skip_targets.items():
@@ -810,7 +1169,7 @@ def apply_nested_branch_barrier_patch() -> bool:
     _original_compile = PregelGraph._compile
 
     PregelGraph._forward_reachable = _forward_reachable_patched  # type: ignore[assignment]
-    PregelGraph._resolve_barrier_groups = _resolve_barrier_groups_nested_patched  # type: ignore[assignment]
+    PregelGraph._resolve_barrier_groups = _resolve_barrier_groups_hybrid  # type: ignore[assignment]
     PregelGraph._build_branch_parent = _build_branch_parent_patched  # type: ignore[assignment]
     PregelGraph._branch_root = staticmethod(_branch_root_patched)  # type: ignore[assignment]
     PregelGraph._compile = _compile_nested_patched  # type: ignore[assignment]

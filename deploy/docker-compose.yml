@@ -114,6 +114,8 @@ services:
     environment:
       # DSL 版本对比大 DSL 降级阈值（单侧规范化后文本字节，Monaco 保护阈值），暂定 10MB，压测后调整
       LARGE_DSL_BYTES_THRESHOLD: ${LARGE_DSL_BYTES_THRESHOLD:-10485760}
+      # iframe SSO 极简接入开关（默认空 = 关闭）；值须与后端 auth_sso_header 同值
+      IFRAME_SSO_TOKEN_PARAM: ${IFRAME_SSO_TOKEN_PARAM:-}
     volumes:
       - ./config/nginx.conf:/home/conf/nginx.conf
       - console_logs:/opt/cloud/wiseagent-nginx/logs
@@ -189,6 +191,8 @@ services:
       agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-runtime:31014}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
+      # manager 出站 header 跳过名单定制（默认空 = 不过滤/全量透传）；逗号分隔、大小写不敏感
+      manager_skip_outbound_header_list: ${MANAGER_SKIP_OUTBOUND_HEADER_LIST:-}
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}
@@ -292,6 +296,8 @@ services:
       TLS_CERT_KEY_PASSWD: ${TLS_CERT_KEY_PASSWD:-}
       TLS_CERT_KEY_PATH: /opt/cloud/agent-runtime/tls/key.pem
       TLS_CERT_PATH: /opt/cloud/agent-runtime/tls/cert.pem
+      CLOSE_URL_JUDGE_SWITCH: ${CLOSE_URL_JUDGE_SWITCH:-false}
+      PLUGIN_WHITE_URLS: ${PLUGIN_WHITE_URLS:-}
       # 沙箱服务地址（生产环境必填，配置后启用沙箱隔离执行）
       # ⚠️ 未配置时代码节点将拒绝执行，需设 ALLOW_LOCAL_CODE_EXEC=true 才能走本地（不安全）
       SECURITY_SANDBOX_SERVER: ${SECURITY_SANDBOX_SERVER:-}
@@ -303,6 +309,8 @@ services:
       CODE_BLACK_LIST: ${CODE_BLACK_LIST:-["subprocess","os.system","os.popen","os.exec","os.spawn","os.fork","os.kill","os.remove","os.unlink","os.rmdir","os.rename","os.chmod","os.chown","__import__","importlib","ctypes","socket","shutil","multiprocessing"]}
       # 是否允许本地代码执行（默认 false，仅限可信内网设为 true）
       ALLOW_LOCAL_CODE_EXEC: ${ALLOW_LOCAL_CODE_EXEC:-false}
+      # 本地代码执行兜底超时（秒）
+      LOCAL_CODE_EXEC_TIMEOUT: ${LOCAL_CODE_EXEC_TIMEOUT:-900}
       OPENSEARCH_HOSTS: ${OPENSEARCH_HOSTS:-}
       OPENSEARCH_USERNAME: ${OPENSEARCH_USERNAME:-admin}
       OPENSEARCH_PASSWORD: ${OPENSEARCH_PASSWORD:-admin}
@@ -366,6 +374,8 @@ services:
       MODEL_CALL_LOGGING_ENABLED: ${MODEL_CALL_LOGGING_ENABLED:-false}
       # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
       PERFORMANCE_LOG_ENABLED: ${PERFORMANCE_LOG_ENABLED:-true}
+      # 性能日志级别：默认 WARNING（不打印）；设为 INFO 打开性能指标
+      PERFORMANCE_LOG_LEVEL: ${PERFORMANCE_LOG_LEVEL:-WARNING}
       ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
       EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
       INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}

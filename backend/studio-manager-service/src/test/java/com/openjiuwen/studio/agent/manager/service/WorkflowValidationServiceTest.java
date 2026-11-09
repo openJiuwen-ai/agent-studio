@@ -41,11 +41,13 @@ class WorkflowValidationServiceTest {
     @BeforeEach
     void setUp() {
         // 注入 i18nUtil mock，避免 validateSchemaFieldNames/validateStartNodeDefaultValues 命中违规时 NPE。
-        // 被测代码调 getMessage(key) 单参数(varargs 空)与 getMessage(key, args) 两参数两种形式，
-        // any(Object[].class) 匹配 varargs 数组(含空数组)，两个 stub 覆盖两种调用形式。
+        // 返回带 {0}/{1} 占位符的模板串：被测代码外层用 MessageFormat.format 把
+        // 节点 ID/字段名替换进 reason（validateSchemaFieldNames_arrayObjectNested_shouldRecurse
+        // 断言错误原因含违规字段名 123）。Mockito 会把单参 varargs 调用归入两参存根，
+        // 两个存根必须给同一模板才一致。
         I18nUtil i18nUtil = mock(I18nUtil.class);
-        when(i18nUtil.getMessage(anyString())).thenReturn("mocked message");
-        when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message");
+        when(i18nUtil.getMessage(anyString())).thenReturn("mocked message {0} {1}");
+        when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message {0} {1}");
         ReflectionTestUtils.setField(service, "i18nUtil", i18nUtil);
     }
 
@@ -493,6 +495,46 @@ class WorkflowValidationServiceTest {
         ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
             errors);
         assertFalse(errors.isEmpty(), "插件 integer 引用 start.query(string) 应报类型不一致");
+    }
+
+    @Test
+    void validateRefTypeMatch_stringExpectedArrayActual_shouldReport() {
+        // C2 复核确认：string 入参引用 array 上游属真实类型不匹配（上游直传 list 非 JSON 字符串），
+        // 保持严格匹配避免把可拦截的类型不匹配放行到运行时
+        WorkflowFieldVO startData = new WorkflowFieldVO();
+        startData.setName("data");
+        startData.setType("array");
+
+        WorkflowNodeVO startInfo = new WorkflowNodeVO();
+        startInfo.setId("node_start");
+        startInfo.setType("Start");
+        startInfo.setOutputs(List.of(startData));
+
+        WorkflowFieldVO pluginInput = new WorkflowFieldVO();
+        pluginInput.setName("coordinates");
+        pluginInput.setType("string");
+
+        WorkflowNodeVO pluginInfo = new WorkflowNodeVO();
+        pluginInfo.setId("node_plugin");
+        pluginInfo.setType("Plugin");
+        pluginInfo.setInputs(List.of(pluginInput));
+
+        WorkflowValidationService.Node startNode = new WorkflowValidationService.Node(startInfo);
+        WorkflowValidationService.Node pluginNode = new WorkflowValidationService.Node(pluginInfo);
+
+        Map<String, WorkflowValidationService.Node> nodeMap = new HashMap<>();
+        nodeMap.put("node_start", startNode);
+        nodeMap.put("node_plugin", pluginNode);
+
+        Map<String, String> refMap = new HashMap<>();
+        refMap.put("ref_node_id", "node_start");
+        refMap.put("ref_var_name", "data");
+        refMap.put("source", "system");
+
+        java.util.Set<WorkflowValidationVOErrors> errors = new java.util.HashSet<>();
+        ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
+            errors);
+        assertFalse(errors.isEmpty(), "string 入参引用 array 上游应报类型不一致（保持严格匹配）");
     }
 
     @Test

@@ -31,8 +31,6 @@ import java.util.Objects;
 public class JsonSchemaUtils {
     private static final String TYPE = "type";
 
-    private static final String NAME_CN = "name_cn";
-
     private static final String LOCATION = "location";
 
     private static final String DESCRIPTION = "description";
@@ -55,7 +53,7 @@ public class JsonSchemaUtils {
      * @param maxPropLimit 模型支持的最大属性数量
      * @param maxDepthLimit 模型支持的最大嵌套深度
      * @param isInput 是否为输入JsonSchema
-     * @return true：有效，false：无效
+     * @return true：有效；非法时抛出 {@link AgentStudioException}，details 中带属性名与缺失字段
      */
     public static boolean isJsonSchemaValid(String jsonSchema, int maxPropLimit, int maxDepthLimit, boolean isInput) {
         if (StringUtils.isBlank(jsonSchema)) {
@@ -67,7 +65,7 @@ public class JsonSchemaUtils {
             schemaNode = mapper.readTree(jsonSchema);
         } catch (JsonProcessingException exception) {
             log.error("The format of tool json schema is invalid");
-            return false;
+            throw invalid("The schema is not valid JSON.");
         }
         JsonSchemaNode node = new JsonSchemaNode(schemaNode, 0, false, isInput);
         return isJsonSchemaValid(node, maxPropLimit, maxDepthLimit);
@@ -79,88 +77,75 @@ public class JsonSchemaUtils {
      * @param node JsonSchemaNode
      * @param maxPropLimit 每层字段的最大数量
      * @param maxDepthLimit Json最大深度，比如 arr[arr[str]]、arr[object] 深度都是2
-     * @return true：当前JsonNode满足校验，false：当前JsonNode不满足校验
+     * @return true：当前JsonNode满足校验；非法时抛异常
      */
     private static boolean isJsonSchemaValid(JsonSchemaNode node, int maxPropLimit, int maxDepthLimit) {
         // 1、递归边界条件判断
 
-        // 节点深度大于限制，返回false
+        // 节点深度大于限制
         int depth = node.getDepth();
         if (depth > maxDepthLimit) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                List.of("The parameter nesting depth cannot exceed " + maxDepthLimit + "."));
+            throw invalid("The parameter nesting depth cannot exceed " + maxDepthLimit + ".");
         }
 
-        // 节点缺失或类型非法，返回false
         JsonNode jsonNode = node.getNode();
-        if (Objects.isNull(jsonNode) || Objects.isNull(jsonNode.get(TYPE))) {
-            return false;
+        if (Objects.isNull(jsonNode)) {
+            // array 缺 items 时 son 为 null
+            if (node.isArraySonNode()) {
+                throw invalid(String.format("%s is missing required field [items].", label(node)));
+            }
+            throw invalid(String.format("%s is missing required field [type].", label(node)));
+        }
+        if (Objects.isNull(jsonNode.get(TYPE))) {
+            throw invalid(String.format("%s is missing required field [type].", label(node)));
         }
         String type = jsonNode.get(TYPE).asText();
         if (isNotJsonSchemaType(type)) {
             log.error("type:{} is not json schema type.", type);
-            return false;
+            throw invalid(String.format("%s has unsupported type [%s].", label(node), type));
         }
 
-        // 参数字段不满足要求，返回false
         checkNodeField(jsonNode, depth, node);
 
-        // 当前节点是基础类型，无子节点，返回true
+        // 当前节点是基础类型，无子节点
         if (isFoundationJsonSchemaType(type)) {
             return true;
         }
 
         // 2、分情况获取子节点，进行递归
 
-        // 当前节点是 array 类型
         if (JsonSchemaType.ARRAY.type.equals(type)) {
-            return isArrayNodeInvalid(node, depth, maxPropLimit, maxDepthLimit);
+            return isArrayNodeValid(node, depth, maxPropLimit, maxDepthLimit);
         }
 
-        // 当前节点是 object 类型
-        return isObjectNodeInvalid(node, depth, maxPropLimit, maxDepthLimit);
+        return isObjectNodeValid(node, depth, maxPropLimit, maxDepthLimit);
     }
 
     /**
      * 校验数组子节点
-     *
-     * @param node JsonSchemaNode
-     * @param depth 嵌套深度
-     * @param maxPropLimit 最大参数数量
-     * @param maxDepthLimit 最大嵌套深度
-     * @return true：当前子节点满足校验，false：当前子节点不满足校验
      */
-    private static boolean isArrayNodeInvalid(JsonSchemaNode node, int depth, int maxPropLimit, int maxDepthLimit) {
-        // 子节点在 items 中
+    private static boolean isArrayNodeValid(JsonSchemaNode node, int depth, int maxPropLimit, int maxDepthLimit) {
         JsonNode sonNode = node.getNode().get(ARRAY_KEY);
-        JsonSchemaNode schemaSonNode = new JsonSchemaNode(sonNode, depth, true, null, node.isInputNode());
+        // 将父参数名传入 items，嵌套数组等错误可指出属性名
+        JsonSchemaNode schemaSonNode = new JsonSchemaNode(sonNode, depth, true, node.getName(), node.isInputNode());
         return isJsonSchemaValid(schemaSonNode, maxPropLimit, maxDepthLimit);
     }
 
     /**
      * 校验Object子节点
-     *
-     * @param node JsonSchemaNode
-     * @param depth 嵌套深度
-     * @param maxPropLimit 最大参数数量
-     * @param maxDepthLimit 最大嵌套深度
-     * @return true：当前子节点满足校验，false：当前子节点不满足校验
      */
-    private static boolean isObjectNodeInvalid(JsonSchemaNode node, int depth, int maxPropLimit, int maxDepthLimit) {
+    private static boolean isObjectNodeValid(JsonSchemaNode node, int depth, int maxPropLimit, int maxDepthLimit) {
         JsonNode sonNode;
         JsonSchemaNode schemaSonNode;
 
-        // Map，子节点在 additionalProperties 中
         sonNode = node.getNode().get(MAP_KEY);
         if (!Objects.isNull(sonNode)) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                List.of("additionalProperties is not supported."));
+            throw invalid(String.format("%s must not use [additionalProperties] (not supported).", label(node)));
         }
 
-        // Object，子节点列表在 properties 中，需要遍历出具体子节点 innerNode
         sonNode = node.getNode().get(OBJECT_KEY);
         if (Objects.isNull(sonNode)) {
-            return false;
+            throw invalid(String.format("%s is missing required field [properties].", label(node)));
         }
         Iterator<JsonNode> elements = sonNode.elements();
         Iterator<String> fieldNames = sonNode.fieldNames();
@@ -170,17 +155,16 @@ public class JsonSchemaUtils {
             String filedName = fieldNames.next();
             schemaSonNode = new JsonSchemaNode(innerNode, depth + 1, false, filedName, node.isInputNode());
             size++;
-            if (isJsonSchemaValid(schemaSonNode, maxPropLimit, maxDepthLimit)) {
-                continue;
-            }
-            return false;
+            isJsonSchemaValid(schemaSonNode, maxPropLimit, maxDepthLimit);
         }
-        // 每层字段数量满足要求
-        if (size >= 1 && size <= maxPropLimit) {
-            return true;
+        if (size < 1) {
+            throw invalid(String.format("%s field [properties] cannot be empty.", label(node)));
         }
-        throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-            List.of("The number of parameters cannot exceed " + maxPropLimit + "."));
+        if (size > maxPropLimit) {
+            throw invalid(String.format(
+                "%s has %d properties, which exceeds the limit of %d.", label(node), size, maxPropLimit));
+        }
+        return true;
     }
 
     /**
@@ -231,10 +215,10 @@ public class JsonSchemaUtils {
         if (node.isArraySonNode()) {
             // 不支持数组嵌套数组
             if (JsonSchemaType.ARRAY.type.equals(type)) {
-                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                    List.of(String.format("The parameter [%s] cannot be nested array.", name)));
+                throw invalid(String.format("The parameter [%s] cannot be nested array.",
+                    StringUtils.defaultIfBlank(name, "items")));
             }
-            // 数组的子节点无需校验
+            // 数组的子节点无需校验 description/location
             return;
         }
         // 响应参数无需其他校验
@@ -244,16 +228,16 @@ public class JsonSchemaUtils {
 
         // 描述，必填
         if (Objects.isNull(jsonNode.get(DESCRIPTION)) || StringUtils.isBlank(jsonNode.get(DESCRIPTION).asText())) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                List.of(String.format("The parameter [%s]'s description cannot be empty.", name)));
+            throw invalid(String.format("The parameter [%s] is missing required field [description].", name));
         }
         // 位置，必填，且只能取 Body Headers Query 和 Path
         if (Objects.isNull(jsonNode.get(LOCATION)) || StringUtils.isBlank(jsonNode.get(LOCATION).asText())
             || Arrays.stream(ToolParamLocation.values())
                 .noneMatch(toolParam -> toolParam.location.equals(jsonNode.get(LOCATION).asText()))) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(String.format(
-                "The parameter [%s]'s location cannot be empty and must be one of: [Body, Headers, Query, Path]",
-                name)));
+            throw invalid(String.format(
+                "The parameter [%s] is missing required field [location] "
+                    + "(must be one of: Body, Headers, Query, Path).",
+                name));
         }
         // 默认值，非必填，值要与参数类型匹配
         if (Objects.nonNull(jsonNode.get(DEFAULT))) {
@@ -270,26 +254,38 @@ public class JsonSchemaUtils {
             switch (JsonSchemaType.valueOf(type.toUpperCase(Locale.ROOT))) {
                 case NUMBER:
                     if (!isNumber(defaultNode.asText())) {
-                        throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                            List.of(String.format("The parameter [%s]'s default value must be a number.", name)));
+                        throw invalid(String.format(
+                            "The parameter [%s]'s default value must be a number.", name));
                     }
                     break;
                 case INTEGER:
                     if (!isInteger(defaultNode.asText())) {
-                        throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                            List.of(String.format("The parameter [%s]'s default value must be an integer.", name)));
+                        throw invalid(String.format(
+                            "The parameter [%s]'s default value must be an integer.", name));
                     }
                     break;
                 case BOOLEAN:
                     if (!isBoolean(defaultNode.asText())) {
-                        throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                            List.of(String.format("The parameter [%s]'s default value must be a boolean.", name)));
+                        throw invalid(String.format(
+                            "The parameter [%s]'s default value must be a boolean.", name));
                     }
                     break;
                 default:
                     break;
             }
         }
+    }
+
+    private static String label(JsonSchemaNode node) {
+        if (StringUtils.isNotBlank(node.getName())) {
+            return "The parameter [" + node.getName() + "]";
+        }
+        return "The schema root";
+    }
+
+    private static AgentStudioException invalid(String detail) {
+        // details + args[0]：若未被 remap 为 02401002/003，对外 02401001 也能带上具体原因
+        return new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
     }
 
     private static boolean isBoolean(String defaultValue) {

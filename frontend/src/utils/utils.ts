@@ -276,10 +276,40 @@ export interface ICommonError{
   error_msg_front? : string,
 
   error_reason?:string,
-  error_suggestion?:string
+  error_suggestion?:string,
+
+  /** 字段级校验明细（如工具 schema 缺 description/location） */
+  details?: { error_code?: string; error_msg?: string }[];
 
 }
-   /**
+/** 转义后拼进错误 HTML，避免 schema 属性名等用户可控文本注入标签 */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** reason 在冒号后的明细若已出现在主文案中，则视为重复（如 02401002 的 {0}） */
+function isRedundantErrorReason(errMessage: string, reason: string): boolean {
+  if (errMessage.includes(reason)) {
+    return true;
+  }
+  const fullIdx = reason.lastIndexOf('：');
+  const halfIdx = reason.lastIndexOf(':');
+  const idx = Math.max(fullIdx, halfIdx);
+  if (idx >= 0 && idx < reason.length - 1) {
+    const detail = reason.slice(idx + 1).trim();
+    if (detail && errMessage.includes(detail)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ /**
  * 构建错误信息的dom
  * @param error
  * @private
@@ -293,22 +323,34 @@ export function buildErrorMsgStr(error:ICommonError) {
     // 如果没有 err_message，直接返回
     return "";
   }
-  err_dom+= `<strong  style="font-size:14px;">${err_message}</strong>`
+  err_dom+= `<strong  style="font-size:14px;">${escapeHtml(err_message)}</strong>`
 
-  // 2. 如果有 error_reason
+  // 2. 如果有 error_reason（与主文案重复的 {0} 明细不再展示）
   const reason = error?.error_reason;
-  if(reason){
-    err_dom += `${i18next.t('httpservice_4')}${reason}`;
+  if (reason && !isRedundantErrorReason(err_message, reason)) {
+    err_dom += `${i18next.t('httpservice_4')}${escapeHtml(reason)}`;
   }
   // 3. 如果有 error_suggestion
   const suggestion = error?.error_suggestion;
   if(suggestion){
-    err_dom += `${i18next.t('httpservice_5')}${suggestion}`;
+    err_dom += `${i18next.t('httpservice_5')}${escapeHtml(suggestion)}`;
   }
-  // 4.错误码
+  // 4. 字段级 details：相对主文案与 reason 去重后再补展示（REQ_015）
+  const details = error?.details;
+  if (Array.isArray(details) && details.length > 0) {
+    const alreadyShown = [err_message, reason].filter((s): s is string => !!s);
+    const detailMsgs = details
+      .map(d => d?.error_msg)
+      .filter((msg): msg is string =>
+        !!msg && !alreadyShown.some(shown => shown.includes(msg)));
+    if (detailMsgs.length > 0) {
+      err_dom += `<br/>${detailMsgs.map(escapeHtml).join('<br/>')}`;
+    }
+  }
+  // 5.错误码
   const error_code = error?.error_code;
   if(error_code){
-    err_dom += `${i18next.t('httpservice_8')}${error_code}`;
+    err_dom += `${i18next.t('httpservice_8')}${escapeHtml(error_code)}`;
   }
   return err_dom
 }

@@ -1880,7 +1880,7 @@ class Questioner(WorkflowComponent):
             )
         )
 
-    async def _initialize_model(self):
+    async def _initialize_model(self, session=None):
         if self._initialized:
             return
 
@@ -1909,6 +1909,22 @@ class Questioner(WorkflowComponent):
             self._model = Model(
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
+            )
+            # 每次真实调用补一个带 usage/ttft 的 llm span（Questioner 反思为
+            # 1+N 次调用：首调并入组件壳、后续为壳下子 span，均由 core 门控）。
+            # 组件实例是定义级产物（跨执行复用）：装饰会话绑任一执行的会话
+            # id，后续执行都会错归属，故统一走定义级会话；业务 workflow_id
+            # 经 identity 附到独立/子 span（壳自身值优先）
+            from agent_runtime.common.trace_compat import (
+                DEFINITION_SCOPED_SESSION_ID,
+                build_traced_model,
+                resolve_trace_identity,
+            )
+
+            self._model = build_traced_model(
+                self._model,
+                session_id=DEFINITION_SCOPED_SESSION_ID,
+                identity=resolve_trace_identity(self, session),
             )
             self._initialized = True
         except Exception as e:
@@ -2106,7 +2122,8 @@ class Questioner(WorkflowComponent):
         self, inputs: Input, session: Session, context: ModelContext
     ) -> Output:
         try:
-            await self._initialize_model()
+            # 先传 session 再初始化：模型工厂在建装饰器时能带上业务 workflow_id
+            await self._initialize_model(session)
 
             # 构建组件元数据，用于 process_on_invoke_info 回调
             node_id = (

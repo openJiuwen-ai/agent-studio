@@ -445,6 +445,42 @@ class ToolManagementServiceTest {
     }
 
     @Test
+    void testCheckToolInfo_InvalidLocationNamesParameter() {
+        String input =
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Invalid\"}},\"required\":[\"city\"]}";
+        String output =
+            "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"ok\"}}}";
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.checkToolInfo("name", input, output, null, "blocking"));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[location]"));
+    }
+
+    @Test
+    void testCheckToolInfo_NestedArrayNamesParameter() {
+        String input =
+            "{\"type\":\"object\",\"properties\":{\"matrix\":{\"type\":\"array\",\"description\":\"二维\",\"location\":\"Body\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}},\"required\":[\"matrix\"]}";
+        String output =
+            "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"ok\"}}}";
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.checkToolInfo("name", input, output, null, "blocking"));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The parameter [matrix] cannot be nested array.", ex.getDetails().get(0));
+    }
+
+    @Test
+    void testCheckToolInfo_EmptyOutputProperties() {
+        String input =
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}";
+        String output = "{\"type\":\"object\",\"properties\":{}}";
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.checkToolInfo("name", input, output, null, "blocking"));
+        assertEquals(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
+    }
+
+    @Test
     void testCheckToolInfo_InvalidOutputSchema() {
         try (MockedStatic<JsonSchemaUtils> jsMock = mockStatic(JsonSchemaUtils.class)) {
             jsMock.when(() -> JsonSchemaUtils.isJsonSchemaValid(any(), anyInt(), anyInt(), anyBoolean()))

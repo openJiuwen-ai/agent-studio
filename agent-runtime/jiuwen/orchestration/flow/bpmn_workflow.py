@@ -1134,6 +1134,7 @@ class BpmnWorkflow(BaseWorkflow):
                         invokable=invokable,
                         invokable_input=invokable_input_new,
                         cur_span_instance=cur_span_instance,
+                        node_timeout=timeout,
                     ),
                     timeout=timeout,
                 )
@@ -1167,13 +1168,17 @@ class BpmnWorkflow(BaseWorkflow):
             ):
                 if invokable.exception_config.retry_times > 0:
                     logger.warning(f"{invokable.type}_{invokable.id} not support retry")
+                _timeout = rewrite_timeout(
+                    self.runtime_context, invokable, invokable.exception_config.timeout
+                )
                 invokable_output = await asyncio.wait_for(
                     self._do_invoke(
                         invokable=invokable,
                         invokable_input=invokable_input,
                         cur_span_instance=cur_span_instance,
+                        node_timeout=_timeout,
                     ),
-                    timeout=invokable.exception_config.timeout,
+                    timeout=_timeout,
                 )
             else:
                 invokable_output = await self._do_invoke_retry(
@@ -1308,7 +1313,8 @@ class BpmnWorkflow(BaseWorkflow):
             raise formatted_exception from error
 
     async def _do_invoke(
-        self, invokable: Node, invokable_input, cur_span_instance: Span
+        self, invokable: Node, invokable_input, cur_span_instance: Span,
+        node_timeout: float = 0,
     ):
         """
         组件invoke的判断逻辑，主要区分异步执行、流式执行、其他执行方式。
@@ -1358,6 +1364,7 @@ class BpmnWorkflow(BaseWorkflow):
                 stream_callback=self._stream_callback,
                 span=cur_span_instance,
                 ref=invokable.inputs,
+                node_timeout=node_timeout,
             )
         elif invokable.type in [NodeType.API.value, NodeType.EXTRACTOR.value]:
             api_configs = self.runtime_context.get(WORKFLOW_API_CONFIGS)
@@ -1397,6 +1404,7 @@ class BpmnWorkflow(BaseWorkflow):
                 inputs=invokable_input,
                 runtime_auth_headers=self.runtime_context.get(WORKFLOW_API_CONFIGS),
                 span=cur_span_instance,
+                node_timeout=node_timeout,
             )
             if invokable.type == NodeType.LOOP.value:
                 invokable.state = invokable.action.metadata.node_state
