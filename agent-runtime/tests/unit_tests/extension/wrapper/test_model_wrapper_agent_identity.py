@@ -18,6 +18,8 @@ import sys
 import types
 from typing import Optional
 
+import pytest
+
 # packages/（位于 agent-studio 仓库根，agent-runtime 上一级）下的 editable 包
 # （common_utils 等）在 pytest 的断言改写下 import 不到，手动补进 sys.path
 # （append 到末尾：仅补齐缺失路径，不抢占既有解析顺序，避免模块重名遮蔽）
@@ -219,6 +221,21 @@ def _identity_kwargs(captured: dict):
     """全部 get_model 调用里出现过的 identity 取值（None 表示从未传）。"""
     seen = [call.get("identity") for call in captured.get("calls", [])]
     return seen
+
+
+@pytest.fixture(autouse=True)
+def _no_model_display_name_query(monkeypatch):
+    """默认屏蔽显示名查询：存量用例断言 identity 精确形状（不含
+    class_name），且单测不得触达模型元数据缓存/存储；显示名通道的
+    行为由 TestModelDisplayNameOverride 自行打桩覆盖。
+    """
+
+    async def _fake_resolve(model_id):
+        return ""
+
+    monkeypatch.setattr(
+        ModelWrapper, "_resolve_model_display_name", staticmethod(_fake_resolve)
+    )
 
 
 class TestIdentityFacts:
@@ -446,6 +463,96 @@ class TestParentRefsPassthrough:
         assert _identity_kwargs(captured) == [
             {"agent_id": "agent-7", "conversation_id": "s1", "message_count": 1}
         ]
+
+
+class TestModelDisplayNameOverride:
+    """模型显示名 → identity.class_name：core 装饰器探针的覆盖通道。
+
+    控制器路径模型按 modelServiceId 解析，core 探针两处来源皆落空（路由
+    model_name 装服务 id；client_config 显示名供给只在 OBS IR provider），
+    span 名与 gen_ai.request.model 显示 UUID。此处钉住：门控通过后按 id
+    查显示名写 class_name；缺名不写；旧 core 门控短路零查询。
+    """
+
+    @staticmethod
+    def _patch(monkeypatch, captured, display_name="", queries=None):
+        runner, fake_session = _make_runner(captured)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(_model_wrapper, "create_agent_session_with_trace", fake_session)
+
+        async def _fake_resolve(model_id):
+            if queries is not None:
+                queries.append(model_id)
+            return display_name
+
+        monkeypatch.setattr(
+            ModelWrapper, "_resolve_model_display_name", staticmethod(_fake_resolve)
+        )
+        return ModelWrapper()
+
+    @staticmethod
+    def test_ainvoke_display_name_wins_over_probe(monkeypatch):
+        """有显示名 → identity 带 class_name，core 侧覆盖 UUID 探针结果。"""
+        captured: dict = {}
+        wrapper = TestModelDisplayNameOverride._patch(
+            monkeypatch, captured, display_name="通义千问-Max"
+        )
+        asyncio.run(wrapper.ainvoke([{"role": "user", "content": "hi"}], "m1", "s1"))
+        assert _identity_kwargs(captured) == [
+            {
+                "conversation_id": "s1",
+                "message_count": 1,
+                "class_name": "通义千问-Max",
+            }
+        ]
+
+    @staticmethod
+    def test_astream_display_name_wins_over_probe(monkeypatch):
+        """astream（预留给 ReactMode）同通道：显示名进 identity。"""
+
+        async def _consume():
+            async for _chunk in wrapper.astream(
+                [{"role": "user", "content": "hi"}], "m1", "s1"
+            ):
+                break
+
+        captured: dict = {}
+        wrapper = TestModelDisplayNameOverride._patch(
+            monkeypatch, captured, display_name="通义千问-Max"
+        )
+        asyncio.run(_consume())
+        assert captured["calls"], "get_model must be called"
+        assert _identity_kwargs(captured)[0].get("class_name") == "通义千问-Max"
+
+    @staticmethod
+    def test_missing_display_name_keeps_probe_result(monkeypatch):
+        """缺名（空串）→ 不写 class_name，identity 其余事实保持原样。"""
+        captured: dict = {}
+        wrapper = TestModelDisplayNameOverride._patch(monkeypatch, captured)
+        asyncio.run(wrapper.ainvoke([{"role": "user", "content": "hi"}], "m1", "s1"))
+        assert _identity_kwargs(captured) == [
+            {"conversation_id": "s1", "message_count": 1}
+        ]
+
+    @staticmethod
+    def test_old_core_gate_skips_display_name_query(monkeypatch):
+        """旧 core（无 identity 参数）→ 零查询：零开销短路红线。"""
+        captured: dict = {}
+        queries: list = []
+        runner, fake_session = _make_runner(captured, old_core=True)
+        monkeypatch.setattr(_model_wrapper, "Runner", runner)
+        monkeypatch.setattr(_model_wrapper, "create_agent_session_with_trace", fake_session)
+
+        async def _fake_resolve(model_id):
+            queries.append(model_id)
+            return "不应被查询"
+
+        monkeypatch.setattr(
+            ModelWrapper, "_resolve_model_display_name", staticmethod(_fake_resolve)
+        )
+        asyncio.run(ModelWrapper().ainvoke([{"role": "user", "content": "hi"}], "m1", "s1"))
+        assert queries == [], "旧 core 能力门控短路，显示名查询不得发起"
+        assert _identity_kwargs(captured) == [None], "旧 core 退两参调用，不传 identity"
 
 
 class TestOldCoreCapabilityGate:

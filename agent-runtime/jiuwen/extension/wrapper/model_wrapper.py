@@ -405,6 +405,44 @@ class ModelWrapper:
             params["stop_sequences"] = stop
         return params
 
+    @staticmethod
+    async def _resolve_model_display_name(model_id: str) -> str:
+        """modelServiceId → 模型显示名（元数据 model_name，走既有缓存）。
+
+        与 OBSModelConfigProvider._resolve_display_name 同源同契约：仅供
+        遥测展示（identity.class_name 覆盖探针），未配置/查询失败一律
+        返回空串——缺名即"不覆盖"，绝不影响模型解析与调用。
+        """
+        try:
+            from model_service import query_model_display_name
+
+            return await query_model_display_name(model_id)
+        except Exception:  # noqa: BLE001 - 显示名缺失不影响模型调用
+            return ""
+
+    async def _trace_identity_kwargs_resolved(
+        self, kwargs: dict, model_id: str, session_id: str, message_count: int | None
+    ) -> dict:
+        """identity 片段增补模型显示名后返回（调用方直接展开进 get_model）。
+
+        控制器路径的模型经 resource_mgr 按 modelServiceId 解析：core 装饰
+        器探针在两处来源都落空（路由 model_name 装的是服务 id；
+        client_config 的显示名供给只在 OBS IR provider），llm span 名与
+        gen_ai.request.model 因此显示 UUID。此处按 id 查显示名写入
+        identity.class_name——core 侧 instance_info.update 为覆盖通道，
+        写即赢，与 build_traced_model 的工作流路径同构；缺名不覆盖探针
+        结果。查询放在能力门控之后：旧 core 零开销短路红线不破（缓存
+        命中也非零成本）。
+        """
+        identity_kwargs = self._trace_identity_kwargs(
+            kwargs, session_id=session_id, message_count=message_count
+        )
+        if identity_kwargs:
+            display_name = await self._resolve_model_display_name(model_id)
+            if display_name:
+                identity_kwargs["identity"]["class_name"] = str(display_name)
+        return identity_kwargs
+
     async def ainvoke(
         self, inputs: InputType, model_id: str, session_id: str, **kwargs
     ) -> LanguageModelOutput:
@@ -439,8 +477,8 @@ class ModelWrapper:
         model = await Runner.resource_mgr.get_model(
             model_id=model_id,
             session=agent_session,
-            **self._trace_identity_kwargs(
-                kwargs, session_id=session_id, message_count=len(messages)
+            **await self._trace_identity_kwargs_resolved(
+                kwargs, model_id, session_id=session_id, message_count=len(messages)
             ),
         )
         if model is None:
@@ -512,8 +550,8 @@ class ModelWrapper:
         model = await Runner.resource_mgr.get_model(
             model_id=model_id,
             session=agent_session,
-            **self._trace_identity_kwargs(
-                kwargs, session_id=session_id, message_count=len(messages)
+            **await self._trace_identity_kwargs_resolved(
+                kwargs, model_id, session_id=session_id, message_count=len(messages)
             ),
         )
         if model is None:
