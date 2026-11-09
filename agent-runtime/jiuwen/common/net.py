@@ -23,11 +23,12 @@ def _is_legacy_renegotiation_enabled() -> bool:
 
 
 def _build_legacy_ssl_context() -> ssl.SSLContext:
-    """构建允许 unsafe legacy renegotiation 的 SSLContext。"""
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.options |= ssl.OP_NO_TLSv1
-    ctx.options |= ssl.OP_NO_TLSv1_1
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    """构建允许 unsafe legacy renegotiation 的 SSLContext。
+
+    使用 create_default_context 保留默认信任库与校验默认值，
+    再叠加 OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION。
+    """
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ctx.options |= getattr(ssl, "OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION", 0x4)
     return ctx
 
@@ -44,7 +45,7 @@ def _get_ssl_config():
 
     if allow_legacy:
         ctx = _build_legacy_ssl_context()
-        if not api_cert_env or safe_json_loads(api_cert_env, True) is False:
+        if api_cert_env and safe_json_loads(api_cert_env, True) is False:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
         logger.warning(
