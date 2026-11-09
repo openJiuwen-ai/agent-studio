@@ -65,7 +65,7 @@ def test_trace_metadata_without_conf_returns_none():
     assert FlowKnowledgeRetrieval(None).trace_metadata() is None
 
 
-def test_trace_metadata_prefers_loaded_kb_retrieval_params():
+def test_trace_metadata_prefers_loaded_kb_retrieval_params(monkeypatch):
     # 首次执行前 _kb_config 未加载，用 IR retrievalConfig；
     # 已加载后 OBS retrieval_params 是实际生效值，优先
     comp = FlowKnowledgeRetrieval(
@@ -75,5 +75,5 @@ def test_trace_metadata_prefers_loaded_kb_retrieval_params():
             "retrievalConfig": {"topK": 5},
         }
     )
-    comp._kb_config = {"retrieval_params": {"topK": 7}}
+    monkeypatch.setattr(comp, "_kb_config", {"retrieval_params": {"topK": 7}})
     assert comp.trace_metadata()["top_k"] == 7

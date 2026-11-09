@@ -212,16 +212,16 @@ class KnowledgeRetrievalTool(Tool):
             output_list = (result.get(constant.RESTFUL_DATA) or {}).get("output_list") or []
             documents = [item.get("text", "") for item in output_list if isinstance(item, dict)]
             await _TracerAgentUtils.trace_retriever_end(session, span, documents=documents)
-        except Exception:
-            pass
+        except Exception as e:
+            workflow_logger.warning("knowledge retrieval trace end failed: %s: %s", type(e).__name__, e)
 
     async def _end_retrieval_span_error(self, session, span, error) -> None:
         if _TracerAgentUtils is None or span is None or session is None:
             return
         try:
             await _TracerAgentUtils.trace_retriever_error(session, span, error)
-        except Exception:
-            pass
+        except Exception as e:
+            workflow_logger.warning("knowledge retrieval trace error event failed: %s: %s", type(e).__name__, e)
 
     async def stream(self, inputs: Input, **kwargs) -> AsyncIterator[Output]:
         yield await self.invoke(inputs, **kwargs)
