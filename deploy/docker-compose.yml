@@ -296,6 +296,8 @@ services:
       TLS_CERT_KEY_PASSWD: ${TLS_CERT_KEY_PASSWD:-}
       TLS_CERT_KEY_PATH: /opt/cloud/agent-runtime/tls/key.pem
       TLS_CERT_PATH: /opt/cloud/agent-runtime/tls/cert.pem
+      CLOSE_URL_JUDGE_SWITCH: ${CLOSE_URL_JUDGE_SWITCH:-false}
+      PLUGIN_WHITE_URLS: ${PLUGIN_WHITE_URLS:-}
       # 沙箱服务地址（生产环境必填，配置后启用沙箱隔离执行）
       # ⚠️ 未配置时代码节点将拒绝执行，需设 ALLOW_LOCAL_CODE_EXEC=true 才能走本地（不安全）
       SECURITY_SANDBOX_SERVER: ${SECURITY_SANDBOX_SERVER:-}
