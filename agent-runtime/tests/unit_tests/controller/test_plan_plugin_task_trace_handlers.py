@@ -9,7 +9,10 @@
 与来源（StreamRequest 保存的 self._trace_handlers）。
 """
 
+import asyncio
 from types import SimpleNamespace
+
+import pytest
 
 from jiuwen.controller.agent.control_mode.plan_execute_mode import PlanExecuteMode
 
@@ -61,9 +64,8 @@ def test_stream_entry_seeds_trace_handlers_from_stream_request():
     mode = PlanExecuteMode.__new__(PlanExecuteMode)
 
     agen = mode.stream(query="你好", trace_handlers=handlers)
-    try:
+    # 入口段之后的规划逻辑缺桩自然抛错：显式断言抛错，不静默吞异常。
+    with pytest.raises(Exception):
         asyncio.run(asyncio.wait_for(anext(agen), timeout=5))
-    except Exception:
-        pass
 
     assert mode._trace_handlers is handlers, "stream 入口必须真实赋值 trace_handlers"
