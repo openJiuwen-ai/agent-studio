@@ -1609,6 +1609,8 @@ public class PluginService implements IPluginService {
 
     private String addTool(CreatePluginToolReq createPluginToolReq, PluginDTO pluginDTO) {
         checkToolNum(pluginDTO);
+        // 与 v1 独立工具对齐：校验 input/output schema（含参数 description/location 等）
+        validatePluginToolSchemas(createPluginToolReq);
 
         // 名字校验
         Set<String> englisNameSet = pluginDTO.getToolRequestInfo()
@@ -1693,6 +1695,8 @@ public class PluginService implements IPluginService {
     }
 
     private void updateTool(CreatePluginToolReq createPluginToolReq, PluginDTO pluginDTO, String toolId) {
+        // 与 v1 独立工具对齐：修改工具时同样校验 schema
+        validatePluginToolSchemas(createPluginToolReq);
 
         if (pluginDTO.getToolRequestInfo().getToolsInfoList() == null) {
             pluginDTO.getToolRequestInfo().setToolsInfoList(new ArrayList<>());
@@ -2071,6 +2075,14 @@ public class PluginService implements IPluginService {
             log.error("Fail to create tool for duplicate tool name [{}] in black list", toolName);
             throw new AgentStudioException(StudioError.TOOL_NAME_ALREADY_EXIST);
         }
+    }
+
+    /**
+     * 插件下创建/修改工具时复用 v1 的 schema 校验（02401002/02401003，含字段级 description 等）。
+     */
+    private void validatePluginToolSchemas(CreatePluginToolReq req) {
+        toolManagementService.checkToolInfo(req.getToolDisplayName(), req.getInputSchema(), req.getOutputSchema(),
+            null, req.getIntfType());
     }
 
     private String getPluginType(String projectId) {

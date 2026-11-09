@@ -1608,7 +1608,8 @@ public class IrAdapterService {
         Object versionIdConfig = pluginConfig.get(Constants.VERSION_ID);
         if (idConfig == null) {
             log.error("tool id not exist when selectPluginToolEntity");
-            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
+            String detail = "Tool id is missing in plugin config when selecting plugin tool entity.";
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
         }
 
         String toolId = idConfig.toString();
