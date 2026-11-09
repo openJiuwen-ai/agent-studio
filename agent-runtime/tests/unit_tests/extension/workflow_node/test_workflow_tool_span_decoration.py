@@ -26,6 +26,7 @@ from jiuwen.extension.workflow_node.flow_api import FlowApi
 from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException
+from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
 
 USER_FIELDS = "userFields"
 
@@ -235,7 +236,6 @@ def _make_mcp_conf():
 
 def _make_mock_card():
     from openjiuwen.core.foundation.tool.mcp.base import McpToolCard
-    from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
 
     return McpToolCard(
         name="mock_tool",
@@ -285,6 +285,36 @@ async def test_flow_mcp_emits_plugin_span_with_new_core_session(mock_mcp_client)
     events = _plugin_events(tracer)
     assert [name for name, _kw in events] == ["on_plugin_start", "on_plugin_end"]
     assert events[0][1]["instance_info"]["class_name"] == "mock_tool"
+
+
+@pytest.mark.asyncio
+async def test_flow_mcp_plugin_span_inputs_exclude_runtime_auth(mock_mcp_client):
+    """鉴权头不进 execute_tool span：记录面剥离，转发真实调用时回填。"""
+    tracer = _FakeTracer()
+    flow_mcp = FlowMcp(_make_mcp_conf())
+    with patch.object(
+        flow_mcp,
+        "_format_runtime_auth",
+        return_value={"Authorization": "Bearer s3cr3t"},
+    ):
+        result = await flow_mcp.invoke(
+            {USER_FIELDS: {"query": "hello"}},
+            _make_session(tracer, with_span_protocol=True),
+            None,
+        )
+
+    assert result[USER_FIELDS]["isError"] is False
+    events = _plugin_events(tracer)
+    assert [name for name, _kw in events] == ["on_plugin_start", "on_plugin_end"]
+    recorded_inputs = events[0][1]["inputs"]["inputs"]
+    assert JIUWEN_RUNTIME_KWARGS not in recorded_inputs, "鉴权键不得进入 span 记录面"
+
+    # 真实调用不受剥离影响：call_tool 收到的 arguments 仍含回填的鉴权
+    mock_mcp_client["call_tool"].assert_awaited_once()
+    call_arguments = mock_mcp_client["call_tool"].await_args.kwargs["arguments"]
+    assert call_arguments[JIUWEN_RUNTIME_KWARGS]["runtime_auth"]["headers"] == {
+        "Authorization": "Bearer s3cr3t"
+    }
 
 
 @pytest.mark.asyncio
