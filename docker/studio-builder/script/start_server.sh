@@ -20,6 +20,11 @@ function env_init(){
   export PYTHONPATH=${PYTHON_PATH:-}:"${APP_FOLDER}":"${SERVICE_HOME}":"${SERVICE_HOME}/app"
   echo "PYTHONPATH: ${PYTHONPATH}"
 
+  # jemalloc: 仅对 Python 服务进程生效
+  if [[ -z "${LD_PRELOAD}" && -f /usr/local/lib/libjemalloc.so.2 ]]; then
+    export LD_PRELOAD=/usr/local/lib/libjemalloc.so.2
+  fi
+
   # 创建日志目录，用于容器启动时将服务日志挂载到宿主机
   mkdir -p ${LOGGING_LOG_PATH}
   chmod -R 700 ${LOGGING_LOG_PATH}

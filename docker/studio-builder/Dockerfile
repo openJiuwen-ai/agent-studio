@@ -65,6 +65,4 @@ USER 1000:1000
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=31015
 
-# 参考 studio-runtime：先 init.sh（目录/TLS），再 start.sh（nohup 拉起服务 + 主循环保活）
-# jemalloc 仅对 Python 服务进程生效
-CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}; ./script/init.sh; LD_PRELOAD=/usr/local/lib/libjemalloc.so.2 exec ./script/start.sh"]
+CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}; ./script/init.sh; exec ./script/start.sh"]

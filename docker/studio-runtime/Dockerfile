@@ -81,5 +81,4 @@ RUN chmod 700 /opt/cloud/logs \
 
 USER 1000:1000
 
-# jemalloc 仅对 Python 服务进程生效（不影响 nginx/cron/bash 等其他进程）
-CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else LD_PRELOAD=/usr/local/lib/libjemalloc.so.2 ./bin/start.sh; fi"]
+CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]
