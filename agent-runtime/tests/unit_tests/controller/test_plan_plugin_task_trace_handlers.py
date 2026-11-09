@@ -12,9 +12,8 @@
 import asyncio
 from types import SimpleNamespace
 
-import pytest
-
 from jiuwen.controller.agent.control_mode.plan_execute_mode import PlanExecuteMode
+from jiuwen.orchestration.flow.stream.base import StreamCode
 
 
 def _make_mode(trace_handlers):
@@ -50,20 +49,34 @@ def test_plugin_task_runtime_data_defaults_to_none():
     assert task.input_data["runtime_data"]["trace_handlers"] is None
 
 
+def _drive_first_outcome(agen):
+    """推进 stream 至首个产出；缺桩态由兜底 except 转为 ERROR 产出。
+
+    stream 主体整体处于 try/except 兜底内，规划段缺桩失败不会向外抛，
+    而是产出一条 ERROR StreamData；本辅助只负责推进到该产出。若入口段
+    本身缺陷导致向外抛错，返回 None 交由调用方断言暴露。
+    """
+    try:
+        return asyncio.run(asyncio.wait_for(anext(agen), timeout=5))
+    except Exception:
+        return None
+
+
 def test_stream_entry_seeds_trace_handlers_from_stream_request():
     """钉真实来源：stream 入口把 trace_handlers 存到 self._trace_handlers。
 
     透传用例（_make_mode 手工注入）只钉 runtime_data 形态；本用例驱动真实
     stream 入口段（属性就地初始化 + StreamRequest 构造 + 上下文保存），
-    断言赋值发生在任何规划逻辑之前——入口段之后的规划逻辑在缺桩状态下
-    自然抛错，不参与断言。
+    断言赋值发生在任何规划逻辑之前。缺桩态下规划段失败由 stream 兜底
+    except 接管并转 ERROR StreamData 产出——入口段已完成的证据。
     """
     handlers = [SimpleNamespace(name="otel_handler")]
     mode = PlanExecuteMode.__new__(PlanExecuteMode)
+    mode.task_id = "task-1"  # 兜底 except 的日志与 StreamData 构造会读取
 
     agen = mode.stream(query="你好", trace_handlers=handlers)
-    # 入口段之后的规划逻辑缺桩自然抛错：显式断言抛错，不静默吞异常。
-    with pytest.raises(Exception):
-        asyncio.run(asyncio.wait_for(anext(agen), timeout=5))
+    first = _drive_first_outcome(agen)
 
     assert mode._trace_handlers is handlers, "stream 入口必须真实赋值 trace_handlers"
+    assert first is not None, "缺桩态兜底应产出 ERROR StreamData 而非向外抛错"
+    assert first.code == StreamCode.ERROR.value, "兜底产出应为 ERROR 形态"
