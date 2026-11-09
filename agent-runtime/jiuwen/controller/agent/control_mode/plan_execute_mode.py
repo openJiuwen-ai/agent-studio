@@ -612,7 +612,9 @@ class PlanExecuteMode(BaseMode):
                     data = execute_result.data or {}
                     answer = data.get("answer", {})
                     if isinstance(answer, dict):
-                        error_code = answer.get("error_code")
+                        # 缺省按无错处理：键缺失/显式 null 时 None != 0 会把
+                        # 业务成功的工具误判为失败，跨 step 累计直至被熔断拉黑
+                        error_code = answer.get("error_code") or 0
                         result_data = answer.get("result", {})
                         if isinstance(result_data, dict):
                             stderr = result_data.get("stderr", "")
