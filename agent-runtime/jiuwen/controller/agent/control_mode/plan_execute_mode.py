@@ -335,7 +335,10 @@ class PlanExecuteMode(BaseMode):
                 self.context_manager.add_function_message(
                     name=last_tool_name or "unknown",
                     intent=last_tool_name or "unknown",
-                    content=f"当前步骤总轮数已达上限（{_MAX_STEP_TOTAL_ROUNDS}），强制结束本步骤。",
+                    content=(
+                        f"当前步骤总轮数已达上限（{_MAX_STEP_TOTAL_ROUNDS}），"
+                        "强制结束本步骤。"
+                    ),
                     tool_call_id="step_total_rounds_limit",
                 )
                 break
