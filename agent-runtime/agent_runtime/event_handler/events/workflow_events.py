@@ -57,7 +57,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         cls._initialized = True
 
     @classmethod
-    def process_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_event(cls, full_data: Dict[str, Any], trace: Trace, *, collect_node_messages: bool = True) -> Any:
         cls._ensure_initialized()
         event_type = full_data.get("event")
         if event_type in _WORKFLOW_BLOCKED_EVENTS:
@@ -69,8 +69,9 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
                     f"unknown jiuwen workflow event, use event through method, event type is {event_type}"
                 )
                 handler_method = cls._handler_methods.get(EVENT_THROUGH)
-            result = handler_method(full_data, trace)
-            return result
+            if event_type == ConversationEvent.MESSAGE_END.value:
+                return handler_method(full_data, trace, collect_node_messages=collect_node_messages)
+            return handler_method(full_data, trace)
         except Exception as e:
             workflow_logger.error(f"workflow event process failed, event type is {event_type}")
             workflow_logger.error("".join(traceback.format_exception(e)))
@@ -151,7 +152,9 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def process_message_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_message_end(
+        cls, full_data: Dict[str, Any], trace: Trace, *, collect_node_messages: bool = True
+    ) -> Any:
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -176,7 +179,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             if trace.outputs is None:
                 trace.outputs = {}
             trace.outputs[RESPONSE_CONTENT] = final_msg
-        else:
+        elif collect_node_messages:
             FieldDataProcessor.process_node_message(node_type=node_type, full_data=full_data, trace=trace)
         FieldDataProcessor.process_history_message(node_type=node_type, full_data=full_data, trace=trace)
         # Interaction node: set waiting status

@@ -4,7 +4,7 @@
 App Run API — 试运行接口
 
 提供工作流和智能体的试运行执行端点，将请求转换为 ExecutionRequest 格式后
-调用 orchestration.py 的 ir_execute 接口，再通过 EventHandler 封装流式结果。
+调用 orchestration.py 的私有事件入口，再通过 EventHandler 封装流式结果。
 """
 
 import os
@@ -20,7 +20,12 @@ from agent_runtime.serve.apis.app_run_request import (
     NodeRunContext,
     NodeExecuteRequest,
 )
-from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
+# Keep the public IR endpoint on SSE; app_run consumes the private event stream.
+from agent_runtime.serve.apis.orchestration import (
+    component_debug_execute,
+    execute_ir_events as ir_execute,
+)
+from agent_runtime.serve.execution_events import ExecutionEventStream
 from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
 from agent_runtime.serve.error_rsp import build_error_response
 from pydantic import ValidationError
@@ -519,11 +524,11 @@ async def _encapsulate_stream_response(
     ir_path: str,
     query: str = "",
 ):
-    """对 ir_execute 返回的 StreamingResponse 进行流式事件封装.
+    """对内部结构化事件或兼容 StreamingResponse 进行流式事件封装.
 
     非 StreamingResponse（如 JSONResponse）直接透传。
     """
-    if not isinstance(response, StreamingResponse):
+    if not isinstance(response, (StreamingResponse, ExecutionEventStream)):
         return response
     return await EventHandler.encapsulate_stream_response(
         response=response,
@@ -541,11 +546,11 @@ async def _encapsulate_non_stream_response(
     ir_path: str,
     query: str = "",
 ):
-    """对 ir_execute 返回的 StreamingResponse 进行非流式事件封装.
+    """对内部结构化事件或兼容 StreamingResponse 进行非流式事件封装.
 
     非 StreamingResponse（如 JSONResponse）直接透传。
     """
-    if not isinstance(response, StreamingResponse):
+    if not isinstance(response, (StreamingResponse, ExecutionEventStream)):
         return response
     return await EventHandler.encapsulate_non_stream_response(
         response=response,

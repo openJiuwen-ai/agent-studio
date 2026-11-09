@@ -11,6 +11,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Union
 
+import anyio
+
 from agent_runtime.common.config import settings, ModelConfigStrategyType
 from agent_runtime.common.ir_exceptions import IRBuildException
 from agent_runtime.common.ir_interfaces import (
@@ -18,6 +20,7 @@ from agent_runtime.common.ir_interfaces import (
     StorageReadError,
 )
 from agent_runtime.context.request_context import _request_ctx
+from agent_runtime.serve.execution_events import ExecutionEventStream, copy_json_event
 from agent_runtime.runner.controller_runner import ControllerRunner
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner
 from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
@@ -162,10 +165,17 @@ async def health():
     },
 )
 async def ir_execute(req: ExecutionRequest, request: Request):
-    """
-    IR execute endpoint.
-    直接透传 openjiuwen 原生格式，不做额外包装
-    """
+    """Public IR endpoint: retain the existing SSE/JSON response contract."""
+    return await _execute_ir(req, request)
+
+
+async def execute_ir_events(req: ExecutionRequest, request: Request):
+    """Private app_run entry; carries structured events only within this process."""
+    return await _execute_ir(req, request, structured_output=True)
+
+
+async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_output: bool = False):
+    """Shared preparation, moderation, prefetch and error handling for both entries."""
     workflow_logger.debug(
         "IR Execute Request - URL: %s %s", request.method, request.url
     )
@@ -268,6 +278,7 @@ async def ir_execute(req: ExecutionRequest, request: Request):
                 project_id=getattr(request.state, "project_id", ""),
                 entry_type=getattr(request.state, "entry_type", ""),
             ),
+            structured_output=structured_output,
         )
         try:
             _first_event = await anext(gen)
@@ -282,10 +293,10 @@ async def ir_execute(req: ExecutionRequest, request: Request):
             descriptor = error_factory.from_plugin_exception(e, _entry_rid)
             return error_factory.build_json_response(descriptor, _entry_lang)
 
-        return StreamingResponse(
-            content=_prefetched_stream(_first_event, gen),
-            media_type="text/event-stream",
-        )
+        prefetched = _prefetched_stream(_first_event, gen)
+        if structured_output:
+            return ExecutionEventStream(prefetched)
+        return StreamingResponse(content=prefetched, media_type="text/event-stream")
     else:
         full_text = await runner.run_blocking(req)
         now_ms = int(time.time() * 1000)
@@ -330,16 +341,20 @@ def _serialize_stream_chunk(chunk):
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
-def _fallback_terminal_done(execution_id: str) -> str:
-    """runner 未发送 done 时构造的兜底终态事件(空 data)。"""
-    done_payload = {
+def _fallback_terminal_payload(execution_id: str) -> dict:
+    """Construct the fallback terminal event without choosing a transport."""
+    return {
         "event": "done",
         "data": {},
         "index": 0,
         "executionId": execution_id,
         "createdTime": int(time.time()),
     }
-    return f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+
+
+def _fallback_terminal_done(execution_id: str) -> str:
+    """Keep the public SSE fallback format unchanged."""
+    return _serialize_stream_chunk(_fallback_terminal_payload(execution_id))
 
 
 async def _prefetched_stream(_first, _gen):
@@ -352,10 +367,11 @@ async def _prefetched_stream(_first, _gen):
         async for chunk in _gen:
             yield chunk
     finally:
-        try:
-            await _gen.aclose()
-        except Exception:
-            pass  # already closed or cleanup error — safe to ignore
+        with anyio.CancelScope(shield=True):
+            try:
+                await _gen.aclose()
+            except Exception:
+                workflow_logger.warning("Failed to close a prefetched execution stream", exc_info=True)
 
 
 @dataclass
@@ -379,6 +395,8 @@ async def stream_response(
     runner,
     moderation_engine=None,
     entry: Optional[StreamEntryContext] = None,
+    *,
+    structured_output: bool = False,
 ):
     """
     透传 OutputSchema 格式
@@ -397,7 +415,7 @@ async def stream_response(
     执行注册（终止接口数据源）：开头注册 current_task + 归属四元组到 ExecutionRegistry
     （agent_id=entry.entry_id、project 优先 entry.project_id，均由 ir_execute 从
     request.state 注入：执行智能体时 entry_id=agent_id、执行工作流时=workflow_id）；
-    finally 首行注销，自然结束/异常/被取消三路径均无残留。
+    finally 关闭所属迭代器并注销，自然结束/异常/被取消三路径均无残留。
     运行中被取消时本生成器被 task.cancel() 掐断，末尾无 done（无 done 即中止约定）。
     """
     execution_id = execution_id or str(uuid.uuid4())
@@ -410,6 +428,7 @@ async def stream_response(
     _sse_guard = SseTerminalGuard()
     _sse_guard.begin_streaming()
     _stream_started = False
+    raw_gen = moderated_gen = None
     try:
         _ctx = _request_ctx.get()
     except LookupError:
@@ -460,13 +479,19 @@ async def stream_response(
             # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
             # COM-03 §3.3: _stream_started 只在对外 yield 前置 True（pending done 不算对外开始）
             _stream_started = True
-            yield _serialize_stream_chunk(chunk)
+            if structured_output and isinstance(chunk, dict):
+                yield copy_json_event(chunk)
+            else:
+                yield _serialize_stream_chunk(chunk)
 
         # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
         if pending_done is not None:
-            yield _serialize_stream_chunk(pending_done)
+            yield (copy_json_event(pending_done)
+                   if structured_output and isinstance(pending_done, dict)
+                   else _serialize_stream_chunk(pending_done))
         else:
-            yield _fallback_terminal_done(execution_id)
+            yield (_fallback_terminal_payload(execution_id)
+                   if structured_output else _fallback_terminal_done(execution_id))
     except Exception as e:
         # COM-03 §3.2: 流中异常 → SSE error 帧（guard 原子抢占终态,只有赢家产出）
         if _stream_started:
@@ -482,7 +507,20 @@ async def stream_response(
             # 首帧前失败——不记日志,由 endpoint 首帧预取的 except 统一记录 + HTTP error
             raise
     finally:
-        await registry.unregister(req.conversation_id, task=entry_task)
+        # Closing an outer response must also close the owned runner generators.
+        # Cancellation can enter here while awaiting the runner, before the
+        # outer EventHandler can shield its own aclose(). Protect this boundary too.
+        with anyio.CancelScope(shield=True):
+            try:
+                for iterator in (moderated_gen, raw_gen if raw_gen is not moderated_gen else None):
+                    close = getattr(iterator, "aclose", None)
+                    if close is not None:
+                        try:
+                            await close()
+                        except Exception:
+                            workflow_logger.warning("Failed to close an execution iterator", exc_info=True)
+            finally:
+                await registry.unregister(req.conversation_id, task=entry_task)
 
 
 @dataclass
