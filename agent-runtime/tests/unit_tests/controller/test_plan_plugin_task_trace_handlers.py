@@ -58,8 +58,6 @@ def test_stream_entry_seeds_trace_handlers_from_stream_request():
     断言赋值发生在任何规划逻辑之前——入口段之后的规划逻辑在缺桩状态下
     自然抛错，不参与断言。
     """
-    import asyncio
-
     handlers = [SimpleNamespace(name="otel_handler")]
     mode = PlanExecuteMode.__new__(PlanExecuteMode)
 
