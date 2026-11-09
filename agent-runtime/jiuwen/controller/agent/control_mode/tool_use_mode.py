@@ -12,6 +12,12 @@ from jiuwen.controller.common.message import Message
 from jiuwen.controller.common.task import Task
 from jiuwen.controller.utils.utils import MessageConverter
 
+# 任务循环总趟数硬上限：iterations 仅在收到 PLANNING 码时自增，队列回补、
+# 工具等待等趟型不计数——病态场景（工具长期 pending/任务反复重入队列，
+# 状态机不回 PLANNING）下 while 恒真、无界自旋。单调计数不受任何重置
+# 影响，与 plan 模式 _MAX_STEP_TOTAL_ROUNDS 同款兜底范式。
+_MAX_TASK_TOTAL_PASSES = 100
+
 
 class ToolUseMode(BaseMode):
     def __init__(self, **kwargs):
@@ -91,9 +97,21 @@ class ToolUseMode(BaseMode):
         """
         current_message = initial_message
         iterations = 0
+        # 总趟数单调计数：不区分趟型（规划/队列回补/工具等待）一律累加，
+        # 兜住 iterations 不自增导致的 while 恒真
+        total_passes = 0
         runtime_data = initial_message.runtime_data
 
         while iterations < self.max_task_iterations:
+            total_passes += 1
+            if total_passes > _MAX_TASK_TOTAL_PASSES:
+                logger.warning(
+                    "Task loop exceeded %s total passes (iterations=%s), abort to avoid unbounded spin",
+                    _MAX_TASK_TOTAL_PASSES,
+                    iterations,
+                    simple_log="Task loop exceeded total passes cap, abort",
+                )
+                break
             # 与 base_mode._run_task_loop 保持一致，迭代开始信息为 DEBUG
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
