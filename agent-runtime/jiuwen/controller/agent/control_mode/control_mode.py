@@ -26,6 +26,13 @@ from jiuwen.controller.utils.utils import MessageConverter
 from jiuwen.orchestration.flow.enum import StreamDataMsg
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 
+# 任务循环总趟数硬上限：iterations 仅在分发到"GENERAL 型且名字未重复"的
+# 工作流时自增——插件/MCP/消息趟与同名工作流重复趟均不计数，病态场景
+# （此类任务持续产出、状态机不推进 GENERAL 工作流）下 while 恒真、无界
+# 自旋。单调计数不受任何重置影响，与 plan 模式 _MAX_STEP_TOTAL_ROUNDS、
+# tool_use 模式 _MAX_TASK_TOTAL_PASSES 同款兜底范式。
+_MAX_TASK_TOTAL_PASSES = 100
+
 
 class ControllerMode(BaseMode):
     def __init__(self, **kwargs):
@@ -422,7 +429,17 @@ class ControllerMode(BaseMode):
                 data={},
                 execution_id=self.task_id,
             )
+        # 总趟数单调计数：不区分趟型一律累加，兜住 iterations 不自增导致
+        # 的 while 恒真（见 _MAX_TASK_TOTAL_PASSES 注释）
+        total_passes = 0
         while iterations < self.max_task_iterations:
+            total_passes += 1
+            if total_passes > _MAX_TASK_TOTAL_PASSES:
+                logger.warning(
+                    f"task_id: {self.task_id}| Task loop exceeded "
+                    f"{_MAX_TASK_TOTAL_PASSES} total passes (iterations={iterations}), abort"
+                )
+                break
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "task_id: %s|Stream task iteration %s: "
