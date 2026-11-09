@@ -18,11 +18,11 @@ pydantic-core==2.46.3
 elasticsearch==8.19.3
 jieba==0.42.1
 # openjiuwen 暂指向 agent-core 官方 hotfix 分支（0.1.17_hotfix，
-# 当前 pin commit 463bed92）。待该分支合入 openJiuwen/agent-core@develop 后
+# 当前 pin commit b810a3c5d0fd99da621bac361dd2114e7e3852d3）。待该分支合入 openJiuwen/agent-core@develop 后
 # 改回 PyPI 版本 pin。
 # 注意：git+https 依赖要求构建镜像时装 git（见 studio-runtime 各 Dockerfile，
 # 随编译工具链临时安装、装完卸载）。
-openjiuwen @ git+https://gitcode.com/openJiuwen/agent-core.git@463bed921216990bbc105ebab0787325023782a6
+openjiuwen @ git+https://gitcode.com/openJiuwen/agent-core.git@b810a3c5d0fd99da621bac361dd2114e7e3852d3
 milvus-lite==3.1.1
 agent-sandbox==0.0.30
 opensearch-py==2.8.0

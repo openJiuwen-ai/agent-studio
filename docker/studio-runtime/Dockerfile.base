@@ -17,8 +17,11 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     fi \
     && DEBIAN_FRONTEND=noninteractive apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx \
+       curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx libjemalloc2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 注：此基础镜像仅安装 libjemalloc2 包，不设 LD_PRELOAD / 不创建软链
+# （x86_64 和 ARM64 交叉构建共用，库路径因架构而异）。
+# 激活由最终 Dockerfile / Dockerfile.arm 各自完成（ln -sf + CMD 内 LD_PRELOAD）。
 
 # 安装 pip Python 依赖（临时安装编译工具链 + git，编译完成后卸载）
 # git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
