@@ -17,7 +17,6 @@ _inner.tracer() / _inner.span() / agent_handler_valid()，替身可同时建模
 新旧两种 core 形态，测试不随配对 core 版本漂移。
 """
 
-import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -26,6 +25,7 @@ import pytest
 from jiuwen.extension.workflow_node.flow_api import FlowApi
 from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
 from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
+from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 
 USER_FIELDS = "userFields"
 
@@ -85,6 +85,7 @@ class _StubApiTool:
         self.card = SimpleNamespace(name=name)
         self.response = []
         self.params = []
+        self.invoke_calls = []
         self.ainvoke_calls = []
 
     async def ainvoke(self, inputs, **kwargs):
@@ -92,6 +93,9 @@ class _StubApiTool:
         return {"errCode": 0, "data": "ok"}
 
     async def invoke(self, inputs, **kwargs):
+        # invoke 与 ainvoke 分别记录：生产调用位点（invoke）与内部委托
+        # （ainvoke）可分辨，委托链不掩盖真实调用契约。
+        self.invoke_calls.append((inputs, kwargs))
         return await self.ainvoke(inputs, **kwargs)
 
 
@@ -168,6 +172,7 @@ async def test_flow_api_emits_plugin_span_with_new_core_session():
         )
 
     assert result[USER_FIELDS]["errCode"] == 0
+    assert len(api_tool.invoke_calls) == 1, "生产位点必须经 invoke 入口"
     assert len(api_tool.ainvoke_calls) == 1
     inputs, kwargs = api_tool.ainvoke_calls[0]
     assert inputs == {"query": "hi"}
@@ -206,6 +211,7 @@ async def test_flow_custom_api_emits_plugin_span_with_new_core_session():
         )
 
     assert result["userFields"]["errCode"] == 0
+    assert api_tool.invoke_calls[0][0] == {"query": "hi"}
     assert api_tool.ainvoke_calls[0][0] == {"query": "hi"}
     _assert_full_plugin_span(tracer, "custom_plugin", {"query": "hi"})
 
@@ -410,3 +416,58 @@ async def test_flow_api_stream_old_core_passthrough():
     assert api_tool.astream_calls == [({"query": "hi"}, {"runtime_auth": {"headers": {}}})]
     assert len(schemas) == 2
     _assert_no_plugin_events(tracer)
+
+
+@pytest.mark.asyncio
+async def test_flow_api_stream_real_decorator_keeps_astream():
+    """真实 decorate_tool_with_trace（不 patch）下 stream 位点仍拿得到 astream。
+
+    跨 core 版本底线用例：配对 core 的代理要么显式包装 astream（新 core，
+    execute_tool span 生效），要么仅包装 invoke、其余属性经
+    ``_TraceProxy.__getattr__`` 透传（!3650 之前的 core）。两种形态下
+    stream 位点的 astream 都必须可达且 chunk 不丢——「代理缺 astream →
+    流式节点 100% 失败」的配对风险在此被实测排除，而非被替身代理抹掉。
+    """
+    tracer = _FakeTracer()
+    api_tool = _StubStreamApiTool("weather_api")
+    flow = _make_flow_api(api_tool)
+    with patch.object(
+        flow, "_format_api_inputs", new=AsyncMock(return_value={"query": "hi"})
+    ), patch.object(flow, "_format_api_header", return_value={}), patch.object(
+        flow, "_transform_async_stream_data", new=_passthrough_transform
+    ):
+        schemas = []
+        async for schema in flow.stream(
+            dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
+        ):
+            schemas.append(schema)
+
+    assert api_tool.astream_calls == [
+        ({"query": "hi"}, {"runtime_auth": {"headers": {}}})
+    ]
+    assert len(schemas) == 2, "真实装饰下 chunk 数据仍完整流出"
+
+
+@pytest.mark.asyncio
+async def test_flow_api_stream_error_through_decorator_still_maps():
+    """装饰生效路径下 astream 抛错仍走既有异常映射，不被装饰吞掉。"""
+
+    class _BoomStreamTool(_StubStreamApiTool):
+        async def astream(self, inputs, **kwargs):
+            self.astream_calls.append((inputs, kwargs))
+            raise RuntimeError("api exploded")
+            yield  # noqa: B901  # 使本方法成为异步生成器，与真实 astream 同形态
+
+    tracer = _FakeTracer()
+    api_tool = _BoomStreamTool("weather_api")
+    flow = _make_flow_api(api_tool)
+    with patch.object(
+        flow, "_format_api_inputs", new=AsyncMock(return_value={"query": "hi"})
+    ), patch.object(flow, "_format_api_header", return_value={}), patch.object(
+        flow, "_transform_async_stream_data", new=_passthrough_transform
+    ):
+        with pytest.raises(JiuWenBaseException):
+            async for _schema in flow.stream(
+                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
+            ):
+                pass
