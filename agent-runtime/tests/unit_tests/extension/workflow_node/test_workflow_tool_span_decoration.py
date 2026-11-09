@@ -36,7 +36,8 @@ USER_FIELDS = "userFields"
 class _FakeSpanManager:
     """tracer_agent_span_manager 替身：create_agent_span 返回哑 span。"""
 
-    def create_agent_span(self, parent_span):
+    @staticmethod
+    def create_agent_span(parent_span):
         return SimpleNamespace(parent_invoke_id=getattr(parent_span, "invoke_id", None))
 
 
@@ -47,7 +48,8 @@ class _FakeTracer:
         self.events = []
         self.tracer_agent_span_manager = _FakeSpanManager()
 
-    def agent_handler_valid(self):
+    @staticmethod
+    def agent_handler_valid():
         return True
 
     async def trigger(self, handler_class_name, event_name, **kwargs):
@@ -55,6 +57,10 @@ class _FakeTracer:
 
 
 async def _no_op_trace(data=None, **kwargs):
+    return None
+
+
+def _no_op_span():
     return None
 
 
@@ -66,7 +72,7 @@ def _make_session(tracer, with_span_protocol: bool):
     """
     inner = SimpleNamespace(tracer=lambda: tracer)
     if with_span_protocol:
-        inner.span = lambda: None
+        inner.span = _no_op_span
     return SimpleNamespace(
         _inner=inner, trace=_no_op_trace, get_session_id=lambda: "session-1"
     )
@@ -347,12 +353,11 @@ async def test_flow_api_stream_path_uses_decorated_astream():
         "jiuwen.extension.workflow_node.flow_api.decorate_tool_with_trace",
         return_value=proxy,
     ):
-        schemas = [
-            schema
-            async for schema in flow.stream(
-                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
-            )
-        ]
+        schemas = []
+        async for schema in flow.stream(
+            dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
+        ):
+            schemas.append(schema)
 
     assert proxy.astream_calls == [
         ({"query": "hi"}, {"runtime_auth": {"headers": {}}})
@@ -375,12 +380,11 @@ async def test_flow_custom_api_stream_path_uses_decorated_astream():
         "jiuwen.extension.workflow_node.flow_custom_api.decorate_tool_with_trace",
         return_value=proxy,
     ):
-        schemas = [
-            schema
-            async for schema in flow.stream(
-                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
-            )
-        ]
+        schemas = []
+        async for schema in flow.stream(
+            dict(_API_INPUTS), _make_session(tracer, with_span_protocol=True), None
+        ):
+            schemas.append(schema)
 
     assert proxy.astream_calls == [({"query": "hi"}, {})]
     assert len(schemas) == 2, "chunk 数据仍完整流出"
@@ -397,12 +401,11 @@ async def test_flow_api_stream_old_core_passthrough():
     ), patch.object(flow, "_format_api_header", return_value={}), patch.object(
         flow, "_transform_async_stream_data", new=_passthrough_transform
     ):
-        schemas = [
-            schema
-            async for schema in flow.stream(
-                dict(_API_INPUTS), _make_session(tracer, with_span_protocol=False), None
-            )
-        ]
+        schemas = []
+        async for schema in flow.stream(
+            dict(_API_INPUTS), _make_session(tracer, with_span_protocol=False), None
+        ):
+            schemas.append(schema)
 
     assert api_tool.astream_calls == [({"query": "hi"}, {"runtime_auth": {"headers": {}}})]
     assert len(schemas) == 2
