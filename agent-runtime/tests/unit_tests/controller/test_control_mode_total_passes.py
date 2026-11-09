@@ -1,13 +1,14 @@
 # coding: utf-8
 # pylint: disable=protected-access
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-"""ControllerMode._stream_task_loop 总趟数硬上限回归测试。
+"""ControllerMode._stream_task_loop 连续不推进趟硬上限回归测试。
 
 实测暴露：iterations 仅在分发到"GENERAL 型且名字未重复"的工作流时自增
 （分发后置位）；插件/MCP/消息趟与同名工作流重复趟均不计数——此类任务
-持续产出时 while iterations < max_task_iterations 恒真、无界自旋。本测试
-钉住：总趟数单调计数触顶即断（落既有触顶终局路径），GENERAL 工作流
-计数语义不受影响。
+持续产出时 while iterations < max_task_iterations 恒真、无界自旋。守卫仅
+统计"连续不推进 iterations"的趟（任一推进趟清零），触顶即断落既有触顶
+终局路径；因此不覆盖任何 plan_config.max_iterations 配置预算——正常
+推进任务始终按预算退出。
 """
 
 from types import SimpleNamespace
@@ -55,6 +56,23 @@ def _make_general_task_factory():
         task.workflow_context = SimpleNamespace(
             type=WorkflowType.GENERAL, workflow_name=f"wf-{counter[0]}"
         )
+        return task
+
+    return factory
+
+
+def _make_alternating_task_factory():
+    """交替任务工厂：推进趟/不推进趟轮换，永不连续不推进。"""
+
+    counter = [0]
+
+    def factory():
+        counter[0] += 1
+        task = _make_plugin_task()
+        if counter[0] % 2:
+            task.workflow_context = SimpleNamespace(
+                type=WorkflowType.GENERAL, workflow_name=f"wf-{counter[0]}"
+            )
         return task
 
     return factory
@@ -117,14 +135,14 @@ async def _drain(gen):
 
 @pytest.mark.asyncio
 async def test_plugin_passes_capped():
-    """插件任务无 workflow_context（iterations 恒 0）：总趟数触顶即断。"""
+    """插件任务无 workflow_context（iterations 恒 0）：连续不推进趟触顶即断。"""
     mode = _make_mode(_make_plugin_task, max_task_iterations=10)
 
-    with patch.object(cmode, "_MAX_TASK_TOTAL_PASSES", 3):
+    with patch.object(cmode, "_MAX_IDLE_TASK_PASSES", 3):
         drained = await _drain(mode._stream_task_loop(_make_message()))
 
     assert _END_SENTINEL in drained  # 断路落入既有触顶终局路径
-    assert mode.task_planner.calls == 3  # 上限 3 趟后断，而非 10 趟预算
+    assert mode.task_planner.calls == 3  # 连续 3 趟不推进后断，而非 10 趟预算
 
 
 @pytest.mark.asyncio
@@ -135,18 +153,32 @@ async def test_general_workflow_budget_semantics_unchanged():
     drained = await _drain(mode._stream_task_loop(_make_message()))
 
     assert _END_SENTINEL in drained
-    assert mode.task_planner.calls == 2  # 预算 2 趟用尽退出，总趟上限未介入
+    assert mode.task_planner.calls == 2  # 预算 2 趟用尽退出，守卫未介入
     assert mode.context_manager.controller_context.global_iteration_count == 2
 
 
 @pytest.mark.asyncio
-async def test_cap_dominates_when_smaller_than_budget():
-    """两计数并存：上限小于预算时按总趟数断，GENERAL 计数保持推进。"""
+async def test_cap_never_cuts_productive_loops():
+    """检视场景钉住：每趟都推进时，上限远小于预算也不截断。"""
     mode = _make_mode(_make_general_task_factory(), max_task_iterations=10)
 
-    with patch.object(cmode, "_MAX_TASK_TOTAL_PASSES", 2):
+    with patch.object(cmode, "_MAX_IDLE_TASK_PASSES", 2):
         drained = await _drain(mode._stream_task_loop(_make_message()))
 
     assert _END_SENTINEL in drained
-    assert mode.task_planner.calls == 2  # 总趟上限 2 先于预算 10 触发
-    assert mode.context_manager.controller_context.global_iteration_count == 2
+    assert mode.task_planner.calls == 10  # 跑满预算 10 趟退出，上限未介入
+    assert mode.context_manager.controller_context.global_iteration_count == 10
+
+
+@pytest.mark.asyncio
+async def test_idle_counter_reset_by_progress():
+    """推进趟清零计数：间歇性不推进不会误触上限，按预算退出。"""
+    mode = _make_mode(_make_alternating_task_factory(), max_task_iterations=6)
+
+    with patch.object(cmode, "_MAX_IDLE_TASK_PASSES", 2):
+        drained = await _drain(mode._stream_task_loop(_make_message()))
+
+    assert _END_SENTINEL in drained
+    # 预算按 iterations 计：推进 6 次需 11 趟（推进/不推进交替），守卫未介入
+    assert mode.task_planner.calls == 11
+    assert mode.context_manager.controller_context.global_iteration_count == 6
