@@ -1479,6 +1479,10 @@ public class McpServiceManager implements IMcpServiceManagerService {
         // 自定义 apikey 鉴权：出站前对 cust-* 做配置驱动 rename（cust-token→token, cust-userid→userId）
         McpCustomerHeaderProjection.renameOutboundCustomerHeaders(headerInfo, serviceEntity.getName());
 
+        // FEAT-093 调测期动态凭证：scope=DYNAMIC 服务凭证值不入库，
+        // 调测请求经 debug_headers 携带调试值（key 须为已登记的 auth_keys 出站头名）
+        mergeDynamicDebugHeaders(serviceEntity, testInfo.getDebugHeaders(), headerInfo);
+
         log.info("Calling MCP service tool. Service name: {}, Tool name: {}", serviceEntity.getName(), testInfo.getToolName());
         McpSchema.CallToolResult callToolResult = mcpClientService.callMcpServiceTool(
             serviceEntity.getName(), testInfo.getToolName(), mcpUrl, testInfo.getParams(), serviceEntity.getOrgType(), headerInfo);
@@ -1489,6 +1493,69 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
 
         return resp;
+    }
+
+    /**
+     * FEAT-093 调测期动态凭证注入。
+     *
+     * 仅接受服务 auth_info(scope=DYNAMIC, domain=HEADERS) 已登记的出站头名；
+     * 空白值跳过（与工作流侧"未绑定不注入"语义一致）；值须 Latin-1 可编码且
+     * 不含控制字符，避免非法头值穿透到 HTTP 客户端才在编码处失败（不可诊断）。
+     */
+    private void mergeDynamicDebugHeaders(McpServiceEntity serviceEntity, Map<String, String> debugHeaders,
+        Map<String, String> headerInfo) {
+        if (ObjectUtils.isEmpty(debugHeaders)) {
+            return;
+        }
+        AuthInfo authInfo = serviceEntity.getAuthInfo();
+        if (authInfo == null || authInfo.getScope() == null
+            || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            log.warn("[testServicesTools] debug headers ignored: service {} auth scope is not DYNAMIC, service id: {}",
+                serviceEntity.getName(), serviceEntity.getId());
+            return;
+        }
+        Set<String> registeredNames = new HashSet<>();
+        if (ObjectUtils.isNotEmpty(authInfo.getAuthKeys())) {
+            for (AuthKeyInfo key : authInfo.getAuthKeys()) {
+                if (key != null && StringUtils.isNotBlank(key.getTargetName())) {
+                    registeredNames.add(key.getTargetName().trim());
+                }
+            }
+        }
+        for (Map.Entry<String, String> entry : debugHeaders.entrySet()) {
+            String name = entry.getKey() == null ? "" : entry.getKey().trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            if (!registeredNames.contains(name)) {
+                log.warn("[testServicesTools] debug header '{}' is not a registered dynamic auth key, service id: {}",
+                    name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' is not a registered dynamic auth key");
+            }
+            String value = entry.getValue();
+            if (StringUtils.isBlank(value)) {
+                continue;
+            }
+            if (!isLatin1HeaderValue(value)) {
+                log.warn("[testServicesTools] debug header '{}' contains characters not allowed in an HTTP header, service id: {}",
+                    name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' value contains characters not allowed in an HTTP header");
+            }
+            headerInfo.put(name, value);
+            log.info("[testServicesTools] dynamic debug header applied: {}", name);
+        }
+    }
+
+    private boolean isLatin1HeaderValue(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c == 0x7F || c > 0xFF) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private McpServiceDataResp transformerMcpRes(McpSchema.CallToolResult callToolResult) {
