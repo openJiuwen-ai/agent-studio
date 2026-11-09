@@ -103,14 +103,16 @@ class TestCreateTraceManagerModelIdentity:
 class TestAgentCoreModelLayerDisplayName:
     """AgentCoreModelLayer 的 model_display_name 字段落位与默认值。"""
 
-    def test_field_defaults_to_empty(self):
+    @staticmethod
+    def test_field_defaults_to_empty():
         from jiuwen.integration.agent_core_model_new import AgentCoreModelLayer
 
         layer = AgentCoreModelLayer(default_model_id="3f2b8c1e-uuid")
         assert layer.model_display_name == ""
         assert layer.model_name == "3f2b8c1e-uuid"
 
-    def test_field_stored_normalized(self):
+    @staticmethod
+    def test_field_stored_normalized():
         from jiuwen.integration.agent_core_model_new import AgentCoreModelLayer
 
         layer = AgentCoreModelLayer(
