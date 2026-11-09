@@ -77,3 +77,14 @@ def test_trace_metadata_prefers_loaded_kb_retrieval_params(monkeypatch):
     )
     monkeypatch.setattr(comp, "_kb_config", {"retrieval_params": {"topK": 7}})
     assert comp.trace_metadata()["top_k"] == 7
+
+
+def test_trace_metadata_tolerates_degenerate_payloads(monkeypatch):
+    # 值来自 IR/OBS 任意载荷：knowledgeBaseIds 缺省、retrieval_params 非 dict
+    # 都不向 vertex 抛错（vertex 侧另有兜底，这里保证自身不出错）
+    comp = FlowKnowledgeRetrieval({"connectionId": "conn-1"})
+    monkeypatch.setattr(comp, "_kb_config", {"retrieval_params": ["not-a-dict"]})
+
+    metadata = comp.trace_metadata()
+
+    assert metadata == {"data_source_ids": []}

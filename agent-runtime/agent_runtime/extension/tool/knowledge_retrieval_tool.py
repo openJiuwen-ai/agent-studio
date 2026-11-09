@@ -188,7 +188,9 @@ class KnowledgeRetrievalTool(Tool):
                 retrieval_config=self._retrieval_config,
                 tag_overrides=self._tag_overrides,
             )
-        except Exception as exc:
+        except BaseException as exc:
+            # BaseException：asyncio.CancelledError（取消/超时）不属于 Exception，
+            # 取消路径同样要收尾 error 事件后再抛出，避免 retrieval span 悬空
             await self._end_retrieval_span_error(session, span, exc)
             raise
         await self._end_retrieval_span(session, span, result)
@@ -202,7 +204,8 @@ class KnowledgeRetrievalTool(Tool):
             return await _TracerAgentUtils.trace_retriever_start(
                 session, query=str(query) if query else None, instance_name=_RETRIEVAL_NAME
             )
-        except Exception:
+        except Exception as e:
+            workflow_logger.warning("knowledge retrieval trace start failed: %s: %s", type(e).__name__, e)
             return None
 
     async def _end_retrieval_span(self, session, span, result) -> None:

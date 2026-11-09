@@ -8,6 +8,8 @@
 - 追踪调用自身的异常被吞掉，绝不影响检索主流程。
 """
 
+import asyncio
+
 import pytest
 
 from agent_runtime.extension.tool import knowledge_retrieval_tool as krt
@@ -146,3 +148,24 @@ async def test_invoke_empty_query_still_emits_event_pair(monkeypatch):
     assert [call[0] for call in fake.calls] == ["start", "end"]
     assert fake.calls[0][2] is None  # 空查询不传 query
     assert fake.calls[1][2] == []  # 空结果 documents 为空列表
+
+
+@pytest.mark.asyncio
+async def test_invoke_cancellation_still_emits_error_event(monkeypatch):
+    # CancelledError 属 BaseException：except Exception 接不住，span 会悬空。
+    # 取消/超时路径同样要发 error 事件收尾后原样抛出。
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+
+    async def fake_run_retrieval(**kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    session = object()
+    with pytest.raises(asyncio.CancelledError) as excinfo:
+        await tool.invoke({"query": "q"}, session=session)
+
+    assert [call[0] for call in fake.calls] == ["start", "error"]
+    assert fake.calls[1][2] is excinfo.value  # 取消对象原样透传给事件

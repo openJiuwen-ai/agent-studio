@@ -115,13 +115,15 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         """
         if self._conf is None:
             return None
-        metadata: Dict = {"data_source_ids": list(self._conf.knowledge_base_ids)}
+        # 值来自 IR/OBS 任意载荷：knowledge_base_ids 可能为 None，
+        # retrieval_params 可能不是 dict，全部就地兜底，不向 vertex 抛错
+        metadata: Dict = {"data_source_ids": list(self._conf.knowledge_base_ids or [])}
         retrieval_config = self._conf.retrieval_config or {}
         if self._kb_config is not None:
             retrieval_config = self._kb_config.get("retrieval_params", retrieval_config)
         try:
             metadata["top_k"] = int(retrieval_config.get("topK"))
-        except (TypeError, ValueError):
+        except (AttributeError, TypeError, ValueError):
             pass
         return metadata
 
