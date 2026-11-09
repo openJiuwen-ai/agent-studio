@@ -34,6 +34,26 @@ from jiuwen.multi_agent.core.stream.stream_handler import (
 )
 
 
+def _current_user_id_or_none() -> Optional[str]:
+    """当前请求的用户 id（遥测 ContextVar）；遥测层不可用返回 None。"""
+    try:
+        from agent_runtime.common.trace_compat import current_user_id
+
+        return current_user_id()
+    except Exception:  # noqa: BLE001 - 遥测不可用不构成消息发送失败
+        return None
+
+
+def _bind_current_user_id(user_id: Optional[str]) -> None:
+    """把 envelope 携带的用户 id 回绑当前任务上下文（有值才绑）。"""
+    try:
+        from agent_runtime.common.trace_compat import bind_current_user_id
+
+        bind_current_user_id(user_id)
+    except Exception:  # noqa: BLE001 - 遥测不可用不影响消息处理
+        pass
+
+
 @dataclass(kw_only=True)
 class ProcessResult:
     """Message processing result"""
@@ -143,6 +163,7 @@ class StandaloneRunner:
             future=future,
             stream_handler=stream_handler,
             message_id=message_id,
+            user_id=_current_user_id_or_none(),
         )
         # Add message to queue
         logger.debug(
@@ -238,6 +259,9 @@ class StandaloneRunner:
 
     async def _process_send_message(self, envelope: SendMessageEnvelope) -> Any:
         """Process send message"""
+        # 消息处理任务继承消费循环上下文（用户事实为空）——把 envelope 携带
+        # 的用户 id 回绑 ContextVar，下游遥测身份（gen_ai.user.id）恢复可见。
+        _bind_current_user_id(envelope.user_id)
         message = envelope.message
         recipient = envelope.recipient
         sender = envelope.sender
