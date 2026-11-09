@@ -11,6 +11,7 @@ PlanExecute 控制模式
 """
 
 import json
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -39,9 +40,33 @@ from jiuwen.controller.task_planner.planning_modules.plan_tracker import (
 from jiuwen.controller.utils.utils import MessageConverter, ToolFormatter
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 
-# step 级总轮数硬上限：step_iteration 会被工具切换/死循环检测合法重置，
-# 单调递增的 total_rounds 不受影响，兜底"计数器被反复清零"形态的 step 死循环
-_MAX_STEP_TOTAL_ROUNDS = 100
+# step 级连续无进展轮数上限：轮末命中错误特征、连续同内容指纹或工具未解析
+# 记一次无进展，结果可用的干净轮清零。兜底"熔断/切换重置打穿轮次预算"形态
+# 的 step 死循环，且不截断长期合法的干净工具链（检视意见：总轮数硬上限会把
+# 正当的长链调用一并拦腰截断，与 !2618 任务循环同款问题）
+_MAX_IDLE_STEP_ROUNDS = 100
+
+# 错误特征模式：供 _extract_error_signature 与无进展判定共用
+_ERROR_SIGNATURE_PATTERNS = (
+    r"NameError:\s*name\s+'[^']+'\s+is\s+not\s+defined",
+    r"SyntaxError:\s*.*",
+    r"TypeError:\s*.*",
+    r"ValueError:\s*.*",
+    r"ImportError:\s*.*",
+    r"exit_code:\s*\d+",
+    r"stderr:\s*.*",
+)
+
+
+def _has_error_pattern(content) -> bool:
+    """内容是否命中错误特征模式（不含内容指纹兜底）。
+
+    区别于 _extract_error_signature 的"签名"：干净但内容变化的轮结果
+    不应被当作无进展，只有真正带错误特征的输出才算。
+    """
+    if not content:
+        return False
+    return any(re.search(pattern, content) for pattern in _ERROR_SIGNATURE_PATTERNS)
 
 
 class PlanExecuteMode(BaseMode):
@@ -318,28 +343,29 @@ class PlanExecuteMode(BaseMode):
         max_same_error_retries = 3
         # 工具切换时重置迭代计数器
         last_tool_name = None
-        # 单调总轮数：不受任何重置影响，超限即强制结束本 step
-        total_rounds = 0
+        # 连续无进展轮数：错误特征/连续同指纹/工具未解析轮累计，干净轮清零
+        idle_rounds = 0
+        prev_error_key = None
 
         while not step_done:
             step_iteration += 1
-            total_rounds += 1
             if self.terminate:
                 break
-            if total_rounds > _MAX_STEP_TOTAL_ROUNDS:
+            if idle_rounds >= _MAX_IDLE_STEP_ROUNDS:
                 logger.warning(
-                    f"task_id: {self.task_id}| Step {step.step_idx} total rounds "
-                    f"{total_rounds} reached hard limit, forcing step end"
+                    f"task_id: {self.task_id}| Step {step.step_idx} idle rounds "
+                    f"{idle_rounds} reached limit, forcing step end"
                 )
                 # 写入context让模型知道步骤被强制终止的原因
                 self.context_manager.add_function_message(
                     name=last_tool_name or "unknown",
                     intent=last_tool_name or "unknown",
                     content=(
-                        f"当前步骤总轮数已达上限（{_MAX_STEP_TOTAL_ROUNDS}），"
+                        f"当前步骤已连续 {idle_rounds} 轮无进展"
+                        f"（上限 {_MAX_IDLE_STEP_ROUNDS}），"
                         "强制结束本步骤。"
                     ),
-                    tool_call_id="step_total_rounds_limit",
+                    tool_call_id="step_idle_rounds_limit",
                 )
                 break
 
@@ -424,7 +450,22 @@ class PlanExecuteMode(BaseMode):
                 else:
                     last_error_content = error_key
                     consecutive_same_error_count = 1
-            
+
+            # 连续无进展计数（检视意见整改）：错误特征、连续同内容指纹或
+            # 工具未解析记一次无进展；结果可用的干净轮清零——正当的长工具链
+            # 不会像旧总轮数硬上限那样被拦腰截断
+            if not step_done:
+                round_error_key = self._extract_error_signature(result_content)
+                if (
+                    round_had_unresolved_tool
+                    or _has_error_pattern(result_content)
+                    or (round_error_key is not None and round_error_key == prev_error_key)
+                ):
+                    idle_rounds += 1
+                else:
+                    idle_rounds = 0
+                prev_error_key = round_error_key
+
             if step_iteration >= max_iterations:
                 last_iteration_had_tool_call = llm_result.get("has_tool_calls", False)
                 if last_iteration_had_tool_call:
@@ -464,18 +505,8 @@ class PlanExecuteMode(BaseMode):
         """提取错误信息的特征签名，用于判断是否为重复出现的相同错误"""
         if not content:
             return None
-        import re as re_module
-        patterns = [
-            r"NameError:\s*name\s+'[^']+'\s+is\s+not\s+defined",
-            r"SyntaxError:\s*.*",
-            r"TypeError:\s*.*",
-            r"ValueError:\s*.*",
-            r"ImportError:\s*.*",
-            r"exit_code:\s*\d+",
-            r"stderr:\s*.*",
-        ]
-        for pattern in patterns:
-            match = re_module.search(pattern, content)
+        for pattern in _ERROR_SIGNATURE_PATTERNS:
+            match = re.search(pattern, content)
             if match:
                 return match.group(0)[:200]
         return content[:200] if len(content) > 10 else None

@@ -10,6 +10,7 @@ Must be applied *after* ``apply_parallel_branch_grouping_patch``.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import itertools
 
 from collections import defaultdict, deque
@@ -1108,12 +1109,19 @@ def _compile_nested_patched(self, graph_store=None, step_callback=None, nodes=No
         # Keep partial filtering — filter safe selectors, leave unsafe ones.
 
     # Step 2: Run original _compile (only safe targets are in self.waits).
-    # 当前 core 两线 _compile 均无 nodes 形参，直接调用；签名保留 nodes
-    # 容忍位（旧 0.1.17_hotfix core 曾以关键字传入，吞掉不转发），
-    # 新旧 core 矩阵下均不会在编译期 TypeError。
-    compiled = _original_compile(
-        self, graph_store=graph_store, step_callback=step_callback
-    )
+    # core d8cd86e12（0.1.17_hotfix 线）给 PregelGraph._compile 加了 nodes
+    # 形参且 compile() 以关键字传入；本补丁整体替换 _compile，签名不同步
+    # 会让工作流在编译期 TypeError（表现为点执行无响应）。develop 线 core
+    # 尚无该形参，探测后按需转发，两条 core 线都可加载本补丁
+    # （test_nested_branch_barrier_compile_sync 钉住转发语义）。
+    if "nodes" in inspect.signature(_original_compile).parameters:
+        compiled = _original_compile(
+            self, graph_store=graph_store, step_callback=step_callback, nodes=nodes
+        )
+    else:
+        compiled = _original_compile(
+            self, graph_store=graph_store, step_callback=step_callback
+        )
 
     # Step 3: Replace ConditionalRouter selectors on safe branch nodes.
     for branch_node, targets_to_skip in skip_targets.items():
