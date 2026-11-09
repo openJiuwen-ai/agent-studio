@@ -485,8 +485,8 @@ async def test_flow_api_stream_error_through_decorator_still_maps():
     class _BoomStreamTool(_StubStreamApiTool):
         async def astream(self, inputs, **kwargs):
             self.astream_calls.append((inputs, kwargs))
-            raise RuntimeError("api exploded")
-            yield  # noqa: B901  # 使本方法成为异步生成器，与真实 astream 同形态
+            yield {"errCode": 0, "data": "partial"}
+            raise RuntimeError("api exploded mid-stream")
 
     tracer = _FakeTracer()
     api_tool = _BoomStreamTool("weather_api")
