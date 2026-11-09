@@ -122,6 +122,10 @@ class PlanExecuteMode(BaseMode):
             # 保存当前请求上下文，便于工具执行时使用
             self._current_query = request.query
             self._runtime_context = request.runtime_context
+            # OTel：保留 trace_handlers 引用——规划模式插件任务供给经
+            # getattr(self, "_trace_handlers", None) 消费此属性（StepExecute
+            # 载荷消费已随 !2524 回退移除，本行是仅存的赋值点）
+            self._trace_handlers = request.trace_handlers
             self._workflow_req_params = {}
             self._conversation_id = None
             if request.runtime_context and hasattr(
