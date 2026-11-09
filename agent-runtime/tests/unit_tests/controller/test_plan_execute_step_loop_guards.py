@@ -20,6 +20,16 @@ import pytest
 from jiuwen.controller.agent.control_mode import plan_execute_mode as pem
 
 
+def _stub_build_step_hint(iteration, ctx):
+    """step 提示桩：提示内容不参与断言。"""
+    return "hint"
+
+
+def _stub_log_step_iteration(*args, **kwargs):
+    """迭代日志桩：静默，避免日志副作用。"""
+    return None
+
+
 def _make_mode():
     """构造最小 PlanExecuteMode，绕过复杂初始化（同既有测试范式）。"""
     with patch.object(pem.PlanExecuteMode, "__init__", return_value=None):
@@ -28,8 +38,8 @@ def _make_mode():
     mode.terminate = False
     mode._tool_failure_count = {}
     mode.context_manager = MagicMock()
-    mode._build_step_hint = lambda iteration, ctx: "hint"
-    mode._log_step_iteration = lambda *args, **kwargs: None
+    mode._build_step_hint = _stub_build_step_hint
+    mode._log_step_iteration = _stub_log_step_iteration
     return mode
 
 
