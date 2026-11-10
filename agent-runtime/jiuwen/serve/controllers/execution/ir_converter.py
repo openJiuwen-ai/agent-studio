@@ -156,6 +156,9 @@ class _LLMModelIdentifiers(NamedTuple):
 
 _BASE_AGENT_SWITCH = "BASE_AGENT_SWITCH"
 _AGENT_CORE_REGISTERED_MODEL_IDS = set()
+# 模型显示名缓存（model_id → 人读名）：与 _AGENT_CORE_REGISTERED_MODEL_IDS 同生命周期，
+# 供重复注册早退路径回带显示名（provider 只在首次注册时跑）。
+_AGENT_CORE_MODEL_DISPLAY_NAMES = {}
 
 # 可插拔的 ModelConfigProvider 工厂函数，默认使用 IRModelConfigProvider。
 # WorkflowRunner 在初始化时根据 MODEL_CONFIG_STRATEGY 环境变量覆盖此函数，
@@ -4182,32 +4185,40 @@ class IRConverter:
             or agent_name
             or ""
         )
-        await IRConverter._register_agent_core_llm_model(model_id, model_configs)
+        model_display_name = await IRConverter._register_agent_core_llm_model(
+            model_id, model_configs
+        )
         return AgentCoreModelLayer(
             runtime=ModelWrapper(),
             default_model_id=model_id,
             default_session_id=session_id,
             default_agent_id=resolved_agent_id,
+            model_display_name=model_display_name,
             default_agent_name=resolved_agent_name,
         )
 
     @staticmethod
-    async def _register_agent_core_llm_model(model_id: str, model_configs: dict) -> None:
-        """Register an openjiuwen model resource from jiuwen IR model config.
+    async def _register_agent_core_llm_model(
+        model_id: str, model_configs: dict
+    ) -> str:
+        """Register an openjiuwen model resource and return its display name.
 
         Uses the configured ModelConfigProvider (via _get_model_config_provider())
-        for consistent model configuration across all components.
+        for consistent model configuration across all components. The display
+        name (human-readable, from the provider's client config when the
+        gateway metadata carries one) is returned so callers can surface it on
+        telemetry; empty string when absent — callers keep the plain model_id.
         """
 
         if not model_id:
-            return
+            return ""
         if model_id in _AGENT_CORE_REGISTERED_MODEL_IDS:
             logger.debug(
                 "Agent-core model resource already registered: model_id=%s",
                 model_id,
                 simple_log="agent-core model resource already registered",
             )
-            return
+            return _AGENT_CORE_MODEL_DISPLAY_NAMES.get(model_id, "")
 
         from agent_runtime.common.model_adapters import adapt_ir_converter_model_config
         from openjiuwen.core.foundation.llm import Model
@@ -4217,6 +4228,18 @@ class IRConverter:
 
         provider = _get_model_config_provider()
         llm_comp_config = await provider.get_llm_config(adapted_conf)
+
+        # 显示名与真身模型同源同值：都读自同一份 client config（OBS 网关
+        # provider 从元数据带出；env/IR provider 无此字段则为空串）。
+        model_display_name = str(
+            getattr(
+                getattr(llm_comp_config, "model_client_config", None),
+                "model_display_name",
+                "",
+            )
+            or ""
+        )
+        _AGENT_CORE_MODEL_DISPLAY_NAMES[model_id] = model_display_name
 
         # Extract model name for logging
         model_name = model_configs.get("modelName") or model_id
@@ -4255,7 +4278,7 @@ class IRConverter:
                     f"Agent-core model resource already exists in runner: model_id={model_id}",
                     simple_log="agent-core model resource already exists",
                 )
-                return
+                return model_display_name
             raise RuntimeError(
                 f"Failed to register agent-core model resource: {add_result}"
             )
@@ -4265,6 +4288,7 @@ class IRConverter:
             f"Registered agent-core model resource: model_id={model_id}, model={model_name}",
             simple_log="registered agent-core model resource",
         )
+        return model_display_name
 
     @staticmethod
     def _resolve_legacy_model_config(model_configs: dict) -> dict:
