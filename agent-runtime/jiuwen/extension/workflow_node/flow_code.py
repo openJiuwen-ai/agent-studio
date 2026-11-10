@@ -91,19 +91,45 @@ class FlowCode(WorkflowComponent):
     def component_type(self) -> str:
         return JIUWEN_CODE_TYPE
 
-    def _check_blacklist(self, code: str) -> None:
-        clean_code = " ".join(code.split())
-        # CODE_BLACK_LIST 为空串时 get(..., "[]") 仍返回 ""，json.loads("") 会崩；
-        # 空/空白/非法 JSON/非 list → 无黑名单
+    def _load_code_blacklist(self) -> list:
+        """解析 CODE_BLACK_LIST：空串/空白容错；非法 JSON/非 list fail-closed。"""
         raw = (os.environ.get("CODE_BLACK_LIST") or "").strip()
         if not raw:
-            black_list: list = []
-        else:
-            try:
-                parsed = json.loads(raw)
-            except json.JSONDecodeError:
-                parsed = []
-            black_list = parsed if isinstance(parsed, list) else []
+            return []
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as e:
+            workflow_logger.error(
+                "CODE_BLACK_LIST is not valid JSON, reject code execution: %r", raw
+            )
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                comp="flow_code",
+                ability="invoke",
+                reason=f"CODE_BLACK_LIST is not valid JSON: {e}",
+                workflow="n/a",
+            ) from e
+        if not isinstance(parsed, list):
+            workflow_logger.error(
+                "CODE_BLACK_LIST must be a JSON list, got %s: %r",
+                type(parsed).__name__,
+                raw,
+            )
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                comp="flow_code",
+                ability="invoke",
+                reason=(
+                    "CODE_BLACK_LIST must be a JSON list, "
+                    f"got {type(parsed).__name__}"
+                ),
+                workflow="n/a",
+            )
+        return [kw for kw in parsed if isinstance(kw, str)]
+
+    def _check_blacklist(self, code: str) -> None:
+        clean_code = " ".join(code.split())
+        black_list = self._load_code_blacklist()
         if black_list:
             black_keyword = next((kw for kw in black_list if kw in clean_code), None)
             if black_keyword:

@@ -2,9 +2,8 @@
 
 """FlowCode CODE_BLACK_LIST 解析回归。
 
-覆盖：环境变量存在但为空串时，原先 json.loads("") 抛
-Expecting value: line 1 column 1 (char 0)，导致对象处理流中的代码节点
-invoke 失败。修复后空串/空白/非法 JSON 均视为无黑名单。
+空串/空白容错为无黑名单；非法 JSON/非 list fail-closed，避免配置写错时
+静默关闭安全控制。
 """
 
 import os
@@ -41,19 +40,28 @@ class TestLoadCodeBlacklist:
             assert _load_code_blacklist() == []
 
     @staticmethod
-    def test_invalid_json_returns_empty():
+    def test_invalid_json_fail_closed():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": "not-json"}):
-            assert _load_code_blacklist() == []
+            with pytest.raises(Exception) as exc_info:
+                _load_code_blacklist()
+            assert "CODE_BLACK_LIST" in str(exc_info.value)
 
     @staticmethod
-    def test_non_list_json_returns_empty():
+    def test_non_list_json_fail_closed():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": '{"a": 1}'}):
-            assert _load_code_blacklist() == []
+            with pytest.raises(Exception) as exc_info:
+                _load_code_blacklist()
+            assert "list" in str(exc_info.value).lower()
 
     @staticmethod
     def test_valid_list_parsed():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": '["subprocess","os.system"]'}):
             assert _load_code_blacklist() == ["subprocess", "os.system"]
+
+    @staticmethod
+    def test_non_string_items_filtered():
+        with patch.dict(os.environ, {"CODE_BLACK_LIST": '["subprocess", 123]'}):
+            assert _load_code_blacklist() == ["subprocess"]
 
 
 class TestCheckBlacklistEmptyEnv:
@@ -76,3 +84,13 @@ class TestCheckBlacklistEmptyEnv:
                     flow_code, "import subprocess\ndef main(args): return {}"
                 )
             assert "subprocess" in str(exc_info.value)
+
+    @staticmethod
+    def test_invalid_json_blocks_invoke():
+        flow_code = FlowCode(
+            FlowCodeConfig(code="def main(args): return {}", exec_env="local")
+        )
+        with patch.dict(os.environ, {"CODE_BLACK_LIST": "not-json"}):
+            with pytest.raises(Exception) as exc_info:
+                _call_check_blacklist(flow_code, "def main(args): return {}")
+            assert "CODE_BLACK_LIST" in str(exc_info.value)
