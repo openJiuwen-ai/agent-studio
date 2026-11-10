@@ -1517,11 +1517,12 @@ public class McpServiceManager implements IMcpServiceManagerService {
                 serviceEntity.getName(), serviceEntity.getId());
             return;
         }
+        // HTTP 头名大小写不敏感：登记名按小写归一比对，接受合法大小写变体
         Set<String> registeredNames = new HashSet<>();
         if (ObjectUtils.isNotEmpty(authInfo.getAuthKeys())) {
             for (AuthKeyInfo key : authInfo.getAuthKeys()) {
                 if (key != null && StringUtils.isNotBlank(key.getTargetName())) {
-                    registeredNames.add(key.getTargetName().trim());
+                    registeredNames.add(key.getTargetName().trim().toLowerCase(Locale.ROOT));
                 }
             }
         }
@@ -1547,7 +1548,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
                 throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
                     "debug header '" + name + "' is not a valid http header name");
             }
-            if (!registeredNames.contains(name)) {
+            if (!registeredNames.contains(name.toLowerCase(Locale.ROOT))) {
                 log.warn("[testServicesTools] debug header '{}' is not a registered dynamic auth key, service id: {}",
                     name, serviceEntity.getId());
                 throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,

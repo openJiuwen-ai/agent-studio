@@ -2181,9 +2181,18 @@ public class IrAdapterService {
                 || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
             return;
         }
+        // HTTP 头名大小写不敏感：server_config 与 auth_keys 的同名（仅大小写不同）头视为同一参数，
+        // 按名去重防 IR 出现重复入参/运行期重复出站头
+        Set<String> existingNamesLower = new HashSet<>();
+        for (String name : existingNames) {
+            if (name != null) {
+                existingNamesLower.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
         for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
             String targetName = authKeyInfo.getTargetName();
-            if (StringUtils.isBlank(targetName) || existingNames.contains(targetName)) {
+            if (StringUtils.isBlank(targetName)
+                    || existingNamesLower.contains(targetName.toLowerCase(Locale.ROOT))) {
                 continue;
             }
             Map<String, Object> param = new HashMap<>();

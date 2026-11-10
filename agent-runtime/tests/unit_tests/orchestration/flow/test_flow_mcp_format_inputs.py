@@ -253,6 +253,34 @@ class TestFormatApiInputsHeaders:
             mcp._format_api_inputs({"auth_token": None, "query": "hello"})
 
     @staticmethod
+    def test_header_value_illegal_charset_raises():
+        """method=Headers + 值含非 Latin-1/控制字符 → 显式报错（101876，带参数名）
+
+        头值直达出站请求头：非法字符（中文/CR/LF）须在节点入参层拦截，
+        而非穿透到 HTTP 客户端编码处失败（不可诊断，且宽松客户端下构成
+        请求头注入面）。与调测侧 isLatin1HeaderValue 同语义。
+        """
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers"),
+        ]
+        for bad in ("Bearer 中文令牌", "Bearer tok\r\nen", "bad\x00val"):
+            mcp = _create_flow_mcp_with_params(params)
+            with pytest.raises(Exception):  # JiuWenBaseException 101876
+                mcp._format_api_inputs({"auth_token": bad})
+
+    @staticmethod
+    def test_header_value_latin1_extended_passes():
+        """Latin-1 扩展区字符（é/ü 等，0x80~0xFF）合法放行"""
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, _ = mcp._format_api_inputs({"auth_token": "Bearer café-ü"})
+        assert mcp._header_params["auth_token"] == "Bearer café-ü"
+        assert "auth_token" not in result
+
+    @staticmethod
     def test_required_header_string_true_none_raises():
         """required="true"（字符串形式，见 _create_client 兼容校验）+ None → 同样报错"""
         params = [

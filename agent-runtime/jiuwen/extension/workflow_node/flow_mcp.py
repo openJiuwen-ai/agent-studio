@@ -96,6 +96,24 @@ def _is_param_required(param) -> bool:
     return str(getattr(param, "required", False)).lower() == "true"
 
 
+def _is_latin1_header_value(value) -> bool:
+    """HTTP 头值合法性：Latin-1 可编码且无控制字符（0x20~0xFF，禁 0x7F）。
+
+    与调测侧 isLatin1HeaderValue（Java）同语义。在节点入参层就地拦截，
+    避免非法头值穿透到 HTTP 客户端编码处才失败（不可诊断，且宽松客户端
+    下构成请求头注入面）。
+    """
+    try:
+        text = value if isinstance(value, str) else str(value)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+    for ch in text:
+        code = ord(ch)
+        if code < 0x20 or code == 0x7F or code > 0xFF:
+            return False
+    return True
+
+
 def _create_mcp_client(config: McpServerConfig):
     """根据 client_type 创建对应的 MCP Client 实例"""
     client_type = config.client_type
@@ -432,7 +450,23 @@ class FlowMcp(WorkflowComponent):
                                 param=name,
                             )
                         continue
-                    header_params[name] = transform_type(value, param.type, name)
+                    header_value = transform_type(value, param.type, name)
+                    # 头值字符集就地校验（Headers 值直达出站请求头）：
+                    # 非法字符（非 Latin-1/控制字符）在此报可定位错误，
+                    # 而非穿透到 HTTP 客户端编码处失败
+                    if not _is_latin1_header_value(header_value):
+                        workflow_logger.error(
+                            f"{TAG} _format_api_inputs error: header param value contains characters "
+                            f"not allowed in an HTTP header",
+                            event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                            component_type_str="FlowMcp",
+                            metadata={"param_name": name},
+                        )
+                        raise _build_flow_mcp_error(
+                            FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
+                            param=name,
+                        )
+                    header_params[name] = header_value
                 else:
                     # None 直接透传：MCP server 对可选参数（dict | None = None）接受 None。
                     # 避免 transform_type(None, "string") → 字符串 "None" → Pydantic 校验失败。

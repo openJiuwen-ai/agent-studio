@@ -956,6 +956,26 @@ class IrAdapterServiceTest extends BaseTest {
     }
 
     @Test
+    @DisplayName("FEAT-093 动态鉴权：与 server_config headers 仅大小写不同视为同名去重（HTTP 头名大小写不敏感）")
+    public void test_parseAgentMcpParams_dynamic_auth_dedup_case_insensitive() throws Exception {
+        McpServiceEntity mcpEntity = mockDynamicMcpEntity(buildDynamicAuthInfo());
+        when(encryptionAdapter.decrypt("encryptedServerConfig")).thenReturn("decryptedServerConfig");
+
+        try (MockedStatic<CommonUtil> commonUtilMock = mockStatic(CommonUtil.class)) {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("authorization", "static-value");
+            commonUtilMock.when(() -> CommonUtil.parseMcpConfigHeaderInfo("decryptedServerConfig"))
+                .thenReturn(headers);
+
+            List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, false);
+
+            assertEquals(1, result.size());
+            assertEquals("authorization", result.get(0).get("name"));
+            assertEquals("static-value", result.get(0).get("default_value"));
+        }
+    }
+
+    @Test
     @DisplayName("FEAT-093 动态鉴权：非 DYNAMIC scope 不追加（存量行为不变）")
     public void test_parseAgentMcpParams_non_dynamic_scope_not_appended() throws Exception {
         AuthKeyInfo key = new AuthKeyInfo();
