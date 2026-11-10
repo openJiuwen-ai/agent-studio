@@ -218,7 +218,12 @@ async def test_run_retrieval_emits_retriever_span(monkeypatch):
     assert handler == "tracer_agent"
     assert span is not None
     assert payload["inputs"] == {"query": "hello", "top_k": 5, "knowledge_base_ids": ["kb-1"]}
-    assert payload["instance_info"] == {"class_name": "knowledge_retrieval_tool"}
+    # type 字段与 TracerAgentUtils.trace_retriever_start 同口径（RETRIEVER），
+    # kwargs 兜底路径复用 _trace_retrieval_start 后两条路径形态一致
+    assert payload["instance_info"] == {
+        "class_name": "knowledge_retrieval_tool",
+        "type": "retriever",
+    }
     assert tracer.events[1][3]["outputs"] == {"document_count": 1}
 
 

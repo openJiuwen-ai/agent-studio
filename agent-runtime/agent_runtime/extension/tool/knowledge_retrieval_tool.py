@@ -180,6 +180,38 @@ def _drop_retrieval_span_by_session(session, span):
     _drop_retrieval_span(tracer, span)
 
 
+def _resolve_session_tracer(session):
+    """kwargs 会话版 tracer 解析（口径同 _resolve_retrieval_tracer）。
+
+    invoke 外壳手里是 kwargs 注入的 session 而非 ambient contextvar：tracer
+    取自该会话（同 _drop_retrieval_span_by_session 的取法），handler 不可用
+    时同样按无追踪降级。
+    """
+    if session is None:
+        return None
+    try:
+        tracer = session.tracer()
+    except Exception:  # noqa: BLE001 - tracing must never break retrieval
+        return None
+    if tracer is None:
+        return None
+    try:
+        handler_valid = tracer.agent_handler_valid()
+    except Exception:  # noqa: BLE001 - tracing must never break retrieval
+        return None
+    return tracer if handler_valid else None
+
+
+def _retriever_invoke_type():
+    """core InvokeType.RETRIEVER 的惰性取值；旧 core 缺符号时返回 None。"""
+    try:
+        from openjiuwen.core.session.tracer.data import InvokeType
+
+        return InvokeType.RETRIEVER.value
+    except Exception:  # noqa: BLE001 - 旧 core 缺符号时省略 type 字段
+        return None
+
+
 async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retrieval_config):
     """Open the retriever trace span; returns the tracer span handle.
 
@@ -195,13 +227,19 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         inputs["top_k"] = top_k
     if knowledge_base_ids:
         inputs["knowledge_base_ids"] = list(knowledge_base_ids)
+    instance_info: Dict[str, Any] = {"class_name": "knowledge_retrieval_tool"}
+    retriever_type = _retriever_invoke_type()
+    if retriever_type is not None:
+        # 与 TracerAgentUtils.trace_retriever_start 同口径补 RETRIEVER 类型
+        # 标识：kwargs 兜底路径复用本函数后，两条路径的 instance_info 形态一致
+        instance_info["type"] = retriever_type
     try:
         started = await _trace_retrieval_event(
             tracer,
             "on_retriever_start",
             span,
             inputs=inputs,
-            instance_info={"class_name": "knowledge_retrieval_tool"},
+            instance_info=instance_info,
         )
     except BaseException:  # noqa: BLE001 - 取消等 BaseException 同样要收尾登记
         # CancelledError 不被 _trace_retrieval_event 的 except Exception 吞：
@@ -390,11 +428,25 @@ class KnowledgeRetrievalTool(Tool):
             # top_k / knowledge_base_ids，属性更全）；kwargs 会话仅兜底 ambient
             # 不可达的调用点（如跨线程同步桥的 contextvar 跳变），互斥不双计
             return None
+        tracer = _resolve_session_tracer(session)
+        if tracer is None:
+            return None
+        # 不经 TracerAgentUtils.trace_retriever_start：它先 create_agent_span
+        # 登记再无保护 trigger，start 事件抛 Exception 时外壳吞掉异常返回
+        # None，登记永久残留（悬空记录 + last_span 污染，部分 handler 已开
+        # OTel span 时还留半开 span）。这里复用 _trace_retrieval_start 的
+        # 收尾语义：start 未送达即注销登记；BaseException 注销后原样上抛
+        # （由 invoke 的收尾伞接住）
         try:
-            return await _TracerAgentUtils.trace_retriever_start(
-                session, query=str(query) if query else None, instance_name=_RETRIEVAL_NAME
+            return await _trace_retrieval_start(
+                tracer,
+                str(query) if query else "",
+                self._knowledge_base_ids,
+                self._retrieval_config,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - tracing must never break retrieval
+            # 能到这里的只剩登记前的同步异常：登记后的触发失败已在
+            # _trace_retrieval_start 内部注销收尾
             workflow_logger.warning("knowledge retrieval trace start failed: %s: %s", type(e).__name__, e)
             return None
 

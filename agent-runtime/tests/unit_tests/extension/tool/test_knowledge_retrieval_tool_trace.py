@@ -19,15 +19,15 @@ from openjiuwen.core.foundation.tool.base import ToolCard
 
 
 class _FakeTracerUtils:
-    """记录调用的 TracerAgentUtils 替身（.testenv 静态副本 core 里没有真身）。"""
+    """记录调用的 TracerAgentUtils 替身（.testenv 静态副本 core 里没有真身）。
+
+    start 事件已不经 core helper（改走 _FakeSession/_FakeTracer 的本地路径）：
+    本替身只承接 end/error 两个仍走 TracerAgentUtils 的事件。
+    """
 
     def __init__(self):
         self.calls = []
         self.error_hang = False  # True 时 error 事件挂起，模拟真实取消落点
-
-    async def trace_retriever_start(self, session, query=None, instance_name=""):
-        self.calls.append(("start", session, query, instance_name))
-        return object()
 
     async def trace_retriever_end(self, session, span, documents=None):
         self.calls.append(("end", session, documents))
@@ -36,6 +36,51 @@ class _FakeTracerUtils:
         self.calls.append(("error", session, error))
         if self.error_hang:
             await asyncio.sleep(3600)
+
+
+class _FakeAgentSpan:
+    def __init__(self, n: int):
+        self.invoke_id = f"retr-{n}"
+
+
+class _FakeTracer:
+    """kwargs 会话 tracer 替身：登记/注销/事件全程可观测，trigger 行为可注入。"""
+
+    def __init__(self, trigger=None):
+        self.created = []
+        self.popped = []
+        self.events = []
+        self._trigger = trigger
+        outer = self
+
+        class _Manager:
+            def create_agent_span(self, *args, **kwargs):
+                span = _FakeAgentSpan(len(outer.created))
+                outer.created.append(span)
+                return span
+
+            def pop_span(self, invoke_id):
+                outer.popped.append(invoke_id)
+
+        self.tracer_agent_span_manager = _Manager()
+
+    def agent_handler_valid(self) -> bool:
+        return True
+
+    async def trigger(self, handler, event, span=None, **payload):
+        self.events.append((event, span, payload))
+        if self._trigger is not None:
+            return self._trigger(event, payload)
+
+
+class _FakeSession:
+    """kwargs 注入会话替身：tracer() 返回可观测的 _FakeTracer。"""
+
+    def __init__(self, trigger=None):
+        self.the_tracer = _FakeTracer(trigger)
+
+    def tracer(self):
+        return self.the_tracer
 
 
 def _build_tool() -> KnowledgeRetrievalTool:
@@ -66,21 +111,23 @@ def _canned_output() -> dict:
 async def test_invoke_emits_retriever_events_with_session(monkeypatch):
     fake = _FakeTracerUtils()
     monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
 
     async def fake_run_retrieval(**kwargs):
         return _canned_output()
 
     monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
 
-    session = object()
+    session = _FakeSession()
     tool = _build_tool()
     result = await tool.invoke({"query": "什么是九问"}, session=session)
 
     assert result == _canned_output()
-    assert fake.calls == [
-        ("start", session, "什么是九问", "retrieval"),
-        ("end", session, ["doc-a", "doc-b"]),  # 只送标识符，机密正文不进遥测
-    ]
+    # start 经 kwargs 会话的 tracer 发射（inputs 携带 top_k / knowledge_base_ids）
+    assert [e[0] for e in session.the_tracer.events] == ["on_retriever_start"]
+    assert session.the_tracer.events[0][2]["inputs"]["query"] == "什么是九问"
+    # end 仍经 core helper：只送标识符，机密正文不进遥测
+    assert fake.calls == [("end", session, ["doc-a", "doc-b"])]
     assert "机密正文" not in str(fake.calls)
 
 
@@ -88,6 +135,7 @@ async def test_invoke_emits_retriever_events_with_session(monkeypatch):
 async def test_invoke_error_emits_error_event_and_reraises(monkeypatch):
     fake = _FakeTracerUtils()
     monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
 
     async def fake_run_retrieval(**kwargs):
         raise RuntimeError("kb down")
@@ -95,12 +143,13 @@ async def test_invoke_error_emits_error_event_and_reraises(monkeypatch):
     monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
 
     tool = _build_tool()
-    session = object()
+    session = _FakeSession()
     with pytest.raises(RuntimeError, match="kb down") as excinfo:
         await tool.invoke({"query": "q"}, session=session)
 
-    assert [call[0] for call in fake.calls] == ["start", "error"]
-    assert fake.calls[1][2] is excinfo.value  # error 对象原样透传给事件
+    assert [e[0] for e in session.the_tracer.events] == ["on_retriever_start"]
+    assert [call[0] for call in fake.calls] == ["error"]
+    assert fake.calls[0][2] is excinfo.value  # error 对象原样透传给事件
 
 
 @pytest.mark.asyncio
@@ -134,9 +183,10 @@ async def test_invoke_without_session_skips_tracing(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_invoke_empty_query_still_emits_event_pair(monkeypatch):
-    # 空查询走 _run_retrieval 的短路返回：span 对表示"检索发生过"，无 query 属性
+    # 空查询走 _run_retrieval 的短路返回：span 对表示"检索发生过"
     fake = _FakeTracerUtils()
     monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
 
     async def fake_run_retrieval(**kwargs):
         return {
@@ -147,12 +197,14 @@ async def test_invoke_empty_query_still_emits_event_pair(monkeypatch):
 
     monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
 
+    session = _FakeSession()
     tool = _build_tool()
-    await tool.invoke({"query": ""}, session=object())
+    await tool.invoke({"query": ""}, session=session)
 
-    assert [call[0] for call in fake.calls] == ["start", "end"]
-    assert fake.calls[0][2] is None  # 空查询不传 query
-    assert fake.calls[1][2] == []  # 空结果 documents 为空列表
+    assert [e[0] for e in session.the_tracer.events] == ["on_retriever_start"]
+    assert session.the_tracer.events[0][2]["inputs"]["query"] == ""  # 空查询如实记录
+    assert [call[0] for call in fake.calls] == ["end"]
+    assert fake.calls[0][2] == []  # 空结果 documents 为空列表
 
 
 @pytest.mark.asyncio
@@ -161,6 +213,7 @@ async def test_invoke_cancellation_still_emits_error_event(monkeypatch):
     # 取消/超时路径同样要发 error 事件收尾后原样抛出。
     fake = _FakeTracerUtils()
     monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
 
     async def fake_run_retrieval(**kwargs):
         raise asyncio.CancelledError()
@@ -168,12 +221,13 @@ async def test_invoke_cancellation_still_emits_error_event(monkeypatch):
     monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
 
     tool = _build_tool()
-    session = object()
+    session = _FakeSession()
     with pytest.raises(asyncio.CancelledError) as excinfo:
         await tool.invoke({"query": "q"}, session=session)
 
-    assert [call[0] for call in fake.calls] == ["start", "error"]
-    assert fake.calls[1][2] is excinfo.value  # 取消对象原样透传给事件
+    assert [e[0] for e in session.the_tracer.events] == ["on_retriever_start"]
+    assert [call[0] for call in fake.calls] == ["error"]
+    assert fake.calls[0][2] is excinfo.value  # 取消对象原样透传给事件
 
 
 @pytest.mark.asyncio
@@ -197,16 +251,17 @@ async def test_invoke_skips_wrapper_when_ambient_tracer_alive(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_invoke_cancellation_during_trace_start_propagates(monkeypatch):
-    # 取消落在 trace_retriever_start 期间：CancelledError 穿透 except Exception，
-    # 由 invoke 统一 BaseException 收尾路径接住（span 未开启，error 收尾为 no-op）
-    # 后原样重抛，检索本体不再执行
+    # 取消落在 start 事件 trigger 期间：CancelledError 穿透事件吞异常层，
+    # _trace_retrieval_start 注销登记后原样上抛，再由 invoke 收尾伞接住
+    # （span 未开启，error 收尾为 no-op）后重抛，检索本体不再执行
     fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
 
-    async def cancelled_start(session, **kwargs):
+    def cancel_trigger(event, payload):
         raise asyncio.CancelledError()
 
-    fake.trace_retriever_start = cancelled_start
-    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    session = _FakeSession(trigger=cancel_trigger)
 
     ran = []
 
@@ -218,10 +273,13 @@ async def test_invoke_cancellation_during_trace_start_propagates(monkeypatch):
 
     tool = _build_tool()
     with pytest.raises(asyncio.CancelledError):
-        await tool.invoke({"query": "q"}, session=object())
+        await tool.invoke({"query": "q"}, session=session)
 
     assert ran == []  # 检索未执行
-    assert fake.calls == []  # start 未送达，无任何事件记录
+    assert fake.calls == []  # 未走到任何 core helper 事件
+    tracer = session.the_tracer
+    assert len(tracer.created) == 1  # 登记过一次
+    assert tracer.popped == [s.invoke_id for s in tracer.created]  # 且已注销，无悬空
 
 
 @pytest.mark.asyncio
@@ -232,6 +290,7 @@ async def test_real_task_cancel_during_error_event_drops_span(monkeypatch):
     fake = _FakeTracerUtils()
     fake.error_hang = True
     monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
 
     dropped = []
     monkeypatch.setattr(
@@ -243,12 +302,45 @@ async def test_real_task_cancel_during_error_event_drops_span(monkeypatch):
 
     monkeypatch.setattr(krt, "_run_retrieval", failing_run_retrieval)
 
+    session = _FakeSession()
     tool = _build_tool()
-    task = asyncio.ensure_future(tool.invoke({"query": "q"}, session=object()))
+    task = asyncio.ensure_future(tool.invoke({"query": "q"}, session=session))
     await asyncio.sleep(0.05)  # 跑到 error 事件挂起处
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert [call[0] for call in fake.calls] == ["start", "error"]  # 事件记录在案
+    assert [e[0] for e in session.the_tracer.events] == ["on_retriever_start"]
+    assert [call[0] for call in fake.calls] == ["error"]  # 事件记录在案
     assert dropped and dropped[0] is not None  # 取消再投递时同步收尾已尽力
+
+
+@pytest.mark.asyncio
+async def test_invoke_start_trigger_exception_unregisters_span(monkeypatch):
+    # codex 检视：kwargs 兜底路径 start 事件 trigger 抛 Exception。旧实现经
+    # TracerAgentUtils.trace_retriever_start（create_agent_span 登记在前 +
+    # trigger 无保护），异常被外壳吞掉后登记永久残留、污染 last_span。
+    # 现要求：登记注销收尾、无后续 end/error 事件、检索照常返回
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
+
+    def boom_trigger(event, payload):
+        raise RuntimeError("boom")
+
+    session = _FakeSession(trigger=boom_trigger)
+
+    async def fake_run_retrieval(**kwargs):
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    result = await tool.invoke({"query": "q"}, session=session)
+
+    assert result == _canned_output()  # 追踪失败绝不影响检索
+    tracer = session.the_tracer
+    assert len(tracer.created) == 1  # 登记过一次
+    assert tracer.popped == [s.invoke_id for s in tracer.created]  # 已注销，无悬空
+    assert [e[0] for e in tracer.events] == ["on_retriever_start"]  # 仅尝试过 start
+    assert fake.calls == []  # span 未开启，无 end/error
