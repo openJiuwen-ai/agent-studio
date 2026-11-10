@@ -77,8 +77,10 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
 
     @staticmethod
     def test_session_runtime_auth_not_merged_for_dynamic_scope():
-        """scope=DYNAMIC/空时仅独立通道生效：session 级 runtime_auth（凭据）
-        不经本通道外发（检视修复：防止无鉴权/动态服务整包外发 session 凭据）。"""
+        """scope=DYNAMIC/空时仅独立通道生效：session 级凭据不经本通道外发。
+
+        （检视修复：防止无鉴权/动态服务整包外发 session 凭据。）
+        """
         for auth_conf in ({}, {"scope": "DYNAMIC"}):
             for cls in (StreamableHttpClientNew, SSEClientNew):
                 client = _create_client(cls)
