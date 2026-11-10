@@ -170,8 +170,13 @@ async def test_invoke_without_utils_still_retrieves(monkeypatch):
 
     monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
 
+    # session 用可追踪真替身而非 object()：能力门控（utils 缺失 → 外壳全
+    # 静默）若被误删，外壳会经该 session 开 span，events/created 非空即红灯
+    session = _FakeSession()
     tool = _build_tool()
-    assert await tool.invoke({"query": "q"}, session=object()) == _canned_output()
+    assert await tool.invoke({"query": "q"}, session=session) == _canned_output()
+    assert session.the_tracer.events == []
+    assert session.the_tracer.created == []
 
 
 @pytest.mark.asyncio
@@ -242,7 +247,10 @@ async def test_invoke_cancellation_still_emits_error_event(monkeypatch):
 async def test_invoke_skips_wrapper_when_ambient_tracer_alive(monkeypatch):
     # 双计守卫：ambient 会话上下文可达（controller 路径常态——agent 级
     # with_session 包装内执行工具）时，由 _run_retrieval 内建遥测发射，
-    # kwargs 外壳必须静默，同一次检索只出一对 retriever 事件
+    # kwargs 外壳必须静默，同一次检索只出一对 retriever 事件。
+    # session 用可追踪真替身而非 object()：object() 无 tracer()，守卫即使
+    # 被删，_resolve_session_tracer 也会吞 AttributeError 返回 None——用例
+    # 照样绿，对双计不变式零保护力（atomgit 199654329）
     fake = _FakeTracerUtils()
     monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
     monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: object())
@@ -252,9 +260,12 @@ async def test_invoke_skips_wrapper_when_ambient_tracer_alive(monkeypatch):
 
     monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
 
+    session = _FakeSession()
     tool = _build_tool()
-    assert await tool.invoke({"query": "q"}, session=object()) == _canned_output()
-    assert fake.calls == []
+    assert await tool.invoke({"query": "q"}, session=session) == _canned_output()
+    assert fake.calls == []  # 未走任何 core helper 事件
+    assert session.the_tracer.events == []  # 外壳未发射 start——守卫真实生效
+    assert session.the_tracer.created == []  # 也未登记任何 span
 
 
 @pytest.mark.asyncio
