@@ -7,6 +7,7 @@
 scope=USER/SERVICE 时消费 runtime_auth，DYNAMIC（auth 为空）会整段跳过，
 故 wrapper 在 create() 之后直接并入出站 headers（sse/streamable 两实现同构）。
 """
+# pylint: disable=protected-access  # 单测需注入/调用内部属性与方法（仓库既有惯例，见同目录 test_single_component_http_debug_inputs.py）
 
 from unittest.mock import MagicMock
 
@@ -25,14 +26,15 @@ def _create_client(cls):
     client._plugin_dependency = {}
     client._input_parameters = {}
     client._cert = False
-    client._raise_error = lambda msg: None
+    client._raise_error = MagicMock()
     return client
 
 
 class TestPrepareRequestParamsRuntimeAuthHeaders:
     """runtime_auth.headers（FlowMcp 下传的 Headers 参数值）并入出站 headers。"""
 
-    def test_dynamic_auth_headers_merged(self):
+    @staticmethod
+    def test_dynamic_auth_headers_merged():
         """DYNAMIC（IR auth 为空）时 runtime_auth.headers 仍并入出站 headers。"""
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
@@ -43,7 +45,8 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
             )
             assert request_params.headers.get("Authorization") == "Bearer tok-1", cls.__name__
 
-    def test_no_runtime_auth_unchanged(self):
+    @staticmethod
+    def test_no_runtime_auth_unchanged():
         """无 runtime_auth 时行为不变（不出空注入）。"""
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
@@ -52,7 +55,8 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
             )
             assert "Authorization" not in request_params.headers, cls.__name__
 
-    def test_non_dict_runtime_auth_ignored(self):
+    @staticmethod
+    def test_non_dict_runtime_auth_ignored():
         """runtime_auth 非 dict / headers 非 dict 时安全跳过。"""
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
@@ -67,7 +71,8 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
             )
             assert "Authorization" not in request_params2.headers, cls.__name__
 
-    def test_correlation_headers_still_stripped(self):
+    @staticmethod
+    def test_correlation_headers_still_stripped():
         """runtime_auth.headers 携带平台关联头名时仍被最终边界剥离（B07 不回退）。"""
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
@@ -86,7 +91,8 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
 class TestFlowMcpHeaderParamsToRuntimeAuth:
     """FlowMcp.invoke 组装 jiuwen_kwargs 的 runtime_auth.headers（Mock MCPTool 断言入参）。"""
 
-    def test_invoke_passes_header_params_via_jiuwen_kwargs(self):
+    @staticmethod
+    def test_invoke_passes_header_params_via_jiuwen_kwargs():
         from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 
         mcp = FlowMcp.__new__(FlowMcp)
@@ -116,9 +122,15 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
 
         import asyncio
 
+        # tracer 装饰门禁：decorate_tool_with_trace 以 agent_session._inner 为
+        # 真实 session 并按 _inner.tracer().agent_handler_valid() 判定是否装饰；
+        # MagicMock 会自动生成 _inner 导致门禁误过、handler await 到未配置的
+        # mock。显式置 False 走"未注册 agent handler 原样返回"分支——
+        # 本测只验证 jiuwen_kwargs 透传，不测遥测 span
         mock_session = MagicMock()
-        mcp._format_runtime_auth = lambda session: {}
-        mcp._get_runtime_context_header = lambda session: None
+        mock_session._inner.tracer.return_value.agent_handler_valid.return_value = False
+        mcp._format_runtime_auth = MagicMock(return_value={})
+        mcp._get_runtime_context_header = MagicMock(return_value=None)
 
         asyncio.run(mcp.invoke({"userFields": {"Authorization": "Bearer tok-2"}}, mock_session, None))
 
