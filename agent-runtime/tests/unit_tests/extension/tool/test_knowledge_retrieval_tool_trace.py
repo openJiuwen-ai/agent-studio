@@ -67,6 +67,10 @@ class _FakeTracer:
 
         self.tracer_agent_span_manager = _Manager()
 
+    def set_trigger(self, trigger):
+        """构造后注入 trigger 行为（闭包需要先拿到本替身引用，故不能走构造参）。"""
+        self._trigger = trigger
+
     @staticmethod
     def agent_handler_valid() -> bool:
         return True
@@ -383,7 +387,7 @@ async def test_invoke_start_partial_delivery_exception_drops_opened_span(monkeyp
         opened.append(session.the_tracer.events[-1][1])
         raise RuntimeError("second handler boom")
 
-    session.the_tracer._trigger = partial_trigger
+    session.the_tracer.set_trigger(partial_trigger)
 
     dropped = []
     _patch_otel_drop_handler(monkeypatch, dropped)
@@ -420,7 +424,7 @@ async def test_invoke_start_partial_delivery_cancel_drops_opened_span(monkeypatc
         opened.append(session.the_tracer.events[-1][1])
         raise asyncio.CancelledError()
 
-    session.the_tracer._trigger = partial_cancel
+    session.the_tracer.set_trigger(partial_cancel)
 
     dropped = []
     _patch_otel_drop_handler(monkeypatch, dropped)
