@@ -122,7 +122,10 @@ class AgentClarifier:
         system_prompt = {
             "role": "system",
             "content": update_clarifier_system_prompt(
-                inputs.plugin_info, inputs.knowledge_info, inputs.sub_workflow_info
+                inputs.plugin_info,
+                inputs.knowledge_info,
+                inputs.sub_workflow_info,
+                inputs.skill_info,
             ),
         }
         # 将系统提示词、对话历史（包含用户最新输入指令）结合
@@ -167,7 +170,10 @@ class AgentClarifier:
         system_prompt = {
             "role": "system",
             "content": update_clarifier_system_prompt(
-                inputs.plugin_info, inputs.knowledge_info, inputs.sub_workflow_info
+                inputs.plugin_info,
+                inputs.knowledge_info,
+                inputs.sub_workflow_info,
+                inputs.skill_info,
             ),
         }
         # 将系统提示词、对话历史（包含用户最新输入指令）结合

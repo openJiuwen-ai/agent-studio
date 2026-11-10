@@ -4,18 +4,33 @@
 package com.openjiuwen.studio.agent.manager.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.manager.dto.nl.NLResource;
+import com.openjiuwen.studio.agent.manager.dto.nl.SkillResource;
+import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
+import com.openjiuwen.studio.agent.manager.rce.service.JiuWenService;
 import com.openjiuwen.studio.agent.manager.service.JiuwenRuntimeI18nService;
+import com.openjiuwen.studio.agent.manager.service.SkillManagementService;
+import com.openjiuwen.studio.agent.manager.service.WorkflowManagementService;
+import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
+import com.openjiuwen.studio.agent.manager.service.plugin.PluginService;
 
 import reactor.core.publisher.Flux;
 
@@ -35,6 +50,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,7 +72,7 @@ class JiuwenServiceProxyControllerTest {
     void setUp() {
         mockitoCloseable = MockitoAnnotations.openMocks(this);
         // wrapToSse 仅依赖 jiuwenRuntimeI18nService（error 事件 i18n 处理），其余构造参数传 null
-        controller = new JiuwenServiceProxyController(null, null, null, null, null, null, jiuwenRuntimeI18nService);
+        controller = new JiuwenServiceProxyController(null, null, null, null, null, null, null, jiuwenRuntimeI18nService);
         when(jiuwenRuntimeI18nService.createRuntimeErrorEvent(any()))
             .thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -76,6 +92,23 @@ class JiuwenServiceProxyControllerTest {
         Method method = JiuwenServiceProxyController.class.getDeclaredMethod("wrapToSse", Flux.class);
         method.setAccessible(true);
         return (SseEmitter) method.invoke(controller, flux);
+    }
+
+    /**
+     * 通过反射调用私有方法 assembleBodyResource，返回组装好的 NLResource。
+     *
+     * @param ctrl 目标控制器实例
+     * @param projectId 项目ID
+     * @param workspaceId 空间ID
+     * @param agentType 链路类型（agents / workflows）
+     * @return 组装好的 NLResource
+     */
+    private NLResource invokeAssembleBodyResource(JiuwenServiceProxyController ctrl,
+        String projectId, String workspaceId, String agentType) throws Exception {
+        Method method = JiuwenServiceProxyController.class.getDeclaredMethod(
+            "assembleBodyResource", String.class, String.class, String.class);
+        method.setAccessible(true);
+        return (NLResource) method.invoke(ctrl, projectId, workspaceId, agentType);
     }
 
     /**
@@ -354,5 +387,104 @@ class JiuwenServiceProxyControllerTest {
                 ((AgentStudioException) completeCaptor.getValue()).getErrorCode());
             verify(emitterMock, never()).complete();
         }
+    }
+
+    // ---- assembleBodyResource 技能注入断言 ----
+
+    /**
+     * 构建一个全部依赖均为 mock 的控制器实例，用于 assembleBodyResource 测试。
+     * 各服务 mock 默认返回 null，assembleBodyResource 内部对 null 做空列表降级处理。
+     *
+     * @param skillMgmt 可传入自定义的 SkillManagementService mock；为 null 时自动创建
+     * @return 全 mock 依赖的控制器实例
+     */
+    private JiuwenServiceProxyController newControllerWithMocks(SkillManagementService skillMgmt) {
+        return new JiuwenServiceProxyController(
+            mock(JiuWenService.class),
+            mock(ModelServiceManager.class),
+            mock(ProviderAuthDataMapper.class),
+            mock(KnowledgeBaseServiceImpl.class),
+            mock(PluginService.class),
+            mock(WorkflowManagementService.class),
+            skillMgmt != null ? skillMgmt : mock(SkillManagementService.class),
+            jiuwenRuntimeI18nService);
+    }
+
+    /**
+     * 用例描述：agentType="agents" 时，assembleBodyResource 应调用 skillManagementService.listSkillResources
+     * 获取技能列表并注入到 resource.skills 中
+     * 预制条件：mock 所有依赖服务，skillManagementService.listSkillResources 返回 2 个技能资源
+     * 输入参数：projectId="p1", workspaceId="ws1", agentType="agents"
+     * 预期结果：resource.getSkills() 不为 null；skillList 包含 2 个技能资源；
+     *           skillManagementService.listSkillResources 被调用，参数为 ("p1", "ws1", 200)
+     *
+     * @throws Exception 反射调用可能抛出的异常
+     */
+    @Test
+    void testAssembleBodyResourceAgentsInjectsSkills() throws Exception {
+        SkillManagementService mockSkillMgmt = mock(SkillManagementService.class);
+        JiuwenServiceProxyController fullController = newControllerWithMocks(mockSkillMgmt);
+
+        SkillResource skill1 = new SkillResource();
+        skill1.setSkillId("skill-1");
+        skill1.setSkillName("测试技能1");
+        SkillResource skill2 = new SkillResource();
+        skill2.setSkillId("skill-2");
+        skill2.setSkillName("测试技能2");
+        when(mockSkillMgmt.listSkillResources(eq("p1"), eq("ws1"), eq(200)))
+            .thenReturn(List.of(skill1, skill2));
+
+        NLResource resource = invokeAssembleBodyResource(fullController, "p1", "ws1", "agents");
+
+        assertNotNull(resource.getSkills(), "agents 链路应注入技能资源");
+        assertNotNull(resource.getSkills().getSkillList(), "技能列表不应为 null");
+        assertEquals(2, resource.getSkills().getSkillList().size(), "技能列表应包含 2 个技能");
+        assertEquals("skill-1", resource.getSkills().getSkillList().get(0).getSkillId());
+        assertEquals("skill-2", resource.getSkills().getSkillList().get(1).getSkillId());
+        verify(mockSkillMgmt).listSkillResources(eq("p1"), eq("ws1"), eq(200));
+    }
+
+    /**
+     * 用例描述：agentType="workflows" 时，assembleBodyResource 不应调用 skillManagementService.listSkillResources，
+     * resource.skills 保持为 null（不设置技能字段）
+     * 预制条件：mock 所有依赖服务
+     * 输入参数：projectId="p1", workspaceId="ws1", agentType="workflows"
+     * 预期结果：skillManagementService.listSkillResources 从未被调用；resource.getSkills() 为 null
+     *
+     * @throws Exception 反射调用可能抛出的异常
+     */
+    @Test
+    void testAssembleBodyResourceWorkflowsDoesNotInjectSkills() throws Exception {
+        SkillManagementService mockSkillMgmt = mock(SkillManagementService.class);
+        JiuwenServiceProxyController fullController = newControllerWithMocks(mockSkillMgmt);
+
+        NLResource resource = invokeAssembleBodyResource(fullController, "p1", "ws1", "workflows");
+
+        assertNull(resource.getSkills(), "workflows 链路不应注入技能资源");
+        verify(mockSkillMgmt, never()).listSkillResources(anyString(), anyString(), anyInt());
+    }
+
+    /**
+     * 用例描述：agentType="agents" 但 skillManagementService.listSkillResources 返回 null 时，
+     * resource.skills 应被设置为包含空列表的 SkillList（非 null），行为与现状一致
+     * 预制条件：mock 所有依赖服务，skillManagementService.listSkillResources 返回 null
+     * 输入参数：projectId="p1", workspaceId="ws1", agentType="agents"
+     * 预期结果：resource.getSkills() 不为 null；skillList 为空列表
+     *
+     * @throws Exception 反射调用可能抛出的异常
+     */
+    @Test
+    void testAssembleBodyResourceAgentsWithNullSkillsReturnsEmptyList() throws Exception {
+        SkillManagementService mockSkillMgmt = mock(SkillManagementService.class);
+        JiuwenServiceProxyController fullController = newControllerWithMocks(mockSkillMgmt);
+        when(mockSkillMgmt.listSkillResources(anyString(), anyString(), anyInt()))
+            .thenReturn(null);
+
+        NLResource resource = invokeAssembleBodyResource(fullController, "p1", "ws1", "agents");
+
+        assertNotNull(resource.getSkills(), "agents 链路即使无可用技能也应设置 skills 字段");
+        assertNotNull(resource.getSkills().getSkillList(), "技能列表应为空列表而非 null");
+        assertTrue(resource.getSkills().getSkillList().isEmpty(), "无可用技能时技能列表应为空");
+        verify(mockSkillMgmt).listSkillResources(eq("p1"), eq("ws1"), eq(200));
     }
 }

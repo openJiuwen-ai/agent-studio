@@ -22,6 +22,7 @@ import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SkillSource;
 import com.openjiuwen.studio.agent.manager.dto.SkillStatus;
 import com.openjiuwen.studio.agent.manager.dto.StudioSkillInfo;
+import com.openjiuwen.studio.agent.manager.dto.nl.SkillResource;
 import com.openjiuwen.studio.agent.manager.entity.SkillEntity;
 import com.openjiuwen.studio.agent.manager.entity.SkillVersionEntity;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
@@ -364,6 +365,43 @@ public class SkillManagementService implements ISkillManagementService {
         return response;
     }
 
+
+    /**
+     * 查询技能目录（NL2Agent 对话式生成用）。
+     *
+     * <p>仅返回 status 为 developed 的技能目录元数据
+     * （标识、名称、描述、图标、最新版本），不生成 OBS 临时链接、不返回存储路径。
+     * 无可用技能时返回空列表，调用方行为退化为现状。</p>
+     *
+     * @param projectId 项目ID
+     * @param workspaceId 空间ID
+     * @param limit 返回条数上限（与插件资源聚合一致，建议 200）
+     * @return 技能目录条目列表
+     */
+    public List<SkillResource> listSkillResources(String projectId, String workspaceId, int limit) {
+        SkillEntity selectCondition = new SkillEntity()
+            .setStatus(SkillStatus.DEVELOPED.getValue())
+            .setWorkspaceId(workspaceId)
+            .setProjectId(projectId)
+            .setPublishedAsset(0);
+        List<SkillDetails> selectedSkills = skillMapper.search(selectCondition, 0, limit, null, null, 0);
+
+        List<SkillResource> skillResources = new ArrayList<>();
+        for (SkillDetails skill : selectedSkills) {
+            if (Strings.isEmpty(skill.getLatestVersion())) {
+                // 无最新版本的技能不可执行，不进入 NL2Agent 候选
+                continue;
+            }
+            SkillResource resource = new SkillResource();
+            resource.setSkillId(skill.getSkillId());
+            resource.setSkillName(skill.getName());
+            resource.setDescription(skill.getDescription());
+            resource.setIcon(skill.getIcon());
+            resource.setLastVersionId(skill.getLatestVersion());
+            skillResources.add(resource);
+        }
+        return skillResources;
+    }
 
     /**
      * 查询 Skill 列表（包括模糊匹配）
