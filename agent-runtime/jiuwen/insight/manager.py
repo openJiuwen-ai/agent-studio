@@ -206,9 +206,11 @@ class TraceManager(
     def oj_agent_identity(self) -> Optional[Dict[str, Any]]:
         """当前携带的 openjiuwen 双写执行身份（未携带时为 None）。
 
-        只读视图，供同类实例间继承读取（避免类外触碰保护成员）。
+        只读视图：返回拷贝——外部改写不回写内部状态、不污染后续
+        span 转发（检视意见）；同类实例间继承读取见 inherit_*。
         """
-        return self._oj_agent_identity
+        identity = self._oj_agent_identity
+        return dict(identity) if identity else identity
 
     def inherit_oj_agent_identity(self, source: "TraceManager") -> None:
         """从 source 继承 openjiuwen 双写执行身份（带守卫）。
