@@ -104,6 +104,30 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         """获取组件类型标识"""
         return JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE
 
+    def trace_metadata(self) -> Optional[dict]:
+        """检索静态事实导出，供 core 组件 span 盖 GenAI 属性。
+
+        core 引擎在组件 span 开启时拾取返回值并入组件 metadata，tracer_otel
+        handler 消费：top_k -> gen_ai.retrieval.top_k、knowledge_base_ids ->
+        gen_ai.data_source.id。top_k 仅在 topK 显式配置且可收敛为 int 时导出
+        （未配置不猜缺省——实际检索缺省随引擎类型变化）；纯读取无副作用，
+        任何配置形态不抛错，异常由引擎侧钩子兜底。
+        """
+        if self._conf is None:
+            return None
+        metadata: Dict = {}
+        # retrievalConfig 可能显式为 null（_init_conf 原样透传 None）：非 dict
+        # 不取值不抛错；topK 未显式配置时同样不导出
+        retrieval_config = self._conf.retrieval_config
+        if isinstance(retrieval_config, dict) and "topK" in retrieval_config:
+            try:
+                metadata["top_k"] = int(retrieval_config["topK"])
+            except (TypeError, ValueError):
+                pass
+        if self._conf.knowledge_base_ids:
+            metadata["data_source_ids"] = list(self._conf.knowledge_base_ids)
+        return metadata or None
+
     @staticmethod
     def _resolve_query_from_session(session: Session) -> str:
         try:
