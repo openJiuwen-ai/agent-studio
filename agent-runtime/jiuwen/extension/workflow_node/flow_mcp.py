@@ -38,6 +38,7 @@ from openjiuwen.core.foundation.tool import MCPTool
 from openjiuwen.core.foundation.tool.mcp.base import McpServerConfig, McpToolCard
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session.node import Session
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 USER_FIELDS = "userFields"
@@ -134,6 +135,25 @@ def _resolve_env_in_url(url: str) -> str:
 
     return _ENV_PLACEHOLDER_PATTERN.sub(_replace, url)
 
+
+class _AuthBlindMcpTool:
+    """execute_tool span 记录面剥离鉴权的转发视图。
+
+    tracer 装饰器按首个位置入参记录 execute_tool inputs；JIUWEN_RUNTIME_KWARGS
+    （含 runtime_auth headers 等鉴权信息）从记录面剥离，转发真实 MCPTool 时
+    回填——与 wrapper 侧 ainvoke「先 on_plugin_start、后注入」同口径，
+    鉴权凭据不随 span 进入遥测。
+    """
+
+    def __init__(self, inner, runtime_kwargs: dict):
+        self._inner = inner
+        self._runtime_kwargs = runtime_kwargs
+        self.card = inner.card
+
+    async def invoke(self, inputs, **kwargs):
+        full_inputs = dict(inputs)
+        full_inputs[JIUWEN_RUNTIME_KWARGS] = self._runtime_kwargs
+        return await self._inner.invoke(full_inputs, **kwargs)
 
 
 class FlowMcp(WorkflowComponent):
@@ -342,15 +362,23 @@ class FlowMcp(WorkflowComponent):
                 jiuwen_kwargs["runtime_auth"] = {"headers": {}}
             jiuwen_kwargs["runtime_auth"]["headers"].update(header_params)
 
-        if jiuwen_kwargs:
-            api_inputs = dict(api_inputs)
-            api_inputs[JIUWEN_RUNTIME_KWARGS] = jiuwen_kwargs
-
         # JSON 启发式解析发生时，基于 card 副本构建按调用隔离的 MCPTool，
         # 避免就地修改共享 schema（跨 invoke 持久化 / 并发互相污染）
         tool = self.api
         if schema_patches and self.api is not None:
             tool = self._build_patched_tool(schema_patches)
+
+        if jiuwen_kwargs:
+            # 鉴权经 _AuthBlindMcpTool 在转发层回填给真实 MCPTool，
+            # 不再嵌入 api_inputs 首参（span 记录面只见业务入参）
+            tool = _AuthBlindMcpTool(tool, jiuwen_kwargs)
+            api_inputs = dict(api_inputs)
+            api_inputs.pop(JIUWEN_RUNTIME_KWARGS, None)
+
+        # 工作流内 MCP 工具直连 MCPTool，不经 ToolMgr.get_tool 装饰，
+        # 主动补一层 tracer 装饰以产出 execute_tool span；
+        # 未注册 agent handler 或旧版 core（NodeSession 无 span 协议）时原样返回
+        tool = decorate_tool_with_trace(tool, session)
 
         try:
             result = await tool.invoke(api_inputs)

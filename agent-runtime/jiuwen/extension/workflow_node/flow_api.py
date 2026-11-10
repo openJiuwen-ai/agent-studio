@@ -45,6 +45,7 @@ from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.session.stream.base import OutputSchema
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 USER_FIELDS = "userFields"
@@ -267,7 +268,11 @@ class FlowApi(WorkflowComponent):
             if tmp_header:
                 cur_headers.update(tmp_header)
 
-            api_outputs = await self._api.ainvoke(
+            # 工作流内 API 插件不经 ToolMgr.get_tool 装饰，主动补一层 tracer
+            # 装饰以产出 execute_tool span；RestfulApiToolNew.invoke 直通 ainvoke，
+            # 行为不变。未注册 agent handler 或旧版 core 时装饰原样返回
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = await api_tool.invoke(
                 formatted_inputs, runtime_auth={"headers": cur_headers}
             )
             outputs = {USER_FIELDS: self._format_api_outputs(api_outputs)}
@@ -371,7 +376,10 @@ class FlowApi(WorkflowComponent):
             if tmp_header:
                 cur_headers.update(tmp_header)
 
-            api_outputs = self._api.astream(
+            # 与 invoke 同口径：stream 路径也经 tracer 装饰（新 core 代理会包
+            # astream，首 chunk 起 execute_tool span；旧 core 代理原样透传）
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = api_tool.astream(
                 api_inputs, runtime_auth={"headers": cur_headers}
             )
             async for schema in self._transform_async_stream_data(api_outputs, session):
