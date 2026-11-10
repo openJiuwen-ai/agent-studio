@@ -63,8 +63,9 @@ export class DifyImportModalComponent {
     formData.append("file", this.fileInfo);
 
     this.appFlowRepoService.importParseWorkFlow(query, formData).then(res => {
-      this.dismiss();
+      // 解析失败时保留弹窗以便重试。
       this.difyMigrateService.setParseDsl(res);
+      this.dismiss();
       const halfComNodes = this.difyMigrateService.halfCompatible.nodes;
       const notComNodes = this.difyMigrateService.notCompatible.nodes;
 
@@ -86,6 +87,11 @@ export class DifyImportModalComponent {
           nzContent: DifyMigrateModalComponent
         });
       }
+    }).catch(() => {
+      // 显式提示，避免静默失败。
+      this.messageService.error(
+        this.i18n.transform(`${I18nNamespace.AGENT_CENTER}:imported_failed_dify_tip`)
+      );
     }).finally(() => {
       this.isAnalyzing = false;
     });

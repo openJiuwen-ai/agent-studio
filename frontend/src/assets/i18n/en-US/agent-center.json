@@ -2976,6 +2976,7 @@
   "default_empty_tip": "No matching node found. Please replace the node later.",
   "exchange_node_label": "Replace",
   "imported_succeeded_dify_tip": "The Dify workflow has been successfully imported.",
+  "imported_failed_dify_tip": "Failed to import the Dify workflow. Check the file content and try again.",
   "trigger_frequency_label": "Frequency",
   "trigger_time_label": "Time",
   "trigger_create_label": "Create New Trigger",
