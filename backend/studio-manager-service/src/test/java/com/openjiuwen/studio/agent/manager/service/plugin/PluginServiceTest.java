@@ -641,6 +641,24 @@ class PluginServiceTest {
         verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
     }
 
+    @Test
+    void testCreateTool_RejectsNullRequestInfo() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "no_ri_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+        req.setRequestInfo(null);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
+        assertEquals("request_info is required.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
     private static final String VALID_OUTPUT_SCHEMA =
         "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"ok\"}}}";
 
@@ -665,7 +683,7 @@ class PluginServiceTest {
         when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
     }
 
-    /** 委托真实 checkToolInfo → JsonSchemaUtils，避免只测 mock 透传。 */
+    /** 委托真实 checkToolInfo / requireHttpRequestInfo，避免只测 mock 透传。 */
     private void stubCheckToolInfoWithRealValidation() {
         ToolManagementService real = new ToolManagementService(
             mock(ToolMapper.class),
@@ -693,6 +711,11 @@ class PluginServiceTest {
                 invocation.getArgument(4));
             return null;
         }).when(toolManagementService).checkToolInfo(any(), any(), any(), any(), any());
+        // schema 负向用例在 checkToolInfo 就失败，未必走到 requireHttpRequestInfo
+        lenient().doAnswer(invocation -> {
+            real.requireHttpRequestInfo(invocation.getArgument(0));
+            return null;
+        }).when(toolManagementService).requireHttpRequestInfo(any());
     }
 
     private CreatePluginToolReq baseCreatePluginToolReq(String displayName, String inputSchema, String outputSchema) {

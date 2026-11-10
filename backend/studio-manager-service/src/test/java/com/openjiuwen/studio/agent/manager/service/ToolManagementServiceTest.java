@@ -46,6 +46,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -134,13 +135,62 @@ class ToolManagementServiceTest {
 
             CreateToolReq req = new CreateToolReq();
             req.setToolDisplayName("MyTool");
-            req.setRequestInfo(new RequestInfo());
+            req.setRequestInfo(validHttpRequestInfo());
 
             CreateToolRsp result = toolManagementService.createToolV1("p1", "w1", req);
 
             assertNotNull(result);
             verify(toolMapper).insert(any(ToolEntity.class));
         }
+    }
+
+    @Test
+    void testCreateToolV1_DefaultsVisibilityToProjectWhenMissing() {
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+
+            when(toolMapper.selectByDisplayNameAndWorkspaceId(anyString(), anyString())).thenReturn(0);
+
+            CreateToolReq req = new CreateToolReq();
+            req.setToolDisplayName("NoVisTool");
+            req.setRequestInfo(validHttpRequestInfo());
+            // visibility 不传，保持 null
+
+            CreateToolRsp result = toolManagementService.createToolV1("p1", "w1", req);
+
+            assertNotNull(result);
+            ArgumentCaptor<ToolEntity> captor = ArgumentCaptor.forClass(ToolEntity.class);
+            verify(toolMapper).insert(captor.capture());
+            assertEquals("project", captor.getValue().getVisibility());
+        }
+    }
+
+    @Test
+    void testCreateToolV1_RejectsNullRequestInfo() {
+        CreateToolReq req = new CreateToolReq();
+        req.setToolDisplayName("NoRiTool");
+        req.setRequestInfo(null);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.createToolV1("p1", "w1", req));
+        assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
+        assertEquals("request_info is required.", ex.getDetails().get(0));
+        verify(toolMapper, never()).insert(any(ToolEntity.class));
+    }
+
+    @Test
+    void testCreateToolV1_RejectsIncompleteRequestInfo() {
+        CreateToolReq req = new CreateToolReq();
+        req.setToolDisplayName("BadRiTool");
+        req.setRequestInfo(new RequestInfo()); // url/method 缺失
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.createToolV1("p1", "w1", req));
+        assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
+        assertEquals("request_info.url and request_info.method are required.", ex.getDetails().get(0));
+        verify(toolMapper, never()).insert(any(ToolEntity.class));
     }
 
     @Test
@@ -154,7 +204,7 @@ class ToolManagementServiceTest {
 
             CreateToolReq req = new CreateToolReq();
             req.setToolDisplayName("ExistingTool");
-            req.setRequestInfo(new RequestInfo());
+            req.setRequestInfo(validHttpRequestInfo());
 
             AgentStudioException ex = assertThrows(AgentStudioException.class,
                 () -> toolManagementService.createToolV1("p1", "w1", req));
@@ -174,12 +224,19 @@ class ToolManagementServiceTest {
 
             CreateToolReq req = new CreateToolReq();
             req.setToolDisplayName("DupTool");
-            req.setRequestInfo(new RequestInfo());
+            req.setRequestInfo(validHttpRequestInfo());
 
             AgentStudioException ex = assertThrows(AgentStudioException.class,
                 () -> toolManagementService.createToolV1("p1", "w1", req));
             assertEquals(StudioError.TOOL_NAME_ALREADY_EXIST, ex.getErrorCode());
         }
+    }
+
+    private static RequestInfo validHttpRequestInfo() {
+        RequestInfo ri = new RequestInfo();
+        ri.setUrl("https://example.com/api/x");
+        ri.setMethod(RequestInfo.MethodEnum.POST);
+        return ri;
     }
 
     @Test
@@ -380,6 +437,27 @@ class ToolManagementServiceTest {
         AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> toolManagementService.checkInnerToolPermission("tool-1"));
         assertEquals(StudioError.TOOL_NOT_EXIST, ex.getErrorCode());
+    }
+
+    @Test
+    void testRequireHttpRequestInfo_Null() {
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.requireHttpRequestInfo(null));
+        assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
+        assertEquals("request_info is required.", ex.getDetails().get(0));
+    }
+
+    @Test
+    void testRequireHttpRequestInfo_MissingUrlOrMethod() {
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> toolManagementService.requireHttpRequestInfo(new RequestInfo()));
+        assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
+        assertEquals("request_info.url and request_info.method are required.", ex.getDetails().get(0));
+    }
+
+    @Test
+    void testRequireHttpRequestInfo_Valid() {
+        assertDoesNotThrow(() -> toolManagementService.requireHttpRequestInfo(validHttpRequestInfo()));
     }
 
     @Test

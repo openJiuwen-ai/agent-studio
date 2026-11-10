@@ -31,9 +31,9 @@
 | `tool_chinese_name` | string | 视接口 | 中文展示名，1–64。UI「展示名称」。v2 创建时常为必填 |
 | `tool_desc` | string | **必填**（多数路径） | 工具说明，1–600。UI「描述」（工具级，**不是**参数 `description`） |
 | `icon` | string | 否 | 图标 URL 或资源名 |
-| `request_info` | object | 连接类工具通常需要 | 见下表。含 `url` / `method` / `headers` 等 |
+| `request_info` | object | **是**（本文 HTTP/`api` 工具） | 见下表。须含合法 `url` / `method`；缺省返回业务错误（`02401001`），不会以 500 落库 |
 | `auth_info` | object | 否 | 鉴权配置（Service / IAM / HIS_IAM 等）；结构见鉴权相关文档 |
-| `visibility` | string | 否 | 可见性，如 `project` / `private`；非法值会报错 |
+| `visibility` | string | 否 | 可见性，如 `project` / `user` 等；不传时服务端默认 `project`；非法值会报错 |
 | `intf_type` | string | 否 | 接口形态。常见：`blocking`（同步）、`streaming`（流式；流式时可能跳过出参 schema 校验）。UI/历史数据里也可能出现其它取值 |
 | `call_mode` | string | 插件侧 | 多为 `api`（HTTP）或 `custom`（Python 等）。本文仅覆盖 `api` |
 | `input_schema` | **JSON 字符串** | 否（空=无入参） | 入参契约，见第二节起。**最大约 200000 字符** |

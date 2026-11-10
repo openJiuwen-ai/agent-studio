@@ -1611,6 +1611,7 @@ public class PluginService implements IPluginService {
         checkToolNum(pluginDTO);
         // 与 v1 独立工具对齐：校验 input/output schema（含参数 description/location 等）
         validatePluginToolSchemas(createPluginToolReq);
+        toolManagementService.requireHttpRequestInfo(createPluginToolReq.getRequestInfo());
 
         // 名字校验
         Set<String> englisNameSet = pluginDTO.getToolRequestInfo()
@@ -1697,6 +1698,7 @@ public class PluginService implements IPluginService {
     private void updateTool(CreatePluginToolReq createPluginToolReq, PluginDTO pluginDTO, String toolId) {
         // 与 v1 独立工具对齐：修改工具时同样校验 schema
         validatePluginToolSchemas(createPluginToolReq);
+        toolManagementService.requireHttpRequestInfo(createPluginToolReq.getRequestInfo());
 
         if (pluginDTO.getToolRequestInfo().getToolsInfoList() == null) {
             pluginDTO.getToolRequestInfo().setToolsInfoList(new ArrayList<>());
