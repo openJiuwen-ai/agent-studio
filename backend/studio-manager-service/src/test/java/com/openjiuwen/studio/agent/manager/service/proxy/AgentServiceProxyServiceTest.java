@@ -152,6 +152,16 @@ class AgentServiceProxyServiceTest {
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");
+        // 生产由 @PostConstruct init() 构造(依赖 @Value 配置,单测直呼会 NPE)——
+        // 此处按本类既有反射注入模式补齐下游错误渲染两件套,兜底分支不再 NPE
+        // (评审修订 2026-11-03 三轮:修复 testTextEmbeddings/Rerank_FeignException 回归)
+        ReflectionTestUtils.setField(proxyService, "downstreamMapper",
+            new com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMapper(
+                new com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMappingCatalog(
+                    new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog())));
+        ReflectionTestUtils.setField(proxyService, "downstreamHttpBuilder",
+            new com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder(
+                (key, args, locale) -> key));
     }
 
     @Test
@@ -487,14 +497,8 @@ class AgentServiceProxyServiceTest {
             model.setPublic(true);
             when(modelServiceMapper.queryById("model-1")).thenReturn(model);
 
-            // 注入 i18nUtil mock（构造函数不包含，需通过反射注入）
-            com.openjiuwen.studio.agent.common.utils.I18nUtil i18nUtilMock =
-                org.mockito.Mockito.mock(com.openjiuwen.studio.agent.common.utils.I18nUtil.class);
-            com.openjiuwen.studio.agent.common.utils.ErrorInfo errorInfo =
-                new com.openjiuwen.studio.agent.common.utils.ErrorInfo("unavailable", "reason", "suggestion");
-            when(i18nUtilMock.getMessage(any(com.openjiuwen.studio.agent.common.exception.AgentStudioException.class)))
-                .thenReturn(errorInfo);
-            ReflectionTestUtils.setField(proxyService, "i18nUtil", i18nUtilMock);
+            // 新兜底路径(DownstreamErrorMapper+族字面量)不经 i18nUtil——
+            // 原注入的 i18nUtil mock 已成 UnnecessaryStubbing,删除(评审修订 2026-11-03 三轮)
 
             String badBody = "not-a-json";
             FeignException feignException = new FeignException.BadGateway(
@@ -512,10 +516,12 @@ class AgentServiceProxyServiceTest {
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
             ResponseEntity<?> responseEntity = (ResponseEntity<?>) result;
+            // 新行为(评审修订 2026-11-03 三轮):builder 掉线与 runtime 掉线同构——
+            // 走 DownstreamErrorMapper 兜底 02001131/502(原 02501037 已回归本职)
             assertEquals(502, responseEntity.getStatusCode().value());
             ErrorRsp errorRsp = (ErrorRsp) responseEntity.getBody();
             assertNotNull(errorRsp);
-            assertEquals(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode(), errorRsp.getErrorCode());
+            assertEquals("openjiuwen.02001131", errorRsp.getErrorCode());
         }
     }
 
@@ -625,14 +631,7 @@ class AgentServiceProxyServiceTest {
             model.setPublic(true);
             when(modelServiceMapper.queryById("model-1")).thenReturn(model);
 
-            // 注入 i18nUtil mock（构造函数不包含，需通过反射注入）
-            com.openjiuwen.studio.agent.common.utils.I18nUtil i18nUtilMock =
-                org.mockito.Mockito.mock(com.openjiuwen.studio.agent.common.utils.I18nUtil.class);
-            com.openjiuwen.studio.agent.common.utils.ErrorInfo errorInfo =
-                new com.openjiuwen.studio.agent.common.utils.ErrorInfo("unavailable", "reason", "suggestion");
-            when(i18nUtilMock.getMessage(any(com.openjiuwen.studio.agent.common.exception.AgentStudioException.class)))
-                .thenReturn(errorInfo);
-            ReflectionTestUtils.setField(proxyService, "i18nUtil", i18nUtilMock);
+            // 新兜底路径不经 i18nUtil——原 mock 已成 UnnecessaryStubbing,删除(评审修订 2026-11-03 三轮)
 
             String badBody = "not-a-json";
             FeignException feignException = new FeignException.ServiceUnavailable(
@@ -652,10 +651,13 @@ class AgentServiceProxyServiceTest {
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
             ResponseEntity<?> responseEntity = (ResponseEntity<?>) result;
+            // 新行为(评审修订 2026-11-04 四轮):Feign 已应答(status>0)时按
+            // HTTP_RESPONSE 相位处理——文案族仍为 02001131,但保留原状态
+            // (503 不再统一成 502;真传输失败 status<=0 才 502)
             assertEquals(503, responseEntity.getStatusCode().value());
             ErrorRsp errorRsp = (ErrorRsp) responseEntity.getBody();
             assertNotNull(errorRsp);
-            assertEquals(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode(), errorRsp.getErrorCode());
+            assertEquals("openjiuwen.02001131", errorRsp.getErrorCode());
         }
     }
 
