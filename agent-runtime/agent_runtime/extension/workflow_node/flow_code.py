@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Optional, Union
 
+from agent_runtime.extension.workflow_node.code_blacklist import load_code_blacklist
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
@@ -23,6 +24,9 @@ from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.workflow.components.component import WorkflowComponent
+
+# 兼容既有单测 / 调用方：from ...flow_code import _load_code_blacklist
+_load_code_blacklist = load_code_blacklist
 
 JIUWEN_CODE_TYPE = "jiuwen.code"
 
@@ -42,49 +46,6 @@ _ARRAY_ITEM_TYPE_MAP: dict[str, type] = {
     "boolean": bool,
     "object": dict,
 }
-
-
-def _load_code_blacklist() -> list:
-    """解析 CODE_BLACK_LIST 环境变量。
-
-    os.environ.get(key, default) 在变量存在但值为空串时仍返回 ""，
-    直接 json.loads("") 会抛 Expecting value: line 1 column 1 (char 0)。
-    未设置/空串/空白 → 无黑名单（容错）；非法 JSON/非 list → fail-closed 抛错，
-    避免配置写错时静默关闭安全黑名单。list 内非 str 项丢弃。
-    """
-    raw = (os.environ.get("CODE_BLACK_LIST") or "").strip()
-    if not raw:
-        return []
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        workflow_logger.error(
-            "CODE_BLACK_LIST is not valid JSON, reject code execution: %r", raw
-        )
-        raise build_error(
-            StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
-            comp="flow_code",
-            ability="invoke",
-            reason=f"CODE_BLACK_LIST is not valid JSON: {e}",
-            workflow="n/a",
-        ) from e
-    if not isinstance(parsed, list):
-        workflow_logger.error(
-            "CODE_BLACK_LIST must be a JSON list, got %s: %r",
-            type(parsed).__name__,
-            raw,
-        )
-        raise build_error(
-            StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
-            comp="flow_code",
-            ability="invoke",
-            reason=(
-                "CODE_BLACK_LIST must be a JSON list, "
-                f"got {type(parsed).__name__}"
-            ),
-            workflow="n/a",
-        )
-    return [kw for kw in parsed if isinstance(kw, str)]
 
 
 def _coerce_value(value, target_type: str, *, input_mode: bool = False):
@@ -375,7 +336,7 @@ class FlowCode(WorkflowComponent):
             BuildError: 发现黑名单关键字时抛出异常
         """
         clean_code = " ".join(code.split())
-        black_list = _load_code_blacklist()
+        black_list = load_code_blacklist()
         if black_list:
             black_keyword = next((kw for kw in black_list if kw in clean_code), None)
             if black_keyword:

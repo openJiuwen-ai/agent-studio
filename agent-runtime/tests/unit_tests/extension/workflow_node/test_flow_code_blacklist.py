@@ -10,11 +10,14 @@ import os
 from unittest.mock import patch
 
 import pytest
+from agent_runtime.extension.workflow_node.code_blacklist import load_code_blacklist
 from agent_runtime.extension.workflow_node.flow_code import (
     FlowCode,
     FlowCodeConfig,
-    _load_code_blacklist,
 )
+
+# 兼容别名：flow_code 再导出供既有调用
+_load_code_blacklist = load_code_blacklist
 
 
 def _call_check_blacklist(flow_code, code):
