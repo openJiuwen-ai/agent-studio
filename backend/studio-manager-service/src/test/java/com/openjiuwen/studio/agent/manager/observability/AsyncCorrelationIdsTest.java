@@ -46,13 +46,23 @@ class AsyncCorrelationIdsTest {
     }
 
     @Test
-    void resolve_prefersMdc_overHeaders() {
+    void resolve_prefersHeaders_overStaleMdc() {
+        // 线程池残留 MDC 不得盖住 Redis 缓存的本任务 Header
         MDC.put(MdcKeys.REQUEST_ID, "mdc-req");
         MDC.put(MdcKeys.TRACE_ID, "mdc-trace");
         HttpHeaders headers = new HttpHeaders();
         headers.add(CorrelationContextFilter.REQUEST_ID_HEADER, "hdr-req");
         headers.add(CorrelationContextFilter.TRACE_ID_HEADER, "hdr-trace");
         AsyncCorrelationIds.Pair pair = AsyncCorrelationIds.resolve(headers);
+        assertThat(pair.requestId()).isEqualTo("hdr-req");
+        assertThat(pair.traceId()).isEqualTo("hdr-trace");
+    }
+
+    @Test
+    void resolve_fallsBackToMdc_whenHeadersAbsent() {
+        MDC.put(MdcKeys.REQUEST_ID, "mdc-req");
+        MDC.put(MdcKeys.TRACE_ID, "mdc-trace");
+        AsyncCorrelationIds.Pair pair = AsyncCorrelationIds.resolve(null);
         assertThat(pair.requestId()).isEqualTo("mdc-req");
         assertThat(pair.traceId()).isEqualTo("mdc-trace");
     }
