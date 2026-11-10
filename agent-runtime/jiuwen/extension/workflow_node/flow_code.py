@@ -93,8 +93,8 @@ class FlowCode(WorkflowComponent):
 
     def _check_blacklist(self, code: str) -> None:
         clean_code = " ".join(code.split())
-        # CODE_BLACK_LIST 为空串时 get(..., "[]") 仍返回 ""，json.loads("") 会崩
-        # （BUG2026110905666）；空/空白/非法 JSON/非 list → 无黑名单
+        # CODE_BLACK_LIST 为空串时 get(..., "[]") 仍返回 ""，json.loads("") 会崩；
+        # 空/空白/非法 JSON/非 list → 无黑名单
         raw = (os.environ.get("CODE_BLACK_LIST") or "").strip()
         if not raw:
             black_list: list = []

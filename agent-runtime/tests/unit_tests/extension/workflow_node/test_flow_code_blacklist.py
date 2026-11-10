@@ -1,6 +1,6 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
 
-"""FlowCode CODE_BLACK_LIST 解析回归（BUG2026110905666）。
+"""FlowCode CODE_BLACK_LIST 解析回归。
 
 覆盖：环境变量存在但为空串时，原先 json.loads("") 抛
 Expecting value: line 1 column 1 (char 0)，导致对象处理流中的代码节点
@@ -25,7 +25,7 @@ class TestLoadCodeBlacklist:
             assert _load_code_blacklist() == []
 
     def test_empty_string_returns_empty(self):
-        """BUG2026110905666：CODE_BLACK_LIST="" 不得再抛 JSONDecodeError"""
+        """CODE_BLACK_LIST="" 不得再抛 JSONDecodeError"""
         with patch.dict(os.environ, {"CODE_BLACK_LIST": ""}):
             assert _load_code_blacklist() == []
 

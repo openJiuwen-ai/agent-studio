@@ -57,7 +57,7 @@ class AsyncCorrelationIdsTest {
 
     @Test
     void runtimeExecution_afterAsyncBootstrap_doesNotThrowMissingContext() {
-        // 复现 BUG2026110906765：异步线程仅有 execution-id 时 provide 会缺 request-id,trace_id
+        // 异步线程仅有 execution-id 时 provide 会缺 request-id,trace_id
         MDC.clear();
         AsyncCorrelationIds.Pair pair = AsyncCorrelationIds.resolve(null);
         String executionId = "async-exec-1";

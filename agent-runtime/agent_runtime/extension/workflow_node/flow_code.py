@@ -48,8 +48,8 @@ def _load_code_blacklist() -> list:
     """解析 CODE_BLACK_LIST 环境变量。
 
     os.environ.get(key, default) 在变量存在但值为空串时仍返回 ""，
-    直接 json.loads("") 会抛 Expecting value: line 1 column 1 (char 0)
-    （BUG2026110905666）。空串/空白/非法 JSON/非 list 一律视为无黑名单。
+    直接 json.loads("") 会抛 Expecting value: line 1 column 1 (char 0)。
+    空串/空白/非法 JSON/非 list 一律视为无黑名单。
     """
     raw = (os.environ.get("CODE_BLACK_LIST") or "").strip()
     if not raw:
