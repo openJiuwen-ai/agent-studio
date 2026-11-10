@@ -169,3 +169,51 @@ async def test_invoke_cancellation_still_emits_error_event(monkeypatch):
 
     assert [call[0] for call in fake.calls] == ["start", "error"]
     assert fake.calls[1][2] is excinfo.value  # 取消对象原样透传给事件
+
+
+@pytest.mark.asyncio
+async def test_invoke_skips_wrapper_when_ambient_tracer_alive(monkeypatch):
+    # 双计守卫：ambient 会话上下文可达（controller 路径常态——agent 级
+    # with_session 包装内执行工具）时，由 _run_retrieval 内建遥测发射，
+    # kwargs 外壳必须静默，同一次检索只出一对 retriever 事件
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: object())
+
+    async def fake_run_retrieval(**kwargs):
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    assert await tool.invoke({"query": "q"}, session=object()) == _canned_output()
+    assert fake.calls == []
+
+
+@pytest.mark.asyncio
+async def test_invoke_cancellation_during_trace_start_propagates(monkeypatch):
+    # 取消落在 trace_retriever_start 期间：CancelledError 穿透 except Exception，
+    # 由 invoke 统一 BaseException 收尾路径接住（span 未开启，error 收尾为 no-op）
+    # 后原样重抛，检索本体不再执行
+    fake = _FakeTracerUtils()
+
+    async def cancelled_start(session, **kwargs):
+        raise asyncio.CancelledError()
+
+    fake.trace_retriever_start = cancelled_start
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+
+    ran = []
+
+    async def fake_run_retrieval(**kwargs):
+        ran.append(1)
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    with pytest.raises(asyncio.CancelledError):
+        await tool.invoke({"query": "q"}, session=object())
+
+    assert ran == []  # 检索未执行
+    assert fake.calls == []  # start 未送达，无任何事件记录

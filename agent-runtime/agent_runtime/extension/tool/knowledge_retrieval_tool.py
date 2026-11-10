@@ -343,10 +343,12 @@ class KnowledgeRetrievalTool(Tool):
         elif isinstance(inputs, str):
             query = inputs
         # session 由 ability_manager 调用时注入；携带时在 execute_tool span 下
-        # 补一对 retrieval 事件（核心侧 OTel handler 会开 retrieval 子 span）
+        # 补一对 retrieval 事件（核心侧 OTel handler 会开 retrieval 子 span）。
+        # 与 _run_retrieval 内建 ambient 遥测互斥（见 _start_retrieval_span 守卫）
         session = kwargs.get("session")
-        span = await self._start_retrieval_span(session, query)
+        span = None
         try:
+            span = await self._start_retrieval_span(session, query)
             result = await _run_retrieval(
                 query=str(query or ""),
                 connection_id=self._connection_id,
@@ -356,7 +358,8 @@ class KnowledgeRetrievalTool(Tool):
             )
         except BaseException as exc:
             # BaseException：asyncio.CancelledError（取消/超时）不属于 Exception，
-            # 取消路径同样要收尾 error 事件后再抛出，避免 retrieval span 悬空
+            # 取消落在 start 或检索期间都先收尾 error 事件再抛出；start 阶段取消时
+            # span 尚未开启（None），收尾为 no-op，避免 retrieval span 悬空
             await self._end_retrieval_span_error(session, span, exc)
             raise
         await self._end_retrieval_span(session, span, result)
@@ -365,6 +368,11 @@ class KnowledgeRetrievalTool(Tool):
     async def _start_retrieval_span(self, session, query) -> Optional[object]:
         """开启 retrieval 追踪；追踪不可用或失败时返回 None，不影响检索。"""
         if _TracerAgentUtils is None or session is None:
+            return None
+        if _resolve_retrieval_tracer() is not None:
+            # ambient 会话上下文可达时由 _run_retrieval 内建遥测发射（inputs 携带
+            # top_k / knowledge_base_ids，属性更全）；kwargs 会话仅兜底 ambient
+            # 不可达的调用点（如跨线程同步桥的 contextvar 跳变），互斥不双计
             return None
         try:
             return await _TracerAgentUtils.trace_retriever_start(
