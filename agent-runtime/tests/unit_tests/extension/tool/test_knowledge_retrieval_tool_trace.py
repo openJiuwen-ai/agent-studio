@@ -54,17 +54,21 @@ class _FakeTracer:
         outer = self
 
         class _Manager:
-            def create_agent_span(self, *args, **kwargs):
+            # G.CLS.07：方法不碰 self（只经闭包 outer 观测），定义成 staticmethod
+            @staticmethod
+            def create_agent_span(*args, **kwargs):
                 span = _FakeAgentSpan(len(outer.created))
                 outer.created.append(span)
                 return span
 
-            def pop_span(self, invoke_id):
+            @staticmethod
+            def pop_span(invoke_id):
                 outer.popped.append(invoke_id)
 
         self.tracer_agent_span_manager = _Manager()
 
-    def agent_handler_valid(self) -> bool:
+    @staticmethod
+    def agent_handler_valid() -> bool:
         return True
 
     async def trigger(self, handler, event, span=None, **payload):
