@@ -10,6 +10,7 @@ from agent_runtime.extension.workflow_node.code_runner.sandbox_code_runner impor
     SandboxCodeRunner,
 )
 from agent_runtime.extension.workflow_node.code_runner.base_code_runner import (
+    CodeRunResult,
     build_wrapped_code,
 )
 from openjiuwen.core.common.exception.codes import StatusCode
@@ -59,7 +60,8 @@ class TestSandboxCodeRunnerRun:
             inputs={"x": 1},
             timeout=300,
         )
-        assert result == {"result": 42}
+        assert isinstance(result, CodeRunResult)
+        assert result.result == {"result": 42}
 
     @staticmethod
     @pytest.mark.asyncio
@@ -135,7 +137,8 @@ class TestSandboxCodeRunnerRun:
             inputs={},
             timeout=300,
         )
-        assert result == {"val": "123.45"}
+        assert isinstance(result, CodeRunResult)
+        assert result.result == {"val": "123.45"}
 
     @staticmethod
     @pytest.mark.asyncio

@@ -15,6 +15,14 @@ declare interface Window {
    */
   readonly largeDslBytesThreshold?: string | number;
 
+  /**
+   * iframe SSO 极简接入开关（定制，默认关）。部署时 studio-console start.sh 把 index.html 的
+   * iframe_sso_token_placeholder 替换为环境变量 IFRAME_SSO_TOKEN_PARAM 的值：空 = 关闭；
+   * 非空 = 启用，值为 URL hash 中 token 参数名（同时是写入的 Cookie 名，须与后端
+   * auth_sso_header 同值）。本地 ng serve 不替换，environment 侧解析为 null。
+   */
+  readonly iframeSsoTokenParam?: string;
+
   getConsoleContext: () => ConsoleFramework.ConsoleContext;
 
   __x6_instances__?: any[];

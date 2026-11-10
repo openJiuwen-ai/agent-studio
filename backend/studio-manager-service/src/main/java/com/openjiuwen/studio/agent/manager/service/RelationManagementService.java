@@ -418,7 +418,10 @@ public class RelationManagementService implements IRelationManagementService {
                 dbPluginAndToolIdSet.add(pluginEntity.getPluginId());
             } else {
                 // 未知格式
-                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
+                String detail = String.format(
+                    "Plugin [%s] has empty request_info and call_mode is not custom.",
+                    pluginEntity.getPluginId());
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
             }
         }
 
@@ -528,7 +531,10 @@ public class RelationManagementService implements IRelationManagementService {
                 }
             } else {
                 // 未知格式
-                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID);
+                String detail = String.format(
+                    "Plugin [%s] has empty request_info and call_mode is not custom.",
+                    pluginEntity.getPluginId());
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
             }
         }
         log.debug("Mappings to insert: {}", agentToolSet);
@@ -581,7 +587,8 @@ public class RelationManagementService implements IRelationManagementService {
     private String buildResourceInputSchema(String inputSchemaStr) {
         // 如果inputSchemaStr为空，则抛异常
         if (inputSchemaStr == null || inputSchemaStr.isEmpty()) {
-            throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID);
+            String detail = "input_schema is empty; cannot build resource parameter.";
+            throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID, List.of(detail), detail);
         }
 
         SchemaConfig inputSchema = JSON.parseObject(inputSchemaStr, SchemaConfig.class);

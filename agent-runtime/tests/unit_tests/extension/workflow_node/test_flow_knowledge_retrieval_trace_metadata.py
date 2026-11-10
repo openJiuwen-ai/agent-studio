@@ -1,90 +1,89 @@
-# coding: utf-8
+# pylint: disable=protected-access  # 单元测试需直接验证内部方法行为
+"""FlowKnowledgeRetrieval.trace_metadata 检索事实导出契约。
 
-"""FlowKnowledgeRetrieval.trace_metadata 契约：喂给工作流 retrieval span 的静态事实。
-
-tracer_otel 侧的读取契约（handler._apply_component_metadata）：
-- top_k 必须是 int（isinstance 判断，非 int 直接丢弃）
-- data_source_ids 必须是非空 list
+core 引擎经 getattr 钩子拾取返回值并入组件 metadata，tracer_otel handler
+按 isinstance 门控消费（top_k 必须 int、data_source_ids 非空 list）。
 """
-
 from agent_runtime.extension.workflow_node.flow_knowledge_retrieval import (
     FlowKnowledgeRetrieval,
+    FlowKnowledgeRetrievalConfig,
 )
 
 
-def test_trace_metadata_exports_topk_and_data_source_ids():
-    comp = FlowKnowledgeRetrieval(
+def test_trace_metadata_full_conf():
+    component = FlowKnowledgeRetrieval(
         {
             "connectionId": "conn-1",
             "knowledgeBaseIds": ["kb-1", "kb-2"],
             "retrievalConfig": {"topK": 5},
         }
     )
-    assert comp.trace_metadata() == {
-        "top_k": 5,
-        "data_source_ids": ["kb-1", "kb-2"],
-    }
+
+    metadata = component.trace_metadata()
+
+    assert metadata == {"top_k": 5, "data_source_ids": ["kb-1", "kb-2"]}
 
 
-def test_trace_metadata_topk_is_int_even_from_string_ir():
-    # IR 里 topK 可能是字符串；handler 只接受 int，这里负责收敛
-    comp = FlowKnowledgeRetrieval(
+def test_trace_metadata_top_k_not_exported_when_unconfigured():
+    """topK 未显式配置时不导出 top_k——实际检索缺省随引擎类型变化
+    （openjiuwen 5 / 其余 10），遥测只报已配置的事实，不猜缺省。
+    """
+    component = FlowKnowledgeRetrieval(
+        {"connectionId": "conn-1", "knowledgeBaseIds": [], "retrievalConfig": {}}
+    )
+
+    metadata = component.trace_metadata()
+
+    assert metadata is None
+
+
+def test_trace_metadata_null_retrieval_config_never_raises():
+    """retrievalConfig 显式为 null（_init_conf 原样透传 None）不抛错：
+    top_k 不导出，data_source_ids 照常——纯读取不抛错契约。
+    """
+    component = FlowKnowledgeRetrieval(
+        {"connectionId": "conn-1", "knowledgeBaseIds": ["kb-1"], "retrievalConfig": None}
+    )
+
+    metadata = component.trace_metadata()
+
+    assert metadata == {"data_source_ids": ["kb-1"]}
+
+
+def test_trace_metadata_non_numeric_top_k_omitted():
+    """topK 非数值时丢 top_k 键（handler isinstance 门控跳过），其余照出。"""
+    component = FlowKnowledgeRetrieval(
         {
             "connectionId": "conn-1",
             "knowledgeBaseIds": ["kb-1"],
-            "retrievalConfig": {"topK": "3"},
+            "retrievalConfig": {"topK": "many"},
         }
     )
-    metadata = comp.trace_metadata()
-    assert metadata["top_k"] == 3
-    assert isinstance(metadata["top_k"], int)
 
+    metadata = component.trace_metadata()
 
-def test_trace_metadata_missing_or_invalid_topk_omits_key():
-    comp = FlowKnowledgeRetrieval(
-        {
-            "connectionId": "conn-1",
-            "knowledgeBaseIds": [],
-            "retrievalConfig": {},
-        }
-    )
-    assert comp.trace_metadata() == {"data_source_ids": []}
-
-    comp_missing = FlowKnowledgeRetrieval(
-        {
-            "connectionId": "conn-1",
-            "knowledgeBaseIds": [],
-            "retrievalConfig": {"topK": "not-a-number"},
-        }
-    )
-    assert comp_missing.trace_metadata() == {"data_source_ids": []}
+    assert metadata == {"data_source_ids": ["kb-1"]}
 
 
 def test_trace_metadata_without_conf_returns_none():
-    # 遗留两阶段初始化路径：init 之前 conf 为空
-    assert FlowKnowledgeRetrieval(None).trace_metadata() is None
+    """无配置组件保持基类语义（None，不添事实）。"""
+    component = FlowKnowledgeRetrieval()
+
+    assert component.trace_metadata() is None
 
 
-def test_trace_metadata_prefers_loaded_kb_retrieval_params(monkeypatch):
-    # 首次执行前 _kb_config 未加载，用 IR retrievalConfig；
-    # 已加载后 OBS retrieval_params 是实际生效值，优先
-    comp = FlowKnowledgeRetrieval(
-        {
-            "connectionId": "conn-1",
-            "knowledgeBaseIds": ["kb-1"],
-            "retrievalConfig": {"topK": 5},
-        }
+def test_trace_metadata_dataclass_conf_and_copy():
+    """dataclass 配置路径同样生效；返回列表为拷贝，不回写组件配置。"""
+    component = FlowKnowledgeRetrieval(
+        FlowKnowledgeRetrievalConfig(
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={"topK": "3"},
+        )
     )
-    monkeypatch.setattr(comp, "_kb_config", {"retrieval_params": {"topK": 7}})
-    assert comp.trace_metadata()["top_k"] == 7
 
+    metadata = component.trace_metadata()
 
-def test_trace_metadata_tolerates_degenerate_payloads(monkeypatch):
-    # 值来自 IR/OBS 任意载荷：knowledgeBaseIds 缺省、retrieval_params 非 dict
-    # 都不向 vertex 抛错（vertex 侧另有兜底，这里保证自身不出错）
-    comp = FlowKnowledgeRetrieval({"connectionId": "conn-1"})
-    monkeypatch.setattr(comp, "_kb_config", {"retrieval_params": ["not-a-dict"]})
-
-    metadata = comp.trace_metadata()
-
-    assert metadata == {"data_source_ids": []}
+    assert metadata == {"top_k": 3, "data_source_ids": ["kb-1"]}
+    metadata["data_source_ids"].append("kb-extra")
+    assert component.config.knowledge_base_ids == ["kb-1"]

@@ -781,9 +781,22 @@ class IntentDetection(WorkflowComponent):
         provider = _get_model_config_provider()
         llm_comp_config = await provider.get_llm_config(adapted_conf)
 
-        return Model(
-            model_client_config=llm_comp_config.model_client_config,
-            model_config=llm_comp_config.model_config,
+        from agent_runtime.common.trace_compat import (
+            DEFINITION_SCOPED_SESSION_ID,
+            build_traced_model,
+            resolve_trace_identity,
+        )
+
+        return build_traced_model(
+            Model(
+                model_client_config=llm_comp_config.model_client_config,
+                model_config=llm_comp_config.model_config,
+            ),
+            # 组件实例是定义级产物（跨执行复用）：装饰会话绑任一执行的
+            # conversation_id，后续执行都会错归属，故统一走定义级会话；
+            # 业务 workflow_id 经 identity 附到独立/子 span（壳自身值优先）
+            session_id=DEFINITION_SCOPED_SESSION_ID,
+            identity=resolve_trace_identity(self, self._session),
         )
 
     async def get_llm_result(self, current_inputs: dict) -> str:

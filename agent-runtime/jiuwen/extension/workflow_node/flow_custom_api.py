@@ -48,6 +48,7 @@ from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.session.stream.base import OutputSchema
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 
@@ -155,7 +156,11 @@ class FlowCustomApi(WorkflowComponent):
                 need_confirm=self._enable_confirm and not confirmed,
             )
 
-            api_outputs = await self._api.ainvoke(formatted_inputs)
+            # 工作流内自定义插件不经 ToolMgr.get_tool 装饰，主动补一层 tracer
+            # 装饰以产出 execute_tool span；CustomPluginTool.invoke 直通 ainvoke，
+            # 行为不变。未注册 agent handler 或旧版 core 时装饰原样返回
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = await api_tool.invoke(formatted_inputs)
             outputs = {"userFields": self._format_api_outputs(api_outputs)}
 
             duration = round((time.perf_counter() - start_time) * 1000)
@@ -177,6 +182,11 @@ class FlowCustomApi(WorkflowComponent):
 
         except CommonJiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    # 异常抑制仅"不中断流程"，错误事实须保留在 trace 上（Jaeger 标红）
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 return {"userFields": _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise JiuWenBaseException(
                 error_code=e.error_code,
@@ -185,8 +195,12 @@ class FlowCustomApi(WorkflowComponent):
                 node_name=e.node_name,
                 node_type=e.node_type,
             ) from e
-        except JiuWenBaseException:
+        except JiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 return {"userFields": _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise
         except Exception as e:
@@ -199,6 +213,10 @@ class FlowCustomApi(WorkflowComponent):
                 metadata={"api_id": self._api_id},
             )
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 return {"userFields": _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise _build_flow_api_error(
                 FlowApiStatusCode.WORKFLOW_API_EXECUTE_ERROR,
@@ -224,7 +242,10 @@ class FlowCustomApi(WorkflowComponent):
             inputs_data = inputs.get("userFields", {}) or {}
             api_inputs = await self._format_api_inputs(inputs_data, session=session)
 
-            api_outputs = self._api.astream(api_inputs)
+            # 与 invoke 同口径：stream 路径也经 tracer 装饰（新 core 代理会包
+            # astream，首 chunk 起 execute_tool span；旧 core 代理原样透传）
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = api_tool.astream(api_inputs)
             async for schema in self._transform_async_stream_data(api_outputs, session):
                 yield schema
 
@@ -246,6 +267,11 @@ class FlowCustomApi(WorkflowComponent):
 
         except CommonJiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    # 异常抑制仅"不中断流程"，错误事实须保留在 trace 上（Jaeger 标红）
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -260,8 +286,12 @@ class FlowCustomApi(WorkflowComponent):
                 node_name=e.node_name,
                 node_type=e.node_type,
             ) from e
-        except JiuWenBaseException:
+        except JiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -280,6 +310,10 @@ class FlowCustomApi(WorkflowComponent):
                 metadata={"api_id": self._api_id},
             )
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,

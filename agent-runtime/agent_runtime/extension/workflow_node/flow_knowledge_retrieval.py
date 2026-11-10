@@ -105,27 +105,28 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         return JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE
 
     def trace_metadata(self) -> Optional[dict]:
-        """Export retrieval facts for the workflow trace span.
+        """检索静态事实导出，供 core 组件 span 盖 GenAI 属性。
 
-        Vertex merges this into the node span metadata at component begin and
-        tracer_otel maps it onto GenAI semconv attributes: top_k ->
-        gen_ai.retrieval.top_k (must be int), knowledge_base_ids ->
-        gen_ai.data_source.id.  Values come from the IR config so they are
-        available before the OBS kb_config loads on first execution.
+        core 引擎在组件 span 开启时拾取返回值并入组件 metadata，tracer_otel
+        handler 消费：top_k -> gen_ai.retrieval.top_k、knowledge_base_ids ->
+        gen_ai.data_source.id。top_k 仅在 topK 显式配置且可收敛为 int 时导出
+        （未配置不猜缺省——实际检索缺省随引擎类型变化）；纯读取无副作用，
+        任何配置形态不抛错，异常由引擎侧钩子兜底。
         """
         if self._conf is None:
             return None
-        # 值来自 IR/OBS 任意载荷：knowledge_base_ids 可能为 None，
-        # retrieval_params 可能不是 dict，全部就地兜底，不向 vertex 抛错
-        metadata: Dict = {"data_source_ids": list(self._conf.knowledge_base_ids or [])}
-        retrieval_config = self._conf.retrieval_config or {}
-        if self._kb_config is not None:
-            retrieval_config = self._kb_config.get("retrieval_params", retrieval_config)
-        try:
-            metadata["top_k"] = int(retrieval_config.get("topK"))
-        except (AttributeError, TypeError, ValueError):
-            pass
-        return metadata
+        metadata: Dict = {}
+        # retrievalConfig 可能显式为 null（_init_conf 原样透传 None）：非 dict
+        # 不取值不抛错；topK 未显式配置时同样不导出
+        retrieval_config = self._conf.retrieval_config
+        if isinstance(retrieval_config, dict) and "topK" in retrieval_config:
+            try:
+                metadata["top_k"] = int(retrieval_config["topK"])
+            except (TypeError, ValueError):
+                pass
+        if self._conf.knowledge_base_ids:
+            metadata["data_source_ids"] = list(self._conf.knowledge_base_ids)
+        return metadata or None
 
     @staticmethod
     def _resolve_query_from_session(session: Session) -> str:

@@ -729,7 +729,10 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Failed to load workflow configuration: {e}")
             return
 
-        # 创建 LLM 模型
+        # 创建 LLM 模型。
+        # 注：react 路径不接 build_traced_model——多智能体同步桥线程下装饰
+        # 会话的 ambient 上下文与执行 trace 树脱钩，产孤儿 llm span（缺参
+        # 追问链复现）；react 覆盖待后续接线承接，本模块维持裸模型。
         try:
             llm = await self._create_llm(ir_json)
         except Exception as e:
@@ -831,7 +834,15 @@ class ReActAgentRunner:
             # 不经过 _load_conversation_data 的 join 点，统一在 session
             # 创建前做有界等待（conversation_id 为空时 no-op）。
             await await_pending(req.conversation_id)
-            session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
+            # 会话事实源头：user_id 经 source_metadata 随 session 携带
+            # （core OtelRail 与装饰器路径 identity 兜底的同一取值口径），
+            # 供 llm span 供给 gen_ai.user.id。缺数据不注入：user_id 为空时
+            # 传 None（恢复已有 session 也不落空键覆盖上一轮播种的值）。
+            session = create_agent_session_with_trace(
+                session_id=session_id,
+                card=agent.card,
+                source_metadata={"user_id": req.user_id} if req.user_id else None,
+            )
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:
                 await self._seed_conversation_history(

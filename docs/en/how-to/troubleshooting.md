@@ -170,7 +170,7 @@ Fail to run agent because [{}]
 
 Focus on the detailed process and errors of the underlying execution engine:
 
-**Performance phase logs** (`performance_logger`, INFO level, visible by default):
+**Performance phase logs** (`performance_logger`, enabled by setting `PERFORMANCE_LOG_LEVEL=INFO`, silent by default):
 
 ```
 ir_convert|{ms}              # IR conversion duration
@@ -256,6 +256,7 @@ Adjust via environment variables; restart the service after changes:
 | Environment variable | Default | Debug value | Purpose |
 |---------------------|---------|-------------|---------|
 | `WORKFLOW_LOG_LEVEL` | WARNING | **DEBUG** | Workflow/single-agent full execution flow logs + request body |
+| `PERFORMANCE_LOG_LEVEL` | WARNING | **INFO** | Performance phase logs (IR load/stage durations/first-token latency, etc.) |
 | `GRAPH_LOG_LEVEL` | WARNING | **DEBUG** | Graph execution engine logs |
 | `LLM_LOG_LEVEL` | WARNING | **DEBUG** | LLM call details (request/response/token/latency) |
 | `LOG_VERBOSE` | false | **true** | Print full exception stack traces |
@@ -267,6 +268,8 @@ K8s environment variable configuration reference:
 env:
   - name: WORKFLOW_LOG_LEVEL
     value: "DEBUG"
+  - name: PERFORMANCE_LOG_LEVEL
+    value: "INFO"
   - name: GRAPH_LOG_LEVEL
     value: "DEBUG"
   - name: LLM_LOG_LEVEL

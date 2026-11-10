@@ -629,21 +629,37 @@ export function getValidatedFiles(
   return files;
 }
 
+const DAY_NAME_TO_LABEL_KEY: Record<string, string> = {
+  SUN: 'commonlogicagent_5',
+  MON: 'commonlogicagent_6',
+  TUE: 'commonlogicagent_7',
+  WED: 'commonlogicagent_8',
+  THU: 'commonlogicagent_9',
+  FRI: 'commonlogicagent_10',
+  SAT: 'commonlogicagent_11'
+};
+
 export function getDayOfWeekLabel(dayOfWeek: string): string {
+  // cron 星期域两种形式的展示：
+  // - 英文名称（SUN/MON/.../SAT，当前写入格式）→ 直接映射
+  // - 数字（历史存量数据，旧语义"1=周一 ... 7=周日"）→ 按旧语义映射，
+  //   与 trigger-modal 编辑回显的存量兼容逻辑一致
+  const nameKey = DAY_NAME_TO_LABEL_KEY[dayOfWeek];
+  if (nameKey) {
+    return i18next.t(nameKey, {
+      ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
+    });
+  }
   switch (dayOfWeek) {
-    case '0':
-      return i18next.t('commonlogicagent_5', {
-        ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
-      });
     case '1':
       return i18next.t('commonlogicagent_6', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
-
     case '2':
       return i18next.t('commonlogicagent_7', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
+
     case '3':
       return i18next.t('commonlogicagent_8', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
@@ -660,8 +676,13 @@ export function getDayOfWeekLabel(dayOfWeek: string): string {
       return i18next.t('commonlogicagent_11', {
         ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
       });
+    case '7':
+      return i18next.t('commonlogicagent_5', {
+        ns: [I18nNamespace.COMMON, I18nNamespace.AGENT_CENTER],
+      });
     default:
-      throw new Error('');
+      // 未知值兜底返回原值，避免列表渲染异常
+      return dayOfWeek;
   }
 }
 

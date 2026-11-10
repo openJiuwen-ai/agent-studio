@@ -17,8 +17,12 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.controller.common.constants import WorkflowConstants
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.orchestration import Invokable
+from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.orchestration.utils import Input, Output
 from jiuwen.plugin.common import constant
@@ -36,7 +40,7 @@ time_out_seconds = float(
     os.getenv(PLUGIN_REQUEST_TIMEOUT_KEY, constant.REQUEST_TIME_OUT)
 )
 time_out_aiohttp = aiohttp.ClientTimeout(total=time_out_seconds)
-mcp_time_out_seconds = float(os.getenv("MCP_TIME_OUT_SECONDS", 120))
+mcp_time_out_seconds = parse_mcp_time_out_seconds()
 
 
 def flatten_exception_group(eg: ExceptionGroup | BaseException) -> list[BaseException]:
@@ -112,11 +116,21 @@ class McpAPI(Invokable, ABC):
         """
         异步调用
         """
+        instance_info = get_instance_info(
+            self, blacklist=["auth", "headers", "query_params"]
+        )
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
+        instance_info.update(extract_tool_trace_info(kwargs))
         trace_manager = TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers", "query_params"]),
+            kwargs.pop("trace_handlers", None), instance_info
         )
         await trace_manager.on_plugin_start(inputs)
+
+        # 从编排层获取节点超时，与 MCP_TIME_OUT_SECONDS 取小作为客户端实际超时
+        node_timeout = kwargs.pop("node_timeout", 0)
+        effective_timeout = mcp_time_out_seconds
+        if node_timeout > 0:
+            effective_timeout = min(mcp_time_out_seconds, node_timeout)
 
         try:
             request_params = await self.request_params_creator.create(inputs, **kwargs)
@@ -159,8 +173,8 @@ class McpAPI(Invokable, ABC):
                 async with streamablehttp_client(
                     tmp_url,
                     headers=request_params.headers,
-                    sse_read_timeout=mcp_time_out_seconds,
-                    timeout=mcp_time_out_seconds,
+                    sse_read_timeout=effective_timeout,
+                    timeout=effective_timeout,
                 ) as (
                     read_stream,
                     write_stream,
@@ -181,8 +195,8 @@ class McpAPI(Invokable, ABC):
                 async with sse_client(
                     tmp_url,
                     headers=request_params.headers,
-                    sse_read_timeout=mcp_time_out_seconds,
-                    timeout=mcp_time_out_seconds,
+                    sse_read_timeout=effective_timeout,
+                    timeout=effective_timeout,
                 ) as streams:
                     async with ClientSession(*streams) as session:
                         await session.initialize()
@@ -330,9 +344,11 @@ class McpServer(McpAPI, ABC):
         """
         异步调用
         """
+        instance_info = get_instance_info(self, blacklist=["auth", "headers"])
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
+        instance_info.update(extract_tool_trace_info(kwargs))
         trace_manager = TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers"]),
+            kwargs.pop("trace_handlers", None), instance_info
         )
         await trace_manager.on_plugin_start(inputs)
         try:

@@ -40,6 +40,22 @@ def setup_otel_tracer() -> None:
         )
         return
 
+    try:
+        # 本仓子类依赖上游扩展的私有符号（升级可能缺失/改名），与上游导入隔离，
+        # 失败时回退官方 handler，避免 OTel 整体静默停用并被误报为"未安装扩展"
+        from agent_runtime.observability.tracer_otel_studio import (
+            StudioOtelWorkflowHandler,
+        )
+
+        _workflow_handler_cls = StudioOtelWorkflowHandler
+    except ImportError as import_exc:
+        logger.warning(
+            "StudioOtelWorkflowHandler unavailable (%s), "
+            "fallback to official OtelWorkflowHandler",
+            import_exc,
+        )
+        _workflow_handler_cls = OtelWorkflowHandler
+
     if _handlers_already_registered():
         logger.info("OpenTelemetry tracer handlers already registered, skipping")
         return
@@ -69,7 +85,7 @@ def setup_otel_tracer() -> None:
         "otel_agent", OtelAgentHandler(otel_tracer, config)
     )
     TracerHandlerRegistry.register_handler(
-        "otel_workflow", OtelWorkflowHandler(otel_tracer, config)
+        "otel_workflow", _workflow_handler_cls(otel_tracer, config)
     )
 
     logger.info(

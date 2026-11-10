@@ -1170,7 +1170,8 @@ public class ToolManagementService implements IToolManagementService {
         SchemaConfig inputSchema = JsonUtils.json2ObjQuietly(inputSchemaStr, SchemaConfig.class);
         if (inputSchema == null) {
             log.error("parse input schema failed");
-            throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID);
+            throw schemaInvalid(StudioError.TOOL_INPUT_SCHEMA_INVALID,
+                "Failed to parse input_schema as JSON object.");
         }
         if (inputSchema.getProperties() == null) return;
 
@@ -1257,13 +1258,13 @@ public class ToolManagementService implements IToolManagementService {
         try {
             if (!JsonSchemaUtils.isJsonSchemaValid(inputSchema, maxPropNum, maxPropDepth, true)) {
                 log.error("The format of tool input schema is invalid: {}", inputSchema);
-                throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID,
-                        List.of("The input schema format is invalid. Please check the JSON structure."));
+                throw schemaInvalid(StudioError.TOOL_INPUT_SCHEMA_INVALID,
+                        "The input schema format is invalid. Please check the JSON structure.");
             }
         } catch (AgentStudioException exception) {
             log.error("The format of tool input schema is invalid: {}", inputSchema);
-            throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID,
-                    exception.getDetails());
+            throw remapSchemaException(StudioError.TOOL_INPUT_SCHEMA_INVALID, exception,
+                    "The input schema format is invalid. Please check the JSON structure.");
         }
         try {
             // 非流式插件才校验output格式
@@ -1271,15 +1272,38 @@ public class ToolManagementService implements IToolManagementService {
                     && CommonConstant.Plugin.INTF_TYPE_STREAMING.equalsIgnoreCase(intfType))) {
                 if (!JsonSchemaUtils.isJsonSchemaValid(outputSchema, maxPropNum, maxPropDepth, false)) {
                     log.error("The format of tool output schema is invalid: {}", outputSchema);
-                    throw new AgentStudioException(StudioError.TOOL_OUTPUT_SCHEMA_INVALID,
-                            List.of("The output schema format is invalid. Please check the JSON structure."));
+                    throw schemaInvalid(StudioError.TOOL_OUTPUT_SCHEMA_INVALID,
+                            "The output schema format is invalid. Please check the JSON structure.");
                 }
             }
         } catch (AgentStudioException exception) {
             log.error("The format of tool output schema is invalid: {}", outputSchema);
-            throw new AgentStudioException(StudioError.TOOL_OUTPUT_SCHEMA_INVALID,
-                    exception.getDetails());
+            throw remapSchemaException(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, exception,
+                    "The output schema format is invalid. Please check the JSON structure.");
         }
+    }
+
+    /**
+     * 将 schema 校验异常统一映射为 02401002/02401003，并把具体字段原因写入 details 与 i18n 占位符 {0}。
+     */
+    private static AgentStudioException remapSchemaException(StudioError errorCode, AgentStudioException cause,
+            String fallbackDetail) {
+        List<String> details = cause.getDetails();
+        if (details == null || details.isEmpty()) {
+            String msg = StringUtils.isNotBlank(cause.getMessage()) ? cause.getMessage() : fallbackDetail;
+            details = List.of(msg);
+        }
+        return schemaInvalid(errorCode, details.get(0), details);
+    }
+
+    private static AgentStudioException schemaInvalid(StudioError errorCode, String detail) {
+        return schemaInvalid(errorCode, detail, List.of(detail));
+    }
+
+    private static AgentStudioException schemaInvalid(StudioError errorCode, String detailForI18n,
+            List<String> details) {
+        // args[0] 填入 openjiuwen.02401002/003 文案中的 {0}，便于前端直接展示属性级原因
+        return new AgentStudioException(errorCode, details, detailForI18n);
     }
 
     private String getToolType(String projectId) {
