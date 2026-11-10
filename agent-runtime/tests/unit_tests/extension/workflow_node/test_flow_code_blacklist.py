@@ -18,47 +18,61 @@ from agent_runtime.extension.workflow_node.flow_code import (
 )
 
 
+def _call_check_blacklist(flow_code, code):
+    getattr(flow_code, "_check_blacklist")(code)
+
+
 class TestLoadCodeBlacklist:
-    def test_unset_returns_empty(self):
+    @staticmethod
+    def test_unset_returns_empty():
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CODE_BLACK_LIST", None)
             assert _load_code_blacklist() == []
 
-    def test_empty_string_returns_empty(self):
+    @staticmethod
+    def test_empty_string_returns_empty():
         """CODE_BLACK_LIST="" 不得再抛 JSONDecodeError"""
         with patch.dict(os.environ, {"CODE_BLACK_LIST": ""}):
             assert _load_code_blacklist() == []
 
-    def test_whitespace_returns_empty(self):
+    @staticmethod
+    def test_whitespace_returns_empty():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": "   "}):
             assert _load_code_blacklist() == []
 
-    def test_invalid_json_returns_empty(self):
+    @staticmethod
+    def test_invalid_json_returns_empty():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": "not-json"}):
             assert _load_code_blacklist() == []
 
-    def test_non_list_json_returns_empty(self):
+    @staticmethod
+    def test_non_list_json_returns_empty():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": '{"a": 1}'}):
             assert _load_code_blacklist() == []
 
-    def test_valid_list_parsed(self):
+    @staticmethod
+    def test_valid_list_parsed():
         with patch.dict(os.environ, {"CODE_BLACK_LIST": '["subprocess","os.system"]'}):
             assert _load_code_blacklist() == ["subprocess", "os.system"]
 
 
 class TestCheckBlacklistEmptyEnv:
-    def test_empty_env_does_not_raise(self):
+    @staticmethod
+    def test_empty_env_does_not_raise():
         flow_code = FlowCode(
             FlowCodeConfig(code="def main(args): return {}", exec_env="local")
         )
         with patch.dict(os.environ, {"CODE_BLACK_LIST": ""}):
-            flow_code._check_blacklist("def main(args): return {}")
+            _call_check_blacklist(flow_code, "def main(args): return {}")
 
-    def test_blacklist_still_blocks(self):
+    @staticmethod
+    def test_blacklist_still_blocks():
         flow_code = FlowCode(
             FlowCodeConfig(code="def main(args): return {}", exec_env="local")
         )
         with patch.dict(os.environ, {"CODE_BLACK_LIST": '["subprocess"]'}):
             with pytest.raises(Exception) as exc_info:
-                flow_code._check_blacklist("import subprocess\ndef main(args): return {}")
+                _call_check_blacklist(
+                    flow_code, "import subprocess\ndef main(args): return {}"
+                )
             assert "subprocess" in str(exc_info.value)
