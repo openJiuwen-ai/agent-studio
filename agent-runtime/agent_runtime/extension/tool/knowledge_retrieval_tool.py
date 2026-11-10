@@ -164,6 +164,22 @@ def _drop_retrieval_span(tracer, span):
         pass
 
 
+def _drop_retrieval_span_by_session(session, span):
+    """kwargs 会话版尽力收尾：供 invoke 外壳在事件 await 被取消/未送达时使用。
+
+    真实任务取消（Task.cancel / asyncio.timeout）下，except 块内的 await 会再次
+    收到 CancelledError，无法再依赖任何异步收尾——只能同步地注销登记并探测
+    drop_agent_span 结束半开 otel span。全部尽力而为，不得影响上抛路径。
+    """
+    try:
+        tracer = session.tracer()
+    except Exception:  # noqa: BLE001
+        return
+    if tracer is None:
+        return
+    _drop_retrieval_span(tracer, span)
+
+
 async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retrieval_config):
     """Open the retriever trace span; returns the tracer span handle.
 
@@ -387,10 +403,22 @@ class KnowledgeRetrievalTool(Tool):
             return
         try:
             output_list = (result.get(constant.RESTFUL_DATA) or {}).get("output_list") or []
-            documents = [item.get("text", "") for item in output_list if isinstance(item, dict)]
+            # 只送 document_name（标识符），检索正文不进遥测属性——core handler 对
+            # results 逐项 str() 无截断无脱敏，全量 text 直进 span 会泄露敏感内容
+            documents = [
+                item["document_name"]
+                for item in output_list
+                if isinstance(item, dict) and item.get("document_name")
+            ]
             await _TracerAgentUtils.trace_retriever_end(session, span, documents=documents)
         except Exception as e:
             workflow_logger.warning("knowledge retrieval trace end failed: %s: %s", type(e).__name__, e)
+            _drop_retrieval_span_by_session(session, span)
+        except BaseException:
+            # 真实任务取消下 end 事件的 await 会再收到 CancelledError：
+            # 同步尽力收尾（注销登记 + drop 半开 span）后原样上抛，不留悬空
+            _drop_retrieval_span_by_session(session, span)
+            raise
 
     async def _end_retrieval_span_error(self, session, span, error) -> None:
         if _TracerAgentUtils is None or span is None or session is None:
@@ -399,6 +427,11 @@ class KnowledgeRetrievalTool(Tool):
             await _TracerAgentUtils.trace_retriever_error(session, span, error)
         except Exception as e:
             workflow_logger.warning("knowledge retrieval trace error event failed: %s: %s", type(e).__name__, e)
+            # 事件未送达：otel span 已开启且再无关闭时机，兜底收尾半开 span
+            _drop_retrieval_span_by_session(session, span)
+        except BaseException:
+            _drop_retrieval_span_by_session(session, span)
+            raise
 
     async def stream(self, inputs: Input, **kwargs) -> AsyncIterator[Output]:
         yield await self.invoke(inputs, **kwargs)

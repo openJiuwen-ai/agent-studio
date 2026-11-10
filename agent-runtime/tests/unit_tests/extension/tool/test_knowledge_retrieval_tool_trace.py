@@ -23,6 +23,7 @@ class _FakeTracerUtils:
 
     def __init__(self):
         self.calls = []
+        self.error_hang = False  # True 时 error 事件挂起，模拟真实取消落点
 
     async def trace_retriever_start(self, session, query=None, instance_name=""):
         self.calls.append(("start", session, query, instance_name))
@@ -33,6 +34,8 @@ class _FakeTracerUtils:
 
     async def trace_retriever_error(self, session, span, error):
         self.calls.append(("error", session, error))
+        if self.error_hang:
+            await asyncio.sleep(3600)
 
 
 def _build_tool() -> KnowledgeRetrievalTool:
@@ -51,8 +54,9 @@ def _canned_output() -> dict:
         constant.ERR_MESSAGE: "success",
         constant.RESTFUL_DATA: {
             "output_list": [
-                {"text": "doc-a", "content": "doc-a"},
-                {"text": "doc-b", "content": "doc-b"},
+                # 携带与 document_name 不同的敏感正文：断言遥测载荷只含标识符
+                {"document_name": "doc-a", "text": "机密正文-a", "content": "机密正文-a"},
+                {"document_name": "doc-b", "text": "机密正文-b", "content": "机密正文-b"},
             ]
         },
     }
@@ -75,8 +79,9 @@ async def test_invoke_emits_retriever_events_with_session(monkeypatch):
     assert result == _canned_output()
     assert fake.calls == [
         ("start", session, "什么是九问", "retrieval"),
-        ("end", session, ["doc-a", "doc-b"]),
+        ("end", session, ["doc-a", "doc-b"]),  # 只送标识符，机密正文不进遥测
     ]
+    assert "机密正文" not in str(fake.calls)
 
 
 @pytest.mark.asyncio
@@ -217,3 +222,33 @@ async def test_invoke_cancellation_during_trace_start_propagates(monkeypatch):
 
     assert ran == []  # 检索未执行
     assert fake.calls == []  # start 未送达，无任何事件记录
+
+
+@pytest.mark.asyncio
+async def test_real_task_cancel_during_error_event_drops_span(monkeypatch):
+    # 真实取消（Task.cancel，非 monkeypatch 抛 CancelledError）：error 事件挂起期间
+    # 任务被取消，except 块内的 await 再次收到 CancelledError——收尾不再依赖任何
+    # 异步调用，同步尽力注销登记 + drop 半开 span 后取消原样上抛
+    fake = _FakeTracerUtils()
+    fake.error_hang = True
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+
+    dropped = []
+    monkeypatch.setattr(
+        krt, "_drop_retrieval_span_by_session", lambda session, span: dropped.append(span)
+    )
+
+    async def failing_run_retrieval(**kwargs):
+        raise RuntimeError("kb down")
+
+    monkeypatch.setattr(krt, "_run_retrieval", failing_run_retrieval)
+
+    tool = _build_tool()
+    task = asyncio.ensure_future(tool.invoke({"query": "q"}, session=object()))
+    await asyncio.sleep(0.05)  # 跑到 error 事件挂起处
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert [call[0] for call in fake.calls] == ["start", "error"]  # 事件记录在案
+    assert dropped and dropped[0] is not None  # 取消再投递时同步收尾已尽力
