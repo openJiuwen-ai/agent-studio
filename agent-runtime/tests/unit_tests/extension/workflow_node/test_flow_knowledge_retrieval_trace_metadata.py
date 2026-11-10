@@ -24,15 +24,28 @@ def test_trace_metadata_full_conf():
     assert metadata == {"top_k": 5, "data_source_ids": ["kb-1", "kb-2"]}
 
 
-def test_trace_metadata_defaults_align_with_search_behavior():
-    """空检索配置时 top_k 取执行口径默认值 10，无库则不产 data_source_ids。"""
+def test_trace_metadata_top_k_not_exported_when_unconfigured():
+    """topK 未显式配置时不导出 top_k——实际检索缺省随引擎类型变化
+    （openjiuwen 5 / 其余 10），遥测只报已配置的事实，不猜缺省。"""
     component = FlowKnowledgeRetrieval(
         {"connectionId": "conn-1", "knowledgeBaseIds": [], "retrievalConfig": {}}
     )
 
     metadata = component.trace_metadata()
 
-    assert metadata == {"top_k": 10}
+    assert metadata is None
+
+
+def test_trace_metadata_null_retrieval_config_never_raises():
+    """retrievalConfig 显式为 null（_init_conf 原样透传 None）不抛错：
+    top_k 不导出，data_source_ids 照常——纯读取不抛错契约。"""
+    component = FlowKnowledgeRetrieval(
+        {"connectionId": "conn-1", "knowledgeBaseIds": ["kb-1"], "retrievalConfig": None}
+    )
+
+    metadata = component.trace_metadata()
+
+    assert metadata == {"data_source_ids": ["kb-1"]}
 
 
 def test_trace_metadata_non_numeric_top_k_omitted():

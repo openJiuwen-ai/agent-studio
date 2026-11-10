@@ -173,13 +173,19 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         inputs["top_k"] = top_k
     if knowledge_base_ids:
         inputs["knowledge_base_ids"] = list(knowledge_base_ids)
-    started = await _trace_retrieval_event(
-        tracer,
-        "on_retriever_start",
-        span,
-        inputs=inputs,
-        instance_info={"class_name": "knowledge_retrieval_tool"},
-    )
+    try:
+        started = await _trace_retrieval_event(
+            tracer,
+            "on_retriever_start",
+            span,
+            inputs=inputs,
+            instance_info={"class_name": "knowledge_retrieval_tool"},
+        )
+    except BaseException:  # noqa: BLE001 - 取消等 BaseException 同样要收尾登记
+        # CancelledError 不被 _trace_retrieval_event 的 except Exception 吞：
+        # start 未送达即注销登记（不留悬空记录、不污染 last_span），取消原样上抛
+        _unregister_retrieval_span(tracer, span)
+        raise
     if not started:
         # start 未送达：otel span 从未开启，只注销登记，不发 drop
         _unregister_retrieval_span(tracer, span)

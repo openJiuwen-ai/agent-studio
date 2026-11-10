@@ -124,11 +124,12 @@ class _StubSpanManager:
 
 
 class _StubTracer:
-    def __init__(self, fail_trigger=False, fail_events=None):
+    def __init__(self, fail_trigger=False, fail_events=None, cancel_events=None):
         self.span_manager = _StubSpanManager()
         self.events = []
         self.fail_trigger = fail_trigger
         self.fail_events = fail_events or set()
+        self.cancel_events = cancel_events or set()
 
     @property
     def tracer_agent_span_manager(self):
@@ -139,6 +140,9 @@ class _StubTracer:
         return True
 
     async def trigger(self, handler, event_name, span=None, **payload):
+        if event_name in self.cancel_events:
+            # CancelledError 是 BaseException：不被 _trace_retrieval_event 吞
+            raise asyncio.CancelledError()
         if self.fail_trigger or event_name in self.fail_events:
             raise RuntimeError("otel exporter down")
         self.events.append((handler, event_name, span, payload))
@@ -383,6 +387,27 @@ async def test_run_retrieval_start_event_failure_skips_end(monkeypatch):
     assert tracer.events == []
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
     # 判死的同时注销登记：span manager 不留永不 start/end 的悬空记录
+    assert tracer.span_manager.popped == ["inv-1"]
+
+
+@pytest.mark.asyncio
+async def test_run_retrieval_cancelled_start_pops_registration(monkeypatch):
+    """on_retriever_start 触发被取消（CancelledError 属 BaseException）：
+    登记照样注销（不留悬空记录、不污染 last_span），取消原样上抛调用方。"""
+    tracer = _StubTracer(cancel_events={"on_retriever_start"})
+    _patch_traced_session(monkeypatch, tracer)
+    _patch_lake_search_flow(monkeypatch, [])
+
+    with pytest.raises(asyncio.CancelledError):
+        await _run_retrieval(
+            query="hello",
+            connection_id="conn-1",
+            knowledge_base_ids=["kb-1"],
+            retrieval_config={},
+            tag_overrides={},
+        )
+
+    assert tracer.events == []
     assert tracer.span_manager.popped == ["inv-1"]
 
 
