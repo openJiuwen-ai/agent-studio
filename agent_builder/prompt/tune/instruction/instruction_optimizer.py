@@ -117,8 +117,15 @@ class GreedyOptimizer(BasicOptimizer):
                 prompt_update, placeholder_update = self._process_with_placeholder(
                     prompt, error_example_string, textual_gradient, self._tools
                 )
-            if prompt_update:
+            if prompt_update and prompt_update.strip():
                 break
+        else:
+            raise JiuWenBaseException(
+                StatusCode.PROMPT_OPTIMIZE_REFINE_INSTRUCTION_ERROR.code,
+                StatusCode.PROMPT_OPTIMIZE_REFINE_INSTRUCTION_ERROR.errmsg.format(
+                    error_msg="No non-blank optimized prompt after refinement retries"
+                ),
+            )
         optimized_full_prompt = self._get_full_prompt(prompt_update, placeholder_update)
         acc, sampled_incorrect_data, evaluations = self._evaluator.evaluate(
             optimized_full_prompt, dataset, self._stop_event

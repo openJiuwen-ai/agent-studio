@@ -357,3 +357,7 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+### No Usable Prompt After Refinement Retries
+
+The prompt optimizer expects the model to return a non-blank candidate inside `<PROMPT_OPTIMIZED>...</PROMPT_OPTIMIZED>`. If all five refinement attempts lack a usable candidate, optimization reports a refinement error without scoring an empty prompt. Check that the model can follow the output format and that its response is not truncated before retrying.
