@@ -56,7 +56,7 @@ class ConversationRejectionMvcTest {
     private static String capturedConversationMdc;
 
     private static final String AQ_BODY = "{\"name\":\"test\",\"enable\":true}";
-    private static final String N2L_BODY = "{\"query\":\"hello\"}";
+    private static final String N2L_BODY = "{\"query\":\"hello\",\"model\":{\"modelName\":\"test-model\"}}";
 
     @BeforeEach
     void setUp() {
@@ -98,6 +98,7 @@ class ConversationRejectionMvcTest {
                 mock(com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl.class),
                 mock(com.openjiuwen.studio.agent.manager.service.plugin.PluginService.class),
                 mock(com.openjiuwen.studio.agent.manager.service.WorkflowManagementService.class),
+                mock(com.openjiuwen.studio.agent.manager.service.SkillManagementService.class),
                 mock(com.openjiuwen.studio.agent.manager.service.JiuwenRuntimeI18nService.class)),
                 "n2lController");
         n2lMvc = MockMvcBuilders.standaloneSetup(n2lController)

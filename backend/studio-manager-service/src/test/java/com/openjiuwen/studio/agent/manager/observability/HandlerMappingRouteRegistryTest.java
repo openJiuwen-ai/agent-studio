@@ -63,10 +63,10 @@ class HandlerMappingRouteRegistryTest {
 
         // 真实 HandlerMapping 注册的会话路由必须全部在 profile 注册表中（防遗漏）
         // 注册表不得有实际 MVC 未注册的陈旧项（防漂移）
-        // 18 条唯一 pattern（17 conversation_id + 1 N2L cid）
+        // 17 条唯一 pattern（16 conversation_id + 1 N2L cid）
         Set<String> registered = ConversationIdValidator.registeredPatterns();
         assertThat(conversationRoutes).isNotEmpty();
-        assertThat(conversationRoutes).hasSize(18);
+        assertThat(conversationRoutes).hasSize(17);
         assertThat(conversationRoutes).containsExactlyInAnyOrderElementsOf(registered);
 
         // 清理
@@ -96,6 +96,7 @@ class HandlerMappingRouteRegistryTest {
             mock(com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl.class),
             mock(com.openjiuwen.studio.agent.manager.service.plugin.PluginService.class),
             mock(com.openjiuwen.studio.agent.manager.service.WorkflowManagementService.class),
+            mock(com.openjiuwen.studio.agent.manager.service.SkillManagementService.class),
             mock(com.openjiuwen.studio.agent.manager.service.JiuwenRuntimeI18nService.class));
     }
 }

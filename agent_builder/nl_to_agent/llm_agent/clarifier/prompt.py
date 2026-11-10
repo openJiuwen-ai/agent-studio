@@ -199,20 +199,25 @@ b. 问题-回答总结
 
 
 def update_clarifier_system_prompt(
-    available_tools, available_knowledge_bases, available_sub_workflows
+    available_tools,
+    available_knowledge_bases,
+    available_sub_workflows,
+    available_skills=None,
 ):
     """更新需求澄清系统提示词"""
     return (
         SYSTEM_PROMPT
         + f"""
     <可用外部资源>
-    【解释说明】外部资源包括插件、知识库、工作流三种。其中，插件是提供特定功能的API，能够拓宽Agent的能力边界，例如新闻搜索插件，能够搜索最新的新闻资讯；知识库具有丰富的领域知识，能够弥补Agent在垂直领域知识不足的问题，提升Agent回复的可靠性；工作流能够按照固定流程完成特定任务。
+    【解释说明】外部资源包括插件、知识库、工作流、平台技能（Skill）四种。其中，插件是提供特定功能的API，能够拓宽Agent的能力边界，例如新闻搜索插件，能够搜索最新的新闻资讯；知识库具有丰富的领域知识，能够弥补Agent在垂直领域知识不足的问题，提升Agent回复的可靠性；工作流能够按照固定流程完成特定任务；平台技能（Skill）是沉淀了完整工作方法与操作步骤的技能包，运行时会读取技能说明文件并按照其指引调用系统能力（如读取文件、执行代码）完成复杂任务。
     【可用插件】
     {str(available_tools)}
     【可用知识库】
     {str(available_knowledge_bases)}
     【可用工作流】
     {str(available_sub_workflows)}
+    【可用平台技能】
+    {str(available_skills)}
     </可用外部资源>
     """
     )
