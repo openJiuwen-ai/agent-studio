@@ -123,12 +123,14 @@ async def _trace_retrieval_event(tracer, event_name: str, span, **payload) -> bo
 
 
 def _unregister_retrieval_span(tracer, span):
-    """仅注销登记（start 未送达路径专用）。
+    """仅注销登记（_drop_retrieval_span 的内部原语）。
 
-    start 事件未送达时 otel span 从未开启，只需注销 create_agent_span 留在
-    span manager 的登记（避免永不 start/end 的悬空记录，last_span 也会被它
-    污染）；此时不得再向 handler 发 drop——那会给未开启的 span 发结束事件
-    （jdfff 11-05：依赖 core 对未知 invoke_id 的幂等容错才不产虚假记录）。
+    注销 create_agent_span 留在 span manager 的登记（避免永不 start/end
+    的悬空记录，last_span 也会被它污染）。start 失败路径不得只调本函数：
+    core trigger 逐 handler 裸 await 不隔离异常，start「未送达」可能是
+    「部分送达」——先成功的 handler 已开启 otel span，必须再走
+    _drop_retrieval_span 收掉（drop_agent_span 对未开启 invoke_id 结构性
+    幂等：内部 pop 缺失即返回，不发任何虚假事件）。
     """
     try:
         tracer.tracer_agent_span_manager.pop_span(span.invoke_id)
@@ -137,12 +139,12 @@ def _unregister_retrieval_span(tracer, span):
 
 
 def _drop_retrieval_span(tracer, span):
-    """注销登记 + 尽力结束已开启的 otel span（end/error 未送达路径）。
+    """注销登记 + 尽力结束已开启的 otel span（start/end/error 失败路径通用）。
 
-    仅适用于 start 已送达的 span（start 未达走 _unregister_retrieval_span）：
-    end/error 未送达时 otel handler 手中的 otel span 已开启且再无关闭
-    时机——若已注册 handler 暴露 drop_agent_span（core !3570/!3571 起），
-    再显式结束它（OK 状态 + drop 标记事件），否则半开 span 永久滞留。
+    start 部分送达（先成功的 handler 已开 otel span、后继 handler 抛错）与
+    end/error 未送达同用本函数收口：若已注册 handler 暴露 drop_agent_span
+    （core !3570/!3571 起），显式结束它（OK 状态 + drop 标记事件）——对
+    未开启的 invoke_id 幂等 no-op，无虚假记录；否则半开 span 永久滞留。
     旧 core 无该接口时退化为仅注销登记。全部尽力而为，不得影响降级路径。
     """
     _unregister_retrieval_span(tracer, span)
@@ -215,10 +217,11 @@ def _retriever_invoke_type():
 async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retrieval_config):
     """Open the retriever trace span; returns the tracer span handle.
 
-    start 事件未送达（trigger 抛错被吞）时返回 None：调用侧据 None 跳过
-    后续 end/error 事件，避免产生只有 end 没有 start 的半开 span；同时
-    注销 create_agent_span 留在 span manager 的登记，避免永不 start/end
-    的悬空记录（last_span 也会被它污染）。
+    start 事件失败（trigger 抛错被吞 / 取消穿透）时返回 None：调用侧据
+    None 跳过后续 end/error 事件，避免产生只有 end 没有 start 的半开
+    span；同时注销登记并尽力 drop——core trigger 逐 handler 裸 await
+    不隔离异常，失败可能是「部分送达」（先成功的 handler 已开启 otel
+    span），只注销登记会漏半开 span；drop 对未开启 invoke_id 幂等。
     """
     span = tracer.tracer_agent_span_manager.create_agent_span()
     inputs: Dict[str, Any] = {"query": query}
@@ -243,12 +246,14 @@ async def _trace_retrieval_start(tracer, query: str, knowledge_base_ids, retriev
         )
     except BaseException:  # noqa: BLE001 - 取消等 BaseException 同样要收尾登记
         # CancelledError 不被 _trace_retrieval_event 的 except Exception 吞：
-        # start 未送达即注销登记（不留悬空记录、不污染 last_span），取消原样上抛
-        _unregister_retrieval_span(tracer, span)
+        # 注销登记 + drop 部分送达时已开的 otel span（同步原语、全兜底、必不
+        # 抛），取消原样上抛
+        _drop_retrieval_span(tracer, span)
         raise
     if not started:
-        # start 未送达：otel span 从未开启，只注销登记，不发 drop
-        _unregister_retrieval_span(tracer, span)
+        # start 未送达/部分送达：注销登记；已开的 otel span 由 drop 收口
+        # （未开启的 handler 端幂等 no-op）
+        _drop_retrieval_span(tracer, span)
         return None
     return span
 

@@ -348,3 +348,98 @@ async def test_invoke_start_trigger_exception_unregisters_span(monkeypatch):
     assert tracer.popped == [s.invoke_id for s in tracer.created]  # 已注销，无悬空
     assert [e[0] for e in tracer.events] == ["on_retriever_start"]  # 仅尝试过 start
     assert fake.calls == []  # span 未开启，无 end/error
+
+
+def _patch_otel_drop_handler(monkeypatch, dropped):
+    """把注册表 agent handlers 换成带 drop_agent_span 的替身，记录被 drop 的 invoke_id。"""
+    from types import SimpleNamespace
+
+    from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+    otel_handler = SimpleNamespace(
+        drop_agent_span=lambda invoke_id: dropped.append(invoke_id)
+    )
+    monkeypatch.setattr(
+        TracerHandlerRegistry,
+        "get_agent_handlers",
+        staticmethod(lambda: {"otel": otel_handler}),
+    )
+
+
+@pytest.mark.asyncio
+async def test_invoke_start_partial_delivery_exception_drops_opened_span(monkeypatch):
+    # 部分送达：core trigger 逐 handler 裸 await 不隔离异常，第一个 handler
+    # 已开启 otel span、第二个抛 Exception——只注销登记会漏半开 span，
+    # 必须 drop 收口（对未开启 invoke_id 幂等 no-op）
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
+
+    session = _FakeSession()
+    opened = []
+
+    def partial_trigger(event, payload):
+        # 第一个 handler 成功开启 otel span（替身已先记录事件三元组）
+        opened.append(session.the_tracer.events[-1][1])
+        raise RuntimeError("second handler boom")
+
+    session.the_tracer._trigger = partial_trigger
+
+    dropped = []
+    _patch_otel_drop_handler(monkeypatch, dropped)
+
+    async def fake_run_retrieval(**kwargs):
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    result = await tool.invoke({"query": "q"}, session=session)
+
+    assert result == _canned_output()  # 追踪失败绝不影响检索
+    assert len(opened) == 1  # 确实发生过一次成功开启（部分送达前提）
+    tracer = session.the_tracer
+    assert tracer.popped == [s.invoke_id for s in tracer.created]  # 登记已注销
+    assert dropped == [s.invoke_id for s in tracer.created]  # 已开的 span 被 drop
+    assert fake.calls == []  # span 未开启成功，无 end/error
+
+
+@pytest.mark.asyncio
+async def test_invoke_start_partial_delivery_cancel_drops_opened_span(monkeypatch):
+    # 取消落在 start trigger 的后继 handler：第一个 handler 已开 otel span。
+    # CancelledError 穿透吞异常层走 BaseException 分支，同样注销 + drop 后
+    # 原样上抛（drop 为同步原语，取消再投递打不断它）
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
+
+    session = _FakeSession()
+    opened = []
+
+    def partial_cancel(event, payload):
+        opened.append(session.the_tracer.events[-1][1])
+        raise asyncio.CancelledError()
+
+    session.the_tracer._trigger = partial_cancel
+
+    dropped = []
+    _patch_otel_drop_handler(monkeypatch, dropped)
+
+    ran = []
+
+    async def fake_run_retrieval(**kwargs):
+        ran.append(1)
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    with pytest.raises(asyncio.CancelledError):
+        await tool.invoke({"query": "q"}, session=session)
+
+    assert ran == []  # 检索未执行
+    assert len(opened) == 1  # 部分送达前提成立
+    tracer = session.the_tracer
+    assert tracer.popped == [s.invoke_id for s in tracer.created]  # 登记已注销
+    assert dropped == [s.invoke_id for s in tracer.created]  # 已开的 span 被 drop
+    assert fake.calls == []

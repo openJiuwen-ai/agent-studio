@@ -550,11 +550,13 @@ async def test_drop_retrieval_span_old_core_degrades(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_start_event_failure_never_calls_handler_drop(monkeypatch):
-    """start 未送达：只注销登记，不向 handler 发 drop（jdfff 11-05）。
+async def test_start_event_failure_drops_with_idempotent_noop(monkeypatch):
+    """start 未送达：注销登记 + drop（codex 11-10 部分送达收口）。
 
-    otel span 从未开启——此时发 drop 是给未知 invoke_id 发结束事件，只能
-    靠 core 幂等容错兜底。改前 start 失败与 end 失败共用 _drop_retrieval_span。
+    trigger 逐 handler 裸 await 不隔离异常，「未送达」可能是「部分送达」
+    （先成功的 handler 已开 otel span）——失败路径统一走 drop；对从未
+    开启的 invoke_id，core drop_agent_span 结构性幂等（内部 pop 缺失即
+    返回），不产生虚假记录。替身 drop 记录调用以证明收口通知到位。
     """
     from openjiuwen.core.session.tracer.handler import TraceExtAgentHandler
     from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
@@ -591,7 +593,7 @@ async def test_start_event_failure_never_calls_handler_drop(monkeypatch):
         TracerHandlerRegistry.clear()
 
     assert tracer.span_manager.popped == ["inv-1"]  # 悬空登记仍要注销
-    assert dropped == []  # 但不得给未开启的 span 发 drop
+    assert dropped == ["inv-1"]  # drop 通知到位；handler 端对未开启幂等 no-op
     assert len(out[constant.RESTFUL_DATA]["output_list"]) == 1
 
 
