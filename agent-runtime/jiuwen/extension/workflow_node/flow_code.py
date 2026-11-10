@@ -7,13 +7,12 @@ FlowCode - 代码节点组件
 
 from __future__ import annotations
 
-import json
-import os
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, Union
 from unittest import mock
 
+from agent_runtime.extension.workflow_node.code_blacklist import load_code_blacklist
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
@@ -93,7 +92,7 @@ class FlowCode(WorkflowComponent):
 
     def _check_blacklist(self, code: str) -> None:
         clean_code = " ".join(code.split())
-        black_list = json.loads(os.environ.get("CODE_BLACK_LIST", "[]"))
+        black_list = load_code_blacklist()
         if black_list:
             black_keyword = next((kw for kw in black_list if kw in clean_code), None)
             if black_keyword:
