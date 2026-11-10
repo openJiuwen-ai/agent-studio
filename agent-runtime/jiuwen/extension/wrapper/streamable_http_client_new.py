@@ -130,6 +130,19 @@ class StreamableHttpClientNew(McpClient):
             return str(auth.get("scope") or "").strip().upper()
         return ""
 
+    def _dynamic_auth_headers(self, runtime_auth) -> Optional[dict]:
+        """scope 允许透传且 runtime_auth.headers 为 dict 时返回它，否则 None。
+
+        仅 auth 无 scope 或 scope=DYNAMIC 时放行（理由见 _prepare_request_params
+        内注释：USER/SERVICE 由 _add_auth_params 的 source→target 映射消费）。
+        """
+        if self._get_auth_scope() not in ("", "DYNAMIC"):
+            return None
+        if not isinstance(runtime_auth, dict):
+            return None
+        headers = runtime_auth.get("headers")
+        return headers if isinstance(headers, dict) else None
+
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """
         准备请求参数
@@ -160,11 +173,9 @@ class StreamableHttpClientNew(McpClient):
         # runtime_auth，此处再整包透传会把未映射的 source 键及凭据值额外外发、
         # 并可能覆盖已正确映射的目标头（扩大凭据暴露面）
         runtime_auth = kwargs.get("runtime_auth")
-        auth_scope = self._get_auth_scope()
-        if (not auth_scope or auth_scope == "DYNAMIC") \
-                and isinstance(runtime_auth, dict) \
-                and isinstance(runtime_auth.get("headers"), dict):
-            request_params.headers.update(runtime_auth["headers"])
+        dynamic_headers = self._dynamic_auth_headers(runtime_auth)
+        if dynamic_headers:
+            request_params.headers.update(dynamic_headers)
 
         self._replace_mcp_headers_extra(request_params, **kwargs)
 

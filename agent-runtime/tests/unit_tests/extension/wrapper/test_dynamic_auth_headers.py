@@ -89,10 +89,13 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
 
     @staticmethod
     def test_user_scope_runtime_auth_not_blind_merged():
-        """USER 作用域：runtime_auth 由 _add_auth_params 的 source→target 映射消费
-        （userToken→Authorization），wrapper 不得整包透传（防未映射 source 键/
-        凭据值额外外发、已正确映射的目标头被覆盖）。
-        （SERVICE 作用域的解密失败回退是 _add_auth_params 既有行为，不在本测范围。）"""
+        """USER 作用域：runtime_auth 由映射消费，wrapper 不整包透传。
+
+        _add_auth_params 按 auth_keys 的 source→target 映射注入
+        （userToken→Authorization）；wrapper 不得再把未映射的 source 键及
+        凭据值额外外发、覆盖已正确映射的目标头。
+        （SERVICE 作用域的解密失败回退是 _add_auth_params 既有行为，不在本测范围。）
+        """
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
             client._auth = {

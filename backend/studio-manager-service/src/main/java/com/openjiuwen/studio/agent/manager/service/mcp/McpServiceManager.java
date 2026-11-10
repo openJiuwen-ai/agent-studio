@@ -1505,7 +1505,8 @@ public class McpServiceManager implements IMcpServiceManagerService {
      * （与工作流侧"未绑定不注入"语义一致）；值须 Latin-1 可编码且不含控制字符，
      * 避免非法头值穿透到 HTTP 客户端才在编码处失败（不可诊断）。
      */
-    private void mergeDynamicDebugHeaders(McpServiceEntity serviceEntity, Map<String, String> debugHeaders,
+    // 包级可见：供同包单测直测调测出站护栏（检视意见补直接单测）
+    void mergeDynamicDebugHeaders(McpServiceEntity serviceEntity, Map<String, String> debugHeaders,
         Map<String, String> headerInfo) {
         if (ObjectUtils.isEmpty(debugHeaders)) {
             return;
