@@ -3091,5 +3091,13 @@
   "template_transform": "Template",
   "template_transform_output": "Rendered text",
   "template_transform_jinja_tip": "Jinja2 only. This is full Jinja2 ({{ data.get('field') }}, {% for %}, {% if %}), not the simple {{var}} replacement used by LLM, End, and Message nodes.",
-  "template_transform_default_template": "User name: {{ data.get('customerName') }}"
+  "template_transform_default_template": "User name: {{ data.get('customerName') }}",
+  "skill_delete_title": "Delete Skill",
+  "skill_delete_referenced_warn": "This Skill is referenced. Deleting it will remove all references automatically, which may cause single agents to stop working. This action cannot be undone.",
+  "skill_delete_type_single_agent": "Single Agent",
+  "skill_delete_input_prefix": "To confirm deletion, please type ",
+  "skill_delete_input_oneClick": "Type it for me",
+  "skill_delete_input_incomplete": "Please type \"DELETE\" completely",
+  "skill_delete_will_delete": "The following Skill will be deleted",
+  "skill_reference_undeployed": "Not deployed"
 }

@@ -3113,5 +3113,13 @@
   "template_transform": "模板转换",
   "template_transform_output": "渲染后的文本",
   "template_transform_jinja_tip": "只支持 Jinja2。这里是完整 Jinja2（{{ data.get('字段') }}、{% for %}、{% if %}），不是大模型/结束/消息节点里的简单 {{变量}} 替换。",
-  "template_transform_default_template": "用户名称：{{ data.get('customerName') }}"
+  "template_transform_default_template": "用户名称：{{ data.get('customerName') }}",
+  "skill_delete_title": "删除Skill",
+  "skill_delete_referenced_warn": "该Skill已被引用，删除Skill后引用将自动取消，可能会导致单智能体无法运行，且该操作不可撤回。",
+  "skill_delete_type_single_agent": "单智能体",
+  "skill_delete_input_prefix": "如您确定要删除，请输入",
+  "skill_delete_input_oneClick": "一键输入",
+  "skill_delete_input_incomplete": "请完整输入“DELETE”",
+  "skill_delete_will_delete": "即将删除以下Skill",
+  "skill_reference_undeployed": "未部署"
 }
