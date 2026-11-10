@@ -458,3 +458,91 @@ async def test_invoke_start_partial_delivery_cancel_drops_opened_span(monkeypatc
     assert tracer.popped == [s.invoke_id for s in tracer.created]  # 登记已注销
     assert dropped == [s.invoke_id for s in tracer.created]  # 已开的 span 被 drop
     assert fake.calls == []
+
+
+def _patch_agent_handlers(monkeypatch, handlers):
+    """把注册表 agent handlers 整体换成给定替身字典。"""
+    from openjiuwen.core.session.tracer.tracer import TracerHandlerRegistry
+
+    monkeypatch.setattr(
+        TracerHandlerRegistry,
+        "get_agent_handlers",
+        staticmethod(lambda: dict(handlers)),
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_failure_drop_degrades_without_handler_api(monkeypatch):
+    # 老 core 无 drop_agent_span（.testenv 静态副本即此形态）：drop 探测跳过
+    # 不崩、登记仍注销——start 失败无条件 drop 的能力门控降级契约
+    # （幂等性本体属 core 侧契约，已对 0.1.17_hotfix 源码逐行实证）
+    from types import SimpleNamespace
+
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
+    _patch_agent_handlers(monkeypatch, {"old_core": SimpleNamespace()})  # 无 drop_agent_span
+
+    def boom(event, payload):
+        raise RuntimeError("boom")
+
+    session = _FakeSession(trigger=boom)
+
+    async def fake_run_retrieval(**kwargs):
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    result = await tool.invoke({"query": "q"}, session=session)
+
+    assert result == _canned_output()  # 降级不崩、检索照常
+    tracer = session.the_tracer
+    assert tracer.popped == [s.invoke_id for s in tracer.created]  # 登记仍注销
+    assert fake.calls == []
+
+
+@pytest.mark.asyncio
+async def test_start_failure_drop_isolates_failing_handler(monkeypatch):
+    # drop 逐 handler 隔离：一个 handler 的 drop 抛错不得拖累其余 handler
+    # 的收口（半开 span 至少被能收的那个收掉）
+    from types import SimpleNamespace
+
+    fake = _FakeTracerUtils()
+    monkeypatch.setattr(krt, "_TracerAgentUtils", fake)
+    monkeypatch.setattr(krt, "_resolve_retrieval_tracer", lambda: None)
+
+    dropped = []
+
+    def bad_drop(invoke_id):
+        raise RuntimeError("cleanup boom")
+
+    def good_drop(invoke_id):
+        dropped.append(invoke_id)
+
+    _patch_agent_handlers(
+        monkeypatch,
+        {
+            "bad": SimpleNamespace(drop_agent_span=bad_drop),
+            "good": SimpleNamespace(drop_agent_span=good_drop),
+        },
+    )
+
+    def boom(event, payload):
+        raise RuntimeError("boom")
+
+    session = _FakeSession(trigger=boom)
+
+    async def fake_run_retrieval(**kwargs):
+        return _canned_output()
+
+    monkeypatch.setattr(krt, "_run_retrieval", fake_run_retrieval)
+
+    tool = _build_tool()
+    result = await tool.invoke({"query": "q"}, session=session)
+
+    assert result == _canned_output()  # 清理异常不上抛
+    tracer = session.the_tracer
+    assert tracer.popped == [s.invoke_id for s in tracer.created]  # 登记仍注销
+    assert dropped == [s.invoke_id for s in tracer.created]  # 好 handler 照常收口
+    assert fake.calls == []
