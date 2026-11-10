@@ -12,12 +12,14 @@ import org.springframework.http.HttpHeaders;
 /**
  * 无 HTTP Filter 入口的后台路径（如异步工作流定时拉起）补齐 {@code request-id}/{@code trace_id}。
  *
- * <p>选值规则：合法入站 Header（任务创建时缓存于 Redis，为本任务权威来源）→ 合法 MDC（缺省回退）
- * → 新 UUID；{@code trace_id} 缺失时回退为已选定的 {@code request-id}。
+ * <p>按来源<strong>成组</strong>选值，避免 request/trace 来自不同来源而错配：
+ * <ol>
+ *   <li>入站 Header（Redis 缓存，本任务权威）：request 合法则采用；trace 仅取同组 Header，
+ *       缺失/非法时回退为已选 request。</li>
+ *   <li>仅当 request Header 不可用时，整体回退到 MDC（同样成组；trace 缺则回退 request）。</li>
+ *   <li>再不行则生成新 UUID，trace 与 request 相同。</li>
+ * </ol>
  * 不写入 MDC——由调用方用 {@link MdcScope} 安装。
- *
- * <p>故意不把 MDC 放在 Header 之前：线程池 worker 可能残留与当前任务无关的合法 MDC，
- * 若优先 MDC 会覆盖 Redis Header，并可能让 request/trace 来自不同来源而错配。
  */
 public final class AsyncCorrelationIds {
 
@@ -34,29 +36,22 @@ public final class AsyncCorrelationIds {
      * @param headers 任务创建时缓存的入站 Header（可为 null）
      */
     public static Pair resolve(HttpHeaders headers) {
-        String requestId = firstValid(
-            header(headers, CorrelationContextFilter.REQUEST_ID_HEADER),
-            MDC.get(MdcKeys.REQUEST_ID));
-        if (requestId == null) {
-            requestId = UUID.randomUUID().toString();
+        String headerRequest = header(headers, CorrelationContextFilter.REQUEST_ID_HEADER);
+        if (CorrelationIdValidator.isValid(headerRequest)) {
+            String headerTrace = header(headers, CorrelationContextFilter.TRACE_ID_HEADER);
+            String traceId = CorrelationIdValidator.isValid(headerTrace) ? headerTrace : headerRequest;
+            return new Pair(headerRequest, traceId);
         }
-        String traceId = firstValid(
-            header(headers, CorrelationContextFilter.TRACE_ID_HEADER),
-            MDC.get(MdcKeys.TRACE_ID));
-        if (traceId == null) {
-            traceId = requestId;
-        }
-        return new Pair(requestId, traceId);
-    }
 
-    private static String firstValid(String primary, String secondary) {
-        if (CorrelationIdValidator.isValid(primary)) {
-            return primary;
+        String mdcRequest = MDC.get(MdcKeys.REQUEST_ID);
+        if (CorrelationIdValidator.isValid(mdcRequest)) {
+            String mdcTrace = MDC.get(MdcKeys.TRACE_ID);
+            String traceId = CorrelationIdValidator.isValid(mdcTrace) ? mdcTrace : mdcRequest;
+            return new Pair(mdcRequest, traceId);
         }
-        if (CorrelationIdValidator.isValid(secondary)) {
-            return secondary;
-        }
-        return null;
+
+        String generated = UUID.randomUUID().toString();
+        return new Pair(generated, generated);
     }
 
     private static String header(HttpHeaders headers, String name) {

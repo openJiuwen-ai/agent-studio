@@ -68,6 +68,18 @@ class AsyncCorrelationIdsTest {
     }
 
     @Test
+    void resolve_headerRequestOnly_doesNotMixStaleMdcTrace() {
+        // Header 仅有 request、无合法 Trace 时，不得用残留 MDC trace 错配
+        MDC.put(MdcKeys.REQUEST_ID, "mdc-req");
+        MDC.put(MdcKeys.TRACE_ID, "mdc-trace");
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(CorrelationContextFilter.REQUEST_ID_HEADER, "hdr-req");
+        AsyncCorrelationIds.Pair pair = AsyncCorrelationIds.resolve(headers);
+        assertThat(pair.requestId()).isEqualTo("hdr-req");
+        assertThat(pair.traceId()).isEqualTo("hdr-req");
+    }
+
+    @Test
     void runtimeExecution_afterAsyncBootstrap_doesNotThrowMissingContext() {
         // 异步线程仅有 execution-id 时 provide 会缺 request-id,trace_id
         MDC.clear();

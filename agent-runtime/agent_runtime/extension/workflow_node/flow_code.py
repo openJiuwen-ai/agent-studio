@@ -8,7 +8,6 @@ FlowCode - 代码节点组件（基于 LocalCodeRunner，subprocess 执行）
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Optional, Union
 
