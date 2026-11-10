@@ -44,6 +44,23 @@ _ARRAY_ITEM_TYPE_MAP: dict[str, type] = {
 }
 
 
+def _load_code_blacklist() -> list:
+    """解析 CODE_BLACK_LIST 环境变量。
+
+    os.environ.get(key, default) 在变量存在但值为空串时仍返回 ""，
+    直接 json.loads("") 会抛 Expecting value: line 1 column 1 (char 0)
+    （BUG2026110905666）。空串/空白/非法 JSON/非 list 一律视为无黑名单。
+    """
+    raw = (os.environ.get("CODE_BLACK_LIST") or "").strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def _coerce_value(value, target_type: str, *, input_mode: bool = False):
     """根据 schema type 定义对值做强制类型转换。
 
@@ -332,7 +349,7 @@ class FlowCode(WorkflowComponent):
             BuildError: 发现黑名单关键字时抛出异常
         """
         clean_code = " ".join(code.split())
-        black_list = json.loads(os.environ.get("CODE_BLACK_LIST", "[]"))
+        black_list = _load_code_blacklist()
         if black_list:
             black_keyword = next((kw for kw in black_list if kw in clean_code), None)
             if black_keyword:
