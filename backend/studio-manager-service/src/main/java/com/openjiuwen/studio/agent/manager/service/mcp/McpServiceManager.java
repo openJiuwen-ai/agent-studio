@@ -1025,10 +1025,13 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         AuthInfo authInfo = null == serviceEntity.getAuth() ? new AuthInfo() : serviceEntity.getAuth();
 
-        // FEAT-093 动态鉴权：auth_keys 为权威配置（值不入库），不从 serverConfig 恢复，
-        // 避免 scope 被改写为 USER 导致运行期走用户级鉴权链路
-        if (AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
-            log.info("Dynamic auth scope, skip recovery from server config. Service ID: {}", serviceEntity.getId());
+        // FEAT-093 动态鉴权：auth_keys 权威配置在 authInfo 字段（保存走 DetailInfoDto.authInfo，
+        // 值不入库），不从 serverConfig 恢复，避免 scope 被改写为 USER 导致运行期
+        // 走用户级鉴权链路（原守卫误读旧 auth 字段，对 DYNAMIC 服务永不命中）
+        if (serviceEntity.getAuthInfo() != null
+                && AuthInfo.ScopeEnum.DYNAMIC.equals(serviceEntity.getAuthInfo().getScope())) {
+            log.info("Dynamic auth scope (authInfo field), skip recovery from server config. Service ID: {}",
+                serviceEntity.getId());
             return;
         }
 

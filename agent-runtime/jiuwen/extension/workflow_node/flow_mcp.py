@@ -365,6 +365,9 @@ class FlowMcp(WorkflowComponent):
 
         # 从 session 提取运行时鉴权参数，注入到 inputs 中传递到底层
         # 兼容 runtime_auth（新版）和 runtime_context（旧版 fallback）
+        # runtime_auth 仅承载 session 级鉴权（runtime_auth_headers），
+        # 唯一消费者是 _add_auth_params 的 USER 映射——不得与动态凭证值混装，
+        # 否则无鉴权/动态服务会经 wrapper 门控把 session 级凭据整包外发
         jiuwen_kwargs = {}
         runtime_auth = self._format_runtime_auth(session)
         if runtime_auth:
@@ -373,12 +376,11 @@ class FlowMcp(WorkflowComponent):
         if runtime_context_header:
             jiuwen_kwargs["runtime_context"] = runtime_context_header
 
-        # 合并 header_params 到 runtime_auth headers
+        # FEAT-093 动态凭证：method=Headers 参数值经独立通道下传，
+        # 与 session 级 runtime_auth 严格分离（wrapper 侧仅按本通道合并）
         header_params = getattr(self, "_header_params", {})
         if header_params:
-            if "runtime_auth" not in jiuwen_kwargs:
-                jiuwen_kwargs["runtime_auth"] = {"headers": {}}
-            jiuwen_kwargs["runtime_auth"]["headers"].update(header_params)
+            jiuwen_kwargs["dynamic_auth_headers"] = dict(header_params)
 
         # JSON 启发式解析发生时，基于 card 副本构建按调用隔离的 MCPTool，
         # 避免就地修改共享 schema（跨 invoke 持久化 / 并发互相污染）

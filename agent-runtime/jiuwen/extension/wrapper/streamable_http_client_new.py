@@ -130,17 +130,17 @@ class StreamableHttpClientNew(McpClient):
             return str(auth.get("scope") or "").strip().upper()
         return ""
 
-    def _dynamic_auth_headers(self, runtime_auth) -> Optional[dict]:
-        """scope 允许透传且 runtime_auth.headers 为 dict 时返回它，否则 None。
+    def _dynamic_auth_headers(self, kwargs) -> Optional[dict]:
+        """scope 允许且 kwargs.dynamic_auth_headers（FlowMcp 独立通道下传的
+        method=Headers 参数值）为 dict 时返回它，否则 None。
 
-        仅 auth 无 scope 或 scope=DYNAMIC 时放行（理由见 _prepare_request_params
-        内注释：USER/SERVICE 由 _add_auth_params 的 source→target 映射消费）。
+        仅 auth 无 scope 或 scope=DYNAMIC 时放行；通道内容严格限于已声明
+        method=Headers 的参数值（session 级凭据走 runtime_auth，由
+        _add_auth_params 的 USER 映射消费，不经本通道）。
         """
         if self._get_auth_scope() not in ("", "DYNAMIC"):
             return None
-        if not isinstance(runtime_auth, dict):
-            return None
-        headers = runtime_auth.get("headers")
+        headers = kwargs.get("dynamic_auth_headers")
         return headers if isinstance(headers, dict) else None
 
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
@@ -166,14 +166,12 @@ class StreamableHttpClientNew(McpClient):
         )
         request_params = request_params_creator.create(inputs, **kwargs)
 
-        # FEAT-093 动态鉴权：FlowMcp 把 method=Headers 参数值经
-        # jiuwen_kwargs["runtime_auth"]["headers"] 下传（scope 无关通道）。
+        # FEAT-093 动态凭证：FlowMcp 把 method=Headers 参数值经独立通道
+        # kwargs["dynamic_auth_headers"] 下传（与 session 级 runtime_auth 分离）。
         # 仅当 IR auth 无 scope 或 scope=DYNAMIC 时并入出站 headers：USER/SERVICE
         # 作用域下 _add_auth_params 已按 auth_keys 的 source→target 映射消费
-        # runtime_auth，此处再整包透传会把未映射的 source 键及凭据值额外外发、
-        # 并可能覆盖已正确映射的目标头（扩大凭据暴露面）
-        runtime_auth = kwargs.get("runtime_auth")
-        dynamic_headers = self._dynamic_auth_headers(runtime_auth)
+        # session 级 runtime_auth，此处透传会外发未映射凭据并覆盖已映射头
+        dynamic_headers = self._dynamic_auth_headers(kwargs)
         if dynamic_headers:
             request_params.headers.update(dynamic_headers)
 
