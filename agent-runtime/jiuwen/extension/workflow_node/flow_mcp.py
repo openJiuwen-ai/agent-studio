@@ -30,6 +30,7 @@ from jiuwen.extension.wrapper.sse_client_new import SSEClientNew
 from jiuwen.extension.wrapper.streamable_http_client_new import StreamableHttpClientNew
 from jiuwen.plugin.common import constant
 from jiuwen.plugin.common.utils.ir_utils import MCP_PARAM_LOCATIONS
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
@@ -456,6 +457,18 @@ class FlowMcp(WorkflowComponent):
                                 pass
                         api_inputs[name] = converted
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数打 WARNING（带参数名，迁移期可据此
+                    # 收集多余参数清理清单）后跳过，MCP 工具照常被调用。
+                    # 评审修订（2026-11-04 PR#2577）：不带 event_type——防按
+                    # event_type 聚合时兼容性跳过被计入组件错误指标。
+                    workflow_logger.warning(
+                        f"{TAG} loose param validation: skip undefined param",
+                        component_type_str="FlowMcp",
+                        metadata={"param_name": name},
+                    )
+                    continue
                 workflow_logger.error(
                     f"{TAG} _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
