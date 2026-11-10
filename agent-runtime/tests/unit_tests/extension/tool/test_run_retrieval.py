@@ -393,7 +393,8 @@ async def test_run_retrieval_start_event_failure_skips_end(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_retrieval_cancelled_start_pops_registration(monkeypatch):
     """on_retriever_start 触发被取消（CancelledError 属 BaseException）：
-    登记照样注销（不留悬空记录、不污染 last_span），取消原样上抛调用方。"""
+    登记照样注销（不留悬空记录、不污染 last_span），取消原样上抛调用方。
+    """
     tracer = _StubTracer(cancel_events={"on_retriever_start"})
     _patch_traced_session(monkeypatch, tracer)
     _patch_lake_search_flow(monkeypatch, [])
