@@ -71,6 +71,7 @@ import com.openjiuwen.studio.agent.manager.service.IMcpServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.ApiMcpService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigRequsetDto;
 import com.openjiuwen.studio.agent.manager.service.mcp.auth.IMcpBase;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.mcp.infrastructure.apig.CesService;
 import com.openjiuwen.studio.agent.manager.service.mcp.local.McpUpdateTask;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerDao;
@@ -1499,8 +1500,10 @@ public class McpServiceManager implements IMcpServiceManagerService {
      * FEAT-093 调测期动态凭证注入。
      *
      * 仅接受服务 auth_info(scope=DYNAMIC, domain=HEADERS) 已登记的出站头名；
-     * 空白值跳过（与工作流侧"未绑定不注入"语义一致）；值须 Latin-1 可编码且
-     * 不含控制字符，避免非法头值穿透到 HTTP 客户端才在编码处失败（不可诊断）。
+     * 保留关联头/非法头名/逐跳敏感头就地拒绝（调测出站是 manager 侧独立发送
+     * 边界，不经 runtime wrapper 的 strip_correlation_headers）；空白值跳过
+     * （与工作流侧"未绑定不注入"语义一致）；值须 Latin-1 可编码且不含控制字符，
+     * 避免非法头值穿透到 HTTP 客户端才在编码处失败（不可诊断）。
      */
     private void mergeDynamicDebugHeaders(McpServiceEntity serviceEntity, Map<String, String> debugHeaders,
         Map<String, String> headerInfo) {
@@ -1526,6 +1529,23 @@ public class McpServiceManager implements IMcpServiceManagerService {
             String name = entry.getKey() == null ? "" : entry.getKey().trim();
             if (name.isEmpty()) {
                 continue;
+            }
+            // D-02/B07：调测出站是 manager 侧独立发送边界（不经 runtime wrapper 的
+            // strip_correlation_headers），保留关联头须在此就地拒绝，防伪造值直达第三方
+            if (McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+                log.warn("[testServicesTools] debug header '{}' is a reserved correlation header, rejected, "
+                    + "service id: {}", name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' is a reserved correlation header");
+            }
+            // 头名合法字符/逐跳敏感头校验：存量脏数据（登记早于登记侧校验）经此拦截，
+            // 防请求头注入/请求走私
+            if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(name).matches()
+                || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                log.warn("[testServicesTools] debug header '{}' is not a valid http header name, rejected, "
+                    + "service id: {}", name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' is not a valid http header name");
             }
             if (!registeredNames.contains(name)) {
                 log.warn("[testServicesTools] debug header '{}' is not a registered dynamic auth key, service id: {}",

@@ -87,6 +87,27 @@ class TestPrepareRequestParamsRuntimeAuthHeaders:
             assert request_params.headers.get("Authorization") == "Bearer tok-1", cls.__name__
             assert "X-Request-Id" not in request_params.headers, cls.__name__
 
+    @staticmethod
+    def test_user_scope_runtime_auth_not_blind_merged():
+        """USER 作用域：runtime_auth 由 _add_auth_params 的 source→target 映射消费
+        （userToken→Authorization），wrapper 不得整包透传（防未映射 source 键/
+        凭据值额外外发、已正确映射的目标头被覆盖）。
+        （SERVICE 作用域的解密失败回退是 _add_auth_params 既有行为，不在本测范围。）"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {
+                "scope": "USER",
+                "source": {"domain": "headers", "auth_keys": ["userToken"]},
+                "target": {"domain": "headers", "auth_keys": ["Authorization"]},
+            }
+            request_params = client._prepare_request_params(
+                inputs={"query": "hello"},
+                name="echo_user",
+                runtime_auth={"headers": {"userToken": "Bearer tok-9"}},
+            )
+            assert request_params.headers.get("Authorization") == "Bearer tok-9", cls.__name__
+            assert "userToken" not in request_params.headers, cls.__name__
+
 
 class TestFlowMcpHeaderParamsToRuntimeAuth:
     """FlowMcp.invoke 组装 jiuwen_kwargs 的 runtime_auth.headers（Mock MCPTool 断言入参）。"""

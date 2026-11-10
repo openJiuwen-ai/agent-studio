@@ -1260,7 +1260,7 @@ export class AddMcpHalfModalComponent implements OnInit {
     this.handleChangeDynamicAuthParam();
   }
 
-  /** FEAT-093 动态鉴权参数校验：存在空名或重复名时禁用确认按钮 */
+  /** FEAT-093 动态鉴权参数校验：无参数/存在空名或重复名时禁用确认按钮（与后端 ≥1 条要求一致） */
   handleChangeDynamicAuthParam() {
     if (this.mcpAuthConfigData.selectedAuthType !== 'DYNAMIC') {
       this.isDisabledConfirmBtn = false;
@@ -1268,7 +1268,7 @@ export class AddMcpHalfModalComponent implements OnInit {
     }
     const params = this.mcpAuthConfigData.dynamicAuthParams;
     if (params.length <= 0) {
-      this.isDisabledConfirmBtn = false;
+      this.isDisabledConfirmBtn = true;
       return;
     }
     const names = params.map(param => (param.name || '').trim()).filter(Boolean);

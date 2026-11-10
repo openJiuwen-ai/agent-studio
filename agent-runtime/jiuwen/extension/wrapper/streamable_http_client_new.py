@@ -123,6 +123,13 @@ class StreamableHttpClientNew(McpClient):
         """断开连接（保持接口兼容）"""
         return True
 
+    def _get_auth_scope(self) -> str:
+        """IR auth 的 scope（大小写归一；auth 缺失或无 scope 返回空串）。"""
+        auth = self._auth
+        if isinstance(auth, dict):
+            return str(auth.get("scope") or "").strip().upper()
+        return ""
+
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """
         准备请求参数
@@ -147,11 +154,16 @@ class StreamableHttpClientNew(McpClient):
         request_params = request_params_creator.create(inputs, **kwargs)
 
         # FEAT-093 动态鉴权：FlowMcp 把 method=Headers 参数值经
-        # jiuwen_kwargs["runtime_auth"]["headers"] 下传（scope 无关通道）；
-        # _add_auth_params 仅在 IR auth scope=USER/SERVICE 时消费 runtime_auth，
-        # DYNAMIC（auth 为空）会整段跳过，故在此直接并入出站 headers
+        # jiuwen_kwargs["runtime_auth"]["headers"] 下传（scope 无关通道）。
+        # 仅当 IR auth 无 scope 或 scope=DYNAMIC 时并入出站 headers：USER/SERVICE
+        # 作用域下 _add_auth_params 已按 auth_keys 的 source→target 映射消费
+        # runtime_auth，此处再整包透传会把未映射的 source 键及凭据值额外外发、
+        # 并可能覆盖已正确映射的目标头（扩大凭据暴露面）
         runtime_auth = kwargs.get("runtime_auth")
-        if isinstance(runtime_auth, dict) and isinstance(runtime_auth.get("headers"), dict):
+        auth_scope = self._get_auth_scope()
+        if (not auth_scope or auth_scope == "DYNAMIC") \
+                and isinstance(runtime_auth, dict) \
+                and isinstance(runtime_auth.get("headers"), dict):
             request_params.headers.update(runtime_auth["headers"])
 
         self._replace_mcp_headers_extra(request_params, **kwargs)

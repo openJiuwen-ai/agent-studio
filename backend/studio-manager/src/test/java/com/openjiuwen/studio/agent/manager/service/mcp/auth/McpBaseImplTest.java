@@ -489,6 +489,56 @@ class McpBaseImplTest extends BaseTest {
     }
 
     @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 为平台保留关联头拒绝（D-02/B07，防调测/运行期伪造）")
+    void test_validAuthInfo_dynamic_reserved_correlation_header_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("X-Request-Id");
+        key.setAuthKey(null);
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 含非法头名字符（空格/冒号/CR）拒绝（防请求头注入/走私）")
+    void test_validAuthInfo_dynamic_illegal_header_name_chars_rejected() {
+        for (String bad : new String[] {"Bad Header", "Auth:Inj", "X-Head\r\nX-Evil", "X-头"}) {
+            AuthKeyInfo key = new AuthKeyInfo();
+            key.setTargetName(bad);
+            key.setAuthKey(null);
+            Assertions.assertThrows(AgentStudioException.class,
+                () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)), "name: " + bad);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 为逐跳敏感头（Host/Content-Length 等）拒绝")
+    void test_validAuthInfo_dynamic_hop_by_hop_header_rejected() {
+        for (String bad : new String[] {"Host", "Content-Length", "Transfer-Encoding", "Connection"}) {
+            AuthKeyInfo key = new AuthKeyInfo();
+            key.setTargetName(bad);
+            key.setAuthKey(null);
+            Assertions.assertThrows(AgentStudioException.class,
+                () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)), "name: " + bad);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：auth_keys 超过 5 条拒绝（与前端/DTO 上限一致）")
+    void test_validAuthInfo_dynamic_more_than_five_keys_rejected() {
+        AuthKeyInfo[] keys = new AuthKeyInfo[6];
+        for (int i = 0; i < 6; i++) {
+            AuthKeyInfo key = new AuthKeyInfo();
+            key.setTargetName("X-Key-" + (i + 1));
+            key.setAuthKey(null);
+            keys[i] = key;
+        }
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(keys)));
+    }
+
+    @Test
     @DisplayName("FEAT-093 动态鉴权：domain 非 HEADERS 拒绝（值仅注入出站请求头层）")
     void test_validAuthInfo_dynamic_query_domain_rejected() {
         AuthKeyInfo key = new AuthKeyInfo();
