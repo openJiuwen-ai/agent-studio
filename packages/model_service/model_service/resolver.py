@@ -466,15 +466,10 @@ def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     _logger.info("[decrypt] _auth_from_data: auth_id=%s, auth_type=%s, raw_len=%d", auth_id, auth_type, len(raw))
     if auth_type == "API_KEY":
         info = json.loads(raw) if raw else {}
-        before = info.get("API Key", "")
-        after = _decrypt_auth_value(before)
-        _logger.info("[decrypt] API_KEY: before=%s, after=%s", before, after)
         return ProviderAuth(auth_id=auth_id, auth_type="API_KEY",
                             auth_info={"api_key": _decrypt_auth_value(info.get("API Key", ""))})
     if auth_type == "CUSTOM_APIKEY":
         info = json.loads(raw) if raw else {}
-        _logger.info("[decrypt] CUSTOM_APIKEY: before=%s, after=%s",
-                     info, {k: _decrypt_auth_value(v) for k, v in info.items()})
         return ProviderAuth(auth_id=auth_id, auth_type="CUSTOM_APIKEY",
                             auth_info={k: _decrypt_auth_value(v) for k, v in info.items()})
     return ProviderAuth(auth_id=auth_id, auth_type=auth_type, auth_info={})
