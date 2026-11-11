@@ -59,6 +59,7 @@ import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -657,6 +658,41 @@ class PluginServiceTest {
         assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
         assertEquals("request_info is required.", ex.getDetails().get(0));
         verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreatePlugin_DefaultsVisibilityToProjectWhenMissing() {
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+
+            when(pluginMapper.selectByDisplayNameAndWorkspaceId(anyString(), anyString())).thenReturn(0);
+            when(pluginBase.transformDTOtoNewEntity(any(PluginDTO.class))).thenAnswer(invocation -> {
+                PluginDTO dto = invocation.getArgument(0);
+                PluginEntity entity = new PluginEntity();
+                entity.setPluginId(dto.getPluginId());
+                entity.setVisibility(dto.getVisibility());
+                return entity;
+            });
+
+            CreatePluginToolReq req = new CreatePluginToolReq();
+            req.setToolDisplayName("NoVisPlugin");
+            req.setToolChineseName("无可见性插件");
+            req.setToolDesc("visibility 不传应默认 project");
+            RequestInfo ri = new RequestInfo();
+            ri.setUrl("https://example.com/api");
+            ri.setMethod(RequestInfo.MethodEnum.GET);
+            req.setRequestInfo(ri);
+            // visibility 不传
+
+            CreatePluginToolRsp rsp = pluginService.createPlugin("proj-1", "ws-1", req);
+
+            assertNotNull(rsp.getToolId());
+            ArgumentCaptor<PluginEntity> captor = ArgumentCaptor.forClass(PluginEntity.class);
+            verify(pluginMapper).insert(captor.capture());
+            assertEquals("project", captor.getValue().getVisibility());
+        }
     }
 
     private static final String VALID_OUTPUT_SCHEMA =
