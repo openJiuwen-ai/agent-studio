@@ -162,7 +162,6 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
       nzTitle: this.i18n.transform('object_template'),
       nzData: {
         templatesSelected: (data) => {
-          console.log(data)
           const objectTemplateData = FlowUtils.objectTempStartNodeFields2Views(data);
           this.startNodeParams = [
             ...this.startNodeParams,
