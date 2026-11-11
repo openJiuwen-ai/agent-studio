@@ -56,17 +56,23 @@ import json as _json_mod
 _orig_json_loads = _json_mod.loads
 
 def _guarded_json_loads(s, *args, **kwargs):
+    # 仍抛 JSONDecodeError（ValueError 子类），保证用户代码里
+    # `except json.JSONDecodeError` 的 soft-fail 路径继续命中。
     if s is None or (isinstance(s, str) and not str(s).strip()):
-        raise ValueError(
+        raise _json_mod.JSONDecodeError(
             "json.loads received empty input; "
-            "check upstream QA/Code input is non-empty JSON"
+            "check upstream QA/Code input is non-empty JSON",
+            doc="" if s is None else str(s),
+            pos=0,
         )
     try:
         return _orig_json_loads(s, *args, **kwargs)
     except _json_mod.JSONDecodeError as e:
         preview = repr(s[:120]) if isinstance(s, str) else repr(s)
-        raise ValueError(
-            f"json.loads received non-JSON input {preview}: {e}"
+        raise _json_mod.JSONDecodeError(
+            f"json.loads received non-JSON input {preview}: {e.msg}",
+            e.doc,
+            e.pos,
         ) from e
 
 _json_mod.loads = _guarded_json_loads

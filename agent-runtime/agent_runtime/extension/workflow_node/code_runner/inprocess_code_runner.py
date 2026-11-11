@@ -29,21 +29,26 @@ from openjiuwen.core.common.exception.errors import build_error
 
 
 def _install_guarded_json_loads() -> Any:
-    """进程内加固 json.loads，返回原 loads 供 finally 恢复。"""
+    """进程内加固 json.loads，返回原 loads 供 finally / _force_cleanup 恢复。"""
     orig = json.loads
 
     def _guarded(s, *args, **kwargs):
+        # 仍抛 JSONDecodeError，保证 `except json.JSONDecodeError` soft-fail 可用。
         if s is None or (isinstance(s, str) and not str(s).strip()):
-            raise ValueError(
+            raise json.JSONDecodeError(
                 "json.loads received empty input; "
-                "check upstream QA/Code input is non-empty JSON"
+                "check upstream QA/Code input is non-empty JSON",
+                doc="" if s is None else str(s),
+                pos=0,
             )
         try:
             return orig(s, *args, **kwargs)
         except json.JSONDecodeError as e:
             preview = repr(s[:120]) if isinstance(s, str) else repr(s)
-            raise ValueError(
-                f"json.loads received non-JSON input {preview}: {e}"
+            raise json.JSONDecodeError(
+                f"json.loads received non-JSON input {preview}: {e.msg}",
+                e.doc,
+                e.pos,
             ) from e
 
     json.loads = _guarded  # type: ignore[method-assign]
@@ -70,6 +75,7 @@ class _ExecResult:
     # 必须在锁内捕获，否则可能保存到别的并发执行遗留的 StringIO / mock。
     saved_stdout: Any = None
     saved_os_system: Any = None
+    saved_json_loads: Any = None
 
 
 class _ThreadInterrupt(BaseException):
@@ -214,14 +220,16 @@ class InprocessCodeRunner(CodeRunner):
         """worker 无法中断时恢复全局状态。
 
         使用 _exec_sync 在锁内捕获的基线（container.saved_stdout /
-        container.saved_os_system）恢复全局 stdout 和 os.system，
-        确保超时后进程级状态回到执行前基线，而非其他并发执行遗留的 StringIO / mock。
+        container.saved_os_system / container.saved_json_loads）恢复全局
+        stdout、os.system 和 json.loads，确保超时后进程级状态回到执行前基线，
+        而非其他并发执行遗留的 StringIO / mock / 守卫。
 
         注意：_exec_process_lock 可能仍被 worker 持有，后续调用会在
         _LOCK_ACQUIRE_TIMEOUT 秒后抛出明确错误，不会永久死锁。
         """
         saved_stdout = container.saved_stdout
         saved_os_system = container.saved_os_system
+        saved_json_loads = container.saved_json_loads
         try:
             if saved_stdout is not None and sys.stdout is not saved_stdout:
                 sys.stdout = saved_stdout
@@ -232,6 +240,11 @@ class InprocessCodeRunner(CodeRunner):
                 os.system = saved_os_system
         except Exception as e:
             _logger.warning(f"Failed to restore os.system in _force_cleanup: {e}")
+        try:
+            if saved_json_loads is not None and json.loads is not saved_json_loads:
+                json.loads = saved_json_loads  # type: ignore[method-assign]
+        except Exception as e:
+            _logger.warning(f"Failed to restore json.loads in _force_cleanup: {e}")
 
     @staticmethod
     def _interrupt_thread(thread: threading.Thread) -> None:
@@ -280,6 +293,9 @@ class InprocessCodeRunner(CodeRunner):
         # 因此保存到的一定是真实基线。供超时后 _force_cleanup 使用。
         container.saved_stdout = sys.stdout
         container.saved_os_system = os.system
+        # json.loads 基线在安装守卫前捕获，保证 _force_cleanup 能还原到原始 loads
+        # （worker 卡在不可中断 C 扩展时 finally 不会跑到）。
+        container.saved_json_loads = json.loads
         orig_json_loads = None
         try:
             os_system_patcher.start()
