@@ -184,6 +184,121 @@ class TestGetPubsubClient:
         assert captured["host"] == "h1"
         assert captured["port"] == 6379
 
+    @staticmethod
+    def test_cluster_mode_rotates_nodes_on_repeated_calls(reset_common_utils_state, monkeypatch):
+        """每次调用推进游标，多次调用（模拟重连重试）在节点间轮换。"""
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append((kw["host"], kw["port"]))
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        # 3 次调用、2 个节点 → h1, h2, h1
+        get_pubsub_client()
+        get_pubsub_client()
+        get_pubsub_client()
+        assert created == [("h1", 7000), ("h2", 7001), ("h1", 7000)]
+
+    @staticmethod
+    def test_cluster_mode_first_node_down_rotates_to_next(reset_common_utils_state, monkeypatch):
+        """首节点不可用时，重连重试切换到其他节点。
+
+        模拟 subscribe_runtime_cancel 的重试场景：首次 get_pubsub_client 连接首节点
+        （h1）后订阅失败，重试再次调用 get_pubsub_client 应返回下一节点（h2）的客户端，
+        而非再次绑定同一首节点——否则首节点下线时订阅会持续失败直到进程重启。
+        """
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append((kw["host"], kw["port"]))
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1:7000,h2:7001,h3:7002",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        first = get_pubsub_client()  # 首次：首节点 h1
+        second = get_pubsub_client()  # 重试：应切换到 h2
+        assert created[0] == ("h1", 7000)
+        assert created[1] == ("h2", 7001)
+        assert created[0] != created[1]  # 重试不再绑定同一首节点
+        assert isinstance(first, _FakeRedis)
+        assert isinstance(second, _FakeRedis)
+
+    @staticmethod
+    def test_cluster_mode_single_node_still_works(reset_common_utils_state, monkeypatch):
+        """仅配置一个节点时轮换退化为固定该节点，不报错。"""
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append((kw["host"], kw["port"]))
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_MODE="cluster", REDIS_CLUSTER_NODES="only:6380")
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        get_pubsub_client()
+        assert created == [("only", 6380), ("only", 6380)]
+
+    @staticmethod
+    def test_cluster_mode_empty_nodes_raises(reset_common_utils_state, monkeypatch):
+        from common_utils import redis_manager as rm
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                pass
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_MODE="cluster", REDIS_CLUSTER_NODES=" , , ")
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        with pytest.raises(ValueError):
+            get_pubsub_client()
+
+    @staticmethod
+    def test_pubsub_node_index_reset_on_singleton_reset(reset_common_utils_state, monkeypatch):
+        """reset() 复位游标，避免跨用例残留导致起始节点不确定。"""
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append(kw["host"])
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()  # h1，游标推进到 1
+        assert inst._pubsub_node_index == 1
+        RedisClientManager.reset()
+        assert RedisClientManager._pubsub_node_index == 0
+
 
 class TestNonTransactionPipeline:
     @staticmethod
