@@ -207,7 +207,7 @@ export const reqSchemaMCPField = (schema: IReqSchema): IWorkflowField[] => {
 
 export const resSchemaMCPField = (schema: IResSchema): IWorkflowField[] => {
   const fields: IWorkflowField[] = [];
-  const properties = schema.properties;
+  const properties = schema.properties ?? {};
   const keys = Object.keys(properties);
 
   for (const key of keys) {
