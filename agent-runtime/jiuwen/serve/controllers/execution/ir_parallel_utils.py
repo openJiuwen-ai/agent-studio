@@ -234,31 +234,60 @@ def collect_parallel_join_nodes(
     connections: list[dict],
     node_by_id: dict[str, dict] | None = None,
 ) -> frozenset[str]:
-    """Return node IDs that join two or more parallel branches.
+    """Return node IDs that join two or more incoming edges.
 
-    IR marks branch convergence with ``parallelBranchId`` on the connection
-    target.  The old BPMN converter inserts an inclusive gateway there; the
-    openjiuwen workflow needs ``wait_for_all=True`` on the same nodes.
+    Two detection paths:
+    1. Explicit: ``parallelBranchId`` on the connection target (IR marks
+       branch convergence; the old BPMN converter inserts an inclusive
+       gateway there).
+    2. Auto: in-degree >= 2 from real (non-synthetic, non-back-edge)
+       sources.  Restores the old BPMN engine's implicit AND-join semantics
+       (multi-incoming = wait for all) without requiring ``parallelBranchId``.
+
+    Branch exclusivity (same-branch predecessors) is resolved at compile time
+    by ``_resolve_barrier_groups`` into CNF OR-groups, so mutually exclusive
+    branches (intent/branch routing) won't deadlock.
     """
     adjacency = _build_reachability_graph(connections, node_by_id)
     groups: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    in_degree: dict[str, set[str]] = defaultdict(set)
+
     for connection in connections:
         source_info = connection.get("source") or {}
         target_info = connection.get("target") or {}
         source = _component_id(source_info)
         target = _component_id(target_info)
-        parallel_id = (target_info.get("parallelBranchId") or "").strip()
-        if not source or not target or not parallel_id:
+
+        # Shared filters for both detection paths:
+        # - skip synthetic paired nodes (_input/_output)
+        # - skip back-edges (cycle: target can reach source)
+        if not source or not target:
             continue
         if source.endswith("_input") or target.endswith("_output"):
             continue
         if _is_reachable(adjacency, target, source):
             continue
-        groups[target][parallel_id].add(source)
+
+        # Path 1: explicit parallelBranchId detection (backward compatible)
+        parallel_id = (target_info.get("parallelBranchId") or "").strip()
+        if parallel_id:
+            groups[target][parallel_id].add(source)
+
+        # Path 2: auto in-degree detection (set of unique real sources)
+        in_degree[target].add(source)
 
     join_nodes: set[str] = set()
+
+    # Path 1 results: parallelBranchId convergence
     for target, parallel_groups in groups.items():
         for sources in parallel_groups.values():
             if len(sources) >= 2:
                 join_nodes.add(target)
+
+    # Path 2 results: any node with >=2 unique real predecessors.
+    # Branch exclusivity handled by _resolve_barrier_groups (CNF OR-groups).
+    for target, sources in in_degree.items():
+        if len(sources) >= 2:
+            join_nodes.add(target)
+
     return frozenset(join_nodes)
