@@ -43,10 +43,17 @@ export const reqSchemaStrMCPField = (schemaStr: string): IWorkflowField[] => {
 
 // MCP响应参数解析
 export const resSchemaStrMCPField = (schemaStr: string): IWorkflowField[] => {
+  // 无出参时静默返回，避免详情页误弹「响应参数数据格式有误」
+  if (!schemaStr) {
+    return [];
+  }
   let result: IWorkflowField[] = [];
 
   try {
     const data: IResSchema = JSON.parse(schemaStr);
+    if (!data || typeof data !== 'object') {
+      return [];
+    }
     result = resSchemaMCPField(data);
   } catch {
     MessageComponent.showError(i18next.t('parse_res_error'));
@@ -200,7 +207,7 @@ export const reqSchemaMCPField = (schema: IReqSchema): IWorkflowField[] => {
 
 export const resSchemaMCPField = (schema: IResSchema): IWorkflowField[] => {
   const fields: IWorkflowField[] = [];
-  const properties = schema.properties;
+  const properties = schema.properties ?? {};
   const keys = Object.keys(properties);
 
   for (const key of keys) {
