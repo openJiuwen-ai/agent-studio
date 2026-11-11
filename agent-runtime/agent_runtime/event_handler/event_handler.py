@@ -252,6 +252,7 @@ class EventHandler:
         # 对齐旧 Java WorkflowRunRsp @Builder.Default：outputs/node_info/events
         # 即使未被事件流填充也要输出 {}、[]，避免被 exclude_none 丢弃导致字段缺失。
         non_stream_output.setdefault("outputs", {})
+        non_stream_output.setdefault("messages", [])
         non_stream_output.setdefault("node_info", [])
         non_stream_output.setdefault("events", [])
         response = NonStreamingResponse.model_construct(**non_stream_output)
