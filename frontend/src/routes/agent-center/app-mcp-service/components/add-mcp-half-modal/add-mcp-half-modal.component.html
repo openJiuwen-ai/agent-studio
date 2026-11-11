@@ -407,6 +407,42 @@
   <div *ngIf="mcpAuthConfigData.selectedAuthType === 'SERVICE' && mcpAuthConfigData.selectedAuthPos === 'QUERY'">
     <ng-container *ngTemplateOutlet="authConfigParam; context: { data: mcpAuthConfigData.authQueryParams }"></ng-container>
   </div>
+  <!-- FEAT-093 动态鉴权：仅配置出站头名（单列），凭证值在编排工作流时绑定 -->
+  <div *ngIf="isShowDynamicAuthConfig()">
+    <div class="mcp-auth-list">
+      <span>{{ 'param_list' | i18nextEager }}</span>
+      <span class="add" (click)="handleClickAddDynamicAuthParams()">+</span>
+    </div>
+    <p class="mcp-auth-param-name">
+      <span style="display: inline-flex; gap: 8px">
+        {{ 'mcp_dynamic_auth_param_name' | i18nextEager }}
+        <span nz-tooltip nzTooltipTitle="{{ 'mcp_dynamic_auth_tip' | i18nextEager }}" nzTooltipPlacement="right">
+          <img [src]="changeUrl('assets/model/online-test-help.svg')" alt="" />
+        </span>
+      </span>
+    </p>
+    <div class="mcp-auth-params" *ngFor="let item of mcpAuthConfigData.dynamicAuthParams; index as i" [style]="{ 'margin-bottom': i === mcpAuthConfigData.dynamicAuthParams.length - 1 ? '24px' : '20px' }">
+      <div style="display: flex; flex-direction: column; width: 100%; position: relative">
+        <input
+          nz-input
+          [(ngModel)]="mcpAuthConfigData.dynamicAuthParams[i].name"
+          [placeholder]="'input_placeholder' | i18nextEager"
+          style="margin-right: 4px"
+          [style]="{ border: !(mcpAuthConfigData.dynamicAuthParams[i].name || '').trim() ? '1px solid #FF8A5B' : '' }"
+          (ngModelChange)="handleChangeDynamicAuthParam()"
+        />
+        <p style="color: #f13132; font-size: 12px; position: absolute; left: 2px; top: 30px" *ngIf="!(mcpAuthConfigData.dynamicAuthParams[i].name || '').trim()">
+          <span>{{ 'param_1' | i18nextEager }}</span>
+        </p>
+      </div>
+      <div>
+        <nz-icon nzType="delete" nzTheme="outline" (click)="handleClickDeleteDynamicAuthParams(i)" class="mcp-auth-param-delete" />
+      </div>
+    </div>
+    <p class="mcp-auth-param-name" style="margin-bottom: 24px; font-weight: normal; color: #808080">
+      {{ 'mcp_dynamic_auth_tip' | i18nextEager }}
+    </p>
+  </div>
   <div *ngIf="isShowOauthConfig()">
     <p style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px">
       <span style="display: inline-flex; gap: 8px; align-items: center">

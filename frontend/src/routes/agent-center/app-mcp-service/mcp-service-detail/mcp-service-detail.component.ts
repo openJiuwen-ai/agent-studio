@@ -87,6 +87,8 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
   public selectedMcpTool: McpTool = null;
   public toolParamCollapsed: boolean = false;
   public selectedMcpToolParams = [];
+  // FEAT-093 scope=DYNAMIC 服务：调测面板按 auth_keys 渲染动态凭证调试值输入
+  public dynamicAuthTestParams: { name: string; value: string; isRight: boolean }[] = [];
   public testMcpToolRes: string = JSON.stringify({}, null, 2);
   public editorOptions: MonacoEditorConstructionOptions = {
     theme: 'vs-dark',
@@ -203,6 +205,7 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
     }
     this.setMcpDeployFail(resData.fail_reason_detail || ({} as any));
     this.setStatus();
+    this.initDynamicAuthTestParams();
     if (typeof this.mcpServiceDetail.tools === 'string') {
       try {
         this.mcpServiceDetail.tools = JSON.parse(this.mcpServiceDetail.tools as any);
@@ -214,6 +217,32 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
     this.setType();
     this.setTabs();
     this.isLoading = false;
+  }
+
+  /** FEAT-093 scope=DYNAMIC 服务：调测面板按 auth_keys 出站头名渲染凭证调试值输入 */
+  private initDynamicAuthTestParams() {
+    this.dynamicAuthTestParams = [];
+    const authInfo = this.mcpServiceDetail?.auth_info;
+    if (!authInfo || authInfo.scope !== 'DYNAMIC' || !Array.isArray(authInfo.auth_keys)) {
+      return;
+    }
+    for (const key of authInfo.auth_keys) {
+      const name = (key?.target_name || '').trim();
+      if (name) {
+        this.dynamicAuthTestParams.push({ name, value: '', isRight: true });
+      }
+    }
+  }
+
+  /** 与后端 isLatin1HeaderValue 语义一致：Latin-1 可编码、无控制字符 */
+  private isValidHeaderValue(value: string): boolean {
+    for (let i = 0; i < value.length; i++) {
+      const code = value.charCodeAt(i);
+      if (code < 0x20 || code === 0x7f || code > 0xff) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private setStatus() {
@@ -629,11 +658,28 @@ export class MCPServiceDetailComponent implements OnInit, OnDestroy {
         this.selectedMcpToolParams[index].value.isRight = false;
       }
     }
+    // FEAT-093 动态凭证调测值：非空才随调测请求出站（空白=本次不注入）；
+    // 非法字符（非 Latin-1/含控制字符）就地标红拦截，避免穿透到 HTTP 客户端编码处
+    const debugHeaders: Record<string, string> = {};
+    for (const item of this.dynamicAuthTestParams) {
+      item.isRight = true;
+      if (!item.value || !item.value.trim()) {
+        continue;
+      }
+      if (!this.isValidHeaderValue(item.value)) {
+        item.isRight = false;
+        dataIsWrong = true;
+        continue;
+      }
+      debugHeaders[item.name] = item.value;
+    }
+
     if (!dataIsWrong) {
       const params = {
         params: data,
         serviceId: this.serviceId,
         toolName: this.selectedMcpTool.name,
+        debug_headers: debugHeaders,
       };
       this.testMcpLoading = true;
       this.testMcpToolRes = JSON.stringify({}, null, 2);

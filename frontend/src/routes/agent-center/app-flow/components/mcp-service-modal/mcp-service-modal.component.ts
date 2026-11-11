@@ -275,6 +275,19 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
             // do nth
           }
         }
+        // FEAT-093 动态鉴权：auth_keys 的 target_name 合并进 Headers 检测集，
+        // 使 inputParamsFormatter 将对应入参标记为 Headers 定位（值由编排期 literal/ref 绑定）
+        if (res.auth_info?.scope === 'DYNAMIC' && Array.isArray(res.auth_info.auth_keys)) {
+          this.headers = { ...this.headers };
+          // HTTP 头名大小写不敏感：与 server_config headers 仅大小写不同视为已存在（与 Java IR 去重口径一致）
+          const headerKeysLower = new Set(Object.keys(this.headers).map(key => key.toLowerCase()));
+          res.auth_info.auth_keys.forEach(authKey => {
+            const targetName = (authKey?.target_name || '').trim();
+            if (targetName && !headerKeysLower.has(targetName.toLowerCase())) {
+              this.headers[targetName] = '';
+            }
+          });
+        }
         this.cdr.detectChanges();
       })
       .finally(() => {

@@ -191,6 +191,9 @@ public class AuthInfo implements Serializable {
 
         SERVICE("SERVICE"),
 
+        // FEAT-093 动态鉴权：凭证值不入库，由工作流节点参数在运行期提供
+        DYNAMIC("DYNAMIC"),
+
         IAM("IAM"),
 
         HIS_IAM("HIS_IAM"),

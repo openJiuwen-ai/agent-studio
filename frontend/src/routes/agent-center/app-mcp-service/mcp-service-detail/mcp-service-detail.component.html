@@ -279,6 +279,32 @@
                       />
                     </div>
                   </div>
+                  <div *ngIf="dynamicAuthTestParams.length">
+                    <p style="margin: 16px 0 4px; font-weight: 600">
+                      {{ 'mcp_test_debug_headers' | i18nextEager }}
+                    </p>
+                    <p style="margin: 0 0 8px; color: #999; font-size: 12px">
+                      {{ 'mcp_test_debug_headers_tip' | i18nextEager }}
+                    </p>
+                    <div *ngFor="let item of dynamicAuthTestParams; let i = index">
+                      <p style="display: flex">
+                        <span>{{ item.name }}</span>
+                      </p>
+                      <div class="flex items-center mb-[16px]" style="position: relative">
+                        <input
+                          tiText
+                          type="text"
+                          [placeholder]="'mcp_test_debug_headers_placeholder' | i18nextEager"
+                          [(ngModel)]="item.value"
+                          [title]="item.name"
+                          [style]="{'border': item.isRight ? '' : '1px solid red !important', 'padding-left': '12px'}"
+                        />
+                        <span class="errorDesc" *ngIf="!item.isRight">
+                          {{ 'mcp_test_debug_headers_invalid' | i18nextEager }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                   <button nz-button  nzType="primary" style="margin: 8px 0 8px 0" (click)="testMcpTool()" [nzLoading]="testMcpLoading">
                     {{ 'test' | i18nextEager }}
                   </button>
