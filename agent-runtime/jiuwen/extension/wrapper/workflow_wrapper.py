@@ -91,7 +91,7 @@ class WorkflowWrapper:
     _START_TRACE_RESOLVED_TYPE = "__start_trace_resolved__"
 
     @staticmethod
-    def _format_stream_exception(exc: BaseException) -> tuple[Any, str]:
+    def format_stream_exception(exc: BaseException) -> tuple[Any, str]:
         """将异常转为 StreamData 可用的 (code, message)。
 
         TypeError 等内建异常没有 .code/.message；直接读属性会掩盖真实根因
@@ -421,7 +421,7 @@ class WorkflowWrapper:
             # WorkflowAbortException（异常结束节点）已通过 CustomSchema 发出 exception 事件，
             # 不再重复发送 ERROR StreamData，避免前端弹窗。
             if not isinstance(e, WorkflowAbortException):
-                code, msg = WorkflowWrapper._format_stream_exception(e)
+                code, msg = WorkflowWrapper.format_stream_exception(e)
                 yield StreamData(
                     code=StreamCode.ERROR.value,
                     msg=StreamDataMsg.FAIL,

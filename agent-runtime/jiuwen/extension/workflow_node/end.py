@@ -631,8 +631,8 @@ class End(BaseEnd):
         # 处理输入中的生成器值
         outputs = {}
         # 构建输出到输入的映射，防止重复消费流式数据
-        if inputs.get(USER_FIELDS):
-            user_fields = inputs[USER_FIELDS]
+        user_fields = inputs.get(USER_FIELDS)
+        if user_fields:
             inputs = user_fields if isinstance(user_fields, dict) else {}
         gen_out_to_in = build_output_to_input(inputs)
 
@@ -649,7 +649,7 @@ class End(BaseEnd):
             inputs = {}
 
         outputs = {
-            k[len(OUTPUT_PREFIX) :]: v
+            k[len(OUTPUT_PREFIX):]: v
             for k, v in inputs.items()
             if k.startswith(OUTPUT_PREFIX) and v is not None
         }
@@ -1161,8 +1161,8 @@ class End(BaseEnd):
         _meta_count = 0
         if not isinstance(inputs, dict):
             inputs = {}
-        if inputs.get(USER_FIELDS):
-            user_fields = inputs[USER_FIELDS]
+        user_fields = inputs.get(USER_FIELDS)
+        if user_fields:
             inputs = user_fields if isinstance(user_fields, dict) else {}
         _raw_meta = inputs.pop("__stream_metadata__", None)
         if isinstance(_raw_meta, AsyncGenerator):

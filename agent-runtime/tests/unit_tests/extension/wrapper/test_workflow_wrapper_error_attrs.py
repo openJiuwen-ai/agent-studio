@@ -7,18 +7,20 @@ from jiuwen.extension.wrapper.workflow_wrapper import WorkflowWrapper
 
 
 class TestFormatStreamException:
-    def test_typeerror_without_code_keeps_root_message(self):
-        code, msg = WorkflowWrapper._format_stream_exception(
+    @staticmethod
+    def test_typeerror_without_code_keeps_root_message():
+        code, msg = WorkflowWrapper.format_stream_exception(
             TypeError("argument of type 'NoneType' is not iterable")
         )
         assert code == -1
         assert "NoneType" in msg
         assert "has no attribute" not in msg
 
-    def test_jiuwen_exception_uses_error_code(self):
+    @staticmethod
+    def test_jiuwen_exception_uses_error_code():
         from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 
         exc = JiuWenBaseException(error_code=121007, message="业务失败")
-        code, msg = WorkflowWrapper._format_stream_exception(exc)
+        code, msg = WorkflowWrapper.format_stream_exception(exc)
         assert code == 121007
         assert msg == "业务失败"
