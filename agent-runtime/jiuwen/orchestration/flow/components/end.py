@@ -176,7 +176,11 @@ class End(Invokable, MessageComponentBase):
         if stream_callback is None:
             return self.invoke(inputs, **kwargs)
 
-        inputs = inputs.get(USER_FIELDS)
+        # USER_FIELDS 缺失时不得把 None 传给 build_output_to_input（`x in None`）
+        raw_inputs = inputs if isinstance(inputs, dict) else {}
+        inputs = raw_inputs.get(USER_FIELDS) or {}
+        if not isinstance(inputs, dict):
+            inputs = {}
         gen_out_to_in = build_output_to_input(inputs)
 
         span: Span = kwargs.get("span")

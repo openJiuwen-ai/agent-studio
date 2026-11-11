@@ -623,37 +623,48 @@ class End(BaseEnd):
             return {}
         self._invoke_executed = True
 
+        # Pregel / 上游异常路径可能传入 None；后续 `x in inputs` 会抛
+        # "argument of type 'NoneType' is not iterable"
+        if not isinstance(inputs, dict):
+            inputs = {}
+
         # 处理输入中的生成器值
         outputs = {}
-        if inputs and isinstance(inputs, dict):
-            # 构建输出到输入的映射，防止重复消费流式数据
-            if inputs.get(USER_FIELDS):
-                inputs = inputs[USER_FIELDS]
-            gen_out_to_in = build_output_to_input(inputs)
+        # 构建输出到输入的映射，防止重复消费流式数据
+        user_fields = inputs.get(USER_FIELDS)
+        if user_fields:
+            inputs = user_fields if isinstance(user_fields, dict) else {}
+        gen_out_to_in = build_output_to_input(inputs)
 
-            # 按照 userFields.inputs schema 对输入值做类型强转
-            self._apply_type_conversion(inputs)
+        # 按照 userFields.inputs schema 对输入值做类型强转
+        self._apply_type_conversion(inputs)
 
-            # 处理生成器值
-            inputs = await process_generator_values_of_output(
-                inputs=inputs,
-                out_to_in=gen_out_to_in,
-                workflow_streaming_data=None,  # 非流式调用，不需要回调
-            )
+        # 处理生成器值
+        inputs = await process_generator_values_of_output(
+            inputs=inputs,
+            out_to_in=gen_out_to_in,
+            workflow_streaming_data=None,  # 非流式调用，不需要回调
+        )
+        if not isinstance(inputs, dict):
+            inputs = {}
 
-            outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
-                for k, v in inputs.items()
-                if k.startswith(OUTPUT_PREFIX) and v is not None
-            }
+        outputs = {
+            k[len(OUTPUT_PREFIX):]: v
+            for k, v in inputs.items()
+            if k.startswith(OUTPUT_PREFIX) and v is not None
+        }
 
-            # 移除输出数据标记
-            _remove_output_data(inputs)
+        # 移除输出数据标记
+        _remove_output_data(inputs)
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "batch", inputs, outputs, session
         )
+        if not isinstance(inputs, dict):
+            inputs = {}
+        if not isinstance(outputs, dict):
+            outputs = {}
         if not _mix_i_am_renderer:
             return None
 
@@ -1148,9 +1159,12 @@ class End(BaseEnd):
         # 流式连接下 __stream_metadata__ 会被引擎包装为 AsyncGenerator，需消费取最后一帧
         stream_metadata = None
         _meta_count = 0
-        if inputs and isinstance(inputs, dict) and inputs.get(USER_FIELDS):
-            inputs = inputs[USER_FIELDS]
-        _raw_meta = inputs.pop("__stream_metadata__", None) if isinstance(inputs, dict) else None
+        if not isinstance(inputs, dict):
+            inputs = {}
+        user_fields = inputs.get(USER_FIELDS)
+        if user_fields:
+            inputs = user_fields if isinstance(user_fields, dict) else {}
+        _raw_meta = inputs.pop("__stream_metadata__", None)
         if isinstance(_raw_meta, AsyncGenerator):
             _last_meta = None
             async for _meta_item in _raw_meta:
