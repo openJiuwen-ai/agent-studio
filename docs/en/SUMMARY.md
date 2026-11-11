@@ -5,6 +5,8 @@
   - [02-User Guide](tutorial/02-user-guide.md)
 - [How-to](how-to/)
   - [Deploy Service](how-to/deploy-service.md)
+  - [Docker Compose Deployment](how-to/deploy-docker-compose.md)
+  - [Kubernetes Deployment](how-to/deploy-k8s.md)
   - [Beta5 Upgrade Deployment](how-to/upgrade-from-beta4.md)
   - [Development Guide](how-to/development-guide.md)
   - [Custom Plugin Development Guide](how-to/custom-plugin-development-guide.md)
