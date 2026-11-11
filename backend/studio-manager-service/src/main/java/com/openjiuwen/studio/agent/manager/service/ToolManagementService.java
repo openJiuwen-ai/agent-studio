@@ -820,6 +820,11 @@ public class ToolManagementService implements IToolManagementService {
 
     @NotNull
     public ToolEntity buildToolEntity(String projectId, String workspaceId, CreateToolReq body, boolean isCreateOpenAPI) {
+        if (Objects.isNull(body.getRequestInfo())) {
+            log.error("Fail to create tool for request_info is null, toolDisplayName: {}",
+                body.getToolDisplayName());
+            throw new AgentStudioException(StudioError.PARAMS_IS_REQUIRED);
+        }
         // 工具参数信息校验
         checkUrl(body.getRequestInfo(), projectId);
         checkToolInfo(body.getToolDisplayName(), body.getInputSchema(), body.getOutputSchema(), body.getVisibility(),

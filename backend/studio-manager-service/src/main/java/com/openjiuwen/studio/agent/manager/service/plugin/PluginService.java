@@ -1608,6 +1608,11 @@ public class PluginService implements IPluginService {
     }
 
     private String addTool(CreatePluginToolReq createPluginToolReq, PluginDTO pluginDTO) {
+        if (Objects.isNull(createPluginToolReq.getRequestInfo())) {
+            log.error("Fail to create tool for request_info is null, toolDisplayName: {}",
+                createPluginToolReq.getToolDisplayName());
+            throw new AgentStudioException(StudioError.PARAMS_IS_REQUIRED);
+        }
         checkToolNum(pluginDTO);
         // 与 v1 独立工具对齐：校验 input/output schema（含参数 description/location 等）
         validatePluginToolSchemas(createPluginToolReq);
@@ -1695,6 +1700,10 @@ public class PluginService implements IPluginService {
     }
 
     private void updateTool(CreatePluginToolReq createPluginToolReq, PluginDTO pluginDTO, String toolId) {
+        if (Objects.isNull(createPluginToolReq.getRequestInfo())) {
+            log.error("Fail to modify tool for request_info is null, toolId: {}", toolId);
+            throw new AgentStudioException(StudioError.PARAMS_IS_REQUIRED);
+        }
         // 与 v1 独立工具对齐：修改工具时同样校验 schema
         validatePluginToolSchemas(createPluginToolReq);
 
