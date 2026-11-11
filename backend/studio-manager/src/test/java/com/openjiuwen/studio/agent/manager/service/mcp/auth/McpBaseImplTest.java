@@ -44,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -560,6 +561,20 @@ class McpBaseImplTest extends BaseTest {
         authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
         authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
         authInfo.setAuthKeys(List.of());
+
+        Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：auth_keys 含 null 元素拒绝（防 NPE 逃逸成 500）")
+    void test_validAuthInfo_dynamic_null_key_element_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(Arrays.asList(key, null));
 
         Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
     }

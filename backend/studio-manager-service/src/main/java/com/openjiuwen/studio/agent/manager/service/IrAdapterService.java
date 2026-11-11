@@ -2190,6 +2190,9 @@ public class IrAdapterService {
             }
         }
         for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                continue;
+            }
             String targetName = authKeyInfo.getTargetName();
             if (StringUtils.isBlank(targetName)
                     || existingNamesLower.contains(targetName.toLowerCase(Locale.ROOT))) {

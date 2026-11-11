@@ -358,6 +358,32 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
         result, _ = mcp._format_api_inputs({"auth_token": "   "})
         assert "auth_token" not in getattr(mcp, "_header_params", {}), \
             "whitespace-only should be skipped"
+
+    @staticmethod
+    def test_wrapper_filters_invalid_header_values():
+        """wrapper 过滤非法头值：非 Latin-1/含控制字符的值不出站。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            request_params = client._prepare_request_params(
+                inputs={}, name="t",
+                dynamic_auth_headers={
+                    "Authorization": "Bearer ok",
+                    "X-Chinese": "Bearer 中文令牌",
+                    "X-Cr": "Bearer tok\r\nen",
+                    "X-Null": "bad\x00val",
+                    "X-Latin1-Ok": "Bearer café",
+                },
+            )
+            # 合法值保留
+            assert request_params.headers.get("Authorization") == "Bearer ok", cls.__name__
+            assert request_params.headers.get("X-Latin1-Ok") is not None, cls.__name__
+            # 非法值全部过滤
+            assert "X-Chinese" not in request_params.headers, cls.__name__
+            assert "X-Cr" not in request_params.headers, cls.__name__
+            assert "X-Null" not in request_params.headers, cls.__name__
+
+    @staticmethod
+    def test_wrapper_filters_invalid_names_from_dynamic_auth():
         """wrapper 的 dynamic_auth_headers 过滤非法头名（存量 IR 绕过防护）。"""
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)

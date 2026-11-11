@@ -303,6 +303,10 @@ public class McpBaseImpl implements IMcpBase {
         }
         Set<String> targetNames = new HashSet<>();
         for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth auth_keys contains null element");
+            }
             String targetName = authKeyInfo.getTargetName();
             if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
                 throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,

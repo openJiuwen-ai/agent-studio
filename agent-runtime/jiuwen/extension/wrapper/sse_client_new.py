@@ -16,7 +16,10 @@ from builtins import ExceptionGroup
 from typing import Any, List, Optional
 from urllib.parse import urlencode
 
-from jiuwen.extension.wrapper.outbound_header_guard import is_valid_outbound_header_name
+from jiuwen.extension.wrapper.outbound_header_guard import (
+    is_valid_outbound_header_name,
+    is_valid_outbound_header_value,
+)
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
 from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
@@ -138,8 +141,9 @@ class SSEClientNew(McpClient):
         仅 auth 无 scope 或 scope=DYNAMIC 时放行；通道内容严格限于已声明
         method=Headers 的参数值（session 级凭据走 runtime_auth，由
         _add_auth_params 的 USER 映射消费，不经本通道）。
-        头名合法性校验（RFC 7230 token + 逐跳敏感头 + 保留关联头）保护
-        空 scope 服务的存量 Header 参数绕过（与 Java 侧名单同构）。
+        头名+头值双校验（RFC 7230 token + 逐跳敏感头 + 保留关联头 +
+        Latin-1 无控制字符），保护空 scope 服务的存量 Header 参数绕过
+        及上游校验被绕过后的注入/走私面（与 Java 侧名单同构）。
         """
         if self._get_auth_scope() not in ("", "DYNAMIC"):
             return None
@@ -147,7 +151,8 @@ class SSEClientNew(McpClient):
         if not isinstance(headers, dict) or not headers:
             return None
         return {k: v for k, v in headers.items()
-                if isinstance(k, str) and is_valid_outbound_header_name(k)} or None
+                if isinstance(k, str) and is_valid_outbound_header_name(k)
+                and is_valid_outbound_header_value(v)} or None
 
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """
