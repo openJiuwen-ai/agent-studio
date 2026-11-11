@@ -252,5 +252,129 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
             "X-Session-Token": "Bearer session-tok",
             "Authorization": "Bearer dyn-tok",
         }
-        # session 凭据不泄漏到独立通道
-        assert "X-Session-Token" not in jiuwen_kwargs.get("dynamic_auth_headers", {})
+
+    @staticmethod
+    def test_invoke_session_auth_dict_not_mutated():
+        """session 级字典不被污染：invoke 后原字典内容不变、二次 invoke 不累积。
+
+        _format_runtime_auth 返回的是 session 存储的引用。双通道合并必须
+        构造副本（展开语法），绝不能 update 原对象——否则会把本节点
+        绑定的动态凭证持久写入 workflow 全局鉴权状态。
+        """
+        from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
+
+        mcp = FlowMcp.__new__(FlowMcp)
+        mcp._conf = {"type": "sse", "url": "http://test", "tool_name": "t", "name": "s"}
+        mcp._is_older_version = False
+        mcp._header_params = {"Authorization": "Bearer dyn-tok"}
+        mcp._init_lock = None
+
+        param = MagicMock()
+        param.name = "Authorization"
+        param.method = "Headers"
+        param.required = False
+        param.type = "string"
+        mock_client = MagicMock()
+        mock_client._tool_params = [param]
+        mcp._client = mock_client
+
+        captured = {}
+
+        async def fake_invoke(inputs):
+            captured.update(inputs)
+            return {"result": MagicMock(structuredContent={"ok": True}, content=None)}
+
+        mock_tool = MagicMock()
+        mock_tool.invoke = fake_invoke
+        mcp.api = mock_tool
+
+        import asyncio
+
+        session_auth = {"X-Session-Token": "Bearer session-tok"}
+        mock_session = MagicMock()
+        mock_session._inner.tracer.return_value.agent_handler_valid.return_value = False
+        mcp._format_runtime_auth = MagicMock(return_value=session_auth)
+        mcp._get_runtime_context_header = MagicMock(return_value=None)
+
+        asyncio.run(mcp.invoke({"userFields": {"Authorization": "Bearer dyn-tok"}}, mock_session, None))
+
+        # 核心断言：session 级字典未被污染
+        assert session_auth == {"X-Session-Token": "Bearer session-tok"}, \
+            "session auth dict was mutated!"
+
+        # 二次 invoke 不累积
+        captured.clear()
+        asyncio.run(mcp.invoke({"userFields": {"Authorization": "Bearer dyn-tok"}}, mock_session, None))
+        jiuwen_kwargs = captured.get("_jiuwen_runtime_kwargs")
+        assert jiuwen_kwargs["runtime_auth"]["headers"] == {
+            "X-Session-Token": "Bearer session-tok",
+            "Authorization": "Bearer dyn-tok",
+        }, "second invoke should not accumulate!"
+
+    @staticmethod
+    def test_wrapper_filters_invalid_header_names():
+        """wrapper 过滤非法头名：Host/Content-Length/保留头/非法 token 不出站。"""
+        from jiuwen.extension.wrapper.outbound_header_guard import is_valid_outbound_header_name
+
+        # 合法名通过
+        assert is_valid_outbound_header_name("Authorization") is True
+        assert is_valid_outbound_header_name("X-Custom-Header") is True
+
+        # 逐跳敏感头拒绝
+        assert is_valid_outbound_header_name("Host") is False
+        assert is_valid_outbound_header_name("Content-Length") is False
+        assert is_valid_outbound_header_name("Transfer-Encoding") is False
+
+        # 平台保留关联头拒绝
+        assert is_valid_outbound_header_name("X-Request-Id") is False
+        assert is_valid_outbound_header_name("X-Execution-Id") is False
+        assert is_valid_outbound_header_name("traceparent") is False
+
+        # 非法 token 字符拒绝
+        assert is_valid_outbound_header_name("Bad Header") is False
+        assert is_valid_outbound_header_name("Auth:Inj") is False
+        assert is_valid_outbound_header_name("X-头") is False
+
+    @staticmethod
+    def test_whitespace_only_header_value_skipped():
+        """纯空白值不注入（与 Java StringUtils.isBlank 语义对齐）。"""
+        from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
+
+        param = MagicMock()
+        param.name = "auth_token"
+        param.method = "Headers"
+        param.required = False
+        param.type = "string"
+
+        mcp = FlowMcp.__new__(FlowMcp)
+        mcp._conf = {"type": "sse", "url": "http://test", "tool_name": "t", "name": "s"}
+        mcp._is_older_version = False
+        mcp._init_lock = None
+
+        mock_client = MagicMock()
+        mock_client._tool_params = [param]
+        mcp._client = mock_client
+
+        result, _ = mcp._format_api_inputs({"auth_token": "   "})
+        assert "auth_token" not in getattr(mcp, "_header_params", {}), \
+            "whitespace-only should be skipped"
+        """wrapper 的 dynamic_auth_headers 过滤非法头名（存量 IR 绕过防护）。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            request_params = client._prepare_request_params(
+                inputs={}, name="t",
+                dynamic_auth_headers={
+                    "Authorization": "Bearer ok",
+                    "Host": "evil",
+                    "Content-Length": "999",
+                    "X-Request-Id": "fake",
+                    "Bad Header": "v",
+                },
+            )
+            # 合法名保留
+            assert request_params.headers.get("Authorization") == "Bearer ok", cls.__name__
+            # 非法名全部过滤
+            assert "Host" not in request_params.headers, cls.__name__
+            assert "Content-Length" not in request_params.headers, cls.__name__
+            assert "X-Request-Id" not in request_params.headers, cls.__name__
+            assert "Bad Header" not in request_params.headers, cls.__name__

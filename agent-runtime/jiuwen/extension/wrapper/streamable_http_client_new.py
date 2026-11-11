@@ -12,28 +12,11 @@
 
 import copy
 import os
-import re
 from builtins import ExceptionGroup
 from typing import Any, List, Optional
 from urllib.parse import urlencode
 
-# FEAT-093: 出站头名合法性校验(与 Java 侧 McpBaseImpl 同构)
-_RESERVED_CORRELATION_HEADERS = frozenset({"x-request-id", "x-execution-id", "traceparent"})
-_FORBIDDEN_HEADER_NAMES = frozenset({
-    "host", "content-length", "transfer-encoding", "connection",
-    "keep-alive", "te", "trailer", "upgrade",
-    "proxy-authenticate", "proxy-authorization",
-})
-_VALID_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
-
-
-def _is_valid_outbound_header_name(name: str) -> bool:
-    """RFC 7230 token 字符集 + 逐跳敏感头 + 平台保留关联头。"""
-    lower = name.lower()
-    if lower in _RESERVED_CORRELATION_HEADERS or lower in _FORBIDDEN_HEADER_NAMES:
-        return False
-    return bool(_VALID_HEADER_NAME_RE.match(name))
-
+from jiuwen.extension.wrapper.outbound_header_guard import is_valid_outbound_header_name
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
 from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
@@ -164,7 +147,7 @@ class StreamableHttpClientNew(McpClient):
         if not isinstance(headers, dict) or not headers:
             return None
         return {k: v for k, v in headers.items()
-                if isinstance(k, str) and _is_valid_outbound_header_name(k)} or None
+                if isinstance(k, str) and is_valid_outbound_header_name(k)} or None
 
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """

@@ -370,8 +370,6 @@ class FlowMcp(WorkflowComponent):
         # 否则无鉴权/动态服务会经 wrapper 门控把 session 级凭据整包外发
         jiuwen_kwargs = {}
         runtime_auth = self._format_runtime_auth(session)
-        if runtime_auth:
-            jiuwen_kwargs["runtime_auth"] = {"headers": runtime_auth}
         runtime_context_header = self._get_runtime_context_header(session)
         if runtime_context_header:
             jiuwen_kwargs["runtime_context"] = runtime_context_header
@@ -380,14 +378,16 @@ class FlowMcp(WorkflowComponent):
         # USER/SERVICE scope：_add_auth_params 读 runtime_auth 做 source→target
         # 映射（SERVICE 解密失败回退也读 runtime_auth）
         # DYNAMIC/空 scope：wrapper 的独立通道合并（scope 门控不双重合并）
-        # runtime_auth 在 DYNAMIC/空 scope 下不会被 _add_auth_params 消费（非
-        # USER/SERVICE），不会泄漏 session 级凭据
+        # runtime_auth 构造副本合并——_format_runtime_auth 返回的是 session
+        # 存储的引用，update 原对象会污染 workflow 全局鉴权状态（后续
+        # 节点读取到追加的凭证 + 并发互相污染），必须用展开语法构造新 dict
         header_params = getattr(self, "_header_params", {})
-        if header_params:
-            if "runtime_auth" not in jiuwen_kwargs:
-                jiuwen_kwargs["runtime_auth"] = {"headers": {}}
-            jiuwen_kwargs["runtime_auth"]["headers"].update(header_params)
-            jiuwen_kwargs["dynamic_auth_headers"] = dict(header_params)
+        if header_params or runtime_auth:
+            jiuwen_kwargs["runtime_auth"] = {
+                "headers": {**(runtime_auth or {}), **header_params},
+            }
+            if header_params:
+                jiuwen_kwargs["dynamic_auth_headers"] = dict(header_params)
 
         # JSON 启发式解析发生时，基于 card 副本构建按调用隔离的 MCPTool，
         # 避免就地修改共享 schema（跨 invoke 持久化 / 并发互相污染）
