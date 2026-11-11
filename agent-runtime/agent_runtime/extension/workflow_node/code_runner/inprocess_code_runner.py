@@ -13,6 +13,7 @@
 import asyncio
 import copy
 import ctypes
+import json
 import logging
 import os
 import sys
@@ -25,6 +26,33 @@ from unittest import mock
 from agent_runtime.extension.workflow_node.code_runner.base_code_runner import CodeRunner, CodeRunResult
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
+
+
+def _install_guarded_json_loads() -> Any:
+    """进程内加固 json.loads，返回原 loads 供 finally 恢复。"""
+    orig = json.loads
+
+    def _guarded(s, *args, **kwargs):
+        if s is None or (isinstance(s, str) and not str(s).strip()):
+            raise ValueError(
+                "json.loads received empty input; "
+                "check upstream QA/Code input is non-empty JSON"
+            )
+        try:
+            return orig(s, *args, **kwargs)
+        except json.JSONDecodeError as e:
+            preview = repr(s[:120]) if isinstance(s, str) else repr(s)
+            raise ValueError(
+                f"json.loads received non-JSON input {preview}: {e}"
+            ) from e
+
+    json.loads = _guarded  # type: ignore[method-assign]
+    return orig
+
+
+def _restore_json_loads(orig: Any) -> None:
+    if orig is not None:
+        json.loads = orig  # type: ignore[method-assign]
 
 _logger = logging.getLogger(__name__)
 
@@ -252,18 +280,25 @@ class InprocessCodeRunner(CodeRunner):
         # 因此保存到的一定是真实基线。供超时后 _force_cleanup 使用。
         container.saved_stdout = sys.stdout
         container.saved_os_system = os.system
+        orig_json_loads = None
         try:
             os_system_patcher.start()
+            orig_json_loads = _install_guarded_json_loads()
             try:
                 exec(exec_code, global_namespace, local_namespace)
             except BaseException as e:
                 error_log = traceback.format_exc()
                 exec_exception = e
             finally:
+                _restore_json_loads(orig_json_loads)
                 os_system_patcher.stop()
         except BaseException as e:
             error_log = traceback.format_exc()
             exec_exception = e
+            try:
+                _restore_json_loads(orig_json_loads)
+            except Exception as restore_err:
+                _logger.warning(f"Failed to restore json.loads: {restore_err}")
             try:
                 os_system_patcher.stop()
             except Exception as stop_err:

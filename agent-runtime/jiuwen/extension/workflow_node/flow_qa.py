@@ -328,6 +328,69 @@ class FlowQA(WorkflowComponent):
     def should_interrupt(self) -> bool:
         return self._node_state.status == ExecutionStatus.USER_INTERACT
 
+    @staticmethod
+    def _clear_residual_interactive_input(session: Session) -> None:
+        """清除父工作流残留的 INTERACTIVE_INPUT，避免首问被误当成回复。"""
+        session._interaction = None
+        session.update_state({INTERACTIVE_INPUT: None})
+        # 清除 workflow_state 中残留的 INTERACTIVE_INPUT，防止父工作流的
+        # raw_inputs 泄漏导致 WorkflowInteraction 误读而跳过中断
+        try:
+            session._inner.state().update_and_commit_workflow_state(
+                {INTERACTIVE_INPUT: None}
+            )
+            session._inner.state().commit()
+        except Exception:
+            # session mock / 精简实现可能没有完整 state API
+            pass
+
+    async def _await_first_paint_interrupt(
+        self, session: Session, query: str
+    ) -> None:
+        """首问展示后必须 GraphInterrupt。
+
+        对象提取 AFTER_QUIT 等嵌套场景下，父工作流的 raw_inputs 可能仍留在
+        INTERACTIVE_INPUT。WorkflowInteraction 会把它当成用户回复直接返回，
+        导致本应中断的 QA 落空继续往下跑；下游 Code 对空/自然语言做
+        json.loads 就会报 Expecting value: line 1 column 1 (char 0)。
+        """
+        self._clear_residual_interactive_input(session)
+        try:
+            leaked = await session.interact(query)
+        except GraphInterrupt:
+            raise
+
+        workflow_logger.warning(
+            "FlowQA first paint interact() returned without interrupt "
+            "(residual INTERACTIVE_INPUT=%r); forcing GraphInterrupt",
+            leaked,
+            event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+            component_id=session.get_component_id(),
+            component_type_str=JIUWEN_QA_TYPE,
+            session_id=session.get_session_id(),
+        )
+        # 同一 Interaction 实例下 residual 已被消费，再次 interact 应中断；
+        # 若仍被缓存污染，清空后重试一次。
+        try:
+            await session.interact(query)
+        except GraphInterrupt:
+            raise
+        self._clear_residual_interactive_input(session)
+        try:
+            await session.interact(query)
+        except GraphInterrupt:
+            raise
+        raise build_error(
+            StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+            comp=session.get_component_id(),
+            ability="invoke",
+            reason=(
+                "FlowQA first paint failed to interrupt after clearing "
+                "residual INTERACTIVE_INPUT"
+            ),
+            workflow=session.get_workflow_id(),
+        )
+
     def get_latest_user_query_intent(self, session: Session) -> Optional[str]:
         chat_history = None
         if hasattr(session, "get_global_state"):
@@ -581,22 +644,26 @@ class FlowQA(WorkflowComponent):
                         "should_interrupt": True,
                     }
 
-                    session._interaction = None
-                    session.update_state({INTERACTIVE_INPUT: None})
-                    # 清除 workflow_state 中残留的 INTERACTIVE_INPUT，防止父工作流的
-                    # raw_inputs 泄漏导致 WorkflowInteraction 误读而跳过中断
-                    session._inner.state().update_and_commit_workflow_state(
-                        {INTERACTIVE_INPUT: None}
-                    )
-                    session._inner.state().commit()
-
-                    await session.interact(query)
+                    await self._await_first_paint_interrupt(session, query)
 
                 elif self._node_state.status == ExecutionStatus.USER_INTERACT:
                     # 恢复执行：通过 interact() 获取用户输入
                     user_response = await session.interact(
                         self._node_state.question or ""
                     )
+                    if user_response is None or (
+                        isinstance(user_response, str) and not user_response.strip()
+                    ):
+                        raise build_error(
+                            StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                            comp=session.get_component_id(),
+                            ability="invoke",
+                            reason=(
+                                "QA response is empty after resume; "
+                                "downstream Code must not json.loads an empty string"
+                            ),
+                            workflow=session.get_workflow_id(),
+                        )
 
                     self._node_state.status = ExecutionStatus.END
                     self._store_state_to_session(self._node_state, session)
