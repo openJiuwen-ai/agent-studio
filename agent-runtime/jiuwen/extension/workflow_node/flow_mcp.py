@@ -376,10 +376,17 @@ class FlowMcp(WorkflowComponent):
         if runtime_context_header:
             jiuwen_kwargs["runtime_context"] = runtime_context_header
 
-        # FEAT-093 动态凭证：method=Headers 参数值经独立通道下传，
-        # 与 session 级 runtime_auth 严格分离（wrapper 侧仅按本通道合并）
+        # FEAT-093 动态凭证：method=Headers 参数值双通道下传。
+        # USER/SERVICE scope：_add_auth_params 读 runtime_auth 做 source→target
+        # 映射（SERVICE 解密失败回退也读 runtime_auth）
+        # DYNAMIC/空 scope：wrapper 的独立通道合并（scope 门控不双重合并）
+        # runtime_auth 在 DYNAMIC/空 scope 下不会被 _add_auth_params 消费（非
+        # USER/SERVICE），不会泄漏 session 级凭据
         header_params = getattr(self, "_header_params", {})
         if header_params:
+            if "runtime_auth" not in jiuwen_kwargs:
+                jiuwen_kwargs["runtime_auth"] = {"headers": {}}
+            jiuwen_kwargs["runtime_auth"]["headers"].update(header_params)
             jiuwen_kwargs["dynamic_auth_headers"] = dict(header_params)
 
         # JSON 启发式解析发生时，基于 card 副本构建按调用隔离的 MCPTool，
@@ -436,10 +443,11 @@ class FlowMcp(WorkflowComponent):
                     # 显式报错——header 不参与 card schema 的 client-side
                     # 校验，静默跳过后下游没有任何报错点，与 Body 分支
                     # 必填参数由 MCPTool 校验报错的行为不一致
-                    # FEAT-093：空串同 None 处理——引擎把未绑定的 ref 解析为
-                    # start 默认空串，注入空 Authorization 头会被下游鉴权层
-                    # 视为非法凭证，语义上"未提供"不应产生头
-                    if value is None or value == "":
+                    # FEAT-093：空串/纯空白同 None 处理——引擎把未绑定的 ref
+                    # 解析为 start 默认空串，注入空/空白 Authorization 头会被
+                    # 下游鉴权层视为非法凭证，语义上"未提供"不应产生头
+                    # （与 Java 调测侧 StringUtils.isBlank 语义对齐）
+                    if value is None or (isinstance(value, str) and not value.strip()):
                         if _is_param_required(param):
                             workflow_logger.error(
                                 f"{TAG} _format_api_inputs error: required header param value is None",

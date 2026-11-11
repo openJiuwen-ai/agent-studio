@@ -198,10 +198,11 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
 
     @staticmethod
     def test_invoke_separates_session_auth_from_dynamic_headers():
-        """通道分离：session 级 runtime_auth 与动态凭证值各走各的键，互不混装。
+        """双通道下传：session 凭据仅在 runtime_auth，动态凭证值双通道。
 
-        （检视修复：混装会使无鉴权/动态服务经 wrapper 门控把 session 级
-        凭据整包外发。）
+        runtime_auth 含 session 凭据+动态凭证值（USER scope 时供
+        _add_auth_params 映射消费）；dynamic_auth_headers 仅含动态凭证
+        值（DYNAMIC/空 scope 时 wrapper 合并；session 凭据不泄漏）。
         """
         from jiuwen.extension.workflow_node.flow_mcp import FlowMcp
 
@@ -243,6 +244,13 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
         jiuwen_kwargs = captured.get("_jiuwen_runtime_kwargs")
         assert jiuwen_kwargs is not None
         # session 级只含自己的键，未被动态凭证值污染
-        assert jiuwen_kwargs["runtime_auth"]["headers"] == {"X-Session-Token": "Bearer session-tok"}
-        # 动态凭证值走独立通道，未混入 runtime_auth
         assert jiuwen_kwargs["dynamic_auth_headers"] == {"Authorization": "Bearer dyn-tok"}
+        # runtime_auth 合并 session 凭据 + 动态凭证值（USER scope 时由
+        # _add_auth_params 消费做 source→target 映射；DYNAMIC/空 scope 时
+        # _add_auth_params 不读，不影响独立通道行为）
+        assert jiuwen_kwargs["runtime_auth"]["headers"] == {
+            "X-Session-Token": "Bearer session-tok",
+            "Authorization": "Bearer dyn-tok",
+        }
+        # session 凭据不泄漏到独立通道
+        assert "X-Session-Token" not in jiuwen_kwargs.get("dynamic_auth_headers", {})

@@ -12,9 +12,27 @@
 
 import copy
 import os
+import re
 from builtins import ExceptionGroup
 from typing import Any, List, Optional
 from urllib.parse import urlencode
+
+# FEAT-093: 出站头名合法性校验(与 Java 侧 McpBaseImpl 同构)
+_RESERVED_CORRELATION_HEADERS = frozenset({"x-request-id", "x-execution-id", "traceparent"})
+_FORBIDDEN_HEADER_NAMES = frozenset({
+    "host", "content-length", "transfer-encoding", "connection",
+    "keep-alive", "te", "trailer", "upgrade",
+    "proxy-authenticate", "proxy-authorization",
+})
+_VALID_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+
+
+def _is_valid_outbound_header_name(name: str) -> bool:
+    """RFC 7230 token 字符集 + 逐跳敏感头 + 平台保留关联头。"""
+    lower = name.lower()
+    if lower in _RESERVED_CORRELATION_HEADERS or lower in _FORBIDDEN_HEADER_NAMES:
+        return False
+    return bool(_VALID_HEADER_NAME_RE.match(name))
 
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
@@ -132,16 +150,21 @@ class SSEClientNew(McpClient):
 
     def _dynamic_auth_headers(self, kwargs) -> Optional[dict]:
         """scope 允许且 kwargs.dynamic_auth_headers（FlowMcp 独立通道下传的
-        method=Headers 参数值）为 dict 时返回它，否则 None。
+        method=Headers 参数值）为 dict 时返回合法子集，否则 None。
 
         仅 auth 无 scope 或 scope=DYNAMIC 时放行；通道内容严格限于已声明
         method=Headers 的参数值（session 级凭据走 runtime_auth，由
         _add_auth_params 的 USER 映射消费，不经本通道）。
+        头名合法性校验（RFC 7230 token + 逐跳敏感头 + 保留关联头）保护
+        空 scope 服务的存量 Header 参数绕过（与 Java 侧名单同构）。
         """
         if self._get_auth_scope() not in ("", "DYNAMIC"):
             return None
         headers = kwargs.get("dynamic_auth_headers")
-        return headers if isinstance(headers, dict) else None
+        if not isinstance(headers, dict) or not headers:
+            return None
+        return {k: v for k, v in headers.items()
+                if isinstance(k, str) and _is_valid_outbound_header_name(k)} or None
 
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """

@@ -1521,6 +1521,13 @@ public class McpServiceManager implements IMcpServiceManagerService {
                 serviceEntity.getName(), serviceEntity.getId());
             return;
         }
+        // 与 validDynamicAuthInfo 对齐：仅 HEADERS 域允许注入（防 DYNAMIC+QUERY
+        // 存量/异常配置绕过"仅请求头层注入"约束）
+        if (!AuthInfo.DomainEnum.HEADERS.equals(authInfo.getDomain())) {
+            log.warn("[testServicesTools] debug headers ignored: service {} auth domain is not HEADERS, service id: {}",
+                serviceEntity.getName(), serviceEntity.getId());
+            return;
+        }
         // HTTP 头名大小写不敏感：登记名按小写归一比对，接受合法大小写变体
         Set<String> registeredNames = new HashSet<>();
         if (ObjectUtils.isNotEmpty(authInfo.getAuthKeys())) {
