@@ -51,6 +51,10 @@ class RedisClientManager:
     _client: Optional[Union[Redis, RedisCluster]] = None
     _sync_client: Optional[Union[SyncRedis, SyncRedisCluster]] = None
     _settings: Optional[RedisSettings] = None
+    # 集群 pubsub 轮换游标：每次创建 pubsub 单节点连接推进一次，
+    # 使 subscribe_runtime_cancel 重连重试时自动切换到下一节点，
+    # 规避首节点下线导致订阅持续失败直到进程重启。
+    _pubsub_node_index: int = 0
 
     def __init__(self) -> None:
         raise RuntimeError("Use get_instance() to get the singleton.")
@@ -305,6 +309,56 @@ class RedisClientManager:
             )
         return ctx
 
+    def _create_cluster_pubsub_client(self) -> Redis:
+        """集群模式下创建单节点 pubsub 连接，按游标轮换节点。
+
+        redis-py < 8.0.0 的异步 RedisCluster 未实现 pubsub()，需取单节点创建
+        普通 Redis 连接做订阅；Redis Cluster 的 PUBLISH 会广播到所有节点，任一
+        节点 SUBSCRIBE 即可收到消息。每次调用推进 _pubsub_node_index，使
+        subscribe_runtime_cancel 的重连重试自动轮换到下一节点——首节点下线而
+        集群其他节点可用时，订阅可在下一次重试恢复，而非持续失败直到进程重启。
+
+        不设 socket_timeout：pubsub 为长连接阻塞读（listen() 无限等待消息），
+        redis-py < 8.0.0 的 parse_response(block=True) 将 timeout=None 传给
+        连接层，连接层回退到 socket_timeout（默认 5s）→ 空闲 5s 即 TimeoutError
+        断连，导致订阅每 5s 重连+轮换节点（高频重连、日志噪声、断连窗口丢消息）。
+        省略 socket_timeout 使阻塞读无限等待；socket_connect_timeout 仍保留以
+        保证建连阶段有超时保护。
+        """
+        nodes: list[tuple[str, int]] = []
+        for node_str in self._settings.cluster_nodes.split(","):
+            node_str = node_str.strip()
+            if not node_str:
+                continue
+            if ":" in node_str:
+                host, port = node_str.split(":", 1)
+                nodes.append((host, int(port)))
+            else:
+                nodes.append((node_str, 6379))
+        if not nodes:
+            raise ValueError("REDIS_CLUSTER_NODES not configured")
+
+        idx = self._pubsub_node_index % len(nodes)
+        self._pubsub_node_index += 1
+        host, port = nodes[idx]
+        kwargs: dict = {
+            "host": host,
+            "port": port,
+            "db": 0,
+            "max_connections": self._settings.max_connections,
+            "socket_connect_timeout": self._settings.socket_connect_timeout,
+            "decode_responses": False,
+        }
+        if self._settings.password:
+            kwargs["password"] = self._settings.password
+        if self._settings.ssl_enabled:
+            kwargs["ssl"] = self._create_ssl_context()
+        logger.info(
+            "Creating cluster pubsub client: node=%s:%s (index=%s/%s)",
+            host, port, idx, len(nodes),
+        )
+        return Redis(**kwargs)
+
     def get_client(self) -> Union[Redis, RedisCluster]:
         """获取异步 Redis 客户端。"""
         if self._client is None:
@@ -333,6 +387,7 @@ class RedisClientManager:
         cls._client = None
         cls._sync_client = None
         cls._settings = None
+        cls._pubsub_node_index = 0
 
 
 def get_redis_client() -> Union[Redis, RedisCluster]:
@@ -343,3 +398,20 @@ def get_redis_client() -> Union[Redis, RedisCluster]:
 def get_sync_redis_client() -> Union[SyncRedis, SyncRedisCluster]:
     """获取同步 Redis 客户端的便捷函数。"""
     return RedisClientManager.get_instance().get_sync_client()
+
+
+def get_pubsub_client() -> Union[Redis, RedisCluster]:
+    """获取专用于 pubsub 订阅的 Redis 客户端。
+
+    集群模式下 RedisCluster（redis-py < 8.0.0）未实现 pubsub()，
+    取集群节点创建单机 Redis 连接做 pubsub 订阅。Redis Cluster 的 PUBLISH 会广播到
+    所有节点，单节点 SUBSCRIBE 即可收到消息。节点轮换：每次调用推进游标，重连重试
+    时自动切换到下一节点，避免首节点下线导致订阅持续失败直到进程重启。
+    单机/哨兵模式直接返回现有客户端。
+    """
+    mgr = RedisClientManager.get_instance()
+    if mgr._settings is None:
+        return mgr.get_client()
+    if mgr._settings.mode == RedisMode.CLUSTER:
+        return mgr._create_cluster_pubsub_client()
+    return mgr.get_client()

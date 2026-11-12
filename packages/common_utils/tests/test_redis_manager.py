@@ -5,6 +5,7 @@
 # pylint: disable=protected-access  # 白盒单测：需直接访问 _settings / _create_*_client 等内部成员
 
 import pytest
+from unittest.mock import MagicMock
 
 from common_utils.common_config import RedisMode, RedisSettings
 from common_utils.redis_manager import (
@@ -122,6 +123,242 @@ class TestNodeParsingHelpers:
         inst._settings = settings
         with pytest.raises(ValueError):
             inst._create_sentinel_client()
+
+
+class TestGetPubsubClient:
+    """get_pubsub_client() 在不同模式下的行为。"""
+
+    @staticmethod
+    def test_single_mode_returns_existing_client(reset_common_utils_state):
+        """单机模式返回与 get_client() 相同的客户端。"""
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_HOST="127.0.0.1", REDIS_PORT=6379)
+        inst._settings = settings
+        inst._client = inst._create_single_client()
+        from common_utils.redis_manager import get_pubsub_client
+        assert get_pubsub_client() is inst._client
+
+    @staticmethod
+    def test_cluster_mode_creates_single_node_client(reset_common_utils_state, monkeypatch):
+        """集群模式创建连接到第一个节点的单机 Redis 客户端。"""
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster",
+            REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+            REDIS_PASSWORD="secret",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        client = get_pubsub_client()
+        assert captured["host"] == "h1"
+        assert captured["port"] == 7000
+        assert captured["password"] == "secret"
+        assert captured["decode_responses"] is False
+        assert isinstance(client, _FakeRedis)
+
+    @staticmethod
+    def test_cluster_mode_node_without_port_defaults_6379(reset_common_utils_state, monkeypatch):
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1,h2")
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        assert captured["host"] == "h1"
+        assert captured["port"] == 6379
+
+    # ------------------------------------------------------------------ #
+    # 节点轮换（检视意见：首节点下线时订阅切换到其他节点）
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def test_cluster_mode_rotates_nodes_on_repeated_calls(reset_common_utils_state, monkeypatch):
+        """每次调用推进游标，多次调用（模拟重连重试）在节点间轮换。"""
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append((kw["host"], kw["port"]))
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        # 3 次调用、2 个节点 → h1, h2, h1
+        get_pubsub_client()
+        get_pubsub_client()
+        get_pubsub_client()
+        assert created == [("h1", 7000), ("h2", 7001), ("h1", 7000)]
+
+    @staticmethod
+    def test_cluster_mode_first_node_down_rotates_to_next(reset_common_utils_state, monkeypatch):
+        """首节点不可用时，重连重试切换到其他节点。
+
+        模拟 subscribe_runtime_cancel 的重试场景：首次 get_pubsub_client 连接首节点
+        （h1）后订阅失败，重试再次调用 get_pubsub_client 应返回下一节点（h2）的客户端，
+        而非再次绑定同一首节点——否则首节点下线时订阅会持续失败直到进程重启。
+        """
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append((kw["host"], kw["port"]))
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1:7000,h2:7001,h3:7002",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        first = get_pubsub_client()   # 首次：首节点 h1
+        second = get_pubsub_client()  # 重试：应切换到 h2
+        assert created[0] == ("h1", 7000)
+        assert created[1] == ("h2", 7001)
+        assert created[0] != created[1]  # 重试不再绑定同一首节点
+        assert isinstance(first, _FakeRedis)
+        assert isinstance(second, _FakeRedis)
+
+    @staticmethod
+    def test_cluster_mode_single_node_still_works(reset_common_utils_state, monkeypatch):
+        """仅配置一个节点时轮换退化为固定该节点，不报错。"""
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append((kw["host"], kw["port"]))
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_MODE="cluster", REDIS_CLUSTER_NODES="only:6380")
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        get_pubsub_client()
+        assert created == [("only", 6380), ("only", 6380)]
+
+    @staticmethod
+    def test_cluster_mode_empty_nodes_raises(reset_common_utils_state, monkeypatch):
+        from common_utils import redis_manager as rm
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                pass
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(REDIS_MODE="cluster", REDIS_CLUSTER_NODES=" , , ")
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        with pytest.raises(ValueError):
+            get_pubsub_client()
+
+    @staticmethod
+    def test_pubsub_node_index_reset_on_singleton_reset(reset_common_utils_state, monkeypatch):
+        """reset() 复位游标，避免跨用例残留导致起始节点不确定。"""
+        from common_utils import redis_manager as rm
+        created = []
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                created.append(kw["host"])
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster", REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()  # h1，游标推进到 1
+        assert inst._pubsub_node_index == 1
+        RedisClientManager.reset()
+        assert RedisClientManager._pubsub_node_index == 0
+
+    # ------------------------------------------------------------------ #
+    # socket_timeout 省略（检视意见：pubsub 阻塞读不应被 socket_timeout 周期断连）
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def test_cluster_pubsub_omits_socket_timeout(reset_common_utils_state, monkeypatch):
+        """pubsub 专用客户端不继承 socket_timeout，避免空闲阻塞读周期性断连。
+
+        redis-py < 8.0.0 的 parse_response(block=True) 将 timeout=None 传给连接层，
+        连接层回退到 socket_timeout（默认 5s）→ 空闲 5s 即 TimeoutError 断连。
+        省略 socket_timeout 使阻塞读无限等待。
+        """
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster",
+            REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+            REDIS_PASSWORD="secret",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        # socket_timeout 不得传入 kwargs（redis-py 默认 None = 无读超时）
+        assert "socket_timeout" not in captured
+        # socket_connect_timeout 仍保留，建连阶段有超时保护
+        assert captured["socket_connect_timeout"] == settings.socket_connect_timeout
+
+    @staticmethod
+    def test_cluster_pubsub_keeps_socket_connect_timeout(reset_common_utils_state, monkeypatch):
+        """socket_connect_timeout 不受 socket_timeout 省略影响。"""
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster",
+            REDIS_CLUSTER_NODES="h1:7000",
+            REDIS_SOCKET_CONNECT_TIMEOUT=10,
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        assert captured["socket_connect_timeout"] == 10
+        assert "socket_timeout" not in captured
 
 
 class TestNonTransactionPipeline:

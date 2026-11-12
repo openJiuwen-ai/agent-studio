@@ -74,6 +74,13 @@ class ExecutionRegistry:
 
         return get_redis_client()
 
+    @staticmethod
+    def _pubsub_client():
+        """获取专用于 pubsub 订阅的客户端（集群模式下为单节点 Redis 连接）。"""
+        from common_utils.redis_manager import get_pubsub_client
+
+        return get_pubsub_client()
+
     async def register(
         self,
         conversation_id: str,
@@ -234,7 +241,8 @@ class ExecutionRegistry:
         while True:
             pubsub = None
             try:
-                pubsub = self._redis().pubsub()
+                pubsub_client = self._pubsub_client()
+                pubsub = pubsub_client.pubsub()
                 await pubsub.subscribe(CANCEL_CHANNEL)
                 workflow_logger.info(
                     "Subscribed runtime cancel channel: %s (instance=%s)",

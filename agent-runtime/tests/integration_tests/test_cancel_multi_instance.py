@@ -81,7 +81,8 @@ class TestCrossInstanceCancelBroadcast:
         """VR-9：执行在实例 A，/cancel 受理在实例 B → 广播 → A 本地 task 被取消。"""
         client = fakeredis.aioredis.FakeRedis(decode_responses=False)
         try:
-            with patch("common_utils.redis_manager.get_redis_client", return_value=client):
+            with patch("common_utils.redis_manager.get_redis_client", return_value=client), \
+                 patch("common_utils.redis_manager.get_pubsub_client", return_value=client):
                 # 实例 A：注册在飞执行 + 启动广播订阅（对应 server lifespan 启动的订阅者）
                 registry_a = ExecutionRegistry()
                 running_task = asyncio.create_task(asyncio.sleep(30))
@@ -158,7 +159,8 @@ class TestCancelEndpointEndToEnd:
         """端到端：端点受理 → 标记 + 广播 → 持有实例订阅回调 → 本地 task 取消。"""
         client = fakeredis.aioredis.FakeRedis(decode_responses=False)
         try:
-            with patch("common_utils.redis_manager.get_redis_client", return_value=client):
+            with patch("common_utils.redis_manager.get_redis_client", return_value=client), \
+                 patch("common_utils.redis_manager.get_pubsub_client", return_value=client):
                 registry = ExecutionRegistry()
                 running_task = asyncio.create_task(asyncio.sleep(30))
                 await registry.register(
