@@ -180,6 +180,7 @@ class ControllerPlanner(TaskPlanner):
                 )
             if message.message_type == MessageType.USER_INPUT:
                 self.intention_detect_module._intent_detected_this_turn = False
+                self.intention_detect_module._intent_workflow_user_fields = {}
                 intent_workflow_task = await self._get_intent_based_workflow(
                     [], self.last_message, True
                 )
@@ -192,6 +193,7 @@ class ControllerPlanner(TaskPlanner):
 
         # 执行下一个工作流
         self.intention_detect_module._intent_detected_this_turn = False
+        self.intention_detect_module._intent_workflow_user_fields = {}
         task = await self._get_next_workflow(message)
         if self.intention_detect_module._intent_detected_this_turn:
             yield self._build_intent_stream_data()
