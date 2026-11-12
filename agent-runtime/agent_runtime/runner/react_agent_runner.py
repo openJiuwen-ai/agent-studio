@@ -798,7 +798,9 @@ class ReActAgentRunner:
             # MCP 动态凭证绑定模板按本次运行 agent 的 IR 提供（按 server_id 键控）：
             # resource_mgr 的 MCP client 按 server_id 进程级缓存且首个注册者的
             # 配置生效——跨 agent 共享的 client 其绑定模板可能来自其他 agent 的
-            # IR，wrapper 须以请求级模板为准（工作流路径不经此通道）
+            # IR，wrapper 须以请求级模板为准（工作流路径不经此通道）。
+            # 插件动态鉴权绑定模板走同一通道（configs.plugins[].inputParameters，
+            # 键含 id 与 name——restful wrapper card.id 优先取 name 的双形态）。
             mcp_input_parameters = {}
             for mcp_conf in (ir_json.get("configs") or {}).get("mcps") or []:
                 mcp_id = mcp_conf.get("id") if isinstance(mcp_conf, dict) else None
@@ -806,6 +808,16 @@ class ReActAgentRunner:
                              or mcp_conf.get("input_parameters") or {}) if isinstance(mcp_conf, dict) else {}
                 if mcp_id and isinstance(templates, dict) and templates:
                     mcp_input_parameters[str(mcp_id)] = templates
+            for plugin_conf in (ir_json.get("configs") or {}).get("plugins") or []:
+                if not isinstance(plugin_conf, dict):
+                    continue
+                plugin_templates = plugin_conf.get("inputParameters") \
+                    or plugin_conf.get("input_parameters") or {}
+                if not isinstance(plugin_templates, dict) or not plugin_templates:
+                    continue
+                for plugin_key in (plugin_conf.get("id"), plugin_conf.get("name")):
+                    if plugin_key and str(plugin_key) not in mcp_input_parameters:
+                        mcp_input_parameters[str(plugin_key)] = plugin_templates
             set_request_mcp_input_parameters(mcp_input_parameters)
             agent, agent_id = self._create_agent(
                 ir_json, skill_work_dir, global_variables, has_file_links
