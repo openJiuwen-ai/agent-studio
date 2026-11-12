@@ -679,6 +679,7 @@
   "mcp_dynamic_auth": "Dynamic Auth",
   "mcp_dynamic_auth_param_name": "Parameter Name (Outbound Header Name)",
   "mcp_dynamic_auth_tip": "Credential values are bound to upstream node variables or literals when orchestrating the workflow. The platform does not store credential values.",
+    "plugin_dynamic_auth_header_conflict": "Request header conflicts with dynamic auth header, remove duplicates: ",
   "mcp_test_debug_headers": "Dynamic credential test value",
   "mcp_test_debug_headers_tip": "Sent as request headers with this test only; the value is never stored.",
   "mcp_test_debug_headers_placeholder": "e.g. Bearer xxx-token",

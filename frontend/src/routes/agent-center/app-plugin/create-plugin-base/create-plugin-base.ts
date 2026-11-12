@@ -233,6 +233,13 @@ export class CreatePluginBaseComponent implements OnInit {
       show: true,
     },
     {
+      // FEAT-093 插件动态鉴权：仅登记出站头名，值由工作流/智能体编排期
+      // 绑定（引用入参/记忆变量），不落库
+      label: this.i18n.transform('mcp_dynamic_auth'),
+      id: 'pluginDynamicAuth',
+      show: true,
+    },
+    {
       label: 'HisIAM',
       id: 'HIS_IAM',
       show: this.configServ.getConfigs()?.his_openai_enable,

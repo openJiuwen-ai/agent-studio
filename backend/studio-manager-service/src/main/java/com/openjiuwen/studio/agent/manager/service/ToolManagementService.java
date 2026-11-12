@@ -173,10 +173,6 @@ public class ToolManagementService implements IToolManagementService {
     @Autowired
     private IPluginBase pluginBase;
 
-    /** FEAT-093 插件动态鉴权：登记侧校验器（实现于 PluginService） */
-    @Autowired
-    private PluginService pluginService;
-
     /** FEAT-093 插件动态鉴权：父插件鉴权解析（getPlugin 在 IPlugin 接口上） */
     @Autowired
     private IPlugin pluginQueryService;
@@ -250,7 +246,7 @@ public class ToolManagementService implements IToolManagementService {
     public CreateToolRsp createToolV1(String projectId, String workspaceId, CreateToolReq body) {
         // FEAT-093 插件动态鉴权：与工具请求头同名拒绝（父插件/body 的动态头
         // vs 固定 headers + Headers 参数），回环条目先行剥离
-        pluginService.validPluginDynamicAuthInfo(
+        pluginBase.validPluginDynamicAuthInfo(
             resolveEffectiveDynamicAuth(projectId, workspaceId, body.getPluginId(), null, body.getAuthInfo()),
             body.getRequestInfo(), body.getInputSchema());
         ToolEntity toolEntity = buildToolEntity(projectId, workspaceId, body, false);
@@ -465,7 +461,7 @@ public class ToolManagementService implements IToolManagementService {
 
         // FEAT-093 插件动态鉴权：与工具请求头同名拒绝（父插件按 toolId 前缀解析），
         // 回环条目先行剥离
-        pluginService.validPluginDynamicAuthInfo(
+        pluginBase.validPluginDynamicAuthInfo(
             resolveEffectiveDynamicAuth(projectId, workspaceId, null, toolId, body.getAuthInfo()),
             body.getRequestInfo(), body.getInputSchema());
 
@@ -520,8 +516,9 @@ public class ToolManagementService implements IToolManagementService {
     /**
      * FEAT-093 插件动态鉴权：解析工具保存请求的生效动态鉴权。
      * 优先请求体自带 auth_info（工具直接携带动态鉴权的场景）；
-     * 否则按 pluginId（创建）或 toolId 前缀（修改，格式 pluginId#seq）
-     * 解析父插件鉴权。非 DYNAMIC 返回 null（校验器跳过）。
+     * 否则按 pluginId（创建）或 toolId 前缀（修改，格式 pluginId#seq；
+     * API 模式插件行即工具行，toolId 无后缀时其本身即插件 id）解析
+     * 父插件鉴权。非 DYNAMIC 返回 null（校验器跳过）。
      */
     private AuthInfo resolveEffectiveDynamicAuth(String projectId, String workspaceId, String pluginId,
         String toolId, AuthInfo bodyAuth) {
@@ -529,7 +526,7 @@ public class ToolManagementService implements IToolManagementService {
             return bodyAuth;
         }
         String parentPluginId = StringUtils.isNotBlank(pluginId) ? pluginId
-            : (StringUtils.isNotBlank(toolId) && toolId.contains("#") ? toolId.split("#")[0] : null);
+            : (StringUtils.isNotBlank(toolId) ? toolId.split("#")[0] : null);
         if (StringUtils.isBlank(parentPluginId)) {
             return null;
         }

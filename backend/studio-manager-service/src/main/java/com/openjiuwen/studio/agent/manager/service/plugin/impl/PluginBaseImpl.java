@@ -13,6 +13,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Lists;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
+import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.enums.TestStatus;
@@ -58,6 +61,7 @@ import io.swagger.v3.oas.models.servers.Server;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -73,10 +77,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -1466,5 +1473,116 @@ public class PluginBaseImpl implements IPluginBase {
                 .basePath(basePath)
                 .protocol(protocol)
                 .build();
+    }
+
+
+    /** Headers 位置参数标记（工具 schema 与动态鉴权头同名校验用）。 */
+    private static final String HEADER_PARAM_LOCATION = "Headers";
+
+    /**
+     * FEAT-093 插件动态鉴权校验：scope=DYNAMIC 时仅登记出站头名（值由
+     * 工作流/智能体编排期绑定，不落库）。登记侧规则与 MCP 通道同构
+     * （McpBaseImpl.validDynamicAuthInfo，复用其公开常量与语义）；
+     * 同时与工具请求头做同名拒绝（固定 headers / Headers 位置入参，
+     * 大小写不敏感——同名头会在运行期相互覆盖，须在保存期拒绝）。
+     * 工具 schema 中的自动追加条目（描述=DYNAMIC_AUTH_PARAM_DESC 标记，
+     * 详情回显回环产物）先行剥离，保持单一事实源（auth_info）。
+     * 落位 PluginBaseImpl：PluginService 与 ToolManagementService 均
+     * 依赖本基类，避免两者互相注入成环。
+     *
+     * @param authInfo 鉴权信息（插件创建/修改时来自请求体；工具创建时来自父插件）
+     * @param requestInfo 工具请求信息（固定 headers 同名拒绝源）
+     * @param inputSchemaStr 工具入参 schema JSON 字符串（Headers 参数同名拒绝源）
+     */
+    public void validPluginDynamicAuthInfo(AuthInfo authInfo, RequestInfo requestInfo, String inputSchemaStr) {
+        if (Objects.isNull(authInfo) || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            return;
+        }
+        if (!AuthInfo.DomainEnum.HEADERS.equals(authInfo.getDomain())) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth only supports HEADERS domain");
+        }
+        if (CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth requires at least one auth key entry");
+        }
+        if (authInfo.getAuthKeys().size() > McpBaseImpl.MAX_DYNAMIC_AUTH_KEYS) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth supports at most " + McpBaseImpl.MAX_DYNAMIC_AUTH_KEYS + " auth key entries");
+        }
+        Set<String> targetNamesLower = new HashSet<>();
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth auth_keys contains null element");
+            }
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is required and its length must be 1-64");
+            }
+            if (McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name must not be a reserved correlation header: " + targetName);
+            }
+            if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(targetName).matches()
+                    || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is not a valid http header name: " + targetName);
+            }
+            if (StringUtils.isNotBlank(authKeyInfo.getAuthKey())) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth must not persist credential value");
+            }
+            if (!targetNamesLower.add(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is duplicated: " + targetName);
+            }
+        }
+        // 详情回显回环条目剥离（标记识别），再对剩余 Headers 参数做同名拒绝
+        SchemaConfig inputSchema = StringUtils.isBlank(inputSchemaStr)
+                ? null : JSON.parseObject(inputSchemaStr, SchemaConfig.class);
+        stripDynamicAuthRoundtripParams(inputSchema, targetNamesLower);
+        if (Objects.nonNull(requestInfo) && MapUtils.isNotEmpty(requestInfo.getHeaders())) {
+            for (String name : requestInfo.getHeaders().keySet()) {
+                if (name != null && targetNamesLower.contains(name.toLowerCase(Locale.ROOT))) {
+                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                        "tool request header '" + name + "' conflicts with dynamic auth header, remove the duplicate");
+                }
+            }
+        }
+        if (Objects.nonNull(inputSchema) && Objects.nonNull(inputSchema.getProperties())) {
+            for (Map.Entry<String, SchemaConfig> entry : inputSchema.getProperties().entrySet()) {
+                SchemaConfig value = entry.getValue();
+                boolean isHeaderParam = Objects.nonNull(value)
+                        && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation());
+                if (isHeaderParam && entry.getKey() != null
+                        && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT))) {
+                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                        "tool header param '" + entry.getKey()
+                            + "' conflicts with dynamic auth header, remove the duplicate");
+                }
+            }
+        }
+    }
+
+    /**
+     * 剥离工具 schema 中的动态鉴权自动追加条目（描述=DYNAMIC_AUTH_PARAM_DESC
+     * 且名命中动态头集合的 Headers 参数——详情回显回环产物），保持
+     * 单一事实源（auth_info）。名命中但描述不符的条目不剥离——由
+     * 同名拒绝校验报错（用户自行添加的冲突头）。
+     */
+    private static void stripDynamicAuthRoundtripParams(SchemaConfig inputSchema, Set<String> targetNamesLower) {
+        if (Objects.isNull(inputSchema) || Objects.isNull(inputSchema.getProperties())) {
+            return;
+        }
+        inputSchema.getProperties().entrySet().removeIf(entry -> {
+            SchemaConfig value = entry.getValue();
+            return Objects.nonNull(value)
+                    && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation())
+                    && IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(value.getDescription())
+                    && entry.getKey() != null
+                    && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT));
+        });
     }
 }

@@ -1167,7 +1167,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             String irPath = workflowDslToIr(workflowId, workflowEntity, workflowVo);
             workflowEntity.setIrPath(irPath);
         } catch (Exception e) {
-            log.info("workflow dsl import failed, dont parse ir.");
+            // 可观测性：静默吞掉 IR 转换异常会使发布期 copyObsObject 404（02001023），
+            // 且无从定位转换失败原因——至少落栈
+            log.error("workflow dsl to ir failed, skip parse ir. workflowId: {}", workflowId, e);
         }
         updateRefResources(workflowVo, null);
         workflowMapper.createWorkflowEntity(workflowEntity);

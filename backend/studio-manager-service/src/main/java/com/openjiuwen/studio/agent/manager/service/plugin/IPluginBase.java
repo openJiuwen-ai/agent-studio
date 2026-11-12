@@ -3,6 +3,8 @@
  */
 package com.openjiuwen.studio.agent.manager.service.plugin;
 
+import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.plugin.PluginDTO;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolInputSchema;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolRequestInfo;
@@ -15,6 +17,13 @@ import java.util.Map;
 
 public interface IPluginBase {
     ToolEntity buildToolByPlugin(String projectId, String workspaceId, String pluginId, String toolId);
+
+    /**
+     * FEAT-093 插件动态鉴权校验（scope=DYNAMIC 登记侧 + 工具请求头同名拒绝）。
+     * 落位 PluginBaseImpl：PluginService 与 ToolManagementService 均依赖本
+     * 接口，避免两者互相注入成环。
+     */
+    void validPluginDynamicAuthInfo(AuthInfo authInfo, RequestInfo requestInfo, String inputSchemaStr);
 
     ToolEntity getToolEntityByVersion(String toolId, String versionId);
 

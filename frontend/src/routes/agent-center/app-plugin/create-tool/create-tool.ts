@@ -1086,6 +1086,11 @@ export class CreateToolComponent implements OnInit {
     if (this.requestArgsForm && !this.showFromErrorByName(this.requestArgsForm.form, ['requestValidateRule'], true, 2)) {
       return;
     }
+    // FEAT-093 插件动态鉴权：请求头同名前端校验（后端 modifyTool 同样拒绝，
+    // 此处提前拦截——大小写不敏感）
+    if (!this.checkDynamicAuthHeaderConflict()) {
+      return;
+    }
 
     const data = this.buildRequestBody();
     this.loading = true;
@@ -1095,6 +1100,52 @@ export class CreateToolComponent implements OnInit {
       await this.registerPlugin(data);
     }
     this.loading = false;
+  }
+
+  /**
+   * FEAT-093 插件动态鉴权：请求头同名前端校验。
+   * 工具的固定请求头（headers 键）与 Headers 位置入参（requestArgs
+   * location=Headers 的 name）不得与父插件动态鉴权头（auth_info
+   * scope=DYNAMIC 的 auth_keys[].target_name）同名（大小写不敏感）——
+   * 同名头运行期相互覆盖，保存期即拒绝。返回 true=通过。
+   */
+  public checkDynamicAuthHeaderConflict(): boolean {
+    const pluginAuth = this.pluginInfo?.auth;
+    if (!pluginAuth || pluginAuth.scope !== 'DYNAMIC') {
+      return true;
+    }
+    const dynamicNames = new Set(
+      (pluginAuth.auth_keys || [])
+        .map(item => (item?.target_name ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (!dynamicNames.size) {
+      return true;
+    }
+    const conflicts: string[] = [];
+    for (const header of this.headers || []) {
+      const name = (header?.key ?? '').trim().toLowerCase();
+      if (name && dynamicNames.has(name)) {
+        conflicts.push(header.key);
+      }
+    }
+    for (const arg of this.requestArgs || []) {
+      if (arg?.location === 'Headers') {
+        const name = (arg?.name ?? '').trim().toLowerCase();
+        if (name && dynamicNames.has(name)) {
+          conflicts.push(arg.name);
+        }
+      }
+    }
+    if (conflicts.length) {
+      MessageComponent.showError(
+        this.i18n.transform('plugin_dynamic_auth_header_conflict') +
+          conflicts.join('、'),
+        5000,
+      );
+      return false;
+    }
+    return true;
   }
 
   async updatePlugin(data: PluginDetail) {
