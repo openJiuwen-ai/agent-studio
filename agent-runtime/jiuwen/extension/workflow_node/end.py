@@ -500,6 +500,88 @@ class End(BaseEnd):
             return False
         return self._template_parts[-1] == ""
 
+    @staticmethod
+    def _normalize_inputs_dict(inputs) -> dict:
+        """Pregel / 上游异常路径可能传入 None；统一成 dict，避免 `x in None`。"""
+        return inputs if isinstance(inputs, dict) else {}
+
+    @staticmethod
+    def _coalesce_none_leaves(inputs: dict) -> None:
+        """将已解析但仍为 None 的叶子改为空串。
+
+        典型场景：memory.a 为空数组/未赋值时，End 引用 memory.a[0].b 解析为 None；
+        Start 已执行时 Vertex sanitize 不会替换，后续 `x in None` / 模板路径会炸。
+        """
+        if not isinstance(inputs, dict):
+            return
+        for key, value in list(inputs.items()):
+            if value is None:
+                inputs[key] = ""
+
+    def _extract_user_fields(self, inputs) -> dict:
+        """抽取 userFields 并归一为 dict。"""
+        inputs = self._normalize_inputs_dict(inputs)
+        user_fields = inputs.get(USER_FIELDS)
+        if user_fields:
+            return user_fields if isinstance(user_fields, dict) else {}
+        return inputs
+
+    @staticmethod
+    async def _coerce_collect_inputs(inputs):
+        """collect 入口归一：先消费顶层异步流，再剥 userFields。
+
+        不可先走 ``_extract_user_fields`` / ``_normalize_inputs_dict``——二者会把
+        AsyncGenerator 收成 ``{}``，导致原 ``hasattr(..., "__aiter__")`` 聚合分支
+        不可达、流式输入被静默丢弃。
+        """
+        # 与历史行为对齐：dict 上先剥 USER_FIELDS，再判断是否异步流
+        if isinstance(inputs, dict) and inputs.get(USER_FIELDS):
+            unwrapped = inputs.get(USER_FIELDS)
+            if isinstance(unwrapped, dict) or (
+                unwrapped is not None and hasattr(unwrapped, "__aiter__")
+            ):
+                inputs = unwrapped
+            else:
+                inputs = {}
+        elif inputs is None:
+            inputs = {}
+
+        if hasattr(inputs, "__aiter__") and not isinstance(inputs, dict):
+            collected_inputs = []
+            async for input_chunk in inputs:
+                collected_inputs.append(input_chunk)
+            if len(collected_inputs) == 1:
+                final_inputs = collected_inputs[0]
+            elif len(collected_inputs) > 1:
+                final_inputs = collected_inputs[-1]
+            else:
+                final_inputs = {}
+        else:
+            final_inputs = inputs
+
+        # 帧若仍是 {userFields: ...} 再剥一层；最终保证 dict
+        if isinstance(final_inputs, dict):
+            nested = final_inputs.get(USER_FIELDS)
+            if nested:
+                final_inputs = nested if isinstance(nested, dict) else {}
+        return End._normalize_inputs_dict(final_inputs)
+
+    def _prepare_user_inputs(self, inputs) -> dict:
+        """归一 userFields → 类型强转 → None 叶子兜底。"""
+        inputs = self._extract_user_fields(inputs)
+        self._apply_type_conversion(inputs)
+        self._coalesce_none_leaves(inputs)
+        return inputs
+
+    @staticmethod
+    def _ensure_response_dict(response) -> dict:
+        """父类 invoke/collect 在无模板等路径可能返回 None。"""
+        if isinstance(response, dict):
+            return response
+        if response is None:
+            return {}
+        return {"response": str(response)}
+
     def _apply_type_conversion(self, inputs: dict) -> None:
         """按照 userFields.inputs schema 对输入值做类型强转，与旧框架 force_convert → _convert_simple 对齐。"""
         if not self._user_fields_inputs or not isinstance(inputs, dict):
@@ -644,7 +726,11 @@ class End(BaseEnd):
             st.mix_condition = asyncio.Condition()
 
         async with st.mix_condition:
-            st.mix_data[key] = {"inputs": inputs, "outputs": outputs}
+            # 上游 !2652：Pregel/异常路径可能传 None，此处归一为非 dict 值
+            st.mix_data[key] = {
+                "inputs": inputs if isinstance(inputs, dict) else {},
+                "outputs": outputs if isinstance(outputs, dict) else {},
+            }
             st.mix_push_count += 1
             if key == "batch":
                 st.mix_batch_pushed = True
@@ -718,10 +804,17 @@ class End(BaseEnd):
 
     def _merge_mix_data(self, st: "_EndExecState") -> tuple[dict, dict]:
         """合并两路数据，batch 侧数据优先级高于 stream 侧（与原始逻辑一致）。"""
-        stream_inputs = st.mix_data.get("stream", {}).get("inputs", {})
-        batch_inputs = st.mix_data.get("batch", {}).get("inputs", {})
-        stream_outputs = st.mix_data.get("stream", {}).get("outputs", {})
-        batch_outputs = st.mix_data.get("batch", {}).get("outputs", {})
+        def _as_dict(value) -> dict:
+            return value if isinstance(value, dict) else {}
+
+        # 上游 !2652：.get("inputs", {}) 在 key 存在且值为 None 时仍返回 None，
+        # 必须再归一（执行期容器 st 承载，不落实例字段）
+        stream_side = st.mix_data.get("stream") or {}
+        batch_side = st.mix_data.get("batch") or {}
+        stream_inputs = _as_dict(stream_side.get("inputs"))
+        batch_inputs = _as_dict(batch_side.get("inputs"))
+        stream_outputs = _as_dict(stream_side.get("outputs"))
+        batch_outputs = _as_dict(batch_side.get("outputs"))
         return {**stream_inputs, **batch_inputs}, {**stream_outputs, **batch_outputs}
 
     def get_stream_output(self):
@@ -771,19 +864,8 @@ class End(BaseEnd):
 
         # Pregel / 上游异常路径可能传入 None；后续 `x in inputs` 会抛
         # "argument of type 'NoneType' is not iterable"
-        if not isinstance(inputs, dict):
-            inputs = {}
-
-        # 处理输入中的生成器值
-        outputs = {}
-        # 构建输出到输入的映射，防止重复消费流式数据
-        user_fields = inputs.get(USER_FIELDS)
-        if user_fields:
-            inputs = user_fields if isinstance(user_fields, dict) else {}
+        inputs = self._prepare_user_inputs(inputs)
         gen_out_to_in = build_output_to_input(inputs)
-
-        # 按照 userFields.inputs schema 对输入值做类型强转
-        self._apply_type_conversion(inputs)
 
         # 处理生成器值
         inputs = await process_generator_values_of_output(
@@ -791,8 +873,8 @@ class End(BaseEnd):
             out_to_in=gen_out_to_in,
             workflow_streaming_data=None,  # 非流式调用，不需要回调
         )
-        if not isinstance(inputs, dict):
-            inputs = {}
+        inputs = self._normalize_inputs_dict(inputs)
+        self._coalesce_none_leaves(inputs)
 
         outputs = {
             k[len(OUTPUT_PREFIX):]: v
@@ -807,22 +889,18 @@ class End(BaseEnd):
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "batch", inputs, outputs, session
         )
-        if not isinstance(inputs, dict):
-            inputs = {}
-        if not isinstance(outputs, dict):
-            outputs = {}
+        inputs = self._normalize_inputs_dict(inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return None
 
         # 调用父类的invoke方法获取结果
-        response = await super().invoke(inputs, session, context)
+        response = self._ensure_response_dict(
+            await super().invoke(inputs, session, context)
+        )
 
         # 提取原始文本输出
-        final_output = (
-            str(response)
-            if not isinstance(response, dict)
-            else response.get("response", "")
-        )
+        final_output = response.get("response", "")
 
         # 处理结构化输出：渲染模板得到 JSON 字符串
         struct_answer_str = ""
@@ -927,34 +1005,27 @@ class End(BaseEnd):
         _current_exec_key.set(self._exec_key(session))
         self._prepare_render_state(st)
 
-        # 处理输入中的生成器值
-        outputs = {}
-        if inputs and isinstance(inputs, dict):
-            # 构建输出到输入的映射，防止重复消费流式数据
-            if inputs.get(USER_FIELDS):
-                inputs = inputs[USER_FIELDS]
-            gen_out_to_in = build_output_to_input(inputs)
-
-            # 按照 userFields.inputs schema 对输入值做类型强转
-            self._apply_type_conversion(inputs)
-
-            # 处理生成器值
-            inputs = await process_generator_values_of_output(
-                inputs=inputs, out_to_in=gen_out_to_in, workflow_streaming_data=None
-            )
-
-            outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
-                for k, v in inputs.items()
-                if k.startswith(OUTPUT_PREFIX) and v is not None
-            }
-            # 移除输出数据标记
-            _remove_output_data(inputs)
+        # 与 invoke 对齐：None inputs / None 叶子统一兜底，避免 `x in None`
+        inputs = self._prepare_user_inputs(inputs)
+        gen_out_to_in = build_output_to_input(inputs)
+        inputs = await process_generator_values_of_output(
+            inputs=inputs, out_to_in=gen_out_to_in, workflow_streaming_data=None
+        )
+        inputs = self._normalize_inputs_dict(inputs)
+        self._coalesce_none_leaves(inputs)
+        outputs = {
+            k[len(OUTPUT_PREFIX):]: v
+            for k, v in inputs.items()
+            if k.startswith(OUTPUT_PREFIX) and v is not None
+        }
+        _remove_output_data(inputs)
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "batch", inputs, outputs, session
         )
+        inputs = self._normalize_inputs_dict(inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return
 
@@ -972,12 +1043,9 @@ class End(BaseEnd):
         async for output in super().stream(inputs, session, context):
             # 保存响应内容
             last_end_node_stream = output
-            # 处理 OutputSchema 类型输出（有 type 和 index 属性）
-            if (
-                hasattr(output, "type")
-                and hasattr(output, "payload")
-                and "response" in output.payload
-            ):
+            # payload 可能为 None；必须先 isinstance(dict) 再做 `in`，
+            # 否则会抛 argument of type 'NoneType' is not iterable
+            if _has_response_payload(output):
                 response_parts.append(output.payload["response"])
                 # 构建输出结果
                 result = get_output_data_with_metadata(
@@ -1013,11 +1081,24 @@ class End(BaseEnd):
                 yield OutputSchema(
                     type=output.type, index=output.index + 1, payload=result
                 )
-            else:
+            elif isinstance(output, dict):
                 yield OutputSchema(
                     type=output.get("type", "end node stream"),
                     index=output.get("index", 0) + 1,
                     payload=output,
+                )
+            elif hasattr(output, "type") and hasattr(output, "payload"):
+                # OutputSchema 但 payload 无 response（含 payload is None）：原样下发
+                yield OutputSchema(
+                    type=getattr(output, "type", "end node stream"),
+                    index=getattr(output, "index", 0) + 1,
+                    payload=output.payload if output.payload is not None else {},
+                )
+            else:
+                yield OutputSchema(
+                    type="end node stream",
+                    index=0,
+                    payload={"response": str(output) if output is not None else ""},
                 )
         if last_end_node_stream and self._should_emit_end_marker():
             # 当模板以 {{...}} 结尾时，旧框架 split 末元素为空字符串，
@@ -1145,54 +1226,45 @@ class End(BaseEnd):
         set_stream_final_output(None)
         _current_exec_key.set(self._exec_key(session))
         self._prepare_render_state(st)
-        # 聚合流式输入
-        collected_inputs = []
+        # 聚合流式输入（必须先于 _extract_user_fields，见 _coerce_collect_inputs）
         outputs = {}
-        if inputs and isinstance(inputs, dict) and inputs.get(USER_FIELDS):
-            inputs = inputs[USER_FIELDS]
-        if hasattr(inputs, "__aiter__"):
-            async for input_chunk in inputs:
-                collected_inputs.append(input_chunk)
-            if len(collected_inputs) == 1:
-                final_inputs = collected_inputs[0]
-            elif len(collected_inputs) > 1:
-                final_inputs = collected_inputs[-1]
-            else:
-                final_inputs = {}
-        else:
-            final_inputs = inputs
+        final_inputs = await self._coerce_collect_inputs(inputs)
 
         # 处理输入中的生成器值（与 invoke 一致）
-        if final_inputs and isinstance(final_inputs, dict):
-            gen_out_to_in = build_output_to_input(final_inputs)
-            final_inputs = await process_generator_values_of_output(
-                inputs=final_inputs,
-                out_to_in=gen_out_to_in,
-                workflow_streaming_data=None,
-            )
-            outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
-                for k, v in final_inputs.items()
-                if k.startswith(OUTPUT_PREFIX) and v is not None
-            }
-            _remove_output_data(final_inputs)
+        final_inputs = self._normalize_inputs_dict(final_inputs)
+        self._apply_type_conversion(final_inputs)
+        self._coalesce_none_leaves(final_inputs)
+        gen_out_to_in = build_output_to_input(final_inputs)
+        final_inputs = await process_generator_values_of_output(
+            inputs=final_inputs,
+            out_to_in=gen_out_to_in,
+            workflow_streaming_data=None,
+        )
+        final_inputs = self._normalize_inputs_dict(final_inputs)
+        self._coalesce_none_leaves(final_inputs)
+        outputs = {
+            k[len(OUTPUT_PREFIX):]: v
+            for k, v in final_inputs.items()
+            if k.startswith(OUTPUT_PREFIX) and v is not None
+        }
+        _remove_output_data(final_inputs)
 
         # mix 模式协调
         final_inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "stream", final_inputs, outputs, session
         )
+        final_inputs = self._normalize_inputs_dict(final_inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return None
 
         # 调用父类的collect方法获取结果（与 invoke 一致）
-        response = await super().collect(final_inputs, session, context)
+        response = self._ensure_response_dict(
+            await super().collect(final_inputs, session, context)
+        )
 
         # 提取原始文本输出
-        final_output = (
-            str(response)
-            if not isinstance(response, dict)
-            else response.get("response", "")
-        )
+        final_output = response.get("response", "")
 
         # 处理结构化输出：渲染模板得到 JSON 字符串
         struct_answer_str = ""
@@ -1325,11 +1397,7 @@ class End(BaseEnd):
         # 流式连接下 __stream_metadata__ 会被引擎包装为 AsyncGenerator，需消费取最后一帧
         stream_metadata = None
         _meta_count = 0
-        if not isinstance(inputs, dict):
-            inputs = {}
-        user_fields = inputs.get(USER_FIELDS)
-        if user_fields:
-            inputs = user_fields if isinstance(user_fields, dict) else {}
+        inputs = self._extract_user_fields(inputs)
         _raw_meta = inputs.pop("__stream_metadata__", None)
         if isinstance(_raw_meta, AsyncGenerator):
             _last_meta = None
@@ -1362,6 +1430,9 @@ class End(BaseEnd):
         _reasoning_ref = {"value": _reasoning_content}
         if inputs and isinstance(inputs, dict):
             self._apply_type_conversion(inputs)
+            # 非流式叶子的 None（如 memory.a[0].b 未命中）先兜成空串；
+            # AsyncGenerator 不会被 _coalesce_none_leaves 碰到。
+            self._coalesce_none_leaves(inputs)
 
             # 按生成器 id 分组：同一 AsyncGenerator 可能被多个键引用（answer/#end_answer）
             gen_to_keys = {}
@@ -1399,7 +1470,7 @@ class End(BaseEnd):
 
             # 提取 outputs 中的非生成器值（输出字段以 #end_ 前缀标识）
             outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
+                k[len(OUTPUT_PREFIX):]: v
                 for k, v in inputs.items()
                 if k.startswith(OUTPUT_PREFIX) and v is not None and not isinstance(v, AsyncGenerator)
             }
@@ -1454,6 +1525,8 @@ class End(BaseEnd):
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "stream", inputs, outputs, session
         )
+        inputs = self._normalize_inputs_dict(inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return
 
