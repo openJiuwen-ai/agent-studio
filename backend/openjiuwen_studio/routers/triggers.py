@@ -75,7 +75,7 @@ async def trigger_execution_log_detail_api(request: TriggerLogDetail, current_us
 
 # ── Public webhook inbound receiver ──────────────────────────────────────────
 
-@triggers_inbound_router.get("/inbound/{webhook_token}")
+@triggers_inbound_router.api_route("/inbound/{webhook_token}", methods=["GET", "POST"])
 async def webhook_inbound(
     webhook_token: str,
     request: Request,
@@ -83,7 +83,11 @@ async def webhook_inbound(
 ):
     """
     Public endpoint — no JWT. Accepts inbound webhooks.
-    Always returns 200 (even for unknown tokens) to prevent token enumeration.
+
+    GET and POST are both accepted: external systems (GitHub, CI, etc.)
+    deliver webhooks via POST, while GET keeps manual/browser invocation
+    working. Always returns 200 (even for unknown tokens) to prevent
+    token enumeration.
     """
     db = SessionLocal()
     try:
