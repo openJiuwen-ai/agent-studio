@@ -313,11 +313,12 @@ const AgentModelSelector = (props: {
 
       // 获取记忆配置数据
       const initVariables = saveAgentRequest?.memory?.variable_config || []
-      const initLongTermMemory = saveAgentRequest?.memory?.longterm_memory_config || true
-      const initUserProfile = saveAgentRequest?.memory?.user_profile_config || true
-      const initSemanticMemory = saveAgentRequest?.memory?.semantic_memory_config || true
-      const initEpisodicMemory = saveAgentRequest?.memory?.episodic_memory_config || true
-      const initSummaryMemory = saveAgentRequest?.memory?.summary_memory_config || true
+      // 注意：必须用 ?? 而非 || —— false 是合法保存值，|| 会把已关闭的开关错误地初始化为开启
+      const initLongTermMemory = saveAgentRequest?.memory?.longterm_memory_config ?? true
+      const initUserProfile = saveAgentRequest?.memory?.user_profile_config ?? true
+      const initSemanticMemory = saveAgentRequest?.memory?.semantic_memory_config ?? true
+      const initEpisodicMemory = saveAgentRequest?.memory?.episodic_memory_config ?? true
+      const initSummaryMemory = saveAgentRequest?.memory?.summary_memory_config ?? true
 
       setMemoryVariables(
         initVariables.map((v: { id?: string; name?: string; description?: string; enabled?: boolean }, index: number) => ({
