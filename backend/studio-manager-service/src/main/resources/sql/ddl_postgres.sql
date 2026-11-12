@@ -2128,3 +2128,17 @@ CREATE TABLE IF NOT EXISTS t_polling_trigger_state (
     PRIMARY KEY (trigger_id)
 );
 COMMENT ON TABLE t_polling_trigger_state IS 'Polling触发器运行状态表';
+
+-- ===================== FRS-091 资产广场上架开放接口 =====================
+-- t_skill: 上架来源标记（PRESET=官方预置 / USER=用户上架）；published_asset 仍为上架标记
+ALTER TABLE t_skill ADD COLUMN plaza_source VARCHAR(32);
+UPDATE t_skill SET plaza_source = 'PRESET' WHERE published_asset = '1' AND plaza_source IS NULL;
+
+-- ws_mcp_server_def: 用户上架标记 + 源实例关联（供同一实例重复上架去重）
+ALTER TABLE ws_mcp_server_def ADD COLUMN platform_published SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE ws_mcp_server_def ADD COLUMN source_instance_id VARCHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ws_mcp_server_source_instance ON ws_mcp_server_def (source_instance_id);
+
+-- t_tool: 用户插件上架标记 + 锚定发布版本（t_release_version.version_id）
+ALTER TABLE t_tool ADD COLUMN platform_published SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE t_tool ADD COLUMN plaza_version_id VARCHAR(64);

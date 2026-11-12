@@ -182,4 +182,80 @@ class PluginAdapterImplTest {
         var result = pluginAdapter.anonymizeAuthInfo(null);
         assertNull(result);
     }
+
+    @Test
+    void testValidTools_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件（platform_published=1）跨工作空间引用应放行（FRS-091）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setType("custom");
+        plugin.setProjectId("proj-other");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(1);
+
+        when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plugin));
+        when(shareInnerService.getShareScopeByWorkspaceAndId(anyList(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        assertDoesNotThrow(() -> pluginAdapter.validTools("proj-1", "ws-1", List.of("plugin-1#t1")));
+    }
+
+    @Test
+    void testValidTools_NotPlazaPublished_CrossWorkspaceRejected() {
+        // 未上架的自定义插件跨工作空间仍应拒绝
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setType("custom");
+        plugin.setProjectId("proj-other");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plugin));
+        when(shareInnerService.getShareScopeByWorkspaceAndId(anyList(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.validTools("proj-1", "ws-1", List.of("plugin-1#t1")));
+        assertEquals("plugin-1", ex.getMessage());
+    }
+
+    @Test
+    void testGetPlugin_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件（platform_published=1）跨工作空间应被检索到（FRS-091）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(1);
+
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", "ws-1", List.of("plugin-1"), null))
+            .thenReturn(Collections.emptyList());
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", null, List.of("plugin-1"), null))
+            .thenReturn(List.of(plugin));
+        when(shareInnerService.getOriginSharedInfoByResourceId(anyList())).thenReturn(Collections.emptyList());
+
+        List<PluginEntity> result = pluginAdapter.getPlugin("proj-1", "ws-1", List.of("plugin-1"));
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals("plugin-1", result.get(0).getPluginId());
+    }
+
+    @Test
+    void testGetPlugin_NotPlazaPublished_NotShared_CrossWorkspaceExcluded() {
+        // 未上架且未共享的自定义插件，跨工作空间不应被检索到
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", "ws-1", List.of("plugin-1"), null))
+            .thenReturn(Collections.emptyList());
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", null, List.of("plugin-1"), null))
+            .thenReturn(List.of(plugin));
+        when(shareInnerService.getOriginSharedInfoByResourceId(anyList())).thenReturn(Collections.emptyList());
+
+        List<PluginEntity> result = pluginAdapter.getPlugin("proj-1", "ws-1", List.of("plugin-1"));
+
+        assertTrue(result.isEmpty());
+    }
 }

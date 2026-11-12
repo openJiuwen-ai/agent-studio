@@ -37,9 +37,10 @@
         <result column="call_mode" jdbcType="VARCHAR" property="callMode"/>
         <result column="is_free" jdbcType="TINYINT" property="isFree"/>
         <result column="domain_id" jdbcType="VARCHAR" property="domainId"/>
-        <result column="is_share" jdbcType="TINYINT" property="isShare"/>
+<result column="is_share" jdbcType="TINYINT" property="isShare"/>
         <result column="category" jdbcType="VARCHAR" property="category"/>
-        <result column="trace_id" jdbcType="VARCHAR" property="traceId"/>
+        <result column="platform_published" jdbcType="TINYINT" property="platformPublished"/>
+        <result column="plaza_version_id" jdbcType="VARCHAR" property="plazaVersionId"/>
         <association property="credentials" javaType="com.openjiuwen.studio.agent.manager.dto.ToolCredential">
             <id property="id" column="c_id"/>
             <result property="authKeys" column="c_auth_keys" typeHandler="com.openjiuwen.studio.agent.manager.mapper.handler.AuthKeyInfoListHandler"/>
@@ -79,7 +80,9 @@
         is_free,
         label,
         is_share,
-        category
+        category,
+        platform_published,
+        plaza_version_id
     </sql>
 
     <sql id="Base_Column_List_postgres">
@@ -452,7 +455,9 @@
         <if test="workspaceId != null and workspaceId != ''">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
-        ) or type = 'inner')
+        ) or type = 'inner'
+        -- 资产广场已上架插件（platform_published=1 and published=1）支持跨项目/跨空间检索（FRS-091）
+        or (platform_published = 1 and published = 1))
         <if test="searchCriteria != null and searchCriteria.type != null and searchCriteria.type != 'all'">
             and type = #{searchCriteria.type,jdbcType=VARCHAR}
         </if>
@@ -506,6 +511,8 @@
         t.is_free,
         t.is_share,
         t.category,
+        t.platform_published,
+        t.plaza_version_id,
         c.id as c_id,
         c.project_id as c_project_id,
         c.user_id as c_user_id,
@@ -523,13 +530,22 @@
         LEFT JOIN t_credential c on t.tool_id = c.resource_id and c.resource_type = 'tool' and (c.workspace_id is null or c.workspace_id = #{workspaceId,jdbcType=VARCHAR})
         where 1=1
         <if test="projectId != null">
-            and  t.project_id = #{projectId,jdbcType=VARCHAR}
+            and (t.project_id = #{projectId,jdbcType=VARCHAR}
+            <if test="searchCriteria != null and searchCriteria.isInner()">
+                or (t.platform_published = 1 and t.published = 1)
+            </if>
+            )
         </if>
         <if test="userId != null">
             and (t.visibility != 'user' or (t.visibility = 'user' and t.creator_id = #{userId,jdbcType=VARCHAR}))
         </if>
         <if test="searchCriteria != null and searchCriteria.type != null and searchCriteria.type != 'all'">
-            and t.type = #{searchCriteria.type,jdbcType=VARCHAR}
+            <if test="searchCriteria.isInner()">
+                and (t.type = 'inner' or (t.platform_published = 1 and t.published = 1))
+            </if>
+            <if test="!searchCriteria.isInner()">
+                and t.type = #{searchCriteria.type,jdbcType=VARCHAR}
+            </if>
         </if>
         <if test="searchCriteria != null and searchCriteria.userId != null">
             and t.creator_id = #{searchCriteria.userId,jdbcType=VARCHAR}
@@ -614,7 +630,7 @@
         <if test="workspaceId != null and workspaceId != ''">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
-        ) or type = 'inner')
+        ) or type = 'inner' or platform_published = 1)
         <if test="searchCriteria != null and searchCriteria.type != null and searchCriteria.type != 'all'">
             and type = #{searchCriteria.type,jdbcType=VARCHAR}
         </if>
@@ -663,6 +679,9 @@
             t.creator_id,
             t.created_on,
             t.updated_on,
+            t.published,
+            t.platform_published,
+            t.plaza_version_id,
             c.id as c_id,
             c.project_id as c_project_id,
             c.user_id as c_user_id,
@@ -787,6 +806,8 @@
         t.updated_on,
         t.published,
         t.is_free,
+        t.platform_published,
+        t.plaza_version_id,
         c.id as c_id,
         c.project_id as c_project_id,
         c.user_id as c_user_id,
@@ -839,4 +860,20 @@
         FROM t_tool
         WHERE tool_id = #{pluginId}
     </select>
+
+    <update id="updatePlazaShelf">
+        UPDATE t_tool
+        SET platform_published = #{platformPublished,jdbcType=INTEGER},
+            plaza_version_id = #{plazaVersionId,jdbcType=VARCHAR},
+            updated_on = updated_on
+        WHERE tool_id = #{pluginId,jdbcType=VARCHAR}
+    </update>
+
+    <update id="updateCategoryById">
+        UPDATE t_tool
+        SET category = #{category,jdbcType=VARCHAR},
+            updated_on = updated_on
+        WHERE tool_id = #{pluginId,jdbcType=VARCHAR}
+          AND project_id = #{projectId,jdbcType=VARCHAR}
+    </update>
 </mapper>

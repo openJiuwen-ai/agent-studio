@@ -31,6 +31,7 @@ import com.openjiuwen.studio.agent.manager.dto.ParsePluginReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
+import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.plugin.BasicInfo;
@@ -50,6 +51,7 @@ import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.AgentCommonService;
+import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
 import com.openjiuwen.studio.agent.manager.service.ToolManagementService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginAdapterImpl;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
@@ -116,6 +118,9 @@ class PluginServiceTest {
     private com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper shareScopeMapper;
     @Mock
     private ShareInnerService shareInnerService;
+
+    @Mock
+    private AssetShelfPermissionValidator shelfPermissionValidator;
 
     @InjectMocks
     private PluginService pluginService;
@@ -399,6 +404,21 @@ class PluginServiceTest {
         AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> pluginService.validPlugins(ids, "proj-1", "ws-1"));
         assertEquals(StudioError.TOOLS_NOT_EXIST_OR_NO_PERMISSION, ex.getErrorCode());
+    }
+
+    @Test
+    void testValidPlugins_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件（platform_published=1）跨工作空间引用应放行（FRS-091）
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("other-ws");
+        pluginEntity.setPlatformPublished(1);
+
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(pluginEntity);
+
+        Set<String> ids = new HashSet<>();
+        ids.add("p-1");
+        assertDoesNotThrow(() -> pluginService.validPlugins(ids, "proj-1", "ws-1"));
     }
 
     @Test
@@ -1005,6 +1025,36 @@ class PluginServiceTest {
     }
 
     @Test
+    void testRetrievePlugin_CustomPublishedToPlazaVisible() {
+        // 已上架到资产广场（platform_published=1 and published=1）的自定义插件，跨工作空间应放行（FRS-091）
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("other-ws");
+        pluginEntity.setPlatformPublished(1);
+        pluginEntity.setPublished(1);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setToolRequestInfo(ToolRequestInfo.builder()
+            .basicInfo(BasicInfo.builder().host("host").protocol("https").build())
+            .toolsInfoList(new ArrayList<>(List.of(
+                ToolInfo.builder().toolId("t-1").build())))
+            .build());
+
+        when(pluginMapper.selectByPrimaryKeyAndWorkspaceAndCredential("p-1", null, "ws-1")).thenReturn(pluginEntity);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("workflow"), isNull()))
+            .thenReturn(Collections.emptyList());
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("agent"), isNull()))
+            .thenReturn(Collections.emptyList());
+
+        BaseResp resp = pluginService.retrievePlugin("proj-1", "p-1", "ws-1");
+
+        assertEquals(200, resp.getCode());
+    }
+
+    @Test
     void testRetrievePlugin_ToolDependencyDedupByApp() {
         // 工具引用数口径：与引用插件列表(listResourceRelations)完全一致，仅按工具粒度分组。
         // SQL 前缀匹配捞取 pluginId 与 pluginId#* 全部行（含双后缀脏数据）；
@@ -1196,5 +1246,167 @@ class PluginServiceTest {
         assertEquals(3, response.getCount());
         assertEquals(List.of("new-plugin", "existing-plugin"), response.getSucceedIds());
         assertEquals(List.of("failed-plugin"), response.getFailedIds());
+    }
+
+    @Test
+    void testPublishPlugin_NotPublished_Rejected() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(0);
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.publishPlugin("proj-1", "ws-1", "p-1", new PluginShelfReq()));
+        assertEquals(StudioError.ASSET_NOT_PUBLISHABLE, ex.getErrorCode());
+        verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void testPublishPlugin_Success_AnchorLatestWithCategory() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(1);
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+        ReleaseVersion releaseVersion = new ReleaseVersion();
+        releaseVersion.setVersionId("v2");
+        when(releaseVersionMapper.selectByAppIdWithLimit("p-1", 1)).thenReturn(List.of(releaseVersion));
+        PluginShelfReq body = new PluginShelfReq();
+        body.setCategory("cat-1");
+
+        String anchorVersion = pluginService.publishPlugin("proj-1", "ws-1", "p-1", body);
+
+        assertEquals("v2", anchorVersion);
+        verify(pluginMapper).updateCategoryById("p-1", "proj-1", "cat-1");
+        verify(pluginMapper).updatePlazaShelf("p-1", 1, "v2");
+    }
+
+    @Test
+    void testPublishPlugin_InnerPreset_Rejected() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.INNER.type);
+        pluginEntity.setPublished(1);
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.publishPlugin("proj-1", "ws-1", "p-1", new PluginShelfReq()));
+        assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+        verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void testUnpublishPlugin_NotPublished_Idempotent() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(1);
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(pluginEntity);
+
+        String pluginId = pluginService.unpublishPlugin("proj-1", "ws-1", "p-1");
+
+        assertEquals("p-1", pluginId);
+        verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void testUnpublishPlugin_NotOwner_Forbidden() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(1);
+        pluginEntity.setPlatformPublished(1);
+        pluginEntity.setCreatorId("other-user");
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(pluginEntity);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("request-user");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> pluginService.unpublishPlugin("proj-1", "ws-1", "p-1"));
+            assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+            verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+        }
+    }
+
+    @Test
+    void testGetPluginVersion_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件跨工作空间查看版本应放行（FRS-091）
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("ws-other");
+        pluginEntity.setPlatformPublished(1);
+        pluginEntity.setRequestInfo("{\"basic_info\":{},\"tool_info\":[{\"tool_id\":\"t1\"}]}");
+
+        when(pluginBase.getPluginEntityByVersion("p-1", "v1")).thenReturn(pluginEntity);
+        when(pluginMapper.selectInfo("p-1")).thenReturn(pluginEntity);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setType(ToolType.CUSTOM.type);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+
+        GetPluginVersionQo qo = new GetPluginVersionQo();
+        qo.setWorkspaceId("ws-1");
+
+        BaseResp resp = pluginService.getPluginVersion("proj-1", "v1", "p-1", qo);
+
+        assertEquals(200, resp.getCode());
+        verify(shareScopeMapper, never()).selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString());
+    }
+
+    @Test
+    void testGetPluginVersion_NotPlazaPublished_CrossWorkspaceRejected() {
+        // 未上架尚未共享的自定义插件跨工作空间查看版本应拒绝
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("ws-other");
+        pluginEntity.setPlatformPublished(0);
+
+        when(pluginBase.getPluginEntityByVersion("p-1", "v1")).thenReturn(pluginEntity);
+        when(pluginMapper.selectInfo("p-1")).thenReturn(pluginEntity);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setType(ToolType.CUSTOM.type);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+
+        GetPluginVersionQo qo = new GetPluginVersionQo();
+        qo.setWorkspaceId("ws-1");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.getPluginVersion("proj-1", "v1", "p-1", qo));
+        assertEquals(StudioError.PLUGIN_PRIVILEGE_ERROR, ex.getErrorCode());
+    }
+
+    @Test
+    void testGetPluginVersion_SnapshotNoFlag_DbPlazaPublished_CrossWorkspaceAllowed() {
+        // 版本快照无上架标记时回查数据库，数据库已上架 → 放行（FRS-091）
+        PluginEntity snapshot = new PluginEntity();
+        snapshot.setPluginId("p-1");
+        snapshot.setType(ToolType.CUSTOM.type);
+        snapshot.setWorkspaceId("ws-other");
+        snapshot.setPlatformPublished(null);
+
+        PluginEntity dbPlugin = new PluginEntity();
+        dbPlugin.setPluginId("p-1");
+        dbPlugin.setWorkspaceId("ws-other");
+        dbPlugin.setPlatformPublished(1);
+
+        when(pluginBase.getPluginEntityByVersion("p-1", "v1")).thenReturn(snapshot);
+        when(pluginMapper.selectInfo("p-1")).thenReturn(snapshot);
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(dbPlugin);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setType(ToolType.CUSTOM.type);
+        when(pluginBase.transformEntityToDTO(snapshot)).thenReturn(pluginDTO);
+
+        GetPluginVersionQo qo = new GetPluginVersionQo();
+        qo.setWorkspaceId("ws-1");
+
+        BaseResp resp = pluginService.getPluginVersion("proj-1", "v1", "p-1", qo);
+
+        assertEquals(200, resp.getCode());
+        verify(shareScopeMapper, never()).selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString());
     }
 }

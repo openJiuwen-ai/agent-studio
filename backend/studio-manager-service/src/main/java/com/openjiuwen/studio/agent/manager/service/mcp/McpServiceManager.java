@@ -35,6 +35,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployItem;
@@ -67,6 +68,7 @@ import com.openjiuwen.studio.agent.manager.enums.EnumOrgType;
 import com.openjiuwen.studio.agent.manager.enums.McpNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
+import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
 import com.openjiuwen.studio.agent.manager.service.IMcpServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.ApiMcpService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigRequsetDto;
@@ -101,6 +103,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
@@ -135,6 +138,7 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -148,6 +152,11 @@ import java.util.stream.Collectors;
 @Service
 public class McpServiceManager implements IMcpServiceManagerService {
     private static final String TENANT_ID = "tenantId";
+
+    /**
+     * 私有服务目录条目类型（用户上架条目保持 private，由 platform_published 控制跨租户可见性）
+     */
+    private static final String MCP_SERVER_TYPE_PRIVATE = "private";
 
     /**
      * 监控粒度
@@ -232,6 +241,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
     @Resource
     private McpServiceDao serviceDao;
 
+    @Autowired
+    private AssetShelfPermissionValidator shelfPermissionValidator;
+
     @Resource
     private McpUtil mcpUtil;
 
@@ -302,6 +314,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
         commonService.validSearchNameStartWithChineseEnglishLettersNumber(listServersQo.getName());
 
         String tenantId = RequestContextUtils.getRequestUserDomainId();
+        String userId = RequestContextUtils.getRequestUserId();
 
 
         if (StringUtils.isNotBlank(listServersQo.getLanguage()) && !Arrays.stream(LANGUAGE.values())
@@ -339,6 +352,8 @@ public class McpServiceManager implements IMcpServiceManagerService {
         log.info("Mapping server entities to DTOs and calculating scores.");
         resp.setMcps(mcpServerEntities.stream().map(server -> {
             McpServerBaseInfoDto mcpServerBaseInfoDto = mcpUtil.serverEntity2McpBaseInfoDto(server);
+            mcpServerBaseInfoDto.setCreatedByUserId(server.getCreatedByUserId());
+            mcpServerBaseInfoDto.setIsOwner(userId.equals(server.getCreatedByUserId()));
             double avgScore = calculatedScore(mcpServerBaseInfoDto.getId(), serverScores);
             mcpServerBaseInfoDto.setScore(avgScore);
             return mcpServerBaseInfoDto;
@@ -505,12 +520,20 @@ public class McpServiceManager implements IMcpServiceManagerService {
     private McpServiceBaseInfoListResp buildMcpServiceListRep(List<McpServiceEntity> infos, long total) {
         log.info("Building MCP service list response. Total: {}", total);
 
+        // 批量查询已上架目录条目（source_instance_id → 目录条目id），用于组件库"已上架"状态标注（FRS-091 FR-06）
+        Set<String> serviceIds = infos.stream().map(McpServiceEntity::getId).collect(Collectors.toSet());
+        Map<String, String> shelfServerMap = serverDao.selectShelfServerIdsBySourceInstanceIds(new ArrayList<>(serviceIds));
+
         McpServiceBaseInfoListResp resp = new McpServiceBaseInfoListResp();
         resp.setTotal(total).setMcps(infos.stream().map(info -> {
             McpServiceBaseInfoDto mcpServiceBaseInfoDto;
             mcpServiceBaseInfoDto = mcpUtil.serviceEntity2McpBaseInfoDto(info);
             // 初始化MCP来源是自定义
             mcpServiceBaseInfoDto.setResource("custom");
+            // 组件库"已上架到资产广场"状态
+            if (shelfServerMap.containsKey(info.getId())) {
+                mcpServiceBaseInfoDto.setPlatformPublished(1);
+            }
             log.info("Querying server entity for service ID: {}", info.getServerId());
             McpServerEntity mcpServerEntity = this.serverDao.selectById(info.getServerId());
 
@@ -792,6 +815,12 @@ public class McpServiceManager implements IMcpServiceManagerService {
             && !"private".equals(serverDetail.getType())) {
             throw new AgentStudioException(StudioError.MCP_SERVER_TYPE_INVALID);
         }
+        // TBD-03 收口（FRS-091）：inner（全员可见目录条目）仅平台运营租户可创建，
+        // 防止普通空间成员绕过角色配置创建"官方预置"外观条目
+        if ("inner".equals(serverDetail.getType()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("Only operation tenant can create inner type mcp server, projectId: {}", projectId);
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
 
         // 构建实体
         McpServerEntity serverEntity = mcpUtil.mcpDetailInfoDto2ServerEntity(serverDetail);
@@ -799,6 +828,169 @@ public class McpServiceManager implements IMcpServiceManagerService {
         // 插入数据库
         serverDao.insert(serverEntity);
         return serverEntity.getId();
+    }
+
+    /**
+     * 将已部署的 MCP 服务实例上架到资产广场（平台精选，跨租户可见）。
+     *
+     * <p>实现语义（FRS-091）：实例 → 服务目录条目快照转换；鉴权信息（auth/authInfo）不下发；
+     * 同一实例重复上架返回既有条目并刷新快照内容（source_instance_id 全局唯一，DEC-05）；</p>
+     *
+     * @param projectId 项目 ID
+     * @param workspaceId 空间 ID
+     * @param req 上架请求（service_id 必填）
+     * @return 服务目录条目 ID
+     */
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "McpServer",
+        description = "上架MCP服务到资产广场",
+        resourceId = "req.serviceId",
+        resourceName = ""
+    )
+    public String publishServer(String projectId, String workspaceId, McpServerShelfReq req) {
+        log.info("operation log {}:start to publish mcp server, serviceId: {}", projectId, req.getServiceId());
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        String tenantId = RequestContextUtils.getRequestUserDomainId();
+        McpServiceEntity service = serviceDao.selectById(req.getServiceId(), tenantId, CommonUtil.getDeptCode(),
+            workspaceId);
+        if (service == null) {
+            log.error("Mcp service not exists, serviceId: {}", req.getServiceId());
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
+        }
+        if (!SUCCESS.getValue().equals(service.getFcInstanceStatus()) || StringUtils.isBlank(service.getTools())) {
+            log.error("Mcp service is not publishable, serviceId: {}, fcInstanceStatus: {}, tools blank: {}",
+                req.getServiceId(), service.getFcInstanceStatus(), StringUtils.isBlank(service.getTools()));
+            throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
+        }
+        // 同一实例重复上架：去重并刷新快照（并发由 source_instance_id 唯一索引兜底）；
+        // readme 未重新填写时保留既有目录 readme（避免二次上架被服务说明覆盖清空）
+        McpServerEntity existing = serverDao.selectBySourceInstanceId(req.getServiceId());
+        if (existing != null) {
+            String refreshReadme = StringUtils.isBlank(req.getReadme()) ? existing.getReadme() : req.getReadme();
+            McpServerEntity refresh = buildShelfServerEntity(service, existing.getId(), req.getCategory(),
+                refreshReadme, tenantId);
+            serverDao.updateContentById(refresh);
+            return existing.getId();
+        }
+        McpServerEntity server = buildShelfServerEntity(service, UUID.randomUUID().toString(), req.getCategory(),
+            req.getReadme(), tenantId);
+        try {
+            serverDao.insert(server);
+        } catch (DuplicateKeyException e) {
+            // 并发上架竞态：唯一索引（source_instance_id）兜底，返回既有条目
+            log.warn("Concurrent publish detected for mcp service {}, fallback to existing shelf entry",
+                req.getServiceId());
+            McpServerEntity concurrent = serverDao.selectBySourceInstanceId(req.getServiceId());
+            if (concurrent != null) {
+                return concurrent.getId();
+            }
+            throw e;
+        }
+        return server.getId();
+    }
+
+    /**
+     * 将 MCP 服务目录条目从资产广场下架（软删目录条目，不影响已安装实例）。
+     *
+     * @param projectId 项目 ID
+     * @param workspaceId 空间 ID
+     * @param serverId 服务目录条目 ID
+     * @return 服务目录条目 ID
+     */
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "McpServer",
+        description = "下架MCP服务目录条目",
+        resourceId = "serverId",
+        resourceName = ""
+    )
+    public String unpublishServer(String projectId, String workspaceId, String serverId) {
+        log.info("operation log {}:start to unpublish mcp server, serverId: {}", projectId, serverId);
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        McpServerEntity server = serverDao.selectById(serverId);
+        // 兼容组件库场景：入参为目录条目标识或上架来源的实例ID（source_instance_id）
+        if (server == null) {
+            server = serverDao.selectBySourceInstanceId(serverId);
+        }
+        if (server == null || Boolean.TRUE.equals(server.getDeleted())) {
+            log.info("Mcp server already off shelf, serverId: {}", serverId);
+            return serverId;
+        }
+        // 归属校验：仅上架属主用户（创建者）或运营租户可下架（FRS-091：跨用户不可下架他人上架资产）
+        String userId = RequestContextUtils.getRequestUserId();
+        if (!userId.equals(server.getCreatedByUserId()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("No permission to unpublish mcp server, serverId: {}, createdByUserId: {}",
+                serverId, server.getCreatedByUserId());
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        serverDao.updateOffShelfById(server.getId(), RequestContextUtils.getRequestUserId());
+        return server.getId();
+    }
+
+    /**
+     * 由 MCP 服务实例构建资产广场目录条目（快照语义，不含实例鉴权信息）。
+     *
+     * <p>鉴权剔除（DEC-04）：实例的 auth/authInfo/authType 不落目录；server_config 仅保留连接配置。</p>
+     */
+    private McpServerEntity buildShelfServerEntity(McpServiceEntity service, String serverId, String category,
+        String readme, String tenantId) {
+        McpServerEntity server = new McpServerEntity();
+        server.setId(serverId);
+        server.setServerCode(service.getId());
+        server.setIcon(service.getIcon());
+        server.setName(service.getName());
+        server.setNameEn(service.getNameEn());
+        server.setDescription(service.getDescription());
+        server.setDescriptionEn(service.getDescriptionEn());
+        server.setReadme(StringUtils.isBlank(readme) ? service.getReadme() : readme);
+        server.setServerConfig(buildShelfServerConfig(service));
+        server.setUrl(service.getFcInstanceUrl());
+        server.setTools(service.getTools());
+        server.setType(MCP_SERVER_TYPE_PRIVATE);
+        server.setOrgType(service.getOrgType());
+        server.setPlatformPublished(1);
+        server.setSourceInstanceId(service.getId());
+        server.setCategory(category);
+        server.setDeleted(false);
+        server.setTenantId(tenantId);
+        server.setDeptCode(CommonUtil.getDeptCode());
+        server.setViewTimes(0);
+        server.setInstallTimes(0);
+        server.setCreatedByUserId(RequestContextUtils.getRequestUserId());
+        server.setLastUpdatedByUserId(RequestContextUtils.getRequestUserId());
+        return server;
+    }
+
+    /**
+     * 构建资产广场目录条目的服务端配置：保留实例连接配置（含服务地址 URL），
+     * 并标记鉴权方式（auth_type 标识，`仅方式不含鉴权密文`，DEC-04：鉴权信息不下发）。
+     */
+    private String buildShelfServerConfig(McpServiceEntity service) {
+        JSONObject config = new JSONObject();
+        String raw = service.getServerConfig();
+        if (StringUtils.isNotBlank(raw)) {
+            try {
+                String decrypted = encryptionAdapter.decrypt(raw);
+                decrypted = mcpUtil.deleteAuthHeadersFromMcpServer(decrypted);
+                JSONObject parsed = JSONObject.parseObject(decrypted);
+                if (parsed != null) {
+                    config.putAll(parsed);
+                }
+            } catch (Exception e) {
+                log.warn("mcp server config parse failed, serviceId: {}, config: {}", service.getId(), raw);
+            }
+        }
+        // 连接地址：优先实例 serverConfig 内已有 uri/url，否则回填实例连接地址
+        String instanceUrl = service.getFcInstanceUrl();
+        if (StringUtils.isNotBlank(instanceUrl) && !config.containsKey("uri") && !config.containsKey("url")) {
+            config.put("uri", instanceUrl);
+        }
+        // 仅保留鉴权方式标识（authType，如 SERVICE/OAUTH 等），不含 auth/auth_info 密文
+        if (StringUtils.isNotBlank(service.getAuthType())) {
+            config.put("auth_type", service.getAuthType());
+        }
+        return config.toString();
     }
 
     /**
@@ -1367,6 +1559,11 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
         // 是否共享校验
         shareInnerService.cancelMCPShared(id, projectId, workspaceId);
+        // 已上架校验（对标团队共享删除校验）：先下架才能删除
+        if (serverDao.selectBySourceInstanceId(id) != null) {
+            log.error("Mcp service published to plaza cannot be deleted, serviceId: {}", id);
+            throw new AgentStudioException(StudioError.RESOURCE_PUBLISHED_CANNOT_BE_DELETE);
+        }
         // 增加 OR STREAMABLE_HTTP 判断
         if (Strings.CI.equals(serviceEntity.getOrgType(), EnumOrgType.SSE.toString()) ||
             Strings.CI.equals(serviceEntity.getOrgType(), EnumOrgType.STREAMABLE_HTTP.toString())

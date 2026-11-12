@@ -13,6 +13,8 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { Subject } from 'rxjs';
 import { handleCommonReqError } from 'src/utils/utils';
 import { CommonUtils } from 'src/utils/common.util';
+import { SpaceTeamManagementService } from '@services/space-team-management.service';
+import { ContextService } from '@services/context.service';
 import { PluginCredentialStatus } from '@enums/agent-center.enum';
 import { AddPluginAuthComponent } from '@routes/plugin-market/add-plugin/add-plugin-auth.component';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -29,6 +31,7 @@ import {
   ShareTypeTag,
 } from '@routes/app-center/app-center-management/app-center-management.config';
 import { EditShareModalComponent } from '@routes/app-center/components/edit-share-modal/edit-share-modal.component';
+import { PublishAssetModalComponent } from '@routes/agent-center/component-library/shelf-modal/publish-asset-modal.component';
 import { SHARE_PAGE } from '@routes/app-center/components/edit-share-modal/edit-share-modal.config';
 import { CommonService } from '@services/common.service';
 import { HttpService } from '@services/http.service';
@@ -66,6 +69,8 @@ const MAX_HEIGHT = 1270;
   ],
 })
 export class PluginMarketComponent implements OnInit {
+  pluginHovered = '';
+  canPublish = true;
   @Input() needRefresh = '';
   @Input() isShowDom: boolean = true;
   @Input() limit: number = -1;
@@ -255,7 +260,9 @@ export class PluginMarketComponent implements OnInit {
     private cardService: CardService,
     private nzModalService: NzModalService,
     private promptService: PromptService,
-    private sidebarServ: SetSidebarVisibilityService
+    private sidebarServ: SetSidebarVisibilityService,
+    private spaceTeamManagementService: SpaceTeamManagementService,
+    private ctxServ: ContextService
   ) {
     this.isHC = false;
     this.lang = CommonUtils.getLanguage();
@@ -264,6 +271,7 @@ export class PluginMarketComponent implements OnInit {
 
   ngOnInit() {
     this.sidebarServ.setSidebarsVisibilityByState('hideSidebar');
+    this.checkPublishPermission();
     const cur_space_option_str = StorageService.getSessionStorage('CUR_SPACE_OPTIONS');
     if (cur_space_option_str !== '{}') {
       try {
@@ -517,6 +525,49 @@ export class PluginMarketComponent implements OnInit {
       this.AppShareTabs.forEach((t, i) => (t.active = i === index));
       this.shareTabChange(tab);
     }
+  }
+
+  async checkPublishPermission() {
+    try {
+      const res = await this.spaceTeamManagementService.getWorkspaceDetial(this.ctxServ.currentWorkspaceId);
+      if (res?.type === 'TEAM' && res?.role && res.role !== 'OWNER' && res.role !== 'ADMIN') {
+        this.canPublish = false;
+      }
+    } catch {
+      this.canPublish = false;
+    }
+  }
+
+  public openPublishModal() {
+    this.nzModalService.create({
+      nzContent: PublishAssetModalComponent,
+      nzWidth: 560,
+      nzTitle: this.i18n.transform('plaza_onshelf'),
+      nzFooter: null,
+      nzData: {
+        assetType: 'plugin',
+        onPublished: () => this.onSearch(),
+      },
+    });
+  }
+
+  unpublishPlugin(plugin: any, $event?: Event): void {
+    $event?.stopPropagation();
+    this.nzModalService.confirm({
+      nzTitle: this.i18n.transform('plaza_offshelf_confirm'),
+      nzOkText: this.i18n.transform('ok'),
+      nzCancelText: this.i18n.transform('cancel'),
+      nzOnOk: () => {
+        return this.appPluginRepoServ
+          .unpublishPlugin(plugin.plugin_id)
+          .then(() => {
+            MessageComponent.showSuccess(this.i18n.transform('plaza_offshelf_success'));
+            this.onSearch();
+            return null;
+          })
+          .catch(() => null);
+      },
+    });
   }
 
   public creatShare() {

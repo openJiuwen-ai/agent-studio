@@ -92,4 +92,26 @@ public interface PluginMapper {
     void updateProjectIdByIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("pluginIds") List<String> pluginIds);
 
     String selectVersionByPluginId(@Param("pluginId") String pluginId);
+
+    /**
+     * 更新插件资产广场上架状态与锚定版本（FRS-091 上架/下架）。
+     *
+     * @param pluginId 插件ID（tool_id）
+     * @param platformPublished 上架标记（1=已上架，0=未上架）
+     * @param plazaVersionId 上架锚定的发布版本ID（下架传 null）
+     * @return 更新的行数
+     */
+    int updatePlazaShelf(@Param("pluginId") String pluginId, @Param("platformPublished") int platformPublished,
+        @Param("plazaVersionId") String plazaVersionId);
+
+    /**
+     * 更新插件行业分类（上架时补充广场展示标签；updateByPrimaryKeySelective 不含 category 列）
+     *
+     * @param pluginId 插件ID
+     * @param projectId 项目ID（归属校验）
+     * @param category 行业分类ID（t_pe_industry.id）
+     * @return 更新的行数
+     */
+    int updateCategoryById(@Param("pluginId") String pluginId, @Param("projectId") String projectId,
+        @Param("category") String category);
 }

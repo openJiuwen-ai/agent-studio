@@ -1,0 +1,22 @@
+<div class="p-[4px]">
+  <div class="text-[13px] text-[#595959] mb-[8px]">
+    {{ 'plaza_anchor_version' | i18nextEager }}：{{ currentAnchorName }}
+  </div>
+  <nz-select
+    [(ngModel)]="selectedVersionId"
+    [ngModelOptions]="{ standalone: true }"
+    nzSize="default"
+    style="width: 100%"
+    [nzPlaceHolder]="'select_version' | i18nextEager"
+  >
+    <nz-option
+      *ngFor="let v of nzData.versions"
+      [nzValue]="v.version_id"
+      [nzLabel]="v.version_name || v.version_id"
+    ></nz-option>
+  </nz-select>
+  <div class="flex justify-end gap-[4px] mt-[16px]">
+    <button nz-button (click)="onCancel()">{{ 'cancel' | i18nextEager }}</button>
+    <button nz-button nzType="primary" (click)="onUpdate()">{{ 'plaza_update_anchor' | i18nextEager }}</button>
+  </div>
+</div>

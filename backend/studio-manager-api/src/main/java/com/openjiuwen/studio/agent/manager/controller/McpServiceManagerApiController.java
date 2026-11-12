@@ -13,6 +13,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployResp;
@@ -60,6 +61,16 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     @Override
     public ResponseEntity<String> createServer(String projectId, String workspaceId, McpServerDetailReq body) {
         return ResponseModel.success(mcpServiceManagerService.createServer(projectId, workspaceId, body));
+    }
+
+    @Override
+    public ResponseEntity<String> publishServer(String projectId, String workspaceId, McpServerShelfReq body) {
+        return ResponseModel.success(mcpServiceManagerService.publishServer(projectId, workspaceId, body));
+    }
+
+    @Override
+    public ResponseEntity<String> unpublishServer(String projectId, String workspaceId, String id) {
+        return ResponseModel.success(mcpServiceManagerService.unpublishServer(projectId, workspaceId, id));
     }
 
     @Override

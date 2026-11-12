@@ -51,6 +51,7 @@ export class PluginHeaderNewComponent {
   @Input() isToolDetail: boolean = false;
   @Output() update = new EventEmitter<void>();
   @Output() visionSelectedChangeEvent = new EventEmitter();
+  @Output() plazaUpdateClick = new EventEmitter<void>();
   public successIcon = cdnAssetUrl('assets/images/flow-task/success.svg');
   public lang = CommonUtils.getLanguage();
   public noAuthIcon = cdnAssetUrl('assets/images/flow-task/un-auth.svg');

@@ -31,6 +31,7 @@
         <result column="credential_status" jdbcType="VARCHAR" property="credentialStatus"/>
         <result column="customize_node" jdbcType="TINYINT" property="customizeNode"/>
         <result column="published" jdbcType="TINYINT" property="published"/>
+        <result column="platform_published" jdbcType="TINYINT" property="platformPublished"/>
         <result column="call_mode" jdbcType="VARCHAR" property="callMode"/>
         <association property="credentials" javaType="com.openjiuwen.studio.agent.manager.dto.ToolCredential">
             <id property="id" column="c_id"/>
@@ -67,6 +68,7 @@
         trace_id,
         domain_id,
         published,
+        platform_published,
         call_mode,
         is_free,
         label,
@@ -881,6 +883,8 @@
         <foreach collection="toolIds" item="toolId" open="(" separator="," close=")">
             #{toolId,jdbcType=VARCHAR}
         </foreach>
+        and (project_id = #{projectId,jdbcType=VARCHAR}
+            or (platform_published = 1 and published = 1))
     </select>
 
     <update id="updateLastVersionId">

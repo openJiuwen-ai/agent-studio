@@ -50,6 +50,9 @@
         </div>
       </div>
       <div class="header-right" *ngIf="subscribeBtnStatus">
+        <span *ngIf="!isShare && pluginInfo?.platform_published === 1" class="mr-[16px] text-[13px] text-[#8c8c8c]">
+          {{ 'version_number' | i18nextEager }}：{{ pluginInfo?.plaza_version_name || '--' }}
+        </span>
         <div
           *ngIf="!isShare"
           class="flex cursor-pointer items-center gap-[4px]"
@@ -67,6 +70,15 @@
             {{'pluginheadercomponent_1139'| i18nextEager}}
           </span>
         </div>
+        <button
+          nz-button
+          nzType="primary"
+          *ngIf="!isShare && pluginInfo?.platform_published === 1 && pluginInfo?.is_owner"
+          class="ml-[16px]"
+          (click)="plazaUpdateClick.emit()"
+        >
+          {{'plaza_touch'| i18nextEager}}
+        </button>
         <div *ngIf="isShare && canEditShare && !isToolDetail">
           <share-detail-btn
             [toolId]="pluginInfo?.tool_id"

@@ -73,6 +73,9 @@ public class SkillManagementServiceTest {
     @Mock
     private MappingMapper mappingMapper;
 
+    @Mock
+    private AssetShelfPermissionValidator shelfPermissionValidator;
+
     @InjectMocks
     private SkillManagementService skillManagementService;
 
@@ -82,6 +85,114 @@ public class SkillManagementServiceTest {
         ReflectionTestUtils.setField(skillManagementService, "mgObsService", mgObsService);
         ReflectionTestUtils.setField(skillManagementService, "skillMapper", skillMapper);
         ReflectionTestUtils.setField(skillManagementService, "mappingMapper", mappingMapper);
+        ReflectionTestUtils.setField(skillManagementService, "shelfPermissionValidator", shelfPermissionValidator);
+    }
+
+    private SkillDetails buildPublishableSkill() {
+        SkillDetails skill = new SkillDetails();
+        skill.setWorkspaceId("mock-workspace-id");
+        skill.setStatus("developed");
+        skill.setLatestVersion("1.0.0");
+        skill.setObsPath("obs://test-bucket/test-file.zip");
+        skill.setPublishedAsset(0);
+        skill.setPlazaSource("USER");
+        return skill;
+    }
+
+    @Test
+    void testPublishSkill_Success() {
+        String skillId = "test-skill-001";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("mock-domain-id");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("mock-user-id");
+            SkillVersionEntity version = new SkillVersionEntity();
+            version.setObsPath("obs://test-bucket/test-file.zip");
+            when(skillVersionMapper.searchBySkillId(skillId, 0, Integer.MAX_VALUE)).thenReturn(List.of(version));
+            when(skillMapper.searchBySkillIdAndDomainId(skillId, "mock-domain-id")).thenReturn(buildPublishableSkill());
+            skillManagementService.publishStudioSkill(skillId, "mock-workspace-id", "mock-project-id", null);
+            verify(shelfPermissionValidator, times(1)).checkOwnerOrAdmin("mock-project-id", "mock-workspace-id");
+            verify(skillMapper, times(1)).updatePublishAsset(eq(skillId), eq("1"), eq("USER"), anyLong());
+        }
+    }
+
+    @Test
+    void testPublishSkill_AlreadyPublished_Idempotent() {
+        String skillId = "test-skill-001";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("mock-domain-id");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("mock-user-id");
+            SkillDetails skill = buildPublishableSkill();
+            skill.setPublishedAsset(1);
+            when(skillMapper.searchBySkillIdAndDomainId(skillId, "mock-domain-id")).thenReturn(skill);
+            skillManagementService.publishStudioSkill(skillId, "mock-workspace-id", "mock-project-id", null);
+            verify(skillMapper, never()).updatePublishAsset(anyString(), anyString(), anyString(), anyLong());
+        }
+    }
+
+    @Test
+    void testPublishSkill_DevelopingRejected() {
+        String skillId = "test-skill-001";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("mock-domain-id");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("mock-user-id");
+            SkillDetails skill = buildPublishableSkill();
+            skill.setStatus("developing");
+            when(skillMapper.searchBySkillIdAndDomainId(skillId, "mock-domain-id")).thenReturn(skill);
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                skillManagementService.publishStudioSkill(skillId, "mock-workspace-id", "mock-project-id", null));
+            assertEquals(StudioError.ASSET_NOT_PUBLISHABLE, ex.getErrorCode());
+            verify(skillMapper, never()).updatePublishAsset(anyString(), anyString(), anyString(), anyLong());
+        }
+    }
+
+    @Test
+    void testUnpublishSkill_Success() {
+        String skillId = "test-skill-001";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("mock-domain-id");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("mock-user-id");
+            SkillDetails skill = buildPublishableSkill();
+            skill.setCreatorId("mock-user-id");
+            skill.setPublishedAsset(1);
+            when(skillMapper.searchBySkillId(skillId)).thenReturn(skill);
+            skillManagementService.unpublishStudioSkill(skillId, "mock-workspace-id", "mock-project-id");
+            verify(skillMapper, times(1)).updatePublishAsset(eq(skillId), eq("0"), eq("USER"), anyLong());
+        }
+    }
+
+    @Test
+    void testUnpublishSkill_NotOwner_Forbidden() {
+        String skillId = "test-skill-001";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("mock-domain-id");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("mock-user-id");
+            SkillDetails skill = buildPublishableSkill();
+            skill.setCreatorId("other-user");
+            skill.setPublishedAsset(1);
+            when(skillMapper.searchBySkillId(skillId)).thenReturn(skill);
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                skillManagementService.unpublishStudioSkill(skillId, "mock-workspace-id", "mock-project-id"));
+            assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+            verify(skillMapper, never()).updatePublishAsset(anyString(), anyString(), anyString(), anyLong());
+        }
+    }
+
+    @Test
+    void testUnpublishSkill_PresetForbidden() {
+        String skillId = "test-skill-001";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("mock-domain-id");
+            mockedReq.when(RequestContextUtils::getRequestUserId).thenReturn("mock-user-id");
+            SkillDetails skill = buildPublishableSkill();
+            skill.setCreatorId("mock-user-id");
+            skill.setPublishedAsset(1);
+            skill.setPlazaSource("PRESET");
+            when(skillMapper.searchBySkillId(skillId)).thenReturn(skill);
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                skillManagementService.unpublishStudioSkill(skillId, "mock-workspace-id", "mock-project-id"));
+            assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+            verify(skillMapper, never()).updatePublishAsset(anyString(), anyString(), anyString(), anyLong());
+        }
     }
 
 
