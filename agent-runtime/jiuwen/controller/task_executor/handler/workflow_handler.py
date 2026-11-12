@@ -644,6 +644,7 @@ class WorkflowHandler(BaseHandler):
             logger.error(
                 f"Intent detection workflow {workflow_context.workflow_name} failed, returning empty result for LLM fallback: {e}",
                 simple_log="Intent detection workflow failed, returning empty result",
+                exc_info=True,
             )
             # 对于意图识别工作流，执行失败时不抛出异常，直接返回（不 yield 任何内容）
             # 上层 _parse_workflow_output 会检测到空结果并触发 LLM fallback
