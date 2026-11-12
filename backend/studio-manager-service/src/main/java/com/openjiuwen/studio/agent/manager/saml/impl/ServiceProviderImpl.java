@@ -24,6 +24,8 @@ import java.security.cert.CertificateFactory;
 import java.util.Properties;
 public class ServiceProviderImpl implements ServiceProvider {
     private static String issuer;
+
+    private static String idpIssuer;
     private static String serviceUrl;
     private static KeystoreInfo keyInfo;
     private static Certificate certificate;
@@ -39,6 +41,7 @@ public class ServiceProviderImpl implements ServiceProvider {
         Properties properties = new Properties();
         try {
             issuer = getConfigValue("issuer", "issuer", "aa", false);
+            idpIssuer = getConfigValue("idpIssuer", "idpIssuer", null, false);
             serviceUrl = getConfigValue("serviceUrl", "serviceUrl", "serviceUrl", false);
             String store = getConfigValue("keystore", "keystore", "keystore", false);
             jks = new FileInputStream(store);
@@ -74,6 +77,11 @@ public class ServiceProviderImpl implements ServiceProvider {
     @Override
     public String getIssuer() {
         return issuer;
+    }
+
+    @Override
+    public String getIdpIssuer() {
+        return idpIssuer;
     }
 
     @Override
