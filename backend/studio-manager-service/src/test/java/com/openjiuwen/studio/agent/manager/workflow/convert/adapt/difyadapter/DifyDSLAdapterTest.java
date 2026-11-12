@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.workflow.convert.adapt.difyadapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -351,6 +352,87 @@ class DifyDSLAdapterTest {
         JSONObject details = new JSONObject(info.getWorkflowDetails());
         assertEquals("branch_2", findEdge(details.getJSONArray("edges"), "node_classifier", "node_answer_zx")
             .getString("branch"));
+    }
+
+    /** features 缺该子项时补齐缺省配置。 */
+    @Test
+    void convertWithMinimalFeaturesKeepsAdditionalQuestionsConfig() {
+        Map<String, Object> dsl = buildMiniDsl();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workflow = (Map<String, Object>) dsl.get("workflow");
+        Map<String, Object> features = new HashMap<>();
+        features.put("file_upload", new HashMap<>());
+        features.put("sensitive_word_avoidance", Map.of("enabled", false));
+        workflow.put("features", features);
+
+        adapter.validateFormat(dsl);
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject configs = new JSONObject(info.getWorkflowDetails()).getJSONObject("configs");
+        assertTrue(configs.containsKey("additional_questions_config"));
+        JSONObject additionalQuestions = configs.getJSONObject("additional_questions_config");
+        assertEquals(false, additionalQuestions.get("enable"));
+        assertEquals("", additionalQuestions.getString("prompt"));
+    }
+
+    /** features 整体缺失时同样补齐。 */
+    @Test
+    void convertWithoutFeaturesKeepsAdditionalQuestionsConfig() {
+        Map<String, Object> dsl = buildMiniDsl();
+
+        adapter.validateFormat(dsl);
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject configs = new JSONObject(info.getWorkflowDetails()).getJSONObject("configs");
+        assertTrue(configs.containsKey("additional_questions_config"));
+        assertEquals(false, configs.getJSONObject("additional_questions_config").get("enable"));
+    }
+
+    /** 完整 features 的真实配置不被覆盖。 */
+    @Test
+    void convertWithFullFeaturesPreservesExistingConfig() {
+        Map<String, Object> dsl = buildMiniDsl();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workflow = (Map<String, Object>) dsl.get("workflow");
+
+        Map<String, Object> followUp = new HashMap<>();
+        followUp.put("enabled", true);
+        Map<String, Object> features = new HashMap<>();
+        features.put("opening_statement", "你好，有什么可以帮你？");
+        features.put("suggested_questions", List.of("问题一", "问题二"));
+        features.put("suggested_questions_after_answer", followUp);
+        workflow.put("features", features);
+
+        adapter.validateFormat(dsl);
+        WorkflowInfo info = adapter.convert(dsl);
+
+        JSONObject configs = new JSONObject(info.getWorkflowDetails()).getJSONObject("configs");
+        JSONObject additionalQuestions = configs.getJSONObject("additional_questions_config");
+        assertEquals(true, additionalQuestions.get("enable"));
+        assertFalse(additionalQuestions.getString("prompt").isEmpty());
+        assertFalse(additionalQuestions.containsKey("enabled"));
+        assertEquals("你好，有什么可以帮你？", configs.getString("prologue"));
+        assertEquals(2, configs.getJSONArray("suggest_queries").size());
+    }
+
+    /** 任务型 mode 映射与配置补齐。 */
+    @Test
+    void convertWorkflowModeWithMinimalFeaturesKeepsTaskType() {
+        Map<String, Object> dsl = buildMiniDsl();
+        dsl.put("app", Map.of("mode", "workflow", "name", "ut-dify-task", "description", "UT夹具"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workflow = (Map<String, Object>) dsl.get("workflow");
+        Map<String, Object> features = new HashMap<>();
+        features.put("file_upload", new HashMap<>());
+        workflow.put("features", features);
+
+        adapter.validateFormat(dsl);
+        WorkflowInfo info = adapter.convert(dsl);
+
+        assertEquals("task", info.getType());
+        JSONObject configs = new JSONObject(info.getWorkflowDetails()).getJSONObject("configs");
+        assertEquals(false, configs.getJSONObject("additional_questions_config").get("enable"));
+        assertEquals("", configs.getJSONObject("additional_questions_config").getString("prompt"));
     }
 
     /** 构造意图 DSL 并把 classifier 节点的 classes 字段替换为指定值（畸形结构哨兵用例）。 */

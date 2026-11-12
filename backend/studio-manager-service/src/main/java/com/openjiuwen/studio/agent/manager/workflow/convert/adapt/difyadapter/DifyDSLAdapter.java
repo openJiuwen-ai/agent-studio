@@ -147,10 +147,20 @@ public class DifyDSLAdapter implements AdapterService {
         workflowVo.setLayouts(workflowNodeLayouts);
         workflowVo.setNodes(workflowNodes);
 
-        // 处理处理对话型-功能相关配置
-        if (ObjectUtils.isNotEmpty(workflowData.get("features"))) {
-            handlerWorkflowConfig(workflowVo.getConfigs(), workflowData.get("features"));
+        Map<String, Object> globalConfigs = workflowVo.getConfigs();
+        if (globalConfigs == null) {
+            globalConfigs = new HashMap<>();
+            workflowVo.setConfigs(globalConfigs);
         }
+        // 处理对话型-功能相关配置
+        if (ObjectUtils.isNotEmpty(workflowData.get("features"))) {
+            handlerWorkflowConfig(globalConfigs, workflowData.get("features"));
+        }
+        // features 子项可选，缺省时补齐，不覆盖已有配置。
+        Map<String, Object> defaultAdditionalQuestionsConfig = new HashMap<>();
+        defaultAdditionalQuestionsConfig.put("enable", false);
+        defaultAdditionalQuestionsConfig.put("prompt", "");
+        globalConfigs.putIfAbsent("additional_questions_config", defaultAdditionalQuestionsConfig);
 
         WorkflowNodeVO startNode = workflowNodes.stream().filter(node -> node.getType().equals(NodeType.START.getType())).findFirst().orElse(null);
         if (startNode != null) {

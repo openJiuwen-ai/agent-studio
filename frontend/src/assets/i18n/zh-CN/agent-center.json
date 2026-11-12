@@ -3002,6 +3002,7 @@
   "default_empty_tip": "无匹配节点，请稍后替换节点",
   "exchange_node_label": "更换",
   "imported_succeeded_dify_tip": "已成功导入Dify工作流",
+  "imported_failed_dify_tip": "Dify工作流导入失败，请检查文件内容后重试",
   "trigger_frequency_label": "频率",
   "trigger_time_label": "时间",
   "trigger_create_label": "新建触发器",
