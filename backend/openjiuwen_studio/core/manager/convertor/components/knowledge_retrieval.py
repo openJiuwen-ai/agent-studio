@@ -51,9 +51,16 @@ def knowledge_retrieval_convert(node: Node, space_id: str) -> dsl.Component:
             raise ValueError("knowledge_retrieval_param is none")
 
         # Build retrieval config
+        # min_match_score=0 是合法配置（不过滤低分结果），不能用 or 兜底，
+        # 否则 0 会被静默覆盖成 0.5 导致召回结果被错误过滤。
+        score_threshold = (
+            kr_param.min_match_score
+            if kr_param.min_match_score is not None
+            else 0.5
+        )
         retrieval_config = {
             "top_k": kr_param.max_recall_count or 5,
-            "score_threshold": kr_param.min_match_score or 0.5,
+            "score_threshold": score_threshold,
             "use_graph": kr_param.use_graph or False,
             "agentic": kr_param.agentic or False,
         }
