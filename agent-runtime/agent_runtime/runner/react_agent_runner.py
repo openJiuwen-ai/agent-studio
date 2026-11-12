@@ -761,6 +761,13 @@ class ReActAgentRunner:
         try:
             conversation_history = req.params.conversation_history
             global_variables = req.params.global_variables or {}
+            # FEAT-093 单智能体动态凭证：请求级全局变量写入 RequestContext——
+            # MCP wrapper 出站前解析 input_parameters 的 {{inputs.*}} 绑定注入
+            # 出站请求头（与提示词模板同源；_parse_prompt_template 的入参默认值
+            # 合并就地变更同一 dict，晚于本赋值也会被工具调用看到）
+            from agent_runtime.context.request_context import set_request_global_variables
+
+            set_request_global_variables(global_variables)
             agent, agent_id = self._create_agent(
                 ir_json, skill_work_dir, global_variables, has_file_links
             )

@@ -404,3 +404,138 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
             assert "Content-Length" not in request_params.headers, cls.__name__
             assert "X-Request-Id" not in request_params.headers, cls.__name__
             assert "Bad Header" not in request_params.headers, cls.__name__
+
+
+class TestResolveDynamicCredentialHeaders:
+    """FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}} 绑定注入出站头。
+
+    值源=RequestContext.global_variables（react_agent_runner 写入）；
+    工作流链路不写该字段（FlowMcp 走 kwargs 独立通道），互不重叠。
+    """
+
+    @staticmethod
+    def _bind(ctx_variables):
+        """构造请求上下文绑定并返回恢复函数。"""
+        from agent_runtime.context import request_context as rc
+
+        original = rc._request_ctx.get().global_variables
+        rc._request_ctx.get().global_variables = ctx_variables
+
+        def restore():
+            rc._request_ctx.get().global_variables = original
+
+        return restore
+
+    @staticmethod
+    def test_inputs_binding_injected_as_header():
+        """{{inputs.userToken}} 绑定 → 值从请求上下文解析并注入出站头。"""
+        for auth_conf in ({}, {"scope": "DYNAMIC"}):
+            for cls in (StreamableHttpClientNew, SSEClientNew):
+                client = _create_client(cls)
+                client._auth = auth_conf
+                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+                restore = TestResolveDynamicCredentialHeaders._bind(
+                    {"userToken": "Bearer react-tok-1"}
+                )
+                try:
+                    request_params = client._prepare_request_params(
+                        inputs={"query": "hi"}, name="echo_user"
+                    )
+                finally:
+                    restore()
+                assert request_params.headers.get("Authorization") == "Bearer react-tok-1", (
+                    auth_conf, cls.__name__)
+
+    @staticmethod
+    def test_nested_inputs_path_resolved():
+        """嵌套路径 {{inputs.cred.token}} 逐级解析。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            client._input_parameters = {"Authorization": "{{inputs.cred.token}}"}
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {"cred": {"token": "tok-nested"}}
+            )
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            assert request_params.headers.get("Authorization") == "tok-nested", cls.__name__
+
+    @staticmethod
+    def test_service_scope_not_injected():
+        """SERVICE/USER scope 不走该通道（与 kwargs 独立通道同门控）。"""
+        for scope in ("SERVICE", "USER"):
+            for cls in (StreamableHttpClientNew, SSEClientNew):
+                client = _create_client(cls)
+                client._auth = {"scope": scope}
+                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+                restore = TestResolveDynamicCredentialHeaders._bind(
+                    {"userToken": "tok-x"}
+                )
+                try:
+                    request_params = client._prepare_request_params(inputs={}, name="t")
+                finally:
+                    restore()
+                assert "Authorization" not in request_params.headers, (scope, cls.__name__)
+
+    @staticmethod
+    def test_existing_header_not_overwritten():
+        """头已存在（server_config 头/已并入的鉴权头）时不覆盖。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            client._auth_headers = {"Authorization": "server-hdr"}
+            client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {"userToken": "bound-value"}
+            )
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            assert request_params.headers.get("Authorization") == "server-hdr", cls.__name__
+
+    @staticmethod
+    def test_missing_or_blank_value_skipped():
+        """路径不存在/值为空串（含纯空白）不注入头。"""
+        for variables in ({"other": "x"}, {"userToken": ""}, {"userToken": "   "}):
+            for cls in (StreamableHttpClientNew, SSEClientNew):
+                client = _create_client(cls)
+                client._auth = {"scope": "DYNAMIC"}
+                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+                restore = TestResolveDynamicCredentialHeaders._bind(variables)
+                try:
+                    request_params = client._prepare_request_params(inputs={}, name="t")
+                finally:
+                    restore()
+                assert "Authorization" not in request_params.headers, (variables, cls.__name__)
+
+    @staticmethod
+    def test_invalid_value_rejected():
+        """非法头值（中文/控制字符）打 WARNING 后跳过。"""
+        for bad in ("Bearer 中文", "tok\r\nen", "bad\x00val"):
+            for cls in (StreamableHttpClientNew, SSEClientNew):
+                client = _create_client(cls)
+                client._auth = {"scope": "DYNAMIC"}
+                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+                restore = TestResolveDynamicCredentialHeaders._bind({"userToken": bad})
+                try:
+                    request_params = client._prepare_request_params(inputs={}, name="t")
+                finally:
+                    restore()
+                assert "Authorization" not in request_params.headers, (bad, cls.__name__)
+
+    @staticmethod
+    def test_workflow_path_untouched_without_ctx():
+        """工作流链路（请求上下文未写 global_variables）零注入——通道不重叠。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+            restore = TestResolveDynamicCredentialHeaders._bind({})
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            assert "Authorization" not in request_params.headers, cls.__name__

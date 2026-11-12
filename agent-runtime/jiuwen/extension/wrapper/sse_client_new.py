@@ -12,10 +12,15 @@
 
 import copy
 import os
+import re
 from builtins import ExceptionGroup
 from typing import Any, List, Optional
 from urllib.parse import urlencode
 
+from agent_runtime.context.request_context import (
+    get_request_global_variables,
+    strip_correlation_headers,
+)
 from jiuwen.extension.wrapper.outbound_header_guard import (
     is_valid_outbound_header_name,
     is_valid_outbound_header_value,
@@ -36,7 +41,6 @@ from openjiuwen.core.foundation.tool.mcp.base import (
     McpToolCard,
 )
 from openjiuwen.core.foundation.tool.mcp.client.mcp_client import McpClient
-from agent_runtime.context.request_context import strip_correlation_headers
 
 mcp_time_out_seconds = parse_mcp_time_out_seconds()
 
@@ -154,6 +158,50 @@ class SSEClientNew(McpClient):
                 if isinstance(k, str) and is_valid_outbound_header_name(k)
                 and is_valid_outbound_header_value(v)} or None
 
+    def _resolve_dynamic_credential_headers(self) -> dict:
+        """FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}}
+        绑定解析为出站头（值源=RequestContext.global_variables，由
+        react_agent_runner 写入；工作流链路不写该字段，互不重叠）。
+
+        仅 auth 无 scope 或 scope=DYNAMIC 时放行（与 kwargs 独立通道同门控）；
+        头已存在（server_config 头/已映射鉴权头）不覆盖——同名替换属
+        _replace_mcp_headers_extra 的既有职责；名+值双校验
+        （outbound_header_guard），非法条目打 WARNING（带参数名）后跳过。
+        """
+        if self._get_auth_scope() not in ("", "DYNAMIC"):
+            return {}
+        if not self._input_parameters:
+            return {}
+        global_variables = get_request_global_variables()
+        if not global_variables:
+            return {}
+        resolved = {}
+        for name, template in self._input_parameters.items():
+            if not isinstance(name, str) or not isinstance(template, str):
+                continue
+            if not name or not template.startswith("{{") or not template.endswith("}}"):
+                continue
+            inner = template[2:-2].strip()
+            if not inner.startswith("inputs.") or len(inner) <= 7:
+                continue
+            value = global_variables
+            for key in inner[7:].split("."):
+                if isinstance(value, dict) and key in value:
+                    value = value[key]
+                else:
+                    value = None
+                    break
+            if value is None or (isinstance(value, str) and not value.strip()):
+                continue
+            if not is_valid_outbound_header_name(name) or not is_valid_outbound_header_value(str(value)):
+                logger.warning(
+                    "dynamic credential header '%s' rejected: invalid name or value "
+                    "characters, server_name is %s", name, self._name,
+                )
+                continue
+            resolved[name] = str(value)
+        return resolved
+
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """
         准备请求参数
@@ -187,6 +235,14 @@ class SSEClientNew(McpClient):
             request_params.headers.update(dynamic_headers)
 
         self._replace_mcp_headers_extra(request_params, **kwargs)
+
+        # FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}} 绑定
+        # 注入出站头（头不存在时新增；值源=请求上下文，工作流链路不写）
+        existing_lower = {str(k).lower() for k in request_params.headers}
+        for name, value in self._resolve_dynamic_credential_headers().items():
+            if name.lower() not in existing_lower:
+                request_params.headers[name] = value
+                existing_lower.add(name.lower())
 
         self._execute_auth_hook(request_params, kwargs.get("name"))
 
