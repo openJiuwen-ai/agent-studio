@@ -140,24 +140,41 @@ class TestFlowQAConcurrentIsolation:
         A 的用户回复到达后，A session 里的终态必须是 A 自己的
         question/inputs（Critical-1 恢复路径回归）。
 
-        中断-恢复语义：START 轮 invoke 返回 None（interact 返回即结束），
-        恢复轮走 USER_INTERACT 分支返回用户回复。污染点是恢复轮
-        ``await session.interact`` 之后的状态写回（status=END + store）。
+        中断-恢复语义（对齐引擎契约）：START 轮 interact 以 GraphInterrupt
+        结束（first-paint 必须中断），恢复轮走 USER_INTERACT 分支 interact
+        返回用户回复。污染点是恢复轮 ``await session.interact`` 之后的
+        状态写回（status=END + store）。
         """
+        from openjiuwen.core.graph.pregel import GraphInterrupt
+
         from jiuwen.extension.workflow_node.flow_qa import FlowQA
 
         qa = FlowQA(_qa_conf(need_reply=True))
 
         a_at_interact = asyncio.Event()
         a_futures: list = []
+        a_calls = 0
 
         async def _interact_a(value):
+            """A 侧 interact：START 轮抛中断信号，恢复轮返回用户回复。"""
+            nonlocal a_calls
+            a_calls += 1
             fut = asyncio.get_event_loop().create_future()
             a_futures.append(fut)
             a_at_interact.set()
-            return await fut
+            reply = await fut
+            if a_calls == 1:
+                raise GraphInterrupt("A start paint")
+            return reply
+
+        b_calls = 0
 
         async def _interact_b(value):
+            """B 侧 interact：START/重开轮抛中断，恢复轮返回用户回复。"""
+            nonlocal b_calls
+            b_calls += 1
+            if b_calls % 2 == 1:
+                raise GraphInterrupt("B start paint")
             return "answer-B"
 
         session_a = _make_qa_session("A", interact_impl=_interact_a)
@@ -168,21 +185,24 @@ class TestFlowQAConcurrentIsolation:
         await a_at_interact.wait()
         a_at_interact.clear()
 
-        # B 完整周期（A 挂起期间交错）：START 轮 + 恢复轮
-        await qa.invoke({"name": "B"}, session_b, MagicMock())
+        # B 完整周期（A 挂起期间交错）：START 轮（中断信号）+ 恢复轮
+        with pytest.raises(GraphInterrupt):
+            await qa.invoke({"name": "B"}, session_b, MagicMock())
         result_b = await qa.invoke({"name": "B"}, session_b, MagicMock())
         assert result_b == {"userFields": {"response": "answer-B"}}
 
-        # A START 轮收尾（语义上返回 None）
+        # A START 轮收尾：首问必须以 GraphInterrupt 结束（first-paint 契约）
         a_futures[0].set_result("answer-A")
-        assert await task_a1 is None
+        with pytest.raises(GraphInterrupt):
+            await task_a1
 
         # A 恢复轮：USER_INTERACT 分支，挂起在 interact 等第二次用户回复
         task_a2 = asyncio.create_task(qa.invoke({"name": "A"}, session_a, MagicMock()))
         await a_at_interact.wait()
 
-        # B 重开一轮（A 恢复轮挂起期间交错：END → 重新开始 → START）
-        await qa.invoke({"name": "B"}, session_b, MagicMock())
+        # B 重开一轮（A 恢复轮挂起期间交错：END → 重新开始 → START 中断）
+        with pytest.raises(GraphInterrupt):
+            await qa.invoke({"name": "B"}, session_b, MagicMock())
 
         # A 的第二次用户回复到达，A 恢复轮写回终态
         a_futures[1].set_result("answer-A2")

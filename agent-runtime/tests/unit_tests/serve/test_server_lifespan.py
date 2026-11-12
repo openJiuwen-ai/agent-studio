@@ -596,14 +596,12 @@ class TestServerLifespanLogLevels:
         mock_settings.workflow_log.level = "INFO"
         mock_settings.workflow_log.graph_level = "WARNING"
         mock_settings.workflow_log.llm_level = "WARNING"
-        mock_settings.workflow_log.performance_level = performance_level
+        # 主线实现读 settings.server.performance_log_level（PR 版的
+        # workflow_log.performance_level 键已随 server.py 冲突取主线而废弃）
+        mock_settings.server.performance_log_level = performance_level
 
-        mock_redis_mgr = MagicMock()
-        mock_redis_mgr.close = AsyncMock()
-        mock_redis_mgr.is_initialized = True
         mock_redis_client = AsyncMock()
         mock_redis_client.ping = AsyncMock(return_value=True)
-        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
@@ -613,7 +611,12 @@ class TestServerLifespanLogLevels:
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
-             patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
+             patch(
+                 # 主线 Redis SPI 路径：lifespan 经 init_redis_provider 装配
+                 # （原 RedisClientManager.get_instance 的 mock 已不覆盖该路径）
+                 "agent_runtime.serve.server.init_redis_provider",
+                 new=AsyncMock(return_value=mock_redis_client),
+             ), \
              patch("agent_runtime.serve.server.configure_log_config") as mock_log_config, \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \

@@ -174,11 +174,12 @@ class TestConcurrentIsolationOnSharedInstance:
         # 四路执行事件序列骨架一致：并发未污染任一执行的路径
         assert all(s == shapes[0] for s in shapes[1:])
 
-        # compile 产物已绑定（Patch A 保留 self.pregel 属性写入，指向最近一次
-        # compile 的产物——本断言只证"已绑定"，每执行独立 Pregel 的隔离
-        # 由上方的执行/内容断言承担）
+        # compile 纯函数化（agent-core 0.1.17_hotfix/v0.1.17.post3 上游语义）：
+        # 执行产物仅由返回的 CompiledGraph 持有、不写回可复用的图实例
+        # （self.pregel 不再保留写入）。并发隔离的正确性由上方的执行/内容
+        # 断言承担，此处只反向确认图实例未携带执行产物（复用安全前提）
         graph = wf._internal._graph
-        assert graph.pregel is not None
+        assert graph.pregel is None
 
         # checkpointer 隔离（本层）：各 session 的 checkpoint store 按
         # session_id 各自建/删，执行完成后无残留——跨 session 共享 store

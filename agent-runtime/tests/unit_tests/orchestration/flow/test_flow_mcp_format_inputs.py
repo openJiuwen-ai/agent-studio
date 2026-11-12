@@ -277,8 +277,10 @@ class TestFormatApiInputsHeaders:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"auth_token": "Bearer café-ü"})
-        assert mcp._header_params["auth_token"] == "Bearer café-ü"
+        # 静态图复用：header_params 随 _format_api_inputs 返回值传递（三元组），
+        # 不再写 mcp._header_params 实例字段
+        result, _schema_patches, header_params = mcp._format_api_inputs({"auth_token": "Bearer café-ü"})
+        assert header_params["auth_token"] == "Bearer café-ü"
         assert "auth_token" not in result
 
     @staticmethod
@@ -329,8 +331,8 @@ class TestFormatApiInputsHeaders:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"Authorization": "", "query": "hello"})
-        assert "Authorization" not in mcp._header_params
+        result, _schema_patches, header_params = mcp._format_api_inputs({"Authorization": "", "query": "hello"})
+        assert "Authorization" not in header_params
         assert result["query"] == "hello"
 
     @staticmethod

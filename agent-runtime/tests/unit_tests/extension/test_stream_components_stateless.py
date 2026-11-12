@@ -407,6 +407,12 @@ class TestFlowMcpStateless:
 
         session = MagicMock()
         session.get_global_state = MagicMock(return_value=None)
+        # tracer 装饰探测：引擎 decorate_tool_with_trace 经 session._inner.tracer()
+        # 判定是否包 span 层——MagicMock 默认全真会误入装饰路径且 trigger
+        # 不可 await；显式返回 None 关闭探测，保持测试聚焦 header 下传语义
+        inner = MagicMock()
+        inner.tracer.return_value = None
+        session._inner = inner
 
         result = await mcp.invoke(
             {"userFields": {"auth_token": "tok-1", "query": "hi"}},

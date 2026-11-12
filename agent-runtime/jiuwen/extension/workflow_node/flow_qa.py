@@ -696,7 +696,7 @@ class FlowQA(WorkflowComponent):
                         {
                             "answer": query,
                             "node_id": node_id,
-                            "node_name": node_name,
+                            "node_name": self._node_name or node_id,
                             "node_type": JIUWEN_QA_TYPE,
                             "should_interrupt": True,
                         }

@@ -355,8 +355,12 @@ class TestFlowMcpHeaderParamsToRuntimeAuth:
         mock_client._tool_params = [param]
         mcp._client = mock_client
 
-        result, _ = mcp._format_api_inputs({"auth_token": "   "})
-        assert "auth_token" not in getattr(mcp, "_header_params", {}), \
+        # 静态图复用：header_params 随 _format_api_inputs 返回值传递
+        # （不落实例字段——实例跨执行复用）
+        result, _schema_patches, header_params = mcp._format_api_inputs(
+            {"auth_token": "   "}
+        )
+        assert "auth_token" not in header_params, \
             "whitespace-only should be skipped"
         """wrapper 的 dynamic_auth_headers 过滤非法头名（存量 IR 绕过防护）。"""
         for cls in (StreamableHttpClientNew, SSEClientNew):

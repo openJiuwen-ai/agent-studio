@@ -58,8 +58,17 @@ class TestFlowQAFirstPaintInterrupt:
             )
 
         assert session.interact.await_count == 2
-        assert qa.get_node_status().value == "user_interact"
-        assert qa.should_interrupt() is True
+        # 静态图复用下执行期状态走 ContextVar 通道（finally 复位防跨执行串扰），
+        # invoke 返回后逃逸面不可再读；执行后状态以 session 持久化真源为准：
+        # START 轮中断发生前应已把 USER_INTERACT 状态存入 session
+        stored = [
+            c.args[0]["flow_qa_state"]
+            for c in session.update_state.call_args_list
+            if c.args and "flow_qa_state" in c.args[0]
+        ]
+        assert stored and stored[-1]["status"] == "user_interact"
+        # （原 ``qa.should_interrupt()`` 断言与上同义：逃逸面在 invoke 返回后
+        # 已随 ContextVar 通道复位，该状态改由 session 真源断言承载）
 
     async def test_start_interrupt_on_first_interact(self):
         """正常路径：第一次 interact 即 GraphInterrupt。"""
