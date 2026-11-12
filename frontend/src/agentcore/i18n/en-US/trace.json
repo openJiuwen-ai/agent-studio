@@ -511,5 +511,9 @@
   "trace.option": "Option",
   "trace.add_tag_enum": "Add Tag Category",
   "trace.put_tag_info": "Tag updated successfully",
-  "trace.ref_version": "reference version"
+  "trace.ref_version": "reference version",
+  "trace.active_uesr_total_tip": "Unique users (of agent/workflow apps) active within the selected time range",
+  "trace.dataset_datail": "Evaluation Set Details",
+  "trace.reward_rules_d": "Math Accuracy Reward",
+  "trace.reward_rules_d_desc": "Compares numeric results for math tasks"
 }

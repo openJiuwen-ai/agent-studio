@@ -70,5 +70,9 @@
   "common.advanced.environment.json.errorTip2": "Value must be a string",
   "common.advanced.environment.json.errorTip3": "Key cannot be empty",
   "common.advanced.environment.json.errorTip4": "Key must be unique",
-  "common.advanced.environment.json.errorTip5": "Environment variables cannot exceed {{num}}"
+  "common.advanced.environment.json.errorTip5": "Environment variables cannot exceed {{num}}",
+  "common.failure": "Failed",
+  "common.last14Day": "Last 14 Days",
+  "common.success": "Succeeded",
+  "common.tableNodata.title": "No table data"
 }
