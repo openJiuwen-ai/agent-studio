@@ -21,6 +21,7 @@ FlowAgent - Agent节点组件
 from __future__ import annotations
 
 import ast
+import asyncio
 import traceback
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -161,16 +162,30 @@ class FlowAgent(WorkflowComponent):
         self._model = model
         self._react_agent = None  # 组合持有 ReActAgent，非继承
         self._initialized = False
+        # 懒初始化（_ensure_initialized）双检锁：实例跨执行复用，并发首调
+        # 不得重复建 ReActAgent / 重复注册工具与 rail
+        self._init_lock: asyncio.Lock = asyncio.Lock()
 
     # =========================================================================
     # 初始化与 Agent 创建
     # =========================================================================
 
     async def _ensure_initialized(self) -> None:
-        """确保 Agent 已初始化（async：register_rail 需要 await）。"""
+        """确保 Agent 已初始化（async：register_rail 需要 await）。
+
+        双检加锁：无锁时并发首调会重复建 ReActAgent（后建覆盖先建）、重复
+        ``Runner.resource_mgr.add_tool``（默认严格拒绝重复注册，异常被下方
+        except 吞成脏日志）、重复 ``register_rail``。
+        """
         if self._initialized:
             return
 
+        async with self._init_lock:
+            if self._initialized:
+                return
+            await self._do_initialize()
+
+    async def _do_initialize(self) -> None:
         # 验证配置
         self._config.validate_config()
 
@@ -282,9 +297,11 @@ class FlowAgent(WorkflowComponent):
                         logger.debug(f"Tool already in ability_manager, skipped: {tool_name}")
 
                 # 2. 注册工具实例到 Runner.resource_mgr
+                # skip_if_exists：构建期幂等注册（同一工具被多个 Agent 共享，
+                # 默认严格模式会拒绝重复注册并抛错）
                 from openjiuwen.core.runner import Runner
 
-                Runner.resource_mgr.add_tool(tool)
+                Runner.resource_mgr.add_tool(tool, skip_if_exists=True)
                 logger.debug(f"Registered tool with Runner.resource_mgr: {tool_name}")
 
             except Exception as e:

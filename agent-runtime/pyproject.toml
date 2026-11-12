@@ -8,7 +8,9 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.4.0",
     "pydantic-settings~=2.14.2",
-    "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@develop",
+    # agent-core 修复分支（compile 可重入 + 执行期状态 ContextVar 化，静态图
+    # 实例复用的引擎前置）；待合入 openJiuwen/agent-core@develop 后改回 @develop
+    "openjiuwen[sandbox] @ git+https://gitcode.com/taoliankuan123/agent-core.git@fix/0.1.17.post2-compile-reentrant",
     "boto3",
     "aioboto3",
     "aiohttp",
