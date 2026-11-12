@@ -294,15 +294,12 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
     }
 
     const ptl = this.graph.pageToLocal(e.pageX, e.pageY);
+    // pageToLocal returns graph world coords (can be negative after panning);
+    // do not treat negative values as "outside the canvas".
     const x =
       ptl.x < this.clickNodeX && ptl.x > 0 ? 0 : ptl.x - this.clickNodeX;
     const y =
       ptl.y < this.clickNodeY && ptl.y > 0 ? 0 : ptl.y - this.clickNodeY;
-
-    // Reject releases that map outside the canvas (negative graph coords).
-    if (x < 0 || y < 0) {
-      return;
-    }
 
     this.createNode.emit({
       ...node,

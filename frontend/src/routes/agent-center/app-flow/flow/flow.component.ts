@@ -2461,10 +2461,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public allowDrop(e: DragEvent) {
     e.preventDefault();
-    // Mark the canvas as an accepted copy target so palette dragend sees
-    // dropEffect !== 'none' for successful drops (see #1193).
+    // Only the graph host accepts palette drops. Overlays inside `.content`
+    // (node panel, toolbar, …) must keep dropEffect 'none', otherwise
+    // dragend would still create a node (see #1193 / PR review).
+    const overCanvas = !!(e.target as Element | null)?.closest?.(
+      '#app-flow-container',
+    );
     if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'copy';
+      e.dataTransfer.dropEffect = overCanvas ? 'copy' : 'none';
     }
   }
 

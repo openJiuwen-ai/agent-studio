@@ -47,10 +47,21 @@ describe('NodesGroupModalComponent dragend (#1193)', () => {
     expect(createNodeEmit).not.toHaveBeenCalled();
   });
 
-  it('does not create a node when release maps to negative graph coordinates', () => {
+  it('creates a node when release maps to negative graph coordinates after pan', () => {
+    // X6 pageToLocal returns world coords; after panning, visible canvas
+    // can map to negative values and must still create a node.
     pageToLocal.and.returnValue({ x: -50, y: -20 });
     component.onDragEnd.call(component, dragEndEvent(), node);
-    expect(createNodeEmit).not.toHaveBeenCalled();
+    expect(createNodeEmit).toHaveBeenCalledTimes(1);
+    expect(createNodeEmit.calls.mostRecent().args[0]).toEqual(
+      jasmine.objectContaining({
+        name: 'Code',
+        type: 'Code',
+        x: -60,
+        y: -30,
+        shape: 'op-code-node',
+      }),
+    );
   });
 
   it('creates a node on a successful accepted drop', () => {
@@ -65,6 +76,15 @@ describe('NodesGroupModalComponent dragend (#1193)', () => {
         shape: 'op-code-node',
       }),
     );
+  });
+
+  it('does not create a node when dataTransfer is missing', () => {
+    component.onDragEnd.call(
+      component,
+      { pageX: 300, pageY: 200, dataTransfer: null } as unknown as DragEvent,
+      node,
+    );
+    expect(createNodeEmit).not.toHaveBeenCalled();
   });
 
   it('does not create a node in read-only mode', () => {
