@@ -771,6 +771,16 @@ class ReActAgentRunner:
             )
 
             set_request_global_variables(global_variables)
+            # 入参变量默认值合并（请求未提供时回退）：agent IR 的入参声明在顶层
+            # ir["inputs"]（{name, default}）；提示词侧 configs.inputVariables 合并
+            # 读的是另一形态字段（variable_key/default_value），agent IR 不含，
+            # 此前默认值从未生效（{{inputs.*}} 绑定值源随之缺省）
+            for var in ir_json.get("inputs") or []:
+                if not isinstance(var, dict) or var.get("name") is None:
+                    continue
+                default = var.get("default")
+                if default is not None and str(var["name"]) not in global_variables:
+                    global_variables[str(var["name"])] = default
             # 记忆变量（{{memory.*}} 绑定值源）：IR metadata.memoryVariables 的
             # value > default_value 合并（编辑器记忆面板填写即落 DSL；旧编排链
             # 走 ContextEngine 加载，react 链路在此以 DSL 声明为源）
