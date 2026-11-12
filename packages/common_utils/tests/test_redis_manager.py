@@ -184,6 +184,9 @@ class TestGetPubsubClient:
         assert captured["host"] == "h1"
         assert captured["port"] == 6379
 
+    # ------------------------------------------------------------------ #
+    # 节点轮换（检视意见：首节点下线时订阅切换到其他节点）
+    # ------------------------------------------------------------------ #
     @staticmethod
     def test_cluster_mode_rotates_nodes_on_repeated_calls(reset_common_utils_state, monkeypatch):
         """每次调用推进游标，多次调用（模拟重连重试）在节点间轮换。"""
@@ -231,7 +234,7 @@ class TestGetPubsubClient:
         inst._settings = settings
         inst._client = MagicMock()
         from common_utils.redis_manager import get_pubsub_client
-        first = get_pubsub_client()  # 首次：首节点 h1
+        first = get_pubsub_client()   # 首次：首节点 h1
         second = get_pubsub_client()  # 重试：应切换到 h2
         assert created[0] == ("h1", 7000)
         assert created[1] == ("h2", 7001)
@@ -298,6 +301,64 @@ class TestGetPubsubClient:
         assert inst._pubsub_node_index == 1
         RedisClientManager.reset()
         assert RedisClientManager._pubsub_node_index == 0
+
+    # ------------------------------------------------------------------ #
+    # socket_timeout 省略（检视意见：pubsub 阻塞读不应被 socket_timeout 周期断连）
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def test_cluster_pubsub_omits_socket_timeout(reset_common_utils_state, monkeypatch):
+        """pubsub 专用客户端不继承 socket_timeout，避免空闲阻塞读周期性断连。
+
+        redis-py < 8.0.0 的 parse_response(block=True) 将 timeout=None 传给连接层，
+        连接层回退到 socket_timeout（默认 5s）→ 空闲 5s 即 TimeoutError 断连。
+        省略 socket_timeout 使阻塞读无限等待。
+        """
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster",
+            REDIS_CLUSTER_NODES="h1:7000,h2:7001",
+            REDIS_PASSWORD="secret",
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        # socket_timeout 不得传入 kwargs（redis-py 默认 None = 无读超时）
+        assert "socket_timeout" not in captured
+        # socket_connect_timeout 仍保留，建连阶段有超时保护
+        assert captured["socket_connect_timeout"] == settings.socket_connect_timeout
+
+    @staticmethod
+    def test_cluster_pubsub_keeps_socket_connect_timeout(reset_common_utils_state, monkeypatch):
+        """socket_connect_timeout 不受 socket_timeout 省略影响。"""
+        from common_utils import redis_manager as rm
+        captured = {}
+
+        class _FakeRedis:
+            def __init__(self, **kw):
+                captured.update(kw)
+
+        monkeypatch.setattr(rm, "Redis", _FakeRedis)
+        inst = RedisClientManager.get_instance()
+        settings = RedisSettings(
+            REDIS_MODE="cluster",
+            REDIS_CLUSTER_NODES="h1:7000",
+            REDIS_SOCKET_CONNECT_TIMEOUT=10,
+        )
+        inst._settings = settings
+        inst._client = MagicMock()
+        from common_utils.redis_manager import get_pubsub_client
+        get_pubsub_client()
+        assert captured["socket_connect_timeout"] == 10
+        assert "socket_timeout" not in captured
 
 
 class TestNonTransactionPipeline:

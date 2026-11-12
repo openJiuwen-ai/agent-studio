@@ -317,6 +317,13 @@ class RedisClientManager:
         节点 SUBSCRIBE 即可收到消息。每次调用推进 _pubsub_node_index，使
         subscribe_runtime_cancel 的重连重试自动轮换到下一节点——首节点下线而
         集群其他节点可用时，订阅可在下一次重试恢复，而非持续失败直到进程重启。
+
+        不设 socket_timeout：pubsub 为长连接阻塞读（listen() 无限等待消息），
+        redis-py < 8.0.0 的 parse_response(block=True) 将 timeout=None 传给
+        连接层，连接层回退到 socket_timeout（默认 5s）→ 空闲 5s 即 TimeoutError
+        断连，导致订阅每 5s 重连+轮换节点（高频重连、日志噪声、断连窗口丢消息）。
+        省略 socket_timeout 使阻塞读无限等待；socket_connect_timeout 仍保留以
+        保证建连阶段有超时保护。
         """
         nodes: list[tuple[str, int]] = []
         for node_str in self._settings.cluster_nodes.split(","):
@@ -339,7 +346,6 @@ class RedisClientManager:
             "port": port,
             "db": 0,
             "max_connections": self._settings.max_connections,
-            "socket_timeout": self._settings.socket_timeout,
             "socket_connect_timeout": self._settings.socket_connect_timeout,
             "decode_responses": False,
         }
