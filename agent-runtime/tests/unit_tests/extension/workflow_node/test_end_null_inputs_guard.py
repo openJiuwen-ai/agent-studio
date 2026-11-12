@@ -8,6 +8,8 @@ Start 写成 None,Pregel 会把未命中下标解析成 None 传入 End;`x in No
 """
 # pylint: disable=protected-access
 
+import pytest
+
 from jiuwen.extension.workflow_node.end import End
 
 
@@ -63,3 +65,37 @@ class TestEndNullInputsGuard:
         assert _has_response_payload(_Out({"response": "x"})) is True
         assert _has_response_payload(_Out({"other": 1})) is False
         assert _has_response_payload("plain") is False
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_coerce_collect_inputs_consumes_top_level_async_stream():
+        """顶层 AsyncGenerator 必须先聚合，不能被 normalize 成 {}。"""
+
+        async def _chunks():
+            yield {"b": "first"}
+            yield {"b": "last", "c": "c"}
+
+        out = await End._coerce_collect_inputs(_chunks())
+        assert out == {"b": "last", "c": "c"}
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_coerce_collect_inputs_unwraps_user_fields_dict():
+        out = await End._coerce_collect_inputs(
+            {"userFields": {"b": None, "c": "c"}}
+        )
+        assert out == {"b": None, "c": "c"}
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_coerce_collect_inputs_none_becomes_empty_dict():
+        assert await End._coerce_collect_inputs(None) == {}
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_coerce_collect_inputs_user_fields_async_stream():
+        async def _chunks():
+            yield {"x": 1}
+
+        out = await End._coerce_collect_inputs({"userFields": _chunks()})
+        assert out == {"x": 1}

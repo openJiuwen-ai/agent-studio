@@ -388,6 +388,46 @@ class End(BaseEnd):
             return user_fields if isinstance(user_fields, dict) else {}
         return inputs
 
+    @staticmethod
+    async def _coerce_collect_inputs(inputs):
+        """collect 入口归一：先消费顶层异步流，再剥 userFields。
+
+        不可先走 ``_extract_user_fields`` / ``_normalize_inputs_dict``——二者会把
+        AsyncGenerator 收成 ``{}``，导致原 ``hasattr(..., "__aiter__")`` 聚合分支
+        不可达、流式输入被静默丢弃。
+        """
+        # 与历史行为对齐：dict 上先剥 USER_FIELDS，再判断是否异步流
+        if isinstance(inputs, dict) and inputs.get(USER_FIELDS):
+            unwrapped = inputs.get(USER_FIELDS)
+            if isinstance(unwrapped, dict) or (
+                unwrapped is not None and hasattr(unwrapped, "__aiter__")
+            ):
+                inputs = unwrapped
+            else:
+                inputs = {}
+        elif inputs is None:
+            inputs = {}
+
+        if hasattr(inputs, "__aiter__") and not isinstance(inputs, dict):
+            collected_inputs = []
+            async for input_chunk in inputs:
+                collected_inputs.append(input_chunk)
+            if len(collected_inputs) == 1:
+                final_inputs = collected_inputs[0]
+            elif len(collected_inputs) > 1:
+                final_inputs = collected_inputs[-1]
+            else:
+                final_inputs = {}
+        else:
+            final_inputs = inputs
+
+        # 帧若仍是 {userFields: ...} 再剥一层；最终保证 dict
+        if isinstance(final_inputs, dict):
+            nested = final_inputs.get(USER_FIELDS)
+            if nested:
+                final_inputs = nested if isinstance(nested, dict) else {}
+        return End._normalize_inputs_dict(final_inputs)
+
     def _prepare_user_inputs(self, inputs) -> dict:
         """归一 userFields → 类型强转 → None 叶子兜底。"""
         inputs = self._extract_user_fields(inputs)
@@ -820,7 +860,7 @@ class End(BaseEnd):
         inputs = self._normalize_inputs_dict(inputs)
         self._coalesce_none_leaves(inputs)
         outputs = {
-            k[len(OUTPUT_PREFIX) :]: v
+            k[len(OUTPUT_PREFIX):]: v
             for k, v in inputs.items()
             if k.startswith(OUTPUT_PREFIX) and v is not None
         }
@@ -1025,21 +1065,9 @@ class End(BaseEnd):
         if self._collect_executed:
             return None
         self._collect_executed = True
-        # 聚合流式输入
-        collected_inputs = []
+        # 聚合流式输入（必须先于 _extract_user_fields，见 _coerce_collect_inputs）
         outputs = {}
-        inputs = self._extract_user_fields(inputs)
-        if hasattr(inputs, "__aiter__"):
-            async for input_chunk in inputs:
-                collected_inputs.append(input_chunk)
-            if len(collected_inputs) == 1:
-                final_inputs = collected_inputs[0]
-            elif len(collected_inputs) > 1:
-                final_inputs = collected_inputs[-1]
-            else:
-                final_inputs = {}
-        else:
-            final_inputs = inputs
+        final_inputs = await self._coerce_collect_inputs(inputs)
 
         # 处理输入中的生成器值（与 invoke 一致）
         final_inputs = self._normalize_inputs_dict(final_inputs)
@@ -1054,7 +1082,7 @@ class End(BaseEnd):
         final_inputs = self._normalize_inputs_dict(final_inputs)
         self._coalesce_none_leaves(final_inputs)
         outputs = {
-            k[len(OUTPUT_PREFIX) :]: v
+            k[len(OUTPUT_PREFIX):]: v
             for k, v in final_inputs.items()
             if k.startswith(OUTPUT_PREFIX) and v is not None
         }
@@ -1275,7 +1303,7 @@ class End(BaseEnd):
 
             # 提取 outputs 中的非生成器值（输出字段以 #end_ 前缀标识）
             outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
+                k[len(OUTPUT_PREFIX):]: v
                 for k, v in inputs.items()
                 if k.startswith(OUTPUT_PREFIX) and v is not None and not isinstance(v, AsyncGenerator)
             }

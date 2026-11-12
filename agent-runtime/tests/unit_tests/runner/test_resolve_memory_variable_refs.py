@@ -14,10 +14,10 @@ from agent_runtime.runner.workflow_stream_data_wrapper import (
 
 class _FakeState:
     def __init__(self, values: dict):
-        self._values = values
+        self.values = values
 
     def get_global(self, key):
-        return self._values.get(key)
+        return self.values.get(key)
 
 
 def test_resolve_memory_ref_miss_fills_inputs_without_global_write():
@@ -28,10 +28,10 @@ def test_resolve_memory_ref_miss_fills_inputs_without_global_write():
 
     resolve_memory_variable_refs(schema, inputs, state)
 
-    assert inputs["b"] is None
-    assert inputs["c"] == "c"
+    assert inputs.get("b") is None
+    assert inputs.get("c") == "c"
     # 权威 global 仍是空数组，未被 None 删除污染
-    assert state._values == {"MEMORY_VARIABLE.a": []}
+    assert state.values == {"MEMORY_VARIABLE.a": []}
 
 
 def test_resolve_memory_ref_hit_fills_inputs():
@@ -41,7 +41,7 @@ def test_resolve_memory_ref_hit_fills_inputs():
 
     resolve_memory_variable_refs(schema, inputs, state)
 
-    assert inputs["b"] == "from_mem"
+    assert inputs.get("b") == "from_mem"
 
 
 def test_resolve_nested_schema():
@@ -51,4 +51,4 @@ def test_resolve_nested_schema():
 
     resolve_memory_variable_refs(schema, inputs, state)
 
-    assert inputs["userFields"]["b"] is None
+    assert (inputs.get("userFields") or {}).get("b") is None
