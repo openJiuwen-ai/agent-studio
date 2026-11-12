@@ -25,6 +25,7 @@ import { ArrTypeValidatorDirective } from '@shared/directives/array-type-validat
 import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { MessageComponent } from '@shared/services/cfdata.service';
 import { parseCurl } from './curl';
+import { mapOpenApiParamLocation } from './openapi-param-location';
 import { CommonUtils } from 'src/utils/common.util';
 import { NzModalRef } from 'ng-zorro-antd/modal';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -217,7 +218,8 @@ export class ImportRequestModalComponent implements OnInit {
       default: item.schema.default,
       type: item.schema.type,
       schema: item.schema,
-      location: this.capitalizeFirstLetter(item.in),
+      // OpenAPI uses "header"; tool schema tabs/backend expect "Headers".
+      location: mapOpenApiParamLocation(item.in),
     }));
   }
 
@@ -239,10 +241,6 @@ export class ImportRequestModalComponent implements OnInit {
       type: properties[key].type,
       location: 'Body',
     }));
-  }
-
-  capitalizeFirstLetter(string) {
-    return string.slice(0, 1).toUpperCase() + string.slice(1);
   }
 
   public onInputJSONChange() {
