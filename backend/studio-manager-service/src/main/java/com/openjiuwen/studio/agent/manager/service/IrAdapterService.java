@@ -338,9 +338,12 @@ public class IrAdapterService {
     private static final String MCP_METHOD = "Headers";
 
     /**
-     * FEAT-093 动态鉴权参数描述（值由工作流编排期绑定，运行期注入出站请求头）
+     * FEAT-093 动态鉴权参数描述（值由工作流编排期绑定，运行期注入出站请求头）。
+     * 公开常量：MCP 与插件两条链路共用，且作为工具 schema 中自动追加条目的
+     * 标记——保存侧据此识别"回环条目"（剥离，单一事实源=auth_info）与
+     * 用户同名条目（拒绝）。
      */
-    private static final String DYNAMIC_AUTH_PARAM_DESC = "dynamic auth credential, bind value in workflow";
+    public static final String DYNAMIC_AUTH_PARAM_DESC = "dynamic auth credential, bind value in workflow";
 
     /**
      * ir路径
@@ -1697,6 +1700,10 @@ public class IrAdapterService {
         SchemaConfig inputSchema = JSON.parseObject(toolEntity.getInputSchema(), SchemaConfig.class);
         fillHeaders(inputSchema, headers);
         fillInputSchemaByRequestInfo(inputSchema, toolEntity.getRequestInfo());
+        // FEAT-093 插件动态鉴权：auth_keys[].target_name 追加为 Headers 入参
+        // （值不落库，由工作流节点/智能体工具参数绑定——ref/input_ref 引用入参；
+        // 与 server headers 按名去重、大小写不敏感，同 MCP 通道约定）
+        appendDynamicAuthParamsToSchema(toolEntity.getAuthInfo(), inputSchema);
 
         result.put(HEADERS, headers);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(toolEntity.getAuthInfo()));
@@ -2210,6 +2217,52 @@ public class IrAdapterService {
             param.put(METHOD, MCP_METHOD);
             param.put(REQUIRED, false);
             paramList.add(param);
+        }
+    }
+
+    /**
+     * FEAT-093 插件动态鉴权参数追加（工具 schema 通道）：scope=DYNAMIC 时把
+     * auth_keys 的 target_name 追加为 Headers 位置入参（描述=DYNAMIC_AUTH_PARAM_DESC
+     * 标记），供工作流节点/智能体工具参数绑定 ref/input_ref 引用入参，
+     * 运行期经 RequestParamsCreator 的 Headers 路由注入出站请求头。
+     * 与既有参数（server headers/schema Headers 参数）按名去重、大小写不敏感。
+     *
+     * @param authInfo 工具（继承自插件）的鉴权信息
+     * @param inputSchema 待追加的工具入参 schema
+     */
+    public static void appendDynamicAuthParamsToSchema(AuthInfo authInfo, SchemaConfig inputSchema) {
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return;
+        }
+        if (Objects.isNull(inputSchema)) {
+            inputSchema = new SchemaConfig();
+        }
+        if (Objects.isNull(inputSchema.getProperties())) {
+            inputSchema.setProperties(new HashMap<>());
+        }
+        Set<String> existingNamesLower = new HashSet<>();
+        for (String name : inputSchema.getProperties().keySet()) {
+            if (name != null) {
+                existingNamesLower.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                continue;
+            }
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName)
+                    || existingNamesLower.contains(targetName.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            SchemaConfig paramSchema = new SchemaConfig();
+            paramSchema.setLocation(MCP_METHOD);
+            paramSchema.setType(MCP_TYPE);
+            paramSchema.setDescription(DYNAMIC_AUTH_PARAM_DESC);
+            inputSchema.getProperties().put(targetName, paramSchema);
+            existingNamesLower.add(targetName.toLowerCase(Locale.ROOT));
         }
     }
 

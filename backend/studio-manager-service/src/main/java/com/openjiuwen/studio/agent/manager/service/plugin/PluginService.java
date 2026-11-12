@@ -48,6 +48,9 @@ import com.openjiuwen.studio.agent.common.dto.auth.PluginIAMAuthInfo;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.SearchCriteria;
+import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.plugin.BasicInfo;
@@ -139,6 +142,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.TreeSet;
@@ -309,6 +313,9 @@ public class PluginService implements IPluginService {
         log.info("operation log {}: start to create plugin", projectId);
         PluginDTO pluginDTO = buildPluginEntity(projectId, workspaceId, body);
 
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝
+        validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+
         log.info("Checking for duplicate display name - DisplayName: {}, WorkspaceId: {}",
             pluginDTO.getPluginDisplayName(), workspaceId);
         int existDisplayName = pluginMapper.selectByDisplayNameAndWorkspaceId(pluginDTO.getPluginDisplayName(),
@@ -350,6 +357,9 @@ public class PluginService implements IPluginService {
             throw new AgentStudioException(StudioError.TOOL_NOT_EXIST);
         }
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
+
+        // FEAT-093 插件动态鉴权：父插件动态头 vs 新建工具的固定 headers/Headers 参数同名拒绝
+        validPluginDynamicAuthInfo(pluginEntity.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
 
         String toolId = addTool(body, pluginDTO);
 
@@ -1251,6 +1261,9 @@ public class PluginService implements IPluginService {
             log.error("callMode can not modify, pluginId:{}", pluginId);
             throw new AgentStudioException(StudioError.PLUGIN_CALL_MODE_CANNOT_MODIFFY);
         }
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝
+        // （存量插件改动态鉴权时，请求体自带 headers 即本请求内校验）
+        validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), null);
         if (Strings.CS.equals(body.getCallMode(), PluginCallModeEnum.API.getCode())) {
             // 预置插件支持修改auth描述
             if (ToolType.INNER.type.equals(oldPlugin.getType()) && Boolean.TRUE.equals(oldPlugin.getAuthRequired())) {
@@ -2170,6 +2183,114 @@ public class PluginService implements IPluginService {
         urlCheckUtils.checkUrl(projectId, requestInfo.getUrl());
     }
 
+    /** Headers 位置参数标记（工具 schema 与动态鉴权头同名校验用）。 */
+    private static final String HEADER_PARAM_LOCATION = "Headers";
+
+    /**
+     * FEAT-093 插件动态鉴权校验：scope=DYNAMIC 时仅登记出站头名（值由
+     * 工作流/智能体编排期绑定，不落库）。登记侧规则与 MCP 通道同构
+     * （McpBaseImpl.validDynamicAuthInfo，复用其公开常量与语义）；
+     * 同时与工具请求头做同名拒绝（固定 headers / Headers 位置入参，
+     * 大小写不敏感——同名头会在运行期相互覆盖，须在保存期拒绝）。
+     * 工具 schema 中的自动追加条目（描述=DYNAMIC_AUTH_PARAM_DESC 标记，
+     * 详情回显回环产物）先行剥离，保持单一事实源（auth_info）。
+     *
+     * @param authInfo 鉴权信息（插件创建/修改时来自请求体；工具创建时来自父插件）
+     * @param requestInfo 工具请求信息（固定 headers 同名拒绝源）
+     * @param inputSchemaStr 工具入参 schema JSON 字符串（Headers 参数同名拒绝源）
+     */
+    public void validPluginDynamicAuthInfo(AuthInfo authInfo, RequestInfo requestInfo, String inputSchemaStr) {
+        if (Objects.isNull(authInfo) || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            return;
+        }
+        if (!AuthInfo.DomainEnum.HEADERS.equals(authInfo.getDomain())) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth only supports HEADERS domain");
+        }
+        if (CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth requires at least one auth key entry");
+        }
+        if (authInfo.getAuthKeys().size() > McpBaseImpl.MAX_DYNAMIC_AUTH_KEYS) {
+            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                "dynamic auth supports at most " + McpBaseImpl.MAX_DYNAMIC_AUTH_KEYS + " auth key entries");
+        }
+        Set<String> targetNamesLower = new HashSet<>();
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth auth_keys contains null element");
+            }
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is required and its length must be 1-64");
+            }
+            if (McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name must not be a reserved correlation header: " + targetName);
+            }
+            if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(targetName).matches()
+                    || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is not a valid http header name: " + targetName);
+            }
+            if (StringUtils.isNotBlank(authKeyInfo.getAuthKey())) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth must not persist credential value");
+            }
+            if (!targetNamesLower.add(targetName.toLowerCase(Locale.ROOT))) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth target_name is duplicated: " + targetName);
+            }
+        }
+        // 详情回显回环条目剥离（标记识别），再对剩余 Headers 参数做同名拒绝
+        SchemaConfig inputSchema = StringUtils.isBlank(inputSchemaStr)
+                ? null : JSON.parseObject(inputSchemaStr, SchemaConfig.class);
+        stripDynamicAuthRoundtripParams(inputSchema, targetNamesLower);
+        if (Objects.nonNull(requestInfo) && MapUtils.isNotEmpty(requestInfo.getHeaders())) {
+            for (String name : requestInfo.getHeaders().keySet()) {
+                if (name != null && targetNamesLower.contains(name.toLowerCase(Locale.ROOT))) {
+                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                        "tool request header '" + name + "' conflicts with dynamic auth header, remove the duplicate");
+                }
+            }
+        }
+        if (Objects.nonNull(inputSchema) && Objects.nonNull(inputSchema.getProperties())) {
+            for (Map.Entry<String, SchemaConfig> entry : inputSchema.getProperties().entrySet()) {
+                SchemaConfig value = entry.getValue();
+                boolean isHeaderParam = Objects.nonNull(value)
+                        && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation());
+                if (isHeaderParam && entry.getKey() != null
+                        && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT))) {
+                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                        "tool header param '" + entry.getKey()
+                            + "' conflicts with dynamic auth header, remove the duplicate");
+                }
+            }
+        }
+    }
+
+    /**
+     * 剥离工具 schema 中的动态鉴权自动追加条目（描述=DYNAMIC_AUTH_PARAM_DESC
+     * 且名命中动态头集合的 Headers 参数——详情回显回环产物），保持
+     * 单一事实源（auth_info）。名命中但描述不符的条目不剥离——由
+     * 同名拒绝校验报错（用户自行添加的冲突头）。
+     */
+    private static void stripDynamicAuthRoundtripParams(SchemaConfig inputSchema, Set<String> targetNamesLower) {
+        if (Objects.isNull(inputSchema) || Objects.isNull(inputSchema.getProperties())) {
+            return;
+        }
+        inputSchema.getProperties().entrySet().removeIf(entry -> {
+            SchemaConfig value = entry.getValue();
+            return Objects.nonNull(value)
+                    && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation())
+                    && IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(value.getDescription())
+                    && entry.getKey() != null
+                    && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT));
+        });
+    }
+
     /**
      * 生成16位唯一ID（基于UUID截取）
      *
@@ -2242,6 +2363,13 @@ public class PluginService implements IPluginService {
         if (authInfoReq.getAuthKeys() != null && (authInfoReq.getDomain() == null || authInfoReq.getScope() == null)) {
             throw new AgentStudioException(StudioError.PLUGIN_AUTH_KEY_DOMAIN_NOT_NULL);
         }
+
+        // FEAT-093 插件动态鉴权：登记侧校验 + 存量工具请求头（插件行上的
+        // requestInfo/inputSchema JSON 串）同名拒绝
+        validPluginDynamicAuthInfo(authInfoReq,
+            StringUtils.isBlank(pluginEntity.getRequestInfo())
+                ? null : JSON.parseObject(pluginEntity.getRequestInfo(), RequestInfo.class),
+            pluginEntity.getInputSchema());
 
         // 2. 复用现有的加密逻辑，对最新的鉴权信息进行加密
         AuthInfo encryptedAuth = encryptedAuthInfo(authInfoReq);
