@@ -765,9 +765,25 @@ class ReActAgentRunner:
             # MCP wrapper 出站前解析 input_parameters 的 {{inputs.*}} 绑定注入
             # 出站请求头（与提示词模板同源；_parse_prompt_template 的入参默认值
             # 合并就地变更同一 dict，晚于本赋值也会被工具调用看到）
-            from agent_runtime.context.request_context import set_request_global_variables
+            from agent_runtime.context.request_context import (
+                set_request_global_variables,
+                set_request_memory_variables,
+            )
 
             set_request_global_variables(global_variables)
+            # 记忆变量（{{memory.*}} 绑定值源）：IR metadata.memoryVariables 的
+            # value > default_value 合并（编辑器记忆面板填写即落 DSL；旧编排链
+            # 走 ContextEngine 加载，react 链路在此以 DSL 声明为源）
+            memory_vars = {}
+            for var in (ir_json.get("metadata") or {}).get("memoryVariables") or []:
+                if not isinstance(var, dict) or not var.get("name"):
+                    continue
+                value = var.get("value")
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    value = var.get("default_value")
+                if value is not None and not (isinstance(value, str) and not value.strip()):
+                    memory_vars[var["name"]] = value
+            set_request_memory_variables(memory_vars)
             agent, agent_id = self._create_agent(
                 ir_json, skill_work_dir, global_variables, has_file_links
             )

@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 
 from agent_runtime.context.request_context import (
     get_request_global_variables,
+    get_request_memory_variables,
     strip_correlation_headers,
 )
 from jiuwen.extension.wrapper.outbound_header_guard import (
@@ -159,9 +160,10 @@ class StreamableHttpClientNew(McpClient):
                 and is_valid_outbound_header_value(v)} or None
 
     def _resolve_dynamic_credential_headers(self) -> dict:
-        """FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}}
-        绑定解析为出站头（值源=RequestContext.global_variables，由
-        react_agent_runner 写入；工作流链路不写该字段，互不重叠）。
+        """FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}}/
+        {{memory.*}} 绑定解析为出站头（值源=RequestContext.global_variables/
+        memory_variables，由 react_agent_runner 写入；工作流链路不写这些
+        字段，互不重叠）。
 
         仅 auth 无 scope 或 scope=DYNAMIC 时放行（与 kwargs 独立通道同门控）；
         头已存在（server_config 头/已映射鉴权头）不覆盖——同名替换属
@@ -172,8 +174,14 @@ class StreamableHttpClientNew(McpClient):
             return {}
         if not self._input_parameters:
             return {}
+        sources = {}
         global_variables = get_request_global_variables()
-        if not global_variables:
+        if global_variables:
+            sources["inputs"] = global_variables
+        memory_variables = get_request_memory_variables()
+        if memory_variables:
+            sources["memory"] = memory_variables
+        if not sources:
             return {}
         resolved = {}
         for name, template in self._input_parameters.items():
@@ -182,24 +190,31 @@ class StreamableHttpClientNew(McpClient):
             if not name or not template.startswith("{{") or not template.endswith("}}"):
                 continue
             inner = template[2:-2].strip()
-            if not inner.startswith("inputs.") or len(inner) <= 7:
-                continue
-            value = global_variables
-            for key in inner[7:].split("."):
-                if isinstance(value, dict) and key in value:
-                    value = value[key]
-                else:
-                    value = None
+            matched = False
+            for namespace, variables in sources.items():
+                prefix = namespace + "."
+                if inner.startswith(prefix) and len(inner) > len(prefix):
+                    matched = True
+                    value = variables
+                    for key in inner[len(prefix):].split("."):
+                        if isinstance(value, dict) and key in value:
+                            value = value[key]
+                        else:
+                            value = None
+                            break
+                    if value is None or (isinstance(value, str) and not value.strip()):
+                        continue
+                    value_str = str(value)
+                    if not is_valid_outbound_header_name(name) or not is_valid_outbound_header_value(value_str):
+                        logger.warning(
+                            "dynamic credential header '%s' rejected: invalid name or value "
+                            "characters, server_name is %s", name, self._name,
+                        )
+                        continue
+                    resolved[name] = value_str
                     break
-            if value is None or (isinstance(value, str) and not value.strip()):
+            if not matched:
                 continue
-            if not is_valid_outbound_header_name(name) or not is_valid_outbound_header_value(str(value)):
-                logger.warning(
-                    "dynamic credential header '%s' rejected: invalid name or value "
-                    "characters, server_name is %s", name, self._name,
-                )
-                continue
-            resolved[name] = str(value)
         return resolved
 
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:

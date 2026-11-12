@@ -39,6 +39,10 @@ class RequestContext:
     # 供 MCP wrapper 解析 input_parameters 的 {{inputs.*}} 动态凭证绑定。
     # 工作流链路不经此通道（FlowMcp 走 kwargs 独立通道），互不重叠）
     global_variables: dict = field(default_factory=dict)
+    # 请求级记忆变量（react 执行器写入：IR metadata.memoryVariables 的
+    # value/default_value 合并；供 MCP wrapper 解析 {{memory.*}} 绑定。
+    # 旧编排链走 ContextEngine+global_variables，不经此通道）
+    memory_variables: dict = field(default_factory=dict)
     # 内容审核引擎实例（由请求入口设置，供审核节点读取）
     moderation_engine: Any = None
 
@@ -86,6 +90,25 @@ def set_request_global_variables(variables: dict) -> None:
     """
     if isinstance(variables, dict):
         _request_ctx.get().global_variables = variables
+
+
+def set_request_memory_variables(variables: dict) -> None:
+    """写入请求级记忆变量（react 执行器调用）。
+
+    值序=value > default_value（IR metadata.memoryVariables 合并产物）；
+    非 dict 值忽略（保持现状）。
+    """
+    if isinstance(variables, dict):
+        _request_ctx.get().memory_variables = variables
+
+
+def get_request_memory_variables() -> dict:
+    """请求级记忆变量（MCP {{memory.*}} 绑定值源）。
+
+    未写入或非 dict 时返回空 dict——调用方按"未提供值"跳过绑定。
+    """
+    variables = getattr(_request_ctx.get(), "memory_variables", None)
+    return variables if isinstance(variables, dict) else {}
 
 
 def get_request_global_variables() -> dict:

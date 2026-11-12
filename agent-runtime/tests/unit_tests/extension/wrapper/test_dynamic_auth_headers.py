@@ -414,15 +414,18 @@ class TestResolveDynamicCredentialHeaders:
     """
 
     @staticmethod
-    def _bind(ctx_variables):
+    def _bind(ctx_variables, memory_variables=None):
         """构造请求上下文绑定并返回恢复函数。"""
         from agent_runtime.context import request_context as rc
 
-        original = rc._request_ctx.get().global_variables
+        original_globals = rc._request_ctx.get().global_variables
+        original_memory = rc._request_ctx.get().memory_variables
         rc._request_ctx.get().global_variables = ctx_variables
+        rc._request_ctx.get().memory_variables = memory_variables or {}
 
         def restore():
-            rc._request_ctx.get().global_variables = original
+            rc._request_ctx.get().global_variables = original_globals
+            rc._request_ctx.get().memory_variables = original_memory
 
         return restore
 
@@ -520,6 +523,52 @@ class TestResolveDynamicCredentialHeaders:
                 client._auth = {"scope": "DYNAMIC"}
                 client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
                 restore = TestResolveDynamicCredentialHeaders._bind({"userToken": bad})
+                try:
+                    request_params = client._prepare_request_params(inputs={}, name="t")
+                finally:
+                    restore()
+                assert "Authorization" not in request_params.headers, (bad, cls.__name__)
+
+    @staticmethod
+    def test_memory_binding_injected_from_memory_vars():
+        """{{memory.test}} 绑定 → 值从请求上下文记忆变量解析并注入出站头。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            client._input_parameters = {"Authorization": "{{memory.test}}"}
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {}, {"test": "123"})
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            assert request_params.headers.get("Authorization") == "123", cls.__name__
+
+    @staticmethod
+    def test_memory_binding_skipped_when_memory_vars_empty():
+        """{{memory.*}} 绑定但记忆变量未提供 → 不注入（未提供值即跳过）。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            client._input_parameters = {"Authorization": "{{memory.test}}"}
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {"other": "x"})
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            assert "Authorization" not in request_params.headers, cls.__name__
+
+    @staticmethod
+    def test_memory_binding_invalid_value_rejected():
+        """{{memory.*}} 值非法（非 Latin-1/控制字符）→ WARNING 后跳过。"""
+        for bad in ("凭证中文", "12\r\n3"):
+            for cls in (StreamableHttpClientNew, SSEClientNew):
+                client = _create_client(cls)
+                client._auth = {"scope": "DYNAMIC"}
+                client._input_parameters = {"Authorization": "{{memory.test}}"}
+                restore = TestResolveDynamicCredentialHeaders._bind(
+                    {}, {"test": bad})
                 try:
                     request_params = client._prepare_request_params(inputs={}, name="t")
                 finally:
