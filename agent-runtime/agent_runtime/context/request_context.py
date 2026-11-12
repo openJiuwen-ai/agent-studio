@@ -43,6 +43,11 @@ class RequestContext:
     # value/default_value 合并；供 MCP wrapper 解析 {{memory.*}} 绑定。
     # 旧编排链走 ContextEngine+global_variables，不经此通道）
     memory_variables: dict = field(default_factory=dict)
+    # 请求级 MCP 动态凭证绑定模板（react 执行器写入：本次运行 agent 的 IR
+    # configs.mcps[].inputParameters，按 server_id 键控。resource_mgr 的 MCP
+    # client 按 server_id 进程级缓存且首个注册者的配置生效——跨 agent 共享
+    # 的 client 其绑定模板可能来自别的 agent 的 IR，须以请求级为准）
+    mcp_input_parameters: dict = field(default_factory=dict)
     # 内容审核引擎实例（由请求入口设置，供审核节点读取）
     moderation_engine: Any = None
 
@@ -109,6 +114,21 @@ def get_request_memory_variables() -> dict:
     """
     variables = getattr(_request_ctx.get(), "memory_variables", None)
     return variables if isinstance(variables, dict) else {}
+
+
+def set_request_mcp_input_parameters(parameters: dict) -> None:
+    """写入请求级 MCP 绑定模板（react 执行器调用，按 server_id 键控）。"""
+    if isinstance(parameters, dict):
+        _request_ctx.get().mcp_input_parameters = parameters
+
+
+def get_request_mcp_input_parameters() -> dict:
+    """请求级 MCP 绑定模板（react 执行器按本次 agent 的 IR 提供）。
+
+    未写入或非 dict 时返回空 dict——wrapper 回退 client 自身配置。
+    """
+    parameters = getattr(_request_ctx.get(), "mcp_input_parameters", None)
+    return parameters if isinstance(parameters, dict) else {}
 
 
 def get_request_global_variables() -> dict:

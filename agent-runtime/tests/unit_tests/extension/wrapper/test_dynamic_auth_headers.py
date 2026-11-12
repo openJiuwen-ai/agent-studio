@@ -414,18 +414,21 @@ class TestResolveDynamicCredentialHeaders:
     """
 
     @staticmethod
-    def _bind(ctx_variables, memory_variables=None):
+    def _bind(ctx_variables, memory_variables=None, mcp_input_parameters=None):
         """构造请求上下文绑定并返回恢复函数。"""
         from agent_runtime.context import request_context as rc
 
         original_globals = rc._request_ctx.get().global_variables
         original_memory = rc._request_ctx.get().memory_variables
+        original_mcp_params = rc._request_ctx.get().mcp_input_parameters
         rc._request_ctx.get().global_variables = ctx_variables
         rc._request_ctx.get().memory_variables = memory_variables or {}
+        rc._request_ctx.get().mcp_input_parameters = mcp_input_parameters or {}
 
         def restore():
             rc._request_ctx.get().global_variables = original_globals
             rc._request_ctx.get().memory_variables = original_memory
+            rc._request_ctx.get().mcp_input_parameters = original_mcp_params
 
         return restore
 
@@ -574,6 +577,46 @@ class TestResolveDynamicCredentialHeaders:
                 finally:
                     restore()
                 assert "Authorization" not in request_params.headers, (bad, cls.__name__)
+
+    @staticmethod
+    def test_request_level_templates_override_shared_client_config():
+        """请求级模板优先于共享 client 自身配置（跨 agent 污染防护）。
+
+        resource_mgr 的 MCP client 按 server_id 进程级缓存且首个注册者配置
+        生效——client 的 input_parameters 可能来自别的 agent 的 IR 绑定；
+        react 执行器按本次 agent 的 IR 提供请求级模板，wrapper 以其为准。
+        """
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            # client 自身（陈旧/他 agent）模板：绑定 otherVar
+            client._input_parameters = {"Authorization": "{{inputs.otherVar}}"}
+            # 请求级模板（本次 agent 的 IR）：绑定 userToken
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {"userToken": "request-level-tok"},
+                mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
+            )
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            # 请求级模板胜出（otherVar 无值，client 级模板不生效）
+            assert request_params.headers.get("Authorization") == "request-level-tok", cls.__name__
+
+    @staticmethod
+    def test_client_fallback_when_no_request_templates():
+        """无请求级模板（工作流路径）回退 client 自身 input_parameters。"""
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {"userToken": "client-level-tok"})
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            assert request_params.headers.get("Authorization") == "client-level-tok", cls.__name__
 
     @staticmethod
     def test_workflow_path_untouched_without_ctx():

@@ -767,6 +767,7 @@ class ReActAgentRunner:
             # 合并就地变更同一 dict，晚于本赋值也会被工具调用看到）
             from agent_runtime.context.request_context import (
                 set_request_global_variables,
+                set_request_mcp_input_parameters,
                 set_request_memory_variables,
             )
 
@@ -794,6 +795,18 @@ class ReActAgentRunner:
                 if value is not None and not (isinstance(value, str) and not value.strip()):
                     memory_vars[var["name"]] = value
             set_request_memory_variables(memory_vars)
+            # MCP 动态凭证绑定模板按本次运行 agent 的 IR 提供（按 server_id 键控）：
+            # resource_mgr 的 MCP client 按 server_id 进程级缓存且首个注册者的
+            # 配置生效——跨 agent 共享的 client 其绑定模板可能来自其他 agent 的
+            # IR，wrapper 须以请求级模板为准（工作流路径不经此通道）
+            mcp_input_parameters = {}
+            for mcp_conf in (ir_json.get("configs") or {}).get("mcps") or []:
+                mcp_id = mcp_conf.get("id") if isinstance(mcp_conf, dict) else None
+                templates = (mcp_conf.get("inputParameters")
+                             or mcp_conf.get("input_parameters") or {}) if isinstance(mcp_conf, dict) else {}
+                if mcp_id and isinstance(templates, dict) and templates:
+                    mcp_input_parameters[str(mcp_id)] = templates
+            set_request_mcp_input_parameters(mcp_input_parameters)
             agent, agent_id = self._create_agent(
                 ir_json, skill_work_dir, global_variables, has_file_links
             )

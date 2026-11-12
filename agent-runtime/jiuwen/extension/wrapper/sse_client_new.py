@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 
 from agent_runtime.context.request_context import (
     get_request_global_variables,
+    get_request_mcp_input_parameters,
     get_request_memory_variables,
     strip_correlation_headers,
 )
@@ -160,10 +161,15 @@ class SSEClientNew(McpClient):
                 and is_valid_outbound_header_value(v)} or None
 
     def _resolve_dynamic_credential_headers(self) -> dict:
-        """FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}}/
-        {{memory.*}} 绑定解析为出站头（值源=RequestContext.global_variables/
-        memory_variables，由 react_agent_runner 写入；工作流链路不写这些
-        字段，互不重叠）。
+        """FEAT-093 单智能体（react）链路：绑定模板解析为出站头。
+
+        模板优先取请求上下文（get_request_mcp_input_parameters——react 执行器
+        按本次运行 agent 的 IR 提供，按 server_id 键控）：resource_mgr 的 MCP
+        client 按 server_id 进程级缓存且首个注册者的配置生效，跨 agent 共享
+        的 client 其绑定模板可能来自别的 agent 的 IR；无请求级模板时回退
+        client 自身 input_parameters（工作流路径：FlowMcp 每节点构造 config，
+        无共享问题）。值源={{inputs.*}}→global_variables、{{memory.*}}→
+        memory_variables（均为 react 执行器写入；工作流链路不写，互不重叠）。
 
         仅 auth 无 scope 或 scope=DYNAMIC 时放行（与 kwargs 独立通道同门控）；
         头已存在（server_config 头/已映射鉴权头）不覆盖——同名替换属
@@ -172,7 +178,9 @@ class SSEClientNew(McpClient):
         """
         if self._get_auth_scope() not in ("", "DYNAMIC"):
             return {}
-        if not self._input_parameters:
+        input_parameters = get_request_mcp_input_parameters().get(self._name) \
+            or self._input_parameters
+        if not input_parameters:
             return {}
         sources = {}
         global_variables = get_request_global_variables()
@@ -184,7 +192,7 @@ class SSEClientNew(McpClient):
         if not sources:
             return {}
         resolved = {}
-        for name, template in self._input_parameters.items():
+        for name, template in input_parameters.items():
             if not isinstance(name, str) or not isinstance(template, str):
                 continue
             if not name or not template.startswith("{{") or not template.endswith("}}"):
