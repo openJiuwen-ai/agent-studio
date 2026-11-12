@@ -26,6 +26,7 @@ _CONTROLLER_THROUGH_EVENTS = {
     "workflow_blocked", "workflow_resume", "workflow_start", "workflow_end",
     "task_terminated", "scene_match", "plan_start", "plan_end", "step_start",
     "step_end", "task_complete",
+    "intent",
 }
 
 

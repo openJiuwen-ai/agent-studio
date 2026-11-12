@@ -24,6 +24,7 @@ from jiuwen.controller.task_planner.planning_modules.task_understanding_module i
 from jiuwen.controller.task_planner.rule_modules.rule_module import RuleModule
 from jiuwen.controller.task_planner.task_planner import TaskPlanner
 from jiuwen.controller.task_planner.task_queue import TaskQueue
+from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 
 
 @dataclass
@@ -178,19 +179,90 @@ class ControllerPlanner(TaskPlanner):
                     self.task_id,
                 )
             if message.message_type == MessageType.USER_INPUT:
+                self.intention_detect_module._intent_detected_this_turn = False
+                self.intention_detect_module._intent_workflow_user_fields = {}
                 intent_workflow_task = await self._get_intent_based_workflow(
                     [], self.last_message, True
                 )
+                if self.intention_detect_module._intent_detected_this_turn:
+                    yield self._build_intent_stream_data()
                 if intent_workflow_task:
                     yield intent_workflow_task
                 return
             return
 
         # 执行下一个工作流
+        self.intention_detect_module._intent_detected_this_turn = False
+        self.intention_detect_module._intent_workflow_user_fields = {}
         task = await self._get_next_workflow(message)
+        if self.intention_detect_module._intent_detected_this_turn:
+            yield self._build_intent_stream_data()
         if task:
             yield task
             return
+
+    def _build_intent_stream_data(self) -> StreamData:
+        """构造 intent 事件 StreamData，携带当前意图识别结果。
+
+        数据来源优先级：
+        1. 意图识别工作流路径（method=WORKFLOW）：直接透传 End 节点的完整 user_fields
+        2. LLM 路径（method=DEFAULT/非工作流）：从映射表和 workflow context 反查
+        """
+        idm = self.intention_detect_module
+
+        # 路径1：意图识别工作流执行后，End 节点输出的完整 user_fields
+        user_fields = idm._intent_workflow_user_fields
+        if user_fields:
+            return StreamData(
+                code=StreamCode.INTENT_MSG.value,
+                msg="intent",
+                data=user_fields,
+                execution_id=self.task_id,
+            )
+
+        # 路径2：LLM 识别路径，从映射表和 workflow context 反查
+        detected_intent = self.context_manager.get_latest_intent()
+        intent_id = ""
+        pred_main = ""
+        message = ""
+        if detected_intent:
+            category = idm.intent_function_2_category_map.get(detected_intent)
+            if category:
+                for k, v in idm.intent_id_to_function_map.items():
+                    if v == detected_intent:
+                        intent_id = k
+                        break
+                message = f"{category}:{detected_intent}"
+            wf_ctx = self.context_manager.get_workflow_context_by_name_and_type(
+                detected_intent
+            )
+            if wf_ctx:
+                pred_main = wf_ctx.intent_name or wf_ctx.config_name or ""
+
+        return StreamData(
+            code=StreamCode.INTENT_MSG.value,
+            msg="intent",
+            data={
+                "intent_id": intent_id,
+                "res": pred_main or detected_intent or "",
+                "predMain": pred_main,
+                "abrFlag": "",
+                "message": message,
+                "rag_msg": "",
+                "intentResponse": {
+                    "responseData": [
+                        {
+                            "answer": detected_intent or "",
+                            "pageData": {
+                                "status": "",
+                                "type": "",
+                            },
+                        }
+                    ]
+                },
+            },
+            execution_id=self.task_id,
+        )
 
     def reset(self):
         """重置规划器状态"""
