@@ -2,7 +2,7 @@
   <div>
     <div class="relative h-[96%] w-full flex" >
       <nz-tabset id="flow-add-tool-modal" class="h-full w-full" [nzAnimated]="false"  [(nzSelectedIndex)]="tabSelectIndex">
-        <div *ngIf="currTab === tabs[0].id" class="add-button">
+        <div *ngIf="currTab === tabs[0].id && studioBtnShow" class="add-button">
           <button type="button" (click)="showAddPluginModal()" nz-button nzType="primary" class="!rounded-button" [disabled]="isShowCreatePluginModal">
             {{ 'create_plugin' | i18nextEager }}
           </button>
@@ -170,7 +170,8 @@
             <app-new-common-no-data-with-btn
             [type]="searchNameIsEmpty ? 'noData' : 'filterNoData'"
             [tutorialType]="'plugin'"
-            [noDataBtnStr]="'create_plugin' | i18nextEager "
+            [noDataBtnStr]="studioBtnShow ? ('create_plugin' | i18nextEager) : ''"
+            [hideSecondLineData]="!studioBtnShow"
             (create)="showAddPluginModal()"
             (clear)="handleClickClearSearch()"
           />
