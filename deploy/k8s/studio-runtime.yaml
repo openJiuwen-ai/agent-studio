@@ -72,6 +72,11 @@ spec:
             - name: DATASOURCE_OBS_PATH_STYLE
               value: 'path'
             # ======== 服务间调用地址（默认无需修改） ========
+            # SQL 工作流节点调 manager 执行 API；留空则 SQL 节点 fail-closed 报 101755（#1293）
+            - name: AGENT_MANAGER_ENDPOINT
+              value: 'http://studio-manager:31111'
+            - name: DATASOURCE_EXECUTE_TIMEOUT
+              value: '25'
             # 模型配置来源策略：env（环境变量）/ ir（旧版路由）/ obs（OBS直连，默认，绕过模型路由）
             - name: MODEL_CONFIG_STRATEGY
               value: 'obs'
