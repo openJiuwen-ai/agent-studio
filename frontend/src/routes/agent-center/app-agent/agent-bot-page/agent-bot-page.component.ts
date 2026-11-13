@@ -659,8 +659,7 @@ export class AgentBotPageComponent implements OnInit, OnDestroy {
 
   public changeCollapsedState(configInfo: any) {
     try {
-      const collapsed = configInfo;
-      configInfo = !collapsed;
+      configInfo.collapsed = !configInfo.collapsed;
       this.cdr.markForCheck();
     } catch {
     }

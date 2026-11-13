@@ -2192,8 +2192,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public changeCollapsedState(configInfo: any) {
     try {
-      const collapsed = configInfo;
-      configInfo = !collapsed;
+      configInfo.collapsed = !configInfo.collapsed;
       this.cdr.markForCheck();
     } catch {
     }
