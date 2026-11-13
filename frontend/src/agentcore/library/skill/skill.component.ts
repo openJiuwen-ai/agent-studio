@@ -115,7 +115,6 @@ export class SkillComponent implements OnInit {
     const params: QueryParams = {
       offset: 0,
       limit: this.cardPageSize.size || 10, // 提供默认值
-      published_asset: 0,
       [mapKeys.LANGUAGE]: this.isZH() ? 'ZH' : 'EN', // 直接初始化语言参数
     };
     if (this.searchName.length > 0) {
@@ -140,6 +139,13 @@ export class SkillComponent implements OnInit {
 
   handleClickClearSearch(): void {
     this.searchName = [];
+    this.querySkillList();
+  }
+
+  /**
+   * 卡片操作回调（上架/下架后刷新列表，FRS-091）
+   */
+  onCardHandle(event: any): void {
     this.querySkillList();
   }
 }

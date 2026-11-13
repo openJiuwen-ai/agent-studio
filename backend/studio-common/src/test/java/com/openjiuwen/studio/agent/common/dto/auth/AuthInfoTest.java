@@ -96,13 +96,14 @@ class AuthInfoTest {
     @Test
     void testScopeEnum_Values() {
         AuthInfo.ScopeEnum[] values = AuthInfo.ScopeEnum.values();
-        assertEquals(7, values.length);
+        assertEquals(8, values.length);
     }
 
     @Test
     void testScopeEnum_FromValue() {
         assertEquals(AuthInfo.ScopeEnum.USER, AuthInfo.ScopeEnum.fromValue("USER"));
         assertEquals(AuthInfo.ScopeEnum.SERVICE, AuthInfo.ScopeEnum.fromValue("SERVICE"));
+        assertEquals(AuthInfo.ScopeEnum.DYNAMIC, AuthInfo.ScopeEnum.fromValue("DYNAMIC"));
         assertEquals(AuthInfo.ScopeEnum.IAM, AuthInfo.ScopeEnum.fromValue("IAM"));
         assertEquals(AuthInfo.ScopeEnum.HIS_IAM, AuthInfo.ScopeEnum.fromValue("HIS_IAM"));
         assertEquals(AuthInfo.ScopeEnum.SGOV, AuthInfo.ScopeEnum.fromValue("SGOV"));

@@ -2186,3 +2186,17 @@ CREATE TABLE IF NOT EXISTS `t_polling_trigger_state` (
     PRIMARY KEY (`trigger_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Polling触发器运行状态表';
 
+-- ===================== FRS-091 资产广场上架开放接口 =====================
+-- t_skill: 上架来源标记（PRESET=官方预置 / USER=用户上架）；published_asset 仍为上架标记
+ALTER TABLE `t_skill` ADD COLUMN `plaza_source` VARCHAR(32) NULL DEFAULT NULL COMMENT '资产广场上架来源（PRESET=官方预置，USER=用户上架）' AFTER `published_asset`;
+UPDATE `t_skill` SET `plaza_source` = 'PRESET' WHERE `published_asset` = '1' AND `plaza_source` IS NULL;
+
+-- ws_mcp_server_def: 用户上架标记 + 源实例关联（供同一实例重复上架去重）
+ALTER TABLE ws_mcp_server_def ADD COLUMN platform_published TINYINT NOT NULL DEFAULT 0 COMMENT '用户上架到资产广场（1=是，0=否）；官方预置 type=inner 不受此列影响';
+ALTER TABLE ws_mcp_server_def ADD COLUMN source_instance_id VARCHAR(64) NULL COMMENT '上架来源的MCP服务实例ID（ws_mcp_service_def.id），用于同一实例重复上架去重';
+CREATE UNIQUE INDEX uk_ws_mcp_server_source_instance ON ws_mcp_server_def (source_instance_id);
+
+-- t_tool: 用户插件上架标记 + 锚定发布版本（t_release_version.version_id）
+ALTER TABLE `t_tool` ADD COLUMN `platform_published` TINYINT NOT NULL DEFAULT 0 COMMENT '用户插件上架到资产广场（1=是，0=否）';
+ALTER TABLE `t_tool` ADD COLUMN `plaza_version_id` VARCHAR(64) NULL COMMENT '上架锚定的发布版本ID（t_release_version.version_id）';
+

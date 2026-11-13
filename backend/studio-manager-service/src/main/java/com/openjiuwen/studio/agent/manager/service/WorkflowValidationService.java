@@ -2809,6 +2809,11 @@ public class WorkflowValidationService {
         if (shareWorkspaceId != null) {
             return true;
         }
+        // 资产广场已上架插件（platform_published=1 AND published=1）支持跨工作空间引用（FRS-091，口径与 CommonMeta/PluginAdapterImpl/广场 SQL 一致）
+        if (toolEntity.getPlatformPublished() != null && toolEntity.getPlatformPublished() == 1
+            && toolEntity.getPublished() != null && toolEntity.getPublished() == 1) {
+            return true;
+        }
         if (!workspaceId.equals(toolEntity.getWorkspaceId())) {
             return false;
         }

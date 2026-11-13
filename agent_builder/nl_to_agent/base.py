@@ -17,12 +17,14 @@ class OperatorInput:
         plugin_info (Optional[list]): 检索到的插件相关信息列表。
         knowledge_info (Optional[list]): 检索到的知识库相关信息列表。
         sub_workflow_info (Optional[list]): 检索到的子工作流相关信息列表。
+        skill_info (Optional[list]): 检索到的技能（Skill）相关信息列表。
     """
 
     query: Optional[str] = None
     plugin_info: Optional[list] = None
     knowledge_info: Optional[list] = None
     sub_workflow_info: Optional[list] = None
+    skill_info: Optional[list] = None
 
 
 @dataclass

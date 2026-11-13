@@ -1,6 +1,9 @@
 import asyncio
+import copy
 import inspect
 import re
+import weakref
+from contextvars import ContextVar
 from enum import Enum
 from typing import Any, Optional, Union, AsyncGenerator
 
@@ -15,6 +18,11 @@ from openjiuwen.core.workflow.components.flow.end_comp import (
     End as BaseEnd,
     EndConfig as BaseEndConfig,
     TemplateUtils,
+)
+
+from jiuwen.extension.workflow.execution_session_ctx import (
+    get_stream_final_output,
+    set_stream_final_output,
 )
 
 _TEMPLATE_SPLIT_PATTERN = re.compile(r"(\{\{[^{}]*?\}\})")
@@ -54,6 +62,14 @@ _TYPE_DEFAULT_VALUE = {
     NUMBER_TYPE: None,
     BOOLEAN_TYPE: None,
 }
+
+# 当前执行容器键（执行期属性 _template/_batch_template 的解析上下文）。
+# 能力方法入口 set，不 reset：值随节点执行任务（pregel task.py:29 每节点
+# create_task）存活，同一任务内父类渲染路径（end_comp.py:107/155/217）
+# 读取时可见；任务结束即随 context 丢弃，不跨执行残留。
+_current_exec_key: ContextVar[Optional[Any]] = ContextVar(
+    "jiuwen_end_exec_key", default=None
+)
 
 
 def _has_response_payload(output: Any) -> bool:
@@ -262,6 +278,33 @@ class OutputMode(Enum):
             return None
 
 
+class _EndExecState:
+    """单次执行的 End 能力协调状态（跨执行隔离，issue #1555 / Task 9）。
+
+    原 self._invoke_executed 等四个能力幂等标志 + _mix_* 协调状态迁入此类；
+    静态图复用下 End 实例跨执行共享，执行期状态若留在实例属性上，第二次
+    执行会被幂等标志直接短路（返回空）。容器按 NodeSession 键控：Patch A
+    每次执行新建 Vertex（Vertex.init 重建 NodeSession），执行结束即可 GC。
+    """
+
+    def __init__(self):
+        self.invoke_executed = False
+        self.stream_executed = False
+        self.collect_executed = False
+        self.transform_executed = False
+        self.mix_condition = None  # asyncio.Condition，lazy init
+        self.mix_data = {}  # {'batch': {inputs, outputs}, 'stream': {inputs, outputs}}
+        self.mix_push_count = 0  # 已 push 的路径数 (0/1/2)
+        self.mix_render_complete = False
+        self.mix_batch_pushed = False  # batch 路径已 push 数据，stream 可以开始渲染
+        # 本执行的 TemplateProcessor 克隆（同一执行内 batch/stream 两路共享，
+        # 渲染位置推进是 mix 协调的一部分；跨执行隔离）
+        self.template = None
+        # 本执行的 batch 渲染器 latch（父类 _render 的 self._batch_template 解析目标；
+        # 共享属性会跨执行互相清空/顶替 → 在途 _render 恢复后 AttributeError/串答案）
+        self.batch_template = None
+
+
 class EndConfig(BaseEndConfig):
     """扩展的 End 组件配置，继承基础配置"""
 
@@ -278,6 +321,10 @@ class End(BaseEnd):
     """
 
     def __init__(self, conf: Union[EndConfig, dict] = None):
+        # build 期原对象槽位：父类 __init__ 经 _template/_batch_template 属性 setter
+        # 写入（见属性定义），执行期读取解析到 per-execution 克隆
+        self._template_source = None
+        self._batch_template_source = None
         super().__init__(conf)
         # 从配置中提取结构化输出相关参数
         conf_dict = conf if isinstance(conf, dict) else {}
@@ -291,7 +338,6 @@ class End(BaseEnd):
             self.end_interrupt = True
         self.struct_output_template = conf_dict.get(STRUCT_OUTPUT_TEMPLATE, "")
         self.enable_struct_message = conf_dict.get(ENABLE_STRUCT_MESSAGE, False)
-        self._stream_output: Optional[dict] = None
         # 回复模板，用于判断流式起始/结束空 chunk 的发送条件
         self._response_template: str = conf_dict.get("responseTemplate", "") or ""
         # 预计算模板 split 结果，用于判断起始/结束是否需要空 chunk
@@ -314,19 +360,111 @@ class End(BaseEnd):
         # stream 路径负责 merge + render + signal
         # None 表示兼容 openjiuwen 默认行为；IR converter 会显式标记纯流式/混合场景。
         self._expect_mix: Optional[bool] = None
-        self._mix_condition = None  # asyncio.Condition，lazy init
-        self._mix_data = {}  # {'batch': {inputs, outputs}, 'stream': {inputs, outputs}}
-        self._mix_push_count = 0  # 已 push 的路径数 (0/1/2)
-        self._mix_render_complete = False
-        self._mix_batch_pushed = False  # batch 路径已 push 数据，stream 可以开始渲染
+        # 执行期协调状态（四个能力幂等标志 + mix 协调 + 模板克隆 + batch latch）
+        # 迁移到 per-execution 容器：Pregel 引擎在 wait_for_all=False 时每条入边
+        # 分别触发 End 节点，导致 stream()/invoke() 被多次调用，用各自独立的标志
+        # 保证同一执行内幂等；跨执行必须隔离（否则复用实例第二次执行被短路）。
+        # 键归一到底层 NodeSession（见 _exec_key），弱引用键控随执行结束自动回收。
+        self._exec_states: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 
-        # Pregel 引擎在 wait_for_all=False 时，每条入边分别触发 End 节点，
-        # 导致 stream()/invoke() 被多次调用。用各自独立的标志保证幂等，
-        # 同时不影响 mix 模式下 batch(invoke/stream) 与 stream(collect/transform) 两路的协调。
-        self._invoke_executed = False
-        self._stream_executed = False
-        self._collect_executed = False
-        self._transform_executed = False
+    @staticmethod
+    def _exec_key(session):
+        """执行容器键归一。
+
+        引擎 ComponentExecutable.on_invoke/on_stream/on_collect/on_transform
+        每次调用都新建 Session(session, ...) 包装器（component.py:95-119），
+        Session 无 __eq__/__hash__（session/node.py:13-18，身份哈希）——直接用
+        入参做键会让同一执行的四个能力各建容器（mix 双路协调断裂、幂等失效）。
+        包装器的 _inner 即其包裹的 NodeSession（session/node.py:14），故归一
+        到底层 NodeSession；裸 NodeSession（NodeSession 自身无 _inner）原样返回。
+        """
+        inner = getattr(session, "_inner", None)
+        return inner if inner is not None else session
+
+    def _exec_state(self, session) -> "_EndExecState":
+        """当前执行的协调状态（按 NodeSession 隔离；单事件循环内无 await，原子）。"""
+        key = self._exec_key(session)
+        st = self._exec_states.get(key)
+        if st is None:
+            st = _EndExecState()
+            self._exec_states[key] = st
+        return st
+
+    def _resolve_exec_state(self) -> "Optional[_EndExecState]":
+        """解析当前执行状态（执行期属性读取用）。
+
+        解析键由能力方法入口写入当前任务 context（_current_exec_key）；
+        容器查找走实例自身 → 外来的键解析为 None，安全回退 build 期原对象。
+        """
+        key = _current_exec_key.get()
+        if key is None:
+            return None
+        return self._exec_states.get(key)
+
+    @property
+    def _template(self):
+        """当前执行的模板（执行外回退 build 期原对象）。
+
+        父类渲染路径（end_comp.py:107/155/217 → render_stream）逐段推进
+        TemplateProcessor 的位置状态（_current_position/_chunk_index/_count），
+        复用实例下并发执行共享同一对象会互踩渲染位置，故执行内解析到
+        per-execution 克隆（st.template）。属性解析不改任何共享属性：能力入口
+        变更共享属性会打断并发执行在途的父类 _render（end_comp.py:239-240 在
+        await 后重读 self._batch_template → None → AttributeError）。
+        """
+        st = self._resolve_exec_state()
+        if st is not None and st.template is not None:
+            return st.template
+        return self._template_source
+
+    @_template.setter
+    def _template(self, value):
+        # 仅 build 期赋值（父类 __init__ 等）；执行期读取经 getter 解析克隆
+        self._template_source = value
+
+    @property
+    def _batch_template(self):
+        """父类 _render 的 batch 渲染器 latch（按执行隔离）。
+
+        end_comp.py:216-242 把 latch 放在 self._batch_template 上并在 await 后
+        重读（:239-242）；复用实例下共享会让并发执行互相清空/顶替 → 在途渲染
+        恢复后 AttributeError（None）或渲染另一执行的输入（串答案）。
+        """
+        st = self._resolve_exec_state()
+        if st is not None:
+            return st.batch_template
+        return self._batch_template_source
+
+    @_batch_template.setter
+    def _batch_template(self, value):
+        st = self._resolve_exec_state()
+        if st is not None:
+            st.batch_template = value
+        else:
+            self._batch_template_source = value
+
+    def _prepare_render_state(self, st: "_EndExecState") -> None:
+        """per-execution 渲染隔离：共享 TemplateProcessor 按执行克隆。
+
+        同一执行内 batch/stream 两路必须共用同一克隆（mix 协调依赖共享位置
+        推进），故克隆缓存在 per-execution 容器；克隆时复位位置字段（等价
+        父类 set_mix 的 reset 语义），_data_source_count 继承共享配置
+        （set_mix 2 / _sanitize_end_node_inputs 0，均写 build 期原对象，早于本入口）。
+        入口不改任何共享属性（I1 不变量）。
+
+        浅拷贝会连 _lock/_condition 一起共享（模板变量为上游流式生成器时，
+        父类 _render_stream 在持有 _lock 期间逐帧 yield、可长时间挂起）——
+        跨执行共享会让执行 B 的渲染阻塞在执行 A 的在途帧上（队头阻塞），
+        故按执行重建同步原语；同一执行内两路仍共用同一克隆，协调语义不变。
+        """
+        if st.template is None:
+            if self._template_source is None:
+                return
+            st.template = copy.copy(self._template_source)
+            # 浅拷贝共享的同步原语须按执行重建，上游模板对象未提供公开替换入口
+            st.template._lock = asyncio.Lock()  # pylint: disable=protected-access
+            st.template._condition = asyncio.Condition()  # pylint: disable=protected-access
+            st.template.reset()
 
     @staticmethod
     def _is_workflow_interrupted(session: Session) -> bool:
@@ -361,6 +499,88 @@ class End(BaseEnd):
         if not self._template_parts:
             return False
         return self._template_parts[-1] == ""
+
+    @staticmethod
+    def _normalize_inputs_dict(inputs) -> dict:
+        """Pregel / 上游异常路径可能传入 None；统一成 dict，避免 `x in None`。"""
+        return inputs if isinstance(inputs, dict) else {}
+
+    @staticmethod
+    def _coalesce_none_leaves(inputs: dict) -> None:
+        """将已解析但仍为 None 的叶子改为空串。
+
+        典型场景：memory.a 为空数组/未赋值时，End 引用 memory.a[0].b 解析为 None；
+        Start 已执行时 Vertex sanitize 不会替换，后续 `x in None` / 模板路径会炸。
+        """
+        if not isinstance(inputs, dict):
+            return
+        for key, value in list(inputs.items()):
+            if value is None:
+                inputs[key] = ""
+
+    def _extract_user_fields(self, inputs) -> dict:
+        """抽取 userFields 并归一为 dict。"""
+        inputs = self._normalize_inputs_dict(inputs)
+        user_fields = inputs.get(USER_FIELDS)
+        if user_fields:
+            return user_fields if isinstance(user_fields, dict) else {}
+        return inputs
+
+    @staticmethod
+    async def _coerce_collect_inputs(inputs):
+        """collect 入口归一：先消费顶层异步流，再剥 userFields。
+
+        不可先走 ``_extract_user_fields`` / ``_normalize_inputs_dict``——二者会把
+        AsyncGenerator 收成 ``{}``，导致原 ``hasattr(..., "__aiter__")`` 聚合分支
+        不可达、流式输入被静默丢弃。
+        """
+        # 与历史行为对齐：dict 上先剥 USER_FIELDS，再判断是否异步流
+        if isinstance(inputs, dict) and inputs.get(USER_FIELDS):
+            unwrapped = inputs.get(USER_FIELDS)
+            if isinstance(unwrapped, dict) or (
+                unwrapped is not None and hasattr(unwrapped, "__aiter__")
+            ):
+                inputs = unwrapped
+            else:
+                inputs = {}
+        elif inputs is None:
+            inputs = {}
+
+        if hasattr(inputs, "__aiter__") and not isinstance(inputs, dict):
+            collected_inputs = []
+            async for input_chunk in inputs:
+                collected_inputs.append(input_chunk)
+            if len(collected_inputs) == 1:
+                final_inputs = collected_inputs[0]
+            elif len(collected_inputs) > 1:
+                final_inputs = collected_inputs[-1]
+            else:
+                final_inputs = {}
+        else:
+            final_inputs = inputs
+
+        # 帧若仍是 {userFields: ...} 再剥一层；最终保证 dict
+        if isinstance(final_inputs, dict):
+            nested = final_inputs.get(USER_FIELDS)
+            if nested:
+                final_inputs = nested if isinstance(nested, dict) else {}
+        return End._normalize_inputs_dict(final_inputs)
+
+    def _prepare_user_inputs(self, inputs) -> dict:
+        """归一 userFields → 类型强转 → None 叶子兜底。"""
+        inputs = self._extract_user_fields(inputs)
+        self._apply_type_conversion(inputs)
+        self._coalesce_none_leaves(inputs)
+        return inputs
+
+    @staticmethod
+    def _ensure_response_dict(response) -> dict:
+        """父类 invoke/collect 在无模板等路径可能返回 None。"""
+        if isinstance(response, dict):
+            return response
+        if response is None:
+            return {}
+        return {"response": str(response)}
 
     def _apply_type_conversion(self, inputs: dict) -> None:
         """按照 userFields.inputs schema 对输入值做类型强转，与旧框架 force_convert → _convert_simple 对齐。"""
@@ -423,7 +643,8 @@ class End(BaseEnd):
         super().set_mix()
 
     def _reset_stream_output(self) -> None:
-        self._stream_output = None
+        """清空末帧输出通道（ContextVar；外部 sub_stream patch 亦调用本方法）。"""
+        set_stream_final_output(None)
 
     def _build_final_output(
         self,
@@ -495,42 +716,47 @@ class End(BaseEnd):
             - is_renderer=True：调用方继续执行渲染
             - is_renderer=False：另一方已完成渲染，调用方应 return/return None
         """
-        if self._mix_render_complete:
+        st = self._exec_state(session)
+        if st.mix_render_complete:
             return inputs, outputs, False
         if not self._mix:
             return inputs, outputs, True
 
-        if self._mix_condition is None:
-            self._mix_condition = asyncio.Condition()
+        if st.mix_condition is None:
+            st.mix_condition = asyncio.Condition()
 
-        async with self._mix_condition:
-            self._mix_data[key] = {"inputs": inputs, "outputs": outputs}
-            self._mix_push_count += 1
+        async with st.mix_condition:
+            # 上游 !2652：Pregel/异常路径可能传 None，此处归一为非 dict 值
+            st.mix_data[key] = {
+                "inputs": inputs if isinstance(inputs, dict) else {},
+                "outputs": outputs if isinstance(outputs, dict) else {},
+            }
+            st.mix_push_count += 1
             if key == "batch":
-                self._mix_batch_pushed = True
-            self._mix_condition.notify_all()
-            i_am_last = self._mix_push_count == 2
+                st.mix_batch_pushed = True
+            st.mix_condition.notify_all()
+            i_am_last = st.mix_push_count == 2
 
         # ——— 批路径：只注入数据，等待流路径渲染 ———
         if key == "batch":
             # 流路径必不到达（所有流生产者从未产帧）时跳过等待，
             # 否则结束节点会白等满 3s 协调超时（分支未走到场景）。
             wait_timeout = 3.0 if self._stream_path_alive(session) else 0.0
-            async with self._mix_condition:
-                if not self._mix_render_complete and wait_timeout > 0:
+            async with st.mix_condition:
+                if not st.mix_render_complete and wait_timeout > 0:
                     try:
                         await asyncio.wait_for(
-                            self._mix_condition.wait(), timeout=wait_timeout
+                            st.mix_condition.wait(), timeout=wait_timeout
                         )
                     except asyncio.TimeoutError:
                         pass
-            if self._mix_render_complete:
+            if st.mix_render_complete:
                 return inputs, outputs, False
             # 超时回退：流路径未到达，批路径自己渲染
-            merged_inputs, merged_outputs = self._merge_mix_data()
-            async with self._mix_condition:
-                self._mix_render_complete = True
-                self._mix_condition.notify_all()
+            merged_inputs, merged_outputs = self._merge_mix_data(st)
+            async with st.mix_condition:
+                st.mix_render_complete = True
+                st.mix_condition.notify_all()
             self._mix = False
             if self._template:
                 self._template._data_source_count = 1
@@ -547,10 +773,10 @@ class End(BaseEnd):
             pass  # 跳到下面的渲染逻辑
 
         # 流路径渲染
-        merged_inputs, merged_outputs = self._merge_mix_data()
-        async with self._mix_condition:
-            self._mix_render_complete = True
-            self._mix_condition.notify_all()
+        merged_inputs, merged_outputs = self._merge_mix_data(st)
+        async with st.mix_condition:
+            st.mix_render_complete = True
+            st.mix_condition.notify_all()
         self._mix = False
         if self._template:
             self._template._data_source_count = 1
@@ -576,16 +802,24 @@ class End(BaseEnd):
             # burst-replay (fake streaming).
         return inputs
 
-    def _merge_mix_data(self) -> tuple[dict, dict]:
+    def _merge_mix_data(self, st: "_EndExecState") -> tuple[dict, dict]:
         """合并两路数据，batch 侧数据优先级高于 stream 侧（与原始逻辑一致）。"""
-        stream_inputs = self._mix_data.get("stream", {}).get("inputs", {})
-        batch_inputs = self._mix_data.get("batch", {}).get("inputs", {})
-        stream_outputs = self._mix_data.get("stream", {}).get("outputs", {})
-        batch_outputs = self._mix_data.get("batch", {}).get("outputs", {})
+        def _as_dict(value) -> dict:
+            return value if isinstance(value, dict) else {}
+
+        # 上游 !2652：.get("inputs", {}) 在 key 存在且值为 None 时仍返回 None，
+        # 必须再归一（执行期容器 st 承载，不落实例字段）
+        stream_side = st.mix_data.get("stream") or {}
+        batch_side = st.mix_data.get("batch") or {}
+        stream_inputs = _as_dict(stream_side.get("inputs"))
+        batch_inputs = _as_dict(batch_side.get("inputs"))
+        stream_outputs = _as_dict(stream_side.get("outputs"))
+        batch_outputs = _as_dict(batch_side.get("outputs"))
         return {**stream_inputs, **batch_inputs}, {**stream_outputs, **batch_outputs}
 
     def get_stream_output(self):
-        return self._stream_output
+        """末帧输出经 ContextVar 通道（引擎 Vertex._post_stream 流耗尽后读取）。"""
+        return get_stream_final_output()
 
     def _format_struct_answer(
         self, origin_output: str, struct_template: str, variables: dict[str, Any]
@@ -619,53 +853,54 @@ class End(BaseEnd):
         - 支持结构化输出
         """
         # 幂等保护：End 节点在 wait_for_all=False 时可能被 Pregel 引擎多次触发
-        if self._invoke_executed:
+        # （同一执行内按入边分别触发）；标志按 NodeSession 隔离，跨执行不复用
+        st = self._exec_state(session)
+        if st.invoke_executed:
             return {}
-        self._invoke_executed = True
+        st.invoke_executed = True
+        set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
+        self._prepare_render_state(st)
 
-        # 处理输入中的生成器值
-        outputs = {}
-        if inputs and isinstance(inputs, dict):
-            # 构建输出到输入的映射，防止重复消费流式数据
-            if inputs.get(USER_FIELDS):
-                inputs = inputs[USER_FIELDS]
-            gen_out_to_in = build_output_to_input(inputs)
+        # Pregel / 上游异常路径可能传入 None；后续 `x in inputs` 会抛
+        # "argument of type 'NoneType' is not iterable"
+        inputs = self._prepare_user_inputs(inputs)
+        gen_out_to_in = build_output_to_input(inputs)
 
-            # 按照 userFields.inputs schema 对输入值做类型强转
-            self._apply_type_conversion(inputs)
+        # 处理生成器值
+        inputs = await process_generator_values_of_output(
+            inputs=inputs,
+            out_to_in=gen_out_to_in,
+            workflow_streaming_data=None,  # 非流式调用，不需要回调
+        )
+        inputs = self._normalize_inputs_dict(inputs)
+        self._coalesce_none_leaves(inputs)
 
-            # 处理生成器值
-            inputs = await process_generator_values_of_output(
-                inputs=inputs,
-                out_to_in=gen_out_to_in,
-                workflow_streaming_data=None,  # 非流式调用，不需要回调
-            )
+        outputs = {
+            k[len(OUTPUT_PREFIX):]: v
+            for k, v in inputs.items()
+            if k.startswith(OUTPUT_PREFIX) and v is not None
+        }
 
-            outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
-                for k, v in inputs.items()
-                if k.startswith(OUTPUT_PREFIX) and v is not None
-            }
-
-            # 移除输出数据标记
-            _remove_output_data(inputs)
+        # 移除输出数据标记
+        _remove_output_data(inputs)
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "batch", inputs, outputs, session
         )
+        inputs = self._normalize_inputs_dict(inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return None
 
         # 调用父类的invoke方法获取结果
-        response = await super().invoke(inputs, session, context)
+        response = self._ensure_response_dict(
+            await super().invoke(inputs, session, context)
+        )
 
         # 提取原始文本输出
-        final_output = (
-            str(response)
-            if not isinstance(response, dict)
-            else response.get("response", "")
-        )
+        final_output = response.get("response", "")
 
         # 处理结构化输出：渲染模板得到 JSON 字符串
         struct_answer_str = ""
@@ -737,18 +972,20 @@ class End(BaseEnd):
         )
 
         # 写入最终输出到缓存
-        self._stream_output = self._build_final_output(
-            answer=struct_answer_str if struct_answer_str else final_output,
-            node_id=node_id,
-            struct_answer=final_output,
-            user_fields=user_fields,
+        set_stream_final_output(
+            self._build_final_output(
+                answer=struct_answer_str if struct_answer_str else final_output,
+                node_id=node_id,
+                struct_answer=final_output,
+                user_fields=user_fields,
+            )
         )
 
         # mix 模式：通知另一方渲染已完成
-        if _mix_i_am_renderer and self._mix_condition is not None:
-            async with self._mix_condition:
-                self._mix_render_complete = True
-                self._mix_condition.notify_all()
+        if _mix_i_am_renderer and st.mix_condition is not None:
+            async with st.mix_condition:
+                st.mix_render_complete = True
+                st.mix_condition.notify_all()
 
         return result_with_think
 
@@ -759,38 +996,36 @@ class End(BaseEnd):
         增强的流式输出处理，支持生成器值和结构化输出。
         """
         # 幂等保护：End 节点在 wait_for_all=False 时可能被 Pregel 引擎多次触发
-        if self._stream_executed:
+        # （同一执行内按入边分别触发）；标志按 NodeSession 隔离，跨执行不复用
+        st = self._exec_state(session)
+        if st.stream_executed:
             return
-        self._stream_executed = True
+        st.stream_executed = True
+        set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
+        self._prepare_render_state(st)
 
-        # 处理输入中的生成器值
-        outputs = {}
-        if inputs and isinstance(inputs, dict):
-            # 构建输出到输入的映射，防止重复消费流式数据
-            if inputs.get(USER_FIELDS):
-                inputs = inputs[USER_FIELDS]
-            gen_out_to_in = build_output_to_input(inputs)
-
-            # 按照 userFields.inputs schema 对输入值做类型强转
-            self._apply_type_conversion(inputs)
-
-            # 处理生成器值
-            inputs = await process_generator_values_of_output(
-                inputs=inputs, out_to_in=gen_out_to_in, workflow_streaming_data=None
-            )
-
-            outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
-                for k, v in inputs.items()
-                if k.startswith(OUTPUT_PREFIX) and v is not None
-            }
-            # 移除输出数据标记
-            _remove_output_data(inputs)
+        # 与 invoke 对齐：None inputs / None 叶子统一兜底，避免 `x in None`
+        inputs = self._prepare_user_inputs(inputs)
+        gen_out_to_in = build_output_to_input(inputs)
+        inputs = await process_generator_values_of_output(
+            inputs=inputs, out_to_in=gen_out_to_in, workflow_streaming_data=None
+        )
+        inputs = self._normalize_inputs_dict(inputs)
+        self._coalesce_none_leaves(inputs)
+        outputs = {
+            k[len(OUTPUT_PREFIX):]: v
+            for k, v in inputs.items()
+            if k.startswith(OUTPUT_PREFIX) and v is not None
+        }
+        _remove_output_data(inputs)
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "batch", inputs, outputs, session
         )
+        inputs = self._normalize_inputs_dict(inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return
 
@@ -808,12 +1043,9 @@ class End(BaseEnd):
         async for output in super().stream(inputs, session, context):
             # 保存响应内容
             last_end_node_stream = output
-            # 处理 OutputSchema 类型输出（有 type 和 index 属性）
-            if (
-                hasattr(output, "type")
-                and hasattr(output, "payload")
-                and "response" in output.payload
-            ):
+            # payload 可能为 None；必须先 isinstance(dict) 再做 `in`，
+            # 否则会抛 argument of type 'NoneType' is not iterable
+            if _has_response_payload(output):
                 response_parts.append(output.payload["response"])
                 # 构建输出结果
                 result = get_output_data_with_metadata(
@@ -849,11 +1081,24 @@ class End(BaseEnd):
                 yield OutputSchema(
                     type=output.type, index=output.index + 1, payload=result
                 )
-            else:
+            elif isinstance(output, dict):
                 yield OutputSchema(
                     type=output.get("type", "end node stream"),
                     index=output.get("index", 0) + 1,
                     payload=output,
+                )
+            elif hasattr(output, "type") and hasattr(output, "payload"):
+                # OutputSchema 但 payload 无 response（含 payload is None）：原样下发
+                yield OutputSchema(
+                    type=getattr(output, "type", "end node stream"),
+                    index=getattr(output, "index", 0) + 1,
+                    payload=output.payload if output.payload is not None else {},
+                )
+            else:
+                yield OutputSchema(
+                    type="end node stream",
+                    index=0,
+                    payload={"response": str(output) if output is not None else ""},
                 )
         if last_end_node_stream and self._should_emit_end_marker():
             # 当模板以 {{...}} 结尾时，旧框架 split 末元素为空字符串，
@@ -949,20 +1194,22 @@ class End(BaseEnd):
         yield OutputSchema(type="workflow_end", index=1, payload=result_without_think)
 
         # 写入最终输出到缓存
-        self._stream_output = self._build_final_output(
-            answer=struct_answer_str
-            if struct_answer_str
-            else workflow_output["response"],
-            node_id=node_id,
-            struct_answer=workflow_output["response"],
-            user_fields=user_fields,
+        set_stream_final_output(
+            self._build_final_output(
+                answer=struct_answer_str
+                if struct_answer_str
+                else workflow_output["response"],
+                node_id=node_id,
+                struct_answer=workflow_output["response"],
+                user_fields=user_fields,
+            )
         )
 
         # mix 模式：通知另一方渲染已完成
-        if _mix_i_am_renderer and self._mix_condition is not None:
-            async with self._mix_condition:
-                self._mix_render_complete = True
-                self._mix_condition.notify_all()
+        if _mix_i_am_renderer and st.mix_condition is not None:
+            async with st.mix_condition:
+                st.mix_render_complete = True
+                st.mix_condition.notify_all()
 
     async def collect(
         self, inputs: Input, session: Session, context: ModelContext
@@ -971,57 +1218,53 @@ class End(BaseEnd):
         流式输入聚合为批量输出（与 invoke 模式一致）。
         """
         # 幂等保护：End 节点在 wait_for_all=False 时可能被 Pregel 引擎多次触发
-        if self._collect_executed:
+        # （同一执行内按入边分别触发）；标志按 NodeSession 隔离，跨执行不复用
+        st = self._exec_state(session)
+        if st.collect_executed:
             return None
-        self._collect_executed = True
-        # 聚合流式输入
-        collected_inputs = []
+        st.collect_executed = True
+        set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
+        self._prepare_render_state(st)
+        # 聚合流式输入（必须先于 _extract_user_fields，见 _coerce_collect_inputs）
         outputs = {}
-        if inputs and isinstance(inputs, dict) and inputs.get(USER_FIELDS):
-            inputs = inputs[USER_FIELDS]
-        if hasattr(inputs, "__aiter__"):
-            async for input_chunk in inputs:
-                collected_inputs.append(input_chunk)
-            if len(collected_inputs) == 1:
-                final_inputs = collected_inputs[0]
-            elif len(collected_inputs) > 1:
-                final_inputs = collected_inputs[-1]
-            else:
-                final_inputs = {}
-        else:
-            final_inputs = inputs
+        final_inputs = await self._coerce_collect_inputs(inputs)
 
         # 处理输入中的生成器值（与 invoke 一致）
-        if final_inputs and isinstance(final_inputs, dict):
-            gen_out_to_in = build_output_to_input(final_inputs)
-            final_inputs = await process_generator_values_of_output(
-                inputs=final_inputs,
-                out_to_in=gen_out_to_in,
-                workflow_streaming_data=None,
-            )
-            outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
-                for k, v in final_inputs.items()
-                if k.startswith(OUTPUT_PREFIX) and v is not None
-            }
-            _remove_output_data(final_inputs)
+        final_inputs = self._normalize_inputs_dict(final_inputs)
+        self._apply_type_conversion(final_inputs)
+        self._coalesce_none_leaves(final_inputs)
+        gen_out_to_in = build_output_to_input(final_inputs)
+        final_inputs = await process_generator_values_of_output(
+            inputs=final_inputs,
+            out_to_in=gen_out_to_in,
+            workflow_streaming_data=None,
+        )
+        final_inputs = self._normalize_inputs_dict(final_inputs)
+        self._coalesce_none_leaves(final_inputs)
+        outputs = {
+            k[len(OUTPUT_PREFIX):]: v
+            for k, v in final_inputs.items()
+            if k.startswith(OUTPUT_PREFIX) and v is not None
+        }
+        _remove_output_data(final_inputs)
 
         # mix 模式协调
         final_inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "stream", final_inputs, outputs, session
         )
+        final_inputs = self._normalize_inputs_dict(final_inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return None
 
         # 调用父类的collect方法获取结果（与 invoke 一致）
-        response = await super().collect(final_inputs, session, context)
+        response = self._ensure_response_dict(
+            await super().collect(final_inputs, session, context)
+        )
 
         # 提取原始文本输出
-        final_output = (
-            str(response)
-            if not isinstance(response, dict)
-            else response.get("response", "")
-        )
+        final_output = response.get("response", "")
 
         # 处理结构化输出：渲染模板得到 JSON 字符串
         struct_answer_str = ""
@@ -1086,18 +1329,20 @@ class End(BaseEnd):
         )
 
         # 写入最终输出到缓存
-        self._stream_output = self._build_final_output(
-            answer=struct_answer_str if struct_answer_str else final_output,
-            node_id=node_id,
-            struct_answer=final_output,
-            user_fields=user_fields,
+        set_stream_final_output(
+            self._build_final_output(
+                answer=struct_answer_str if struct_answer_str else final_output,
+                node_id=node_id,
+                struct_answer=final_output,
+                user_fields=user_fields,
+            )
         )
 
         # mix 模式：通知另一方渲染已完成
-        if _mix_i_am_renderer and self._mix_condition is not None:
-            async with self._mix_condition:
-                self._mix_render_complete = True
-                self._mix_condition.notify_all()
+        if _mix_i_am_renderer and st.mix_condition is not None:
+            async with st.mix_condition:
+                st.mix_render_complete = True
+                st.mix_condition.notify_all()
 
         return result_with_think
 
@@ -1137,20 +1382,23 @@ class End(BaseEnd):
         每帧后检查中断状态，若中断则立即停止，不发送 message_end/workflow_end 等结束帧。
         """
         # 幂等保护：End 节点在 wait_for_all=False 时可能被 Pregel 引擎多次触发
-        if self._transform_executed:
+        # （同一执行内按入边分别触发）；标志按 NodeSession 隔离，跨执行不复用
+        st = self._exec_state(session)
+        if st.transform_executed:
             return
-        self._transform_executed = True
+        st.transform_executed = True
 
-        # 开始时清空缓存
-        self._reset_stream_output()
+        # 开始时清空缓存（末帧 ContextVar 通道）
+        set_stream_final_output(None)
+        _current_exec_key.set(self._exec_key(session))
+        self._prepare_render_state(st)
 
         # 提取上游节点的流式 metadata（由 FlowApi/FlowMcp 在 yield 中附带）
         # 流式连接下 __stream_metadata__ 会被引擎包装为 AsyncGenerator，需消费取最后一帧
         stream_metadata = None
         _meta_count = 0
-        if inputs and isinstance(inputs, dict) and inputs.get(USER_FIELDS):
-            inputs = inputs[USER_FIELDS]
-        _raw_meta = inputs.pop("__stream_metadata__", None) if isinstance(inputs, dict) else None
+        inputs = self._extract_user_fields(inputs)
+        _raw_meta = inputs.pop("__stream_metadata__", None)
         if isinstance(_raw_meta, AsyncGenerator):
             _last_meta = None
             async for _meta_item in _raw_meta:
@@ -1182,6 +1430,9 @@ class End(BaseEnd):
         _reasoning_ref = {"value": _reasoning_content}
         if inputs and isinstance(inputs, dict):
             self._apply_type_conversion(inputs)
+            # 非流式叶子的 None（如 memory.a[0].b 未命中）先兜成空串；
+            # AsyncGenerator 不会被 _coalesce_none_leaves 碰到。
+            self._coalesce_none_leaves(inputs)
 
             # 按生成器 id 分组：同一 AsyncGenerator 可能被多个键引用（answer/#end_answer）
             gen_to_keys = {}
@@ -1219,7 +1470,7 @@ class End(BaseEnd):
 
             # 提取 outputs 中的非生成器值（输出字段以 #end_ 前缀标识）
             outputs = {
-                k[len(OUTPUT_PREFIX) :]: v
+                k[len(OUTPUT_PREFIX):]: v
                 for k, v in inputs.items()
                 if k.startswith(OUTPUT_PREFIX) and v is not None and not isinstance(v, AsyncGenerator)
             }
@@ -1274,6 +1525,8 @@ class End(BaseEnd):
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
             "stream", inputs, outputs, session
         )
+        inputs = self._normalize_inputs_dict(inputs)
+        outputs = self._normalize_inputs_dict(outputs)
         if not _mix_i_am_renderer:
             return
 
@@ -1393,10 +1646,10 @@ class End(BaseEnd):
                 session_id=session.get_session_id(),
             )
             # mix 模式：通知另一方渲染已完成（即使中断也要通知，避免另一方死锁）
-            if _mix_i_am_renderer and self._mix_condition is not None:
-                async with self._mix_condition:
-                    self._mix_render_complete = True
-                    self._mix_condition.notify_all()
+            if _mix_i_am_renderer and st.mix_condition is not None:
+                async with st.mix_condition:
+                    st.mix_render_complete = True
+                    st.mix_condition.notify_all()
             return
 
         # 生成器消费完成后获取 reasoning_content 最终值
@@ -1537,27 +1790,29 @@ class End(BaseEnd):
 
         # 防御性检查：发送最终结束帧前再次确认未中断
         if self._is_workflow_interrupted(session):
-            if _mix_i_am_renderer and self._mix_condition is not None:
-                async with self._mix_condition:
-                    self._mix_render_complete = True
-                    self._mix_condition.notify_all()
+            if _mix_i_am_renderer and st.mix_condition is not None:
+                async with st.mix_condition:
+                    st.mix_render_complete = True
+                    st.mix_condition.notify_all()
             return
 
         yield OutputSchema(type="message_end", index=0, payload=result_with_think)
         yield OutputSchema(type="workflow_end", index=1, payload=result_without_think)
 
         # 写入最终输出到缓存
-        self._stream_output = self._build_final_output(
-            answer=struct_answer_str
-            if struct_answer_str
-            else workflow_output["response"],
-            node_id=node_id,
-            struct_answer=workflow_output["response"],
-            user_fields=user_fields,
+        set_stream_final_output(
+            self._build_final_output(
+                answer=struct_answer_str
+                if struct_answer_str
+                else workflow_output["response"],
+                node_id=node_id,
+                struct_answer=workflow_output["response"],
+                user_fields=user_fields,
+            )
         )
 
         # mix 模式：通知另一方渲染已完成
-        if _mix_i_am_renderer and self._mix_condition is not None:
-            async with self._mix_condition:
-                self._mix_render_complete = True
-                self._mix_condition.notify_all()
+        if _mix_i_am_renderer and st.mix_condition is not None:
+            async with st.mix_condition:
+                st.mix_render_complete = True
+                st.mix_condition.notify_all()

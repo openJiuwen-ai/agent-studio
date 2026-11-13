@@ -140,6 +140,11 @@ export class DifyMigrateService {
           id: res.workflow_id,
         },
       });
+    }).catch(() => {
+      MessageComponent.showError(
+        this.i18n.transform(`${I18nNamespace.AGENT_CENTER}:imported_failed_dify_tip`),
+        3000,
+      );
     });
   }
 
@@ -170,8 +175,13 @@ export class DifyMigrateService {
   }
 
   private setTriggerNode() {
-    this.oldDifyTrigger = this.workFlowDsl.workflow_details.configs.trigger;
-    this.workFlowDsl.workflow_details.configs.trigger = null;
+    // configs 为可选结构。
+    const configs = this.workFlowDsl.workflow_details?.configs;
+    if (!configs) {
+      return;
+    }
+    this.oldDifyTrigger = configs.trigger;
+    configs.trigger = null;
 
     if(this.oldDifyTrigger?.frequency) {
       // 推入虚拟触发器节点
@@ -182,9 +192,7 @@ export class DifyMigrateService {
   }
 
   private setGlobalConfigNode(): void {
-    const additionalQuestionsConfig = this.workFlowDsl.workflow_details.configs.additional_questions_config;
-
-    if(additionalQuestionsConfig?.enable) {
+    if (this.workFlowDsl.workflow_details?.configs?.additional_questions_config?.enable) {
       this.halfCompatible.nodes.push({
         type: MigrateNodeType.GlobalConfig
       })

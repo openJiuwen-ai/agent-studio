@@ -46,6 +46,7 @@ import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
 import com.openjiuwen.studio.agent.common.dto.auth.PluginIAMAuthInfo;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
+import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.SearchCriteria;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
@@ -82,6 +83,7 @@ import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.AgentCommonService;
+import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
 import com.openjiuwen.studio.agent.manager.service.IPluginService;
 import com.openjiuwen.studio.agent.manager.service.ToolManagementService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginAdapterImpl;
@@ -211,6 +213,9 @@ public class PluginService implements IPluginService {
 
     @Autowired
     private PluginMapper pluginMapper;
+
+    @Autowired
+    private AssetShelfPermissionValidator shelfPermissionValidator;
 
     @Autowired
     private ToolMapper toolMapper;
@@ -390,6 +395,11 @@ public class PluginService implements IPluginService {
         }
 
         shareInnerService.cancelPluginShared(projectId, workspaceId, pluginId);
+        // 已上架校验（对标团队共享删除校验）：先下架才能删除
+        if (pluginEntity.getPlatformPublished() != null && pluginEntity.getPlatformPublished() == 1) {
+            log.error("Plugin published to plaza cannot be deleted, pluginId: {}", pluginId);
+            throw new AgentStudioException(StudioError.RESOURCE_PUBLISHED_CANNOT_BE_DELETE);
+        }
         // 设置关联的资源为已失效
         mappingMapper.updateValidByResourceId(pluginId);
         pluginMapper.updatePluginShareStatus(pluginId, 0);
@@ -587,26 +597,39 @@ public class PluginService implements IPluginService {
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
         if (!Strings.CS.equals(pluginDTO.getType(), ToolType.INNER.type) && !Strings.CS.equals(
             pluginEntity.getWorkspaceId(), getPluginVersionQo.getWorkspaceId())) {
-            // 判断是否共享资源，共享资源也可查询
-            ShareScopeEntity shareScopeEntity = shareScopeMapper.selectShareScopesByResourceIdAndWorkspaceId(pluginId,
-                ThreadLocalUtils.getWorkspaceId());
-            // 非空表示跨空间引用查询，检查版本号是否被共享
-            if (Objects.nonNull(shareScopeEntity)) {
-                // 检查工作流是否被授权
-                ShareResourceEntity shareResourceEntity = shareResourceMapper.selectShareResourceEntityByResourceId(
-                    pluginId);
-                if (!shareResourceEntity.containsVersion(versionId)) {
+            // 上架标记是实时状态（上架/下架随时变更），OBS 版本快照里的 platform_published 是发版本时的快照值，
+            // 可能已过期（例如发版本后又被下架再重新上架），跨空间可见性必须以数据库最新值为准，
+            // 故无条件回查 DB 覆盖快照值（FRS-091）。
+            PluginEntity dbPlugin = pluginMapper.selectByPrimaryKey(pluginId, null);
+            if (dbPlugin != null) {
+                pluginEntity.setPlatformPublished(dbPlugin.getPlatformPublished());
+            }
+            // 资产广场已上架插件（platform_published=1）支持跨工作空间查看版本（FRS-091）
+            boolean plazaPublished = pluginEntity.getPlatformPublished() != null
+                && pluginEntity.getPlatformPublished() == 1;
+            if (!plazaPublished) {
+                // 判断是否共享资源，共享资源也可查询
+                ShareScopeEntity shareScopeEntity = shareScopeMapper.selectShareScopesByResourceIdAndWorkspaceId(pluginId,
+                    ThreadLocalUtils.getWorkspaceId());
+                // 非空表示跨空间引用查询，检查版本号是否被共享
+                if (Objects.nonNull(shareScopeEntity)) {
+                    // 检查工作流是否被授权
+                    ShareResourceEntity shareResourceEntity = shareResourceMapper.selectShareResourceEntityByResourceId(
+                        pluginId);
+                    if (!shareResourceEntity.containsVersion(versionId)) {
+                        log.error(
+                            "getToolVersion, request project id: {} workspace id: {}, tool project id {} workspace id {}",
+                            projectId, getPluginVersionQo.getWorkspaceId(), pluginEntity.getProjectId(),
+                            pluginEntity.getWorkspaceId());
+                        throw new AgentStudioException(StudioError.PLUGIN_PRIVILEGE_ERROR, pluginEntity.getProjectId());
+                    }
+                } else {
                     log.error(
                         "getToolVersion, request project id: {} workspace id: {}, tool project id {} workspace id {}",
                         projectId, getPluginVersionQo.getWorkspaceId(), pluginEntity.getProjectId(),
                         pluginEntity.getWorkspaceId());
                     throw new AgentStudioException(StudioError.PLUGIN_PRIVILEGE_ERROR, pluginEntity.getProjectId());
                 }
-            } else {
-                log.error("getToolVersion, request project id: {} workspace id: {}, tool project id {} workspace id {}",
-                    projectId, getPluginVersionQo.getWorkspaceId(), pluginEntity.getProjectId(),
-                    pluginEntity.getWorkspaceId());
-                throw new AgentStudioException(StudioError.PLUGIN_PRIVILEGE_ERROR, pluginEntity.getProjectId());
             }
         }
         return new BaseResp().setCode(200).setMessage("success").setData(pluginDTO);
@@ -837,8 +860,13 @@ public class PluginService implements IPluginService {
     public void checkPluginPermission(String projectId, String workspaceId, String pluginId) {
         PluginEntity pluginEntity = pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, projectId, workspaceId);
         if (Objects.isNull(pluginEntity)) {
-            log.error("Plugin {} projectId {} workspaceId {} does not exist.", pluginId, projectId, workspaceId);
-            throw new AgentStudioException(StudioError.TOOL_PROJECT_DONE_NOT_EXIST, pluginId, projectId, workspaceId);
+            // 资产广场已上架插件（platform_published=1）支持跨租户可见（FRS-091）
+            PluginEntity plazaPublished = pluginMapper.selectByPrimaryKey(pluginId, null);
+            if (plazaPublished == null || plazaPublished.getPlatformPublished() == null
+                || plazaPublished.getPlatformPublished() != 1) {
+                log.error("Plugin {} projectId {} workspaceId {} does not exist.", pluginId, projectId, workspaceId);
+                throw new AgentStudioException(StudioError.TOOL_PROJECT_DONE_NOT_EXIST, pluginId, projectId, workspaceId);
+            }
         }
     }
 
@@ -1107,13 +1135,24 @@ public class PluginService implements IPluginService {
                     messageSource.getMessage("tool.creator.official", null, CommonConstant.DEFAULT_USERNAME, locale));
             }
             tool.setAuthInfo(anonymizeAuthInfo(tool.getAuthInfo()));
+            // 属主标识：当前用户是否为插件创建者（前端据此显示下架按钮，FRS-091）
+            tool.setIsOwner(Objects.equals(RequestContextUtils.getRequestUserId(), tool.getCreatorId()));
             if (Strings.CI.equals(ToolType.INNER.type, tool.getType())) {
                 tool.getToolRequestInfo().getBasicInfo().setHost(null);
             }
         });
-        pluginListRsp.setPluginList(plugins.subList(listPluginsQo.getOffset(),
-            Math.min(listPluginsQo.getLimit() + listPluginsQo.getOffset(), plugins.size())));
+        List<PluginDTO> pagedPlugins = plugins.subList(listPluginsQo.getOffset(),
+            Math.min(listPluginsQo.getLimit() + listPluginsQo.getOffset(), plugins.size()));
+        pluginListRsp.setPluginList(pagedPlugins);
         pluginListRsp.setCount((long) plugins.size());
+
+        // 批量带出各插件最新发布版本，供前端"有新版可更新上架"判断（FRS-091 增强）
+        if (!pagedPlugins.isEmpty()) {
+            Set<String> appIds = plugins.stream().map(PluginDTO::getPluginId).collect(Collectors.toSet());
+            Map<String, String> latestVersionMap = releaseVersionMapper.queryLastVersionByAppIds(appIds).stream()
+                .collect(Collectors.toMap(ReleaseVersion::getAppId, ReleaseVersion::getVersionId, (a, b) -> a));
+            pagedPlugins.forEach(tool -> tool.setLatestReleaseVersionId(latestVersionMap.get(tool.getPluginId())));
+        }
         return pluginListRsp;
     }
 
@@ -1433,12 +1472,36 @@ public class PluginService implements IPluginService {
         }
         if (ToolType.CUSTOM.type.equals(pluginEntity.getType()) && !Strings.CS.equals(workspaceId,
             pluginEntity.getWorkspaceId())) {
-            throw new AgentStudioException(StudioError.TOOLS_NOT_EXIST_OR_NO_PERMISSION,
-                String.format("%s.", pluginId));
+            // 已上架到资产广场的自定义插件跨工作空间可见（口径与列表接口 platform_published=1 and published=1 一致）
+            boolean publishedToPlaza = pluginEntity.getPlatformPublished() != null
+                && pluginEntity.getPlatformPublished() == 1
+                && pluginEntity.getPublished() != null
+                && pluginEntity.getPublished() == 1;
+            if (!publishedToPlaza) {
+                throw new AgentStudioException(StudioError.TOOLS_NOT_EXIST_OR_NO_PERMISSION,
+                    String.format("%s.", pluginId));
+            }
         }
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
         pluginDTO.setAuthInfo(anonymizeAuthInfo(pluginDTO.getAuthInfo()));
         pluginDTO.setToolDependencyList(new ArrayList<>());
+
+        // 回填资产广场上架锚定版本名（FRS-091）：详情页"版本号"展示。
+        // 由后端按 plaza_version_id 直接查 t_release_version 取 version_name，属主与他人视角均一致，
+        // 前端不再用本地版本列表匹配（避免非属主拿不到列表 / 跨空间 find 不到导致的脏展示或 "--"）。
+        if (Integer.valueOf(1).equals(pluginEntity.getPlatformPublished())
+            && StringUtils.isNotBlank(pluginEntity.getPlazaVersionId())) {
+            try {
+                ReleaseVersion anchorVersion = releaseVersionMapper.selectByAppIdAndVersionId(
+                    pluginEntity.getPluginId(), pluginEntity.getPlazaVersionId());
+                if (anchorVersion != null) {
+                    pluginDTO.setPlazaVersionName(anchorVersion.getVersionName());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve plaza anchor version name, pluginId: {}, versionId: {}",
+                    pluginEntity.getPluginId(), pluginEntity.getPlazaVersionId(), e);
+            }
+        }
 
         // 构建tool_dependency_list字段
         // 统计口径与引用插件列表(listResourceRelations)保持完全一致，仅维度不同：
@@ -1611,6 +1674,7 @@ public class PluginService implements IPluginService {
         checkToolNum(pluginDTO);
         // 与 v1 独立工具对齐：校验 input/output schema（含参数 description/location 等）
         validatePluginToolSchemas(createPluginToolReq);
+        toolManagementService.requireHttpRequestInfo(createPluginToolReq.getRequestInfo());
 
         // 名字校验
         Set<String> englisNameSet = pluginDTO.getToolRequestInfo()
@@ -1697,6 +1761,7 @@ public class PluginService implements IPluginService {
     private void updateTool(CreatePluginToolReq createPluginToolReq, PluginDTO pluginDTO, String toolId) {
         // 与 v1 独立工具对齐：修改工具时同样校验 schema
         validatePluginToolSchemas(createPluginToolReq);
+        toolManagementService.requireHttpRequestInfo(createPluginToolReq.getRequestInfo());
 
         if (pluginDTO.getToolRequestInfo().getToolsInfoList() == null) {
             pluginDTO.getToolRequestInfo().setToolsInfoList(new ArrayList<>());
@@ -1977,7 +2042,10 @@ public class PluginService implements IPluginService {
                 .put(CommonConstant.DOMAIN_ID, RequestContextUtils.getRequestUserDomainId());
         }
         pluginEntity.setAuthInfo(body.getAuthInfo());
-        pluginEntity.setVisibility(body.getVisibility());
+        // 与库表 NOT NULL DEFAULT 'project'、v1 buildToolEntity 对齐：不传时显式落默认，
+        // 避免 PluginMapper.insert 显式写入 null 触发 SQL 异常（同 #1665）
+        pluginEntity.setVisibility(
+            StringUtils.isEmpty(body.getVisibility()) ? VisibilityEnum.PROJECT.getValue() : body.getVisibility());
         pluginEntity.setType(pluginEntity.getType() != null ? pluginEntity.getType() : getPluginType(projectId));
 
         pluginEntity.setCreator(
@@ -2208,8 +2276,11 @@ public class PluginService implements IPluginService {
         for (String pluginId : pluginIds) {
             PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, null);
 
-            if ((ToolType.CUSTOM.type.equals(pluginEntity.getType()) && !Strings.CS.equals(workspaceId,
-                pluginEntity.getWorkspaceId()))) {
+            // 资产广场已上架插件（platform_published=1）支持跨工作空间引用（FRS-091）
+            boolean plazaPublished = pluginEntity != null && pluginEntity.getPlatformPublished() != null
+                && pluginEntity.getPlatformPublished() == 1;
+            if (pluginEntity != null && ToolType.CUSTOM.type.equals(pluginEntity.getType())
+                && !Strings.CS.equals(workspaceId, pluginEntity.getWorkspaceId()) && !plazaPublished) {
                 throw new AgentStudioException(StudioError.TOOLS_NOT_EXIST_OR_NO_PERMISSION,
                     String.format("%s.", pluginId));
             }
@@ -2294,6 +2365,115 @@ public class PluginService implements IPluginService {
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntityByVersion);
         pluginMapper.updateByPrimaryKeySelective(pluginEntityByVersion);
         return new BaseResp().setCode(200).setMessage("success").setData(pluginDTO);
+    }
+
+    @Override
+    @Transactional
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "Plugin",
+        description = "上架插件到资产广场",
+        resourceId = "pluginId",
+        resourceName = ""
+    )
+    public String publishPlugin(String projectId, String workspaceId, String pluginId, PluginShelfReq body) {
+        log.info("operation log {}: start to publish plugin to asset plaza, pluginId: {}", projectId, pluginId);
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        PluginEntity plugin = checkPluginOwnership(pluginId, projectId, workspaceId);
+        // 官方预置插件本已平台精选，不允许普通租户重复上架（运营租户兜底放行）
+        if (ToolType.INNER.type.equals(plugin.getType()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("Inner preset plugin cannot be published again, pluginId: {}", pluginId);
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        // 上架门槛：仅已发布（published=1）插件可上架，保证上架成功 ⇔ 广场（published=1 过滤）可见一致
+        if (plugin.getPublished() == null || plugin.getPublished() == 0) {
+            log.error("Plugin is not published, pluginId: {}", pluginId);
+            throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
+        }
+        // 锚定版本解析：指定版本校验存在；缺省实时取当前最新发布版本（决策：last_version_id 仅作线索）
+        String anchorVersionId = resolveAnchorVersion(pluginId, body == null ? null : body.getVersionId());
+        // 行业分类：上架时可补充目录展示需用的行业标签（广场 getCategoryLabel 展示）
+        String category = body == null ? null : body.getCategory();
+        if (StringUtils.isNotBlank(category) && !category.equals(plugin.getCategory())) {
+            pluginMapper.updateCategoryById(pluginId, projectId, category);
+        }
+        pluginMapper.updatePlazaShelf(pluginId, 1, anchorVersionId);
+        return anchorVersionId;
+    }
+
+    @Override
+    @Transactional
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "Plugin",
+        description = "下架插件",
+        resourceId = "pluginId",
+        resourceName = ""
+    )
+    public String unpublishPlugin(String projectId, String workspaceId, String pluginId) {
+        log.info("operation log {}: start to unpublish plugin, pluginId: {}", projectId, pluginId);
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        // 下架不需限制在请求空间内查询：上架资产全租户可见，非属主也需能被识别后拒绝（而非报插件不存在）
+        PluginEntity plugin = pluginMapper.selectByPrimaryKey(pluginId, null);
+        if (plugin == null) {
+            log.error("Plugin not exists, pluginId: {}", pluginId);
+            throw new AgentStudioException(StudioError.TOOL_NOT_EXIST, String.format("plugin id %s not exist", pluginId));
+        }
+        // 幂等：未上架直接返回成功
+        if (!Integer.valueOf(1).equals(plugin.getPlatformPublished())) {
+            log.info("Plugin already off shelf, pluginId: {}", pluginId);
+            return pluginId;
+        }
+        // 官方预置插件不允许普通租户下架（运营租户兜底放行，DEC-10）
+        if (ToolType.INNER.type.equals(plugin.getType()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("Inner preset plugin cannot be un-shelved by normal tenant, pluginId: {}", pluginId);
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        // 归属校验：仅上架属主用户（创建者）或运营租户可下架（FRS-091：跨用户不可下架他人上架资产）
+        if (!RequestContextUtils.getRequestUserId().equals(plugin.getCreatorId())
+            && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("No permission to unpublish plugin, pluginId: {}, creatorId: {}", pluginId,
+                plugin.getCreatorId());
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        pluginMapper.updatePlazaShelf(pluginId, 0, null);
+        return pluginId;
+    }
+
+    /**
+     * 校验插件归属当前项目与空间。
+     */
+    private PluginEntity checkPluginOwnership(String pluginId, String projectId, String workspaceId) {
+        PluginEntity plugin = pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, projectId, workspaceId);
+        if (plugin == null) {
+            log.error("Plugin not exists or not in workspace, pluginId: {}, workspaceId: {}", pluginId, workspaceId);
+            throw new AgentStudioException(StudioError.TOOL_NOT_EXIST);
+        }
+        return plugin;
+    }
+
+    /**
+     * 解析插件上架锚定版本：
+     * <ul>
+     *   <li>指定 version_id：校验 t_release_version 存在；</li>
+     *   <li>缺省：实时查最新发布版本（selectByAppIdWithLimit，按 version_id desc）。</li>
+     * </ul>
+     */
+    private String resolveAnchorVersion(String pluginId, String versionId) {
+        if (StringUtils.isBlank(versionId)) {
+            List<ReleaseVersion> latestVersions = releaseVersionMapper.selectByAppIdWithLimit(pluginId, 1);
+            if (CollectionUtils.isEmpty(latestVersions)) {
+                log.error("Plugin has no release version, pluginId: {}", pluginId);
+                throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
+            }
+            return latestVersions.get(0).getVersionId();
+        }
+        ReleaseVersion existVersion = releaseVersionMapper.selectByAppIdAndVersionId(pluginId, versionId);
+        if (existVersion == null) {
+            log.error("Plugin release version not exists, pluginId: {}, versionId: {}", pluginId, versionId);
+            throw new AgentStudioException(StudioError.TOOL_VERSION_NOT_EXIST);
+        }
+        return versionId;
     }
 
     /**

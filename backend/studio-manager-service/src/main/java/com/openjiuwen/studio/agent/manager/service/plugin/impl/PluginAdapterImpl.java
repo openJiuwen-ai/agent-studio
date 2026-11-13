@@ -377,9 +377,16 @@ public class PluginAdapterImpl implements IPlugin {
         // 增加共享判断，如果插件被共享到当前空间,则可以使用
         List<String> canUseIds = shareInnerService.getShareScopeByWorkspaceAndId(toolMap.keySet().stream().toList(),
             workspaceId).stream().map(ShareScopeEntity::getResourceId).toList();
+        // 资产广场已上架插件（platform_published=1）支持跨工作空间引用（FRS-091）
+        List<String> plazaPublishedIds = toolEntities.stream()
+            .filter(tool -> tool.getPlatformPublished() != null && tool.getPlatformPublished() == 1)
+            .map(PluginEntity::getPluginId)
+            .toList();
         List<String> cannotUseIds = toolEntities.stream()
-            .filter(tool -> "custom".equals(tool.getType()) && (!Strings.CS.equals(projectId, tool.getProjectId())
-                || !Strings.CS.equals(workspaceId, tool.getWorkspaceId())))
+            .filter(tool -> "custom".equals(tool.getType())
+                && (!Strings.CS.equals(projectId, tool.getProjectId())
+                    || !Strings.CS.equals(workspaceId, tool.getWorkspaceId()))
+                && !plazaPublishedIds.contains(tool.getPluginId()))
             .map(PluginEntity::getPluginId)
             .toList();
 
@@ -732,8 +739,15 @@ public class PluginAdapterImpl implements IPlugin {
             .map(ShareResourceEntity::getWorkspaceId)
             .toList();
         result = pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria(projectId, null, pluginIds, null);
-        return result.stream().filter(plugin -> originWorkspaceId.contains(plugin.getWorkspaceId())).toList();
-
+        if (CollectionUtils.isEmpty(result)) {
+            return result;
+        }
+        List<PluginEntity> allowed = result.stream()
+            .filter(plugin -> originWorkspaceId.contains(plugin.getWorkspaceId())
+                // 资产广场已上架插件（platform_published=1）支持跨工作空间引用（FRS-091）
+                || (plugin.getPlatformPublished() != null && plugin.getPlatformPublished() == 1))
+            .toList();
+        return allowed;
     }
 
     @Override

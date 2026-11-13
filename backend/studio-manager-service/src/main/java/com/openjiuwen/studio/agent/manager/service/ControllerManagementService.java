@@ -840,16 +840,17 @@ public class ControllerManagementService {
         if (MapUtils.isEmpty(subControllerNodeMap) && MapUtils.isEmpty(agentNodeMap)) {
             return Collections.emptyList();
         }
-        // 按 mode 分流取节点并按节点 id 去重（与保存链路一致：Controller 挂子多智能体，PlanExecute 挂单智能体）
+        // 按 mode 分流取节点并按节点 id 去重（与保存链路一致：Controller 挂子多智能体，
+        // 单智能体挂 Agent 节点）。单智能体成员的 mode 有两种合法值：PlanExecute（规划）
+        // 与 agent（通用，见 #2576），两者引用的都是 Agent 节点，均需参与版本校验——
+        // 未知 mode 兜底按 Agent 节点处理，避免通用成员被静默跳过校验
         Map<String, ControllerNodeVO> nodesToCheck = new HashMap<>();
         for (ControllerNodeConfigVOAgents agent : agents) {
             Map<String, ControllerNodeVO> nodeMap;
             if (AgentMode.CONTROLLER.getMode().equals(agent.getMode())) {
                 nodeMap = subControllerNodeMap;
-            } else if (AgentMode.PLANEXECUTE.getMode().equals(agent.getMode())) {
-                nodeMap = agentNodeMap;
             } else {
-                continue;
+                nodeMap = agentNodeMap;
             }
             if (MapUtils.isEmpty(nodeMap) || StringUtils.isEmpty(agent.getNodeId())) {
                 continue;

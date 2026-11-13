@@ -111,6 +111,10 @@ public class McpServiceBaseInfoDto implements Serializable {
     @Schema(description = "是否共享", example = "1")
     private Integer isShare = null;
 
+    @JsonProperty("platform_published")
+    @Schema(description = "是否已上架到资产广场（1=已上架，0=未上架）", example = "0")
+    private Integer platformPublished = null;
+
     public String getId() {
         return id;
     }
@@ -291,6 +295,15 @@ public class McpServiceBaseInfoDto implements Serializable {
         return this;
     }
 
+    public Integer getPlatformPublished() {
+        return platformPublished;
+    }
+
+    public McpServiceBaseInfoDto setPlatformPublished(Integer platformPublished) {
+        this.platformPublished = platformPublished;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -316,6 +329,7 @@ public class McpServiceBaseInfoDto implements Serializable {
         sb.append("    mcpServers: ").append(toIndentedString(mcpServers)).append("\n");
         sb.append("    authInfo: ").append(toIndentedString(authInfo)).append("\n");
         sb.append("    isShare: ").append(toIndentedString(isShare)).append("\n");
+        sb.append("    platformPublished: ").append(toIndentedString(platformPublished)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -343,14 +357,15 @@ public class McpServiceBaseInfoDto implements Serializable {
             this.visibility, mcpServiceBaseInfoDto.visibility) && Objects.equals(this.resource,
             mcpServiceBaseInfoDto.resource) && Objects.equals(this.mcpServers, mcpServiceBaseInfoDto.mcpServers)
             && Objects.equals(this.authInfo, mcpServiceBaseInfoDto.authInfo) && Objects.equals(this.isShare,
-            mcpServiceBaseInfoDto.isShare);
+            mcpServiceBaseInfoDto.isShare) && Objects.equals(this.platformPublished,
+            mcpServiceBaseInfoDto.platformPublished);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(id, icon, name, nameEn, description, descriptionEn, type, deployType, fcInstanceStatus,
             failReasonDetail, viewTimes, installTimes, nodeType, createdDate, lastUpdatedDate, visibility, resource,
-            mcpServers, authInfo, isShare);
+            mcpServers, authInfo, isShare, platformPublished);
     }
 
     /**

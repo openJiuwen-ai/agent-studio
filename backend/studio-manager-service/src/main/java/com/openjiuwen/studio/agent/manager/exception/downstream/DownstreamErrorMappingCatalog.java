@@ -30,8 +30,34 @@ import java.util.Set;
 public final class DownstreamErrorMappingCatalog {
 
     /**
+     * RUNTIME 可信码形（COM-04 §5.2 修订，2026-11-02）。
+     * <p>
+     * 与 Runtime 实际码宇宙对齐，且与 Builder canonical 码族（{@code 13xxxxxx}）正交：
+     * <ul>
+     *   <li>{@code 1[0-2]\d{4}}——引擎/组件 6 位码族（100000~129999，
+     *       {@code openjiuwen/core/common/exception/codes.py} 与
+     *       {@code jiuwen/common/exception/status_code.py} 全集，如 101003）；</li>
+     *   <li>{@code 999999}——Runtime 错误帧未知码兜底（其自身 i18n 有三段文案）；</li>
+     *   <li>{@code 12\d{5,6}}——Runtime error_contract 自有目录（121007/12100001~06）；</li>
+     *   <li>{@code 02\d{6}}——应用层 8 位码族（02001003/02201021/02501037 等，
+     *       与 Manager i18n 共库）。评审修订（2026-11-04）：由宽泛 {@code 0\d{7}}
+     *       收敛为 {@code 02} 前缀——Manager/Runtime 共库的应用层码全部落在
+     *       openjiuwen.02 前缀族（common 02001x、workflow 0220x、model 0250x），
+     *       其余 0 头形态不在共库范围，不入信任面（防未登记 0 头码携带
+     *       自由三段文案进入透传）。</li>
+     * </ul>
+     * 刻意不信任：8 位 {@code 13} 头（Builder canonical 族——跨服务不信任，
+     * 修复 2026-10-27 格式门放行 {@code 13100006} 误入 RUNTIME 的回归）、
+     * 任意 7 位、任意其他前缀。
+     */
+    static final String RUNTIME_CANONICAL_SHAPE = "1[0-2]\\d{4}|999999|12\\d{5,6}|02\\d{6}";
+
+    /**
      * DEF-06 发布的 Builder canonical 码——Manager 当前识别的下游原码。
-     * Runtime 下游原码暂未登记（Runtime 错误契约独立，后续按需补）。
+     * <p>
+     * 2026-10-27 备注（已被 2026-11-02 修订取代）：此前对 RUNTIME 按
+     * "openjiuwen. + 任意 7~8 位数字"做格式信任，导致 ①引擎 6 位码族全灭、
+     * ②Builder canonical 码被 RUNTIME 身份误信、③正则随业务演进失配。
      */
     private static final Set<String> RECOGNIZED_BUILDER_CODES = Set.of(
         "openjiuwen.13100006", "openjiuwen.13100007", "openjiuwen.13100008",
@@ -60,6 +86,12 @@ public final class DownstreamErrorMappingCatalog {
      * 下游原码是否被识别为可信（parser 信任门 + 诊断写入依据）。
      * <p>
      * 精确匹配，不补前缀、不改大小写、不把数字转 canonical。
+     * <p>
+     * RUNTIME（2026-11-02 修订）：按 {@link #RUNTIME_CANONICAL_SHAPE} 码形信任
+     * （引擎 6 位族/兜底 999999/error_contract 12 族/应用层 0 头 8 位族），
+     * 与 Builder canonical 码族正交——Builder 码到 RUNTIME 身份不跨服务误信。
+     * 信任后 Parser 提取的原码可透传到 ErrorDescriptor，构建器对 Manager i18n
+     * 缺失的码回退使用帧内受管三段文案，前端不再只见兜底 02001131。
      */
     public boolean isRecognizedDownstreamCode(DownstreamService service, String code) {
         if (code == null || code.isBlank()) {
@@ -68,8 +100,25 @@ public final class DownstreamErrorMappingCatalog {
         if (service == DownstreamService.BUILDER) {
             return RECOGNIZED_BUILDER_CODES.contains(code);
         }
-        // RUNTIME / EXTERNAL 下游原码暂未登记
+        if (service == DownstreamService.RUNTIME) {
+            return isRuntimeCanonicalShape(code);
+        }
         return false;
+    }
+
+    /**
+     * Runtime canonical 码形判定（openjiuwen. 前缀 + RUNTIME_CANONICAL_SHAPE）。
+     * <p>
+     * 供 parser 信任门与 mapper 1b 分支共用（纵深防御：mapper 侧再次校验，
+     * 直接构造的 DownstreamFailure 也不能把非 Runtime 码形推入透传路径）。
+     */
+    public boolean isRuntimeCanonicalShape(String code) {
+        if (code == null || code.isBlank()) {
+            return false;
+        }
+        String digits = code.startsWith("openjiuwen.")
+            ? code.substring("openjiuwen.".length()) : "";
+        return !digits.isEmpty() && digits.matches(RUNTIME_CANONICAL_SHAPE);
     }
 
     /**
@@ -93,5 +142,28 @@ public final class DownstreamErrorMappingCatalog {
     /** 默认 Manager 下游依赖失败定义（02001131/502）。 */
     public ErrorDefinition defaultDownstreamFailure() {
         return managerCatalog.downstreamDependencyFailed();
+    }
+
+    /**
+     * RUNTIME 透传解析(2026-10-27 修复, 2026-11-02 修订):按 runtime 原码构造 ErrorDefinition。
+     * <p>
+     * Runtime 与 Manager 共用 openjiuwen.* 错误码体系——原码即 i18n_key,
+     * message/reason/suggestion 由 i18n 按 "{code}" / "{code}.reason" /
+     * "{code}.suggestion" 三键查找(与 Manager 自身错误码同一解析路径)。
+     * Manager 侧 i18n 已含 runtime 应用层常见码(02001003/02001004/02001005 等);
+     * i18n 缺失的码(引擎 6 位族/999999/error_contract 12 族)由构建器回退到
+     * mapper 附带的帧内受管三段文案(PassthroughText)——前端仍能看到 Runtime
+     * 自身 i18n 的可读文案,而非兜底 02001131"下游依赖访问失败"。
+     *
+     * @param code runtime 原码(已过 isRecognizedDownstreamCode 信任门或码形纵深校验)
+     * @param httpStatus runtime 实际返回的 HTTP 状态码(403/400 等,不强制 502;
+     *                   SSE 阶段无状态时由 mapper 传入 500)
+     * @return 透传 ErrorDefinition;永不为 empty(调用方在信任后才调本方法)
+     */
+    public Optional<ErrorDefinition> resolveByCode(String code, int httpStatus) {
+        if (code == null || code.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(new ErrorDefinition(code, httpStatus, code));
     }
 }

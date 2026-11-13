@@ -439,7 +439,8 @@ public class ToolManagementService implements IToolManagementService {
                 throw new AgentStudioException(StudioError.TOOL_NAME_ALREADY_EXIST);
             }
         });
-        // 工具参数信息校验
+        // 工具参数信息校验（HTTP 工具必须有 request_info，避免后续 NPE 变成 500）
+        requireHttpRequestInfo(body.getRequestInfo());
         checkUrl(body.getRequestInfo(), projectId);
         checkToolInfo(body.getToolDisplayName(), body.getInputSchema(), body.getOutputSchema(), null,
                 body.getIntfType());
@@ -820,7 +821,8 @@ public class ToolManagementService implements IToolManagementService {
 
     @NotNull
     public ToolEntity buildToolEntity(String projectId, String workspaceId, CreateToolReq body, boolean isCreateOpenAPI) {
-        // 工具参数信息校验
+        // 工具参数信息校验（HTTP 工具必须有 request_info，避免后续 NPE 变成 500）
+        requireHttpRequestInfo(body.getRequestInfo());
         checkUrl(body.getRequestInfo(), projectId);
         checkToolInfo(body.getToolDisplayName(), body.getInputSchema(), body.getOutputSchema(), body.getVisibility(),
                 body.getIntfType());
@@ -870,7 +872,9 @@ public class ToolManagementService implements IToolManagementService {
         toolEntity.setAuthInfo(body.getAuthInfo());
         toolEntity.setIntfType(
                 StringUtils.isEmpty(body.getIntfType()) ? CommonConstant.Plugin.INTF_TYPE_BLOCKING : body.getIntfType());
-        toolEntity.setVisibility(body.getVisibility());
+        // 与库表 NOT NULL DEFAULT 'project' 对齐：不传时显式落默认，避免 MyBatis 插 null 触发 SQL 异常
+        toolEntity.setVisibility(
+                StringUtils.isEmpty(body.getVisibility()) ? VisibilityEnum.PROJECT.getValue() : body.getVisibility());
         toolEntity.setInputSchema(body.getInputSchema());
         toolEntity.setOutputSchema(body.getOutputSchema());
         toolEntity.setIsInputList(body.isIsInputList());
@@ -961,6 +965,20 @@ public class ToolManagementService implements IToolManagementService {
             return;
         }
         urlCheckUtils.checkUrl(projectId, requestInfo.getUrl());
+    }
+
+    /**
+     * HTTP 工具创建/更新时 request_info（含 url、method）必填；缺失时返回业务错误而非 NPE/500。
+     */
+    public void requireHttpRequestInfo(RequestInfo requestInfo) {
+        if (requestInfo == null) {
+            String detail = "request_info is required.";
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
+        }
+        if (StringUtils.isEmpty(requestInfo.getUrl()) || requestInfo.getMethod() == null) {
+            String detail = "request_info.url and request_info.method are required.";
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID, List.of(detail), detail);
+        }
     }
 
     /**

@@ -12,6 +12,7 @@ import com.openjiuwen.studio.agent.manager.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.common.dto.auth.OauthInfo;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.AuthServiceConfig;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -163,5 +164,31 @@ class WorkflowUtilsTest extends BaseTest {
         authInfo.setScope(AuthInfo.ScopeEnum.SERVICE);
         authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
         WorkflowUtils.parseAuthInfo(orgType, "serverConfig", authInfo);
+    }
+
+    @Test
+    public void test_parseAuthInfo_dynamic_scope_preserved() {
+        // FEAT-093：IR 保留 DYNAMIC scope 身份（值经 arguments 注入，headers/query 恒空），
+        // 使运行期可区分 DYNAMIC 与无鉴权（三参与单参两个重载同构）
+        AuthKeyInfo authKeyInfo = new AuthKeyInfo();
+        authKeyInfo.setTargetName("Authorization");
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setAuthKeys(Collections.singletonList(authKeyInfo));
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+
+        Object threeArg = WorkflowUtils.parseAuthInfo("SSE", "serverConfig", authInfo);
+        assertTrue(threeArg instanceof AuthServiceConfig, "three-arg should return AuthServiceConfig");
+        AuthServiceConfig config = (AuthServiceConfig) threeArg;
+        assertEquals("DYNAMIC", config.getScope());
+        assertTrue(config.getHeaders().isEmpty());
+        assertTrue(config.getQuery().isEmpty());
+
+        Object oneArg = WorkflowUtils.parseAuthInfo(authInfo);
+        assertTrue(oneArg instanceof AuthServiceConfig, "one-arg should return AuthServiceConfig");
+        AuthServiceConfig config1 = (AuthServiceConfig) oneArg;
+        assertEquals("DYNAMIC", config1.getScope());
+        assertTrue(config1.getHeaders().isEmpty());
+        assertTrue(config1.getQuery().isEmpty());
     }
 }

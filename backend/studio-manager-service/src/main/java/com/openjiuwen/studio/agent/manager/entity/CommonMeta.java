@@ -85,8 +85,15 @@ public class CommonMeta {
                     continue;
                 }
                 if (entity.getType().equals(ToolType.CUSTOM.type) && !Strings.CS.equals(entity.getWorkspaceId(), workspaceId)) {
-                    throw new AgentStudioException(StudioError.TOOLS_NOT_EXIST_OR_NO_PERMISSION,
+                    // 资产广场已上架插件（platform_published=1 且 published=1）支持跨工作空间可见（FRS-091，口径与 listPlugins 一致）
+                    boolean plazaPublished = entity.getPlatformPublished() != null
+                        && entity.getPlatformPublished() == 1
+                        && entity.getPublished() != null
+                        && entity.getPublished() == 1;
+                    if (!plazaPublished) {
+                        throw new AgentStudioException(StudioError.TOOLS_NOT_EXIST_OR_NO_PERMISSION,
                             String.format("%s.", entity.getToolId()));
+                    }
                 }
                 CommonMeta commonMeta = new CommonMeta();
                 commonMeta.setId(entity.getToolId());

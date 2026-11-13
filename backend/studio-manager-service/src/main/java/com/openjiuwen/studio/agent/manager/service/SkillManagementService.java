@@ -21,7 +21,9 @@ import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.SkillSource;
 import com.openjiuwen.studio.agent.manager.dto.SkillStatus;
+import com.openjiuwen.studio.agent.manager.dto.SkillShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.StudioSkillInfo;
+import com.openjiuwen.studio.agent.manager.dto.nl.SkillResource;
 import com.openjiuwen.studio.agent.manager.entity.SkillEntity;
 import com.openjiuwen.studio.agent.manager.entity.SkillVersionEntity;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
@@ -37,6 +39,7 @@ import org.mapstruct.ap.internal.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -55,6 +58,16 @@ import java.util.Objects;
 @Service
 public class SkillManagementService implements ISkillManagementService {
 
+    /**
+     * 资产广场上架来源：官方预置（平台运营预置，跨租户可见）
+     */
+    private static final String PLAZA_SOURCE_PRESET = "PRESET";
+
+    /**
+     * 资产广场上架来源：用户上架（开放接口/页面操作上架，跨租户可见）
+     */
+    private static final String PLAZA_SOURCE_USER = "USER";
+
     private final SkillMapper skillMapper;
 
     private final SkillVersionMapper skillVersionMapper;
@@ -64,6 +77,9 @@ public class SkillManagementService implements ISkillManagementService {
 
     @Autowired
     private MappingMapper mappingMapper;
+
+    @Autowired
+    private AssetShelfPermissionValidator shelfPermissionValidator;
 
     public SkillManagementService(SkillMapper skillMapper, SkillVersionMapper sKillVersionMapper) {
         this.skillMapper = skillMapper;
@@ -90,6 +106,12 @@ public class SkillManagementService implements ISkillManagementService {
             throw new AgentStudioException(StudioError.SKILL_NOT_EXISTS);
         }
 
+        // 已上架校验（对标团队共享删除校验）：先下架才能删除
+        if (skill.getPublishedAsset() != null && skill.getPublishedAsset() == 1) {
+            log.error("Skill published to plaza cannot be deleted, skillId: {}", skillId);
+            throw new AgentStudioException(StudioError.RESOURCE_PUBLISHED_CANNOT_BE_DELETE);
+        }
+
         // 删除 OBS 中的所有版本文件
         List<SkillVersionEntity> skillVersionEntities = skillVersionMapper.searchBySkillId(skillId, 0, Integer.MAX_VALUE);
         for (SkillVersionEntity skillVersionEntity : skillVersionEntities) {
@@ -104,6 +126,113 @@ public class SkillManagementService implements ISkillManagementService {
         mappingMapper.updateValidByResourceId(skillId);
 
         return null;
+    }
+
+    /**
+     * 上架 Skill 到资产广场（平台精选，跨租户可见）。
+     *
+     * <p>约束（FRS-091）：仅 OWNER/ADMIN（或运营租户）可操作；Skill 须处于可发布状态
+     * （非开发中且已有发布版本与制品）；重复上架幂等返回成功。</p>
+     */
+    @Transactional
+    @Override
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "Skill",
+        description = "上架Skill到资产广场",
+        resourceId = "skillId",
+        resourceName = ""
+    )
+    public Void publishStudioSkill(String skillId, String workspaceId, String projectId, SkillShelfReq body) {
+        SkillDetails skill = checkSkillOwnership(skillId, workspaceId);
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        // 幂等：已上架直接返回成功
+        if (Integer.valueOf(1).equals(skill.getPublishedAsset())) {
+            log.info("Skill already published to asset plaza, skillId: {}", skillId);
+            return null;
+        }
+        if (SkillStatus.DEVELOPING.getValue().equals(skill.getStatus())
+            || Strings.isEmpty(skill.getLatestVersion())) {
+            log.error("Skill is not publishable, skillId: {}, status: {}, latestVersion: {}",
+                skillId, skill.getStatus(), skill.getLatestVersion());
+            throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
+        }
+        // 制品存在性：t_skill 无 obs_path 列，需以版本记录是否含制品路径判定（有版本即有上传制品）
+        List<SkillVersionEntity> versions = skillVersionMapper.searchBySkillId(skillId, 0, Integer.MAX_VALUE);
+        boolean hasArtifact = versions != null
+            && versions.stream().anyMatch(v -> StringUtils.hasText(v.getObsPath()));
+        if (!hasArtifact) {
+            log.error("Skill has no artifact, skillId: {}", skillId);
+            throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
+        }
+        // 上架时可补充广场分类标签（tag_id，缺省沿用既有分类）
+        String tagId = body == null ? null : body.getTagId();
+        if (StringUtils.hasText(tagId)) {
+            skillMapper.updateTagById(skillId, tagId, System.currentTimeMillis());
+        }
+        skillMapper.updatePublishAsset(skillId, "1", PLAZA_SOURCE_USER, System.currentTimeMillis());
+        return null;
+    }
+
+    /**
+     * 将 Skill 从资产广场下架（不影响已挂载引用）。
+     *
+     * <p>约束（FRS-091）：仅 OWNER/ADMIN（或运营租户）可操作；官方预置资产不允许普通租户下架，
+     * 平台运营方（运营租户）可下架任意用户上架资产；重复下架幂等返回成功。</p>
+     */
+    @Transactional
+    @Override
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "Skill",
+        description = "下架Skill",
+        resourceId = "skillId",
+        resourceName = ""
+    )
+    public Void unpublishStudioSkill(String skillId, String workspaceId, String projectId) {
+        // 下架不需限制在请求空间内查询：上架资产全租户可见，非属主也需能被识别后拒绝（而非报 skill 不存在）
+        SkillDetails skill = skillMapper.searchBySkillId(skillId);
+        if (skill == null) {
+            log.error("Skill not exists, skillId: {}", skillId);
+            throw new AgentStudioException(StudioError.SKILL_NOT_EXISTS);
+        }
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        // 幂等：未上架直接返回成功
+        if (!Integer.valueOf(1).equals(skill.getPublishedAsset())) {
+            log.info("Skill is not published, skillId: {}", skillId);
+            return null;
+        }
+        // 用户下架不得作用于官方预置资产（运营租户兜底放行，DEC-10）
+        if (!PLAZA_SOURCE_USER.equals(skill.getPlazaSource()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("Official preset skill cannot be un-shelved by normal tenant, skillId: {}", skillId);
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        // 归属校验：仅上架属主用户（创建者）或运营租户可下架（FRS-091：跨用户不可下架他人上架资产）
+        if (!RequestContextUtils.getRequestUserId().equals(skill.getCreatorId())
+            && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("No permission to unpublish skill, skillId: {}, creatorId: {}", skillId, skill.getCreatorId());
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        skillMapper.updatePublishAsset(skillId, "0", skill.getPlazaSource(), System.currentTimeMillis());
+        return null;
+    }
+
+    /**
+     * 校验 Skill 归属当前租户与工作空间。
+     */
+    private SkillDetails checkSkillOwnership(String skillId, String workspaceId) {
+        SkillDetails skill = skillMapper.searchBySkillIdAndDomainId(skillId,
+            RequestContextUtils.getRequestUserDomainId());
+        if (skill == null) {
+            log.error("Skill not exists, skillId: {}", skillId);
+            throw new AgentStudioException(StudioError.SKILL_NOT_EXISTS);
+        }
+        if (StringUtils.hasText(skill.getWorkspaceId()) && !skill.getWorkspaceId().equals(workspaceId)) {
+            log.error("Skill does not belong to the current workspace, skillId: {}, workspaceId: {}",
+                skillId, workspaceId);
+            throw new AgentStudioException(StudioError.SKILL_NOT_EXISTS);
+        }
+        return skill;
     }
 
     /**
@@ -136,7 +265,9 @@ public class SkillManagementService implements ISkillManagementService {
             .setUsedVersion(skill.getUsedVersion())
             .setUsedVersionName(skill.getVersionName())
             .setObsUrl(temporaryObsUrl)
-            .setObsPath(skill.getObsPath());
+            .setObsPath(skill.getObsPath())
+            .setPublishedAsset(skill.getPublishedAsset())
+            .setPlazaSource(skill.getPlazaSource());
 
         return new GetStudioSkillDetailsResponseBody().setSkillInfo(skillInfo);
     }
@@ -366,6 +497,43 @@ public class SkillManagementService implements ISkillManagementService {
 
 
     /**
+     * 查询技能目录（NL2Agent 对话式生成用）。
+     *
+     * <p>仅返回 status 为 developed 的技能目录元数据
+     * （标识、名称、描述、图标、最新版本），不生成 OBS 临时链接、不返回存储路径。
+     * 无可用技能时返回空列表，调用方行为退化为现状。</p>
+     *
+     * @param projectId 项目ID
+     * @param workspaceId 空间ID
+     * @param limit 返回条数上限（与插件资源聚合一致，建议 200）
+     * @return 技能目录条目列表
+     */
+    public List<SkillResource> listSkillResources(String projectId, String workspaceId, int limit) {
+        SkillEntity selectCondition = new SkillEntity()
+            .setStatus(SkillStatus.DEVELOPED.getValue())
+            .setWorkspaceId(workspaceId)
+            .setProjectId(projectId)
+            .setPublishedAsset(0);
+        List<SkillDetails> selectedSkills = skillMapper.search(selectCondition, 0, limit, null, null, 0);
+
+        List<SkillResource> skillResources = new ArrayList<>();
+        for (SkillDetails skill : selectedSkills) {
+            if (Strings.isEmpty(skill.getLatestVersion())) {
+                // 无最新版本的技能不可执行，不进入 NL2Agent 候选
+                continue;
+            }
+            SkillResource resource = new SkillResource();
+            resource.setSkillId(skill.getSkillId());
+            resource.setSkillName(skill.getName());
+            resource.setDescription(skill.getDescription());
+            resource.setIcon(skill.getIcon());
+            resource.setLastVersionId(skill.getLatestVersion());
+            skillResources.add(resource);
+        }
+        return skillResources;
+    }
+
+    /**
      * 查询 Skill 列表（包括模糊匹配）
      */
     @Override
@@ -373,13 +541,12 @@ public class SkillManagementService implements ISkillManagementService {
         // 1. 获取匹配列表
         SkillEntity selectCondition;
         if (Integer.valueOf(1).equals(listStudioSkillsQo.getPublishedAsset())) {
+            // 上架到资产广场的资产全租户可见（不按 project/workspace 过滤，FRS-091）
             selectCondition = new SkillEntity()
                 .setName(escapeSqlSpecialChars(listStudioSkillsQo.getName()))
                 .setDescription(escapeSqlSpecialChars(listStudioSkillsQo.getDescription()))
                 .setStatus(listStudioSkillsQo.getStatus())
                 .setSource(listStudioSkillsQo.getSource())
-                .setWorkspaceId(listStudioSkillsQo.getWorkspaceId())
-                .setProjectId(projectId)
                 .setPublishedAsset(listStudioSkillsQo.getPublishedAsset());
         }else {
             selectCondition = new SkillEntity()
@@ -424,7 +591,11 @@ public class SkillManagementService implements ISkillManagementService {
                 .setObsUrl(temporaryObsUrl)
                 .setObsPath(skill.getObsPath())
                 .setUsedVersion(skill.getUsedVersion())
-                .setUsedVersionName(skill.getVersionName()));
+                .setUsedVersionName(skill.getVersionName())
+                .setPublishedAsset(skill.getPublishedAsset())
+                .setPlazaSource(skill.getPlazaSource())
+                .setCreatorId(skill.getCreatorId())
+                .setIsOwner(Objects.equals(RequestContextUtils.getRequestUserId(), skill.getCreatorId())));
         });
         return items;
     }

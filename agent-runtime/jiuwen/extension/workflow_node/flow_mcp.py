@@ -20,6 +20,7 @@ import copy
 from enum import Enum
 import json
 import re
+from typing import Tuple
 
 from agent_runtime.context.request_context import _request_ctx
 from jiuwen.common.exception.status_code import StatusCode
@@ -30,6 +31,7 @@ from jiuwen.extension.wrapper.sse_client_new import SSEClientNew
 from jiuwen.extension.wrapper.streamable_http_client_new import StreamableHttpClientNew
 from jiuwen.plugin.common import constant
 from jiuwen.plugin.common.utils.ir_utils import MCP_PARAM_LOCATIONS
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from openjiuwen.core.common.exception.errors import BaseError
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
@@ -94,6 +96,24 @@ def _is_param_required(param) -> bool:
     判断会把非空字符串 "false" 误判为必填，统一归一化后比较。
     """
     return str(getattr(param, "required", False)).lower() == "true"
+
+
+def _is_latin1_header_value(value) -> bool:
+    """HTTP 头值合法性：Latin-1 可编码且无控制字符（0x20~0xFF，禁 0x7F）。
+
+    与调测侧 isLatin1HeaderValue（Java）同语义。在节点入参层就地拦截，
+    避免非法头值穿透到 HTTP 客户端编码处才失败（不可诊断，且宽松客户端
+    下构成请求头注入面）。
+    """
+    try:
+        text = value if isinstance(value, str) else str(value)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+    for ch in text:
+        code = ord(ch)
+        if code < 0x20 or code == 0x7F or code > 0xFF:
+            return False
+    return True
 
 
 def _create_mcp_client(config: McpServerConfig):
@@ -171,7 +191,6 @@ class FlowMcp(WorkflowComponent):
         self._client = None
         self.api: MCPTool = None
         self._is_older_version: bool = False
-        self._header_params: dict = {}
         self._init_lock: asyncio.Lock = asyncio.Lock()
         if conf:
             self.init(conf)
@@ -340,27 +359,41 @@ class FlowMcp(WorkflowComponent):
 
         inputs_data = inputs.get(USER_FIELDS, {})
         schema_patches = {}
+        header_params = {}
         if not self._is_older_version:
-            api_inputs, schema_patches = self._format_api_inputs(inputs_data)
+            api_inputs, schema_patches, header_params = self._format_api_inputs(
+                inputs_data
+            )
         else:
             api_inputs = inputs_data
 
         # 从 session 提取运行时鉴权参数，注入到 inputs 中传递到底层
         # 兼容 runtime_auth（新版）和 runtime_context（旧版 fallback）
+        # runtime_auth 仅承载 session 级鉴权（runtime_auth_headers），
+        # 唯一消费者是 _add_auth_params 的 USER 映射——不得与动态凭证值混装，
+        # 否则无鉴权/动态服务会经 wrapper 门控把 session 级凭据整包外发
         jiuwen_kwargs = {}
         runtime_auth = self._format_runtime_auth(session)
-        if runtime_auth:
-            jiuwen_kwargs["runtime_auth"] = {"headers": runtime_auth}
         runtime_context_header = self._get_runtime_context_header(session)
         if runtime_context_header:
             jiuwen_kwargs["runtime_context"] = runtime_context_header
 
-        # 合并 header_params 到 runtime_auth headers
-        header_params = getattr(self, "_header_params", {})
-        if header_params:
-            if "runtime_auth" not in jiuwen_kwargs:
-                jiuwen_kwargs["runtime_auth"] = {"headers": {}}
-            jiuwen_kwargs["runtime_auth"]["headers"].update(header_params)
+        # FEAT-093 动态凭证：method=Headers 参数值双通道下传。
+        # USER/SERVICE scope：_add_auth_params 读 runtime_auth 做 source→target
+        # 映射（SERVICE 解密失败回退也读 runtime_auth）
+        # DYNAMIC/空 scope：wrapper 的独立通道合并（scope 门控不双重合并）
+        # runtime_auth 构造副本合并——_format_runtime_auth 返回的是 session
+        # 存储的引用，update 原对象会污染 workflow 全局鉴权状态（后续
+        # 节点读取到追加的凭证 + 并发互相污染），必须用展开语法构造新 dict
+        # header_params 走 _format_api_inputs 返回值（局部变量，不落实例
+        # 字段——实例跨执行复用；jiuwen_kwargs 的传递经 _AuthBlindMcpTool
+        # 转发层，不再嵌入 api_inputs 首参）
+        if header_params or runtime_auth:
+            jiuwen_kwargs["runtime_auth"] = {
+                "headers": {**(runtime_auth or {}), **header_params},
+            }
+            if header_params:
+                jiuwen_kwargs["dynamic_auth_headers"] = dict(header_params)
 
         # JSON 启发式解析发生时，基于 card 副本构建按调用隔离的 MCPTool，
         # 避免就地修改共享 schema（跨 invoke 持久化 / 并发互相污染）
@@ -389,17 +422,20 @@ class FlowMcp(WorkflowComponent):
         outputs = self._format_api_outputs(api_outputs)
         return {USER_FIELDS: outputs}
 
-    def _format_api_inputs(self, inputs: dict) -> tuple:
+    def _format_api_inputs(self, inputs: dict) -> Tuple[dict, dict, dict]:
         """格式化 API 输入参数（基于 client._tool_params 的类型转换）
 
-        注意：method=Headers 的参数会被提取到 _header_params，不作为 call_tool 的 arguments
+        注意：method=Headers 的参数会被提取到返回值 header_params，不作为
+        call_tool 的 arguments
 
         Returns:
-            tuple: (api_inputs, schema_patches)
+            tuple: (api_inputs, schema_patches, header_params)
                 - api_inputs: 格式化后的调用参数
                 - schema_patches: {参数名: "object"/"array"}，记录 JSON 字符串被
                   解析成 dict/list 的参数，供调用方按 card 副本生成 schema，
                   不就地修改共享的 tool card
+                - header_params: method=Headers 的参数（随返回值传递，不写
+                  实例字段——实例跨执行复用）
         """
         tool_params = getattr(self._client, "_tool_params", None)
         api_params_dict = {param.name: param for param in tool_params}
@@ -416,7 +452,11 @@ class FlowMcp(WorkflowComponent):
                     # 显式报错——header 不参与 card schema 的 client-side
                     # 校验，静默跳过后下游没有任何报错点，与 Body 分支
                     # 必填参数由 MCPTool 校验报错的行为不一致
-                    if value is None:
+                    # FEAT-093：空串/纯空白同 None 处理——引擎把未绑定的 ref
+                    # 解析为 start 默认空串，注入空/空白 Authorization 头会被
+                    # 下游鉴权层视为非法凭证，语义上"未提供"不应产生头
+                    # （与 Java 调测侧 StringUtils.isBlank 语义对齐）
+                    if value is None or (isinstance(value, str) and not value.strip()):
                         if _is_param_required(param):
                             workflow_logger.error(
                                 f"{TAG} _format_api_inputs error: required header param value is None",
@@ -429,7 +469,23 @@ class FlowMcp(WorkflowComponent):
                                 param=name,
                             )
                         continue
-                    header_params[name] = transform_type(value, param.type, name)
+                    header_value = transform_type(value, param.type, name)
+                    # 头值字符集就地校验（Headers 值直达出站请求头）：
+                    # 非法字符（非 Latin-1/控制字符）在此报可定位错误，
+                    # 而非穿透到 HTTP 客户端编码处失败
+                    if not _is_latin1_header_value(header_value):
+                        workflow_logger.error(
+                            f"{TAG} _format_api_inputs error: header param value contains characters "
+                            f"not allowed in an HTTP header",
+                            event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                            component_type_str="FlowMcp",
+                            metadata={"param_name": name},
+                        )
+                        raise _build_flow_mcp_error(
+                            FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
+                            param=name,
+                        )
+                    header_params[name] = header_value
                 else:
                     # None 直接透传：MCP server 对可选参数（dict | None = None）接受 None。
                     # 避免 transform_type(None, "string") → 字符串 "None" → Pydantic 校验失败。
@@ -456,6 +512,18 @@ class FlowMcp(WorkflowComponent):
                                 pass
                         api_inputs[name] = converted
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数打 WARNING（带参数名，迁移期可据此
+                    # 收集多余参数清理清单）后跳过，MCP 工具照常被调用。
+                    # 评审修订（2026-11-04 PR#2577）：不带 event_type——防按
+                    # event_type 聚合时兼容性跳过被计入组件错误指标。
+                    workflow_logger.warning(
+                        f"{TAG} loose param validation: skip undefined param",
+                        component_type_str="FlowMcp",
+                        metadata={"param_name": name},
+                    )
+                    continue
                 workflow_logger.error(
                     f"{TAG} _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
@@ -466,9 +534,8 @@ class FlowMcp(WorkflowComponent):
                     FlowMcpStatusCode.WORKFLOW_MCP_INPUTS_ERROR,
                     param=name,
                 )
-        # 保存 header_params 到实例变量，供后续 invoke 使用
-        self._header_params = header_params
-        return api_inputs, schema_patches
+        # header_params 随返回值交给调用方（不写实例字段）
+        return api_inputs, schema_patches, header_params
 
     @staticmethod
     def _is_json_like_string(value) -> bool:

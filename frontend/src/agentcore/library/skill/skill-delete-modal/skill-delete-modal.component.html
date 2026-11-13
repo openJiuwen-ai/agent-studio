@@ -1,10 +1,10 @@
-<div *nzModalTitle>删除Skill</div>
+<div *nzModalTitle>{{ 'skill_delete_title' | i18nextEager }}</div>
 <div>
   <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-2">
       @if (srcData.data.length) {
         <nz-alert class="alert-text" nzType="warning" [nzShowIcon]="false" [nzDescription]="descriptionTemplate1">
-          <ng-template #descriptionTemplate1> 该Skill已被引用，删除Skill后引用将自动取消，可能会导致单智能体无法运行，且该操作不可撤回。 </ng-template>
+          <ng-template #descriptionTemplate1> {{ 'skill_delete_referenced_warn' | i18nextEager }} </ng-template>
         </nz-alert>
         <div class="flex flex-col gap-2">
           <span class="font-semibold">{{ 'reference_ist' | i18nextEager }}</span>
@@ -33,24 +33,24 @@
                     {{ row.app_name }}
                   </a>
                 </td>
-                <td>{{ row.app_version || ('unpublished' | i18nextEager) }}</td>
-                <td>单智能体</td>
+                <td>{{ row.app_version || ('skill_reference_undeployed' | i18nextEager) }}</td>
+                <td>{{ 'skill_delete_type_single_agent' | i18nextEager }}</td>
               </tr>
             </tbody>
           </nz-table>
         </div>
         <div>
-          <span>如您确定要删除，请输入<b style="margin: 0px 6px">DELETE</b></span>
-          <a (click)="deleteVal = 'DELETE'">一键输入</a>
+          <span>{{ 'skill_delete_input_prefix' | i18nextEager }}<b style="margin: 0px 6px">DELETE</b></span>
+          <a (click)="deleteVal = 'DELETE'">{{ 'skill_delete_input_oneClick' | i18nextEager }}</a>
         </div>
         <div>
           <input [style]="{ 'border-color': errorClass ? '#ff4d4f !important' : '' }" nz-input [(ngModel)]="deleteVal" />
         </div>
         @if (errorClass) {
-          <div style="color: #ff4d4f; font-size: 12px">请完整输入“DELETE”</div>
+          <div style="color: #ff4d4f; font-size: 12px">{{ 'skill_delete_input_incomplete' | i18nextEager }}</div>
         }
       } @else {
-        <div style="font-size: 12px; color: #191919">即将删除以下Skill</div>
+        <div style="font-size: 12px; color: #191919">{{ 'skill_delete_will_delete' | i18nextEager }}</div>
         <ul>
           <li>{{ name }}</li>
         </ul>

@@ -299,6 +299,11 @@ public enum StudioError {
     GET_REQUEST_IAM_FAILED(INTERNAL_SERVER_ERROR, COMMON, "1050"),
 
     /**
+     * Redis访问失败（连接/读写失败——Spring Data Redis 异常族，统一族格式标注组件redis）
+     */
+    REDIS_ACCESS_FAILED(INTERNAL_SERVER_ERROR, COMMON, "1051"),
+
+    /**
      * endpoint can not be found
      */
     ENDPOINT_CAN_NOT_FOUND(INTERNAL_SERVER_ERROR, COMMON, "1053"),
@@ -682,6 +687,15 @@ public enum StudioError {
      * 下游服务依赖调用失败（COM-03 框架 502）
      */
     DOWNSTREAM_DEPENDENCY_FAILED(BAD_GATEWAY, COMMON, "1131"),
+
+    /**
+     * 资产当前状态不允许上架到资产广场（Skill 处于开发中或尚无发布版本）
+     */
+    ASSET_NOT_PUBLISHABLE(BAD_REQUEST, COMMON, "1132"),
+    /**
+     * 已上架到资产广场的资源不可直接删除，需先下架（对标团队共享删除校验）
+     */
+    RESOURCE_PUBLISHED_CANNOT_BE_DELETE(BAD_REQUEST, COMMON, "1133"),
 
 
     /**

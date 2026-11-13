@@ -26,9 +26,12 @@
         <result property="viewTimes" column="view_times" jdbcType="INTEGER"/>
         <result property="installTimes" column="install_times" jdbcType="INTEGER"/>
         <result property="url" column="url" jdbcType="VARCHAR"/>
+        <result property="category" column="category" jdbcType="VARCHAR"/>
+        <result property="platformPublished" column="platform_published" jdbcType="INTEGER"/>
+        <result property="sourceInstanceId" column="source_instance_id" jdbcType="VARCHAR"/>
     </resultMap>
     <sql id="All_Column">
-        id, server_code, icon, name, name_en, description, description_en, readme, server_config, tools, type, org_type, deleted, tenant_id, dept_code, created_date, created_by_user_id, last_updated_date, last_updated_by_user_id, url, view_times, install_times,category
+        id, server_code, icon, name, name_en, description, description_en, readme, server_config, tools, type, org_type, deleted, tenant_id, dept_code, created_date, created_by_user_id, last_updated_date, last_updated_by_user_id, url, view_times, install_times,category, platform_published, source_instance_id
     </sql>
 
     <select id="selectById" resultMap="mcpServerEntity">
@@ -42,7 +45,7 @@
         <include refid="All_Column"/>
         FROM ws_mcp_server_def
         WHERE deleted = false
-        AND (type = 'inner' OR (type = 'private' AND tenant_id = #{tenantId,jdbcType=VARCHAR}))
+        AND (type = 'inner' OR platform_published = 1 OR (type = 'private' AND tenant_id = #{tenantId,jdbcType=VARCHAR}))
         <if test='name != null'>
             <if test="language != null and language.toUpperCase() == 'EN'">
                 AND name_en LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%')
@@ -65,7 +68,7 @@
         SELECT COUNT(*) AS total
         FROM ws_mcp_server_def
         WHERE deleted = false
-        AND (type = 'inner' OR (type = 'private' AND tenant_id = #{tenantId,jdbcType=VARCHAR}))
+        AND (type = 'inner' OR platform_published = 1 OR (type = 'private' AND tenant_id = #{tenantId,jdbcType=VARCHAR}))
         <if test="language != null and language.toUpperCase() == 'EN'">
             <if test='name != null'>
                 AND (name_en LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%') OR description_en LIKE CONCAT('%', #{name,jdbcType=VARCHAR}, '%'))
@@ -97,13 +100,60 @@
         INSERT INTO ws_mcp_server_def (id, server_code, icon, name, name_en, description,
         description_en, readme, url, server_config, tools,
         type, org_type, view_times, install_times, tenant_id, dept_code, deleted,
-        created_by_user_id, last_updated_by_user_id)
+        created_by_user_id, last_updated_by_user_id, category, platform_published, source_instance_id)
         VALUES (#{id}, #{serverCode}, #{icon}, #{name}, #{nameEn},
         #{description}, #{descriptionEn}, #{readme},
         #{url}, #{serverConfig}, #{tools}, #{type},
         #{orgType}, #{viewTimes}, #{installTimes}, #{tenantId}, #{deptCode}, #{deleted},
-        #{createdByUserId}, #{lastUpdatedByUserId})
+        #{createdByUserId}, #{lastUpdatedByUserId}, #{category}, #{platformPublished}, #{sourceInstanceId})
     </insert>
+
+    <select id="selectBySourceInstanceId" resultMap="mcpServerEntity">
+        SELECT <include refid="All_Column"/>
+        FROM ws_mcp_server_def
+        WHERE deleted = false
+          AND source_instance_id = #{sourceInstanceId,jdbcType=VARCHAR}
+        LIMIT 1
+    </select>
+
+    <update id="updateContentById">
+        UPDATE ws_mcp_server_def
+        SET icon = #{icon},
+            name = #{name},
+            name_en = #{nameEn},
+            description = #{description},
+            description_en = #{descriptionEn},
+            readme = #{readme},
+            server_config = #{serverConfig},
+            url = #{url},
+            org_type = #{orgType},
+            tools = #{tools},
+            category = #{category},
+            platform_published = #{platformPublished},
+            last_updated_by_user_id = #{lastUpdatedByUserId}
+        WHERE id = #{id}
+          AND deleted = false
+    </update>
+
+    <update id="updateOffShelfById">
+        UPDATE ws_mcp_server_def
+        SET deleted = true,
+            source_instance_id = NULL,
+            last_updated_by_user_id = #{updatedByUserId}
+        WHERE id = #{id}
+          AND deleted = false
+    </update>
+
+    <select id="selectShelfServerIdsBySourceInstanceIds" resultType="java.util.HashMap">
+        SELECT source_instance_id, id
+        FROM ws_mcp_server_def
+        WHERE deleted = false
+          AND platform_published = 1
+          AND source_instance_id IN
+        <foreach collection="sourceInstanceIds" item="sid" open="(" separator="," close=")">
+            #{sid,jdbcType=VARCHAR}
+        </foreach>
+    </select>
 
     <update id="updateViewTimes">
         UPDATE ws_mcp_server_def

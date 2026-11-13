@@ -219,6 +219,13 @@ public class SearchCriteria implements Serializable {
         return this;
     }
 
+    /**
+     * 是否为平台精选（官方预置）类型。平台精选列表需同步纳入用户上架（platform_published=1）的插件。
+     */
+    public boolean isInner() {
+        return "inner".equals(this.type);
+    }
+
     public String getSubType() {
         return subType;
     }
