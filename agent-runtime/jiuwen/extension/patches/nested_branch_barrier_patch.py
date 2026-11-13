@@ -57,12 +57,13 @@ def _compute_scc(adj: dict[str, list[str]]) -> dict[str, int]:
         scc_id += 1
     return comp
 
-def _get_scc(self) -> tuple[dict[str, int], dict[int, int], set[str]]:
-    """SCC 缓存：返回 ``(node -> scc_id, scc_id -> size, self_loop_nodes)``。
+def _get_cyclic_nodes(self) -> set[str]:
+    """按需计算并缓存环上节点（多节点 SCC 的成员及自环节点）。
 
     整个 compile 期间图拓扑不变，与 ``_adj_cache`` 同生命周期。
+    仅缓存判环需要的集合，不保留 SCC 编号和大小；空集合也复用缓存。
     """
-    cached = getattr(self, "_scc_cache", None)
+    cached = getattr(self, "_cyclic_nodes_cache", None)
     if cached is not None:
         return cached
     adj = getattr(self, "_adj_cache", None)
@@ -75,12 +76,14 @@ def _get_scc(self) -> tuple[dict[str, int], dict[int, int], set[str]]:
         sizes[sid] += 1
     # 自环 (node -> node) 的 SCC 大小为 1，但节点确实在环上。
     # 把这类节点标记为"在环上"，避免 sizes > 1 判据漏判。
-    self_loops: set[str] = {
-        src for src, targets in adj.items() if src in targets
-    }
-    result = (comp, dict(sizes), self_loops)
-    self._scc_cache = result  # type: ignore[attr-defined]
-    return result
+    cyclic_sccs = {sid for sid, size in sizes.items() if size > 1}
+    cyclic_nodes = (
+        {node for node, sid in comp.items() if sid in cyclic_sccs}
+        if cyclic_sccs else set()
+    )
+    cyclic_nodes.update(src for src, targets in adj.items() if src in targets)
+    self._cyclic_nodes_cache = cyclic_nodes  # type: ignore[attr-defined]
+    return cyclic_nodes
 
 
 def _build_adjacency_list(self) -> dict[str, list[str]]:
@@ -231,10 +234,9 @@ def _build_condition_targets(self) -> dict[str, dict[str, set[str]]]:
 
 
 def _always_executes(
+    self,
     co: set[tuple[str, str]],
     branch_all_conds: dict[str, set[str]],
-    reachable_cond: dict[tuple[str, str, str], set[str]],
-    scc: tuple[dict[str, int], dict[int, int], set[str]] | None = None,
 ) -> bool:
     """判断前驱是否为"共行前驱"：无论涉及的分支走哪个条件，它都会执行。
 
@@ -243,12 +245,11 @@ def _always_executes(
     就已合流，所有并行车道对每个条件都可达），该前驱不是互斥备选，而是
     必然执行的共行前驱。
 
-    环拓扑保护：当提供 SCC 信息时，若任一涉及的分支节点所在强连通分量
+    环拓扑保护：仅在条件覆盖检查通过后按需计算环上节点。若涉及分支所在强连通分量
     含多个节点，或该节点存在自环，则判 False，回退原 OR-group 语义，
     避免环导致可达性覆盖全部条件的假象，误加闩锁造成单边路径死锁。
     DAG 中的串联分支仅有单向可达关系，不会因此触发环保护。
-    ``reachable_cond`` 参数保留以兼容原调用，环判定改用 ``scc``；
-    未提供 ``scc`` 时不执行环判定。
+    同一图的多个候选和 barrier 复用环上节点集合，通过集合查询判环。
     """
     involved_branches: dict[str, set[str]] = defaultdict(set)
     for bn, cond_id in co:
@@ -258,17 +259,13 @@ def _always_executes(
         if not all_conds or not all_conds <= conds:
             return False
 
+    if not involved_branches:
+        return False
+
     # 环拓扑保护 (SCC)：仅当 bn 所在 SCC 含多个节点或 bn 存在自环时降级。
     # DAG 中的串联分支不会因出现在上游条件目标的可达集中而被误判。
-    if scc is not None:
-        comp, sizes, self_loops = scc
-        for bn in involved_branches:
-            bn_scc = comp.get(bn)
-            if bn_scc is None:
-                continue
-            if sizes.get(bn_scc, 1) > 1 or bn in self_loops:
-                return False
-    return bool(involved_branches)
+    cyclic_nodes = _get_cyclic_nodes(self)
+    return involved_branches.keys().isdisjoint(cyclic_nodes)
 
 
 def _classify_coexec(
@@ -358,8 +355,6 @@ def _resolve_barrier_groups_nested_patched(
     branch_all_conds: dict[str, set[str]] = {
         bn: set(cond_map.keys()) for bn, cond_map in cond_targets.items()
     }
-    scc = _get_scc(self)
-
     # Level 2 fix: len(co) >= 1 (not just == 1)
     cond_bucket: dict[tuple[str, str], set[str]] = defaultdict(set)
     legacy_bucket: dict[str, set[str]] = defaultdict(set)
@@ -369,7 +364,7 @@ def _resolve_barrier_groups_nested_patched(
         co = cond_owned.get(p, set())
         lo = legacy_owned.get(p, set())
         if co and not lo:
-            if _always_executes(co, branch_all_conds, reachable_cond, scc):
+            if _always_executes(self, co, branch_all_conds):
                 coexec_candidates.add(p)
             for (bn, cond_id) in co:
                 cond_bucket[(bn, cond_id)].add(p)
