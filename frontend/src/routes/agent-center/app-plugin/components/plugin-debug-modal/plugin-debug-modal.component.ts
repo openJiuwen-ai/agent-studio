@@ -112,6 +112,14 @@ export class PluginDebugModalComponent {
 
   /** 环境变量加载是否失败（接口异常）：用于提示，并保证强转默认值不被误当作手填值提交 */
   public envVarLoadFailed = false;
+
+  /**
+   * FEAT-093 动态鉴权调测调试值：插件 auth_info.scope=DYNAMIC 时的
+   * auth_keys[].target_name 列表（值随调测请求即发即弃，不落库——与
+   * MCP 调测侧 debug_headers 同语义）。值并入调测入参 JSON，由后端
+   * runTool 的 injectDynamicAuthDebugHeaders 注入出站请求头。
+   */
+  public dynamicAuthHeaders: { name: string; value: string }[] = [];
   constructor(
     private i18n: I18NextEagerPipe,
     private commonLogic: agentCommonLogic,
@@ -124,6 +132,13 @@ export class PluginDebugModalComponent {
   ) {}
 
   ngOnInit() {
+    // FEAT-093 动态鉴权调测：登记动态头名列表（调试值输入区渲染源）
+    const debugAuthInfo = this.pluginBodyParams?.auth_info;
+    if (debugAuthInfo?.scope === 'DYNAMIC' && Array.isArray(debugAuthInfo.auth_keys)) {
+      this.dynamicAuthHeaders = debugAuthInfo.auth_keys
+        .map((key: any) => ({ name: (key?.target_name ?? '').trim() }))
+        .filter((h: any) => h.name);
+    }
     //插件路径参数
     let pluginPathArgs = pluginSchemaStr2Path(this.pluginBodyParams?.request_info?.basic_info?.input_schema)
     pluginPathArgs = pluginPathArgs.map((item) => initializeReqItem(item))
@@ -400,6 +415,14 @@ export class PluginDebugModalComponent {
   /** 点击【开始调测】，获取表单key-value，作为插件调测接口的入参 */
   private getDebugBodyParams() {
     const params = this.dynamicFormIns?.getDynamicParams() || {};
+    // FEAT-093 动态鉴权调测：调试值并入调测入参（后端按 auth_keys 头名提取
+    // 注入出站 headers）；空值不提交（动态头不填不注入，不产生空头）
+    for (const header of this.dynamicAuthHeaders) {
+      const value = (header.value ?? '').trim();
+      if (value) {
+        params[header.name] = value;
+      }
+    }
     // 加密环境变量字段保留 ****** 展示（通过必填校验），提交时替换为运行时占位符，
     // 由后端按默认环境解密解析；用户手填的值原样提交。
     this.requestArgToDynamicForm.forEach((item: any) => {
