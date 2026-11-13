@@ -1,3 +1,10 @@
+.layout-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #FFFFFF;
+}
+
 .info-box {
   padding: 16px 0px 16px 0px !important;
   border-bottom: 1px solid #dbdbdb;
@@ -15,16 +22,9 @@
     font-size: 16px !important;
   }
 
-  #customDetail {
-    tp-layout-content.tp-layout-content {
-      min-width: unset !important;
-      max-width: 100% !important;
-    }
-
-    custom-header .responsive {
-      min-width: unset !important;
-      max-width: 100% !important;
-    }
+  custom-header .responsive {
+    padding-left: 96px !important;
+    padding-right: 96px !important;
   }
 }
 
