@@ -1,0 +1,84 @@
+<div>
+  <nz-spin [nzSpinning]="loading">
+    <nz-empty
+      *ngIf="!loading && assets.length === 0"
+      [nzNotFoundContent]="'plaza_no_assets' | i18nextEager"
+    ></nz-empty>
+    <div *ngIf="assets.length > 0">
+      <nz-form-label>{{ 'plaza_select_asset' | i18nextEager }}</nz-form-label>
+      <nz-select
+        class="w-full mb-[16px]"
+        [(ngModel)]="selectedAssetId"
+        [ngModelOptions]="{ standalone: true }"
+        nzPlaceHolder="{{ 'plaza_select_asset_placeholder' | i18nextEager }}"
+        nzShowSearch
+        (ngModelChange)="onAssetSelect($event)"
+      >
+        <nz-option
+          *ngFor="let asset of assets"
+          [nzLabel]="getAssetName(asset)"
+          [nzValue]="getAssetId(asset)"
+        ></nz-option>
+      </nz-select>
+
+      <form nz-form [formGroup]="form" nzLayout="vertical">
+        <nz-form-item *ngIf="showTag && skillTags.length">
+          <nz-form-label>{{ 'skill.shelf.selectTag' | i18nextEager }}</nz-form-label>
+          <nz-form-control>
+            <nz-select
+              formControlName="tag_id"
+              nzAllowClear
+              nzPlaceHolder="{{ 'skill.shelf.selectTagPlaceholder' | i18nextEager }}"
+            >
+              <nz-option
+                *ngFor="let opt of skillTags"
+                [nzLabel]="opt.i18key | i18nextEager"
+                [nzValue]="opt.id"
+              ></nz-option>
+            </nz-select>
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item *ngIf="showReadme">
+          <nz-form-label>{{ 'plaza_readme' | i18nextEager }}</nz-form-label>
+          <nz-form-control>
+            <textarea
+              nz-input
+              formControlName="readme"
+              rows="3"
+              [placeholder]="'plaza_readme_placeholder' | i18nextEager"
+            ></textarea>
+          </nz-form-control>
+        </nz-form-item>
+        <nz-form-item *ngIf="showCategory && categoryOptions.length">
+          <nz-form-label>{{ 'plaza_category' | i18nextEager }}</nz-form-label>
+          <nz-form-control>
+            <nz-select
+              formControlName="category"
+              nzAllowClear
+              nzPlaceHolder="{{ 'plaza_category_placeholder' | i18nextEager }}"
+            >
+              <nz-option
+                *ngFor="let opt of categoryOptions"
+                [nzLabel]="opt.name"
+                [nzValue]="opt.id"
+              ></nz-option>
+            </nz-select>
+          </nz-form-control>
+        </nz-form-item>
+      </form>
+    </div>
+  </nz-spin>
+
+  <div class="mt-[16px] flex justify-end gap-[8px]">
+    <button nz-button (click)="onCancel()">{{ 'cancel' | i18nextEager }}</button>
+    <button
+      nz-button
+      nzType="primary"
+      [disabled]="!selectedAssetId"
+      [nzLoading]="submitting"
+      (click)="onOk()"
+    >
+      {{ 'ok' | i18nextEager }}
+    </button>
+  </div>
+</div>

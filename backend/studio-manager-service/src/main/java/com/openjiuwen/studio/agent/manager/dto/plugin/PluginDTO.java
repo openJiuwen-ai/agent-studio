@@ -170,4 +170,19 @@ public class PluginDTO {
 
     @JsonProperty("usage")
     private Integer usage;
+
+    @JsonProperty("platform_published")
+    private Integer platformPublished;
+
+    @JsonProperty("plaza_version_id")
+    private String plazaVersionId;
+
+    @JsonProperty("plaza_version_name")
+    private String plazaVersionName;
+
+    @JsonProperty("latest_release_version_id")
+    private String latestReleaseVersionId;
+
+    @JsonProperty("is_owner")
+    private Boolean isOwner;
 }

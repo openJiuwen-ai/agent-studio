@@ -152,4 +152,16 @@ public class PluginEntity {
 
     @JsonProperty("category")
     private String category;
+
+    /**
+     * 用户插件上架到资产广场标记（1=是，0=否）
+     */
+    @JsonProperty("platform_published")
+    private Integer platformPublished;
+
+    /**
+     * 上架锚定的发布版本ID（t_release_version.version_id）
+     */
+    @JsonProperty("plaza_version_id")
+    private String plazaVersionId;
 }

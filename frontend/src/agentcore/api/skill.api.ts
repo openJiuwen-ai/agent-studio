@@ -35,6 +35,33 @@ export class SkillApi extends JiuwenBaseApi {
     } as any);
   }
 
+  /**
+   * 上架 Skill 到资产广场（平台精选，跨租户可见）
+   */
+  publishSkill(skillId: string, tagId?: string) {
+    return this.request.post({
+      url: `${this.prefix}/${skillId}/on-shelf`,
+      query: {
+        workspace_id: this.request.getWorkspaceId(),
+      },
+      body: {
+        ...(tagId ? { tag_id: tagId } : {}),
+      },
+    } as any);
+  }
+
+  /**
+   * 将 Skill 从资产广场下架
+   */
+  unpublishSkill(skillId: string) {
+    return this.request.post({
+      url: `${this.prefix}/${skillId}/off-shelf`,
+      query: {
+        workspace_id: this.request.getWorkspaceId(),
+      },
+    } as any);
+  }
+
   exportSkillVersion(skillId: string) {
     return this.request.post({
       url: `${this.prefix}/${skillId}/export`,

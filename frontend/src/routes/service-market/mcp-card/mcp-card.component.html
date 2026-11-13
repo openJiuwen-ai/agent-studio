@@ -1,10 +1,10 @@
 <div id="mcp-card" class="com-card-box" [ngClass]="selectClass()" (click)="toDetail(mcpData)">
   <div class="com-card-header" style="position: relative">
-    <img alt="" class="com-card-icon" [src]="!mcpData.icon ? MCP_DEFAULT_ICON_BASE64_STR :
+    <img alt="" class="com-card-icon"
+         style="width: 48px; height: 48px; border-radius: 8px; object-fit: contain; background: transparent"
+         [src]="!mcpData.icon ? MCP_DEFAULT_ICON_BASE64_STR :
     (mcpData.icon.startsWith('http') ? mcpData.icon : (mcpData.icon.startsWith('data:image/') ? mcpData.icon :'data:image/png;base64,' + mcpData.icon))"
-         style="border-radius: 8px"
     />
-    <span style="width: 48px; height: 48px; border: 1px solid rgb(230,230,230); border-radius: 8px; position: absolute"></span>
     <div class="com-card-name-box">
       <div class="com-card-name" tiOverflow [ngClass]="{'mcp-name-line': activeTabIsOfficial}">
         {{ isZH() ? mcpData.name : mcpData.name_en ? mcpData.name_en : '' }}
@@ -13,6 +13,13 @@
         <div class="com-card-tag-box">
           <nz-tag [ngStyle]="{'background-color': 'rgb(245, 245, 245)', 'color': 'rgb(25, 25, 25)', 'border-color': 'rgb(245, 245, 245)'}">
             {{ getCategoryLabel(mcpData.category) }}
+          </nz-tag>
+        </div>
+      </ng-container>
+      <ng-container *ngIf="activeTabIsOfficial && mcpData.platform_published === 1">
+        <div class="com-card-tag-box">
+          <nz-tag [ngStyle]="{'background-color': '#e6f7ff', 'border-color': '#91d5ff', 'color': '#1890ff'}">
+            {{ 'plaza_user_published' | i18nextEager }}
           </nz-tag>
         </div>
       </ng-container>
@@ -32,8 +39,8 @@
     </div>
   </div>
 
-  <div class="com-card-description" nz-tooltip [nzTooltipTitle]="isZH() ? (mcpData.description || '--') : (mcpData.description_en || '--')">
-    {{ isZH() ? (mcpData.description || '--') : (mcpData.description_en || '--') }}
+  <div class="com-card-description" nz-tooltip [nzTooltipTitle]="isZH() ? (mcpData.readme || mcpData.description || '--') : (mcpData.readme || mcpData.description_en || '--')">
+    {{ isZH() ? (mcpData.readme || mcpData.description || '--') : (mcpData.readme || mcpData.description_en || '--') }}
   </div>
   <div class="bottom-area w-full" [ngClass]="{'bottom-area-have-menu': ((![true,false].includes(mcpData?.is_subscription) || mcpData?.is_subscription )&& subscribeBtnStatus) || ([true,false].includes(mcpData?.is_subscription) && !mcpData?.is_subscription && subscribeBtnStatus) }">
     <div class="flex justify-between w-full items-center">
@@ -46,11 +53,25 @@
       </div>
     </div>
   </div>
-  <div class="com-card-bottom-menu" *ngIf="(![true,false].includes(mcpData?.is_subscription) || mcpData?.is_subscription )&& subscribeBtnStatus"
-        (click)="handleOpenModal($event, mcpData)"
-        (mouseenter)="mcpData.isHoverInstall = true"
-        (mouseleave)="mcpData.isHoverInstall = false"
-        [class.install-hovered]="mcpData.isHoverInstall && !hasPermission()">
-    <div class="text-[#1476FF] font-bold cursor-pointer">{{ 'install' | i18nextEager }}</div>
+  <div class="com-card-bottom-menu" *ngIf="mcpData.platform_published === 1 && mcpData.is_owner">
+    <button
+      nz-button
+      nzSize="small"
+      nzType="link"
+      (click)="unpublishMcp($event)"
+    >
+      {{ 'plaza_offshelf' | i18nextEager }}
+    </button>
+  </div>
+  <div class="com-card-bottom-menu" *ngIf="(![true,false].includes(mcpData?.is_subscription) || mcpData?.is_subscription ) && subscribeBtnStatus && (mcpData.platform_published !== 1 || !mcpData.is_owner)">
+    <div
+      class="text-[#1476FF] font-bold cursor-pointer"
+      (click)="handleOpenModal($event, mcpData)"
+      (mouseenter)="mcpData.isHoverInstall = true"
+      (mouseleave)="mcpData.isHoverInstall = false"
+      [class.install-hovered]="mcpData.isHoverInstall && !hasPermission()"
+    >
+      {{ 'install' | i18nextEager }}
+    </div>
   </div>
 </div>

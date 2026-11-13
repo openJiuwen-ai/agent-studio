@@ -1,9 +1,14 @@
 <div id="mcp-square-list">
   <div>
     <div style="height: calc(100vh - 90px);">
-      <div class="com-center-title mt-[6px] mb-6">
-        {{ 'platform_selection' | i18nextEager}}MCP
-        <ng-container *ngIf="officialTotal">（{{officialTotal}}）</ng-container>
+      <div class="flex justify-between items-center mt-6 mb-6">
+        <div class="text-[20px] text-[#191919] font-[600]">
+          {{ 'platform_selection' | i18nextEager }}MCP
+          <ng-container *ngIf="officialTotal">（{{officialTotal}}）</ng-container>
+        </div>
+        <button *ngIf="canPublish" nz-button nzType="primary" (click)="openPublishModal()">
+          {{ 'plaza_onshelf' | i18nextEager }}
+        </button>
       </div>
       <div class="mcp-search">
         <nz-input-group style="flex: 1; height: 28px">
@@ -26,7 +31,7 @@
       </div>
       <div  class="card-container" *ngIf="officialCardData?.length > 0" [ngClass]="'isLiteStyle'"  (scroll)="onScroll()">
         <div class="com-cards-wrapper mb-[14px]" style="padding-right: 16px">
-          <mcp-card [mcpData]="item" *ngFor="let item of officialCardData"></mcp-card>
+          <mcp-card [mcpData]="item" *ngFor="let item of officialCardData" (onRefresh)="refreshOfficialCardData()"></mcp-card>
         </div>
         <nz-spin
             nzSimple

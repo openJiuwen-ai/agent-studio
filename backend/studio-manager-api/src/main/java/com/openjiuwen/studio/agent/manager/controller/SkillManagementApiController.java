@@ -7,6 +7,7 @@ import com.openjiuwen.studio.agent.manager.dto.ExportStudioSkillResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.GetStudioSkillDetailsResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ImportStudioSkillResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsQo;
+import com.openjiuwen.studio.agent.manager.dto.SkillShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsResponseBody;
 import com.openjiuwen.studio.agent.manager.service.ISkillManagementService;
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
@@ -37,6 +38,17 @@ public class SkillManagementApiController implements SkillManagementApi {
     @Override
     public ResponseEntity<Void> deleteStudioSkill(String skillId, String workspaceId, String projectId) {
         return ResponseModel.success(skillManagementService.deleteStudioSkill(skillId, workspaceId, projectId));
+    }
+
+    @Override
+    public ResponseEntity<Void> publishStudioSkill(String skillId, String workspaceId, String projectId,
+        SkillShelfReq body) {
+        return ResponseModel.success(skillManagementService.publishStudioSkill(skillId, workspaceId, projectId, body));
+    }
+
+    @Override
+    public ResponseEntity<Void> unpublishStudioSkill(String skillId, String workspaceId, String projectId) {
+        return ResponseModel.success(skillManagementService.unpublishStudioSkill(skillId, workspaceId, projectId));
     }
 
     @Override

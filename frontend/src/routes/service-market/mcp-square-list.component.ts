@@ -12,6 +12,10 @@ import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic
 import { PromptService } from '@services/prompt.service';
 import { NewCommonNoDataWithBtnComponent } from '@shared/components/new-common-no-data-with-btn/new-common-no-data-with-btn.component';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
+import { NzModalService } from 'ng-zorro-antd/modal';
+import { PublishAssetModalComponent } from '@routes/agent-center/component-library/shelf-modal/publish-asset-modal.component';
+import { SpaceTeamManagementService } from '@services/space-team-management.service';
+import { ContextService } from '@services/context.service';
 
 enum mapKeys {
   language = 'language',
@@ -41,6 +45,7 @@ const MAX_HEIGHT = 1270;
   ],
 })
 export class McpSquareListComponent implements OnInit {
+  public canPublish = true;
   tabs: any = [
     {
       title: this.i18n.transform('platform_selection_1'),
@@ -141,12 +146,46 @@ export class McpSquareListComponent implements OnInit {
     public commonService: CommonService,
     public promptService: PromptService,
     private sidebarServ: SetSidebarVisibilityService,
+    private nzModal: NzModalService,
+    private spaceTeamManagementService: SpaceTeamManagementService,
+    private ctxServ: ContextService,
   ) {
     this.lang = CommonUtils.getLanguage();
   }
 
+  openPublishModal(): void {
+    this.nzModal.create({
+      nzContent: PublishAssetModalComponent,
+      nzWidth: 560,
+      nzTitle: this.i18n.transform('plaza_onshelf'),
+      nzFooter: null,
+      nzData: {
+        assetType: 'mcp',
+        onPublished: () => {
+          // 上架成功后重置到第一页刷新（getOfficialCardData 为滚动分页，直接调用会按旧页码拉取不生效）
+          this.officialCurrentPage = 1;
+          this.officialCardData.length = 0;
+          this.officialTotal = 0;
+          this.getOfficialCardData();
+        },
+      },
+    });
+  }
+
+  async checkPublishPermission() {
+    try {
+      const res = await this.spaceTeamManagementService.getWorkspaceDetial(this.ctxServ.currentWorkspaceId);
+      if (res?.type === 'TEAM' && res?.role && res.role !== 'OWNER' && res.role !== 'ADMIN') {
+        this.canPublish = false;
+      }
+    } catch {
+      this.canPublish = false;
+    }
+  }
+
   ngOnInit() {
     this.sidebarServ.setSidebarsVisibilityByState('hideSidebar');
+    this.checkPublishPermission();
     this.initThirdOptions();
     this.getMcpTagData();
     this.getOfficialCardData();

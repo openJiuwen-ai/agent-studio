@@ -26,6 +26,8 @@ import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.McpServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
@@ -64,6 +66,12 @@ class ResourceServiceNewTest {
 
     @Mock
     private KnowledgeBaseServiceImpl knowledgeBaseService;
+
+    @Mock
+    private ShareResourceMapper shareResourceMapper;
+
+    @Mock
+    private ShareScopeMapper shareScopeMapper;
 
     @InjectMocks
     private ResourceService resourceService;
@@ -185,6 +193,65 @@ class ResourceServiceNewTest {
         assertTrue(result.containsKey("tool-1"));
         assertEquals("Test Tool", result.get("tool-1").getName());
         verify(toolMapper).selectByToolIdsAndWorkspaceId(List.of("tool-1"), "p1", "w1");
+    }
+
+    @Test
+    void testGetResourceMeta_ToolType_CustomCrossWorkspace_PlazaPublished() {
+        // 跨空间 custom 插件，platform_published=1 且 published=1 → 放行（FRS-091）
+        ToolEntity tool = new ToolEntity();
+        tool.setToolId("tool-1");
+        tool.setToolDisplayName("Test Tool");
+        tool.setDomainId("d1");
+        tool.setProjectId("pA");
+        tool.setWorkspaceId("wA");
+        tool.setType("custom");
+        tool.setPlatformPublished(1);
+        tool.setPublished(1);
+        when(toolMapper.selectByToolIdsAndWorkspaceId(List.of("tool-1"), "pB", "wB"))
+            .thenReturn(List.of(tool));
+
+        Map<String, CommonMeta> result = resourceService.getResourceMeta(List.of("tool-1"), "tool", "pB", "wB");
+
+        assertNotNull(result);
+        assertTrue(result.containsKey("tool-1"));
+    }
+
+    @Test
+    void testGetResourceMeta_ToolType_CustomCrossWorkspace_NotPlazaPublished() {
+        // 跨空间 custom 插件，未上架 → 拦截 TOOLS_NOT_EXIST_OR_NO_PERMISSION
+        ToolEntity tool = new ToolEntity();
+        tool.setToolId("tool-2");
+        tool.setToolDisplayName("Test Tool");
+        tool.setDomainId("d1");
+        tool.setProjectId("pA");
+        tool.setWorkspaceId("wA");
+        tool.setType("custom");
+        tool.setPlatformPublished(0);
+        tool.setPublished(1);
+        when(toolMapper.selectByToolIdsAndWorkspaceId(List.of("tool-2"), "pB", "wB"))
+            .thenReturn(List.of(tool));
+
+        assertThrows(AgentStudioException.class,
+            () -> resourceService.getResourceMeta(List.of("tool-2"), "tool", "pB", "wB"));
+    }
+
+    @Test
+    void testGetResourceMeta_ToolType_CustomCrossWorkspace_PlazaOffShelf() {
+        // 跨空间 custom 插件，曾上架但已下架（platform_published=0，published 仍=1）→ 拦截
+        ToolEntity tool = new ToolEntity();
+        tool.setToolId("tool-3");
+        tool.setToolDisplayName("Test Tool");
+        tool.setDomainId("d1");
+        tool.setProjectId("pA");
+        tool.setWorkspaceId("wA");
+        tool.setType("custom");
+        tool.setPlatformPublished(0);
+        tool.setPublished(1);
+        when(toolMapper.selectByToolIdsAndWorkspaceId(List.of("tool-3"), "pB", "wB"))
+            .thenReturn(List.of(tool));
+
+        assertThrows(AgentStudioException.class,
+            () -> resourceService.getResourceMeta(List.of("tool-3"), "tool", "pB", "wB"));
     }
 
     @Test

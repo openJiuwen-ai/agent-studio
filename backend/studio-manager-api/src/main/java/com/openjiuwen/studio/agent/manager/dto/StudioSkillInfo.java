@@ -95,6 +95,22 @@ public class StudioSkillInfo implements Serializable {
     @Length(min = 1, max = 32)
     private String usedVersionName = null;
 
+    @JsonProperty("published_asset")
+    @Schema(description = "资产广场上架状态（1=已上架，0=未上架）", example = "0")
+    private Integer publishedAsset = null;
+
+    @JsonProperty("plaza_source")
+    @Schema(description = "资产广场上架来源（PRESET=官方预置，USER=用户上架）", example = "USER")
+    private String plazaSource = null;
+
+    @JsonProperty("creator_id")
+    @Schema(description = "创建人用户ID（前端据此判断是否属主，决定是否展示下架按钮）", example = "testUser")
+    private String creatorId = null;
+
+    @JsonProperty("is_owner")
+    @Schema(description = "当前用户是否为该资产属主（true=可展示下架按钮）", example = "true")
+    private Boolean isOwner = null;
+
     public String getSkillId() {
         return skillId;
     }
@@ -230,6 +246,42 @@ public class StudioSkillInfo implements Serializable {
         return this;
     }
 
+    public Integer getPublishedAsset() {
+        return publishedAsset;
+    }
+
+    public StudioSkillInfo setPublishedAsset(Integer publishedAsset) {
+        this.publishedAsset = publishedAsset;
+        return this;
+    }
+
+    public String getPlazaSource() {
+        return plazaSource;
+    }
+
+    public StudioSkillInfo setPlazaSource(String plazaSource) {
+        this.plazaSource = plazaSource;
+        return this;
+    }
+
+    public String getCreatorId() {
+        return creatorId;
+    }
+
+    public StudioSkillInfo setCreatorId(String creatorId) {
+        this.creatorId = creatorId;
+        return this;
+    }
+
+    public Boolean getIsOwner() {
+        return isOwner;
+    }
+
+    public StudioSkillInfo setIsOwner(Boolean isOwner) {
+        this.isOwner = isOwner;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -250,6 +302,8 @@ public class StudioSkillInfo implements Serializable {
         sb.append("    latestVersion: ").append(toIndentedString(latestVersion)).append("\n");
         sb.append("    usedVersion: ").append(toIndentedString(usedVersion)).append("\n");
         sb.append("    usedVersionName: ").append(toIndentedString(usedVersionName)).append("\n");
+        sb.append("    publishedAsset: ").append(toIndentedString(publishedAsset)).append("\n");
+        sb.append("    plazaSource: ").append(toIndentedString(plazaSource)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -272,13 +326,16 @@ public class StudioSkillInfo implements Serializable {
             studioSkillInfo.obsUrl) && Objects.equals(this.obsPath, studioSkillInfo.obsPath) && Objects.equals(
             this.domainId, studioSkillInfo.domainId) && Objects.equals(this.latestVersion,
             studioSkillInfo.latestVersion) && Objects.equals(this.usedVersion, studioSkillInfo.usedVersion)
-            && Objects.equals(this.usedVersionName, studioSkillInfo.usedVersionName);
+            && Objects.equals(this.usedVersionName, studioSkillInfo.usedVersionName)
+            && Objects.equals(this.publishedAsset, studioSkillInfo.publishedAsset)
+            && Objects.equals(this.plazaSource, studioSkillInfo.plazaSource);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(skillId, skillName, icon, status, source, description, createdTime, creatorName,
-            updatedTime, obsUrl, obsPath, domainId, latestVersion, usedVersion, usedVersionName);
+            updatedTime, obsUrl, obsPath, domainId, latestVersion, usedVersion, usedVersionName, publishedAsset,
+            plazaSource);
     }
 
     /**

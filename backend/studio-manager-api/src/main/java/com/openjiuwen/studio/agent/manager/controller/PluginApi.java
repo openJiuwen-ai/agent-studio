@@ -24,6 +24,7 @@ import com.openjiuwen.studio.agent.manager.dto.ParsePluginReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
+import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 
@@ -500,5 +501,53 @@ import org.springframework.web.multipart.MultipartFile;
         @PathVariable("plugin_id") String pluginId,
         @NotNull @ApiParam(value = "更新插件鉴权信息请求体", required = true) @Valid @RequestBody
         PluginAuthUpdateReq body);
+
+    @ApiOperation(value = "上架插件到资产广场", nickname = "publishPlugin",
+        notes = "将指定插件（锚定一个发布版本）上架到资产广场（平台精选，跨租户可见）。"
+            + "仅OWNER/ADMIN或平台运营方可操作；插件须存在至少一个发布版本（version_id 缺省取当前最新发布版本）；"
+            + "官方预置插件（type=inner）本已平台精选，不允许重复上架；重复上架更新锚定版本。",
+        response = String.class, tags = {"Plugin"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "上架锚定的发布版本ID", response = String.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorInfo.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorInfo.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorInfo.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorInfo.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/plugins/{plugin_id}/on-shelf",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<String> publishPlugin(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "插件id", required = true, schema = @Schema())
+        @PathVariable("plugin_id") String pluginId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @ApiParam(value = "上架请求（version_id 可选）") @Valid @RequestBody(required = false) PluginShelfReq body);
+
+    @ApiOperation(value = "将插件从资产广场下架", nickname = "unpublishPlugin",
+        notes = "将指定插件从资产广场下架，不影响已按版本引用的存量消费。"
+            + "仅OWNER/ADMIN或平台运营方可操作；官方预置插件不允许普通租户下架；重复下架幂等返回成功。",
+        response = String.class, tags = {"Plugin"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "插件ID", response = String.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorInfo.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorInfo.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorInfo.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorInfo.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/plugins/{plugin_id}/off-shelf",
+        produces = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<String> unpublishPlugin(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "插件id", required = true, schema = @Schema())
+        @PathVariable("plugin_id") String pluginId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId);
 
 }

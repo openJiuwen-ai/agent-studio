@@ -198,6 +198,15 @@ export class SkillDetail {
 
   @prop({ name: 'versionName' })
   versionName: string;
+
+  @autoProp()
+  publishedAsset?: number;
+
+  @autoProp()
+  plazaSource?: string;
+
+  @autoProp()
+  isOwner?: boolean;
 }
 
 export class SkillDetailRes {
