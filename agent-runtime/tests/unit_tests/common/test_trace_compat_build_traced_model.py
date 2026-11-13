@@ -23,6 +23,8 @@ import ast
 from pathlib import Path
 
 import pytest
+from opentelemetry import trace as otel_trace
+from opentelemetry.sdk.trace import TracerProvider
 
 import agent_runtime.common.trace_compat as trace_compat
 from agent_runtime.common.trace_compat import build_traced_model
@@ -95,23 +97,19 @@ class TestDecorate:
 
 
 class TestDefinitionScopedTrace:
-    """定义级会话不绑构建期请求 trace（跨执行复用，绑首请求会错归属）。"""
+    """定义级路径调用期解析：构建期零会话创建，会话延迟到首调。"""
 
     @staticmethod
-    def test_definition_scoped_session_binds_no_request_trace(stub_decorate, monkeypatch):
-        captured = {}
+    def test_definition_scoped_build_defers_session_creation(stub_decorate, monkeypatch):
+        """定义级产物返回调用期代理，构建期不建任何会话（绑首请求会错归属）。"""
 
-        def _fake_create(session_id=None, **kwargs):
-            captured["session_id"] = session_id
-            captured["kwargs"] = kwargs
-            return _StubSession()
+        def _fail_create(*args, **kwargs):
+            pytest.fail("definition-scoped build must not create any session")
 
-        monkeypatch.setattr(trace_compat, "create_agent_session_with_trace", _fake_create)
-        monkeypatch.setattr(trace_compat, "get_x_request_id", lambda: "req-1")
-        build_traced_model(object(), session_id=trace_compat.DEFINITION_SCOPED_SESSION_ID)
-        # 显式定义级 id：即便构建期有请求上下文，也不得绑请求 trace
-        assert captured["session_id"] == trace_compat.DEFINITION_SCOPED_SESSION_ID
-        assert captured["kwargs"].get("trace_id") is trace_compat._DEFINITION_NO_TRACE
+        monkeypatch.setattr(trace_compat, "create_agent_session_with_trace", _fail_create)
+        result = build_traced_model(object(), session_id=trace_compat.DEFINITION_SCOPED_SESSION_ID)
+        assert isinstance(result, trace_compat._CallScopedTracedModel)
+        assert stub_decorate == []
 
     @staticmethod
     def test_request_scoped_session_keeps_ambient_trace(stub_decorate, monkeypatch):
@@ -145,6 +143,168 @@ class TestDefinitionScopedTrace:
         assert forwarded.get("trace_id") == "t-9"
 
 
+class _AmbientShellSpan:
+    """带 openjiuwen.session_id 属性的真 SDK span（作 ambient 壳，随进随出）。
+
+    OTel API 的 get_current_span 按 isinstance(span, Span) 校验，duck-typed
+    假 span 会被判 INVALID——必须用真 SDK span 才与生产同构。
+    """
+
+    _tracer = TracerProvider().get_tracer("test-ambient-shell")
+
+    def __init__(self, session_id: str, with_session: bool = True):
+        attrs = {trace_compat._OJ_SESSION_ID_ATTR: session_id} if with_session else None
+        self._cm = self._tracer.start_as_current_span(f"shell.{session_id}", attributes=attrs)
+
+    def __enter__(self):
+        self._cm.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._cm.__exit__(*exc)
+
+
+class _DecoratedStub:
+    """装饰器替身的返回物：记录当次调用的路径/会话/身份。"""
+
+    def __init__(self, session, identity, calls):
+        self._session = session
+        self._identity = identity
+        self._calls = calls
+
+    async def invoke(self, *args, **kwargs):
+        self._calls.append(("invoke", self._session, self._identity))
+        return "decorated-ok"
+
+    async def stream(self, *args, **kwargs):
+        self._calls.append(("stream", self._session, self._identity))
+        for chunk in ("c1", "c2"):
+            yield chunk
+
+
+@pytest.fixture
+def call_scope(monkeypatch):
+    """调用期路径替身：捕获会话工厂/装饰器入参，装饰返回可调用替身。"""
+    import openjiuwen.core.session.tracer as core_tracer
+
+    state = {"created": [], "decorated": [], "calls": []}
+
+    def _create(session_id=None, trace_id=None, **kwargs):
+        state["created"].append(
+            {"session_id": session_id, "trace_id": trace_id, "kwargs": kwargs}
+        )
+        return _StubSession()
+
+    def _decorate(model, session, identity=None):
+        state["decorated"].append(
+            {"model": model, "session": session, "identity": identity}
+        )
+        return _DecoratedStub(session, identity, state["calls"])
+
+    monkeypatch.setattr(trace_compat, "create_agent_session_with_trace", _create)
+    monkeypatch.setattr(core_tracer, "decorate_model_with_trace", _decorate, raising=False)
+    return state
+
+
+class TestCallScopedInheritance:
+    """定义级路径调用期解析：llm span 会话身份继承 ambient 上层 span。"""
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_invoke_inherits_ambient_session_and_trace(call_scope):
+        """壳 span 带 openjiuwen.session_id：当次调用建会话继承其会话/trace id。"""
+        with _AmbientShellSpan("conv-9"):
+            ambient_trace = otel_trace.get_current_span().get_span_context().trace_id
+            proxy = build_traced_model(object())
+            assert await proxy.invoke("q", temperature=0.7) == "decorated-ok"
+        assert len(call_scope["created"]) == 1
+        assert call_scope["created"][0]["session_id"] == "conv-9"
+        assert call_scope["created"][0]["trace_id"] == format(ambient_trace, "032x")
+        assert call_scope["calls"][0][0] == "invoke"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_no_ambient_falls_back_to_definition_sentinel(call_scope):
+        """无 ambient 父（单组件调试等）：退哨兵会话、不绑请求 trace、只建一次。"""
+        proxy = build_traced_model(
+            object(), session_id=trace_compat.DEFINITION_SCOPED_SESSION_ID
+        )
+        assert await proxy.invoke("q1") == "decorated-ok"
+        assert await proxy.invoke("q2") == "decorated-ok"
+        assert len(call_scope["created"]) == 1
+        assert call_scope["created"][0]["session_id"] == trace_compat.DEFINITION_SCOPED_SESSION_ID
+        assert call_scope["created"][0]["trace_id"] is trace_compat._DEFINITION_NO_TRACE
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_ambient_span_without_session_attr_uses_sentinel(call_scope):
+        """有效父 span 但无会话属性：退哨兵，不臆造归属。"""
+        with _AmbientShellSpan("ignored", with_session=False):
+            proxy = build_traced_model(object())
+            await proxy.invoke("q")
+        assert call_scope["created"][0]["session_id"] == trace_compat.DEFINITION_SCOPED_SESSION_ID
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_same_ambient_scope_decorated_once(call_scope):
+        """同 (会话, trace) 连续调用命中缓存：只装饰一次。"""
+        with _AmbientShellSpan("conv-9"):
+            proxy = build_traced_model(object())
+            await proxy.invoke("a")
+            await proxy.invoke("b")
+        assert len(call_scope["decorated"]) == 1
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_distinct_scopes_attributed_separately(call_scope):
+        """同一缓存模型在不同会话的执行各自归属（跨请求不错归）。"""
+        proxy = build_traced_model(object())
+        with _AmbientShellSpan("conv-1"):
+            await proxy.invoke("a")
+        with _AmbientShellSpan("conv-2"):
+            await proxy.invoke("b")
+        assert [c["session_id"] for c in call_scope["created"]] == ["conv-1", "conv-2"]
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_stream_routes_through_decorated_stream(call_scope):
+        """stream 路径同走调用期装饰（usage/ttft 由 core 流式包装计）。"""
+        with _AmbientShellSpan("conv-s"):
+            proxy = build_traced_model(object())
+            chunks = [chunk async for chunk in proxy.stream("q")]
+        assert chunks == ["c1", "c2"]
+        assert call_scope["calls"][0][0] == "stream"
+        assert call_scope["created"][0]["session_id"] == "conv-s"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_user_id_read_at_call_time(call_scope):
+        """user_id 逐调用取执行期播种值（显式传入优先），调用方字典不被改写。"""
+        caller_identity = {"workflow_id": "wf-1"}
+        token = trace_compat._CURRENT_USER_ID.set("u-77")
+        try:
+            with _AmbientShellSpan("conv-u"):
+                proxy = build_traced_model(object(), identity=caller_identity)
+                await proxy.invoke("q")
+        finally:
+            trace_compat._CURRENT_USER_ID.reset(token)
+        captured = call_scope["decorated"][0]["identity"]
+        assert captured["user_id"] == "u-77"
+        assert captured["workflow_id"] == "wf-1"
+        assert "user_id" not in caller_identity
+
+    @staticmethod
+    def test_attribute_passthrough_to_bare_model(call_scope):
+        """未覆写属性透传裸模型（与 core _TraceProxy 同形）。"""
+
+        class _Bare:
+            def __init__(self):
+                self.config = type("Cfg", (), {"model_name": "M-1"})()
+
+        proxy = build_traced_model(_Bare())
+        assert proxy.config.model_name == "M-1"
+
+
 class TestDegrade:
     @staticmethod
     def test_decorate_entry_missing_returns_bare(monkeypatch):
@@ -156,15 +316,22 @@ class TestDegrade:
         assert build_traced_model(model) is model
 
     @staticmethod
-    def test_session_creation_failure_returns_bare(stub_decorate, monkeypatch):
-        """轻量会话创建抛错：吞掉并返回裸模型，绝不阻断模型创建。"""
+    @pytest.mark.asyncio
+    async def test_call_time_session_failure_degrades_to_bare(stub_decorate, monkeypatch):
+        """定义级路径轻量会话创建抛错：构建照常返代理，逐调用退裸模型直调。"""
 
         def _explode(*args, **kwargs):
             raise RuntimeError("session factory down")
 
         monkeypatch.setattr(trace_compat, "create_agent_session_with_trace", _explode)
-        model = object()
-        assert build_traced_model(model) is model
+
+        class _BareModel:
+            async def invoke(self, *args, **kwargs):
+                return "bare-ok"
+
+        proxy = build_traced_model(_BareModel())
+        assert isinstance(proxy, trace_compat._CallScopedTracedModel)
+        assert await proxy.invoke("q") == "bare-ok"
         assert stub_decorate == []
 
 
