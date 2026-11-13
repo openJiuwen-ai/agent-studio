@@ -30,6 +30,8 @@ import com.openjiuwen.studio.agent.manager.dto.plugin.IsOutputList;
 import com.openjiuwen.studio.agent.manager.dto.plugin.PluginDTO;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolInfo;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolInputSchema;
+import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolIntfType;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolOutputSchema;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolRequestInfo;
@@ -1194,6 +1196,49 @@ public class PluginBaseImpl implements IPluginBase {
      */
     @Override
     public PluginDTO transformEntityToDTO(PluginEntity pluginEntity) {
+        PluginDTO pluginDTO = doTransformEntityToDTO(pluginEntity);
+        // FEAT-093 动态鉴权：auth_keys 的 target_name 追加为各工具 schema 的
+        // Headers 入参（编排侧——工作流插件节点/智能体工具参数配置——可见可
+        // 绑定；与 IR 生成 parsePluginConfig→appendDynamicAuthParamsToSchema
+        // 同源，运行期经 RequestParamsCreator Headers 路由注入出站）
+        appendDynamicAuthParamsToToolSchemas(pluginEntity, pluginDTO);
+        return pluginDTO;
+    }
+
+    /**
+     * FEAT-093 动态鉴权参数追加（DTO input_schema 通道）：scope=DYNAMIC 时把
+     * auth_keys 的 target_name 追加为每个工具 input_schema 的 Headers 位置
+     * 入参（复用 IrAdapterService.appendDynamicAuthParamsToSchema，含描述
+     * 标记与按名去重）。解析失败的个别工具跳过（不阻断列表/详情）。
+     */
+    private void appendDynamicAuthParamsToToolSchemas(PluginEntity pluginEntity, PluginDTO pluginDTO) {
+        AuthInfo authInfo = pluginEntity.getAuthInfo();
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())
+                || Objects.isNull(pluginDTO)
+                || CollectionUtils.isEmpty(pluginDTO.getToolInputSchemaList())) {
+            return;
+        }
+        for (ToolInputSchema toolSchema : pluginDTO.getToolInputSchemaList()) {
+            if (Objects.isNull(toolSchema)) {
+                continue;
+            }
+            try {
+                SchemaConfig schema = StringUtils.isBlank(toolSchema.getInputSchema())
+                        ? new SchemaConfig()
+                        : JSON.parseObject(toolSchema.getInputSchema(), SchemaConfig.class);
+                IrAdapterService.appendDynamicAuthParamsToSchema(authInfo, schema);
+                toolSchema.setInputSchema(JSON.toJSONString(schema));
+            } catch (Exception e) {
+                log.warn("Skip dynamic auth param append for plugin {} tool {}: {}",
+                        pluginEntity.getPluginId(),
+                        Objects.isNull(toolSchema) ? null : toolSchema.getToolId(), e.getMessage());
+            }
+        }
+    }
+
+    private PluginDTO doTransformEntityToDTO(PluginEntity pluginEntity) {
         ToolInfo toolInfo = null;
         ToolRequestInfo toolRequestInfo = null;
         boolean isNewPluginEntity = false;
