@@ -440,6 +440,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public clickNodeY = 0;
 
+  /** 注释节点拖拽期间在 document 级跟踪的最后已知鼠标坐标（client 系）；null = 尚未跟踪到位置 */
+  public lastAnnotateDragX: number | null = null;
+
+  public lastAnnotateDragY: number | null = null;
+
   public triggerEmptyText = this.i18n.transform('triggerEmptyText');
 
   public headerTabs: ITabHeader[] = [
@@ -1890,6 +1895,8 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     // 清理 node:click 300ms 防抖 timer，避免销毁后残留。
     this.disposeGraphEventListeners?.();
     this.disposeGraphEventListeners = null;
+    // 兜底清理注释节点拖拽的 document 级监听，避免销毁后残留。
+    this.removeAnnotateDragTrackListeners();
     this.closeNodeConfigDrawer();
     this.closeGlobalConfigDrawer();
     this.flowHelperServ.cleanupAppFlowService(
@@ -6627,25 +6634,83 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     window.localStorage.setItem('accelerator_key_guide', 'read');
   }
 
-  public onDragStart(e: MouseEvent) {
+  public onDragStart(e: DragEvent) {
     if (this.isFlowReadonly) {
       return;
     }
 
     this.clickNodeX = e.offsetX;
     this.clickNodeY = e.offsetY;
+    // 重置回退坐标：避免 Firefox"未移动即释放"（不触发 dragover）时
+    // 误用上一次拖拽残留的陈旧坐标
+    this.lastAnnotateDragX = null;
+    this.lastAnnotateDragY = null;
+    // Firefox 的 dragend 不携带有效坐标（clientX/Y 为 0），
+    // 拖拽期间在 document 上持续跟踪最后已知鼠标位置作为回退
+    this.trackAnnotateDragPosition();
   }
 
-  public onDragEnd(e: MouseEvent) {
-    this.addAnnotateNode(e);
+  /** 注释节点拖拽期间在 document 级跟踪最后已知鼠标坐标（client 系），供 dragend 坐标缺失时回退 */
+  private removeAnnotateDragListeners: (() => void) | null = null;
+
+  private trackAnnotateDragPosition() {
+    this.removeAnnotateDragTrackListeners();
+    const onDragOver = (ev: DragEvent) => {
+      this.lastAnnotateDragX = ev.clientX;
+      this.lastAnnotateDragY = ev.clientY;
+    };
+    const onDragEndCleanup = () => {
+      this.removeAnnotateDragTrackListeners();
+    };
+    this.removeAnnotateDragListeners = () => {
+      document.removeEventListener('dragover', onDragOver);
+      document.removeEventListener('dragend', onDragEndCleanup);
+      document.removeEventListener('drop', onDragEndCleanup);
+    };
+    document.addEventListener('dragover', onDragOver);
+    document.addEventListener('dragend', onDragEndCleanup);
+    document.addEventListener('drop', onDragEndCleanup);
   }
 
-  public addAnnotateNode(e: MouseEvent): string {
+  private removeAnnotateDragTrackListeners() {
+    this.removeAnnotateDragListeners?.();
+    this.removeAnnotateDragListeners = null;
+  }
+
+  public onDragEnd(e: DragEvent) {
+    // 用户按 Esc 取消或拖出窗口等无效拖放时 dropEffect 为 none，
+    // 此时释放点即使落在画布内也不应创建节点
+    if (e.dataTransfer && e.dataTransfer.dropEffect === 'none') {
+      return;
+    }
+    // Chrome/Edge 的 dragend 携带准确坐标，优先使用；Firefox 的 dragend
+    // 不携带有效坐标（clientX/Y 为 0），回退到拖拽期间跟踪的最后已知位置；
+    // 两者均无（未移动即释放）→ 无有效落点，取消创建
+    const dragendValid = e.clientX !== 0 || e.clientY !== 0;
+    const clientX = dragendValid ? e.clientX : this.lastAnnotateDragX;
+    const clientY = dragendValid ? e.clientY : this.lastAnnotateDragY;
+    if (clientX === null || clientY === null) {
+      return;
+    }
+
+    // 仅当释放点的实际顶层元素位于画布容器内才创建注释节点
+    const hitElement = document.elementFromPoint(clientX, clientY);
+    if (!hitElement || !this.container.contains(hitElement)) {
+      return;
+    }
+
+    // pageToLocal 期望页面坐标（含滚动偏移），由 client 坐标换算
+    const pageX = clientX + window.scrollX;
+    const pageY = clientY + window.scrollY;
+    this.addAnnotateNode(pageX, pageY);
+  }
+
+  public addAnnotateNode(pageX: number, pageY: number): string {
     if (this.isFlowReadonly) {
       return '';
     }
 
-    const ptl = this.graph.pageToLocal(e.pageX, e.pageY);
+    const ptl = this.graph.pageToLocal(pageX, pageY);
     const x =
       ptl.x < this.clickNodeX && ptl.x > 0 ? 0 : ptl.x - this.clickNodeX;
     const y =
@@ -6671,7 +6736,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isFlowReadonly) {
       return;
     }
-    const nodeId = this.addAnnotateNode(e);
+    const nodeId = this.addAnnotateNode(e.pageX, e.pageY);
     if (nodeId === '') {
       return;
     }
