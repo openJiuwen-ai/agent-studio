@@ -1499,43 +1499,43 @@ public class PluginBaseImpl implements IPluginBase {
             return;
         }
         if (!AuthInfo.DomainEnum.HEADERS.equals(authInfo.getDomain())) {
-            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                 "dynamic auth only supports HEADERS domain");
         }
         if (CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
-            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                 "dynamic auth requires at least one auth key entry");
         }
         if (authInfo.getAuthKeys().size() > McpBaseImpl.MAX_DYNAMIC_AUTH_KEYS) {
-            throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                 "dynamic auth supports at most " + McpBaseImpl.MAX_DYNAMIC_AUTH_KEYS + " auth key entries");
         }
         Set<String> targetNamesLower = new HashSet<>();
         for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
             if (Objects.isNull(authKeyInfo)) {
-                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                     "dynamic auth auth_keys contains null element");
             }
             String targetName = authKeyInfo.getTargetName();
             if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
-                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                     "dynamic auth target_name is required and its length must be 1-64");
             }
             if (McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(targetName.toLowerCase(Locale.ROOT))) {
-                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                     "dynamic auth target_name must not be a reserved correlation header: " + targetName);
             }
             if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(targetName).matches()
                     || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(targetName.toLowerCase(Locale.ROOT))) {
-                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                     "dynamic auth target_name is not a valid http header name: " + targetName);
             }
             if (StringUtils.isNotBlank(authKeyInfo.getAuthKey())) {
-                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                     "dynamic auth must not persist credential value");
             }
             if (!targetNamesLower.add(targetName.toLowerCase(Locale.ROOT))) {
-                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                     "dynamic auth target_name is duplicated: " + targetName);
             }
         }
@@ -1546,7 +1546,7 @@ public class PluginBaseImpl implements IPluginBase {
         if (Objects.nonNull(requestInfo) && MapUtils.isNotEmpty(requestInfo.getHeaders())) {
             for (String name : requestInfo.getHeaders().keySet()) {
                 if (name != null && targetNamesLower.contains(name.toLowerCase(Locale.ROOT))) {
-                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                         "tool request header '" + name + "' conflicts with dynamic auth header, remove the duplicate");
                 }
             }
@@ -1558,7 +1558,7 @@ public class PluginBaseImpl implements IPluginBase {
                         && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation());
                 if (isHeaderParam && entry.getKey() != null
                         && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT))) {
-                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
                         "tool header param '" + entry.getKey()
                             + "' conflicts with dynamic auth header, remove the duplicate");
                 }
