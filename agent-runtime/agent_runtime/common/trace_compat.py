@@ -12,11 +12,15 @@ on_llm_end，携带 usage 与 ttft）。identity 通道（get_model / 装饰器�
 identity 参数）按 core 能力门控：callable_accepts_kwarg 一次性签名探测，
 旧 core 不支持时退既有两参调用形态——新旧 studio × 新旧 core 四象限最差
 维持现状、绝不崩；遥测侧运行期失败仍整体降级返回裸模型（不阻断模型创建）。
+定义级产物（跨执行复用的工作流组件模型）经 _CallScopedTracedModel 调用期
+解析会话：每次调用继承 ambient 上层 span 的会话 id/trace id，无上层退
+DEFINITION_SCOPED_SESSION_ID 哨兵。
 """
 
 from __future__ import annotations
 
 import inspect
+from collections import OrderedDict
 from contextvars import ContextVar
 
 from jiuwen.common.log.base import get_x_request_id, logger
@@ -140,11 +144,20 @@ def create_workflow_session_with_trace(session_id: str = None, trace_id: str = N
 # LLM span 覆盖：裸 Model -> 装饰器（usage / ttft 测量）
 # ---------------------------------------------------------------------------
 
-# 定义级产物（工作流 IR 转换出的组件/模型，跨执行复用）的会话身份：构建时
-# 不存在按会话归因的真实 id，绑定任一请求的 id（含 trace_id）都会错归属，
-# 故显式落此常量且不绑请求 trace；会话归因由执行期 trace 树（span 挂在
-# 真实组件壳/工作流 trace 下）承担。
+# 定义级产物（工作流 IR 转换出的组件/模型，跨执行复用）的会话身份兜底：
+# 构建时不存在按会话归因的真实 id，绑定任一请求的 id（含 trace_id）都会
+# 错归属，故无上层 span 可继承时显式落此常量且不绑请求 trace；有上层
+# span 时按调用继承其会话身份（见 _CallScopedTracedModel）。
 DEFINITION_SCOPED_SESSION_ID = "workflow-llm"
+
+# core OTel 侧 span 的会话属性键（openjiuwen/extensions/tracer_otel/
+# semconv.py 的 OJ_SESSION_ID）——跨仓冻结线格式，勿本地改名。
+_OJ_SESSION_ID_ATTR = "openjiuwen.session_id"
+
+# 调用期装饰缓存上限：键为 (会话 id, trace id)，单工作流并发执行的会话数
+# 有限；超限 LRU 逐出最久未用域（遥测侧缓存宁缺勿涨——被逐域复现时重建，
+# 代价一次轻量会话创建，不丢 span）。
+_CALL_SCOPE_CACHE_LIMIT = 32
 
 
 def workflow_identity_from_session(session) -> dict | None:
@@ -201,64 +214,189 @@ def _model_display_name(model) -> str:
     return ""
 
 
+def _ambient_session_refs() -> tuple[str | None, str | None]:
+    """读 ambient OTel 当前 span 的 (会话 id, trace id)；无有效父返 (None, None)。
+
+    llm span 的 OTel 父链本就按调用时 ambient 上下文解析（组件壳/rail span
+    下的真实子 span），此处读的是同一上下文同一属性——父链能挂对，会话
+    身份就能继承对。任何读取失败返回 (None, None)，绝不抛出。
+    """
+    try:
+        from opentelemetry import context as otel_context
+        from opentelemetry import trace as otel_trace
+
+        span = otel_trace.get_current_span(otel_context.get_current())
+        span_context = span.get_span_context()
+        if not span_context.is_valid:
+            return None, None
+        session_id = (getattr(span, "attributes", None) or {}).get(_OJ_SESSION_ID_ATTR)
+        if not session_id:
+            return None, None
+        return str(session_id), format(span_context.trace_id, "032x")
+    except Exception:  # noqa: BLE001 - ambient 解析失败不构成遥测失败
+        return None, None
+
+
+def _decorate_model_with_facts(decorate, model, session, identity):
+    """身份增补 + 能力门控后装饰（显式会话与调用期路径共用）。
+
+    增补均为缺省才补、绝不覆盖显式值；有增补才拷贝，无事实保持 identity
+    引用原样透传：
+    - user_id：workflow 五节点身份只带 workflow 归因，用户事实经 runner 建
+      会话播种的 current_user_id() 兜底注入（显式传入优先）；
+    - class_name：模型显示名覆盖——OBS 模型服务生态下 model_name 装的是
+      modelServiceId（UUID），provider 把元数据里的真实模型名随
+      client_config.model_display_name 带出，此处覆盖装饰器探针结果，
+      llm span 名与 gen_ai.request.model 显示真名（缺名不覆盖）。
+    旧 core 装饰器无 identity 参数时退两参调用（普通 llm span，不退裸
+    模型、不刷告警），新 studio × 旧 core 最差=现状。
+    """
+    user_id = "" if identity and identity.get("user_id") else (current_user_id() or "")
+    display_name = _model_display_name(model)
+    if user_id or display_name:
+        identity = dict(identity) if identity else {}
+        if user_id:
+            identity["user_id"] = str(user_id)
+        if display_name:
+            identity["class_name"] = display_name
+    if identity and callable_accepts_kwarg(decorate, "identity"):
+        return decorate(model, session, identity=identity)
+    return decorate(model, session)
+
+
+class _CallScopedTracedModel:
+    """定义级模型的调用期装饰代理：每次调用继承上层 span 的会话身份。
+
+    装饰期绑定会话的定义级产物（跨执行复用的组件模型）会把构建期请求的
+    会话/trace 错归到后续所有执行（缓存模型保留首调会话，检视 198236863）。
+    本代理把装饰推迟到每次 invoke/stream：读 ambient 当前 span（组件壳/
+    上层 llm span——llm span 的 OTel 父链本就按它解析），继承其会话 id
+    动态建轻量会话、装饰当次调用（ambient 的 trace id 一并传入会话工厂
+    ——core 0.1.17_hotfix 工厂暂不转发该参数，OTel 父链按 ambient 解析、
+    与旧版一致，传入是为 core 补齐转发后的前向兼容）——同一缓存模型在
+    不同会话的执行各自归属，无跨请求污染，域缓存超限 LRU 逐出。无
+    ambient 父（单组件调试等）退定义级哨兵（DEFINITION_SCOPED_SESSION_ID
+    + 不绑请求 trace），装饰产物按调用期用户分桶复用（user_id 是装饰期
+    事实，整体单值缓存会让首个用户的身份错归后续所有无父调用）。解析/
+    装饰任何失败退裸模型直调；产物的 invoke/stream 兼容同步形态
+    （await 非协程/async for 非异步迭代器会 TypeError），绝不阻断业务
+    调用。
+    """
+
+    def __init__(self, model, identity, decorate) -> None:
+        self._model = model
+        # 调用方 identity 的私有副本：装饰期增补绝不改写调用方字典
+        self._identity = dict(identity) if identity else {}
+        self._decorate = decorate
+        self._scoped_cache: OrderedDict[tuple[str, str], object] = OrderedDict()
+        self._fallbacks: OrderedDict[str, object] = OrderedDict()
+        self._degrade_logged = False
+
+    def _decorated_for_call(self) -> object:
+        try:
+            session_id, trace_id = _ambient_session_refs()
+            if session_id is None:
+                # 无 ambient 父：退定义级哨兵（不绑请求 trace）；装饰产物
+                # 按调用期用户分桶缓存——跨用户复用会错归属（见类 docstring）
+                user_key = current_user_id() or ""
+                decorated = self._fallbacks.get(user_key)
+                if decorated is not None:
+                    self._fallbacks.move_to_end(user_key)
+                    return decorated
+                session = create_agent_session_with_trace(
+                    session_id=DEFINITION_SCOPED_SESSION_ID,
+                    trace_id=_DEFINITION_NO_TRACE,
+                )
+                decorated = _decorate_model_with_facts(
+                    self._decorate, self._model, session, self._identity
+                )
+                self._fallbacks[user_key] = decorated
+                while len(self._fallbacks) > _CALL_SCOPE_CACHE_LIMIT:
+                    self._fallbacks.popitem(last=False)
+                return decorated
+            key = (session_id, trace_id)
+            decorated = self._scoped_cache.get(key)
+            if decorated is not None:
+                self._scoped_cache.move_to_end(key)
+                return decorated
+            session = create_agent_session_with_trace(
+                session_id=session_id, trace_id=trace_id
+            )
+            decorated = _decorate_model_with_facts(
+                self._decorate, self._model, session, self._identity
+            )
+            self._scoped_cache[key] = decorated
+            while len(self._scoped_cache) > _CALL_SCOPE_CACHE_LIMIT:
+                self._scoped_cache.popitem(last=False)
+            return decorated
+        except Exception as e:  # noqa: BLE001 - 遥测失败退裸模型直调
+            if not self._degrade_logged:
+                logger.warning(
+                    "build_traced_model: per-call trace decoration degraded to bare model: %s", e
+                )
+                self._degrade_logged = True
+            return self._model
+
+    async def invoke(self, *args, **kwargs):
+        # 产物兼容同步形态：降级退裸模型等场景 invoke 可能不是协程，
+        # 盲 await 会 TypeError（与旧版直接返回裸模型的接口契约等宽）
+        result = self._decorated_for_call().invoke(*args, **kwargs)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    async def stream(self, *args, **kwargs):
+        # 同上：stream 可能是同步可迭代对象，按形态分流
+        result = self._decorated_for_call().stream(*args, **kwargs)
+        if hasattr(result, "__aiter__"):
+            async for chunk in result:
+                yield chunk
+        else:
+            for chunk in result:
+                yield chunk
+
+    def __getattr__(self, name: str):
+        return getattr(self._model, name)
+
+
 def build_traced_model(model, session=None, session_id: str = None, identity: dict = None):
     """把裸 core Model 交给 openjiuwen 装饰器，补齐每次调用的 llm span。
 
-    - ``session`` 显式传入则直接复用（当前生产调用点均传 session_id 由工厂
-      建轻量会话，该参数供测试与后续接线预留）。轻量会话不触碰任何既有
-      会话——OTel 父链按调用时 ambient 上下文解析（组件壳/rail span 下的
-      真实子 span），与会话对象无关，不会因执行会话与装饰会话是两个对象
-      而分叉 trace；层间双计由后端 "优先计子、无子再计桥" 规则去重；
-    - 轻量会话的会话身份与 trace 均不得绑定构建期请求（定义级产物跨执行
-      复用，绑定任一请求都会错归属）：无显式 session_id 时落
-      ``DEFINITION_SCOPED_SESSION_ID`` 且不绑请求 trace；每执行新建模型的
-      请求级场景传当次会话 id，trace 沿用请求上下文；
+    - ``session`` 显式传入则直接复用（测试与后续接线预留）；请求级场景
+      （每执行新建模型）传当次会话 id：装饰期绑定该会话，trace 沿用请求
+      上下文。轻量会话不触碰任何既有会话——OTel 父链按调用时 ambient
+      上下文解析（组件壳/rail span 下的真实子 span），与会话对象无关，
+      不会因执行会话与装饰会话是两个对象而分叉 trace；层间双计由后端
+      "优先计子、无子再计桥" 规则去重；
+    - 定义级产物（工作流 IR 转换出的组件模型，跨执行复用；session_id
+      缺省、空串等 falsy 值或传 ``DEFINITION_SCOPED_SESSION_ID``）不装
+      饰期绑定会话——绑
+      任一构建期请求会把后续执行错归该请求的 trace/会话；返回
+      ``_CallScopedTracedModel`` 调用期解析代理：每次 invoke/stream 继承
+      ambient 上层 span 的会话 id 动态装饰（trace id 一并传入会话工厂，
+      core 工厂暂不转发、OTel 父链仍按 ambient 解析，见代理类 docstring），
+      无上层（单组件调试等）退定义级哨兵且不绑请求 trace；
     - ``identity`` 透传业务归因键（workflow_id / agent_id / request_params /
       message_count / 会话事实 / ...，core 侧 write-if-absent 盖属性）：
-      独立/子 llm span 带上业务身份与调用事实；旧 core 装饰器无 identity
-      参数时按能力门控退两参调用（普通 llm span，不退裸模型）；
-    - 遥测侧任何失败（导入 / 建会话 / 装饰）都降级返回裸模型，
-      绝不影响模型创建与业务语义。
+      独立/子 llm span 带上业务身份与调用事实；user_id / 模型显示名在
+      装饰时增补（定义级路径随调用期取值，用户事实按当次执行归属）；
+    - 遥测侧任何失败都降级：导入失败退裸模型；显式/请求级路径建会话或
+      装饰失败退裸模型；定义级路径逐调用失败退裸模型直调——绝不影响
+      模型创建与业务语义。
     """
     try:
         from openjiuwen.core.session.tracer import decorate_model_with_trace
     except Exception as e:  # noqa: BLE001 - core 无该入口
         logger.warning("build_traced_model: decorate entry missing, bare model kept: %s", e)
         return model
-    try:
-        if session is None:
-            # 无显式 session_id 一律落定义级：不得退 x-request-id——定义级模型
-            # 跨执行复用，绑构建期请求会把后续执行错归该请求的 trace/会话。
-            resolved = session_id or DEFINITION_SCOPED_SESSION_ID
-            if resolved == DEFINITION_SCOPED_SESSION_ID:
-                # 定义级产物：会话 id 与 trace 都不绑构建期请求，归因由执行期
-                # ambient 壳/rail 父链承担（绑首次请求会把后续执行错归其 trace）
-                session = create_agent_session_with_trace(
-                    session_id=resolved, trace_id=_DEFINITION_NO_TRACE
-                )
-            else:
-                session = create_agent_session_with_trace(session_id=resolved)
-        # 身份增补（装饰前一次性完成，均为缺省才补、绝不覆盖显式值；有增补
-        # 才拷贝，无事实保持调用方 identity 引用原样透传）：
-        # - user_id：workflow 五节点身份只带 workflow 归因，用户事实经 runner
-        #   建会话播种的 current_user_id() 兜底注入（显式传入优先）；
-        # - class_name：模型显示名覆盖——OBS 模型服务生态下 model_name 装的
-        #   是 modelServiceId（UUID），provider 把元数据里的真实模型名随
-        #   client_config.model_display_name 带出，此处覆盖装饰器探针结果，
-        #   llm span 名与 gen_ai.request.model 显示真名（缺名不覆盖）。
-        user_id = "" if identity and identity.get("user_id") else (current_user_id() or "")
-        display_name = _model_display_name(model)
-        if user_id or display_name:
-            identity = dict(identity) if identity else {}
-            if user_id:
-                identity["user_id"] = str(user_id)
-            if display_name:
-                identity["class_name"] = display_name
-        # 能力门控：旧 core 装饰器无 identity 参数——退两参调用仍产出普通
-        # llm span（不退裸模型、不刷告警），新 studio × 旧 core 最差=现状
-        if identity and callable_accepts_kwarg(decorate_model_with_trace, "identity"):
-            return decorate_model_with_trace(model, session, identity=identity)
-        return decorate_model_with_trace(model, session)
-    except Exception as e:  # noqa: BLE001 - 遥测失败不得阻断模型创建
-        logger.warning("build_traced_model: trace decoration degraded to bare model: %s", e)
-        return model
+    if session is not None or (session_id and session_id != DEFINITION_SCOPED_SESSION_ID):
+        # 显式会话 / 请求级会话 id：装饰期绑定（既有语义）
+        try:
+            if session is None:
+                session = create_agent_session_with_trace(session_id=session_id)
+            return _decorate_model_with_facts(decorate_model_with_trace, model, session, identity)
+        except Exception as e:  # noqa: BLE001 - 遥测失败不得阻断模型创建
+            logger.warning("build_traced_model: trace decoration degraded to bare model: %s", e)
+            return model
+    # 定义级产物：调用期解析会话（装饰期绑定会跨执行错归属）
+    return _CallScopedTracedModel(model, identity, decorate_model_with_trace)
