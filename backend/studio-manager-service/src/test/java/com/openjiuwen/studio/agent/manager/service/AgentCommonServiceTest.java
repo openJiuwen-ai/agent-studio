@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
@@ -45,8 +46,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -713,5 +716,17 @@ class AgentCommonServiceTest {
         assertNotNull(result);
         assertEquals(dbPublishTime, result.getPublishTime(),
             "publishTime should be from database, not from DSL for DeepResearch");
+    }
+
+    @Test
+    void isExportFileV2ShouldDetectV2WhenFirstLineIsBlank() {
+        ReflectionTestUtils.setField(agentCommonService, "jacksonObjectMapper", new ObjectMapper());
+        String jsonl = "\n"
+            + "{\"resource_id\":\"agent-1\",\"resource_type\":\"AGENT\",\"schema_version\":\"V2.0\"}\n"
+            + "{\"resource_id\":\"agent-2\",\"resource_type\":\"AGENT\",\"schema_version\":\"V2.0\"}\n";
+        MockMultipartFile file = new MockMultipartFile("file", "v2-leading-blank.jsonl", "text/plain",
+            jsonl.getBytes(StandardCharsets.UTF_8));
+
+        assertTrue(agentCommonService.isExportFileV2(file));
     }
 }
