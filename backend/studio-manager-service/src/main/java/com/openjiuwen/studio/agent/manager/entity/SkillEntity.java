@@ -56,7 +56,7 @@ public class SkillEntity {
     private String projectId;
 
     @JsonProperty("published_asset")
-    private int publishedAsset;
+    private Integer publishedAsset;
 
     @JsonProperty("plaza_source")
     private String plazaSource;
