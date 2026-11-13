@@ -938,8 +938,11 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         Map<String, EnvironmentVariableValue> secretVariables) {
         List<EnvironmentVariable> envVariables = new ArrayList<>();
         variables.forEach(envVari -> {
+            if (envVari.getValue() == null) {
+                return;
+            }
             String content = envVari.getValue().getContent();
-            if (envVari.getValue() == null || StringUtils.isBlank(envVari.getValue().getContent())) {
+            if (StringUtils.isBlank(envVari.getValue().getContent())) {
                 content = "";
             } else if (envVari.getValue().isSecret() && Strings.CS.equals(envVari.getValue().getContent(),
                 PASSWORD_PLACEHOLDER)) {
@@ -950,7 +953,7 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
             }
             EnvironmentVariable variable = buildEnvironmentVariable(envVari.getName(),
                 envVari.getValue().getType() == null ? EnvironmentVariableValue.TypeEnum.STRING : envVari.getValue().getType(),
-                content, envVari.getValue() != null && envVari.getValue().isSecret());
+                content, envVari.getValue().isSecret());
             envVariables.add(variable);
         });
         return JsonUtils.toJson(envVariables);
