@@ -2459,8 +2459,17 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.graph.enablePanning();
   }
 
-  public allowDrop(e: MouseEvent) {
+  public allowDrop(e: DragEvent) {
     e.preventDefault();
+    // Only the graph host accepts palette drops. Overlays inside `.content`
+    // (node panel, toolbar, …) must keep dropEffect 'none', otherwise
+    // dragend would still create a node (see #1193 / PR review).
+    const overCanvas = !!(e.target as Element | null)?.closest?.(
+      '#app-flow-container',
+    );
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = overCanvas ? 'copy' : 'none';
+    }
   }
 
   /** 定位到画布中间 */

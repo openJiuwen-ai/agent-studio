@@ -267,21 +267,35 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
     return '';
   }
 
-  public onDragStart(e: MouseEvent) {
+  public onDragStart(e: DragEvent) {
     if (this.isFlowReadonly) {
+      e.preventDefault();
       return;
+    }
+
+    // Required so browsers report a non-"none" dropEffect on accepted drops.
+    e.dataTransfer?.setData('text/plain', 'palette-node');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copy';
     }
 
     this.clickNodeX = e.offsetX;
     this.clickNodeY = e.offsetY;
   }
 
-  public onDragEnd(e: MouseEvent, node: NodeInfo) {
+  public onDragEnd(e: DragEvent, node: NodeInfo) {
     if (this.isFlowReadonly) {
       return;
     }
 
+    // dragend also fires for cancelled drags and drops outside a valid target.
+    if (!e.dataTransfer || e.dataTransfer.dropEffect === 'none') {
+      return;
+    }
+
     const ptl = this.graph.pageToLocal(e.pageX, e.pageY);
+    // pageToLocal returns graph world coords (can be negative after panning);
+    // do not treat negative values as "outside the canvas".
     const x =
       ptl.x < this.clickNodeX && ptl.x > 0 ? 0 : ptl.x - this.clickNodeX;
     const y =
