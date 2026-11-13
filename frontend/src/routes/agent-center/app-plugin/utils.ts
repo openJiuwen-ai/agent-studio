@@ -767,6 +767,17 @@ export function coverPluginInfo(context: any) {
           }
         });
       }
+    } else if (context.plugin.auth_info.scope === 'DYNAMIC') {
+      // FEAT-093 动态鉴权：仅登记出站头名（值不落库，编排期绑定）——
+      // 此前掉进 processApiKey 被当 API Key 展示（type/location/表格误导）
+      context.authInfo.type = 'DYNAMIC';
+      context.authInfo.location = capitalize(context.plugin.auth_info.domain);
+      context.authTbd.data = (
+        context.plugin.auth_info.auth_keys || []
+      ).map((auth) => ({
+        name: auth.target_name,
+        value: '',
+      }));
     } else {
       processApiKey(context);
     }
