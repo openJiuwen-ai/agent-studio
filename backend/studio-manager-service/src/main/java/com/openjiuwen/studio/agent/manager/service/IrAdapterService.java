@@ -1488,7 +1488,12 @@ public class IrAdapterService {
      */
     public List<KnowledgeRepoEntity> getReposFromWorkflowNode(Map<String, Object> nodeConfigs, String projectId) {
         try {
-            String jsonStr = JSON.toJSONString(nodeConfigs.get(REPOS));
+            Object reposObj = nodeConfigs.get(REPOS);
+            // configs.repos 缺失（如旧版本节点数据）时视为无知识库引用，交由调用方按"知识库缺失"提示
+            if (ObjectUtils.isEmpty(reposObj)) {
+                return new ArrayList<>();
+            }
+            String jsonStr = JSON.toJSONString(reposObj);
             Map<String, Object> repoIdsMap = new HashMap<>();
             List<String> repoIds = new ArrayList<>();
             for (Object object : JSON.parseArray(jsonStr)) {
