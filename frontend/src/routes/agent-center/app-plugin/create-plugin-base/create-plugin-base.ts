@@ -324,6 +324,22 @@ export class CreatePluginBaseComponent implements OnInit {
     },
   ];
 
+  /**
+   * FEAT-093 插件动态鉴权：出站头名列表（仅登记头名，凭证值由
+   * 工作流/智能体编排期绑定——ref/input_ref 引用入参或记忆变量，
+   * 平台不存储凭证值；后端 validPluginDynamicAuthInfo 校验 + 与
+   * 工具请求头同名拒绝）
+   */
+  public dynamicAuthArgs: { name: string }[] = [{ name: '' }];
+
+  addDynamicAuthArg() {
+    this.dynamicAuthArgs.push({ name: '' });
+  }
+
+  deleteDynamicAuthArg(index: number) {
+    this.dynamicAuthArgs.splice(index, 1);
+  }
+
   public projectId = '';
 
   public isLocked = false;
@@ -501,6 +517,16 @@ export class CreatePluginBaseComponent implements OnInit {
 
         this.originKeys = this.apiKeyAuthArgs.map(arg => arg.name);
       }
+      if (this.pluginDetail.auth?.scope === 'DYNAMIC') {
+        // FEAT-093 动态鉴权回显：auth_keys[].target_name → 头名列表（值恒空）
+        this.groupFormControl.controls.pluginAuthMethod.setValue('pluginDynamicAuth');
+        this.dynamicAuthArgs = (this.pluginDetail.auth.auth_keys || [])
+          .map(key => ({ name: key?.target_name ?? '' }))
+          .filter(arg => arg.name);
+        if (!this.dynamicAuthArgs.length) {
+          this.dynamicAuthArgs = [{ name: '' }];
+        }
+      }
       if (this.pluginDetail.auth?.scope === 'HIS_IAM') {
         let auth_info = this.pluginDetail.auth.his_iam_info;
         this.groupFormControl.controls.pluginAuthMethod.setValue('HIS_IAM');
@@ -658,9 +684,19 @@ export class CreatePluginBaseComponent implements OnInit {
     if (
       this.groupFormControl.controls.pluginAuthMethod.value !== 'pluginNoNeedAuth' &&
       this.groupFormControl.controls.pluginAuthMethod.value !== 'pluginApiKey' &&
+      this.groupFormControl.controls.pluginAuthMethod.value !== 'pluginDynamicAuth' &&
       !showFromError(this, this.groupFormControl)
     ) {
       return;
+    }
+
+    // FEAT-093 动态鉴权：至少登记一个出站头名（空行保存时过滤，但全空须拦截）
+    if (this.groupFormControl.controls.pluginAuthMethod.value === 'pluginDynamicAuth') {
+      const names = this.dynamicAuthArgs.map(arg => (arg?.name ?? '').trim()).filter(Boolean);
+      if (!names.length) {
+        MessageComponent.showError(this.i18n.transform('mcp_dynamic_auth_param_name'), 3000);
+        return;
+      }
     }
 
     // 提交前校验完整URL长度，与后端 requestInfo.url @Length(max=256) 一致
@@ -846,6 +882,20 @@ export class CreatePluginBaseComponent implements OnInit {
           auth.query[param.name] = param.value;
         }
       }
+    } else if (authMethod === 'pluginDynamicAuth') {
+      // FEAT-093 插件动态鉴权：仅登记出站头名（值不落库，编排期绑定）
+      const names = this.dynamicAuthArgs
+        .map(arg => (arg?.name ?? '').trim())
+        .filter(Boolean);
+      auth = {
+        scope: 'DYNAMIC',
+        domain: 'HEADERS',
+        auth_keys: names.map(name => ({
+          target_name: name,
+          source_name: null,
+          auth_key: null,
+        })),
+      };
     } else if (authMethod === 'HIS_IAM') {
       auth = {
         scope: 'HIS_IAM',
