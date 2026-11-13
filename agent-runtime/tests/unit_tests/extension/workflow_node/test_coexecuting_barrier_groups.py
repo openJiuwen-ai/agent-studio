@@ -31,6 +31,7 @@ from jiuwen.extension.patches.parallel_branch_grouping_patch import (
     apply_parallel_branch_grouping_patch,
 )
 from jiuwen.extension.patches.nested_branch_barrier_patch import (
+    _compute_scc,
     apply_nested_branch_barrier_patch,
 )
 
@@ -66,6 +67,87 @@ def _make_graph(node_ids, *, wait_for_all_ids=()):
 
 def _groups_as_sets(resolved):
     return sorted((frozenset(grp) for grp in resolved), key=lambda s: sorted(s))
+
+
+@pytest.mark.parametrize("branch_count", [2, 4])
+@pytest.mark.parametrize("first_sender", ["safe", "rag"])
+def test_serial_diamond_branches_wait_for_both_paths(branch_count, first_sender):
+    """Upstream and downstream conditions share parallel targets in a DAG.
+
+    Each branch routes directly to safe/rag or to the next branch (the last
+    routes through an example node). Both paths always execute. A downstream
+    branch reachable from an upstream target must not be mistaken for a loop.
+    """
+    branches = [f"branch{i}" for i in range(branch_count)]
+    g = _make_graph(
+        branches + ["example", "safe", "rag", "JOIN"],
+        wait_for_all_ids={"JOIN"},
+    )
+    for i, branch in enumerate(branches):
+        fallback = branches[i + 1] if i + 1 < branch_count else "example"
+        router = BranchRouter()
+        router.add_branch("hit", ["safe", "rag"], branch_id=f"{branch}-if")
+        router.add_branch("True", [fallback], branch_id=f"{branch}-default")
+        g.add_conditional_edges(branch, router)
+        g.register_branch_targets(branch, {"safe", "rag", fallback})
+    g.add_edge("example", "safe")
+    g.add_edge("example", "rag")
+    g.add_edge("safe", "JOIN")
+    g.add_edge("rag", "JOIN")
+
+    resolved = g._resolve_barrier_groups("JOIN", [{"safe"}, {"rag"}])
+    # The resolver may retain a redundant OR-group alongside the singleton
+    # latches. Both singletons must be present to enforce the AND semantics.
+    groups = _groups_as_sets(resolved)
+    assert frozenset({"rag"}) in groups
+    assert frozenset({"safe"}) in groups
+
+    barrier = BarrierChannel("JOIN", expected_groups=resolved)
+    barrier.accept(BarrierMessage(sender=first_sender, target=barrier.key))
+    assert not barrier.is_ready(), "join fired before both parallel paths finished"
+    second_sender = "rag" if first_sender == "safe" else "safe"
+    barrier.accept(BarrierMessage(sender=second_sender, target=barrier.key))
+    assert barrier.is_ready()
+    barrier.consume()
+    barrier.accept(BarrierMessage(sender=second_sender, target=barrier.key))
+    assert not barrier.is_ready(), "late arrival re-armed the barrier"
+
+
+@pytest.mark.parametrize("self_loop", [False, True])
+def test_cycle_guard_preserves_exclusive_paths(self_loop):
+    """A self-loop or multi-node SCC must not introduce singleton latches."""
+    g = _make_graph(
+        ["branch", "p", "q", "JOIN"], wait_for_all_ids={"JOIN"}
+    )
+    router = BranchRouter()
+    router.add_branch("hit", ["p"], branch_id="branch-if")
+    router.add_branch("True", ["q"], branch_id="branch-default")
+    g.add_conditional_edges("branch", router)
+    g.register_branch_targets("branch", {"p", "q"})
+    g.add_edge("branch" if self_loop else "p", "branch")
+    g.add_edge("p", "JOIN")
+    g.add_edge("q", "JOIN")
+
+    resolved = g._resolve_barrier_groups("JOIN", [{"p"}, {"q"}])
+    assert _groups_as_sets(resolved) == [frozenset({"p", "q"})]
+    for sender in ("p", "q"):
+        barrier = BarrierChannel("JOIN", expected_groups=resolved)
+        barrier.accept(BarrierMessage(sender=sender, target=barrier.key))
+        assert barrier.is_ready(), f"exclusive path {sender} deadlocked"
+
+
+def test_scc_separates_serial_nodes_cycles_and_terminal_targets():
+    """Only mutually reachable nodes share a component, including target-only nodes."""
+    comp = _compute_scc({
+        "upstream": ["a"],
+        "a": ["b"],
+        "b": ["a", "terminal"],
+        "self": ["self"],
+        "isolated": [],
+    })
+    assert set(comp) == {"upstream", "a", "b", "terminal", "self", "isolated"}
+    assert comp["a"] == comp["b"]
+    assert len({comp[n] for n in ("upstream", "a", "terminal", "self", "isolated")}) == 5
 
 
 def test_coexecuting_lanes_stay_and_groups():
