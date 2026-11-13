@@ -741,5 +741,9 @@
   "exit_full_screen": "退出全屏",
   "skill_market": "Skill",
   "confirm": "确定",
-  "install_mcp": "安装MCP"
+  "install_mcp": "安装MCP",
+  "preview_state_cannot_operate": "预览状态无法操作",
+  "partial_import_success": "部分导入成功",
+  "import_failed": "导入失败",
+  "upload_image_type_invalid": "请上传png、jpg图片"
 }
