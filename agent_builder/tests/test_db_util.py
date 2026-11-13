@@ -13,6 +13,7 @@ import pytest
 
 from agent_builder.common.store import db as db_module
 from agent_builder.common.store.db import DBUtil
+from agent_builder.adapter.exception_bridge import JiuWenBaseException
 
 
 def _cfg(db_type="mysql", port=3306, sslmode="disable", db_schema=None):
@@ -105,3 +106,66 @@ class TestReconnectClosesOldConnection:
                 result = DBUtil.instance(reconnect=True)
         new.close.assert_not_called()
         assert result is new
+
+
+class TestMysqlExecuteResourceHandling:
+    """G.PRM.03：MySQL 执行路径在成功/异常/非查询三种情况下都必须关闭 cursor，
+    异常时还必须 rollback（与 PostgreSQL 分支行为对齐）。"""
+
+    def _install_mysql_conn(self, cursor):
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+        with patch.object(db_module, "settings") as settings_mock:
+            settings_mock.db_config = _cfg(db_type="mysql", port=3306)
+            with patch("pymysql.connect", return_value=conn):
+                DBUtil.instance()
+        return conn
+
+    def test_success_closes_cursor_and_commits(self):
+        cursor = MagicMock()
+        cursor.description = ("c",)
+        cursor.fetchall.return_value = [(1,)]
+        conn = self._install_mysql_conn(cursor)
+        with patch.object(db_module, "settings") as settings_mock:
+            settings_mock.db_config = _cfg(db_type="mysql", port=3306)
+            with patch("pymysql.connect", return_value=conn):
+                result = DBUtil.execute("SELECT 1")
+        assert result == [(1,)]
+        conn.commit.assert_called()
+        cursor.close.assert_called_once()
+
+    def test_fetch_one_when_fetch_all_false(self):
+        cursor = MagicMock()
+        cursor.description = ("c",)
+        cursor.fetchone.return_value = (1,)
+        conn = self._install_mysql_conn(cursor)
+        with patch.object(db_module, "settings") as settings_mock:
+            settings_mock.db_config = _cfg(db_type="mysql", port=3306)
+            with patch("pymysql.connect", return_value=conn):
+                result = DBUtil.execute("SELECT 1", fetch_all=False)
+        assert result == (1,)
+        cursor.close.assert_called_once()
+
+    def test_non_select_returns_empty_and_closes(self):
+        # INSERT/DDL：cursor.description 为 None，应返回空结果且关闭 cursor
+        cursor = MagicMock()
+        cursor.description = None
+        conn = self._install_mysql_conn(cursor)
+        with patch.object(db_module, "settings") as settings_mock:
+            settings_mock.db_config = _cfg(db_type="mysql", port=3306)
+            with patch("pymysql.connect", return_value=conn):
+                assert DBUtil.execute("INSERT INTO t VALUES (1)") == []
+        cursor.close.assert_called_once()
+
+    def test_exception_rolls_back_closes_cursor_and_raises(self):
+        cursor = MagicMock()
+        cursor.execute.side_effect = RuntimeError("boom")
+        conn = self._install_mysql_conn(cursor)
+        with patch.object(db_module, "settings") as settings_mock:
+            settings_mock.db_config = _cfg(db_type="mysql", port=3306)
+            with patch("pymysql.connect", return_value=conn):
+                with pytest.raises(JiuWenBaseException):
+                    DBUtil.execute("UPDATE t SET a=1")
+        # 首轮执行与重连重试各触发 rollback + close
+        assert conn.rollback.call_count >= 1
+        assert cursor.close.call_count >= 1
