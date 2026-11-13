@@ -45,6 +45,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -309,6 +310,36 @@ public class SkillManagementServiceTest {
             verify(skillMapper, times(1)).search(any(SkillEntity.class), eq(0), eq(10), any(), anyString(), anyInt());
             qo.setPublishedAsset(1);
             response = skillManagementService.listStudioSkills("mock-project-id", qo);
+        }
+    }
+
+    @Test
+    void testListSkill_WithoutPublishedAsset_SearchAndCountShareFilter() {
+        // 未传 published_asset（历史缺陷场景）：search 与 count 的过滤口径必须一致，
+        // 且两者都不过滤（null），避免出现 total 与 items 不一致。
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("TEST_DOMAIN_ID");
+            ListStudioSkillsQo qo = new ListStudioSkillsQo();
+            qo.setOffset(0);
+            qo.setLimit(10);
+            qo.setWorkspaceId("mock-workspace-id");
+
+            when(skillMapper.search(any(SkillEntity.class), anyInt(), anyInt(), any(), any(), any()))
+                .thenReturn(List.of());
+            when(skillMapper.countSelectedSkills(any(SkillEntity.class))).thenReturn(0);
+
+            ListStudioSkillsResponseBody response = skillManagementService.listStudioSkills("mock-project-id", qo);
+
+            assertNotNull(response);
+            assertEquals(0, response.getTotal());
+
+            ArgumentCaptor<SkillEntity> countCaptor = ArgumentCaptor.forClass(SkillEntity.class);
+            verify(skillMapper).countSelectedSkills(countCaptor.capture());
+            assertNull(countCaptor.getValue().getPublishedAsset());
+
+            ArgumentCaptor<Integer> publishedAssetCaptor = ArgumentCaptor.forClass(Integer.class);
+            verify(skillMapper).search(any(SkillEntity.class), eq(0), eq(10), any(), any(), publishedAssetCaptor.capture());
+            assertNull(publishedAssetCaptor.getValue());
         }
     }
 

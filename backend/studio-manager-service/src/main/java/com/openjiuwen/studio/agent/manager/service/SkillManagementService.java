@@ -559,8 +559,15 @@ public class SkillManagementService implements ISkillManagementService {
                 .setProjectId(projectId);
         }
 
+        // 统一过滤口径：非空的 published_asset 同步进 entity，search 与 countSelectedSkills
+        // 共用同一来源，避免未传参数时 items 不过滤而 total 恒按默认值过滤的不一致。
+        if (listStudioSkillsQo.getPublishedAsset() != null) {
+            selectCondition.setPublishedAsset(listStudioSkillsQo.getPublishedAsset());
+        }
+
         List<SkillDetails> selectedSkills = skillMapper.search(selectCondition, listStudioSkillsQo.getOffset(),
-            listStudioSkillsQo.getLimit(), listStudioSkillsQo.getPriorityStatus(),listStudioSkillsQo.getTagId(),listStudioSkillsQo.getPublishedAsset());
+            listStudioSkillsQo.getLimit(), listStudioSkillsQo.getPriorityStatus(), listStudioSkillsQo.getTagId(),
+            selectCondition.getPublishedAsset());
 
         // 2. 构建响应体
         ListStudioSkillsResponseBody responseBody = new ListStudioSkillsResponseBody().setTotal(skillMapper.countSelectedSkills(selectCondition));
