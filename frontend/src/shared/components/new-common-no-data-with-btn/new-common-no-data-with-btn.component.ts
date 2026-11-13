@@ -46,6 +46,7 @@ export class NewCommonNoDataWithBtnComponent {
   @Input() firstLineData = '';
   @Input() secondLineData = '';
   @Input() secondLineClickData = '';
+  @Input() hideSecondLineData = false;
   @Input() filterNoData = this.i18n.transform('no_data_matched');
   @Input() filterNoSecondData = this.i18n.transform('no_matching_data_found');
   @Input() filterBtn = this.i18n.transform('clear_filters');

@@ -53,6 +53,7 @@ export class AddPluginModalComponent implements OnInit {
   public isShowCreatePluginModal = false;
   public isAddingTool = false;
   public changeUrl = cdnAssetUrl;
+  public studioBtnShow = this.configServ.getConfigs()?.studio_btn_show ?? true;
   public tabs = [
     {
       id: 'custom',
