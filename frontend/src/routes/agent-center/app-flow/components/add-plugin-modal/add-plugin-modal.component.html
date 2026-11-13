@@ -287,7 +287,8 @@
             <app-new-common-no-data-with-btn
             [type]="searchNameIsEmpty ? 'noData' : 'filterNoData'"
             [tutorialType]="'plugin'"
-            [noDataBtnStr]="'create_plugin' | i18nextEager"
+            [noDataBtnStr]="studioBtnShow ? ('create_plugin' | i18nextEager) : ''"
+            [hideSecondLineData]="!studioBtnShow"
             (create)="showAddPluginModal()"
             (clear)="handleClickClearSearch()"
           />
