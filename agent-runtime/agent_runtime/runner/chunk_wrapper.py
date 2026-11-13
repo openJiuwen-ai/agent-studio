@@ -21,6 +21,7 @@ from openjiuwen.core.session.stream.base import (
 _CHUNK_TYPE_MAP: dict[str, str] = {
     "jiuwen.plugin": "Api",
     "FlowCustomApi": "Api",
+    "FlowApi": "Api",
 }
 
 

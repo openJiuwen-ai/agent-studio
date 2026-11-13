@@ -16,6 +16,10 @@ class TestChunkNormalizeComponentDisplayType:
         """自定义插件执行器组件名 FlowCustomApi → Api"""
         assert self._norm("FlowCustomApi") == "Api"
 
+    def test_flow_api_maps_to_api(self):
+        """标准 HTTP 插件节点组件名 FlowApi → Api（与 workflow_stream_data_wrapper 姊妹映射表一致）"""
+        assert self._norm("FlowApi") == "Api"
+
     def test_ir_plugin_type_maps_to_api(self):
         """IR 插件类型 jiuwen.plugin → Api"""
         assert self._norm("jiuwen.plugin") == "Api"
