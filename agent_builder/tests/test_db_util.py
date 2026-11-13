@@ -109,10 +109,10 @@ class TestReconnectClosesOldConnection:
 
 
 class TestMysqlExecuteResourceHandling:
-    """G.PRM.03：MySQL 执行路径在成功/异常/非查询三种情况下都必须关闭 cursor，
-    异常时还必须 rollback（与 PostgreSQL 分支行为对齐）。"""
+    """覆盖 G.PRM.03：MySQL 执行路径在成功/异常/非查询时都必须关闭 cursor，异常时还需 rollback。"""
 
-    def _install_mysql_conn(self, cursor):
+    @staticmethod
+    def _install_mysql_conn(cursor):
         conn = MagicMock()
         conn.cursor.return_value = cursor
         with patch.object(db_module, "settings") as settings_mock:
