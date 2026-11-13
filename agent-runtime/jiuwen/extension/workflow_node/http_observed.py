@@ -44,10 +44,12 @@ class HttpObservedExecutable(HTTPRequestExecutable):
                 from urllib.parse import urlsplit, urlunsplit
 
                 parts = urlsplit(raw_url)
-                host = parts.hostname or ""
-                netloc = f"{host}:{parts.port}" if parts.port is not None else host
-                # 脱敏：仅保留 scheme/host/path，丢弃 query、fragment 与 netloc
-                # 中的 userinfo（user:pass@host），防签名/凭据随 trace 落库
+                # 脱敏：仅保留 scheme/host/port/path，丢弃 query、fragment 与
+                # netloc 中的 userinfo（user:pass@host），防签名/凭据随 trace
+                # 落库。注意不能用 parts.hostname 重建 netloc——该属性会剥掉
+                # IPv6 字面量的方括号（[::1]:8080 会变成非法的 ::1:8080），故
+                # 按最后一个 "@" 切掉 userinfo、netloc 其余部分原样保留。
+                netloc = parts.netloc.rsplit("@", 1)[-1]
                 raw_url = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
             except Exception:
                 raw_url = ""
