@@ -162,36 +162,63 @@ class Qwen(BaseModel, BaseChatModel):
                 usage_metadata.output_tokens,
                 usage_metadata.total_tokens,
             ) = self._extract_tokens_from_response(res_json)
-            res_content = res_json.get("choices")[0].get("message").get("content")
-            reasoning_content = (
-                res_json.get("choices")[0].get("message").get("reasoning_content", "")
-                or ""
-            )
+            # 统一提取 message_info，防御 message 为 null 或缺失
+            message_info = res_json.get("choices", [{}])[0].get("message") or {}
+            res_content = message_info.get("content")
+            # 工具调用消息标准协议 content 为 null，而 AIMessage.content 不接受 None，统一兜底为空串
+            if res_content is None:
+                res_content = ""
+            reasoning_content = message_info.get("reasoning_content", "") or ""
             if tools_flag == "tool_calls":
-                name = (
-                    res_json.get("choices")[0]
-                    .get("message")
-                    .get("tool_calls")
-                    .get("function")
-                    .get("name")
-                )
-                check_and_trans_result = ModelUtil.check_and_trans2json(
-                    res_json.get("choices")[0]
-                    .get("message")
-                    .get("tool_calls")
-                    .get("function")
-                    .get("arguments")
-                )
-                if name and check_and_trans_result[0]:
-                    tools_call = ToolCall(name=name, args=check_and_trans_result[1])
+                # tool_calls 可能缺失/为 None，也可能为标准 OpenAI list 形态（并行调用），
+                # 链式 .get 会直接 AttributeError。统一提取所有含 function 的调用，
+                # 与 _stream() 的 list/dict 双形态兼容逻辑对齐
+                raw_tool_calls = message_info.get("tool_calls")
+                if isinstance(raw_tool_calls, dict):
+                    raw_tool_calls = [raw_tool_calls]
+                elif not isinstance(raw_tool_calls, list):
+                    # None / 标量（true/数字等）不可迭代，兜底空列表
+                    raw_tool_calls = []
+                # 单次遍历构造 ToolCall 列表（收集 id + function 信息）
+                tools_call_list = []
+                for tool_call in raw_tool_calls:
+                    if not isinstance(tool_call, dict):
+                        continue
+                    function_info = tool_call.get("function")
+                    if not isinstance(function_info, dict):
+                        continue
+                    name = function_info.get("name")
+                    arguments = function_info.get("arguments")
+                    if isinstance(arguments, str):
+                        check_and_trans_result = ModelUtil.check_and_trans2json(
+                            arguments
+                        )
+                        # JSON 字符串解析结果可能非 dict（如 "null"/"[]"/"123"），
+                        # args 字段类型为 Dict[str, Any]，非 dict 会 pydantic ValidationError
+                        if not isinstance(check_and_trans_result[1], dict):
+                            check_and_trans_result = (False, None)
+                    elif isinstance(arguments, dict):
+                        # 部分模型服务直接返回已解析的 dict，无需再次解析
+                        check_and_trans_result = (True, arguments)
+                    else:
+                        # None / list / int 等畸形值，统一走兜底
+                        check_and_trans_result = (False, None)
+                    if name and check_and_trans_result[0]:
+                        tc = ToolCall(name=name, args=check_and_trans_result[1])
+                        if tool_call.get("id"):
+                            tc.id = tool_call["id"]
+                        tools_call_list.append(tc)
+                if tools_call_list:
+                    # 单个 tool_call 返回对象，多个返回列表（下游已支持，与 _stream() 一致）
+                    tools_call = (
+                        tools_call_list[0]
+                        if len(tools_call_list) == 1
+                        else tools_call_list
+                    )
                     usage_metadata.finish_reason = "function_call"
                 else:
-                    res_content = (
-                        res_json.get("choices")[0]
-                        .get("message")
-                        .get("tool_calls")
-                        .get("function")
-                    )
+                    # 解析失败兜底：保留原始 res_content（如 assistant 文本回复），
+                    # 避免数据丢失；无原始 content 时兜底空串（content 已做 None 防护）
                     tools_call = {}
 
                 return AIMessage(
