@@ -64,7 +64,7 @@ function generate_nginx_conf() {
 
   SSL_BLOCK=""
   LISTEN_DIRECTIVE="listen ${LISTEN_ADDR};"
-  if [[ "${HTTPS}" == "true" ]]; then
+  if [[ "${HTTPS,,}" == "true" ]]; then
     LISTEN_DIRECTIVE="listen ${LISTEN_ADDR} ssl;"
     SSL_BLOCK="
         ssl_certificate      ${TLS_CERT_PATH};
@@ -75,7 +75,7 @@ function generate_nginx_conf() {
   fi
 
   # Build proxy_pass scheme — must match Worker's protocol
-  if [[ "${HTTPS}" == "true" ]]; then
+  if [[ "${HTTPS,,}" == "true" ]]; then
     PROXY_SCHEME="https"
     # Workers use self-signed certs — skip SSL verification on the proxy side
     PROXY_SSL_BLOCK="
@@ -164,7 +164,7 @@ function wait_for_workers() {
     ALL_READY=true
     for i in $(seq 1 ${DISPLAY_WORKER_NUM}); do
       WORKER_PORT=$((SERVER_PORT + i))
-      if [[ "${HTTPS}" == "true" ]]; then
+      if [[ "${HTTPS,,}" == "true" ]]; then
         curl -sk --max-time 3 "https://127.0.0.1:${WORKER_PORT}/v1/health" > /dev/null 2>&1
       else
         curl -s --max-time 3 "http://127.0.0.1:${WORKER_PORT}/v1/health" > /dev/null 2>&1

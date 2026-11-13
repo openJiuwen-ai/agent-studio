@@ -274,7 +274,7 @@ class SingletonLogger:
         )
         if not os.path.exists(os.path.dirname(jiuwen_log_path)):
             # 日志文件目录权限为750
-            os.makedirs(os.path.dirname(jiuwen_log_path), mode=0o750)
+            os.makedirs(os.path.dirname(jiuwen_log_path), mode=0o750, exist_ok=True)
         log_file = os.path.join(jiuwen_log_path, log_config.get("log_file"))
         performance_log_file = os.path.join(
             jiuwen_log_path, log_config.get("performance_log_file")
@@ -407,7 +407,7 @@ class SingletonLogger:
         if "log" in output:
             if not os.path.exists(os.path.dirname(log_file)):
                 # 日志文件目录权限为750
-                os.makedirs(os.path.dirname(log_file), mode=0o750)
+                os.makedirs(os.path.dirname(log_file), mode=0o750, exist_ok=True)
             file_handler = SafeRotatingFileHandler(
                 filename=log_file,
                 maxBytes=max_bytes,
