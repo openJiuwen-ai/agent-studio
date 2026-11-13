@@ -10,7 +10,7 @@ import {
   Provider,
 } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { AppComponent } from '@app';
 import { I18N_PROVIDERS } from '@core/providers/i18n.provider';
 import { ROUTER_GUARD_PROVIDER } from '@core/providers/route-guard.provider';
@@ -24,18 +24,18 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 import { initMessageService } from '@shared/services/cfdata.service';
 
 const basePath = document.getElementsByTagName('base')[0]?.getAttribute('href') || '/';
-const prifix = isDevMode() ? `${window.location.origin}/` : `${window.location.origin}${basePath}`;
+const prefix = isDevMode() ? `${window.location.origin}/` : `${window.location.origin}${basePath}`;
 
 const PROVIDERS: (Provider | EnvironmentProviders)[] = [
   ROUTER_PROVIDER,
   I18N_PROVIDERS,
   ROUTER_GUARD_PROVIDER,
-  importProvidersFrom(BrowserAnimationsModule),
+  provideAnimationsAsync(),
   importProvidersFrom(NzModalModule),
   importProvidersFrom(NzMessageService),
   {
     provide: MONACO_PATH,
-    useValue: `${prifix}${Network.ASSETS_PATH}monaco-editor/min/vs`,
+    useValue: `${prefix}${Network.ASSETS_PATH}monaco-editor/min/vs`,
   },
   provideMarkdown(),
   provideHttpClient(withInterceptorsFromDi()),
