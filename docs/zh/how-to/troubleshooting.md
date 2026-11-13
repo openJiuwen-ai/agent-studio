@@ -362,3 +362,7 @@ env:
 2. [第三步] Service日志 → 搜 "JiuWen request param" 查看转发给 Runtime 的请求体
 3. [第四步] 设置 WORKFLOW_LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
 ```
+
+### 提示词优化重试后仍无有效候选
+
+提示词优化要求模型在 `<PROMPT_OPTIMIZED>...</PROMPT_OPTIMIZED>` 标签内返回非空白候选。如果五次优化尝试均未得到有效候选，系统会报告提示词优化错误，不会对空提示词评分。重试前，请确认模型能遵循输出格式，且响应未被截断。
