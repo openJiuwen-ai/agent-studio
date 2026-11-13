@@ -655,16 +655,49 @@ export class CreateToolComponent implements OnInit {
 
   InitRequestConfigs(): void {
     if (this.pluginDetail.arguments.length > 0) {
-      this.requestArgs = this.pluginDetail.arguments.map(arg => {
-        return {
-          ...arg,
-          depth: arg?.depth ?? 0,
-        };
-      });
+      // FEAT-093：过滤列表接口追加的动态鉴权头回环条目——编排侧（工作流/
+      // 智能体参数配置）需要的 Headers 入参在工具编辑表单里不是工具自有
+      // 参数（单一事实源=auth_info），否则用户一保存就被持久化进工具
+      // schema，造成鉴权头与工具请求头双显同名
+      this.requestArgs = this.pluginDetail.arguments
+        .filter(arg => !this.isDynamicAuthRoundtripParam(arg))
+        .map(arg => {
+          return {
+            ...arg,
+            depth: arg?.depth ?? 0,
+          };
+        });
       this.requestArgs = mapTreeAddKeyIndex(this.requestArgs, 0);
     } else {
       this.requestArgs = [];
     }
+  }
+
+  /**
+   * FEAT-093：识别列表接口追加进 schema 的动态鉴权头回环条目
+   * （Headers 位置 + 名命中 auth_info DYNAMIC 的 target_name——
+   * 后端追加时带专属描述标记，此处双条件防误伤同名自有参数）。
+   */
+  private isDynamicAuthRoundtripParam(arg: any): boolean {
+    if (arg?.location !== 'Headers') {
+      return false;
+    }
+    const pluginAuth = this.pluginInfo?.auth_info;
+    if (!pluginAuth || pluginAuth.scope !== 'DYNAMIC') {
+      return false;
+    }
+    const dynamicNames = new Set(
+      (pluginAuth.auth_keys || [])
+        .map((item: any) => (item?.target_name ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (!dynamicNames.size) {
+      return false;
+    }
+    const marker = 'dynamic auth credential, bind value in workflow';
+    const name = (arg?.name ?? '').trim().toLowerCase();
+    return dynamicNames.has(name)
+      && (arg?.description === marker || arg?.value?.content === marker);
   }
 
   InitPathConfigs(input_schema): void {
@@ -1086,6 +1119,11 @@ export class CreateToolComponent implements OnInit {
     if (this.requestArgsForm && !this.showFromErrorByName(this.requestArgsForm.form, ['requestValidateRule'], true, 2)) {
       return;
     }
+    // FEAT-093 插件动态鉴权：请求头同名前端校验（后端 modifyTool 同样拒绝，
+    // 此处提前拦截——大小写不敏感）
+    if (!this.checkDynamicAuthHeaderConflict()) {
+      return;
+    }
 
     const data = this.buildRequestBody();
     this.loading = true;
@@ -1095,6 +1133,53 @@ export class CreateToolComponent implements OnInit {
       await this.registerPlugin(data);
     }
     this.loading = false;
+  }
+
+  /**
+   * FEAT-093 插件动态鉴权：请求头同名前端校验。
+   * 工具的固定请求头（headers 键）与 Headers 位置入参（requestArgs
+   * location=Headers 的 name）不得与父插件动态鉴权头（auth_info
+   * scope=DYNAMIC 的 auth_keys[].target_name）同名（大小写不敏感）——
+   * 同名头运行期相互覆盖，保存期即拒绝。返回 true=通过。
+   */
+  public checkDynamicAuthHeaderConflict(): boolean {
+    // 注意字段名：插件详情对象上是 auth_info（API 字段），不是 auth
+    const pluginAuth = this.pluginInfo?.auth_info;
+    if (!pluginAuth || pluginAuth.scope !== 'DYNAMIC') {
+      return true;
+    }
+    const dynamicNames = new Set(
+      (pluginAuth.auth_keys || [])
+        .map(item => (item?.target_name ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (!dynamicNames.size) {
+      return true;
+    }
+    const conflicts: string[] = [];
+    for (const header of this.headers || []) {
+      const name = (header?.key ?? '').trim().toLowerCase();
+      if (name && dynamicNames.has(name)) {
+        conflicts.push(header.key);
+      }
+    }
+    for (const arg of this.requestArgs || []) {
+      if (arg?.location === 'Headers') {
+        const name = (arg?.name ?? '').trim().toLowerCase();
+        if (name && dynamicNames.has(name)) {
+          conflicts.push(arg.name);
+        }
+      }
+    }
+    if (conflicts.length) {
+      MessageComponent.showError(
+        this.i18n.transform('plugin_dynamic_auth_header_conflict') +
+          conflicts.join('、'),
+        5000,
+      );
+      return false;
+    }
+    return true;
   }
 
   async updatePlugin(data: PluginDetail) {

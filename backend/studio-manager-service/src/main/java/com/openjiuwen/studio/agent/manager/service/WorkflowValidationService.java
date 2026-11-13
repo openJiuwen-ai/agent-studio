@@ -880,7 +880,11 @@ public class WorkflowValidationService {
     private void validateFieldNames(List<WorkflowFieldVO> fieldList, Node node,
         List<WorkflowValidationVOErrors> errors) {
         for (WorkflowFieldVO field : fieldList) {
-            if (!isNameValid(field.getName())) {
+            // FEAT-093：Headers 通道参数（含动态鉴权头）不按标识符规则校验——
+            // 头名是 HTTP 语义（RFC 7230 token，数字开头合法如 3-pwa），运行期
+            // 按 dict 键消费无标识符约束；历史 DSL 未持久化 location 的由动态
+            // 鉴权标记描述兜底识别
+            if (!isHeaderChannelField(field) && !isNameValid(field.getName())) {
                 errors.add(new WorkflowValidationVOErrors().setId(node.getId())
                     .setType(node.getType())
                     .setReason(MessageFormat.format(i18nUtil.getMessage("workflow.validate.composed"), node.getId(),
@@ -889,6 +893,21 @@ public class WorkflowValidationService {
             // 递归校验 object / array<object> 子字段名（子字段声明在 schema 中）
             validateNestedFieldNames(field, node, errors);
         }
+    }
+
+    /**
+     * FEAT-093 判定字段是否走 HTTP 请求头通道（不适用标识符命名规则）。
+     * location=Headers（前端保存的 DSL）或描述=动态鉴权追加标记
+     * （历史 DSL 未带 location 的兜底）。
+     */
+    private boolean isHeaderChannelField(WorkflowFieldVO field) {
+        if (field == null) {
+            return false;
+        }
+        if ("Headers".equalsIgnoreCase(field.getLocation())) {
+            return true;
+        }
+        return IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(field.getDescription());
     }
 
     /**

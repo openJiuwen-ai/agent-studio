@@ -49,6 +49,9 @@ import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.SearchCriteria;
+import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.plugin.BasicInfo;
@@ -141,6 +144,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.TreeSet;
@@ -314,6 +318,9 @@ public class PluginService implements IPluginService {
         log.info("operation log {}: start to create plugin", projectId);
         PluginDTO pluginDTO = buildPluginEntity(projectId, workspaceId, body);
 
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝
+        pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+
         log.info("Checking for duplicate display name - DisplayName: {}, WorkspaceId: {}",
             pluginDTO.getPluginDisplayName(), workspaceId);
         int existDisplayName = pluginMapper.selectByDisplayNameAndWorkspaceId(pluginDTO.getPluginDisplayName(),
@@ -355,6 +362,12 @@ public class PluginService implements IPluginService {
             throw new AgentStudioException(StudioError.TOOL_NOT_EXIST);
         }
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
+
+        // FEAT-093 插件动态鉴权：父插件动态头 vs 新建工具的固定 headers/Headers 参数同名拒绝
+        pluginBase.validPluginDynamicAuthInfo(pluginEntity.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            pluginEntity.getAuthInfo(), body.getInputSchema()));
 
         String toolId = addTool(body, pluginDTO);
 
@@ -1290,6 +1303,9 @@ public class PluginService implements IPluginService {
             log.error("callMode can not modify, pluginId:{}", pluginId);
             throw new AgentStudioException(StudioError.PLUGIN_CALL_MODE_CANNOT_MODIFFY);
         }
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝
+        // （存量插件改动态鉴权时，请求体自带 headers 即本请求内校验）
+        pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), null);
         if (Strings.CS.equals(body.getCallMode(), PluginCallModeEnum.API.getCode())) {
             // 预置插件支持修改auth描述
             if (ToolType.INNER.type.equals(oldPlugin.getType()) && Boolean.TRUE.equals(oldPlugin.getAuthRequired())) {
@@ -2238,6 +2254,7 @@ public class PluginService implements IPluginService {
         urlCheckUtils.checkUrl(projectId, requestInfo.getUrl());
     }
 
+
     /**
      * 生成16位唯一ID（基于UUID截取）
      *
@@ -2313,6 +2330,13 @@ public class PluginService implements IPluginService {
         if (authInfoReq.getAuthKeys() != null && (authInfoReq.getDomain() == null || authInfoReq.getScope() == null)) {
             throw new AgentStudioException(StudioError.PLUGIN_AUTH_KEY_DOMAIN_NOT_NULL);
         }
+
+        // FEAT-093 插件动态鉴权：登记侧校验 + 存量工具请求头（插件行上的
+        // requestInfo/inputSchema JSON 串）同名拒绝
+        pluginBase.validPluginDynamicAuthInfo(authInfoReq,
+            StringUtils.isBlank(pluginEntity.getRequestInfo())
+                ? null : JSON.parseObject(pluginEntity.getRequestInfo(), RequestInfo.class),
+            pluginEntity.getInputSchema());
 
         // 2. 复用现有的加密逻辑，对最新的鉴权信息进行加密
         AuthInfo encryptedAuth = encryptedAuthInfo(authInfoReq);

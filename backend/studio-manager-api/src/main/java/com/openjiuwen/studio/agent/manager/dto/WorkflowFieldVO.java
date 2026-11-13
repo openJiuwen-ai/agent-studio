@@ -61,6 +61,10 @@ public class WorkflowFieldVO implements Serializable {
     @Valid
     private Object schema = null;
 
+    @JsonProperty("location")
+    @Schema(description = "参数位置（Body/Query/Headers/Path，插件类节点参数）", example = "Body")
+    private String location = null;
+
     @JsonProperty("aging_level")
     @Schema(description = "老化级别", example = "session")
     private String agingLevel = null;
@@ -154,6 +158,15 @@ public class WorkflowFieldVO implements Serializable {
 
     public WorkflowFieldVO setSchema(Object schema) {
         this.schema = schema;
+        return this;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public WorkflowFieldVO setLocation(String location) {
+        this.location = location;
         return this;
     }
 

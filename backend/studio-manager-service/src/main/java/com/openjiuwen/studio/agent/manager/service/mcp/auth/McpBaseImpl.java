@@ -303,6 +303,10 @@ public class McpBaseImpl implements IMcpBase {
         }
         Set<String> targetNames = new HashSet<>();
         for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth auth_keys contains null element");
+            }
             String targetName = authKeyInfo.getTargetName();
             if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
                 throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
@@ -392,7 +396,62 @@ public class McpBaseImpl implements IMcpBase {
             });
         }
 
+        // FEAT-093 动态鉴权：auth_keys[].target_name 追加为参数条目（值不落库，
+        // 由智能体 MCP 参数配置绑定 literal/ref——记忆变量/入参引用），与
+        // IrAdapterService.appendDynamicAuthParams 的 IR 通道同源；否则单智能体
+        // 详情的参数快照不含动态凭证参数，前端「MCP参数配置」入参为空、无从绑定
+        appendDynamicAuthParamsToResourceParam(mcpService, mcpParams, headerInfo.keySet());
+
         return JSON.toJSONString(mcpParams);
+    }
+
+    /**
+     * FEAT-093 动态鉴权参数追加（单智能体参数快照通道）：
+     * scope=DYNAMIC 时把 auth_keys 的 target_name 追加为 ResourceParam 条目
+     * （与 server_config headers 按名去重、大小写不敏感，同 IR 通道约定）。
+     * defaultValue/value 恒空——凭证值不落库，绑定关系由前端保存进 extend_info。
+     *
+     * @param mcpService mcp服务实体
+     * @param mcpParams 待追加的参数列表
+     * @param existingNames 已存在的参数名（server_config headers），用于去重
+     */
+    private void appendDynamicAuthParamsToResourceParam(McpServiceEntity mcpService,
+        List<ResourceParam> mcpParams, Set<String> existingNames) {
+        AuthInfo authInfo = mcpService.getAuthInfo();
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return;
+        }
+        Set<String> existingNamesLower = new HashSet<>();
+        for (String name : existingNames) {
+            if (name != null) {
+                existingNamesLower.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                continue;
+            }
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName)
+                    || existingNamesLower.contains(targetName.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            mcpParams.add(ResourceParam.builder()
+                    .defaultValue(null)
+                    .name(targetName)
+                    .type("string")
+                    .description("")
+                    .value(ResourceParam.ValueDTO.builder()
+                            .type("literal")
+                            .content("")
+                            .build())
+                    .visibility(true)
+                    .required(false)
+                    .build());
+            existingNamesLower.add(targetName.toLowerCase(Locale.ROOT));
+        }
     }
 
     /**
@@ -407,16 +466,42 @@ public class McpBaseImpl implements IMcpBase {
             return;
         }
 
-        if (StringUtils.isNotBlank(agentMcp.getExtendInfo())) {
+        // FEAT-093：历史快照为空列表（"[]"，动态凭证参数补齐前落库）时同样允许回填，
+        // 否则纯动态鉴权服务的参数快照永远停在空列表，前端入参为空且无从绑定；
+        // 非空列表（用户已配置）仍尊重现状不覆盖
+        if (StringUtils.isNotBlank(agentMcp.getExtendInfo())
+                && !isEmptyResourceParamList(agentMcp.getExtendInfo())) {
             return;
         }
 
         String mcpId = agentMcp.getResourceId();
         McpServiceEntity mcpService = serviceDao.selectById(mcpId, CommonUtil.getTenantId(), CommonUtil.getDeptCode(), null);
         String parameter = parseMcpInput2ResourceParameter(mcpService);
+        // 新生成仍为空列表时不回写，避免每次详情加载都触发无意义落库
+        if (isEmptyResourceParamList(parameter)) {
+            return;
+        }
         agentMcp.setExtendInfo(parameter);
 
         mappingMapper.updateResourceParameterByAppIDAndResourceId(agentMcp);
+    }
+
+    /**
+     * 判断 extend_info 的 ResourceParam JSON 是否为空列表
+     * （空/“[]”/解析为空列表 → true；解析失败按非空处理，保守不动既有数据）。
+     *
+     * @param extendInfo 映射存储的参数 JSON
+     * @return 是否为空参数列表
+     */
+    private boolean isEmptyResourceParamList(String extendInfo) {
+        if (StringUtils.isBlank(extendInfo)) {
+            return true;
+        }
+        try {
+            return JSON.parseArray(extendInfo).isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

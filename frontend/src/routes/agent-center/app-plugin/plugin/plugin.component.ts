@@ -107,6 +107,7 @@ export class PluginComponent implements OnInit {
   public authMap = {
     'no_auth': this.i18n.transform('no_auth'),
     'API Key': 'API Key',
+    'DYNAMIC': this.i18n.transform('mcp_dynamic_auth'),
     'HIS': 'HIS',
     'IAM': 'IAM',
     'SGOV': 'HisSGOV',
@@ -120,7 +121,7 @@ export class PluginComponent implements OnInit {
   public lang = CommonUtils.getLanguage();
 
   public authInfo: {
-    type: 'no_auth' | 'API Key' | 'HIS' | 'IAM' | 'SGOV' | 'HIS_IAM' | 'CUSTOM_IAM';
+    type: 'no_auth' | 'API Key' | 'DYNAMIC' | 'HIS' | 'IAM' | 'SGOV' | 'HIS_IAM' | 'CUSTOM_IAM';
     location?: string;
     params?: {
       name: string;
