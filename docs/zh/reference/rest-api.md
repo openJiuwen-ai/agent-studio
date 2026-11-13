@@ -90,6 +90,25 @@ OpenJiuwen 的接口分为管理面（Manager）和运行时（Runtime）两部�
 | X-Auth-Token | 是 | 用户 Token，用于身份认证。获取方式见 [5.6 获取 Token](#56-获取-token) |
 | stream | 否 | 是否使用流式响应，仅 Runtime 对话类接口适用。默认为流式响应，设为 `false` 时返回非流式 JSON 响应 |
 
+### 2.4 智能体追问提示词
+
+调用 `POST /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions?workspace_id={workspace_id}` 时，`prompt` 为可选参数：
+
+- 传入非空白 `prompt` 时，本次请求优先使用该提示词，不修改智能体配置。
+- 未传、传入 `null`、空字符串或纯空白字符串时，按路径中的 `agent_id` 读取智能体运行配置中的追问提示词。
+- 智能体未配置追问提示词时，使用内置追问模板。
+
+例如，下面的请求使用已保存的追问提示词：
+
+```json
+{
+  "name": "我的智能体",
+  "enable": true
+}
+```
+
+`version_id` 未传时读取草稿运行配置；指定具体版本号时，读取该版本的追问提示词和模型配置。升级前生成的运行配置未包含追问配置，需要重新保存智能体；调用已发布版本时，需要重新发布。`name` 和 `enable` 的参数要求保持不变，工作流追问接口仍使用请求中的 `prompt`。
+
 ## 3. 响应格式
 
 ### 3.1 成功响应
