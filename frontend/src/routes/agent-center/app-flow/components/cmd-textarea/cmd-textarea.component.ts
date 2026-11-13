@@ -100,6 +100,11 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   innerVariantsItems: Array<CmdTextareaVariableItem> = [];
 
+  // 与 innerVariantsItems 逐项对应的坐标映射 [分组下标, 组内下标]。
+  // innerVariantsItems 统一按列表 DOM 渲染顺序（默认分组在前）扁平化，
+  // 本映射供滚动定位按坐标精确取 DOM 节点，不依赖全局平铺顺序。
+  private flatItemCoords: Array<[number, number]> = [];
+
   private preVariantsHash: string = ''; // 当前变量的哈希值，用于判断变量是否真正发生了变化
 
   private preAction: string = ''; // 记录按键
@@ -212,7 +217,6 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       const newVariants: CmdTextareaVariableGroup[] = [
         { label: '', items: [] },
       ];
-      this.innerVariantsItems.length = 0;
 
       this.variants?.forEach((item) => {
         // 无分组信息类型放到默认组
@@ -223,25 +227,33 @@ export class CmdTextareaComponent implements ControlValueAccessor {
             value: item,
           };
           newVariants[0].items.push(variantsItem);
-          this.innerVariantsItems.push(variantsItem);
         } else if (
           typeof item === 'object' &&
           'label' in item &&
           'value' in item
         ) {
           newVariants[0].items.push(item);
-          this.innerVariantsItems.push(item);
         } else if (
           typeof item === 'object' &&
           'label' in item &&
           'items' in item
         ) {
-          item?.items?.forEach((subItem, index) => {
-            this.innerVariantsItems.push(subItem);
-          });
           newVariants.push(item);
         } else {
         }
+      });
+
+      // 扁平列表统一按列表 DOM 渲染顺序生成（默认分组恒在最前、其后
+      // 按显式分组出现顺序）：高亮 getCandidateBGColor 以分组下标+组内
+      // 下标累加计数，与 selectedIndex 导航、insertSelectedTemplate 插入
+      // 使用的 innerVariantsItems 必须同序，否则混排时高亮与插入错位。
+      this.innerVariantsItems.length = 0;
+      this.flatItemCoords.length = 0;
+      newVariants.forEach((group, groupIndex) => {
+        group.items?.forEach((subItem, itemIndex) => {
+          this.innerVariantsItems.push(subItem);
+          this.flatItemCoords.push([groupIndex, itemIndex]);
+        });
       });
       const newVariantsHash = this.getVariantsHash(newVariants);
       // 只有变量值真正发生变化时，才重新设置innerVariants
@@ -365,6 +377,44 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       this.showList
     ) {
       event.preventDefault();
+      return;
+    }
+
+    // Tab 失焦修复：contenteditable 按 Tab 的默认行为是把焦点移到下一个
+    // 可聚焦控件，导致编辑中断且 blur 顺带触发保存。这里统一拦截：
+    // 变量列表打开时 Tab/Shift+Tab 当导航键（与方向键共用 moveSelection）；
+    // 关闭时 Tab 插入缩进、Shift+Tab 反缩进（与主流编辑器方向语义一致）。
+    // 带 Ctrl/Meta/Alt 修饰键时放行，不劫持浏览器/系统组合快捷键；
+    // 若调用方把 CMDS 配置为包含 'Tab'（保留原有按键开列表行为），
+    // 也放行到下方 CMDS 分支，避免破坏公开输入的既有语义。
+    if (
+      event.key === 'Tab' &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !this.CMDS?.includes('Tab')
+    ) {
+      event.preventDefault();
+      if (this.showList) {
+        this.moveSelection(event.shiftKey ? -1 : 1);
+      } else if (event.shiftKey) {
+        this.outdentAtCursor();
+      } else {
+        this.insertTextAtCursor('  ');
+      }
+      return;
+    }
+
+    // WCAG 2.1.2（无键盘陷阱）：Tab/Shift+Tab 已被拦截，键盘用户需要一条
+    // 确定性退出通路——Escape：变量列表打开时先关列表，再按时把焦点
+    // 交还页面（blur 顺带触发既有的保存逻辑）。
+    if (event.key === 'Escape') {
+      if (this.showList) {
+        event.preventDefault();
+        this.showList = false;
+      } else {
+        this.editor?.nativeElement?.blur();
+      }
       return;
     }
 
@@ -609,13 +659,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
     if (this.showList) {
       if (['ArrowUp', 'ArrowDown'].includes(event.key)) {
-        this.selectedIndex =
-          event.key === 'ArrowUp'
-            ? (this.selectedIndex - 1 + len) % len
-            : (this.selectedIndex + 1) % len;
-
+        this.moveSelection(event.key === 'ArrowUp' ? -1 : 1);
         event.stopPropagation();
-        this.scrollToVisibleArea();
       }
 
       if (event.key === 'Enter') {
@@ -624,6 +669,26 @@ export class CmdTextareaComponent implements ControlValueAccessor {
         );
       }
     }
+  }
+
+  /**
+   * 变量列表环形导航：dir=1 下移、dir=-1 上移。
+   * 供 handleSelectVar 的方向键与 onKeyDown 的 Tab 导航共用，
+   * 避免环形索引逻辑重复实现。
+   */
+  private moveSelection(dir: 1 | -1): void {
+    const total = this.innerVariants.reduce(
+      (n, g) => n + (g?.items?.length ?? 0),
+      0,
+    );
+    if (!total) {
+      return;
+    }
+    this.selectedIndex =
+      dir === 1
+        ? (this.selectedIndex + 1) % total
+        : (this.selectedIndex - 1 + total) % total;
+    this.scrollToVisibleArea();
   }
 
   public getCandidateBGColor(groupIndex: number, itemIndex: number): string {
@@ -667,6 +732,98 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     this._showList = false;
     this.isTriggerClick = false;
     this.renderFromText(text, offset + token.length);
+    this.emit();
+  }
+
+  /**
+   * 在光标处插入纯文本（如 Tab 缩进两个空格）。
+   * 与 insertSelectedTemplate 同一套纯文本模型插入，避免对 DOM 做手术；
+   * 超出 maxLength 时静默不插入，与可见字符拦截口径一致。
+   */
+  private insertTextAtCursor(text: string): void {
+    if (!text) {
+      return;
+    }
+    const editor = this.editor?.nativeElement;
+    if (!editor) {
+      return;
+    }
+    // 非折叠选区按文本编辑器的替换语义处理：在纯文本模型中计算选区
+    // 起点与长度，先校验“删除选区 + 插入”后的总长度再一次渲染结果——
+    // 拒绝插入时不做任何 DOM 变更，选区原样保留，编辑器与表单模型不会失同步。
+    // 选区长度不能用 Range.toString()：它只拼接 Text 节点字符，<br> 不计
+    // 换行，跨行选区会少算；须与 saveCursorPosition 同口径（文本长度 +
+    // <br> 计 1）分别计算起止偏移，再按 innerText 剔除零宽字符换算。
+    const { text: current, offset } = this.getCleanTextAndOffset();
+    let replaceLen = 0;
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const inside =
+        range.commonAncestorContainer === editor ||
+        editor.contains(range.commonAncestorContainer);
+      if (!range.collapsed && inside) {
+        const rawText = editor.innerText;
+        const rawStart = this.getRawOffsetBefore(
+          editor,
+          range.startContainer,
+          range.startOffset,
+        );
+        const rawEnd = this.getRawOffsetBefore(
+          editor,
+          range.endContainer,
+          range.endOffset,
+        );
+        if (rawStart >= 0 && rawEnd >= rawStart) {
+          const from = Math.min(rawStart, rawText.length);
+          const to = Math.min(rawEnd, rawText.length);
+          let cleanStart = 0;
+          let cleanEnd = 0;
+          for (let i = 0; i < to; i++) {
+            if (rawText[i] !== '\u200B') {
+              cleanEnd++;
+              if (i < from) {
+                cleanStart++;
+              }
+            }
+          }
+          replaceLen = cleanEnd - cleanStart;
+        } else {
+          // 兜底：边界点异常时退回 toString() 口径（不完美但优于完全跳过）
+          replaceLen = range.toString().replaceAll('\u200B', '').length;
+        }
+      }
+    }
+    const removed =
+      current.slice(0, offset) + current.slice(offset + replaceLen);
+    const merged = removed.slice(0, offset) + text + removed.slice(offset);
+    if (this.maxLength && merged.replace(/\n$/, '').length > this.maxLength) {
+      return;
+    }
+    this.renderFromText(merged, offset + text.length);
+    this.emit();
+  }
+
+  /**
+   * Shift+Tab 反缩进：删除光标所在行行首最多两个空格。
+   * 与 insertTextAtCursor 同一套纯文本模型：独立统计该行行首的
+   * 前导空格数——光标恰在行首（点击行首/按 Home）时也允许反缩进；
+   * 仅当光标落在被删空格范围内时收敛到行首，其余位置左移 cut 格。
+   */
+  private outdentAtCursor(): void {
+    const { text, offset } = this.getCleanTextAndOffset();
+    const lineStart = text.lastIndexOf('\n', Math.max(offset - 1, 0)) + 1;
+    let cut = 0;
+    while (cut < 2 && text[lineStart + cut] === ' ') {
+      cut++;
+    }
+    if (!cut) {
+      return;
+    }
+    const merged = text.slice(0, lineStart) + text.slice(lineStart + cut);
+    const rel = offset - lineStart;
+    const newOffset = rel <= cut ? lineStart : offset - cut;
+    this.renderFromText(merged, newOffset);
     this.emit();
   }
 
@@ -817,9 +974,25 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   private scrollToVisibleArea(): void {
     const listWrapper = this.list?.nativeElement;
-    const selectedElement = listWrapper.children[
-      this.selectedIndex
-    ] as HTMLDivElement;
+    if (!listWrapper) {
+      return;
+    }
+
+    // innerVariantsItems 已统一按列表 DOM 渲染顺序（默认分组在前）扁平化，
+    // 与高亮 getCandidateBGColor、插入 insertSelectedTemplate 共用同一套
+    // 索引模型；这里仍用 [分组下标, 组内下标] 坐标定位选中项，
+    // 不依赖 querySelectorAll 的全局平铺顺序。
+    const coords = this.flatItemCoords[this.selectedIndex];
+    const groupEl = coords
+      ? (listWrapper.querySelectorAll<HTMLElement>('.group')[coords[0]] ??
+        null)
+      : null;
+    const selectedElement = coords
+      ? (groupEl?.querySelectorAll<HTMLElement>('.item')[coords[1]] ?? null)
+      : null;
+    if (!selectedElement) {
+      return;
+    }
 
     const listWrapperRect = listWrapper.getBoundingClientRect();
     const selectedRect = selectedElement.getBoundingClientRect();
@@ -957,6 +1130,45 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       }
     }
     callback(offset);
+  }
+
+  /**
+   * 计算编辑器内某边界点 (node, offset) 之前的字符偏移，与
+   * saveCursorPosition 同口径：文本节点按 textContent 长度计数，
+   * <br> 计 1（innerText 中对应一个换行符）。
+   * 边界点不在编辑器内时返回 -1。
+   */
+  private getRawOffsetBefore(
+    containerEl: HTMLElement,
+    node: Node,
+    offset: number,
+  ): number {
+    if (node !== containerEl && !containerEl.contains(node)) {
+      return -1;
+    }
+    const preCaretRange = document.createRange();
+    preCaretRange.selectNodeContents(containerEl);
+    preCaretRange.setEnd(node, offset);
+    const tempDiv = document.createElement('div');
+    tempDiv.appendChild(preCaretRange.cloneContents());
+    const treeWalker = document.createTreeWalker(
+      tempDiv,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+      null,
+    );
+    let cur: Node;
+    let cnt = 0;
+    while ((cur = treeWalker.nextNode())) {
+      if (cur.nodeType === Node.TEXT_NODE) {
+        cnt += cur.textContent.length;
+      } else if (
+        cur.nodeType === Node.ELEMENT_NODE &&
+        cur.nodeName === 'BR'
+      ) {
+        cnt++;
+      }
+    }
+    return cnt;
   }
 
   /**
