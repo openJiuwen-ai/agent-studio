@@ -19,6 +19,7 @@ Correct semantics:
   alternative) -> merged OR-group (preserves the nested-branch deadlock fix).
 """
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -30,6 +31,7 @@ from openjiuwen.core.workflow.components.flow.branch_router import BranchRouter
 from jiuwen.extension.patches.parallel_branch_grouping_patch import (
     apply_parallel_branch_grouping_patch,
 )
+from jiuwen.extension.patches import nested_branch_barrier_patch as nested_patch
 from jiuwen.extension.patches.nested_branch_barrier_patch import (
     _compute_scc,
     apply_nested_branch_barrier_patch,
@@ -150,6 +152,66 @@ def test_scc_separates_serial_nodes_cycles_and_terminal_targets():
     assert len({comp[n] for n in ("upstream", "a", "terminal", "self", "isolated")}) == 5
 
 
+@pytest.mark.parametrize("co", [set(), {("branch", "if")}, {("unknown", "if")}])
+def test_non_coexecuting_predecessors_skip_scc(co, monkeypatch):
+    """Failed condition coverage needs neither adjacency construction nor SCC."""
+    def unexpected_scc(_adj):
+        pytest.fail("SCC computed without a co-executing candidate")
+
+    monkeypatch.setattr(nested_patch, "_compute_scc", unexpected_scc)
+    graph = SimpleNamespace()
+    assert not nested_patch._always_executes(graph, co, {"branch": {"if", "else"}})
+    assert not hasattr(graph, "_adj_cache")
+    assert not hasattr(graph, "_cyclic_nodes_cache")
+
+
+def test_cyclic_nodes_include_only_actual_cycle_members():
+    graph = SimpleNamespace(_adj_cache={
+        "upstream": ["a"], "a": ["b"], "b": ["a", "terminal"],
+        "self": ["self"], "isolated": [],
+    })
+    assert nested_patch._get_cyclic_nodes(graph) == {"a", "b", "self"}
+
+
+@pytest.mark.parametrize("with_cycle", [False, True])
+def test_cycle_cache_reused_across_candidates_and_barriers(with_cycle, monkeypatch):
+    """Both empty DAG results and nonempty cycle results are computed only once."""
+    graph = _make_graph(
+        ["branch", "p", "q", "JOIN1", "JOIN2"],
+        wait_for_all_ids={"JOIN1", "JOIN2"},
+    )
+    router = BranchRouter()
+    router.add_branch("hit", ["p", "q"], branch_id="branch-if")
+    router.add_branch("True", ["p", "q"], branch_id="branch-default")
+    graph.add_conditional_edges("branch", router)
+    graph.register_branch_targets("branch", {"p", "q"})
+    if with_cycle:
+        graph.add_edge("p", "branch")
+    for target in ("JOIN1", "JOIN2"):
+        graph.add_edge("p", target)
+        graph.add_edge("q", target)
+
+    calls = 0
+    original = nested_patch._compute_scc
+
+    def counted_scc(adj):
+        nonlocal calls
+        calls += 1
+        return original(adj)
+
+    monkeypatch.setattr(nested_patch, "_compute_scc", counted_scc)
+    for target in ("JOIN1", "JOIN2"):
+        resolved = graph._resolve_barrier_groups(target, [{"p"}, {"q"}])
+        groups = _groups_as_sets(resolved)
+        if with_cycle:
+            assert groups == [frozenset({"p", "q"})]
+        else:
+            assert frozenset({"p"}) in groups
+            assert frozenset({"q"}) in groups
+    assert calls == 1
+    assert graph._cyclic_nodes_cache == ({"branch", "p"} if with_cycle else set())
+
+
 def test_coexecuting_lanes_stay_and_groups():
     """Customer topology: branch paths re-converge before the fork.
 
@@ -202,7 +264,7 @@ def test_coexecuting_lanes_stay_and_groups():
     assert fire_count == 1
 
 
-def test_exclusive_conditions_still_merge_or():
+def test_exclusive_conditions_still_merge_or(monkeypatch):
     """Original nested-branch deadlock scenario must be preserved.
 
     Branch A routes if/elif to the same target T1 (reaching p1) and default
@@ -210,6 +272,10 @@ def test_exclusive_conditions_still_merge_or():
     a mutually-exclusive alternative; p1 and p2 merge into one OR-group so
     whichever path executes satisfies the barrier (no deadlock).
     """
+    def unexpected_scc(_adj):
+        pytest.fail("exclusive predecessors must not trigger SCC computation")
+
+    monkeypatch.setattr(nested_patch, "_compute_scc", unexpected_scc)
     g = _make_graph(
         ["branchA", "T1", "T2", "p1", "p2", "JOIN"],
         wait_for_all_ids={"JOIN"},
