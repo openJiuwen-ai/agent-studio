@@ -2266,6 +2266,54 @@ public class IrAdapterService {
         }
     }
 
+    /**
+     * FEAT-093 动态鉴权参数追加（ResourceParam 列表通道——智能体插件参数
+     * 快照/详情回显共用）：scope=DYNAMIC 时把 auth_keys 的 target_name
+     * 追加为参数条目（defaultValue/value 恒空——凭证值不落库，绑定关系由
+     * 前端保存进 mapping extends；与 McpBaseImpl.parseMcpInput2ResourceParameter
+     * 的追加语义一致）。与既有参数名按名去重、大小写不敏感。
+     *
+     * @param authInfo 插件鉴权信息
+     * @param params 待追加的参数列表
+     * @param existingNames 已存在的参数名（schema 属性名），用于去重
+     */
+    public static void appendDynamicAuthParamsToResourceParam(AuthInfo authInfo,
+        List<ResourceParam> params, Set<String> existingNames) {
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return;
+        }
+        Set<String> existingNamesLower = new HashSet<>();
+        for (String name : existingNames) {
+            if (name != null) {
+                existingNamesLower.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo) || StringUtils.isBlank(authKeyInfo.getTargetName())) {
+                continue;
+            }
+            String targetName = authKeyInfo.getTargetName();
+            if (existingNamesLower.contains(targetName.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            params.add(ResourceParam.builder()
+                    .defaultValue(null)
+                    .name(targetName)
+                    .type("string")
+                    .description("")
+                    .value(ResourceParam.ValueDTO.builder()
+                            .type("literal")
+                            .content("")
+                            .build())
+                    .visibility(true)
+                    .required(false)
+                    .build());
+            existingNamesLower.add(targetName.toLowerCase(Locale.ROOT));
+        }
+    }
+
     private Object convertDefaultValue(String defaultValue, String type) {
         if (StringUtils.isBlank(defaultValue)) {
             return null;

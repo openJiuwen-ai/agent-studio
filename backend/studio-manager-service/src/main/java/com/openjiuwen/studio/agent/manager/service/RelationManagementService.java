@@ -45,7 +45,9 @@ import com.openjiuwen.studio.agent.manager.dto.ToolReference;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ResourceParam;
+import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolInfo;
 import com.openjiuwen.studio.agent.manager.dto.plugin.ToolInputSchema;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -563,7 +565,7 @@ public class RelationManagementService implements IRelationManagementService {
             toolEntity = toolMapper.selectById(resourceId.split("#")[0]);
             inputSchemaStr = toolEntity != null ? toolEntity.getInputSchema() : null;
             if (!newTool) {
-                return buildResourceInputSchema(inputSchemaStr);
+                return buildResourceInputSchema(inputSchemaStr, resourceId);
             }
             // 若为新工具类型,根据toolId更新inputSchemaStr
             if (toolId != null && inputSchemaStr != null) {
@@ -581,10 +583,27 @@ public class RelationManagementService implements IRelationManagementService {
             inputSchemaStr = toolEntity.getInputSchema();
         }
 
-        return buildResourceInputSchema(inputSchemaStr);
+        return buildResourceInputSchema(inputSchemaStr, resourceId);
     }
 
-    private String buildResourceInputSchema(String inputSchemaStr) {
+    /**
+     * FEAT-093：解析插件的 DYNAMIC 鉴权（按 resourceId 前缀取插件行；
+     * 查库失败返回 null，调用方跳过追加不阻断）。
+     */
+    private AuthInfo resolveDynamicAuthByResource(String resourceId) {
+        try {
+            String pluginId = resourceId.split("#")[0];
+            com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity plugin =
+                    pluginMapper.selectByPrimaryKey(pluginId, null);
+            return Objects.isNull(plugin) ? null : plugin.getAuthInfo();
+        } catch (Exception e) {
+            log.warn("Failed to resolve plugin auth for dynamic param append, resourceId {}: {}",
+                    resourceId, e.getMessage());
+            return null;
+        }
+    }
+
+    private String buildResourceInputSchema(String inputSchemaStr, String resourceId) {
         // 如果inputSchemaStr为空，则抛异常
         if (inputSchemaStr == null || inputSchemaStr.isEmpty()) {
             String detail = "input_schema is empty; cannot build resource parameter.";
@@ -629,6 +648,11 @@ public class RelationManagementService implements IRelationManagementService {
             }
             toolParams.add(resourceParam);
         }
+        // FEAT-093 动态鉴权：auth_keys 头名追加为参数条目（值恒空不落库，
+        // 绑定关系由前端参数配置保存进 mapping extends——与 MCP
+        // parseMcpInput2ResourceParameter 的追加语义一致）
+        IrAdapterService.appendDynamicAuthParamsToResourceParam(
+                resolveDynamicAuthByResource(resourceId), toolParams, inputSchema.getProperties().keySet());
         return JSON.toJSONString(toolParams);
     }
 
@@ -1669,10 +1693,47 @@ public class RelationManagementService implements IRelationManagementService {
         for (ToolReference toolReference : toolReferences) {
             String pluginId = toolReference.getToolId();
             if (resourceParameters.containsKey(pluginId)) {
-                toolReference.setToolParameter(resourceParameters.get(pluginId));
+                // FEAT-093：缺动态鉴权头条目的存量快照展示层补齐（绑定保存后落库）
+                toolReference.setToolParameter(
+                        mergeDynamicAuthParamsForDisplay(pluginId, resourceParameters.get(pluginId)));
             }
         }
         return toolReferences;
+    }
+
+    /**
+     * FEAT-093：详情回显合并——智能体插件参数快照（tool_parameter）缺动态
+     * 鉴权头条目时展示层补齐（存量映射在快照生成时无追加；绑定保存后落库，
+     * 纯展示合并不写回 DB）。解析失败原样返回。
+     */
+    private String mergeDynamicAuthParamsForDisplay(String resourceId, String toolParameter) {
+        if (StringUtils.isBlank(toolParameter)) {
+            return toolParameter;
+        }
+        AuthInfo authInfo = resolveDynamicAuthByResource(resourceId);
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return toolParameter;
+        }
+        try {
+            List<ResourceParam> params = JSON.parseArray(toolParameter, ResourceParam.class);
+            if (Objects.isNull(params)) {
+                return toolParameter;
+            }
+            Set<String> existingNames = new HashSet<>();
+            for (ResourceParam param : params) {
+                if (Objects.nonNull(param) && StringUtils.isNotBlank(param.getName())) {
+                    existingNames.add(param.getName());
+                }
+            }
+            IrAdapterService.appendDynamicAuthParamsToResourceParam(authInfo, params, existingNames);
+            return JSON.toJSONString(params);
+        } catch (Exception e) {
+            log.warn("Failed to merge dynamic auth params for display, resourceId {}: {}",
+                    resourceId, e.getMessage());
+            return toolParameter;
+        }
     }
 
     /**
