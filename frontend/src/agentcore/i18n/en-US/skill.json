@@ -143,5 +143,8 @@
   "skill.add.success.tip": "Skill added.",
   "skill.delete.success.tip": "Skill deleted.",
   "skill.search.filter.placeholder": "Enter a keyword.",
-  "skill.selected.repeat.tip": "A skill with this name is already selected."
+  "skill.selected.repeat.tip": "A skill with this name is already selected.",
+  "skill.import.result.unzipError": "File parsing failed. Please check the OBS URL",
+  "skill.list.deleted.successfully": "Deleted successfully",
+  "skill.list.noData": "No Skill data yet. You can import data to get started"
 }
