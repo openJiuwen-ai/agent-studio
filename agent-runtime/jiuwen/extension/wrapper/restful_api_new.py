@@ -28,6 +28,7 @@ from jiuwen.common.configs.env_constants import (
     EXECUTION_NODE_TIMEOUT_KEY,
     JIUWEN_PROXY_ENABLE_KEY,
     PLUGIN_REQUEST_TIMEOUT_KEY,
+    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY,
 )
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
@@ -69,6 +70,35 @@ _ssl_context.set_ciphers(
     "ECDHE-RSA-AES128-GCM-SHA256"
 )
 _is_cert_loaded = False
+
+# 是否允许 unsafe legacy renegotiation（对接老 TLS 服务器时开启）
+_allow_legacy_renegotiation = os.environ.get(
+    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, ""
+).lower() == "true"
+
+# 允许 legacy renegotiation 时使用的 SSLContext（不复用 _ssl_context，因为它带了 OP_NO_RENEGOTIATION）
+_legacy_ssl_context: Optional[ssl.SSLContext] = None
+_legacy_ssl_context_cert_loaded = False
+
+
+def _build_legacy_ssl_context() -> ssl.SSLContext:
+    """构建允许 unsafe legacy renegotiation 的 SSLContext。
+
+    使用 create_default_context 保留默认信任库与校验默认值，
+    再叠加 OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION。
+    """
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    ctx.options |= getattr(ssl, "OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION", 0x4)
+    return ctx
+
+
+def _get_legacy_ssl_context() -> ssl.SSLContext:
+    """获取允许 legacy renegotiation 的 SSLContext（单例）。"""
+    global _legacy_ssl_context
+    if _legacy_ssl_context is None:
+        _legacy_ssl_context = _build_legacy_ssl_context()
+    return _legacy_ssl_context
+
 
 DEFAULT_STREAM_PLUGIN_BUFSIZE = 64 * 1024
 
@@ -390,6 +420,7 @@ class RestfulApiToolNew(Tool):
             await trace_manager.on_plugin_start(inputs)
             request_params = self._request_params_creator.create(inputs, **kwargs)
             self._validate_request_params(request_params)
+            self._load_cert(request_params)
 
             request = self._create_post_request(request_params)
             connector = Connector().get_tcp_connector()
@@ -433,6 +464,11 @@ class RestfulApiToolNew(Tool):
             params=request_params.query_params_in_inputs,
             **request_params.request_arg,
         )
+        # 仅在 api_cert 为 SSLContext 或 legacy renegotiation 开启时传 ssl，
+        # 否则让 connector 的 ssl 配置生效（保持原有行为）
+        ssl_param = self._get_aiohttp_ssl(request_params.api_cert)
+        if isinstance(ssl_param, ssl.SSLContext):
+            request["ssl"] = ssl_param
 
         if request_params.file_params:
             form_data = aiohttp.FormData()
@@ -576,7 +612,7 @@ class RestfulApiToolNew(Tool):
             ) as session:
                 request = dict(
                     url=request_params.ip_address_url,
-                    ssl=request_params.api_cert,
+                    ssl=self._get_aiohttp_ssl(request_params.api_cert),
                     allow_redirects=False,
                     timeout=timeout,
                 )
@@ -675,7 +711,7 @@ class RestfulApiToolNew(Tool):
             request = dict(
                 method=self._method,
                 url=request_params.ip_address_url,
-                ssl=request_params.api_cert,
+                ssl=self._get_aiohttp_ssl(request_params.api_cert),
                 allow_redirects=False,
                 timeout=_time_out_aiohttp,
                 params=request_params.query_params_in_inputs,
@@ -880,13 +916,51 @@ class RestfulApiToolNew(Tool):
         return merged_data
 
     def _load_cert(self, request_params: RequestParams):
-        """加载证书"""
-        global _is_cert_loaded
+        """加载证书。
+
+        - api_cert 为字符串（证书路径）：加载到 SSLContext
+        - api_cert 为 False（不校验证书）：使用默认行为
+        - 开启 PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION 时：
+          仅对字符串证书路径构造 legacy SSLContext；
+          bool 类型保持不变，由 aiohttp 请求层按需附加 legacy SSLContext，
+          避免破坏 requests 路径的 verify 参数
+        """
+        global _is_cert_loaded, _legacy_ssl_context_cert_loaded
+
+        # 开启 legacy renegotiation 时，仅处理字符串证书路径
+        if _allow_legacy_renegotiation:
+            if isinstance(request_params.api_cert, str):
+                # 有客户端证书，加载到 legacy SSLContext
+                legacy_ctx = _get_legacy_ssl_context()
+                if not _legacy_ssl_context_cert_loaded:
+                    legacy_ctx.load_cert_chain(certfile=request_params.api_cert)
+                    _legacy_ssl_context_cert_loaded = True
+                request_params.api_cert = legacy_ctx
+            # bool 类型不替换为 SSLContext，由 _get_aiohttp_ssl 按需构造
+            return
+
+        # 原有逻辑
         if isinstance(request_params.api_cert, str):
             if not _is_cert_loaded:
                 _ssl_context.load_cert_chain(certfile=request_params.api_cert)
                 _is_cert_loaded = True
             request_params.api_cert = _ssl_context
+
+    def _get_aiohttp_ssl(self, api_cert):
+        """获取 aiohttp 请求的 ssl 参数。
+
+        在 legacy renegotiation 模式下，为 bool 类型的 api_cert 构造独立的
+        legacy SSLContext，避免就地修改共享单例导致后续请求校验被永久关闭。
+        """
+        if isinstance(api_cert, ssl.SSLContext):
+            return api_cert
+        if _allow_legacy_renegotiation and isinstance(api_cert, bool):
+            ctx = _build_legacy_ssl_context()
+            if api_cert is False:
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+            return ctx
+        return api_cert
 
     def _check_url_validate(self, url: str):
         """检查 URL 验证"""
