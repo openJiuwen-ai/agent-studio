@@ -1138,6 +1138,11 @@ export class CreatePluginBaseComponent implements OnInit {
     } else if (authInfo.scope === 'HIS_IAM' || authInfo.scope === 'SGOV' || authInfo.scope === 'CUSTOM_IAM') {
       // do nothing
       return authInfo;
+    } else if (authInfo.scope === 'DYNAMIC') {
+      // FEAT-093 动态鉴权：auth_keys 形态与 SERVICE 同构但值恒空，
+      // 原样直通（掉进 USER-scope 的 source/target 分支会丢顶层
+      // auth_keys → 编辑回显读不到头名）
+      return authInfo;
     } else {
       auth.source = {
         domain: authInfo.domain?.toLowerCase(),
