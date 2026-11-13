@@ -1584,7 +1584,9 @@ public class PluginBaseImpl implements IPluginBase {
                     "dynamic auth target_name is duplicated: " + targetName);
             }
         }
-        // 详情回显回环条目剥离（标记识别），再对剩余 Headers 参数做同名拒绝
+        // 详情回显回环条目剥离（标记识别，仅用于校验豁免——持久侧由
+        // stripDynamicAuthRoundtripParams(AuthInfo, String) 独立剥离），再对
+        // 剩余 Headers 参数做同名拒绝
         SchemaConfig inputSchema = StringUtils.isBlank(inputSchemaStr)
                 ? null : JSON.parseObject(inputSchemaStr, SchemaConfig.class);
         stripDynamicAuthRoundtripParams(inputSchema, targetNamesLower);
@@ -1611,23 +1613,55 @@ public class PluginBaseImpl implements IPluginBase {
         }
     }
 
+    @Override
+    public String stripDynamicAuthRoundtripParams(AuthInfo authInfo, String inputSchemaStr) {
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || StringUtils.isBlank(inputSchemaStr)
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return inputSchemaStr;
+        }
+        Set<String> targetNamesLower = new HashSet<>();
+        for (AuthKeyInfo authKey : authInfo.getAuthKeys()) {
+            if (Objects.nonNull(authKey) && StringUtils.isNotBlank(authKey.getTargetName())) {
+                targetNamesLower.add(authKey.getTargetName().toLowerCase(Locale.ROOT));
+            }
+        }
+        try {
+            SchemaConfig schema = JSON.parseObject(inputSchemaStr, SchemaConfig.class);
+            boolean removed = stripDynamicAuthRoundtripParams(schema, targetNamesLower);
+            return removed ? JSON.toJSONString(schema) : inputSchemaStr;
+        } catch (Exception e) {
+            log.warn("Failed to strip dynamic auth roundtrip params from tool schema: {}", e.getMessage());
+            return inputSchemaStr;
+        }
+    }
+
     /**
      * 剥离工具 schema 中的动态鉴权自动追加条目（描述=DYNAMIC_AUTH_PARAM_DESC
      * 且名命中动态头集合的 Headers 参数——详情回显回环产物），保持
      * 单一事实源（auth_info）。名命中但描述不符的条目不剥离——由
      * 同名拒绝校验报错（用户自行添加的冲突头）。
+     *
+     * @return 是否有条目被剥离
      */
-    private static void stripDynamicAuthRoundtripParams(SchemaConfig inputSchema, Set<String> targetNamesLower) {
+    private static boolean stripDynamicAuthRoundtripParams(SchemaConfig inputSchema, Set<String> targetNamesLower) {
         if (Objects.isNull(inputSchema) || Objects.isNull(inputSchema.getProperties())) {
-            return;
+            return false;
         }
+        final boolean[] removed = {false};
         inputSchema.getProperties().entrySet().removeIf(entry -> {
             SchemaConfig value = entry.getValue();
-            return Objects.nonNull(value)
+            boolean hit = Objects.nonNull(value)
                     && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation())
                     && IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(value.getDescription())
                     && entry.getKey() != null
                     && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT));
+            if (hit) {
+                removed[0] = true;
+            }
+            return hit;
         });
+        return removed[0];
     }
 }

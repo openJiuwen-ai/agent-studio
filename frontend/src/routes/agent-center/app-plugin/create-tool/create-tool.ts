@@ -655,16 +655,49 @@ export class CreateToolComponent implements OnInit {
 
   InitRequestConfigs(): void {
     if (this.pluginDetail.arguments.length > 0) {
-      this.requestArgs = this.pluginDetail.arguments.map(arg => {
-        return {
-          ...arg,
-          depth: arg?.depth ?? 0,
-        };
-      });
+      // FEAT-093：过滤列表接口追加的动态鉴权头回环条目——编排侧（工作流/
+      // 智能体参数配置）需要的 Headers 入参在工具编辑表单里不是工具自有
+      // 参数（单一事实源=auth_info），否则用户一保存就被持久化进工具
+      // schema，造成鉴权头与工具请求头双显同名
+      this.requestArgs = this.pluginDetail.arguments
+        .filter(arg => !this.isDynamicAuthRoundtripParam(arg))
+        .map(arg => {
+          return {
+            ...arg,
+            depth: arg?.depth ?? 0,
+          };
+        });
       this.requestArgs = mapTreeAddKeyIndex(this.requestArgs, 0);
     } else {
       this.requestArgs = [];
     }
+  }
+
+  /**
+   * FEAT-093：识别列表接口追加进 schema 的动态鉴权头回环条目
+   * （Headers 位置 + 名命中 auth_info DYNAMIC 的 target_name——
+   * 后端追加时带专属描述标记，此处双条件防误伤同名自有参数）。
+   */
+  private isDynamicAuthRoundtripParam(arg: any): boolean {
+    if (arg?.location !== 'Headers') {
+      return false;
+    }
+    const pluginAuth = this.pluginInfo?.auth_info;
+    if (!pluginAuth || pluginAuth.scope !== 'DYNAMIC') {
+      return false;
+    }
+    const dynamicNames = new Set(
+      (pluginAuth.auth_keys || [])
+        .map((item: any) => (item?.target_name ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (!dynamicNames.size) {
+      return false;
+    }
+    const marker = 'dynamic auth credential, bind value in workflow';
+    const name = (arg?.name ?? '').trim().toLowerCase();
+    return dynamicNames.has(name)
+      && (arg?.description === marker || arg?.value?.content === marker);
   }
 
   InitPathConfigs(input_schema): void {
@@ -1110,7 +1143,8 @@ export class CreateToolComponent implements OnInit {
    * 同名头运行期相互覆盖，保存期即拒绝。返回 true=通过。
    */
   public checkDynamicAuthHeaderConflict(): boolean {
-    const pluginAuth = this.pluginInfo?.auth;
+    // 注意字段名：插件详情对象上是 auth_info（API 字段），不是 auth
+    const pluginAuth = this.pluginInfo?.auth_info;
     if (!pluginAuth || pluginAuth.scope !== 'DYNAMIC') {
       return true;
     }

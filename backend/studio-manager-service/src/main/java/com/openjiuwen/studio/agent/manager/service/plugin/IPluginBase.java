@@ -25,6 +25,14 @@ public interface IPluginBase {
      */
     void validPluginDynamicAuthInfo(AuthInfo authInfo, RequestInfo requestInfo, String inputSchemaStr);
 
+    /**
+     * FEAT-093 剥离工具 schema 中的动态鉴权自动追加条目（描述=DYNAMIC_AUTH_PARAM_DESC
+     * 标记且名命中动态头集合的 Headers 参数——列表接口追加的回环产物），返回
+     * 清理后的 schema JSON；无 DYNAMIC/无标记/解析失败时原样返回（不阻断保存）。
+     * 工具保存持久前调用，保持单一事实源（auth_info）。
+     */
+    String stripDynamicAuthRoundtripParams(AuthInfo authInfo, String inputSchemaStr);
+
     ToolEntity getToolEntityByVersion(String toolId, String versionId);
 
     PluginEntity getPluginEntityByVersion(String pluginId, String versionId);

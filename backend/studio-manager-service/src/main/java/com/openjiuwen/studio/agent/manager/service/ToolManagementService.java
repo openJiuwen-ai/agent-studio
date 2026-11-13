@@ -246,9 +246,12 @@ public class ToolManagementService implements IToolManagementService {
     public CreateToolRsp createToolV1(String projectId, String workspaceId, CreateToolReq body) {
         // FEAT-093 插件动态鉴权：与工具请求头同名拒绝（父插件/body 的动态头
         // vs 固定 headers + Headers 参数），回环条目先行剥离
+        AuthInfo effectiveDynamicAuth = resolveEffectiveDynamicAuth(projectId, workspaceId, body.getPluginId(), null, body.getAuthInfo());
         pluginBase.validPluginDynamicAuthInfo(
-            resolveEffectiveDynamicAuth(projectId, workspaceId, body.getPluginId(), null, body.getAuthInfo()),
-            body.getRequestInfo(), body.getInputSchema());
+            effectiveDynamicAuth, body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            effectiveDynamicAuth, body.getInputSchema()));
         ToolEntity toolEntity = buildToolEntity(projectId, workspaceId, body, false);
         int existDisplayName = toolMapper.selectByDisplayNameAndWorkspaceId(toolEntity.getToolDisplayName(), toolEntity.getWorkspaceId());
         if(existDisplayName > 0) {
@@ -461,9 +464,12 @@ public class ToolManagementService implements IToolManagementService {
 
         // FEAT-093 插件动态鉴权：与工具请求头同名拒绝（父插件按 toolId 前缀解析），
         // 回环条目先行剥离
+        AuthInfo effectiveDynamicAuth = resolveEffectiveDynamicAuth(projectId, workspaceId, null, toolId, body.getAuthInfo());
         pluginBase.validPluginDynamicAuthInfo(
-            resolveEffectiveDynamicAuth(projectId, workspaceId, null, toolId, body.getAuthInfo()),
-            body.getRequestInfo(), body.getInputSchema());
+            effectiveDynamicAuth, body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            effectiveDynamicAuth, body.getInputSchema()));
 
         // 预置插件支持修改auth描述
         if (ToolType.INNER.type.equals(oldTool.getType()) && Boolean.TRUE.equals(oldTool.getAuthRequired())) {

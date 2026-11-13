@@ -360,6 +360,9 @@ public class PluginService implements IPluginService {
 
         // FEAT-093 插件动态鉴权：父插件动态头 vs 新建工具的固定 headers/Headers 参数同名拒绝
         pluginBase.validPluginDynamicAuthInfo(pluginEntity.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            pluginEntity.getAuthInfo(), body.getInputSchema()));
 
         String toolId = addTool(body, pluginDTO);
 
