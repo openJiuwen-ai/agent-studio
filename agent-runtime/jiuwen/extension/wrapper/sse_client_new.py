@@ -156,9 +156,15 @@ class SSEClientNew(McpClient):
         headers = kwargs.get("dynamic_auth_headers")
         if not isinstance(headers, dict) or not headers:
             return None
-        return {k: v for k, v in headers.items()
-                if isinstance(k, str) and is_valid_outbound_header_name(k)
-                and is_valid_outbound_header_value(v)} or None
+        # G.EXP.04：三条件过滤不放推导式，显式循环表达
+        resolved = {}
+        for k, v in headers.items():
+            if not isinstance(k, str):
+                continue
+            if not is_valid_outbound_header_name(k) or not is_valid_outbound_header_value(v):
+                continue
+            resolved[k] = v
+        return resolved or None
 
     def _resolve_dynamic_credential_headers(self) -> dict:
         """FEAT-093 单智能体（react）链路：绑定模板解析为出站头。
