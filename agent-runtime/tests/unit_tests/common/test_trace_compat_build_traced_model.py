@@ -21,6 +21,7 @@
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from opentelemetry import trace as otel_trace
@@ -303,6 +304,63 @@ class TestCallScopedInheritance:
 
         proxy = build_traced_model(_Bare())
         assert proxy.config.model_name == "M-1"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_fallback_rebuilt_per_user(call_scope):
+        """无父路径装饰产物按调用期用户分桶：换用户重建，同用户复用。"""
+        proxy = build_traced_model(object())
+
+        async def invoke_as(user):
+            token = trace_compat._CURRENT_USER_ID.set(user)
+            try:
+                await proxy.invoke("q")
+            finally:
+                trace_compat._CURRENT_USER_ID.reset(token)
+
+        await invoke_as("u-1")
+        await invoke_as("u-1")
+        await invoke_as("u-2")
+        # 首个用户的装饰产物绝不复用到第二个用户头上（身份串染防护）
+        assert [d["identity"].get("user_id") for d in call_scope["decorated"]] == [
+            "u-1",
+            "u-2",
+        ]
+        assert len(call_scope["created"]) == 2
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_sync_decorated_product_tolerated(call_scope, monkeypatch):
+        """同步产物兼容：invoke 非 awaitable 直返、stream 同步可迭代直代。"""
+        import openjiuwen.core.session.tracer as core_tracer
+
+        def _sync_invoke(*args, **kwargs):
+            return "sync-ok"
+
+        def _sync_stream(*args, **kwargs):
+            yield "s1"
+            yield "s2"
+
+        monkeypatch.setattr(
+            core_tracer,
+            "decorate_model_with_trace",
+            lambda model, session, identity=None: SimpleNamespace(
+                invoke=_sync_invoke, stream=_sync_stream
+            ),
+            raising=False,
+        )
+        proxy = build_traced_model(object())
+        assert await proxy.invoke("q") == "sync-ok"
+        assert [chunk async for chunk in proxy.stream("q")] == ["s1", "s2"]
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_falsy_session_id_stays_definition_scoped(call_scope):
+        """空串等 falsy 会话 id 与缺省同落定义级路径（旧 falsy→哨兵语义）。"""
+        proxy = build_traced_model(object(), session_id="")
+        assert isinstance(proxy, trace_compat._CallScopedTracedModel)
+        await proxy.invoke("q")
+        assert call_scope["created"][0]["session_id"] == trace_compat.DEFINITION_SCOPED_SESSION_ID
 
 
 class TestDegrade:

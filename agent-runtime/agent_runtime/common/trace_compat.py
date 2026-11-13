@@ -271,8 +271,11 @@ class _CallScopedTracedModel:
     上层 llm span——llm span 的 OTel 父链本就按它解析），继承其会话 id
     与 trace id 动态建轻量会话、装饰当次调用——同一缓存模型在不同会话的
     执行各自归属，无跨请求污染。无 ambient 父（单组件调试等）退定义级
-    哨兵（DEFINITION_SCOPED_SESSION_ID + 不绑请求 trace），与旧版装饰期
-    绑定行为一致。解析/装饰任何失败退裸模型直调，绝不阻断业务调用。
+    哨兵（DEFINITION_SCOPED_SESSION_ID + 不绑请求 trace），装饰产物按
+    调用期用户分桶复用（user_id 是装饰期事实，整体单值缓存会让首个用户
+    的身份错归后续所有无父调用）。解析/装饰任何失败退裸模型直调；产物
+    的 invoke/stream 兼容同步形态（await 非协程/async for 非异步迭代器
+    会 TypeError），绝不阻断业务调用。
     """
 
     def __init__(self, model, identity, decorate) -> None:
@@ -281,23 +284,29 @@ class _CallScopedTracedModel:
         self._identity = dict(identity) if identity else {}
         self._decorate = decorate
         self._scoped_cache: dict[tuple[str, str], object] = {}
-        self._fallback = None
+        self._fallbacks: dict[str, object] = {}
         self._degrade_logged = False
 
     def _decorated_for_call(self) -> object:
         try:
             session_id, trace_id = _ambient_session_refs()
             if session_id is None:
-                # 无 ambient 父：退定义级哨兵（不绑请求 trace），首次构建后复用
-                if self._fallback is None:
+                # 无 ambient 父：退定义级哨兵（不绑请求 trace）；装饰产物
+                # 按调用期用户分桶缓存——跨用户复用会错归属（见类 docstring）
+                user_key = current_user_id() or ""
+                decorated = self._fallbacks.get(user_key)
+                if decorated is None:
                     session = create_agent_session_with_trace(
                         session_id=DEFINITION_SCOPED_SESSION_ID,
                         trace_id=_DEFINITION_NO_TRACE,
                     )
-                    self._fallback = _decorate_model_with_facts(
+                    decorated = _decorate_model_with_facts(
                         self._decorate, self._model, session, self._identity
                     )
-                return self._fallback
+                    if len(self._fallbacks) >= _CALL_SCOPE_CACHE_LIMIT:
+                        self._fallbacks.clear()
+                    self._fallbacks[user_key] = decorated
+                return decorated
             key = (session_id, trace_id)
             decorated = self._scoped_cache.get(key)
             if decorated is None:
@@ -320,11 +329,22 @@ class _CallScopedTracedModel:
             return self._model
 
     async def invoke(self, *args, **kwargs):
-        return await self._decorated_for_call().invoke(*args, **kwargs)
+        # 产物兼容同步形态：降级退裸模型等场景 invoke 可能不是协程，
+        # 盲 await 会 TypeError（与旧版直接返回裸模型的接口契约等宽）
+        result = self._decorated_for_call().invoke(*args, **kwargs)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
 
     async def stream(self, *args, **kwargs):
-        async for chunk in self._decorated_for_call().stream(*args, **kwargs):
-            yield chunk
+        # 同上：stream 可能是同步可迭代对象，按形态分流
+        result = self._decorated_for_call().stream(*args, **kwargs)
+        if hasattr(result, "__aiter__"):
+            async for chunk in result:
+                yield chunk
+        else:
+            for chunk in result:
+                yield chunk
 
     def __getattr__(self, name: str):
         return getattr(self._model, name)
@@ -340,7 +360,8 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
       不会因执行会话与装饰会话是两个对象而分叉 trace；层间双计由后端
       "优先计子、无子再计桥" 规则去重；
     - 定义级产物（工作流 IR 转换出的组件模型，跨执行复用；session_id
-      缺省或传 ``DEFINITION_SCOPED_SESSION_ID``）不装饰期绑定会话——绑
+      缺省、空串等 falsy 值或传 ``DEFINITION_SCOPED_SESSION_ID``）不装
+      饰期绑定会话——绑
       任一构建期请求会把后续执行错归该请求的 trace/会话；返回
       ``_CallScopedTracedModel`` 调用期解析代理：每次 invoke/stream 继承
       ambient 上层 span 的会话 id 与 trace id 动态装饰，无上层（单组件
@@ -358,7 +379,7 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
     except Exception as e:  # noqa: BLE001 - core 无该入口
         logger.warning("build_traced_model: decorate entry missing, bare model kept: %s", e)
         return model
-    if session is not None or (session_id is not None and session_id != DEFINITION_SCOPED_SESSION_ID):
+    if session is not None or (session_id and session_id != DEFINITION_SCOPED_SESSION_ID):
         # 显式会话 / 请求级会话 id：装饰期绑定（既有语义）
         try:
             if session is None:
