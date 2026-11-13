@@ -128,6 +128,9 @@ class JointEvaluatorWithRef:
         if not compare_res:
             return 0, "Parse JSON error: Empty result"
 
+        if not isinstance(compare_res, dict):
+            return 0, "Parse JSON error: Expected an object"
+
         score = 1 if compare_res.get("result", False) is True else 0
         reason = compare_res.get("reason", "")
 
