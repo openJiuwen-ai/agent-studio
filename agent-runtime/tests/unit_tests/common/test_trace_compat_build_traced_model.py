@@ -8,10 +8,11 @@
   签名探测降级已按 2026-11-06 决策撤除：装饰无条件进行，identity 有则
   必透传；运行期任何失败（导入 / 建会话 / 装饰抛错，含旧 core 上
   identity 参数缺失引发的 TypeError）整体降级返回裸模型，绝不阻断业务；
-- session 显式传入则直接复用；否则新建轻量 agent session：定义级产物
-  （跨执行复用的组件/模型）落 DEFINITION_SCOPED_SESSION_ID 且不绑构建期
-  请求 trace，请求级场景（react 每执行新建）透传当次会话 id、trace 走
-  请求上下文；
+- session 显式传入则直接复用；否则分路径：定义级产物（跨执行复用的
+  组件/模型）返回调用期代理——有 ambient 上层 span 时继承其会话 id
+  （llm span 归属真实会话），无上层退 DEFINITION_SCOPED_SESSION_ID 且
+  不绑请求 trace；请求级场景（react 每执行新建）透传当次会话 id、
+  装饰期绑定；
 - identity 归因：透传给装饰器（业务 workflow_id/agent_id 附到独立/子
   llm span，write-if-absent）；
 - 五个裸 Model 构造点全部经工厂接线，资源注册路径（get_model 已装饰）除外；
@@ -361,6 +362,23 @@ class TestCallScopedInheritance:
         assert isinstance(proxy, trace_compat._CallScopedTracedModel)
         await proxy.invoke("q")
         assert call_scope["created"][0]["session_id"] == trace_compat.DEFINITION_SCOPED_SESSION_ID
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_scope_cache_lru_evicts_least_recent(call_scope, monkeypatch):
+        """域缓存 LRU 逐出：命中刷新新鲜度，超限淘汰最久未用域而非整清。"""
+        monkeypatch.setattr(trace_compat, "_CALL_SCOPE_CACHE_LIMIT", 2)
+        proxy = build_traced_model(object())
+        with _AmbientShellSpan("conv-a"):
+            await proxy.invoke("1")  # 装饰 a，缓存 [a]
+            with _AmbientShellSpan("conv-b"):
+                await proxy.invoke("2")  # 装饰 b，缓存 [a, b]
+            await proxy.invoke("3")  # 命中 a 并刷新新鲜度，缓存 [b, a]
+            with _AmbientShellSpan("conv-c"):
+                await proxy.invoke("4")  # 装饰 c，逐出最久未用的 b，缓存 [a, c]
+            await proxy.invoke("5")  # a 存活（被刷新过）→ 命中，仍是 3 次装饰
+        assert len(call_scope["decorated"]) == 3
+        assert [c["session_id"] for c in call_scope["created"]] == ["conv-a", "conv-b", "conv-c"]
 
 
 class TestDegrade:

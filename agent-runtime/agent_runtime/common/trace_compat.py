@@ -20,6 +20,7 @@ DEFINITION_SCOPED_SESSION_ID 哨兵。
 from __future__ import annotations
 
 import inspect
+from collections import OrderedDict
 from contextvars import ContextVar
 
 from jiuwen.common.log.base import get_x_request_id, logger
@@ -154,7 +155,8 @@ DEFINITION_SCOPED_SESSION_ID = "workflow-llm"
 _OJ_SESSION_ID_ATTR = "openjiuwen.session_id"
 
 # 调用期装饰缓存上限：键为 (会话 id, trace id)，单工作流并发执行的会话数
-# 有限；超限整体清空重建（遥测侧缓存，宁缺勿涨）。
+# 有限；超限 LRU 逐出最久未用域（遥测侧缓存宁缺勿涨——被逐域复现时重建，
+# 代价一次轻量会话创建，不丢 span）。
 _CALL_SCOPE_CACHE_LIMIT = 32
 
 
@@ -269,13 +271,16 @@ class _CallScopedTracedModel:
     会话/trace 错归到后续所有执行（缓存模型保留首调会话，检视 198236863）。
     本代理把装饰推迟到每次 invoke/stream：读 ambient 当前 span（组件壳/
     上层 llm span——llm span 的 OTel 父链本就按它解析），继承其会话 id
-    与 trace id 动态建轻量会话、装饰当次调用——同一缓存模型在不同会话的
-    执行各自归属，无跨请求污染。无 ambient 父（单组件调试等）退定义级
-    哨兵（DEFINITION_SCOPED_SESSION_ID + 不绑请求 trace），装饰产物按
-    调用期用户分桶复用（user_id 是装饰期事实，整体单值缓存会让首个用户
-    的身份错归后续所有无父调用）。解析/装饰任何失败退裸模型直调；产物
-    的 invoke/stream 兼容同步形态（await 非协程/async for 非异步迭代器
-    会 TypeError），绝不阻断业务调用。
+    动态建轻量会话、装饰当次调用（ambient 的 trace id 一并传入会话工厂
+    ——core 0.1.17_hotfix 工厂暂不转发该参数，OTel 父链按 ambient 解析、
+    与旧版一致，传入是为 core 补齐转发后的前向兼容）——同一缓存模型在
+    不同会话的执行各自归属，无跨请求污染，域缓存超限 LRU 逐出。无
+    ambient 父（单组件调试等）退定义级哨兵（DEFINITION_SCOPED_SESSION_ID
+    + 不绑请求 trace），装饰产物按调用期用户分桶复用（user_id 是装饰期
+    事实，整体单值缓存会让首个用户的身份错归后续所有无父调用）。解析/
+    装饰任何失败退裸模型直调；产物的 invoke/stream 兼容同步形态
+    （await 非协程/async for 非异步迭代器会 TypeError），绝不阻断业务
+    调用。
     """
 
     def __init__(self, model, identity, decorate) -> None:
@@ -283,8 +288,8 @@ class _CallScopedTracedModel:
         # 调用方 identity 的私有副本：装饰期增补绝不改写调用方字典
         self._identity = dict(identity) if identity else {}
         self._decorate = decorate
-        self._scoped_cache: dict[tuple[str, str], object] = {}
-        self._fallbacks: dict[str, object] = {}
+        self._scoped_cache: OrderedDict[tuple[str, str], object] = OrderedDict()
+        self._fallbacks: OrderedDict[str, object] = OrderedDict()
         self._degrade_logged = False
 
     def _decorated_for_call(self) -> object:
@@ -295,30 +300,34 @@ class _CallScopedTracedModel:
                 # 按调用期用户分桶缓存——跨用户复用会错归属（见类 docstring）
                 user_key = current_user_id() or ""
                 decorated = self._fallbacks.get(user_key)
-                if decorated is None:
-                    session = create_agent_session_with_trace(
-                        session_id=DEFINITION_SCOPED_SESSION_ID,
-                        trace_id=_DEFINITION_NO_TRACE,
-                    )
-                    decorated = _decorate_model_with_facts(
-                        self._decorate, self._model, session, self._identity
-                    )
-                    if len(self._fallbacks) >= _CALL_SCOPE_CACHE_LIMIT:
-                        self._fallbacks.clear()
-                    self._fallbacks[user_key] = decorated
-                return decorated
-            key = (session_id, trace_id)
-            decorated = self._scoped_cache.get(key)
-            if decorated is None:
+                if decorated is not None:
+                    self._fallbacks.move_to_end(user_key)
+                    return decorated
                 session = create_agent_session_with_trace(
-                    session_id=session_id, trace_id=trace_id
+                    session_id=DEFINITION_SCOPED_SESSION_ID,
+                    trace_id=_DEFINITION_NO_TRACE,
                 )
                 decorated = _decorate_model_with_facts(
                     self._decorate, self._model, session, self._identity
                 )
-                if len(self._scoped_cache) >= _CALL_SCOPE_CACHE_LIMIT:
-                    self._scoped_cache.clear()
-                self._scoped_cache[key] = decorated
+                self._fallbacks[user_key] = decorated
+                while len(self._fallbacks) > _CALL_SCOPE_CACHE_LIMIT:
+                    self._fallbacks.popitem(last=False)
+                return decorated
+            key = (session_id, trace_id)
+            decorated = self._scoped_cache.get(key)
+            if decorated is not None:
+                self._scoped_cache.move_to_end(key)
+                return decorated
+            session = create_agent_session_with_trace(
+                session_id=session_id, trace_id=trace_id
+            )
+            decorated = _decorate_model_with_facts(
+                self._decorate, self._model, session, self._identity
+            )
+            self._scoped_cache[key] = decorated
+            while len(self._scoped_cache) > _CALL_SCOPE_CACHE_LIMIT:
+                self._scoped_cache.popitem(last=False)
             return decorated
         except Exception as e:  # noqa: BLE001 - 遥测失败退裸模型直调
             if not self._degrade_logged:
@@ -364,8 +373,9 @@ def build_traced_model(model, session=None, session_id: str = None, identity: di
       饰期绑定会话——绑
       任一构建期请求会把后续执行错归该请求的 trace/会话；返回
       ``_CallScopedTracedModel`` 调用期解析代理：每次 invoke/stream 继承
-      ambient 上层 span 的会话 id 与 trace id 动态装饰，无上层（单组件
-      调试等）退定义级哨兵且不绑请求 trace；
+      ambient 上层 span 的会话 id 动态装饰（trace id 一并传入会话工厂，
+      core 工厂暂不转发、OTel 父链仍按 ambient 解析，见代理类 docstring），
+      无上层（单组件调试等）退定义级哨兵且不绑请求 trace；
     - ``identity`` 透传业务归因键（workflow_id / agent_id / request_params /
       message_count / 会话事实 / ...，core 侧 write-if-absent 盖属性）：
       独立/子 llm span 带上业务身份与调用事实；user_id / 模型显示名在
