@@ -149,6 +149,7 @@
                       <nz-form-item style="margin-bottom: 0">
                         <nz-form-control>
                           <input
+                            #varNameCtrl="ngModel"
                             nz-input
                             type="text"
                             [name]="'objectsFormName_' + param.depth + '_' + i"
@@ -158,7 +159,11 @@
                             (input)="onObjectNameChange()"
                             [valueValidityValidator]="getObjectInputNames(param)"
                             [placeholder]="'input_placeholder' | i18nextEager"
+                            [class.input-error]="varNameCtrl.invalid && (varNameCtrl.dirty || varNameCtrl.touched)"
                           />
+                          <div *ngIf="varNameCtrl.invalid && (varNameCtrl.dirty || varNameCtrl.touched)" class="error-tip">
+                            {{ varNameCtrl.errors?.serviceName?.tiErrorMessage }}
+                          </div>
                         </nz-form-control>
                       </nz-form-item>
                     </div>

@@ -357,6 +357,14 @@ export class ObjectManageComponent extends ModalBaseComponent implements OnInit 
     this.showEdit = false;
   }
 
+  private getInvalidVarTip(): string {
+    const first = this.objectForm
+      ? Object.values(this.objectForm.controls).find(c => c.invalid)
+      : undefined;
+    const errors = first?.errors as { serviceName?: { tiErrorMessage?: string } } | null;
+    return errors?.serviceName?.tiErrorMessage || this.i18n.transform('check_form_error');
+  }
+
   createOrEdit() {
     Object.values(this.formGroup.controls).forEach(c => {
       c.markAsDirty();
@@ -364,6 +372,7 @@ export class ObjectManageComponent extends ModalBaseComponent implements OnInit 
     });
 
     if (this.formGroup.invalid) {
+      this.message.warning(this.i18n.transform('validation_name_tip'));
       return;
     }
 
@@ -372,6 +381,7 @@ export class ObjectManageComponent extends ModalBaseComponent implements OnInit 
         c.markAsDirty();
         c.updateValueAndValidity({ onlySelf: true });
       });
+      this.message.warning(this.getInvalidVarTip());
       return;
     }
 
