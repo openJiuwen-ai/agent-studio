@@ -60,7 +60,15 @@
           <tbody>
             <tr *ngFor="let row of basicTable.data; trackBy: trackByFn" style="height: 64px">
               <td nzEllipsis>{{ row.name }}</td>
-              <td nzEllipsis nz-tooltip [nzTooltipTitle]="customTipTmpl" [nzTooltipTitleContext]="{ $implicit: row.schemasFormat }">
+              <td
+                nzEllipsis
+                nz-popover
+                nzPopoverTrigger="click"
+                nzPopoverPlacement="bottomLeft"
+                [nzPopoverContent]="schemaPopoverTpl"
+                [nzPopoverContentContext]="row.schemasFormat"
+                class="cursor-pointer"
+              >
                 {{ row.schemasFormat }}
               </td>
               <td nzEllipsis>{{ row.creator_id }}</td>
@@ -245,6 +253,6 @@
   </div>
 </ng-template>
 
-<ng-template #customTipTmpl let-context>
-  <div style="max-height: 400px; white-space: pre-wrap">{{ context }}</div>
+<ng-template #schemaPopoverTpl let-context>
+  <div style="width: 480px; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: #191919">{{ context }}</div>
 </ng-template>
