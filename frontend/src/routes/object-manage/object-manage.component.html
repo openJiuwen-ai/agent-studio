@@ -170,6 +170,7 @@
                         [(ngModel)]="param.type"
                         (ngModelChange)="onObjectParamTypeChange(param)"
                         [nzOptions]="startTypeOptions"
+                        [nzOptionRender]="renderTpl"
                         [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                         style="width: 100%"
                       >
@@ -182,6 +183,7 @@
                           [(ngModel)]="param.type"
                           (ngModelChange)="onObjectParamTypeChange(param)"
                           [nzOptions]="startTypeOp"
+                          [nzOptionRender]="renderTpl"
                           [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                           style="width: 100%"
                         >
@@ -192,6 +194,7 @@
                             [(ngModel)]="param.type"
                             (ngModelChange)="onObjectParamTypeChange(param)"
                             [nzOptions]="standTypeOps"
+                            [nzOptionRender]="renderTpl"
                             [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                             style="width: 100%"
                           >
@@ -247,4 +250,11 @@
 
 <ng-template #customTipTmpl let-context>
   <div style="max-height: 400px; white-space: pre-wrap">{{ context }}</div>
+</ng-template>
+
+<!-- 类型标签含尖括号，cascader 默认 innerHTML 渲染会吞掉，改用文本插值 -->
+<ng-template #renderTpl let-option>
+  <div class="flex w-full justify-between h-[22px]">
+    <p>{{ option.label }}</p>
+  </div>
 </ng-template>
