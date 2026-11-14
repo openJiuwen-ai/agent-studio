@@ -16,12 +16,11 @@ COM-05：conversation_id 按声明式路由来源矩阵解析（路径段 / 直�
 关联字段由当前 ContextVar 注入），不再依赖外层 ServerErrorMiddleware。
 
 SYNC-01 P3.2 adapt（2026-09-19）：
-- 保留新分支 sync_01 独有能力：OTel span 注入（_to_otel_trace_id + NonRecordingSpan
-  + otel_context.attach）、jiuwen request_ctx（set_x_request_id/execution_id）、
+- 保留新分支 sync_01 独有能力：OTel 上下文传播、jiuwen request_ctx（set_x_request_id/execution_id）、
   IR 加载缓存（ir_load_cache）、客户 header 分仓（customer_headers）、env_variables
   占位、effective userId 配置覆盖。
-- OTel trace_id 继续从 request_id 派生（D-A 决策 a：保留新 OTel 行为，业务
-  trace_id 独立选值；两者映射可核查，不假定字面同）。
+- OTel Trace ID 由真实上游或 SDK 创建；request_id 是独立业务关联 ID，
+  不再为指定 Trace ID 构造无法导出的父 Span。
 - error 收口（build_unhandled_error_response / _conflict_response）P5-R3
   （2026-09-21）已落地 COM-03 error_factory：build_unhandled_error_response
   → from_internal/build_json_response（openjiuwen.12100004 INTERNAL_ERROR 500），
@@ -58,9 +57,8 @@ except ImportError:
     # set_session_id 旧版不返回 token → trace_token=None → reset 跳过（middleware 已检查 None）
     def reset_session_id(_token):
         pass
-from opentelemetry import context as otel_context, trace as otel_trace
-from opentelemetry.trace import SpanContext, TraceFlags, TraceState
-from opentelemetry.trace.span import NonRecordingSpan
+from opentelemetry import context as otel_context
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -222,17 +220,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             _jiuwen_ctx_token = _jiuwen_request_ctx.set({})
             set_x_request_id(request_id)
             set_x_execution_id(execution_id)
-            # 注入 OTel 上下文，使 openjiuwen 创建的 span 继承业务关联 trace_id
-            # （D-A：OTel trace 从 request_id 派生，业务 trace_id 独立选值）
-            _otel_span_ctx = SpanContext(
-                trace_id=_to_otel_trace_id(request_id),
-                span_id=int(uuid.uuid4().hex[:16], 16),
-                is_remote=False,
-                trace_flags=TraceFlags(TraceFlags.SAMPLED),
-                trace_state=TraceState(),
+            # Preserve a real upstream parent, if present. Without one, the SDK
+            # starts an actual root span. A random NonRecordingSpan would never
+            # be exported and makes every local trace appear to have no root.
+            _otel_token = otel_context.attach(
+                TraceContextTextMapPropagator().extract(
+                    carrier=request.headers, context=otel_context.get_current()
+                )
             )
-            _otel_span = NonRecordingSpan(_otel_span_ctx)
-            _otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
             request_token = _request_ctx.set(ctx)
             trace_token = set_session_id(trace_id)
 
