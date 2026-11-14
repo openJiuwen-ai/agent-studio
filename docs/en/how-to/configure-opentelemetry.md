@@ -316,6 +316,26 @@ docker compose restart
 
 ## 11. Common Issue Troubleshooting
 
+### Request correlation IDs and OTel Trace IDs
+
+`X-Request-Id`, the business `TraceID`, and `openjiuwen.trace.id` are correlation
+identifiers; they are not guaranteed to equal the OTel `trace_id`. Without an
+upstream tracing context, the SDK creates a real root span and its Trace ID.
+The middleware does not inject an unexported random parent to force a Trace ID.
+Resolve the actual `trace_id` through correlation attributes before searching
+the tracing backend.
+
+The middleware accepts valid W3C `traceparent` / `tracestate` and preserves an
+existing tracing context. Interrupted workflows retain the saved business ID
+without fabricating an OTel parent. If the upstream parent is not collected by
+the same backend, a partial trace can still appear incomplete; inspect upstream
+collection, sampling, and backend support for partial traces. The fix affects
+new executions and does not repair historical data automatically.
+
+Sequential workflow nodes may share the same workflow parent span. Parent IDs
+express hierarchy, while start and end times position the waterfall. Do not
+reparent sequential siblings solely to express execution order.
+
 | Symptom | Troubleshooting Direction |
 |---------|--------------------------|
 | `agent-runtime` service not visible in Jaeger UI | ① Confirm `OTEL_ENABLED=true`; ② Confirm `OTEL_EXPORTER_TYPE=otlp` (not console); ③ Check agent-runtime logs for `OpenTelemetry tracer initialized` |
