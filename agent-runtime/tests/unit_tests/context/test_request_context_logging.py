@@ -128,8 +128,8 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         self.assertRegex(request.state.request_id, _HEX32_PATTERN)
         self.assertRegex(request.state.execution_id, _HEX32_PATTERN)
 
-    async def test_otel_context_trace_id_matches_request_id_hex32(self):
-        """当 X-Request-Id 为32位16进制时，OTel 上下文的 trace_id 应与之完全一致。"""
+    async def test_hex_request_id_does_not_create_an_unexported_otel_parent(self):
+        """业务 Request ID 不能通过虚构父 Span 强制变成 OTel Trace ID。"""
         middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
         captured = {}
 
@@ -137,7 +137,8 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
         async def call_next(request):
             span = otel_trace.get_current_span()
-            captured["trace_id"] = hex(span.get_span_context().trace_id)
+            captured["valid_parent"] = span.get_span_context().is_valid
+            captured["request_id"] = _request_ctx.get().request_id
             return Response("ok")
 
         request = Request(
@@ -154,10 +155,11 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
         await middleware.dispatch(request, call_next)
 
-        self.assertEqual(captured["trace_id"], hex(int(hex_trace_id, 16)))
+        self.assertFalse(captured["valid_parent"])
+        self.assertEqual(captured["request_id"], hex_trace_id)
 
-    async def test_otel_context_trace_id_hashed_for_non_hex_request_id(self):
-        """当 X-Request-Id 非32位16进制时，OTel trace_id 应为 md5 哈希值。"""
+    async def test_non_hex_request_id_does_not_create_an_unexported_otel_parent(self):
+        """非十六进制业务 ID 同样不应创建无记录父 Span。"""
         middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
         captured = {}
 
@@ -165,7 +167,8 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
         async def call_next(request):
             span = otel_trace.get_current_span()
-            captured["trace_id"] = hex(span.get_span_context().trace_id)
+            captured["valid_parent"] = span.get_span_context().is_valid
+            captured["request_id"] = _request_ctx.get().request_id
             return Response("ok")
 
         request = Request(
@@ -182,8 +185,8 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
 
         await middleware.dispatch(request, call_next)
 
-        expected = _to_otel_trace_id(raw_request_id)
-        self.assertEqual(captured["trace_id"], hex(expected))
+        self.assertFalse(captured["valid_parent"])
+        self.assertEqual(captured["request_id"], raw_request_id)
 
     async def test_otel_context_detached_after_dispatch(self):
         """dispatch 结束后，OTel 上下文应恢复为注入前的状态。"""

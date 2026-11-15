@@ -321,6 +321,21 @@ docker compose restart
 
 ## 11. 常见问题排查
 
+### 请求关联 ID 与 OTel Trace ID
+
+`X-Request-Id`、业务 `TraceID` 及 `openjiuwen.trace.id` 用于业务关联，不能假定
+它们与 OTel `trace_id` 相同。没有上游追踪上下文时，SDK 为实际执行的 Span
+创建真实根节点和 Trace ID；入口不会为了指定 Trace ID 而注入未导出的随机父 Span。
+排查时应先通过业务关联属性找到实际 `trace_id`，再到追踪系统查询。
+
+入口接收合法的 W3C `traceparent` / `tracestate`，并保留已有的真实追踪上下文。
+中断恢复继续使用保存的业务关联 ID，但不会据此伪造 OTel 父节点。如果上游父 Span
+未被同一追踪后端采集，局部链路仍可能显示为不完整；应检查上游采集、采样和后端的
+部分链路展示能力。此修复只影响新执行，不会自动修复已存储的历史缺根数据。
+
+工作流中顺序执行的节点可以共享同一个工作流父 Span：父 ID 表示调用层级，
+起止时间表示瀑布图中的位置与耗时，不应仅为表示先后而把前一节点改为后一节点的父节点。
+
 | 现象 | 排查方向 |
 |------|---------|
 | Jaeger UI 里看不到 `agent-runtime` 服务 | ① 确认 `OTEL_ENABLED=true`；② 确认 `OTEL_EXPORTER_TYPE=otlp`（非 console）；③ 检查 agent-runtime 日志有无 `OpenTelemetry tracer initialized` |

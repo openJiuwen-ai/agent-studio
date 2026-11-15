@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-# 白盒断言：编译产物挂在 Workflow 实例的内部字段上，引擎没有公开访问器，
-# "compile 已绑定 pregel"这一判据只能经内部字段读取，无其它观测面。
+# 白盒断言：引擎没有公开的编译产物访问器，需检查每次 compile 返回的
+# CompiledGraph 持有独立 Pregel，且共享图不再保留执行期状态。
 # pylint: disable=protected-access
 """静态图复用真实引擎集成测试（spec §9.2；issue #1555 验收标准 2/3/5）。
 
@@ -50,7 +50,7 @@ from pathlib import Path
 import pytest
 
 # 先触发 patch 应用链（circular import 规避：引擎类后取）。
-# ir_converter 的 import 完成 sub_stream → ... → static_graph_patch（四件套）
+# ir_converter 的 import 完成 sub_stream → ... → static_graph_patch
 # 的应用；引擎类（CompiledGraph/PregelGraph/Workflow）在其后取。
 import jiuwen.serve.controllers.execution.ir_converter  # noqa: F401
 
@@ -138,7 +138,7 @@ def _streamed_message_node_ids(chunks):
 
 class TestConcurrentIsolationOnSharedInstance:
     @pytest.mark.asyncio
-    async def test_concurrent_streams_on_same_instance_are_isolated(self):
+    async def test_concurrent_streams_on_same_instance_are_isolated(self, monkeypatch):
         """同一 Workflow 实例 4 路并发、不同 session：全部完成且输出互不串扰。
 
         判别：① 每路终结帧 ``answer`` 回显本路 query；② 每路非 tracer 帧
@@ -147,6 +147,16 @@ class TestConcurrentIsolationOnSharedInstance:
         各自建/删、执行后无残留。
         """
         wf = await (await IRConverter.async_ir_to_workflow(_load_ir())).instantiate()
+        graph = wf._internal._graph
+        compile_graph = graph.compile
+        compiled_graphs = []
+
+        def capture_compile(session, **kwargs):
+            compiled = compile_graph(session, **kwargs)
+            compiled_graphs.append(compiled)
+            return compiled
+
+        monkeypatch.setattr(graph, "compile", capture_compile)
         queries = [f"hello-{i}" for i in range(4)]
 
         # 顺序参考（同实例、同 query）：并发输出须与其逐帧一致
@@ -174,11 +184,13 @@ class TestConcurrentIsolationOnSharedInstance:
         # 四路执行事件序列骨架一致：并发未污染任一执行的路径
         assert all(s == shapes[0] for s in shapes[1:])
 
-        # compile 产物已绑定（Patch A 保留 self.pregel 属性写入，指向最近一次
-        # compile 的产物——本断言只证"已绑定"，每执行独立 Pregel 的隔离
-        # 由上方的执行/内容断言承担）
-        graph = wf._internal._graph
-        assert graph.pregel is not None
+        # Four sequential references plus four concurrent executions must own
+        # distinct compiled state. Cached topology must not retain the last run.
+        assert len(compiled_graphs) == 2 * len(queries)
+        assert len({id(compiled) for compiled in compiled_graphs}) == len(compiled_graphs)
+        assert all(compiled._pregel is not None for compiled in compiled_graphs)
+        assert len({id(compiled._pregel) for compiled in compiled_graphs}) == len(compiled_graphs)
+        assert graph.pregel is None
 
         # checkpointer 隔离（本层）：各 session 的 checkpoint store 按
         # session_id 各自建/删，执行完成后无残留——跨 session 共享 store

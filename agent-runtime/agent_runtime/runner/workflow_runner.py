@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import time
@@ -43,28 +42,10 @@ from agent_runtime.common.trace_compat import create_workflow_session_with_trace
 from agent_runtime.error_contract.factory import is_plugin_response_format_error
 
 try:
-    from opentelemetry import trace as otel_trace
     from opentelemetry import context as otel_context
-    from opentelemetry.trace import SpanContext, TraceFlags, TraceState
-    from opentelemetry.trace.span import NonRecordingSpan
     _HAS_OTEL = True
 except ImportError:
     _HAS_OTEL = False
-
-
-def _to_otel_trace_id(trace_id_str: str) -> int:
-    """Convert a string to a valid OTel 128-bit trace_id.
-
-    OTel trace_id must be 32 hex chars (128-bit). If the input is already
-    32 hex, use it directly; otherwise hash with md5 to get 32 hex chars.
-    """
-    _HEX_CHARS = set("0123456789abcdefABCDEF")
-    if len(trace_id_str) == 32 and all(ch in _HEX_CHARS for ch in trace_id_str):
-        val = int(trace_id_str, 16)
-        if val != 0:
-            return val
-    return int(hashlib.md5(trace_id_str.encode()).hexdigest(), 16)
-
 
 
 from agent_runtime.common.logging_context import apply_template_masking_patch
@@ -475,24 +456,20 @@ class WorkflowRunner:
         t_session = time.perf_counter()
         # Outer try/finally ensures OTel context token is always detached,
         # even if client disconnects at early yield points (start/workflow_start).
+        otel_token = None
         try:
-            otel_token = None
+            # Scope SDK context changes to this generator, including early close.
+            # A business trace ID alone is not an OTel parent SpanContext.
+            otel_token = (
+                otel_context.attach(otel_context.get_current()) if _HAS_OTEL else None
+            )
             if is_interrupted:
                 # QA resume: reuse the trace_id from the first execution of this
                 # round so the OTel handler keeps the cached root context.
                 saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
                 if saved_trace_id:
-                    # Update current OTel context to use saved_trace_id
-                    if _HAS_OTEL:
-                        _otel_span_ctx = SpanContext(
-                            trace_id=_to_otel_trace_id(saved_trace_id),
-                            span_id=int(uuid.uuid4().hex[:16], 16),
-                            is_remote=False,
-                            trace_flags=TraceFlags(TraceFlags.SAMPLED),
-                            trace_state=TraceState(),
-                        )
-                        _otel_span = NonRecordingSpan(_otel_span_ctx)
-                        otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
+                    # Reuse the business trace ID and the SDK handler's actual
+                    # cached root, never manufacture an unexported parent ID.
                     session = create_workflow_session_with_trace(session_id=session_id, trace_id=saved_trace_id)
                 else:
                     session = create_workflow_session_with_trace(session_id=session_id)
@@ -792,7 +769,7 @@ class WorkflowRunner:
                     "createdTime": int(time.time() * 1000),
                 }
         finally:
-            # Detach OTel context token if we attached one (QA resume)
+            # Restore the incoming context, including on generator close.
             if otel_token is not None:
                 otel_context.detach(otel_token)
 
