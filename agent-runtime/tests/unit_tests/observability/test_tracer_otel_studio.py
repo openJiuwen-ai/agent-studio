@@ -25,7 +25,7 @@ from openjiuwen.core.workflow.components.tool.http import (
 )
 from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
 from openjiuwen.extensions.tracer_otel.handler import OtelWorkflowHandler
-from openjiuwen.extensions.tracer_otel.semconv import OJ_STATUS
+from openjiuwen.extensions.tracer_otel.semconv import OJ_STATUS, OJ_WORKFLOW_COMPONENT_ID
 
 from agent_runtime.observability.tracer_otel_studio import (
     OJ_BUSINESS_ERROR,
@@ -81,9 +81,9 @@ def _make_workflow(url):
 
 def _http_span(exporter):
     spans = exporter.get_finished_spans()
-    # 官方 openjiuwen 的 span_name 使用 node_id（span 名可读化不在本仓生效范围）
-    match = [s for s in spans if s.name == "component.http"]
-    assert match, f"no http span in {[s.name for s in spans]}"
+    # Span display names may use the configured node name; component ID is stable.
+    match = [s for s in spans if s.attributes.get(OJ_WORKFLOW_COMPONENT_ID) == "http"]
+    assert len(match) == 1, f"expected one http span in {[s.name for s in spans]}"
     return match[0]
 
 
