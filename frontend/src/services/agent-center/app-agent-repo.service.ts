@@ -778,7 +778,7 @@ export class AppAgentRepoService {
     if (app_type === 'agents') {
       seeUrl = `${this.http.prefixPath}/v1/${
         this.ctxServ.projectId
-      }/agent-manager/${app_type}/chat/${short_code}?workspace_id=${this.http.getWorkspaceId()}`;
+      }/agent-manager/${app_type}/chat/${short_code}?workspace_id=${this.http.getWorkspaceId()}&conversation_id=${encodeURIComponent(conversation_id)}`;
     }
     if (agent_type) {
       seeUrl = `${seeUrl}&agent_type=${agent_type}`

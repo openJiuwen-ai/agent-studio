@@ -977,11 +977,13 @@ public class AgentServiceProxyController {
         @PathVariable("short_code") String shortCode, @Pattern(regexp = "^[a-zA-Z0-9_()-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.QUERY, description = "空间id", schema = @Schema())
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @RequestParam(value = "conversation_id", required = false) String conversationId,
         @RequestHeader(value = "stream", required = false) Boolean stream,
         @NotNull @ApiParam(value = "输入参数", required = true) @Valid @RequestBody AgentRunReq body,
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId, @RequestHeader HttpHeaders httpHeaders) {
-        return agentServiceProxyService.runWebAgent(shortCode, projectId, httpHeaders, workspaceId, stream, body);
+        return agentServiceProxyService.runWebAgent(shortCode, projectId, httpHeaders, workspaceId, conversationId, stream, body);
     }
 
     @ApiResponses(value = {
