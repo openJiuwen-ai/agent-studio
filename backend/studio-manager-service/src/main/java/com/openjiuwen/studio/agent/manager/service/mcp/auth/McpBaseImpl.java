@@ -332,6 +332,50 @@ public class McpBaseImpl implements IMcpBase {
         }
     }
 
+    /**
+     * FEAT-093 动态鉴权头 vs serverConfig 固定请求头同名拒绝：
+     * scope=DYNAMIC 时把 serverConfig 的 headers（递归提取）与
+     * auth_keys[].target_name 做大小写不敏感比对，同名即抛错——
+     * 固定头在运行期先注入，动态凭证头按绑定值注入，同名会互相覆盖
+     * 造成凭证值被固定头值顶掉（或反向，固定头被运行期绑定值覆盖）。
+     *
+     * @param authInfo 鉴权信息（非 DYNAMIC 或空时直接跳过）
+     * @param serverConfig MCP 服务的 serverConfig JSON（可空）
+     */
+    @Override
+    public void validDynamicAuthHeaderConflict(AuthInfo authInfo, String serverConfig) {
+        if (Objects.isNull(authInfo) || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())
+                || StringUtils.isBlank(serverConfig)) {
+            return;
+        }
+        Map<String, String> fixedHeaders;
+        try {
+            fixedHeaders = CommonUtil.parseMcpConfigHeaderInfo(serverConfig);
+        } catch (Exception e) {
+            // 解析失败不在此处报错——调用方各自的 serverConfig 格式校验
+            // 会以更具体的错误码报出，此处跳过同名检查即可
+            log.warn("Skip dynamic auth header conflict check: serverConfig parse failed: {}", e.getMessage());
+            return;
+        }
+        if (fixedHeaders.isEmpty()) {
+            return;
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo) || StringUtils.isBlank(authKeyInfo.getTargetName())) {
+                continue;
+            }
+            String targetName = authKeyInfo.getTargetName();
+            for (String fixedName : fixedHeaders.keySet()) {
+                if (fixedName != null && fixedName.equalsIgnoreCase(targetName)) {
+                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                        "serverConfig header '" + fixedName
+                            + "' conflicts with dynamic auth header '" + targetName + "', remove the duplicate");
+                }
+            }
+        }
+    }
+
     @Override
     public AuthInfo validIsNeedToUpdateAuthInfo(AuthInfo newAuth, AuthInfo oldAuth) {
         log.info("Start to valid is need to update auth info!");

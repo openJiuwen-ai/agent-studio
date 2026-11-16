@@ -130,6 +130,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.HashSet;
@@ -874,6 +875,10 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
 
         mcpBase.validAuthInfo(serviceDeployReq.getAuthInfo());
+        // FEAT-093 动态鉴权头 vs serverConfig 固定请求头同名拒绝
+        // （固定头先注入、动态凭证头按绑定值注入，同名互相覆盖）
+        mcpBase.validDynamicAuthHeaderConflict(serviceDeployReq.getAuthInfo(),
+            serviceDeployReq.getServerConfig());
 
         // authInfo信息加密
         serviceDeployReq.setAuthInfo(mcpBase.encryptedAuthInfo(serviceDeployReq.getAuthInfo()));
@@ -2999,6 +3004,17 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
 
         mcpBase.validAuthInfo(serviceReq.getAuthInfo());
+        // FEAT-093 动态鉴权头 vs serverConfig 固定请求头同名拒绝。生效面取
+        // 「本请求改了哪个就用哪个」：serverConfig 未传时用存量解密串，
+        // authInfo 未传时用存量解密鉴权——否则只查请求体两个都非空的组合，
+        // 会漏掉「本次只改 headers、鉴权维持 DYNAMIC」的冲突面
+        String effectiveServerConfig = StringUtils.isNotBlank(serviceReq.getServerConfig())
+            ? serviceReq.getServerConfig()
+            : encryptionAdapter.decrypt(mcpServiceFromDb.getServerConfig());
+        AuthInfo effectiveAuthInfo = Objects.nonNull(serviceReq.getAuthInfo())
+            ? serviceReq.getAuthInfo()
+            : mcpBase.decryptedAuthInfo(mcpServiceFromDb.getAuthInfo());
+        mcpBase.validDynamicAuthHeaderConflict(effectiveAuthInfo, effectiveServerConfig);
         // 判断oauth是否更新，如果更新，则需要重新部署MCP
         boolean isAUthInfoUpdated = false;
         if (serviceReq.getAuthInfo() != null) {
