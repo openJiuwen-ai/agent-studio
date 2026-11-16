@@ -2199,6 +2199,195 @@ def test_inner_arm_outer_fork_coverage_requires_mutual_exclusion():
     assert ("I", "I-if") not in by_branch
 
 
+def _build_deep_nested_arm_ir(*, inner_reachable_from_outer_fork):
+    """深嵌套拓扑（线上理财工作流形态再加深一层）：外层 B → 内层 I → 最深 I2。
+
+    - B.default：携带 pid fork 标记的全 lane 臂（M0+M1），汇聚 C；
+    - B.if → I；I.if → I2（分支节点嵌套在另一分支节点臂后），I.else → M1；
+    - I2.if → M0 单 lane；I2.default → Z2（不汇聚 C）；
+    - 于是最深臂 (I2, I2-if) 的死 lane=M1 只能由 B.default 全 lane fork 臂覆盖，
+      互斥证明必须沿 B→I→I2 跨两级递归——旧的单跳 plain reach 检查
+      （I2 是否出现在 B 兄弟臂 B.if 的 plain reach {I} 中）必然断链。
+
+    inner_reachable_from_outer_fork=True 时额外加 M0→I2，使 I2 也能从
+    B.default 全 lane 臂到达 → 互斥前提破坏，跨分支证据必须被拒绝。
+    """
+    pid = "deep"
+    conns = [
+        _par_edge("node_start", "B"),
+        _par_edge("B", "I", branch="B-if"),
+        _par_edge("B", "M0", branch="B-default", sfork=pid),
+        _par_edge("B", "M1", branch="B-default", sfork=pid),
+        _par_edge("I", "I2", branch="I-if"),
+        _par_edge("I", "M1", branch="I-else"),
+        _par_edge("I2", "M0", branch="I2-if"),
+        _par_edge("I2", "Z2", branch="I2-default"),
+        _par_edge("M0", "VA"),
+        _par_edge("M1", "VB"),
+        _par_edge("VA", "C", tjoin=pid),
+        _par_edge("VB", "C", tjoin=pid),
+        _par_edge("C", "node_end"),
+    ]
+    if inner_reachable_from_outer_fork:
+        # 让 I2 也落在 B.default 全 lane 臂的可达集内 → 破坏互斥前提
+        conns.append(_par_edge("M0", "I2"))
+    return conns, pid
+
+
+def test_deeply_nested_arm_chain_proof_generates_skip():
+    """最深臂 (I2, I2-if) 的死 lane 由外层全 lane fork 臂跨两级覆盖：链式互斥
+    证明必须沿 B→I→I2 递归成立，为两级都补上 skip。
+
+    旧实现的单跳 plain reach 互斥检查在这一形态下断链（I2 不在 B.if 臂的
+    plain reach {I} 内），补偿被拒绝 → [done_M0, done_M1] AND 屏障死锁，
+    代码/结束节点静默不执行（线上 type=1 + res=0 试运行问题）。
+    """
+    conns, pid = _build_deep_nested_arm_ir(
+        inner_reachable_from_outer_fork=False
+    )
+    plan = build_parallel_join_plan(conns)
+    assert (pid, "C") in plan.joins
+
+    skip_plan = build_dead_lane_skip_plan(conns, plan)
+    by_branch = {(s.branch_node, s.branch_id): s for s in skip_plan.skips}
+    # 一级嵌套臂 (I, I-else)：只活 M1、死 M0，由 B.default 全 lane 臂互斥覆盖
+    level1_skip = by_branch.get(("I", "I-else"))
+    assert level1_skip is not None, by_branch.keys()
+    assert level1_skip.done_node == f"_parallel_done__{pid}__C__M0"
+    # 两级嵌套臂 (I2, I2-if)：只活 M0、死 M1，互斥证明需沿 B→I→I2 支配链
+    level2_skip = by_branch.get(("I2", "I2-if"))
+    assert level2_skip is not None, by_branch.keys()
+    assert level2_skip.done_node == f"_parallel_done__{pid}__C__M1"
+
+
+def test_deeply_nested_chain_requires_exclusive_premise():
+    """反例（深嵌套）：最深判定也能从外层全 lane fork 臂直接到达时两路径
+    可并存、不互斥——绝不能跨节点补 skip。
+    """
+    conns, pid = _build_deep_nested_arm_ir(
+        inner_reachable_from_outer_fork=True
+    )
+    plan = build_parallel_join_plan(conns)
+    assert (pid, "C") in plan.joins
+
+    skip_plan = build_dead_lane_skip_plan(conns, plan)
+    by_branch = {(s.branch_node, s.branch_id): s for s in skip_plan.skips}
+    assert ("I2", "I2-if") not in by_branch
+
+
+def _build_multi_arm_entry_ir():
+    """多臂并进拓扑（评审 High 回归）：外层 B 的 if/elseIf 两条臂都直达内层 I。
+
+    - B.default：携带 pid fork 标记的全 lane 臂（M0+M1）；
+    - B.if 与 B.elseIf 都直接路由到 I；I.if 只进 M0 单 lane；
+    - I 的每条起点路径必经「B 的某条非 default 臂」，但没有任何单条臂
+      唯一必经 —— 单臂支配版互斥证明在此误拒（必要臂交集为空），
+      臂割可达性版按「至少必经一条互斥臂」聚合后必须补偿。
+    """
+    pid = "multi"
+    conns = [
+        _par_edge("node_start", "B"),
+        _par_edge("B", "I", branch="B-if"),
+        _par_edge("B", "I", branch="B-elseIf"),
+        _par_edge("B", "M0", branch="B-default", sfork=pid),
+        _par_edge("B", "M1", branch="B-default", sfork=pid),
+        _par_edge("I", "M0", branch="I-if"),
+        _par_edge("I", "Z", branch="I-else"),
+        _par_edge("M0", "VA"),
+        _par_edge("M1", "VB"),
+        _par_edge("VA", "C", tjoin=pid),
+        _par_edge("VB", "C", tjoin=pid),
+        _par_edge("C", "node_end"),
+    ]
+    return conns, pid
+
+
+def test_multi_arm_entry_inner_branch_still_gets_skip():
+    """外层多条非全 lane 臂并进同一内层判定时，单臂支配证明断链（回归防护）。
+
+    评审 High：B.if 与 B.elseIf 都指向 I 时，I 没有任何唯一必经臂，
+    支配交集为空 → 旧证明误拒 → skip 不生成 → AND 屏障静默死锁。
+    臂割可达性证明按「至少必经一条互斥臂」聚合，该拓扑必须补偿。
+    """
+    conns, pid = _build_multi_arm_entry_ir()
+    plan = build_parallel_join_plan(conns)
+    assert (pid, "C") in plan.joins
+
+    skip_plan = build_dead_lane_skip_plan(conns, plan)
+    by_branch = {(s.branch_node, s.branch_id): s for s in skip_plan.skips}
+    inner_skip = by_branch.get(("I", "I-if"))
+    assert inner_skip is not None, by_branch.keys()
+    assert inner_skip.done_node == f"_parallel_done__{pid}__C__M1"
+
+
+def _build_fork_territory_branch_arm_ir():
+    """深嵌套反例（新逻辑拒绝路径）：fork 臂领地内的分支臂 VA.if 直达 I2。
+
+    B.default 全 lane 臂 → M0 → VA；VA.if（分支臂）→ I2。plain reach
+    不扩展分支边，I2 不落在 B.default 臂的 plain reach 内（前提检查通
+    过）；但 fork 臂选中后经 VA 的 if 臂仍可走到 I2 —— 两路径可并存、
+    不互斥，必须拒绝 (I2, I2-if) 的跨节点补偿（否则 fork 臂触发时 I2
+    亦可执行，skip 会给已激活 lane 的 done 重复记账）。
+    一级臂 (I, I-else) 的互斥不受 VA 臂影响，补偿必须保留。
+    """
+    pid = "deeprej"
+    conns = [
+        _par_edge("node_start", "B"),
+        _par_edge("B", "I", branch="B-if"),
+        _par_edge("B", "M0", branch="B-default", sfork=pid),
+        _par_edge("B", "M1", branch="B-default", sfork=pid),
+        _par_edge("I", "I2", branch="I-if"),
+        _par_edge("I", "M1", branch="I-else"),
+        _par_edge("I2", "M0", branch="I2-if"),
+        _par_edge("I2", "Z2", branch="I2-default"),
+        _par_edge("M0", "VA"),
+        _par_edge("VA", "I2", branch="VA-if"),
+        _par_edge("M1", "VB"),
+        _par_edge("VA", "C", tjoin=pid),
+        _par_edge("VB", "C", tjoin=pid),
+        _par_edge("C", "node_end"),
+    ]
+    return conns, pid
+
+
+def test_fork_territory_branch_arm_reaches_inner_must_reject():
+    """B 拒绝路径：前提（plain reach）通过，但 fork 臂经 VA.if 臂可达 I2，
+    两路径可并存——链式互斥证明必须拒绝 (I2, I2-if) 的补偿，同时保留
+    一级臂 (I, I-else) 的补偿（拒绝必须精确，不能殃及无辜）。
+    """
+    conns, pid = _build_fork_territory_branch_arm_ir()
+    plan = build_parallel_join_plan(conns)
+    assert (pid, "C") in plan.joins
+
+    skip_plan = build_dead_lane_skip_plan(conns, plan)
+    by_branch = {(s.branch_node, s.branch_id): s for s in skip_plan.skips}
+    assert ("I2", "I2-if") not in by_branch
+    level1_skip = by_branch.get(("I", "I-else"))
+    assert level1_skip is not None, by_branch.keys()
+    assert level1_skip.done_node == f"_parallel_done__{pid}__C__M0"
+
+
+def test_bypass_entry_into_inner_must_reject():
+    """A 拒绝路径：branch_node 存在不经 other_bn 任何臂的旁路（起点直连 I2）。
+
+    I2 可与 fork 臂并存执行（起点同时触发两者），「必经 other_bn 某条
+    臂」的前提不成立；fork 臂领地内不可达 I2（B 判定通过）、plain reach
+    前提也通过——只有臂割可达性的 A 判定能正确拒绝，防止 fork 臂触发
+    时 skip 给已激活 lane 的 done 重复记账。
+    """
+    conns, pid = _build_deep_nested_arm_ir(
+        inner_reachable_from_outer_fork=False
+    )
+    # 起点旁路直连最深判定：I2 无需经过 B 的任何臂即可执行
+    conns.append(_par_edge("node_start", "I2"))
+    plan = build_parallel_join_plan(conns)
+    assert (pid, "C") in plan.joins
+
+    skip_plan = build_dead_lane_skip_plan(conns, plan)
+    by_branch = {(s.branch_node, s.branch_id): s for s in skip_plan.skips}
+    assert ("I2", "I2-if") not in by_branch
+
+
 # ---- M3：loop body 并行回退路径真正设置 wait_for_all ----
 
 def _build_loop_body_parallel_join_ir(*, uncovered_extra_pred: bool):
