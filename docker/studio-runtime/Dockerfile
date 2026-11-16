@@ -7,6 +7,9 @@ RUN groupadd -g 1000 service && useradd -u 1000 -g service -s /bin/bash -m servi
 ENV SERVICE_HOME=/opt/cloud/agent-runtime
 ENV PACKAGES_HOME=/usr/local/lib/python3.11/site-packages
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
+# jemalloc 行为参数(空=库内默认;部署时按场景覆盖,如 background_thread:true)
+# LD_PRELOAD 在 script/start_server.sh 里按库存在性自动设置
+ENV MALLOC_CONF=""
 
 WORKDIR $SERVICE_HOME
 
@@ -16,8 +19,9 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword libjemalloc2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ln -sf $(dpkg -L libjemalloc2 | grep 'libjemalloc\.so\.2$' | head -1) /usr/local/lib/libjemalloc.so.2
 
 # 安装 Python 依赖（临时安装编译工具链 + git，编译完成后卸载）
 # git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
