@@ -60,7 +60,9 @@ import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
+import com.openjiuwen.studio.agent.manager.service.plugin.PluginService;
 import com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
 import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
@@ -171,6 +173,10 @@ public class ToolManagementService implements IToolManagementService {
     @Autowired
     private IPluginBase pluginBase;
 
+    /** FEAT-093 插件动态鉴权：父插件鉴权解析（getPlugin 在 IPlugin 接口上） */
+    @Autowired
+    private IPlugin pluginQueryService;
+
     @Autowired
     private ShareResourceMapper shareResourceMapper;
 
@@ -238,6 +244,14 @@ public class ToolManagementService implements IToolManagementService {
         resourceName = "body.toolDisplayName"
     )
     public CreateToolRsp createToolV1(String projectId, String workspaceId, CreateToolReq body) {
+        // FEAT-093 插件动态鉴权：与工具请求头同名拒绝（父插件/body 的动态头
+        // vs 固定 headers + Headers 参数），回环条目先行剥离
+        AuthInfo effectiveDynamicAuth = resolveEffectiveDynamicAuth(projectId, workspaceId, body.getPluginId(), null, body.getAuthInfo());
+        pluginBase.validPluginDynamicAuthInfo(
+            effectiveDynamicAuth, body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            effectiveDynamicAuth, body.getInputSchema()));
         ToolEntity toolEntity = buildToolEntity(projectId, workspaceId, body, false);
         int existDisplayName = toolMapper.selectByDisplayNameAndWorkspaceId(toolEntity.getToolDisplayName(), toolEntity.getWorkspaceId());
         if(existDisplayName > 0) {
@@ -449,6 +463,15 @@ public class ToolManagementService implements IToolManagementService {
             throw new AgentStudioException(StudioError.TOOL_NOT_EXIST, String.format("tool id %s not exist", toolId));
         }
 
+        // FEAT-093 插件动态鉴权：与工具请求头同名拒绝（父插件按 toolId 前缀解析），
+        // 回环条目先行剥离
+        AuthInfo effectiveDynamicAuth = resolveEffectiveDynamicAuth(projectId, workspaceId, null, toolId, body.getAuthInfo());
+        pluginBase.validPluginDynamicAuthInfo(
+            effectiveDynamicAuth, body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            effectiveDynamicAuth, body.getInputSchema()));
+
         // 预置插件支持修改auth描述
         if (ToolType.INNER.type.equals(oldTool.getType()) && Boolean.TRUE.equals(oldTool.getAuthRequired())) {
             clearAuthInfo(body.getAuthInfo());
@@ -495,6 +518,38 @@ public class ToolManagementService implements IToolManagementService {
             throw new AgentStudioException(StudioError.TOOL_NAME_ALREADY_EXIST);
         }
         return new ModifyToolRsp().setToolId(toolId);
+    }
+
+    /**
+     * FEAT-093 插件动态鉴权：解析工具保存请求的生效动态鉴权。
+     * 优先请求体自带 auth_info（工具直接携带动态鉴权的场景）；
+     * 否则按 pluginId（创建）或 toolId 前缀（修改，格式 pluginId#seq；
+     * API 模式插件行即工具行，toolId 无后缀时其本身即插件 id）解析
+     * 父插件鉴权。非 DYNAMIC 返回 null（校验器跳过）。
+     */
+    private AuthInfo resolveEffectiveDynamicAuth(String projectId, String workspaceId, String pluginId,
+        String toolId, AuthInfo bodyAuth) {
+        if (Objects.nonNull(bodyAuth) && AuthInfo.ScopeEnum.DYNAMIC.equals(bodyAuth.getScope())) {
+            return bodyAuth;
+        }
+        String parentPluginId = StringUtils.isNotBlank(pluginId) ? pluginId
+            : (StringUtils.isNotBlank(toolId) ? toolId.split("#")[0] : null);
+        if (StringUtils.isBlank(parentPluginId)) {
+            return null;
+        }
+        try {
+            List<PluginEntity> plugins = pluginQueryService.getPlugin(projectId, workspaceId,
+                Collections.singletonList(parentPluginId));
+            if (!plugins.isEmpty() && Objects.nonNull(plugins.get(0).getAuthInfo())
+                    && AuthInfo.ScopeEnum.DYNAMIC.equals(plugins.get(0).getAuthInfo().getScope())) {
+                return plugins.get(0).getAuthInfo();
+            }
+        } catch (Exception e) {
+            // 父插件解析失败不阻断工具保存（沿用既有行为，校验器收 null 跳过）
+            log.warn("Skip dynamic auth check, failed to resolve parent plugin {} for tool {}: {}",
+                parentPluginId, toolId, e.getMessage());
+        }
+        return null;
     }
 
     @Override

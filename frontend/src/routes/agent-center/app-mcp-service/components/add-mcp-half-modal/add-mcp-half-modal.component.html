@@ -342,6 +342,7 @@
             [placeholder]="isZH() ? ('addmcpcomponent_657' | i18nextEager) : 'Key'"
             style="width: 45%; margin-right: 12px"
             [disabled]="this.notChangeMode()"
+            (ngModelChange)="handleChangeHeaderKey()"
           />
           <nz-input-password>
             <input
@@ -441,6 +442,10 @@
     </div>
     <p class="mcp-auth-param-name" style="margin-bottom: 24px; font-weight: normal; color: #808080">
       {{ 'mcp_dynamic_auth_tip' | i18nextEager }}
+    </p>
+    <!-- FEAT-093 动态鉴权头 vs 固定请求头同名冲突提示（确认按钮已置灰） -->
+    <p *ngIf="dynamicAuthHeaderConflict" style="color: #f13132; font-size: 12px; margin: -16px 0 16px">
+      {{ 'mcp_dynamic_auth_header_conflict' | i18nextEager: { header: dynamicAuthHeaderConflict } }}
     </p>
   </div>
   <div *ngIf="isShowOauthConfig()">

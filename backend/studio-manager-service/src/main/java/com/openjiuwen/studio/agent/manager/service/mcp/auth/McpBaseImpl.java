@@ -303,6 +303,10 @@ public class McpBaseImpl implements IMcpBase {
         }
         Set<String> targetNames = new HashSet<>();
         for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                    "dynamic auth auth_keys contains null element");
+            }
             String targetName = authKeyInfo.getTargetName();
             if (StringUtils.isBlank(targetName) || targetName.length() > 64) {
                 throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
@@ -324,6 +328,50 @@ public class McpBaseImpl implements IMcpBase {
             if (!targetNames.add(targetName.toLowerCase(Locale.ROOT))) {
                 throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
                     "dynamic auth target_name is duplicated: " + targetName);
+            }
+        }
+    }
+
+    /**
+     * FEAT-093 动态鉴权头 vs serverConfig 固定请求头同名拒绝：
+     * scope=DYNAMIC 时把 serverConfig 的 headers（递归提取）与
+     * auth_keys[].target_name 做大小写不敏感比对，同名即抛错——
+     * 固定头在运行期先注入，动态凭证头按绑定值注入，同名会互相覆盖
+     * 造成凭证值被固定头值顶掉（或反向，固定头被运行期绑定值覆盖）。
+     *
+     * @param authInfo 鉴权信息（非 DYNAMIC 或空时直接跳过）
+     * @param serverConfig MCP 服务的 serverConfig JSON（可空）
+     */
+    @Override
+    public void validDynamicAuthHeaderConflict(AuthInfo authInfo, String serverConfig) {
+        if (Objects.isNull(authInfo) || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())
+                || StringUtils.isBlank(serverConfig)) {
+            return;
+        }
+        Map<String, String> fixedHeaders;
+        try {
+            fixedHeaders = CommonUtil.parseMcpConfigHeaderInfo(serverConfig);
+        } catch (Exception e) {
+            // 解析失败不在此处报错——调用方各自的 serverConfig 格式校验
+            // 会以更具体的错误码报出，此处跳过同名检查即可
+            log.warn("Skip dynamic auth header conflict check: serverConfig parse failed: {}", e.getMessage());
+            return;
+        }
+        if (fixedHeaders.isEmpty()) {
+            return;
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo) || StringUtils.isBlank(authKeyInfo.getTargetName())) {
+                continue;
+            }
+            String targetName = authKeyInfo.getTargetName();
+            for (String fixedName : fixedHeaders.keySet()) {
+                if (fixedName != null && fixedName.equalsIgnoreCase(targetName)) {
+                    throw new AgentStudioException(StudioError.MCP_AUTH_DATA_INVALID,
+                        "serverConfig header '" + fixedName
+                            + "' conflicts with dynamic auth header '" + targetName + "', remove the duplicate");
+                }
             }
         }
     }
@@ -392,7 +440,62 @@ public class McpBaseImpl implements IMcpBase {
             });
         }
 
+        // FEAT-093 动态鉴权：auth_keys[].target_name 追加为参数条目（值不落库，
+        // 由智能体 MCP 参数配置绑定 literal/ref——记忆变量/入参引用），与
+        // IrAdapterService.appendDynamicAuthParams 的 IR 通道同源；否则单智能体
+        // 详情的参数快照不含动态凭证参数，前端「MCP参数配置」入参为空、无从绑定
+        appendDynamicAuthParamsToResourceParam(mcpService, mcpParams, headerInfo.keySet());
+
         return JSON.toJSONString(mcpParams);
+    }
+
+    /**
+     * FEAT-093 动态鉴权参数追加（单智能体参数快照通道）：
+     * scope=DYNAMIC 时把 auth_keys 的 target_name 追加为 ResourceParam 条目
+     * （与 server_config headers 按名去重、大小写不敏感，同 IR 通道约定）。
+     * defaultValue/value 恒空——凭证值不落库，绑定关系由前端保存进 extend_info。
+     *
+     * @param mcpService mcp服务实体
+     * @param mcpParams 待追加的参数列表
+     * @param existingNames 已存在的参数名（server_config headers），用于去重
+     */
+    private void appendDynamicAuthParamsToResourceParam(McpServiceEntity mcpService,
+        List<ResourceParam> mcpParams, Set<String> existingNames) {
+        AuthInfo authInfo = mcpService.getAuthInfo();
+        if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return;
+        }
+        Set<String> existingNamesLower = new HashSet<>();
+        for (String name : existingNames) {
+            if (name != null) {
+                existingNamesLower.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (Objects.isNull(authKeyInfo)) {
+                continue;
+            }
+            String targetName = authKeyInfo.getTargetName();
+            if (StringUtils.isBlank(targetName)
+                    || existingNamesLower.contains(targetName.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            mcpParams.add(ResourceParam.builder()
+                    .defaultValue(null)
+                    .name(targetName)
+                    .type("string")
+                    .description("")
+                    .value(ResourceParam.ValueDTO.builder()
+                            .type("literal")
+                            .content("")
+                            .build())
+                    .visibility(true)
+                    .required(false)
+                    .build());
+            existingNamesLower.add(targetName.toLowerCase(Locale.ROOT));
+        }
     }
 
     /**
@@ -407,16 +510,50 @@ public class McpBaseImpl implements IMcpBase {
             return;
         }
 
-        if (StringUtils.isNotBlank(agentMcp.getExtendInfo())) {
+        // FEAT-093：历史快照为空列表（"[]"，动态凭证参数补齐前落库）时同样允许回填，
+        // 否则纯动态鉴权服务的参数快照永远停在空列表，前端入参为空且无从绑定；
+        // 非空列表（用户已配置）仍尊重现状不覆盖
+        if (StringUtils.isNotBlank(agentMcp.getExtendInfo())
+                && !isEmptyResourceParamList(agentMcp.getExtendInfo())) {
             return;
         }
 
         String mcpId = agentMcp.getResourceId();
         McpServiceEntity mcpService = serviceDao.selectById(mcpId, CommonUtil.getTenantId(), CommonUtil.getDeptCode(), null);
+        // FEAT-093 回填判空：映射仍 valid 但底层 MCP 服务已删除/不可见时
+        // selectById 返回 null——历史"[]"形态此场景会提前返回（非空列表
+        // 挡在上方），空列表回填放行后此处若不判空，parseMcpInput2ResourceParameter
+        // 直接 NPE 使详情加载整体失败。保持"查不到即不回填"的既有语义
+        if (Objects.isNull(mcpService)) {
+            log.warn("Skip extend info fill: mcp service {} not found (deleted or invisible)", mcpId);
+            return;
+        }
         String parameter = parseMcpInput2ResourceParameter(mcpService);
+        // 新生成仍为空列表时不回写，避免每次详情加载都触发无意义落库
+        if (isEmptyResourceParamList(parameter)) {
+            return;
+        }
         agentMcp.setExtendInfo(parameter);
 
         mappingMapper.updateResourceParameterByAppIDAndResourceId(agentMcp);
+    }
+
+    /**
+     * 判断 extend_info 的 ResourceParam JSON 是否为空列表
+     * （空/“[]”/解析为空列表 → true；解析失败按非空处理，保守不动既有数据）。
+     *
+     * @param extendInfo 映射存储的参数 JSON
+     * @return 是否为空参数列表
+     */
+    private boolean isEmptyResourceParamList(String extendInfo) {
+        if (StringUtils.isBlank(extendInfo)) {
+            return true;
+        }
+        try {
+            return JSON.parseArray(extendInfo).isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

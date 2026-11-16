@@ -470,6 +470,21 @@ export class PreviewDebugComponent {
     this.isCloseAgentParamsPanel = true;
   }
 
+  /**
+   * 调试场景记忆/变量弹窗确认兜底：事件 inputVars 部分（输入变量 tab 的值）
+   * 推给调试入参——此前 (saveMemoryVars) 未接听，记忆 tab（默认激活）上确认时
+   * 输入 tab 已填的值被静默丢弃，动态凭证 {{inputs.*}} 绑定随之无值可取。
+   * userVars 部分不在调试请求持久化（记忆变量值源=智能体 DSL）。
+   */
+  public onDebugVarMemorySaved(result: Record<string, any> | null) {
+    const inputVars = result?.["inputVars"];
+    if (Array.isArray(inputVars)) {
+      this.inputParams = inputVars
+        .filter((item: any) => item && item.key)
+        .map((item: any) => ({ ...item }));
+    }
+  }
+
   public showVarConfPanel() {
     this.isCloseAgentParamsPanel = false;
   }
