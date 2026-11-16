@@ -44,6 +44,13 @@ public class McpServiceToolsTestReq implements Serializable {
     @Size()
     private Map<String, Object> params = null;
 
+    @JsonProperty("debug_headers")
+    @Schema(description = "调测期动态凭证调试值（key=出站请求头名，仅本次调测生效，不入库）",
+        example = "{\"Authorization\": \"Bearer test-token\"}")
+    @Valid
+    @Size(max = 5)
+    private Map<@Length(max = 64) String, @Length(max = 8192) String> debugHeaders = null;
+
     public String getServiceId() {
         return serviceId;
     }
@@ -71,6 +78,15 @@ public class McpServiceToolsTestReq implements Serializable {
         return this;
     }
 
+    public Map<String, String> getDebugHeaders() {
+        return debugHeaders;
+    }
+
+    public McpServiceToolsTestReq setDebugHeaders(Map<String, String> debugHeaders) {
+        this.debugHeaders = debugHeaders;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -79,6 +95,8 @@ public class McpServiceToolsTestReq implements Serializable {
         sb.append("    serviceId: ").append(toIndentedString(serviceId)).append("\n");
         sb.append("    toolName: ").append(toIndentedString(toolName)).append("\n");
         sb.append("    params: ").append(toIndentedString(params)).append("\n");
+        sb.append("    debugHeaders: ")
+            .append(debugHeaders == null ? "null" : "<masked>").append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -93,12 +111,13 @@ public class McpServiceToolsTestReq implements Serializable {
         }
         McpServiceToolsTestReq mcpServiceToolsTestReq = (McpServiceToolsTestReq) o;
         return Objects.equals(this.serviceId, mcpServiceToolsTestReq.serviceId) && Objects.equals(this.toolName,
-            mcpServiceToolsTestReq.toolName) && Objects.equals(this.params, mcpServiceToolsTestReq.params);
+            mcpServiceToolsTestReq.toolName) && Objects.equals(this.params, mcpServiceToolsTestReq.params)
+            && Objects.equals(this.debugHeaders, mcpServiceToolsTestReq.debugHeaders);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(serviceId, toolName, params);
+        return Objects.hash(serviceId, toolName, params, debugHeaders);
     }
 
     /**

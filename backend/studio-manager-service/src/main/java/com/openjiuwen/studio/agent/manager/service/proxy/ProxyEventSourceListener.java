@@ -358,7 +358,8 @@ public class ProxyEventSourceListener extends EventSourceListener {
             hdrs.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             hdrs.set("X-Request-Id", requestId);
             return new org.springframework.http.ResponseEntity<>(rsp, hdrs,
-                org.springframework.http.HttpStatus.valueOf(descriptor.getHttpStatus()));
+                com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder
+                    .resolveHttpStatus(descriptor.getHttpStatus()));
         }
     }
 

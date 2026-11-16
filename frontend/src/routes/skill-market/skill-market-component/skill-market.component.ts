@@ -13,11 +13,15 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzSelectModule } from 'ng-zorro-antd/select';
+import { NzModalService } from 'ng-zorro-antd/modal';
 import { SkillApi } from '@agentcore/api/skill.api';
+import { PublishAssetModalComponent } from '@routes/agent-center/component-library/shelf-modal/publish-asset-modal.component';
 import { I18N_NAMESPACE } from '@agentcore/constants/common';
 import { SKILL_RESOURCE_TYPE_CONFIG, SkillDetail, SkillDetailFromPage, SkillResourceType } from '@agentcore/constants/skill.model';
 import { i18nProviderValue, I18nService } from '@agentcore/core/i18n.service';
 import { I18nPipe } from '@agentcore/shared/pipes/i18n.pipe';
+import { SpaceTeamManagementService } from '@services/space-team-management.service';
+import { ContextService } from '@services/context.service';
 
 @Component({
   selector: 'skill-market',
@@ -46,6 +50,7 @@ import { I18nPipe } from '@agentcore/shared/pipes/i18n.pipe';
   ],
 })
 export class SkillMarketComponent {
+  cardHovered = '';
   @ViewChild('scrollContainer') scrollContainer: ElementRef;
   resourceConfig = SKILL_RESOURCE_TYPE_CONFIG;
   tabs = [
@@ -92,15 +97,64 @@ export class SkillMarketComponent {
   loadSub: Subscription;
   total = 0;
   public activeTabIndex = 0;
+  public canPublish = true;
   constructor(
     private _router: Router,
     private _skillApi: SkillApi,
-    private _i18n: I18nService
+    private _i18n: I18nService,
+    private nzModal: NzModalService,
+    private spaceTeamManagementService: SpaceTeamManagementService,
+    private ctxServ: ContextService
   ) {}
+
+  openPublishModal(): void {
+    this.nzModal.create({
+      nzContent: PublishAssetModalComponent,
+      nzWidth: 560,
+      nzTitle: this._i18n.transform('plaza_onshelf'),
+      nzFooter: null,
+      nzData: {
+        assetType: 'skill',
+        onPublished: () => {
+          // 上架成功后清空列表重载首页（loadMore 为滚动分页，直接调用会按旧 offset 追加，新条目在第一页不会出现）
+          this.cards = [];
+          this.total = 0;
+          this.loadMore();
+        },
+      },
+    });
+  }
+
+  unpublishSkill(card: SkillDetail): void {
+    this.nzModal.confirm({
+      nzTitle: this._i18n.transform('skill.detail.plaza.unpublish.confirm'),
+      nzOnOk: () => {
+        this._skillApi
+          .unpublishSkill(card.skillId)
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe(() => {
+            this.cards = [];
+            this.loadMore();
+          });
+      },
+    });
+  }
 
   ngAfterViewInit() {
     this.watchLatest();
     this.loadMore();
+    this.checkPublishPermission();
+  }
+
+  async checkPublishPermission() {
+    try {
+      const res = await this.spaceTeamManagementService.getWorkspaceDetial(this.ctxServ.currentWorkspaceId);
+      if (res?.type === 'TEAM' && res?.role && res.role !== 'OWNER' && res.role !== 'ADMIN') {
+        this.canPublish = false;
+      }
+    } catch {
+      this.canPublish = false;
+    }
   }
 
   onActiveChange(index: number): void {

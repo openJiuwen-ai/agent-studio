@@ -68,10 +68,6 @@ public final class ConversationIdValidator {
             Profile.STANDARD_CONVERSATION);
         routes.put("/v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/history",
             Profile.STANDARD_CONVERSATION);
-        routes.put(
-            "/v1/{project_id}/agent-manager/apps/{app_id}/conversions/{conversation_id}/messages"
-                + "/{message_id}/feedback",
-            Profile.STANDARD_CONVERSATION);
         routes.put("/v1/{project_id}/agent-manager/workflows/{workflow_id}/conversations/{conversation_id}/abort",
             Profile.STANDARD_CONVERSATION);
         routes.put("/v1/{project_id}/agent-manager/controller/{agent_id}/conversations/{conversation_id}/executions",

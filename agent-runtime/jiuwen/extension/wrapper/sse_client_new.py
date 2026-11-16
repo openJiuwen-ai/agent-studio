@@ -16,6 +16,7 @@ from builtins import ExceptionGroup
 from typing import Any, List, Optional
 from urllib.parse import urlencode
 
+from jiuwen.extension.wrapper.outbound_header_guard import is_valid_outbound_header_name
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
 from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
@@ -123,6 +124,31 @@ class SSEClientNew(McpClient):
         """断开连接（保持接口兼容）"""
         return True
 
+    def _get_auth_scope(self) -> str:
+        """IR auth 的 scope（大小写归一；auth 缺失或无 scope 返回空串）。"""
+        auth = self._auth
+        if isinstance(auth, dict):
+            return str(auth.get("scope") or "").strip().upper()
+        return ""
+
+    def _dynamic_auth_headers(self, kwargs) -> Optional[dict]:
+        """scope 允许且 kwargs.dynamic_auth_headers（FlowMcp 独立通道下传的
+        method=Headers 参数值）为 dict 时返回合法子集，否则 None。
+
+        仅 auth 无 scope 或 scope=DYNAMIC 时放行；通道内容严格限于已声明
+        method=Headers 的参数值（session 级凭据走 runtime_auth，由
+        _add_auth_params 的 USER 映射消费，不经本通道）。
+        头名合法性校验（RFC 7230 token + 逐跳敏感头 + 保留关联头）保护
+        空 scope 服务的存量 Header 参数绕过（与 Java 侧名单同构）。
+        """
+        if self._get_auth_scope() not in ("", "DYNAMIC"):
+            return None
+        headers = kwargs.get("dynamic_auth_headers")
+        if not isinstance(headers, dict) or not headers:
+            return None
+        return {k: v for k, v in headers.items()
+                if isinstance(k, str) and is_valid_outbound_header_name(k)} or None
+
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """
         准备请求参数
@@ -145,6 +171,15 @@ class SSEClientNew(McpClient):
             plugin_dependency=self._plugin_dependency,
         )
         request_params = request_params_creator.create(inputs, **kwargs)
+
+        # FEAT-093 动态凭证：FlowMcp 把 method=Headers 参数值经独立通道
+        # kwargs["dynamic_auth_headers"] 下传（与 session 级 runtime_auth 分离）。
+        # 仅当 IR auth 无 scope 或 scope=DYNAMIC 时并入出站 headers：USER/SERVICE
+        # 作用域下 _add_auth_params 已按 auth_keys 的 source→target 映射消费
+        # session 级 runtime_auth，此处透传会外发未映射凭据并覆盖已映射头
+        dynamic_headers = self._dynamic_auth_headers(kwargs)
+        if dynamic_headers:
+            request_params.headers.update(dynamic_headers)
 
         self._replace_mcp_headers_extra(request_params, **kwargs)
 

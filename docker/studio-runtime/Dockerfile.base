@@ -23,16 +23,18 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
 # （x86_64 和 ARM64 交叉构建共用，库路径因架构而异）。
 # 激活由最终 Dockerfile / Dockerfile.arm 各自完成（ln -sf + CMD 内 LD_PRELOAD）。
 
-# 安装 pip Python 依赖（临时安装编译工具链，编译完成后卸载）
+# 安装 pip Python 依赖（临时安装编译工具链 + git，编译完成后卸载）
+# git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
+# （agent-core 修复分支，见 requirements.txt 注释），装完即卸载不留在镜像里。
 COPY requirements.txt $SERVICE_HOME/app/
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3-dev \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3-dev git \
     && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
     && pip3 config set global.timeout 300 \
     && pip3 config set global.retries 5 \
     && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
-    && DEBIAN_FRONTEND=noninteractive apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get remove -y gcc python3-dev git && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && rm -rf ${PACKAGES_HOME}/future/backports/test

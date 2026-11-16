@@ -3,6 +3,7 @@
 """InprocessCodeRunner 单元测试"""
 
 import asyncio
+import json
 import os
 import sys
 
@@ -238,6 +239,7 @@ class TestInprocessCodeRunnerConcurrentP1:
         """
         original_stdout = sys.stdout
         original_os_system = os.system
+        original_json_loads = json.loads
 
         runner = InprocessCodeRunner()
         # A：快速打印并返回（0.2s 内完成），执行期间会短暂替换 sys.stdout
@@ -268,12 +270,15 @@ class TestInprocessCodeRunnerConcurrentP1:
             await runner.run(user_code=code_b, inputs={}, timeout=1)
 
         # 断言全局状态恢复为真实基线（此时 B 的 worker 仍卡在 time.sleep，但
-        # _force_cleanup 已用锁内基线恢复 stdout / os.system）
+        # _force_cleanup 已用锁内基线恢复 stdout / os.system / json.loads）
         assert sys.stdout is original_stdout, (
             f"stdout 应恢复为真实基线，实际为 {type(sys.stdout).__name__}"
         )
         assert os.system is original_os_system, (
             f"os.system 应恢复为真实基线，实际为 {type(os.system).__name__}"
+        )
+        assert json.loads is original_json_loads, (
+            "json.loads 应恢复为真实基线，避免守卫在超时路径永久泄漏"
         )
 
         # 等 A 完成（A 不受 B 超时影响，因为 B 的 saved_stdout 捕获的是真实基线）

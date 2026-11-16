@@ -11,6 +11,7 @@ import re
 import secrets
 import copy
 from collections import defaultdict
+from contextvars import ContextVar
 from typing import Any, AsyncIterator, Dict, Iterable, List, NamedTuple, Optional
 
 from agent_runtime.extension.workflow_node.flow_code import FlowCode
@@ -32,7 +33,7 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.llm_service.base import ModelFactory
 from jiuwen.common.llm_service.model_util import ModelUtil
 from jiuwen.common.log.base import logger, get_x_execution_id
-from openjiuwen.core.common.logging import performance_logger
+from openjiuwen.core.common.logging import performance_logger, workflow_logger
 from jiuwen.common.utils.utils import safe_json_loads_raise_exception, timed_cache_op
 from jiuwen.context.memory_engine.config.memory_ir_config import MemoryIrConfig
 from jiuwen.controller.agent.agent import Agent
@@ -46,6 +47,10 @@ from jiuwen.extension.patches.global_memory_ref_resolution_patch import (
 )
 from jiuwen.extension.patches.workflow_sub_stream_patch import (
     apply_workflow_sub_stream_patch,
+)
+from jiuwen.extension.patches import static_graph_patch
+from jiuwen.extension.patches.static_graph_patch import (
+    apply_static_graph_patch,
 )
 from jiuwen.extension.workflow_node.end import End
 from jiuwen.extension.workflow_node.exception_handler import (
@@ -97,6 +102,7 @@ from jiuwen.serve.controllers.execution.utils import AgentIrUtils, PluginIRConve
 from openjiuwen.core.common.exception.errors import (
     ValidationError as OpenjiuwenValidationError,
 )
+from openjiuwen.core.session.execution_session_ctx import set_component_exec
 from openjiuwen.core.workflow import Workflow, WorkflowCard
 from openjiuwen.core.workflow.components.base import ComponentAbility
 from openjiuwen.core.workflow.components.component import WorkflowComponent
@@ -114,6 +120,16 @@ apply_workflow_sub_stream_patch()
 apply_loop_body_session_cleanup_patch()
 apply_loop_state_cleanup_patch()
 apply_global_memory_ref_resolution_patch()
+# Patch B 必须最后应用：B1 断言要求 _invoke 已是 sub_stream 补丁版。
+# apply 自身已含结构断言 + 降级（内部不抛）；此处兜底 import 链上其余意外异常，
+# 确保静态图复用降级而非拖垮 ir_converter 的 import。
+try:
+    apply_static_graph_patch()
+except Exception as e:  # pylint: disable=broad-except
+    static_graph_patch.STATIC_GRAPH_DOWNGRADED = True
+    workflow_logger.error(
+        f"[static_graph_patch] apply 异常，自动降级（实例缓存强制关闭）: {e}"
+    )
 from jiuwen.extension.workflow_node.utils import WorkflowMetadata
 
 from jiuwen.serve.controllers.execution.ir_parallel_utils import (
@@ -151,9 +167,13 @@ class _LLMModelIdentifiers(NamedTuple):
     task_id: str
     agent_id: str
     conversation_id: str
+    agent_name: str = ""
 
 _BASE_AGENT_SWITCH = "BASE_AGENT_SWITCH"
 _AGENT_CORE_REGISTERED_MODEL_IDS = set()
+# 模型显示名缓存（model_id → 人读名）：与 _AGENT_CORE_REGISTERED_MODEL_IDS 同生命周期，
+# 供重复注册早退路径回带显示名（provider 只在首次注册时跑）。
+_AGENT_CORE_MODEL_DISPLAY_NAMES = {}
 
 # 可插拔的 ModelConfigProvider 工厂函数，默认使用 IRModelConfigProvider。
 # WorkflowRunner 在初始化时根据 MODEL_CONFIG_STRATEGY 环境变量覆盖此函数，
@@ -910,7 +930,13 @@ class _RoutedIntentDetection(IntentDetection):
     async def invoke(
         self, inputs: Any, session: Any, context: Any, **kwargs: Any
     ) -> Any:
-        self._router.set_session(session)
+        # 路由属主组件：session/context 走引擎 execution_session_ctx 通道（**不
+        # reset**——路由 dispatch 在 invoke 返回后的同一 NodeTask 里执行，
+        # 需读到组件级 session；super().invoke 入口同值再 set，幂等）。
+        # owner 传本组件 router：读取侧做归属校验，避免同 task 内旧值误读。
+        # 存组件面包装器（与旧 `self._session = session` 同物，组件自身读点
+        # 依赖包装器 API）；BaseSession 契约由 resolve_routing_session 读取端解包满足。
+        set_component_exec(session, context, owner=self._router)
         return await super().invoke(inputs, session, context, **kwargs)
 
     def add_component(
@@ -943,7 +969,34 @@ def _resolve_intent_fields(
     return intent_name, intent_description
 
 
-async def _convert_llm_react_node(configs: dict, node_id: str):
+def _workflow_trace_identity(workflow) -> dict | None:
+    """从 Workflow 提取业务工作流身份（workflow_id / workflow_name）。
+
+    供 IR 转换期构建的 traced model 做 LLM span 归因：react 组件壳下的
+    子 llm span 因此带上业务 workflow_id（首调并入壳时壳自身值优先，
+    core 侧 write-if-absent）。card.id 即 ir 的 workflowId（agent IR 时
+    为 agentId），跨执行稳定，可安全用于定义级产物。
+    """
+    card = getattr(workflow, "card", None)
+    identity = {}
+    workflow_id = str(getattr(card, "id", "") or "")
+    workflow_name = str(getattr(card, "name", "") or "")
+    if workflow_id:
+        identity["workflow_id"] = workflow_id
+    if workflow_name:
+        identity["workflow_name"] = workflow_name
+    return identity or None
+
+
+# IR 转换期的业务身份通道：_add_component / 单组件调试在调用
+# _create_component 前置值，仅 LLMReAct 分支消费（构建期装饰 model）。
+# 走 ContextVar 而非新增 _create_component 形参：该方法被大量测试按
+# 旧签名 mock（外部在途分支亦然），任何新 kwarg 都会令其 TypeError；
+# ContextVar 对 mock 透明，identity 未置时降级为 None。
+_TRACE_IDENTITY: ContextVar[dict | None] = ContextVar("oj_ir_trace_identity", default=None)
+
+
+async def _convert_llm_react_node(configs: dict, node_id: str, identity: dict = None):
     """把旧版 jiuwen.LLMReAct 节点 IR 转成 FlowAgent。
 
     映射 camelCase configs → FlowAgentConfig + tools + Model，复用现有 FlowAgent
@@ -952,11 +1005,17 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     Args:
         configs: LLMReAct 节点的 configs（含 systemPrompt/model/plugins/maxIteration/...）。
         node_id: 节点 id，作为 resource_mgr tag。
+        identity: LLM span 业务归因键（workflow_id/...，见 _workflow_trace_identity），
+            单组件调试（无工作流壳）时是 llm span 唯一的业务身份来源。
 
     Returns:
         FlowAgent 实例。
     """
     from agent_runtime.common.model_adapters import adapt_react_agent_config
+    from agent_runtime.common.trace_compat import (
+        DEFINITION_SCOPED_SESSION_ID,
+        build_traced_model,
+    )
     from jiuwen.extension.wrapper.restful_api_loader import load_restful_api_from_ir
     from openjiuwen.core.foundation.llm import Model as SDKModel
     from openjiuwen.core.runner import Runner
@@ -965,10 +1024,21 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     provider = _get_model_config_provider()
     adapted_conf = adapt_react_agent_config(configs)
     llm_comp_config = await provider.get_llm_config(adapted_conf)
-    model = SDKModel(
-        model_client_config=llm_comp_config.model_client_config,
-        model_config=llm_comp_config.model_config,
+    # 转换产物是定义级组件（跨执行复用），构建时不存在真实会话 id——显式落
+    # 定义级常量而非退 x-request-id（请求级 id 盖在复用模型上会错归属）；
+    # 会话归因由执行期 trace 树承担（span 挂真实工作流组件壳/trace 下）；
+    # ``identity`` 携带业务 workflow_id（card.id 跨执行稳定）：单组件调试
+    # 无工作流壳，react 的 llm span 全靠它保持业务可查
+    model = build_traced_model(
+        SDKModel(
+            model_client_config=llm_comp_config.model_client_config,
+            model_config=llm_comp_config.model_config,
+        ),
+        session_id=DEFINITION_SCOPED_SESSION_ID,
+        identity=identity,
     )
+    # LLMReAct 内部 ReAct 循环的每次模型调用经装饰器各产一个带 usage/ttft
+    # 的 llm span（首调并入 LLM 类组件壳、后续为壳下子 span，由 core 门控）
 
     # ② plugins[] → List[Tool]
     tools = []
@@ -978,9 +1048,9 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
             tool = Runner.resource_mgr.get_tool(tool_id, tag=node_id)
             if tool is not None:
                 tools.append(tool)
-        except Exception as e:
+        except Exception as exc:
             logger.error(
-                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {e}"
+                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {exc}"
             )
 
     # ③ 映射 camelCase → FlowAgentConfig
@@ -1164,11 +1234,11 @@ class IRConverter:
             supported_ir_version_lst = safe_json_loads_raise_exception(
                 supported_ir_version
             )
-        except ValueError as e:
+        except ValueError as exc:
             raise JiuWenBaseException(
                 error_code=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.code,
                 message=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.errmsg,
-            ) from e
+            ) from exc
         if not isinstance(supported_ir_version_lst, list):
             raise JiuWenBaseException(
                 error_code=StatusCode.IR_VERSION_INCORRECTLY_CONFIGURED.code,
@@ -1215,10 +1285,10 @@ class IRConverter:
                             f"[PluginLoad] create_agent_config: "
                             f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
                         )
-                except Exception as e:
+                except Exception as exc:
                     plugin_name = plugin_ir.get("name", plugin_ir.get("id", f"index_{idx}"))
                     logger.error(
-                        f"[PluginLoad] create_agent_config: Failed to convert plugin '{plugin_name}': {e}. "
+                        f"[PluginLoad] create_agent_config: Failed to convert plugin '{plugin_name}': {exc}. "
                         f"Skipping. IR keys: {list(plugin_ir.keys())}"
                     )
 
@@ -1276,13 +1346,13 @@ class IRConverter:
             """for each agent, return its child AgentConfig"""
             try:
                 AgentIrValidator(**current_ir_data)
-            except ValidationError as e:
+            except ValidationError as exc:
                 raise JiuWenBaseException(
                     StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
                     StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
-                        error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(e)}"
+                        error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(exc)}"
                     ),
-                ) from e
+                ) from exc
             # R-04: intent 覆盖写到 per-config metadata,不写缓存 IR 对象(避免污染 cache_ir_queue)
             _intent_name, _intent_description = _resolve_intent_fields(
                 current_ir_data, parent_intent
@@ -1349,6 +1419,7 @@ class IRConverter:
                         task_id=task_id,
                         conversation_id=conversation_id,
                         agent_id=current_metadata.id or "",
+                        agent_name=current_metadata.name or "",
                     ),
                 )
             else:
@@ -1553,6 +1624,7 @@ class IRConverter:
                     task_id=task_id,
                     conversation_id=conversation_id,
                     agent_id=ir_data.get("agentId", ""),
+                    agent_name=ir_data.get("agentName", ""),
                 ),
             )
         else:
@@ -2393,8 +2465,8 @@ class IRConverter:
             return None
         try:
             child_ir = await async_ir_load(child_path)
-        except Exception as e:
-            raise IRBuildException(f"从缓存或存储读取 IR 文件失败: {child_path}, {e}") from e
+        except Exception as exc:
+            raise IRBuildException(f"从缓存或存储读取 IR 文件失败: {child_path}, {exc}") from exc
         # First convert old refs to new format
         converted_child_ir = _convert_global_variable_refs_in_ir(child_ir)
         if logger.isEnabledFor(logging.DEBUG):
@@ -2418,6 +2490,10 @@ class IRConverter:
         ir_connections: list[dict] | None = None,
     ) -> tuple[Any, str, dict]:
         """纯组件创建，不依赖 Workflow。
+
+        LLMReAct 分支经模块级 ContextVar（_TRACE_IDENTITY）读取业务身份
+        （构建期装饰 model，无执行期 Session 可供懒提取）；其余 LLM 组件为
+        懒初始化，执行期经 resolve_trace_identity 从 Session 取业务身份。
 
         返回 (component_instance, node_type, configs)。
         """
@@ -2542,7 +2618,7 @@ class IRConverter:
             )
 
         if node_type == "jiuwen.LLMReAct":
-            component = await _convert_llm_react_node(configs, node_id)
+            component = await _convert_llm_react_node(configs, node_id, identity=_TRACE_IDENTITY.get())
             return component, node_type, configs
 
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
@@ -2999,12 +3075,25 @@ class IRConverter:
             _attach_node_def(component, node, configs)
             return component
 
-        component, resolved_type, configs = await IRConverter._create_component(
-            node,
-            global_model,
-            node_by_id=node_by_id,
-            ir_connections=ir_connections,
-        )
+        # card.id 即业务 workflowId（跨执行稳定）：react 子 llm span 的
+        # 业务归因来源；懒初始化组件无需（执行期从 Session 提取）。
+        # 走 ContextVar 传递而非新增 _create_component 形参（签名兼容，
+        # 见 _TRACE_IDENTITY 注释）。LoopGroup 等非业务容器取不到 card 身份
+        # （_workflow_trace_identity 返回 None）：此时不覆盖、继承外层已置的
+        # 业务身份——循环体组件同属外层工作流，set(None) 会把体内 react 的
+        # 归因清空。
+        _node_identity = _workflow_trace_identity(workflow)
+        _identity_token = _TRACE_IDENTITY.set(_node_identity) if _node_identity is not None else None
+        try:
+            component, resolved_type, configs = await IRConverter._create_component(
+                node,
+                global_model,
+                node_by_id=node_by_id,
+                ir_connections=ir_connections,
+            )
+        finally:
+            if _identity_token is not None:
+                _TRACE_IDENTITY.reset(_identity_token)
         _attach_node_def(component, node, configs)
 
         if resolved_type == "EI.http":
@@ -3793,7 +3882,39 @@ class IRConverter:
                 message=StatusCode.COMPONENT_TYPE_ERROR.errmsg,
             )
         global_model = (ir_data.get("configs") or {}).get("model")
-        component, _, configs = await IRConverter._create_component(node, global_model)
+        # 单组件调试的业务身份：Session 的 workflow_id 是 node_id（openjiuwen
+        # execute_single_component 即此口径），业务 workflowId 只存在于 IR——
+        # 显式注入两条通路：react 走 _TRACE_IDENTITY（构建期装饰 model），
+        # 懒初始化组件走 _trace_identity 属性（首调 resolve_trace_identity
+        # 优先读取）。组件归属（node_id/type）走 metadata，不占
+        # workflow.component_id（core 壳分类器判据，llm span 不得携带）
+        debug_identity = {}
+        _wf_id = str(ir_data.get("workflowId") or "")
+        _wf_name = str(ir_data.get("workflowName") or "")
+        if _wf_id:
+            debug_identity["workflow_id"] = _wf_id
+        if _wf_name:
+            debug_identity["workflow_name"] = _wf_name
+        if debug_identity:
+            debug_identity["metadata"] = {
+                "component_id": component_id,
+                "component_type": node_type,
+            }
+        # 与 _add_component 同口径：react 构建期身份走 ContextVar（签名兼容）
+        _identity_token = _TRACE_IDENTITY.set(debug_identity or None)
+        try:
+            component, _, configs = await IRConverter._create_component(node, global_model)
+        finally:
+            _TRACE_IDENTITY.reset(_identity_token)
+        if debug_identity:
+            try:
+                # 内部协议属性：读取侧 resolve_trace_identity 经 getattr 取，
+                # 写入侧对称走 setattr
+                setattr(component, "_trace_identity", debug_identity)
+            except AttributeError:
+                # __slots__ 组件无法挂属性：跳过（遥测归因是可选增强，
+                # 不得阻断组件创建）
+                pass
 
         # SubWorkflow 需要加载子工作流
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
@@ -3971,14 +4092,14 @@ class IRConverter:
         """验证 Agent IR 数据"""
         try:
             AgentIrValidator(**ir_data)
-        except ValidationError as e:
-            error_message = format_pydantic_validation_error_message(e)
+        except ValidationError as exc:
+            error_message = format_pydantic_validation_error_message(exc)
             raise JiuWenBaseException(
                 StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
                 StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
                     error_msg=f"Agent_ir validate failed, root_case={error_message}"
                 ),
-            ) from e
+            ) from exc
 
     @staticmethod
     async def _create_llm_model(
@@ -3994,6 +4115,7 @@ class IRConverter:
                 identifiers.task_id,
                 identifiers.agent_id,
                 conversation_id=identifiers.conversation_id,
+                agent_name=identifiers.agent_name,
             )
 
         runtime_context = {
@@ -4042,7 +4164,11 @@ class IRConverter:
 
     @staticmethod
     async def _create_agent_core_llm_model(
-        model_configs: dict, task_id: str, agent_id: str, conversation_id: str = ""
+        model_configs: dict,
+        task_id: str,
+        agent_id: str,
+        conversation_id: str = "",
+        agent_name: str = "",
     ):
         """Create jiuwen model contract layer backed by openjiuwen's ModelWrapper."""
         # Keep openjiuwen-related imports lazy so the legacy ModelFactory path remains unchanged.
@@ -4073,31 +4199,47 @@ class IRConverter:
             or agent_id
             or ""
         )
-        await IRConverter._register_agent_core_llm_model(model_id, model_configs)
+        resolved_agent_name = (
+            extension.get("agentCoreAgentName")
+            or extension.get("agent_core_agent_name")
+            or extension.get("agent_name")
+            or agent_name
+            or ""
+        )
+        model_display_name = await IRConverter._register_agent_core_llm_model(
+            model_id, model_configs
+        )
         return AgentCoreModelLayer(
             runtime=ModelWrapper(),
             default_model_id=model_id,
             default_session_id=session_id,
             default_agent_id=resolved_agent_id,
+            model_display_name=model_display_name,
+            default_agent_name=resolved_agent_name,
         )
 
     @staticmethod
-    async def _register_agent_core_llm_model(model_id: str, model_configs: dict) -> None:
-        """Register an openjiuwen model resource from jiuwen IR model config.
+    async def _register_agent_core_llm_model(
+        model_id: str, model_configs: dict
+    ) -> str:
+        """Register an openjiuwen model resource and return its display name.
 
         Uses the configured ModelConfigProvider (via _get_model_config_provider())
-        for consistent model configuration across all components.
+        for consistent model configuration across all components. The display
+        name (human-readable, from the provider's client config when the
+        gateway metadata carries one) is returned so callers can surface it on
+        telemetry; empty string when absent — callers keep the plain model_id.
         """
 
         if not model_id:
-            return
+            return ""
         if model_id in _AGENT_CORE_REGISTERED_MODEL_IDS:
             logger.debug(
                 "Agent-core model resource already registered: model_id=%s",
                 model_id,
                 simple_log="agent-core model resource already registered",
             )
-            return
+            return _AGENT_CORE_MODEL_DISPLAY_NAMES.get(model_id, "")
 
         from agent_runtime.common.model_adapters import adapt_ir_converter_model_config
         from openjiuwen.core.foundation.llm import Model
@@ -4108,6 +4250,18 @@ class IRConverter:
         provider = _get_model_config_provider()
         llm_comp_config = await provider.get_llm_config(adapted_conf)
 
+        # 显示名与真身模型同源同值：都读自同一份 client config（OBS 网关
+        # provider 从元数据带出；env/IR provider 无此字段则为空串）。
+        model_display_name = str(
+            getattr(
+                getattr(llm_comp_config, "model_client_config", None),
+                "model_display_name",
+                "",
+            )
+            or ""
+        )
+        _AGENT_CORE_MODEL_DISPLAY_NAMES[model_id] = model_display_name
+
         # Extract model name for logging
         model_name = model_configs.get("modelName") or model_id
 
@@ -4116,13 +4270,13 @@ class IRConverter:
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
-        except Exception as e:
+        except Exception as exc:
             logger.error(
                 f"Failed to create agent-core model resource: model_id={model_id}, "
-                f"model_name={model_name}, error={e}",
+                f"model_name={model_name}, error={exc}",
                 simple_log=(
                     f"failed to create agent-core model resource: "
-                    f"model_id={model_id}, model_name={model_name}, error={e}"
+                    f"model_id={model_id}, model_name={model_name}, error={exc}"
                 ),
             )
             raise
@@ -4145,7 +4299,7 @@ class IRConverter:
                     f"Agent-core model resource already exists in runner: model_id={model_id}",
                     simple_log="agent-core model resource already exists",
                 )
-                return
+                return model_display_name
             raise RuntimeError(
                 f"Failed to register agent-core model resource: {add_result}"
             )
@@ -4155,6 +4309,7 @@ class IRConverter:
             f"Registered agent-core model resource: model_id={model_id}, model={model_name}",
             simple_log="registered agent-core model resource",
         )
+        return model_display_name
 
     @staticmethod
     def _resolve_legacy_model_config(model_configs: dict) -> dict:

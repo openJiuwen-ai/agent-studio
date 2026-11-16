@@ -11,6 +11,7 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.ErrorInfo;
 import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
+import org.springframework.dao.DataAccessException;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -109,7 +110,8 @@ public class MgGlobalExceptionHandler {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Request-Id", descriptor.getRequestId());
             return new ResponseEntity<>(rsp, headers,
-                HttpStatus.valueOf(descriptor.getHttpStatus()));
+                com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder
+                    .resolveHttpStatus(descriptor.getHttpStatus()));
         }
     }
 
@@ -404,12 +406,56 @@ public class MgGlobalExceptionHandler {
     /**
      * COM-03 §3.1/§4.6：DataAccessException——从 prompt ExceptionHandler 迁入，
      * 统一映射为 SQL 执行失败；原始异常栈作为 cause 保留，不通过新异常替换。
+     * <p>
+     * Redis 分流（2026-11-02 用户裁定"redis 要分出来"）：Spring Data Redis 的
+     * 异常族均继承 {@code DataAccessException}（RedisConnectionFailureException、
+     * RedisSystemException 等），先识别为 Redis 访问失败（REDIS_ACCESS_FAILED，
+     * 组件标签 redis），否则会被误标为数据库（mysql）失败。
      */
-    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    @ExceptionHandler(DataAccessException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleDataAccessException(Exception exception) {
         log.error("DataAccessException: {}", exception.getMessage(), exception);
-        ErrorDescriptor descriptor = factory.fromStudioError(StudioError.SQL_EXECUTE_FAILED, exception);
+        ErrorDescriptor descriptor = isRedisAccessFailure(exception)
+            ? factory.fromStudioError(StudioError.REDIS_ACCESS_FAILED, exception)
+            : factory.fromStudioError(StudioError.SQL_EXECUTE_FAILED, exception);
+        return safeBuild(descriptor, LanguageUtils.getLanguageLocale());
+    }
+
+    /** cause 链深度上限：防多节点环（A↔B）——t != t.getCause() 只能拦截自环。 */
+    private static final int MAX_CAUSE_CHAIN_DEPTH = 64;
+
+    /**
+     * Redis 异常族识别：沿异常链逐层检查类及父类包名
+     * （{@code org.springframework.data.redis.*} / {@code org.redisson.*}）。
+     * 深度上限兜底（评审修订 2026-11-03）：两节点及以上的 cause 环无法靠
+     * t != t.getCause() 拦截，超限即终止——异常链正常深度远小于 64。
+     */
+    private static boolean isRedisAccessFailure(Throwable ex) {
+        Throwable t = ex;
+        for (int depth = 0; t != null && depth < MAX_CAUSE_CHAIN_DEPTH; depth++, t = t.getCause()) {
+            for (Class<?> c = t.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                String name = c.getName();
+                if (name.startsWith("org.springframework.data.redis.")
+                    || name.startsWith("org.redisson.")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Redisson 异常族（2026-11-02 用户裁定"redis 要分出来"）：本地 RedisClient 的
+     * Redisson 实现（SPI 桥）在连接断开时抛 {@code org.redisson.client.RedisException}
+     * 族——它们**不继承** Spring {@code DataAccessException}，不接本处理器会漏到
+     * 兜底 02001002 丢失组件标签。统一映射 REDIS_ACCESS_FAILED（组件 redis）。
+     */
+    @ExceptionHandler(org.redisson.client.RedisException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleException(org.redisson.client.RedisException exception) {
+        log.error("RedisException: {}", exception.getMessage(), exception);
+        ErrorDescriptor descriptor = factory.fromStudioError(StudioError.REDIS_ACCESS_FAILED, exception);
         return safeBuild(descriptor, LanguageUtils.getLanguageLocale());
     }
 

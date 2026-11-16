@@ -8,10 +8,10 @@ FlowCode - 代码节点组件（基于 LocalCodeRunner，subprocess 执行）
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Optional, Union
 
+from agent_runtime.extension.workflow_node.code_blacklist import load_code_blacklist
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
@@ -23,6 +23,9 @@ from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.workflow.components.component import WorkflowComponent
+
+# 兼容既有单测 / 调用方：from ...flow_code import _load_code_blacklist
+_load_code_blacklist = load_code_blacklist
 
 JIUWEN_CODE_TYPE = "jiuwen.code"
 
@@ -332,7 +335,7 @@ class FlowCode(WorkflowComponent):
             BuildError: 发现黑名单关键字时抛出异常
         """
         clean_code = " ".join(code.split())
-        black_list = json.loads(os.environ.get("CODE_BLACK_LIST", "[]"))
+        black_list = load_code_blacklist()
         if black_list:
             black_keyword = next((kw for kw in black_list if kw in clean_code), None)
             if black_keyword:

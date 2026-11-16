@@ -1,7 +1,9 @@
 import {
   Component,
+  EventEmitter,
   Input,
   OnInit,
+  Output,
   SimpleChanges,
   TemplateRef,
 } from '@angular/core';
@@ -25,6 +27,8 @@ import {HttpService} from "@services/http.service";
 import { WindowResizeService } from '@shared/base/window-resize.service';
 import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
 import { NzModalService } from 'ng-zorro-antd/modal';
+import { MCPService } from '@services/agent-center/mcp.service';
+import { MessageComponent } from '@shared/services/cfdata.service';
 enum mapKeys {
   service_id = 'service_id'
 }
@@ -47,6 +51,7 @@ export class McpCardComponent implements OnInit {
   @Input() mcpTotal: any;
   @Input() appTabs: AssertSquareTagType[] = [];
   @Input() activeTabIsOfficial = false;
+  @Output() onRefresh = new EventEmitter<void>();
   public lang: string = '';
   statusMap = new Map([
     ['success', { label: this.i18n.transform('installed'), color: 'green' }],
@@ -73,9 +78,29 @@ export class McpCardComponent implements OnInit {
     private mcpAllService: McpAllService,
     private http: HttpService,
     private windowResizeService: WindowResizeService,
-    private nzModal: NzModalService
+    private nzModal: NzModalService,
+    private mcpService: MCPService
   ) {
     this.lang = CommonUtils.getLanguage();
+  }
+
+  unpublishMcp($event?: Event): void {
+    $event?.stopPropagation();
+    this.nzModal.confirm({
+      nzTitle: this.i18n.transform('plaza_offshelf_confirm'),
+      nzOkText: this.i18n.transform('ok'),
+      nzCancelText: this.i18n.transform('cancel'),
+      nzOnOk: () => {
+        return this.mcpService
+          .unpublishServer(this.mcpData.id)
+          .then(() => {
+            MessageComponent.showSuccess(this.i18n.transform('plaza_offshelf_success'));
+            this.onRefresh.emit();
+            return null;
+          })
+          .catch(() => null);
+      },
+    });
   }
 
   ngOnChanges(changes: SimpleChanges) {

@@ -456,11 +456,11 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
 
       this.importSrcData.data.push(...successList, ...failList);
       if (successList.length > 0 && failList.length > 0) {
-        this.message.info('部分导入成功');
+        this.message.info(this.i18n.transform('partial_import_success'));
       } else if (successList.length > 0) {
         this.message.success(this.i18n.transform('import_info_template_success'));
       } else if (failList.length > 0) {
-        this.message.error('导入失败');
+        this.message.error(this.i18n.transform('import_failed'));
       }
 
       this.showUpload = !this.showUpload;

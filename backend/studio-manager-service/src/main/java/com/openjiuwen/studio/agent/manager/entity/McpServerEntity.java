@@ -94,5 +94,15 @@ public class McpServerEntity extends BaseProperties {
      */
     private String category;
 
+    /**
+     * 用户上架到资产广场标记（1=是，0=否）；官方预置 type=inner 不受此列影响
+     */
+    private Integer platformPublished;
+
+    /**
+     * 上架来源的MCP服务实例ID（ws_mcp_service_def.id），用于同一实例重复上架去重
+     */
+    private String sourceInstanceId;
+
 }
 

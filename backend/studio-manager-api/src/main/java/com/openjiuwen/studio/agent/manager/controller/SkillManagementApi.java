@@ -10,6 +10,7 @@ import com.openjiuwen.studio.agent.manager.dto.GetStudioSkillDetailsResponseBody
 import com.openjiuwen.studio.agent.manager.dto.ImportStudioSkillResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsResponseBody;
+import com.openjiuwen.studio.agent.manager.dto.SkillShelfReq;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -26,6 +27,7 @@ import jakarta.validation.constraints.Pattern;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -50,6 +52,58 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
     @RequestMapping(value = "/v1/{project_id}/agent-manager/skills/{skill_id}", produces = {"application/json"},
         method = RequestMethod.DELETE)
     ResponseEntity<Void> deleteStudioSkill(
+        @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+        @Parameter(in = ParameterIn.PATH, description = "Skill ID。", required = true, schema = @Schema())
+        @PathVariable("skill_id") String skillId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID", required = true)
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+        @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId);
+
+    @ApiOperation(value = "上架Skill到资产广场", nickname = "publishStudioSkill",
+        notes = "将指定Skill上架到资产广场（平台精选，跨租户可见）。仅OWNER/ADMIN或平台运营方可操作；"
+            + "Skill须处于可发布状态（非开发中且已有发布版本）。重复上架幂等返回成功。"
+            + "可通过请求体补充广场分类标签（tag_id，缺省沿用Skill既有分类）。",
+        tags = {"SkillManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "上架成功。"),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/skills/{skill_id}/on-shelf",
+        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<Void> publishStudioSkill(
+        @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+        @Parameter(in = ParameterIn.PATH, description = "Skill ID。", required = true, schema = @Schema())
+        @PathVariable("skill_id") String skillId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$")
+        @Parameter(in = ParameterIn.QUERY, description = "空间ID", required = true, schema = @Schema())
+        @ApiParam(value = "空间ID", required = true)
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+        @Parameter(in = ParameterIn.PATH, description = "项目ID", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @ApiParam(value = "上架请求（tag_id 可选）") @Valid @RequestBody(required = false) SkillShelfReq body);
+
+    @ApiOperation(value = "将Skill从资产广场下架", nickname = "unpublishStudioSkill",
+        notes = "将指定Skill从资产广场下架，不影响已挂载引用。仅OWNER/ADMIN或平台运营方可操作；"
+            + "官方预置资产不允许普通租户下架。重复下架幂等返回成功。",
+        tags = {"SkillManagement"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "下架成功。"),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误。", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限。", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源。", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误。", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/skills/{skill_id}/off-shelf",
+        produces = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<Void> unpublishStudioSkill(
         @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         @Parameter(in = ParameterIn.PATH, description = "Skill ID。", required = true, schema = @Schema())
         @PathVariable("skill_id") String skillId,

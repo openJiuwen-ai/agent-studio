@@ -20,6 +20,7 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.plugin.BasicInfo;
 import com.openjiuwen.studio.agent.manager.dto.plugin.IsInputList;
@@ -60,6 +61,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
@@ -553,8 +555,14 @@ public class PluginBaseImpl implements IPluginBase {
         if (!Strings.CS.equals(pluginEntity.getType(), ToolType.INNER.type)) {
             // 插件详情页插件调测功能，插件信息从数据库表里取
             log.info(">>>buildToolByPlugin inner plugin");
-            pluginEntity = pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, null, workspaceId);
-            newTool = toolMapper.selectWithoutStatus(pluginId, null, workspaceId);
+            // 资产广场已上架插件（platform_published=1）支持跨工作空间引用：保留全量查询结果，
+            // 不再按调用方工作空间二次过滤（FRS-091：上架到资产广场的资产所有用户可见）
+            boolean plazaPublished = pluginEntity.getPlatformPublished() != null
+                && pluginEntity.getPlatformPublished() == 1;
+            if (!plazaPublished) {
+                pluginEntity = pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, null, workspaceId);
+                newTool = toolMapper.selectWithoutStatus(pluginId, null, workspaceId);
+            }
         }
 
         if (Objects.isNull(pluginEntity)) {
@@ -563,6 +571,7 @@ public class PluginBaseImpl implements IPluginBase {
         }
         newTool.setToolId(pluginId + "#0");
         newTool.setIsFree(pluginEntity.getIsFree() != null ? pluginEntity.getIsFree() : 0);
+        newTool.setPlatformPublished(pluginEntity.getPlatformPublished());
         String inputSchema = null;
         if (StringUtils.isNotBlank(pluginEntity.getInputSchema()) && pluginEntity.getInputSchema()
             .contains("tool_id")) {
@@ -1209,7 +1218,6 @@ public class PluginBaseImpl implements IPluginBase {
         if (isNewPluginEntity) {
             return transformNewEntityToDTO(toolRequestInfo, pluginEntity);
         }
-
         PluginDTO pluginDTO = new PluginDTO();
         BeanUtils.copyProperties(pluginEntity, pluginDTO);
 
@@ -1258,7 +1266,28 @@ public class PluginBaseImpl implements IPluginBase {
         pluginDTO.setIsOutputList(outputLists);
         pluginDTO.setCallMode(pluginEntity.getCallMode());
         pluginDTO.setIsShare(pluginEntity.getIsShare());
+        // 鉴权状态修正（FRS-091）：已配置鉴权密钥但消费方尚未在 t_credential 绑定 → 判为"需要鉴权"，而非"无需鉴权"
+        pluginDTO.setCredentialStatus(refineCredentialStatus(pluginDTO.getCredentialStatus(), pluginEntity.getAuthInfo()));
+        fillIsOwner(pluginDTO, pluginEntity);
         return pluginDTO;
+    }
+
+    /**
+     * 修正插件鉴权状态：当 credential_status 为 NONE 但插件定义了鉴权密钥（auth_keys 中 auth_key 非空）时，
+     * 应展示为 UNAUTHENTICATED（需鉴权、未配置），避免"配了 API Key 却显示无需鉴权"。
+     */
+    private String refineCredentialStatus(String credentialStatus, AuthInfo authInfo) {
+        if (!"NONE".equalsIgnoreCase(credentialStatus) || authInfo == null
+            || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+            return credentialStatus;
+        }
+        for (AuthKeyInfo authKeyInfo : authInfo.getAuthKeys()) {
+            if (StringUtils.isNotBlank(authKeyInfo.getAuthKey())
+                && !CommonConstant.ANONYMIZED_TEXT.equals(authKeyInfo.getAuthKey())) {
+                return Constants.UNAUTHENTICATED;
+            }
+        }
+        return credentialStatus;
     }
 
     /**
@@ -1355,7 +1384,16 @@ public class PluginBaseImpl implements IPluginBase {
         pluginDTO.setToolTestStatusList(toolTestStatusList);
         pluginDTO.setIsInputList(isInputLists);
         pluginDTO.setIsOutputList(isOutputLists);
+        fillIsOwner(pluginDTO, pluginEntity);
         return pluginDTO;
+    }
+
+    /**
+     * 填充插件属主标识（FRS-091）：当前请求用户是否为插件创建者，前端据此显隐下架/版本管理按钮。
+     */
+    private void fillIsOwner(PluginDTO pluginDTO, PluginEntity pluginEntity) {
+        pluginDTO.setIsOwner(
+            Objects.equals(RequestContextUtils.getRequestUserId(), pluginEntity.getCreatorId()));
     }
 
     private static boolean strToBool(Object value) {

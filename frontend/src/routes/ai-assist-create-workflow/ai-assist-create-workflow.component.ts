@@ -42,7 +42,7 @@ const MERMAID_REGEX =
 interface QuestionItem {
   question: string;
   options: string[];
-  selected?: string;
+  selected?: string[];
 }
 
 interface TimelineGroup {
@@ -666,7 +666,16 @@ export class AiAssistCreateWorkflowComponent
   }
 
   onToggleOption(q: QuestionItem, opt: string): void {
-    q.selected = q.selected === opt ? undefined : opt;
+    // 需求澄清选项支持多选（如"需要集成以下哪些能力"），点击切换选中态
+    if (!Array.isArray(q.selected)) {
+      q.selected = [];
+    }
+    const index = q.selected.indexOf(opt);
+    if (index > -1) {
+      q.selected.splice(index, 1);
+    } else {
+      q.selected.push(opt);
+    }
   }
 
   async generationImage(prompt: string): Promise<void> {
@@ -694,8 +703,8 @@ export class AiAssistCreateWorkflowComponent
 
   onSubmitSelections(m: ChatMessage) {
     const sel = m.questions
-      ?.filter((q) => q.selected)
-      .map((q) => `${q.question}: ${q.selected}`);
+      ?.filter((q) => Array.isArray(q.selected) && q.selected.length)
+      .map((q) => `${q.question}: ${q.selected.join('、')}`);
     if (sel?.length) {
       this.promptValue = sel.join('; ');
       this.onSend();

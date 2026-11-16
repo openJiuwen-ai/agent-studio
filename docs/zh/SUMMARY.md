@@ -5,6 +5,8 @@
   - [02-用户指南](tutorial/02-user-guide.md)
 - [操作指南（How-to）](how-to/)
   - [安装部署](how-to/deploy-service.md)
+  - [Docker Compose 部署](how-to/deploy-docker-compose.md)
+  - [Kubernetes 部署](how-to/deploy-k8s.md)
   - [Beta5 升级部署](how-to/upgrade-from-beta4.md)
   - [开发指南](how-to/development-guide.md)
   - [自定义插件开发指南](how-to/custom-plugin-development-guide.md)

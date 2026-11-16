@@ -91,6 +91,26 @@ public class McpServerBaseInfoDto implements Serializable {
     @Schema(description = "创建时间", example = "2026-01-01T00:00:00.000+08:00")
     private Date createdDate = null;
 
+    @JsonProperty("platform_published")
+    @Schema(description = "用户上架到资产广场标记（1=用户上架，0/空=官方预置）", example = "1")
+    private Integer platformPublished = null;
+
+    @JsonProperty("readme")
+    @Schema(description = "服务说明（上架时补充的目录展示信息）", example = "提供天气查询服务")
+    private String readme = null;
+
+    @JsonProperty("url")
+    @Schema(description = "服务连接地址", example = "http://127.0.0.1:8999/mcp")
+    private String url = null;
+
+    @JsonProperty("created_by_user_id")
+    @Schema(description = "上架属主用户ID（前端据此判断是否属主，决定展示下架/安装按钮）", example = "testUser")
+    private String createdByUserId = null;
+
+    @JsonProperty("is_owner")
+    @Schema(description = "当前用户是否为该资产属主（true=可展示下架按钮）", example = "true")
+    private Boolean isOwner = null;
+
     public String getId() {
         return id;
     }
@@ -235,6 +255,51 @@ public class McpServerBaseInfoDto implements Serializable {
         return this;
     }
 
+    public Integer getPlatformPublished() {
+        return platformPublished;
+    }
+
+    public McpServerBaseInfoDto setPlatformPublished(Integer platformPublished) {
+        this.platformPublished = platformPublished;
+        return this;
+    }
+
+    public String getReadme() {
+        return readme;
+    }
+
+    public McpServerBaseInfoDto setReadme(String readme) {
+        this.readme = readme;
+        return this;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public McpServerBaseInfoDto setUrl(String url) {
+        this.url = url;
+        return this;
+    }
+
+    public String getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public McpServerBaseInfoDto setCreatedByUserId(String createdByUserId) {
+        this.createdByUserId = createdByUserId;
+        return this;
+    }
+
+    public Boolean getIsOwner() {
+        return isOwner;
+    }
+
+    public McpServerBaseInfoDto setIsOwner(Boolean isOwner) {
+        this.isOwner = isOwner;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -256,6 +321,9 @@ public class McpServerBaseInfoDto implements Serializable {
         sb.append("    serverConfig: ").append(toIndentedString(serverConfig)).append("\n");
         sb.append("    lastUpdatedDate: ").append(toIndentedString(lastUpdatedDate)).append("\n");
         sb.append("    createdDate: ").append(toIndentedString(createdDate)).append("\n");
+        sb.append("    platformPublished: ").append(toIndentedString(platformPublished)).append("\n");
+        sb.append("    readme: ").append(toIndentedString(readme)).append("\n");
+        sb.append("    url: ").append(toIndentedString(url)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -279,13 +347,14 @@ public class McpServerBaseInfoDto implements Serializable {
             && Objects.equals(this.score, mcpServerBaseInfoDto.score) && Objects.equals(this.category,
             mcpServerBaseInfoDto.category) && Objects.equals(this.serverConfig, mcpServerBaseInfoDto.serverConfig)
             && Objects.equals(this.lastUpdatedDate, mcpServerBaseInfoDto.lastUpdatedDate) && Objects.equals(
-            this.createdDate, mcpServerBaseInfoDto.createdDate);
+            this.createdDate, mcpServerBaseInfoDto.createdDate) && Objects.equals(this.platformPublished,
+            mcpServerBaseInfoDto.platformPublished);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(id, icon, name, nameEn, description, descriptionEn, type, deployType, orgType, viewTimes,
-            installTimes, score, category, serverConfig, lastUpdatedDate, createdDate);
+            installTimes, score, category, serverConfig, lastUpdatedDate, createdDate, platformPublished, readme, url);
     }
 
     /**

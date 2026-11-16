@@ -387,10 +387,17 @@ export const pluginSchemaStr2Args = (schemaStr: string): IRequestArgsView[] => {
 };
 
 export const pluginSchemaStr2Res = (schemaStr: string): IResponseArgsView[] => {
+  // 无出参（创建时 output_schema=null/空串）时静默返回，避免详情页误弹「响应参数数据格式有误」
+  if (!schemaStr) {
+    return [];
+  }
   let result: IResponseArgsView[] = [];
 
   try {
     const data: IResSchema = JSON.parse(schemaStr);
+    if (!data || typeof data !== 'object') {
+      return [];
+    }
     result = resSchema2View(data);
   } catch (e) {
     MessageComponent.showError(i18next.t('parse_res_error'));
@@ -544,10 +551,17 @@ export const reqSchema2Field = (schema: IReqSchema): IWorkflowField[] => {
 };
 
 export const resSchemaStr2Field = (schemaStr: string): IWorkflowField[] => {
+  // 与 reqSchemaStr2Field 对齐：空/null 表示无出参，不弹 parse_res_error
+  if (!schemaStr) {
+    return [];
+  }
   let result: IWorkflowField[] = [];
 
   try {
     const data: IResSchema = JSON.parse(schemaStr);
+    if (!data || typeof data !== 'object') {
+      return [];
+    }
     result = resSchema2Field(data);
   } catch {
     MessageComponent.showError(i18next.t('parse_res_error'));
