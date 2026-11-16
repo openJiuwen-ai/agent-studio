@@ -16,6 +16,75 @@ from openjiuwen.core.common.logging import workflow_logger as logger
 
 _NESTED_PATCH_APPLIED = False
 
+def _compute_scc(adj: dict[str, list[str]]) -> dict[str, int]:
+    visited: set[str] = set()
+    order: list[str] = []
+    for root in adj:
+        if root in visited:
+            continue
+        visited.add(root)
+        stack: list[tuple[str, Any]] = [(root, iter(adj.get(root, [])))]
+        while stack:
+            node, it = stack[-1]
+            advanced = False
+            for neighbor in it:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    stack.append((neighbor, iter(adj.get(neighbor, []))))
+                    advanced = True
+                    break
+            if not advanced:
+                order.append(node)
+                stack.pop()
+    radj: dict[str, list[str]] = defaultdict(list)
+    for src, targets in adj.items():
+        for tgt in targets:
+            radj[tgt].append(src)
+
+    comp: dict[str, int] = {}
+    scc_id = 0
+    for root in reversed(order):
+        if root in comp:
+            continue
+        comp[root] = scc_id
+        stack2: list[str] = [root]
+        while stack2:
+            node = stack2.pop()
+            for neighbor in radj.get(node, []):
+                if neighbor not in comp:
+                    comp[neighbor] = scc_id
+                    stack2.append(neighbor)
+        scc_id += 1
+    return comp
+
+def _get_cyclic_nodes(self) -> set[str]:
+    """按需计算并缓存环上节点（多节点 SCC 的成员及自环节点）。
+
+    整个 compile 期间图拓扑不变，与 ``_adj_cache`` 同生命周期。
+    仅缓存判环需要的集合，不保留 SCC 编号和大小；空集合也复用缓存。
+    """
+    cached = getattr(self, "_cyclic_nodes_cache", None)
+    if cached is not None:
+        return cached
+    adj = getattr(self, "_adj_cache", None)
+    if adj is None:
+        adj = _build_adjacency_list(self)
+        self._adj_cache = adj  # type: ignore[attr-defined]
+    comp = _compute_scc(adj)
+    sizes: dict[int, int] = defaultdict(int)
+    for sid in comp.values():
+        sizes[sid] += 1
+    # 自环 (node -> node) 的 SCC 大小为 1，但节点确实在环上。
+    # 把这类节点标记为"在环上"，避免 sizes > 1 判据漏判。
+    cyclic_sccs = {sid for sid, size in sizes.items() if size > 1}
+    cyclic_nodes = (
+        {node for node, sid in comp.items() if sid in cyclic_sccs}
+        if cyclic_sccs else set()
+    )
+    cyclic_nodes.update(src for src, targets in adj.items() if src in targets)
+    self._cyclic_nodes_cache = cyclic_nodes  # type: ignore[attr-defined]
+    return cyclic_nodes
+
 
 def _build_adjacency_list(self) -> dict[str, list[str]]:
     """构建邻接表：dict[node -> [neighbors]]，覆盖所有边类型。
@@ -165,9 +234,9 @@ def _build_condition_targets(self) -> dict[str, dict[str, set[str]]]:
 
 
 def _always_executes(
+    self,
     co: set[tuple[str, str]],
     branch_all_conds: dict[str, set[str]],
-    reachable_cond: dict[tuple[str, str, str], set[str]],
 ) -> bool:
     """判断前驱是否为"共行前驱"：无论涉及的分支走哪个条件，它都会执行。
 
@@ -176,11 +245,11 @@ def _always_executes(
     就已合流，所有并行车道对每个条件都可达），该前驱不是互斥备选，而是
     必然执行的共行前驱。
 
-    环拓扑保护：含 Loop 的工作流中，分支节点可能在环上，从某条件目标出发
-    会绕环重新进入分支节点、再沿其他条件边到达本不可达的节点，造成"覆盖
-    全部条件"的假象。检测到任一涉及分支节点 bn 出现在**其他条件**目标的
-    可达集中时（同 bn 不同条件不算——那是正常的分支多出口），判 False
-    （回退原 OR-group 语义，避免误加闩锁导致单边路径死锁）。
+    环拓扑保护：仅在条件覆盖检查通过后按需计算环上节点。若涉及分支所在强连通分量
+    含多个节点，或该节点存在自环，则判 False，回退原 OR-group 语义，
+    避免环导致可达性覆盖全部条件的假象，误加闩锁造成单边路径死锁。
+    DAG 中的串联分支仅有单向可达关系，不会因此触发环保护。
+    同一图的多个候选和 barrier 复用环上节点集合，通过集合查询判环。
     """
     involved_branches: dict[str, set[str]] = defaultdict(set)
     for bn, cond_id in co:
@@ -190,15 +259,13 @@ def _always_executes(
         if not all_conds or not all_conds <= conds:
             return False
 
-    # 环拓扑保护：bn 出现在任何条件目标的可达集中（含自身其他条件——
-    # 单 bn 在环上绕回也算污染）=> 环让可达性绕回分支节点再沿其他条件边
-    # 到达本不可达的节点，造成"覆盖全部条件"的假象。判 False 回退原
-    # OR-group 语义，避免误加闩锁导致单边路径死锁。
-    for bn in involved_branches:
-        for (_bn, _cond_id, _t), nodes in reachable_cond.items():
-            if bn in nodes:
-                return False
-    return bool(involved_branches)
+    if not involved_branches:
+        return False
+
+    # 环拓扑保护 (SCC)：仅当 bn 所在 SCC 含多个节点或 bn 存在自环时降级。
+    # DAG 中的串联分支不会因出现在上游条件目标的可达集中而被误判。
+    cyclic_nodes = _get_cyclic_nodes(self)
+    return involved_branches.keys().isdisjoint(cyclic_nodes)
 
 
 def _classify_coexec(
@@ -247,10 +314,11 @@ def _resolve_barrier_groups_nested_patched(
       alone, and a latch would redundantly cover the OR-group in CNF, firing
       the join on the co-executing predecessor's arrival before exclusive
       siblings finish (truncating their stream output).
-    - Cycle topology guard: a branch node that appears in another condition's
-      reachable set indicates reachability was polluted by a loop; the
-      predecessor is classified as exclusive (OR-group only), avoiding
-      spurious latches that deadlock single-path executions.
+    - Cycle topology guard: if an involved branch node belongs to an SCC
+      with multiple nodes or has a self-loop, the predecessor is classified
+      as exclusive (OR-group only), avoiding spurious latches that deadlock
+      single-path executions. Serial branches in a DAG do not trigger this
+      guard merely because they are reachable from upstream condition targets.
     """
     if not self.branch_targets or not source_list:
         return source_list
@@ -287,7 +355,6 @@ def _resolve_barrier_groups_nested_patched(
     branch_all_conds: dict[str, set[str]] = {
         bn: set(cond_map.keys()) for bn, cond_map in cond_targets.items()
     }
-
     # Level 2 fix: len(co) >= 1 (not just == 1)
     cond_bucket: dict[tuple[str, str], set[str]] = defaultdict(set)
     legacy_bucket: dict[str, set[str]] = defaultdict(set)
@@ -297,7 +364,7 @@ def _resolve_barrier_groups_nested_patched(
         co = cond_owned.get(p, set())
         lo = legacy_owned.get(p, set())
         if co and not lo:
-            if _always_executes(co, branch_all_conds, reachable_cond):
+            if _always_executes(self, co, branch_all_conds):
                 coexec_candidates.add(p)
             for (bn, cond_id) in co:
                 cond_bucket[(bn, cond_id)].add(p)
