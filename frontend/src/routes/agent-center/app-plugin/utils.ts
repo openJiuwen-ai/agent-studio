@@ -369,13 +369,32 @@ export const resView2Schema = (view: IResponseArgsView[]): IResSchema => {
   return schema;
 };
 
+/** 将空出参/入参的历史兜底 "{}" / "[]" / "null" / blank 统一成 null，避免 PUT 02401003 与详情页误弹 parse 错误。 */
+export const normalizeEmptyToolSchema = (
+  schemaStr: string | null | undefined,
+): string | null => {
+  if (schemaStr == null) {
+    return null;
+  }
+  const trimmed = String(schemaStr).trim();
+  // 与后端 equalsIgnoreCase("null") 对齐，避免 "NULL"/"Null" 落库后详情页 JSON.parse 失败误弹
+  if (!trimmed || trimmed === '{}' || trimmed === '[]' || trimmed.toLowerCase() === 'null') {
+    return null;
+  }
+  return schemaStr;
+};
+
 export const pluginSchemaStr2Args = (schemaStr: string): IRequestArgsView[] => {
-  if (!schemaStr) {
+  // 与出参一致：字符串 "null"/"{}" 等视为无入参，避免 JSON.parse("null") 后 schema2View 炸 TypeError 误弹 parse_req_error
+  if (!normalizeEmptyToolSchema(schemaStr)) {
     return [];
   }
   let result: IRequestArgsView[] = [];
   try {
     const data: IReqSchema = JSON.parse(schemaStr);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return [];
+    }
     result = schema2View(data);
   } catch (e) {
     MessageComponent.showError(i18next.t('parse_req_error'));
@@ -387,8 +406,8 @@ export const pluginSchemaStr2Args = (schemaStr: string): IRequestArgsView[] => {
 };
 
 export const pluginSchemaStr2Res = (schemaStr: string): IResponseArgsView[] => {
-  // 无出参（创建时 output_schema=null/空串）时静默返回，避免详情页误弹「响应参数数据格式有误」
-  if (!schemaStr) {
+  // 无出参（null/空串/"{}"）时静默返回，避免详情页误弹「响应参数数据格式有误」
+  if (!normalizeEmptyToolSchema(schemaStr)) {
     return [];
   }
   let result: IResponseArgsView[] = [];
@@ -414,12 +433,15 @@ export const pluginSchemaStr2Res = (schemaStr: string): IResponseArgsView[] => {
 };
 
 export const pluginSchemaStr2Path = (schemaStr: string): IRequestArgsView[] => {
-  if (!schemaStr) {
+  if (!normalizeEmptyToolSchema(schemaStr)) {
     return [];
   }
   let result: IRequestArgsView[] = [];
   try {
     const data: IReqSchema = JSON.parse(schemaStr);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return [];
+    }
     result = schema2View(data, null, null, true);
   } catch (e) {
     MessageComponent.showError(i18next.t('parse_req_error'));
@@ -730,12 +752,14 @@ export function coverPluginInfo(context: any) {
       tool_id: item.tool_id,
       tool_info: {
         ...item,
-        input_schema:
+        input_schema: normalizeEmptyToolSchema(
           context.plugin.input_schema.find((i) => i.tool_id === item.tool_id)
-            ?.input_schema ?? '{}',
-        output_schema:
+            ?.input_schema,
+        ),
+        output_schema: normalizeEmptyToolSchema(
           context.plugin.output_schema.find((i) => i.tool_id === item.tool_id)
-            ?.output_schema ?? '{}',
+            ?.output_schema,
+        ),
         intf_type: context.plugin.intf_type.find(
           (i) => i.tool_id === item.tool_id,
         )?.intf_type,
@@ -807,12 +831,15 @@ export function coverToolInfo(context: any) {
   const tool_info = context.plugin?.request_info.tool_info?.find(
     (item) => item.tool_id === context.toolId,
   );
-  tool_info.input_schema = context.plugin?.input_schema.find(
-    (item) => item.tool_id === context.toolId,
-  )?.input_schema;
-  tool_info.output_schema = context.plugin?.output_schema.find(
-    (item) => item.tool_id === context.toolId,
-  )?.output_schema;
+  tool_info.input_schema = normalizeEmptyToolSchema(
+    context.plugin?.input_schema.find((item) => item.tool_id === context.toolId)
+      ?.input_schema,
+  );
+  tool_info.output_schema = normalizeEmptyToolSchema(
+    context.plugin?.output_schema.find(
+      (item) => item.tool_id === context.toolId,
+    )?.output_schema,
+  );
   context.toolInfo = tool_info;
   context.name = getPluginName(context.plugin, context);
   if (

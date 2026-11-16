@@ -22,7 +22,7 @@ import { PluginHeaderComponent } from '../plugin-header/plugin-header.component'
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 import { CreatePluginBaseComponent } from '@routes/agent-center/app-plugin/create-plugin-base/create-plugin-base';
 import { CreateToolComponent } from '@routes/agent-center/app-plugin/create-tool/create-tool';
-import { coverPluginInfo, initializeReqItem, pluginSchemaStr2Args, pluginSchemaStr2Path } from '@routes/agent-center/app-plugin/utils';
+import { coverPluginInfo, initializeReqItem, normalizeEmptyToolSchema, pluginSchemaStr2Args, pluginSchemaStr2Path } from '@routes/agent-center/app-plugin/utils';
 import { PluginDebugModalComponent } from '@routes/agent-center/app-plugin/components/plugin-debug-modal/plugin-debug-modal.component';
 import { WindowResizeService } from '@shared/base/window-resize.service';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
@@ -428,8 +428,9 @@ export class PluginComponent implements OnInit {
       is_output_list,
       is_input_list,
       intf_type,
-      input_schema,
-      output_schema,
+      input_schema: normalizeEmptyToolSchema(input_schema),
+      // 无出参时勿带 "{}"，否则关闭调试弹框 PUT 会触发 02401003
+      output_schema: normalizeEmptyToolSchema(output_schema),
       icon: undefined,
     };
     const thisNzModal = this.nzModal.create({
