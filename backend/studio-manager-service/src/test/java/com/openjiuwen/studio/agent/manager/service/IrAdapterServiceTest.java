@@ -110,6 +110,47 @@ class IrAdapterServiceTest {
     }
 
     @Test
+    void appendDynamicAuthParams_nullSchemaDynamicAuth_newSchemaHasObjectType() {
+        // 检视项回归：新 schema 缺 type=object 时，下游 parseAgentPluginParams/
+        // parseWorkflowPluginParams 对 getType()=null 直接返回空列表——动态头
+        // 参数进不了 ARGUMENTS/arguments，前端编排侧看不到可绑定参数
+        SchemaConfig result = IrAdapterService.appendDynamicAuthParamsToSchema(dynamicAuth("Authorization"), null);
+        assertNotNull(result);
+        assertEquals("object", result.getType(), "空 schema 构造的新实例须带 type=object（下游解析门槛）");
+    }
+
+    @Test
+    void appendDynamicAuthParams_nullSchemaDynamicAuth_downstreamParserProducesArguments() {
+        // 端到端：null schema + DYNAMIC → helper 返回 → parseWorkflowPluginParams
+        // （反射调用私有方法）须产出含动态头的参数列表（非空）
+        SchemaConfig result = IrAdapterService.appendDynamicAuthParamsToSchema(dynamicAuth("Authorization"), null);
+        @SuppressWarnings("unchecked")
+        java.util.List<java.util.Map<String, Object>> arguments = (java.util.List<java.util.Map<String, Object>>)
+            org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                irAdapterService, "parseWorkflowPluginParams", result, true);
+        assertNotNull(arguments);
+        assertFalse(arguments.isEmpty(), "parseWorkflowPluginParams 须解析出动态头参数（非空列表）");
+        boolean hasAuthorization = arguments.stream()
+            .anyMatch(param -> "Authorization".equals(param.get("name")));
+        assertTrue(hasAuthorization, "arguments 须含 Authorization 动态头参数");
+    }
+
+    @Test
+    void appendDynamicAuthParams_nullSchemaDynamicAuth_agentParserProducesArguments() {
+        // 端到端：同上，走 parseAgentPluginParams（agent 插件参数链路）
+        SchemaConfig result = IrAdapterService.appendDynamicAuthParamsToSchema(dynamicAuth("Authorization"), null);
+        @SuppressWarnings("unchecked")
+        java.util.List<java.util.Map<String, Object>> arguments = (java.util.List<java.util.Map<String, Object>>)
+            org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                irAdapterService, "parseAgentPluginParams", result, true);
+        assertNotNull(arguments);
+        assertFalse(arguments.isEmpty(), "parseAgentPluginParams 须解析出动态头参数（非空列表）");
+        boolean hasAuthorization = arguments.stream()
+            .anyMatch(param -> "Authorization".equals(param.get("name")));
+        assertTrue(hasAuthorization, "arguments 须含 Authorization 动态头参数");
+    }
+
+    @Test
     void appendDynamicAuthParams_existingSchema_mutatesAndReturnsSameInstance() {
         SchemaConfig schema = new SchemaConfig();
         schema.setProperties(new java.util.HashMap<>());

@@ -2246,6 +2246,13 @@ public class IrAdapterService {
         if (Objects.isNull(inputSchema)) {
             inputSchema = new SchemaConfig();
         }
+        // 空入参 schema（纯动态鉴权插件）构造的新实例须带 type=object：
+        // 下游 parseAgentPluginParams/parseWorkflowPluginParams 对
+        // getType()=null 直接返回空列表，动态头参数进不了 ARGUMENTS/arguments
+        // ——前端编排侧看不到可绑定参数，动态凭证在该声明支持场景不生效
+        if (StringUtils.isBlank(inputSchema.getType())) {
+            inputSchema.setType("object");
+        }
         if (Objects.isNull(inputSchema.getProperties())) {
             inputSchema.setProperties(new HashMap<>());
         }
