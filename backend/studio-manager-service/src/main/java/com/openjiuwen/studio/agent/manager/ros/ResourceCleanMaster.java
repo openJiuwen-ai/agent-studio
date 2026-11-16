@@ -76,7 +76,15 @@ public class ResourceCleanMaster {
         ObjectMapper objectMapper = new ObjectMapper();
         cleanResources = objectMapper.readValue(resource.getInputStream(), CleanResource[].class);
 
-        timeWindow = Arrays.stream(timeWindowStr.split(",")).map(s -> Integer.parseInt(s)).toList();
+        // trim+过滤空 token 再 parseInt——与被移除的 Hadoop StringUtils.split
+        // （commons-lang 风格：跳过空 token、空输入得空集合）保持同款容错；
+        // String.split(",") 保留中间空 token（如 "0,,6"），裸 parseInt 会抛
+        // NumberFormatException 使 @PostConstruct bean 初始化失败→manager 启动崩
+        timeWindow = Arrays.stream(timeWindowStr.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .map(Integer::parseInt)
+            .toList();
     }
 
     /**

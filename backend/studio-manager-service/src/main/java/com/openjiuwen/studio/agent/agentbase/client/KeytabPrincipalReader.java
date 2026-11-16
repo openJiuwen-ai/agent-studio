@@ -49,7 +49,12 @@ public final class KeytabPrincipalReader {
         }
         Set<String> names = new LinkedHashSet<>();
         keytab.getPrincipals().forEach(principal -> {
-            String name = principal.getName();
+            // Kerby PrincipalName.getName() 输出可能用 \ 分隔多组件 principal
+            // （如 lakesearch\host@REALM）——原 Hadoop KerberosUtil 输出是
+            // / 分隔（lakesearch/host@REALM）；Krb5LoginModule 的 principal
+            // 选项须与 keytab 条目名逐字匹配，反斜杠形态会 login 失败。
+            // 归一化 \→/ 并保留 @REALM 后缀（name 为完整 principal 名）
+            String name = principal.getName().replace("\\", "/");
             if (pattern == null || pattern.matcher(name).matches()) {
                 names.add(name);
             }

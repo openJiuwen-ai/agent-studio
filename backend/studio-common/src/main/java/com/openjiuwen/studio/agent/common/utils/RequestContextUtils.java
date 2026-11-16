@@ -146,16 +146,20 @@ public class RequestContextUtils {
     }
 
     /**
-     * 获取当前请求的IAM上下文
+     * 获取当前请求的IAM上下文。
      *
+     * <p>优先级:ThreadLocal(显式 set 的上下文,如 TaskRuntimeService 切换
+     * 任务归属用户)优先于 request attribute(filter 写入的登录用户)——
+     * 显式 set 是意图覆盖,须被尊重;attribute 优先会静默忽略请求线程内
+     * 的显式 set(以错误身份调下游)。
      */
     public static SimpleUser getRequestIamCtx() {
-        SimpleUser simpleUser = getIamCtxFromReqAttr();
+        SimpleUser simpleUser = THREAD_LOCAL_IAM_CTX.get();
         if (simpleUser != null) {
             return simpleUser;
         }
 
-        simpleUser = THREAD_LOCAL_IAM_CTX.get();
+        simpleUser = getIamCtxFromReqAttr();
         if (simpleUser != null) {
             return simpleUser;
         }
@@ -164,17 +168,15 @@ public class RequestContextUtils {
     }
 
     /**
-     * 获取当前请求的IAM上下文
-     *
-     * @return Context信息
+     * 获取当前请求的IAM上下文(优先级同 getRequestIamCtx:ThreadLocal 优先)。
      */
     public static Optional<SimpleUser> getRequestIamCtxOptional() {
-        SimpleUser simpleUser = getIamCtxFromReqAttr();
+        SimpleUser simpleUser = THREAD_LOCAL_IAM_CTX.get();
         if (simpleUser != null) {
             return Optional.of(simpleUser);
         }
 
-        simpleUser = THREAD_LOCAL_IAM_CTX.get();
+        simpleUser = getIamCtxFromReqAttr();
         if (simpleUser != null) {
             return Optional.of(simpleUser);
         }
