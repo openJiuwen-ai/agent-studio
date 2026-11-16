@@ -368,7 +368,10 @@ class ReActAgentRunner:
 
     async def _register_plugins(self, ir_json: dict, agent: ReActAgent, agent_id: str) -> list[str]:
         """注册 Plugin 工具"""
-        from jiuwen.extension.wrapper.restful_api_loader import load_restful_api_from_ir
+        from jiuwen.extension.wrapper.restful_api_loader import (
+            load_restful_api_from_ir,
+            convert_ir_to_card,
+        )
         from openjiuwen.core.foundation.tool import ToolCard
         from openjiuwen.core.runner import Runner
         from agent_runtime.extension.tool.knowledge_retrieval_tool import (
@@ -395,7 +398,7 @@ class ReActAgentRunner:
                     continue
 
                 tool_id = load_restful_api_from_ir(plugin_conf, tag=agent_id)
-                input_params = self._convert_arguments_to_schema(plugin_conf.get("arguments", []))
+                input_params = convert_ir_to_card(plugin_conf).input_params
 
                 card = ToolCard(
                     id=tool_id,
