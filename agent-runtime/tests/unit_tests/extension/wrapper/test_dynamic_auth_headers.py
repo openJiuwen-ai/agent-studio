@@ -439,9 +439,11 @@ class TestResolveDynamicCredentialHeaders:
             for cls in (StreamableHttpClientNew, SSEClientNew):
                 client = _create_client(cls)
                 client._auth = auth_conf
-                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+                # react 链路模板只认请求级映射（react 执行器按本次 agent 的
+                # IR 写入，按 server_id 键控）
                 restore = TestResolveDynamicCredentialHeaders._bind(
-                    {"userToken": "Bearer react-tok-1"}
+                    {"userToken": "Bearer react-tok-1"},
+                    mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
                 )
                 try:
                     request_params = client._prepare_request_params(
@@ -458,9 +460,9 @@ class TestResolveDynamicCredentialHeaders:
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
             client._auth = {"scope": "DYNAMIC"}
-            client._input_parameters = {"Authorization": "{{inputs.cred.token}}"}
             restore = TestResolveDynamicCredentialHeaders._bind(
-                {"cred": {"token": "tok-nested"}}
+                {"cred": {"token": "tok-nested"}},
+                mcp_input_parameters={"test-server": {"Authorization": "{{inputs.cred.token}}"}},
             )
             try:
                 request_params = client._prepare_request_params(inputs={}, name="t")
@@ -492,9 +494,9 @@ class TestResolveDynamicCredentialHeaders:
             client = _create_client(cls)
             client._auth = {"scope": "DYNAMIC"}
             client._auth_headers = {"Authorization": "server-hdr"}
-            client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
             restore = TestResolveDynamicCredentialHeaders._bind(
-                {"userToken": "bound-value"}
+                {"userToken": "bound-value"},
+                mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
             )
             try:
                 request_params = client._prepare_request_params(inputs={}, name="t")
@@ -509,8 +511,10 @@ class TestResolveDynamicCredentialHeaders:
             for cls in (StreamableHttpClientNew, SSEClientNew):
                 client = _create_client(cls)
                 client._auth = {"scope": "DYNAMIC"}
-                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
-                restore = TestResolveDynamicCredentialHeaders._bind(variables)
+                restore = TestResolveDynamicCredentialHeaders._bind(
+                    variables,
+                    mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
+                )
                 try:
                     request_params = client._prepare_request_params(inputs={}, name="t")
                 finally:
@@ -524,8 +528,10 @@ class TestResolveDynamicCredentialHeaders:
             for cls in (StreamableHttpClientNew, SSEClientNew):
                 client = _create_client(cls)
                 client._auth = {"scope": "DYNAMIC"}
-                client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
-                restore = TestResolveDynamicCredentialHeaders._bind({"userToken": bad})
+                restore = TestResolveDynamicCredentialHeaders._bind(
+                    {"userToken": bad},
+                    mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
+                )
                 try:
                     request_params = client._prepare_request_params(inputs={}, name="t")
                 finally:
@@ -538,9 +544,11 @@ class TestResolveDynamicCredentialHeaders:
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
             client._auth = {"scope": "DYNAMIC"}
-            client._input_parameters = {"Authorization": "{{memory.test}}"}
             restore = TestResolveDynamicCredentialHeaders._bind(
-                {}, {"test": "123"})
+                {"any": "source"},
+                {"test": "123"},
+                mcp_input_parameters={"test-server": {"Authorization": "{{memory.test}}"}},
+            )
             try:
                 request_params = client._prepare_request_params(inputs={}, name="t")
             finally:
@@ -553,9 +561,10 @@ class TestResolveDynamicCredentialHeaders:
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
             client._auth = {"scope": "DYNAMIC"}
-            client._input_parameters = {"Authorization": "{{memory.test}}"}
             restore = TestResolveDynamicCredentialHeaders._bind(
-                {"other": "x"})
+                {"other": "x"},
+                mcp_input_parameters={"test-server": {"Authorization": "{{memory.test}}"}},
+            )
             try:
                 request_params = client._prepare_request_params(inputs={}, name="t")
             finally:
@@ -569,9 +578,11 @@ class TestResolveDynamicCredentialHeaders:
             for cls in (StreamableHttpClientNew, SSEClientNew):
                 client = _create_client(cls)
                 client._auth = {"scope": "DYNAMIC"}
-                client._input_parameters = {"Authorization": "{{memory.test}}"}
                 restore = TestResolveDynamicCredentialHeaders._bind(
-                    {}, {"test": bad})
+                    {"any": "source"},
+                    {"test": bad},
+                    mcp_input_parameters={"test-server": {"Authorization": "{{memory.test}}"}},
+                )
                 try:
                     request_params = client._prepare_request_params(inputs={}, name="t")
                 finally:
@@ -604,19 +615,28 @@ class TestResolveDynamicCredentialHeaders:
             assert request_params.headers.get("Authorization") == "request-level-tok", cls.__name__
 
     @staticmethod
-    def test_client_fallback_when_no_request_templates():
-        """无请求级模板（工作流路径）回退 client 自身 input_parameters。"""
+    def test_client_template_not_applied_in_react_chain():
+        """react 链路（请求级值源存在）映射无本 server 条目 → 不回退 client
+        自身 input_parameters（跨 agent 凭证污染防护）。
+
+        resource_mgr 的 MCP client 按 server_id 进程级缓存且首个注册者的
+        配置生效——共享 client 的 input_parameters 可能来自别的 agent 的
+        IR；本次 agent 未配置该 server 的绑定（映射无条目）时套用旧模板
+        会把本次请求的变量按他 agent 的绑定注入出站头。
+        """
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
             client._auth = {"scope": "DYNAMIC"}
+            # client 自身（陈旧/他 agent）模板存在
             client._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+            # react 链路：值源已写入（global_variables），映射无 test-server 条目
             restore = TestResolveDynamicCredentialHeaders._bind(
                 {"userToken": "client-level-tok"})
             try:
                 request_params = client._prepare_request_params(inputs={}, name="t")
             finally:
                 restore()
-            assert request_params.headers.get("Authorization") == "client-level-tok", cls.__name__
+            assert "Authorization" not in request_params.headers, cls.__name__
 
     @staticmethod
     def test_workflow_path_untouched_without_ctx():

@@ -14,7 +14,7 @@
 """
 
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -90,21 +90,25 @@ def strip_correlation_headers(headers: dict) -> None:
 def set_request_global_variables(variables: dict) -> None:
     """写入请求级全局变量（react 执行器调用）。
 
+    copy-on-write：经 dataclasses.replace 构造新实例后 ContextVar.set——
+    ContextVar 的 default 是进程级共享实例，不继承 contextvars 的执行
+    （多智能体同步桥线程/线程池 worker）.get() 拿到的正是它，原地改写会把
+    本次请求的变量/凭证泄漏给所有无自有上下文的执行（跨用户串用）。
     就地持有调用方 dict 引用（后续默认值合并对读取方可见）；
     非 dict 值忽略（保持现状）。
     """
     if isinstance(variables, dict):
-        _request_ctx.get().global_variables = variables
+        _request_ctx.set(replace(_request_ctx.get(), global_variables=variables))
 
 
 def set_request_memory_variables(variables: dict) -> None:
     """写入请求级记忆变量（react 执行器调用）。
 
     值序=value > default_value（IR metadata.memoryVariables 合并产物）；
-    非 dict 值忽略（保持现状）。
+    copy-on-write 语义同 set_request_global_variables；非 dict 值忽略。
     """
     if isinstance(variables, dict):
-        _request_ctx.get().memory_variables = variables
+        _request_ctx.set(replace(_request_ctx.get(), memory_variables=variables))
 
 
 def get_request_memory_variables() -> dict:
@@ -117,9 +121,26 @@ def get_request_memory_variables() -> dict:
 
 
 def set_request_mcp_input_parameters(parameters: dict) -> None:
-    """写入请求级 MCP 绑定模板（react 执行器调用，按 server_id 键控）。"""
+    """写入请求级 MCP 绑定模板（react 执行器调用，按 server_id 键控）。
+
+    copy-on-write 语义同 set_request_global_variables。
+    """
     if isinstance(parameters, dict):
-        _request_ctx.get().mcp_input_parameters = parameters
+        _request_ctx.set(replace(_request_ctx.get(), mcp_input_parameters=parameters))
+
+
+def clear_request_runtime_bindings() -> None:
+    """清空 react 执行器写入的三类请求级绑定（run_streaming 的 finally 调用）。
+
+    防两类残留：同一上下文内 agent 结束后，后续工作流/插件调用经
+    get_request_* 读到上一个 agent 的绑定值源（{{inputs.*}} 解析出
+    他人凭证注入出站头）；以及（copy-on-write 之前已写入共享 default 的
+    场景）桥线程复用上下文的累积污染。copy-on-write 语义同三个 setter。
+    """
+    _request_ctx.set(replace(_request_ctx.get(),
+                             global_variables={},
+                             memory_variables={},
+                             mcp_input_parameters={}))
 
 
 def get_request_mcp_input_parameters() -> dict:

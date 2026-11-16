@@ -715,7 +715,26 @@ class ReActAgentRunner:
     async def run_streaming(
             self, req: ExecutionRequest, execution_id: str | None = None
     ) -> AsyncGenerator[Dict, None]:
-        """流式运行 ReActAgent 并 yield SSE 事件"""
+        """流式运行 ReActAgent 并 yield SSE 事件。
+
+        FEAT-093 请求级绑定清理包装：impl 内写入了请求级
+        global_variables/memory_variables/mcp_input_parameters（动态凭证
+        绑定值源与模板），任何退出路径（早退 return、异常、消费者中断
+        生成器）结束后统一清空——防同一上下文内后续调用读到上一个
+        agent 的绑定值源（跨请求凭证串用）。
+        """
+        try:
+            async for event in self._run_streaming_impl(req, execution_id):
+                yield event
+        finally:
+            from agent_runtime.context.request_context import (
+                clear_request_runtime_bindings,
+            )
+            clear_request_runtime_bindings()
+
+    async def _run_streaming_impl(
+            self, req: ExecutionRequest, execution_id: str | None = None
+    ) -> AsyncGenerator[Dict, None]:
         exec_id = execution_id or req.conversation_id or str(uuid.uuid4())
         adapter = ReactStreamDataAdapter(execution_id=exec_id)
 

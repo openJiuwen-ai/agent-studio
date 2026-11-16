@@ -49,6 +49,7 @@ import com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentServiceManagerService;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
@@ -907,7 +908,14 @@ public class WorkflowValidationService {
         if ("Headers".equalsIgnoreCase(field.getLocation())) {
             return true;
         }
-        return IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(field.getDescription());
+        // 兜底叠加头名合法性约束：description 是用户可自由编辑的字段，单独
+        // 作为豁免开关等于任意参数填标记串即可绕过 isNameValid（发布校验
+        // 防线被可伪造内容击穿）；叠加 RFC 7230 头名 token 校验后，可豁免的
+        // 只剩「标识符非法但头名合法」的名字（456/3-pwa 等动态头人群），
+        // 头名也非法的（含空格/控制字符）仍被 isNameValid 拦截
+        return IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(field.getDescription())
+            && McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(
+                StringUtils.defaultString(field.getName())).matches();
     }
 
     /**

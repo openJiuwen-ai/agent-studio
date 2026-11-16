@@ -1586,10 +1586,27 @@ public class PluginBaseImpl implements IPluginBase {
         }
         // 详情回显回环条目剥离（标记识别，仅用于校验豁免——持久侧由
         // stripDynamicAuthRoundtripParams(AuthInfo, String) 独立剥离），再对
-        // 剩余 Headers 参数做同名拒绝
-        SchemaConfig inputSchema = StringUtils.isBlank(inputSchemaStr)
-                ? null : JSON.parseObject(inputSchemaStr, SchemaConfig.class);
-        stripDynamicAuthRoundtripParams(inputSchema, targetNamesLower);
+        // 剩余 Headers 参数做同名拒绝。inputSchemaStr 双形态：请求体=单工具
+        // 对象 SchemaConfig；插件实体行=ToolInputSchema 数组
+        // （transformDTOtoNewEntity 序列化写入，每元素 input_schema 内层串
+        // 才是对象形态）——数组按数组解析遍历内层，防存量插件把鉴权切
+        // DYNAMIC 时对象解析抛错使接口整体失败
+        for (SchemaConfig inputSchema : parseInputSchemasForValidation(inputSchemaStr)) {
+            stripDynamicAuthRoundtripParams(inputSchema, targetNamesLower);
+            if (Objects.nonNull(inputSchema) && Objects.nonNull(inputSchema.getProperties())) {
+                for (Map.Entry<String, SchemaConfig> entry : inputSchema.getProperties().entrySet()) {
+                    SchemaConfig value = entry.getValue();
+                    boolean isHeaderParam = Objects.nonNull(value)
+                            && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation());
+                    if (isHeaderParam && entry.getKey() != null
+                            && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT))) {
+                        throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
+                            "tool header param '" + entry.getKey()
+                                + "' conflicts with dynamic auth header, remove the duplicate");
+                    }
+                }
+            }
+        }
         if (Objects.nonNull(requestInfo) && MapUtils.isNotEmpty(requestInfo.getHeaders())) {
             for (String name : requestInfo.getHeaders().keySet()) {
                 if (name != null && targetNamesLower.contains(name.toLowerCase(Locale.ROOT))) {
@@ -1598,19 +1615,40 @@ public class PluginBaseImpl implements IPluginBase {
                 }
             }
         }
-        if (Objects.nonNull(inputSchema) && Objects.nonNull(inputSchema.getProperties())) {
-            for (Map.Entry<String, SchemaConfig> entry : inputSchema.getProperties().entrySet()) {
-                SchemaConfig value = entry.getValue();
-                boolean isHeaderParam = Objects.nonNull(value)
-                        && HEADER_PARAM_LOCATION.equalsIgnoreCase(value.getLocation());
-                if (isHeaderParam && entry.getKey() != null
-                        && targetNamesLower.contains(entry.getKey().toLowerCase(Locale.ROOT))) {
-                    throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
-                        "tool header param '" + entry.getKey()
-                            + "' conflicts with dynamic auth header, remove the duplicate");
+    }
+
+    /**
+     * validPluginDynamicAuthInfo 的入参 schema 双形态解析：
+     * 请求体（单工具对象 SchemaConfig JSON）返回单元素；插件实体行
+     * （ToolInputSchema 数组，元素 input_schema 字段为内层对象 JSON 串）
+     * 返回全部内层对象。内层单条畸形仅告警跳过（豁免面随行缩小，不阻断
+     * 存量数据切换 DYNAMIC）；外层形态畸形按入参非法报错。
+     */
+    private static List<SchemaConfig> parseInputSchemasForValidation(String inputSchemaStr) {
+        if (StringUtils.isBlank(inputSchemaStr)) {
+            return Collections.emptyList();
+        }
+        String trimmed = inputSchemaStr.trim();
+        if (trimmed.startsWith("[")) {
+            List<SchemaConfig> schemas = new ArrayList<>();
+            List<ToolInputSchema> toolInputs = JSON.parseArray(trimmed, ToolInputSchema.class);
+            for (ToolInputSchema toolInput : toolInputs) {
+                if (Objects.isNull(toolInput) || StringUtils.isBlank(toolInput.getInputSchema())) {
+                    continue;
+                }
+                try {
+                    SchemaConfig inner = JSON.parseObject(toolInput.getInputSchema(), SchemaConfig.class);
+                    if (Objects.nonNull(inner)) {
+                        schemas.add(inner);
+                    }
+                } catch (Exception e) {
+                    log.warn("Skip malformed tool input_schema while validating dynamic auth: {}", e.getMessage());
                 }
             }
+            return schemas;
         }
+        SchemaConfig single = JSON.parseObject(trimmed, SchemaConfig.class);
+        return Objects.isNull(single) ? Collections.emptyList() : Collections.singletonList(single);
     }
 
     @Override

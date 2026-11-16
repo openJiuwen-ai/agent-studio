@@ -22,7 +22,6 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
-
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -111,6 +110,56 @@ class WorkflowValidationServiceTest {
     @Test
     void isNameValid_null_shouldReturnFalse() {
         assertFalse(invokeNameValid(null), "null 应拒绝");
+    }
+
+    // ===== FEAT-093 isHeaderChannelField（头通道豁免：location 或 标记描述）=====
+
+    @Test
+    void isHeaderChannelField_locationHeaders_shouldReturnTrue() {
+        WorkflowFieldVO field = new WorkflowFieldVO();
+        field.setLocation("Headers");
+        field.setName("456");
+        assertTrue(invokeHeaderChannelField(field), "location=Headers 直通豁免");
+    }
+
+    @Test
+    void isHeaderChannelField_markerDescWithHeaderTokenName_shouldReturnTrue() {
+        // 历史 DSL 兜底：标记描述 + 标识符非法但 HTTP 头名合法（数字开头等）→ 豁免
+        WorkflowFieldVO field = new WorkflowFieldVO();
+        field.setDescription(IrAdapterService.DYNAMIC_AUTH_PARAM_DESC);
+        field.setName("456");
+        assertTrue(invokeHeaderChannelField(field), "标记描述+合法头名应豁免（456 动态头人群）");
+    }
+
+    @Test
+    void isHeaderChannelField_markerDescWithIllegalHeaderName_shouldReturnFalse() {
+        // 兜底收窄：description 是用户可自由编辑字段——头名非法的名字不因
+        // 填写标记串获得豁免（防任意参数绕过 isNameValid）
+        WorkflowFieldVO field = new WorkflowFieldVO();
+        field.setDescription(IrAdapterService.DYNAMIC_AUTH_PARAM_DESC);
+        field.setName("my param");
+        assertFalse(invokeHeaderChannelField(field), "头名非法（含空格）不应豁免");
+        field.setName("bad\r\nname");
+        assertFalse(invokeHeaderChannelField(field), "头名含控制字符不应豁免");
+    }
+
+    @Test
+    void isHeaderChannelField_markerDescWithNullName_shouldReturnFalse() {
+        WorkflowFieldVO field = new WorkflowFieldVO();
+        field.setDescription(IrAdapterService.DYNAMIC_AUTH_PARAM_DESC);
+        assertFalse(invokeHeaderChannelField(field), "无字段名不豁免");
+    }
+
+    @Test
+    void isHeaderChannelField_plainDesc_shouldReturnFalse() {
+        WorkflowFieldVO field = new WorkflowFieldVO();
+        field.setDescription("dynamic auth credential, bind value in workflowX");
+        field.setName("456");
+        assertFalse(invokeHeaderChannelField(field), "非标记描述不豁免");
+    }
+
+    private boolean invokeHeaderChannelField(WorkflowFieldVO field) {
+        return (boolean) ReflectionTestUtils.invokeMethod(service, "isHeaderChannelField", field);
     }
 
     // ===== isElementTypeValid：integer 整数约束（低风险）=====

@@ -4,8 +4,11 @@
 
 机制：react 执行器把请求级全局变量/记忆变量写入 RequestContext；插件
 工具的动态鉴权头（Headers 位置参数）绑定模板（inputParameters，
-请求级优先、card 回退）解析出值并入 inputs，经 RequestParamsCreator
-的 Headers 路由注入出站请求头。工作流链路不写请求上下文，互不重叠。
+react 链路只认请求级映射，不回退 card 自身配置——card 进程级共享、
+配置可能来自首个注册者即别的 agent）解析出值并入 inputs，经
+RequestParamsCreator 的 Headers 路由注入出站请求头。工作流链路不写
+请求上下文，互不重叠。绑定值对 inputs 已有同名值（LLM 工具调用参数，
+可能为编造值）强制覆盖——与环境变量通道同语义。
 """
 # pylint: disable=protected-access  # 单测需注入/调用内部属性与方法（仓库既有惯例）
 
@@ -51,8 +54,10 @@ class TestPluginDynamicCredentialMerge:
     def test_inputs_template_resolved_to_headers_param():
         """{{inputs.*}} 绑定 → Headers 位置参数值并入 inputs。"""
         wrapper = _create_wrapper([("Authorization", "Headers"), ("query", "Body")])
-        wrapper._input_parameters = {"Authorization": "{{inputs.userToken}}"}
-        restore = _bind(global_variables={"userToken": "Bearer plugin-tok"})
+        restore = _bind(
+            global_variables={"userToken": "Bearer plugin-tok"},
+            request_templates={"plugin-1": {"Authorization": "{{inputs.userToken}}"}},
+        )
         try:
             inputs = {"query": "hi"}
             wrapper._merge_input_parameters(inputs)
@@ -64,8 +69,11 @@ class TestPluginDynamicCredentialMerge:
     def test_memory_template_resolved():
         """{{memory.*}} 绑定 → 记忆变量值并入 Headers 参数。"""
         wrapper = _create_wrapper([("Authorization", "Headers")])
-        wrapper._input_parameters = {"Authorization": "{{memory.memToken}}"}
-        restore = _bind(memory_variables={"memToken": "123"})
+        restore = _bind(
+            global_variables={"any": "source"},
+            memory_variables={"memToken": "123"},
+            request_templates={"plugin-1": {"Authorization": "{{memory.memToken}}"}},
+        )
         try:
             inputs = {}
             wrapper._merge_input_parameters(inputs)
@@ -77,8 +85,10 @@ class TestPluginDynamicCredentialMerge:
     def test_non_headers_param_not_injected():
         """非 Headers 位置参数的 {{inputs.*}} 引用不注入（维持环境变量通道语义）。"""
         wrapper = _create_wrapper([("query", "Body")])
-        wrapper._input_parameters = {"query": "{{inputs.userToken}}"}
-        restore = _bind(global_variables={"userToken": "tok"})
+        restore = _bind(
+            global_variables={"userToken": "tok"},
+            request_templates={"plugin-1": {"query": "{{inputs.userToken}}"}},
+        )
         try:
             inputs = {}
             wrapper._merge_input_parameters(inputs)
@@ -87,17 +97,24 @@ class TestPluginDynamicCredentialMerge:
         assert "query" not in inputs or inputs.get("query") != "tok"
 
     @staticmethod
-    def test_existing_value_not_overwritten():
-        """inputs 已有值（LLM 已提供）不覆盖。"""
+    def test_bound_value_overwrites_llm_given():
+        """绑定值强制覆盖 inputs 已有同名值（LLM 编造值必须被覆盖）。
+
+        Java 侧 IrAdapter 把动态头 target_name 下发进工具 schema，LLM
+        工具调用可能编造同名参数值；与环境变量通道（LLM 可能生成推测值，
+        必须被覆盖）同语义——绑定模板解析成功即覆盖。
+        """
         wrapper = _create_wrapper([("Authorization", "Headers")])
-        wrapper._input_parameters = {"Authorization": "{{inputs.userToken}}"}
-        restore = _bind(global_variables={"userToken": "bound"})
+        restore = _bind(
+            global_variables={"userToken": "bound"},
+            request_templates={"plugin-1": {"Authorization": "{{inputs.userToken}}"}},
+        )
         try:
             inputs = {"Authorization": "llm-given"}
             wrapper._merge_input_parameters(inputs)
         finally:
             restore()
-        assert inputs.get("Authorization") == "llm-given"
+        assert inputs.get("Authorization") == "bound"
 
     @staticmethod
     def test_request_level_template_wins():
@@ -135,14 +152,36 @@ class TestPluginDynamicCredentialMerge:
         """非法头值（中文/控制字符）WARNING 后不注入。"""
         for bad in ("Bearer 中文", "tok\r\nen"):
             wrapper = _create_wrapper([("Authorization", "Headers")])
-            wrapper._input_parameters = {"Authorization": "{{inputs.userToken}}"}
-            restore = _bind(global_variables={"userToken": bad})
+            restore = _bind(
+                global_variables={"userToken": bad},
+                request_templates={"plugin-1": {"Authorization": "{{inputs.userToken}}"}},
+            )
             try:
                 inputs = {}
                 wrapper._merge_input_parameters(inputs)
             finally:
                 restore()
             assert "Authorization" not in inputs, bad
+
+    @staticmethod
+    def test_client_template_not_applied_in_react_chain():
+        """react 链路（请求级值源存在）映射无本插件条目 → 不回退 card 自身
+        input_parameters（跨 agent 凭证污染防护）。
+
+        card（插件工具实例）进程级共享且首个注册者的配置生效——card 的
+        input_parameters 可能来自别的 agent 的 IR；本次 agent 未配置该
+        插件的绑定（映射无条目）时套用旧模板会把本次请求的变量按他
+        agent 的绑定注入出站头。
+        """
+        wrapper = _create_wrapper([("Authorization", "Headers")])
+        wrapper._input_parameters = {"Authorization": "{{inputs.userToken}}"}
+        restore = _bind(global_variables={"userToken": "client-level-tok"})
+        try:
+            inputs = {}
+            wrapper._merge_input_parameters(inputs)
+        finally:
+            restore()
+        assert "Authorization" not in inputs
 
     @staticmethod
     def test_workflow_path_untouched_without_ctx():

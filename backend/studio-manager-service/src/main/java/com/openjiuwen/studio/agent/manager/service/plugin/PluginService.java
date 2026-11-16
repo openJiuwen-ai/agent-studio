@@ -141,6 +141,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Set;
@@ -2263,8 +2264,7 @@ public class PluginService implements IPluginService {
         // FEAT-093 插件动态鉴权：登记侧校验 + 存量工具请求头（插件行上的
         // requestInfo/inputSchema JSON 串）同名拒绝
         pluginBase.validPluginDynamicAuthInfo(authInfoReq,
-            StringUtils.isBlank(pluginEntity.getRequestInfo())
-                ? null : JSON.parseObject(pluginEntity.getRequestInfo(), RequestInfo.class),
+            parseEntityRequestInfoForValidation(pluginEntity.getRequestInfo()),
             pluginEntity.getInputSchema());
 
         // 2. 复用现有的加密逻辑，对最新的鉴权信息进行加密
@@ -2300,6 +2300,44 @@ public class PluginService implements IPluginService {
         }
 
         return response;
+    }
+
+    /**
+     * 插件实体行 requestInfo 双形态解析（updatePluginAuthInfo 校验用）：
+     * 旧版单工具=RequestInfo（顶层 headers 即固定头）；新版多工具=
+     * ToolRequestInfo（basic_info + tool_info[*].headers）——同名拒绝校验
+     * 须取全部工具的 headers 并集，按旧形态解析会漏检新结构的工具头。
+     * 两种形态均解析失败时返回 null（不阻断，豁免面随行缩小并告警）。
+     */
+    private RequestInfo parseEntityRequestInfoForValidation(String requestInfoStr) {
+        if (StringUtils.isBlank(requestInfoStr)) {
+            return null;
+        }
+        try {
+            ToolRequestInfo toolRequestInfo = JSON.parseObject(requestInfoStr, ToolRequestInfo.class);
+            if (Objects.nonNull(toolRequestInfo)
+                    && CollectionUtils.isNotEmpty(toolRequestInfo.getToolsInfoList())) {
+                Map<String, String> mergedHeaders = new HashMap<>();
+                for (ToolInfo tool : toolRequestInfo.getToolsInfoList()) {
+                    if (Objects.nonNull(tool) && MapUtils.isNotEmpty(tool.getHeaders())) {
+                        mergedHeaders.putAll(tool.getHeaders());
+                    }
+                }
+                RequestInfo merged = new RequestInfo();
+                merged.setHeaders(mergedHeaders);
+                return merged;
+            }
+        } catch (Exception e) {
+            log.warn("Parse plugin requestInfo as ToolRequestInfo failed, fallback to RequestInfo: {}",
+                e.getMessage());
+        }
+        try {
+            return JSON.parseObject(requestInfoStr, RequestInfo.class);
+        } catch (Exception e) {
+            log.warn("Parse plugin requestInfo as RequestInfo failed, skip header conflict check: {}",
+                e.getMessage());
+            return null;
+        }
     }
 
     @Override

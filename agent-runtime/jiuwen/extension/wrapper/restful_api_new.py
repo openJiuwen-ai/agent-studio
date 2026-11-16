@@ -366,15 +366,17 @@ class RestfulApiToolNew(Tool):
             sources["memory"] = memory_variables
         if not sources:
             return
+        # sources 非空 ⟹ react 链路（工作流链路不写请求级变量，上方已早退）：
+        # 只认请求级映射（react 执行器按本次运行 agent 的 IR 写入，按插件
+        # id/name 双形态键控）——本插件无条目即无模板，不回退 card 自身
+        # input_parameters（插件工具实例进程级共享，card 配置可能来自首个
+        # 注册者即别的 agent，回退=跨 agent 动态凭证污染）
         request_level = get_request_mcp_input_parameters()
-        templates = request_level.get(self._id) or request_level.get(self._name) \
-            or self._input_parameters
+        templates = request_level.get(self._id) or request_level.get(self._name)
         if not isinstance(templates, dict) or not templates:
             return
         for param_name, template in templates.items():
             if not isinstance(param_name, str) or not param_name or not isinstance(template, str):
-                continue
-            if inputs.get(param_name) not in (None, ""):
                 continue
             template = template.strip()
             if not (template.startswith("{{") and template.endswith("}}")):
@@ -401,7 +403,12 @@ class RestfulApiToolNew(Tool):
                     )
                     break
                 # 仅并入 Headers 位置参数的值（语义=出站请求头；其他位置的
-                # {{inputs.*}} 引用维持既有环境变量通道语义，不在此覆盖）
+                # {{inputs.*}} 引用维持既有环境变量通道语义，不在此覆盖）。
+                # 覆盖语义（不判 inputs 已有值）：inputs 里的同名值来自 LLM
+                # 工具调用参数——Java 侧 IrAdapter 把动态头 target_name 下发
+                # 进工具 schema，LLM 可能编造推测值，必须被绑定值覆盖
+                # （与环境变量通道同语义；工作流链路在上方 sources 空处早退，
+                # 字面值优先语义不经此路径）
                 for param in self._params:
                     if param.name == param_name and str(getattr(param, "method", "Body")) == "Headers":
                         inputs[param_name] = value_str
