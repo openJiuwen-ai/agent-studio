@@ -149,8 +149,28 @@ class EvaluationExportEasyExcelTest {
         }
     }
 
-    private static List<List<String>> buildHead() {
-        List<List<String>> head = new ArrayList<>();
+    @Test
+    void doubleEmptyLists_stillProducesOneRow() {
+        // 检视修复回归：双空集合时原 Math.max(0,0)=0 会产出 0 行,
+        // testNum/expectResult 标量列丢失——Math.max(1,...) 保证至少 1 行
+        List<EvaluationResultsExportExcel> rows = List.of(
+            EvaluationResultsExportExcel.builder()
+                .testNum(42)
+                .variableExportList(List.of())
+                .expectResult("空集合预期")
+                .promptEvaluationResultExportList(List.of())
+                .build());
+
+        List<List<Object>> flat = new ArrayList<>();
+        List<int[]> ranges = new ArrayList<>();
+        EvaluationResultService.flattenRows(rows, flat, ranges);
+        assertEquals(1, flat.size(), "双空集合实体须产出至少 1 行(标量列不丢)");
+        assertEquals(Arrays.asList(42, "", "", "空集合预期", "", "", "", ""),
+            flat.get(0), "testNum=42 与 expectResult 须保留,集合列为空串");
+        assertArrayEquals(new int[]{0, 0}, ranges.get(0));
+    }
+
+    private static List<List<String>> buildHead() {        List<List<String>> head = new ArrayList<>();
         for (String key : Arrays.asList("excel.export.evaluation.test.num",
             "excel.export.variable.key", "excel.export.variable.value",
             "excel.export.evaluation.result.expect", "excel.export.prompt.name",

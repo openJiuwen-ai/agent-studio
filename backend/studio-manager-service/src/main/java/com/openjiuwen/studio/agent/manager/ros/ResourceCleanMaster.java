@@ -76,15 +76,23 @@ public class ResourceCleanMaster {
         ObjectMapper objectMapper = new ObjectMapper();
         cleanResources = objectMapper.readValue(resource.getInputStream(), CleanResource[].class);
 
-        // trim+过滤空 token 再 parseInt——与被移除的 Hadoop StringUtils.split
-        // （commons-lang 风格：跳过空 token、空输入得空集合）保持同款容错；
-        // String.split(",") 保留中间空 token（如 "0,,6"），裸 parseInt 会抛
-        // NumberFormatException 使 @PostConstruct bean 初始化失败→manager 启动崩
+        // trim+过滤空 token 再 parseInt——比被移除的 Hadoop StringUtils.split
+        // 更宽容（Hadoop 3.4.2 的 split 实际保留中间空 token、空输入返回 [""]，
+        // 仅剔除末尾空 token——旧代码对 "0,,6" 同样会启动失败，新实现跳过空
+        // token 使其可正常启动）。
+        // 但空输入/全空 token 解析后 timeWindow 为空列表，clean() 中
+        // timeWindow.get(0) 会 IndexOutOfBoundsException——须校验
+        // size >= 2 保持坏配置 fail-fast（time-window 语义=区间[begin, end]）
         timeWindow = Arrays.stream(timeWindowStr.split(","))
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .map(Integer::parseInt)
             .toList();
+        if (timeWindow.size() < 2) {
+            throw new IllegalArgumentException(
+                "tenant.resourceclean.time-window must contain at least 2 valid integers, "
+                + "current: [" + timeWindowStr + "]");
+        }
     }
 
     /**

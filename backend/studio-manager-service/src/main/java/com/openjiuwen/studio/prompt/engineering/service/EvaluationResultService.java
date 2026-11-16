@@ -321,7 +321,9 @@ public class EvaluationResultService {
             List<PromptEvaluationResultExport> prompts = row.getPromptEvaluationResultExportList() == null
                 ? Collections.emptyList() : row.getPromptEvaluationResultExportList();
             int startRow = flatRows.size();
-            int lineCount = Math.max(vars.size(), prompts.size());
+            // 至少 1 行：双空集合时原 easypoi 仍输出一行标量列(testNum/expectResult
+            // 不丢)；Math.max(0,...) 会产出 0 行,该实体的标量列整体丢失
+            int lineCount = Math.max(1, Math.max(vars.size(), prompts.size()));
             for (int i = 0; i < lineCount; i++) {
                 VariableExport var = i < vars.size() ? vars.get(i) : null;
                 PromptEvaluationResultExport prompt = i < prompts.size() ? prompts.get(i) : null;

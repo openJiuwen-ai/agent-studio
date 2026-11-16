@@ -73,8 +73,16 @@ public class GenKeytab {
 
 
 def main():
-    lib = r"D:\project\openjiuwen\agent-studio\backend\studio-manager\target\lib"
-    cp = ";".join([
+    # 基于脚本位置推导相对路径（可移植——不再硬编码作者本机绝对路径）
+    # 脚本位置: backend/studio-manager-service/src/test/resources/
+    # lib 目标: backend/studio-manager/target/lib/
+    here = os.path.dirname(os.path.abspath(__file__))
+    backend = os.path.join(here, "..", "..", "..", "..")
+    lib = os.path.join(backend, "studio-manager", "target", "lib")
+    outdir = here
+    # classpath 分隔符按操作系统（Windows 用 ";"，Linux/Mac 用 ":"）
+    sep = os.pathsep
+    cp = sep.join([
         os.path.join(lib, "kerb-util-2.0.3.jar"),
         os.path.join(lib, "kerb-core-2.0.3.jar"),
         os.path.join(lib, "kerby-util-2.0.3.jar"),
@@ -83,7 +91,6 @@ def main():
         os.path.join(lib, "kerby-config-2.0.3.jar"),
         os.path.join(lib, "kerby-pkix-2.0.3.jar"),
     ])
-    outdir = r"D:\project\openjiuwen\agent-studio\backend\studio-manager-service\src\test\resources"
     java_file = os.path.join(outdir, "GenKeytab.java")
     with open(java_file, "w", encoding="utf-8") as f:
         f.write(JAVA_SRC)
