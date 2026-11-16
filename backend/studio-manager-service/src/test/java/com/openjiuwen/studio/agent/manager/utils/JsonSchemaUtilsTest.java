@@ -25,6 +25,15 @@ class JsonSchemaUtilsTest {
     }
 
     @Test
+    void testIsJsonSchemaValid_WithEmptyObjectLiteral() {
+        // 前端历史兜底 "{}" 视为无 schema，与 blank 同语义
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("{}", 10, 5, false));
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("  {}  ", 10, 5, true));
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("[]", 10, 5, false));
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("null", 10, 5, false));
+    }
+
+    @Test
     void testIsJsonSchemaValid_WithInvalidJson() {
         AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> JsonSchemaUtils.isJsonSchemaValid("not-json", 10, 5, true));

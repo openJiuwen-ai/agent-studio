@@ -59,6 +59,11 @@ public class JsonSchemaUtils {
         if (StringUtils.isBlank(jsonSchema)) {
             return true;
         }
+        // 前端历史兜底会把「无出入参」写成 "{}"；与 blank 一样视为无 schema，避免误报缺 type
+        String trimmed = jsonSchema.trim();
+        if ("{}".equals(trimmed) || "[]".equals(trimmed) || "null".equalsIgnoreCase(trimmed)) {
+            return true;
+        }
         ObjectMapper mapper = new ObjectMapper();
         JsonNode schemaNode;
         try {

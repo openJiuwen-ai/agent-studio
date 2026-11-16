@@ -386,9 +386,23 @@ export const pluginSchemaStr2Args = (schemaStr: string): IRequestArgsView[] => {
   return result;
 };
 
+/** 将空出参/入参的历史兜底 "{}" / "[]" / blank 统一成 null，避免 PUT 触发 02401003。 */
+export const normalizeEmptyToolSchema = (
+  schemaStr: string | null | undefined,
+): string | null => {
+  if (schemaStr == null) {
+    return null;
+  }
+  const trimmed = String(schemaStr).trim();
+  if (!trimmed || trimmed === '{}' || trimmed === '[]' || trimmed === 'null') {
+    return null;
+  }
+  return schemaStr;
+};
+
 export const pluginSchemaStr2Res = (schemaStr: string): IResponseArgsView[] => {
-  // 无出参（创建时 output_schema=null/空串）时静默返回，避免详情页误弹「响应参数数据格式有误」
-  if (!schemaStr) {
+  // 无出参（null/空串/"{}"）时静默返回，避免详情页误弹「响应参数数据格式有误」
+  if (!normalizeEmptyToolSchema(schemaStr)) {
     return [];
   }
   let result: IResponseArgsView[] = [];
@@ -730,12 +744,14 @@ export function coverPluginInfo(context: any) {
       tool_id: item.tool_id,
       tool_info: {
         ...item,
-        input_schema:
+        input_schema: normalizeEmptyToolSchema(
           context.plugin.input_schema.find((i) => i.tool_id === item.tool_id)
-            ?.input_schema ?? '{}',
-        output_schema:
+            ?.input_schema,
+        ),
+        output_schema: normalizeEmptyToolSchema(
           context.plugin.output_schema.find((i) => i.tool_id === item.tool_id)
-            ?.output_schema ?? '{}',
+            ?.output_schema,
+        ),
         intf_type: context.plugin.intf_type.find(
           (i) => i.tool_id === item.tool_id,
         )?.intf_type,
