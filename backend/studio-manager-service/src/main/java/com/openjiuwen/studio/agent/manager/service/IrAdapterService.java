@@ -1702,8 +1702,11 @@ public class IrAdapterService {
         fillInputSchemaByRequestInfo(inputSchema, toolEntity.getRequestInfo());
         // FEAT-093 插件动态鉴权：auth_keys[].target_name 追加为 Headers 入参
         // （值不落库，由工作流节点/智能体工具参数绑定——ref/input_ref 引用入参；
-        // 与 server headers 按名去重、大小写不敏感，同 MCP 通道约定）
-        appendDynamicAuthParamsToSchema(toolEntity.getAuthInfo(), inputSchema);
+        // 与 server headers 按名去重、大小写不敏感，同 MCP 通道约定）。
+        // 返回值回写：inputSchema 可为 null（空入参 schema=纯动态鉴权插件的既有
+        // 支持场景），追加须以返回值为准——helper 对 null 入参构造的新实例
+        // 只能经返回值传播到调用方
+        inputSchema = appendDynamicAuthParamsToSchema(toolEntity.getAuthInfo(), inputSchema);
 
         result.put(HEADERS, headers);
         result.put(AUTH, WorkflowUtils.parseAuthInfo(toolEntity.getAuthInfo()));
@@ -2228,13 +2231,17 @@ public class IrAdapterService {
      * 与既有参数（server headers/schema Headers 参数）按名去重、大小写不敏感。
      *
      * @param authInfo 工具（继承自插件）的鉴权信息
-     * @param inputSchema 待追加的工具入参 schema
+     * @param inputSchema 待追加的工具入参 schema；可为 null——空入参 schema 是
+     *        既有支持场景（纯动态鉴权插件），此时构造并返回新 schema（Java 引用
+     *        按值传递，就地重赋局部参数不会回写到调用方，必须经返回值传播）
+     * @return 追加后的 schema（入参非 null 时为同一实例；入参 null 且命中
+     *         DYNAMIC 追加时为新实例，否则原样返回 null/入参）
      */
-    public static void appendDynamicAuthParamsToSchema(AuthInfo authInfo, SchemaConfig inputSchema) {
+    public static SchemaConfig appendDynamicAuthParamsToSchema(AuthInfo authInfo, SchemaConfig inputSchema) {
         if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
                 || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
                 || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
-            return;
+            return inputSchema;
         }
         if (Objects.isNull(inputSchema)) {
             inputSchema = new SchemaConfig();
@@ -2264,6 +2271,7 @@ public class IrAdapterService {
             inputSchema.getProperties().put(targetName, paramSchema);
             existingNamesLower.add(targetName.toLowerCase(Locale.ROOT));
         }
+        return inputSchema;
     }
 
     /**

@@ -2,6 +2,8 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
@@ -13,6 +15,7 @@ import com.openjiuwen.studio.agent.manager.service.nodes.ParamExtractionNodeServ
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.workspace.WorkspaceMappingService;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -77,5 +80,48 @@ class IrAdapterServiceTest {
     @Test
     void testServiceCreation() {
         assertNotNull(irAdapterService);
+    }
+
+    // ===== FEAT-093 appendDynamicAuthParamsToSchema 的返回值契约（检视修复回归）=====
+
+    private static AuthInfo dynamicAuth(String targetName) {
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        AuthKeyInfo keyInfo = new AuthKeyInfo();
+        keyInfo.setTargetName(targetName);
+        keyInfo.setSourceName("userToken");
+        authInfo.setAuthKeys(java.util.List.of(keyInfo));
+        return authInfo;
+    }
+
+    @Test
+    void appendDynamicAuthParams_nullSchemaDynamicAuth_returnsNewSchemaWithHeaderParam() {
+        // 严重检视项回归：空入参 schema（纯动态鉴权插件既有支持场景）+
+        // DYNAMIC ——追加须经返回值传播（此前 helper 就地重赋局部参数，
+        // 调用方仍持 null → 参数列表为空 → 运行期无法注入动态凭证）
+        SchemaConfig result = IrAdapterService.appendDynamicAuthParamsToSchema(dynamicAuth("Authorization"), null);
+        assertNotNull(result, "空 schema + DYNAMIC 须返回新 schema（非 null）");
+        assertNotNull(result.getProperties());
+        SchemaConfig param = result.getProperties().get("Authorization");
+        assertNotNull(param, "动态头须追加为 Headers 入参");
+        assertEquals("Headers", param.getLocation());
+        assertEquals(IrAdapterService.DYNAMIC_AUTH_PARAM_DESC, param.getDescription());
+    }
+
+    @Test
+    void appendDynamicAuthParams_existingSchema_mutatesAndReturnsSameInstance() {
+        SchemaConfig schema = new SchemaConfig();
+        schema.setProperties(new java.util.HashMap<>());
+        SchemaConfig result = IrAdapterService.appendDynamicAuthParamsToSchema(dynamicAuth("X-Token"), schema);
+        assertSame(schema, result, "非 null 入参须返回同一实例（既有调用方语义）");
+        assertTrue(result.getProperties().containsKey("X-Token"));
+    }
+
+    @Test
+    void appendDynamicAuthParams_nonDynamic_nullSchema_returnsNullPassThrough() {
+        AuthInfo noAuth = new AuthInfo();
+        assertNull(IrAdapterService.appendDynamicAuthParamsToSchema(noAuth, null),
+            "非 DYNAMIC 时原样返回入参（null 透传）");
     }
 }

@@ -144,12 +144,10 @@ import java.util.Objects;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -1265,9 +1263,17 @@ public class PluginService implements IPluginService {
             log.error("callMode can not modify, pluginId:{}", pluginId);
             throw new AgentStudioException(StudioError.PLUGIN_CALL_MODE_CANNOT_MODIFFY);
         }
-        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝
-        // （存量插件改动态鉴权时，请求体自带 headers 即本请求内校验）
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝。
+        // body 的 requestInfo 仅承载 basicInfo/url（ConvertPluginFromModifyBody
+        // 不落库其 headers）；存量固定头与 Headers 参数冲突面在 oldPlugin 行
+        // 数据——Convert 从 oldPlugin 出发重建，tool_info[*].headers 与
+        // inputSchema 原样持续到新实体，须按存量双形态（新版多工具
+        // requestInfo=ToolRequestInfo、inputSchema=数组）校验，复用
+        // updatePluginAuthInfo 的同一套解析
         pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), null);
+        pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(),
+            parseEntityRequestInfoForValidation(oldPlugin.getRequestInfo()),
+            oldPlugin.getInputSchema());
         if (Strings.CS.equals(body.getCallMode(), PluginCallModeEnum.API.getCode())) {
             // 预置插件支持修改auth描述
             if (ToolType.INNER.type.equals(oldPlugin.getType()) && Boolean.TRUE.equals(oldPlugin.getAuthRequired())) {

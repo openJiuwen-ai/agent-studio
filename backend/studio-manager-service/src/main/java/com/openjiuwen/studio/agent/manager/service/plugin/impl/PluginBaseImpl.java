@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Lists;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
-import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
 import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
@@ -49,7 +48,6 @@ import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
-import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 
 import io.swagger.v3.oas.models.OpenAPI;
@@ -1228,7 +1226,8 @@ public class PluginBaseImpl implements IPluginBase {
                 SchemaConfig schema = StringUtils.isBlank(toolSchema.getInputSchema())
                         ? new SchemaConfig()
                         : JSON.parseObject(toolSchema.getInputSchema(), SchemaConfig.class);
-                IrAdapterService.appendDynamicAuthParamsToSchema(authInfo, schema);
+                // 返回值回写（helper 契约：null 入参构造的新实例经返回值传播）
+                schema = IrAdapterService.appendDynamicAuthParamsToSchema(authInfo, schema);
                 toolSchema.setInputSchema(JSON.toJSONString(schema));
             } catch (Exception e) {
                 log.warn("Skip dynamic auth param append for plugin {} tool {}: {}",
