@@ -179,6 +179,10 @@ spec:
             # Uvicorn worker 数量，未设置时默认 1
             - name: GUNICORN_WORK_NUM
               value: '1'
+            # jemalloc 行为参数（空=库内默认；如 background_thread:true 开启后台页清理
+            # 降低驻留；LD_PRELOAD 由镜像内 start_server.sh 自动设置）
+            - name: MALLOC_CONF
+              value: ''
             - name: PORT
               value: '31014'
             - name: PLUGIN_SSL_API_CERT
