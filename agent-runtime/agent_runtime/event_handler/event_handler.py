@@ -155,8 +155,14 @@ class EventHandler:
         return data if isinstance(data, dict) else self.parse_sse_line(data)
 
     def _process_event(self, processor, data: dict, *, streaming: bool):
-        # self.trace 可为 None（未调 init_trace 的调用方）——is_debug 访问须防
-        if streaming and isinstance(processor, WorkflowEventsProcessor) and self.trace and not self.trace.is_debug:
+        # self.trace 可为 None（未调 init_trace 的调用方）——is_debug 访问须防。
+        # 分步布尔（G.CTL.03：条件表达式 ≤3 个）：
+        # ① streaming + workflow processor ② trace 非 None 且非 debug
+        is_stream_workflow = (
+            streaming and isinstance(processor, WorkflowEventsProcessor)
+        )
+        trace_ready = bool(self.trace and not self.trace.is_debug)
+        if is_stream_workflow and trace_ready:
             # Node messages are only returned by non-stream responses. History and
             # outputs have separate owners and must still be collected.
             return processor.process_event(data, self.trace, collect_node_messages=False)

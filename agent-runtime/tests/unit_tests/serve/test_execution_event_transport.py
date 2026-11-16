@@ -1,6 +1,8 @@
 # -*- coding: UTF-8 -*-
 """Protocol, ownership and lifecycle checks for the private event transport."""
 
+# pylint: disable=protected-access  # 单测须注入/断言内部属性（仓库既有惯例）
+
 import asyncio
 import copy
 import inspect
@@ -41,13 +43,13 @@ def registry(monkeypatch):
 
 
 class Runner:
-    def __init__(self, events):
-        self.events = events
+    def __init__(self, event_list):
+        self.event_list = event_list
         self.closed = False
 
     async def run_streaming(self, req, execution_id):
         try:
-            for event in self.events:
+            for event in self.event_list:
                 yield event
         finally:
             self.closed = True
@@ -424,9 +426,12 @@ async def test_structured_stream_preserves_terminal_done_payload_and_bytes_fallb
     terminal = {"event": "done", "data": {"answer": "keep-history"}}
     byte_frame = b'data: {"event": "message", "data": {"answer": "legacy"}}\n\n'
     runner = Runner([terminal, byte_frame, {"event": "task_end", "data": {}}, terminal])
-    items = [item async for item in orchestration.stream_response(
+    # G.EXP.04：复杂推导式改显式循环
+    items = []
+    async for item in orchestration.stream_response(
         SimpleNamespace(conversation_id="conv"), "exec", runner, structured_output=True
-    )]
+    ):
+        items.append(item)
     assert items[0] == byte_frame
     assert items[1]["event"] == "task_end"
     assert items[-1] == terminal
@@ -454,6 +459,7 @@ async def test_processing_error_closes_source_without_persisting_history(monkeyp
     assert json.loads(output[0].decode()[6:])["event"] == "error"
     assert closed == [True]
     consumer._persist_conversation.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [True, False], ids=["stream", "non-stream"])
@@ -487,8 +493,8 @@ async def test_app_run_encapsulation_accepts_private_events(monkeypatch, streami
 async def test_private_prefetch_error_keeps_json_error_response(monkeypatch, registry):
     class BrokenRunner:
         async def run_streaming(self, *args):
+            # 非生成器语义：首帧即抛（G.CTL.02——原 yield 在 raise 之后为死代码）
             raise RuntimeError("private-first-event-failure")
-            yield
 
     monkeypatch.setattr(orchestration, "async_ir_load", AsyncMock(return_value={"configs": {"mode": "workflow"}}))
     monkeypatch.setattr(orchestration, "init_moderation_from_ir", lambda _: None)
