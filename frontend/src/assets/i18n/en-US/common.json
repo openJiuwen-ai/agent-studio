@@ -738,5 +738,9 @@
   "exit_full_screen": "Exit Full Screen",
   "skill_market": "Skill",
   "confirm": "Confirm",
-  "install_mcp": "Install Mcp"
+  "install_mcp": "Install Mcp",
+  "preview_state_cannot_operate": "Cannot edit in preview mode",
+  "partial_import_success": "Partial import succeeded",
+  "import_failed": "Import failed",
+  "upload_image_type_invalid": "Please upload a PNG or JPG image"
 }

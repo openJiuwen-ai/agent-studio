@@ -43,7 +43,7 @@ enum mapKeys {
   providers: [
     {
       provide: I18NEXT_NAMESPACE,
-      useValue: [I18nNamespace.AGENT_CENTER, I18nNamespace.AGENT, I18nNamespace.MODEL_ACCESS, I18nNamespace.REVIEW],
+      useValue: [I18nNamespace.AGENT_CENTER, I18nNamespace.AGENT, I18nNamespace.MODEL_ACCESS, I18nNamespace.REVIEW, I18nNamespace.COMMON],
     },
     NzModalService,
     NzDrawerService,
@@ -305,7 +305,7 @@ export class PluginComponent implements OnInit {
 
   createTool() {
     if (this.previewVersionId) {
-      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      MessageComponent.showPrompt(this.i18n.transform('preview_state_cannot_operate'), 3000);
       return;
     }
     const thisNzModal: any = this.nzModal.create({
@@ -346,7 +346,7 @@ export class PluginComponent implements OnInit {
   }
   modifyPlugin(stepIndex: number) {
     if (this.previewVersionId) {
-      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      MessageComponent.showPrompt(this.i18n.transform('preview_state_cannot_operate'), 3000);
       return;
     }
     if (this.subscribeBtnStatus) {
@@ -501,7 +501,7 @@ export class PluginComponent implements OnInit {
   }
   goDetail(row) {
     if (this.previewVersionId) {
-      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      MessageComponent.showPrompt(this.i18n.transform('preview_state_cannot_operate'), 3000);
       return;
     }
     let queryParams = {
@@ -529,7 +529,7 @@ export class PluginComponent implements OnInit {
   }
   handleToolsAction(item: any, row: any) {
     if (this.previewVersionId) {
-      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      MessageComponent.showPrompt(this.i18n.transform('preview_state_cannot_operate'), 3000);
       return;
     }
     if (item.label === this.i18n.transform('edit')) {
