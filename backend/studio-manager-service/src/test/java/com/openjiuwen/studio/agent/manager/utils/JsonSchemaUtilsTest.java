@@ -26,11 +26,18 @@ class JsonSchemaUtilsTest {
 
     @Test
     void testIsJsonSchemaValid_WithEmptyObjectLiteral() {
-        // 前端历史兜底 "{}" 视为无 schema，与 blank 同语义
+        // 前端历史兜底 "{}" / "null" 视为无 schema，与 blank 同语义
         assertTrue(JsonSchemaUtils.isJsonSchemaValid("{}", 10, 5, false));
         assertTrue(JsonSchemaUtils.isJsonSchemaValid("  {}  ", 10, 5, true));
-        assertTrue(JsonSchemaUtils.isJsonSchemaValid("[]", 10, 5, false));
         assertTrue(JsonSchemaUtils.isJsonSchemaValid("null", 10, 5, false));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_WithEmptyArrayLiteralRejected() {
+        // "[]" 不能当无 schema 放行：落库后 IrAdapter parseObject(SchemaConfig) 会因顶层数组失败
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid("[]", 10, 5, false));
+        assertTrue(ex.getDetails().get(0).contains("missing required field [type]"));
     }
 
     @Test
