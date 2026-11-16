@@ -97,17 +97,31 @@ class AdditionalQuestionsService:
         history_text = self._format_history(messages)
 
         # 5. 构建 prompt
+        ir_data = await self._load_ir(
+            ctx.resource_id, ctx.resource_type,
+            request.version_id if ctx.resource_type == "agent" else "",
+        )
+        if ir_data is None:
+            raise JiuWenBaseException(
+                error_code=StatusCode.IR_DATA_JSON_LOAD_FAILED.code,
+                message=StatusCode.IR_DATA_JSON_LOAD_FAILED.errmsg,
+            )
+        user_prompt = request.prompt or ""
+        if ctx.resource_type == "agent" and not user_prompt.strip():
+            configs = ir_data.get("configs") or {}
+            questions_config = configs.get("additional_questions_config") or {}
+            user_prompt = questions_config.get("prompt") or ""
         language = self._detect_language(headers)
         query = self.prompt_builder.build(
             name=request.name,
             history_messages=history_text,
-            user_prompt=request.prompt,
+            user_prompt=user_prompt,
             language=language,
         )
 
         # 6. 获取模型配置
         model_config = await self._resolve_model_config(
-            ctx.resource_type, ctx.resource_id, headers,
+            ctx.resource_type, ctx.resource_id, ir_data,
         )
 
         # 7. 调用模型（最多重试 MODEL_CALLS 次）
@@ -162,10 +176,9 @@ class AdditionalQuestionsService:
         return []
 
     async def _resolve_model_config(
-        self, resource_type: str, resource_id: str, headers: dict,
+        self, resource_type: str, resource_id: str, ir_data: dict,
     ) -> AdditionalQuestionsModelConfig:
-        """从 OBS 读取 IR，提取模型配置。"""
-        ir_data = await self._load_ir(resource_id, resource_type)
+        """从已加载的 IR 提取模型配置。"""
         config_key = IR_CONFIG_KEY_MAP.get(resource_type)
         if not config_key:
             raise ValueError(f"Unsupported resource_type: {resource_type}")
@@ -188,7 +201,9 @@ class AdditionalQuestionsService:
         )
 
     @staticmethod
-    async def _load_ir(resource_id: str, resource_type: str) -> dict:
+    async def _load_ir(
+        resource_id: str, resource_type: str, version_id: str = "",
+    ) -> dict:
         """从 OBS 加载 IR JSON。"""
         from agent_runtime.context.request_context import _request_ctx
 
@@ -199,7 +214,8 @@ class AdditionalQuestionsService:
 
         if not ir_path:
             obj_type = "agent" if resource_type == "agent" else "workflow"
-            ir_path = f"{obj_type}/ir/{resource_id}/{resource_id}.json"
+            version_suffix = f"_{version_id}" if version_id else ""
+            ir_path = f"{obj_type}/ir/{resource_id}/{resource_id}{version_suffix}.json"
 
         return await async_ir_load(ir_path)
 

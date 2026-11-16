@@ -1416,9 +1416,11 @@ components:
           description: 追问是否启用
           default: true
         prompt:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Prompt
-          description: 追问自定义 prompt 规则
+          description: 追问自定义 prompt 规则；Agent 请求未传、为 null 或空白时使用智能体配置
           default: ''
         version_id:
           type: string

@@ -1,8 +1,12 @@
 /* Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved. */
 package com.openjiuwen.studio.agent.manager.service;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
+import com.openjiuwen.studio.agent.manager.dto.AdditionalQuestionsConfig;
+import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolCredentialMapper;
@@ -19,6 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -72,10 +78,37 @@ class IrAdapterServiceTest {
         ReflectionTestUtils.setField(irAdapterService, "workspaceMappingService", workspaceMappingService);
         ReflectionTestUtils.setField(irAdapterService, "encryptionAdapter", encryptionAdapter);
         ReflectionTestUtils.setField(irAdapterService, "redisClient", redisClient);
+        ReflectionTestUtils.setField(irAdapterService, "relationManagementService",
+            mock(RelationManagementService.class));
     }
 
     @Test
     void testServiceCreation() {
         assertNotNull(irAdapterService);
+    }
+
+    @Test
+    void testAdaptAgentIncludesAdditionalQuestionsConfig() {
+        Agent agent = new Agent();
+        agent.setAgentId("agent-1");
+        agent.setAdditionalQuestionsConfig(new AdditionalQuestionsConfig()
+            .setEnable(true).setPrompt("saved follow-up rules"));
+
+        Map<String, Object> ir = irAdapterService.adaptAgent(agent, Map.of());
+        JSONObject configs = JSON.parseObject(JSON.toJSONString(ir)).getJSONObject("configs");
+        JSONObject questionsConfig = configs.getJSONObject("additional_questions_config");
+
+        assertEquals("saved follow-up rules", questionsConfig.getString("prompt"));
+        assertTrue(questionsConfig.getBoolean("enable"));
+    }
+
+    @Test
+    void testAdaptAgentWithoutAdditionalQuestionsConfig() {
+        Agent agent = new Agent();
+        agent.setAgentId("agent-1");
+
+        Map<String, Object> ir = irAdapterService.adaptAgent(agent, Map.of());
+
+        assertNull(((Map<?, ?>) ir.get("configs")).get("additional_questions_config"));
     }
 }

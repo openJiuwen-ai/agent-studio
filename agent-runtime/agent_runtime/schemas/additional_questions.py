@@ -14,7 +14,9 @@ class AdditionalQuestionsRequest(BaseModel):
 
     name: str = Field(..., min_length=1, description="应用名称")
     enable: bool = Field(True, description="追问是否启用")
-    prompt: str = Field("", description="追问自定义 prompt 规则")
+    prompt: str | None = Field(
+        "", description="追问自定义 prompt 规则；Agent 请求未传、为 null 或空白时使用智能体配置",
+    )
     version_id: str = Field("", description="版本号")
 
 
