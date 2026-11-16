@@ -1022,12 +1022,16 @@ export class CreatePluginBaseComponent implements OnInit {
     });
   }
 
-  private args2JSONSchemaStr(args: IRequestArgsView[]): string {
+  /** 空入参返回 null，避免 properties:{} / "[]" 触发 schema 校验错误。 */
+  private args2JSONSchemaStr(args: IRequestArgsView[]): string | null {
+    if (!args?.length) {
+      return null;
+    }
     try {
       const schema = view2Schema(args);
       return JSON.stringify(schema) as string;
     } catch (e) {
-      return '[]';
+      return null;
     }
   }
 

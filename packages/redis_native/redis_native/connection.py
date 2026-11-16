@@ -135,14 +135,26 @@ def _build_sentinel(
     None）时才注入——保证缺省路径产物与旧客户端参数级相同。
     """
     sentinel_nodes = _parse_sentinel_nodes(settings.sentinel_nodes)
-    sentinel_kwargs: dict = {
-        "socket_timeout": settings.socket_timeout,
-        "socket_connect_timeout": settings.socket_connect_timeout,
-    }
-    # 哨兵节点自身认证（与数据节点密码独立；哨兵集群 requirepass 场景）
+    # 哨兵节点自身认证（与数据节点密码独立；哨兵集群 requirepass 场景）。
+    # redis-py Sentinel 的哨兵连接参数是命名形参 sentinel_kwargs（认证键为
+    # password），不可与 **connection_kwargs 混用——后者是数据节点（master_for
+    # 产物）的连接参数：哨兵收不到密码，且 sentinel_password 键会随 master_for
+    # 合并进数据节点连接参数，建连抛 TypeError。socket_* 保持在
+    # connection_kwargs（master 池继承语义与旧实现一致，见 test_connection）。
+    sentinel_auth: dict = {}
     if settings.sentinel_password:
-        sentinel_kwargs["sentinel_password"] = settings.sentinel_password
-    sentinel = Sentinel(sentinel_nodes, **sentinel_kwargs)
+        sentinel_auth["password"] = settings.sentinel_password
+        # redis-py 仅在 sentinel_kwargs 为 None 时才把 connection_kwargs 的
+        # socket_* 自动复用到哨兵连接；显式传入后须自带，否则配密码路径的
+        # 哨兵连接丢失超时（哨兵不可达/丢包时可能无限期等待）
+        sentinel_auth["socket_timeout"] = settings.socket_timeout
+        sentinel_auth["socket_connect_timeout"] = settings.socket_connect_timeout
+    sentinel = Sentinel(
+        sentinel_nodes,
+        socket_timeout=settings.socket_timeout,
+        socket_connect_timeout=settings.socket_connect_timeout,
+        sentinel_kwargs=sentinel_auth or None,
+    )
     redis_cls = Redis if settings.redis_transaction_enabled else _NonTransactionRedis
     master_kwargs: dict = {
         "password": settings.password,

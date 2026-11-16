@@ -53,6 +53,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+
 @ExtendWith(MockitoExtension.class)
 class AgentCommonServiceTest {
 
@@ -713,5 +719,16 @@ class AgentCommonServiceTest {
         assertNotNull(result);
         assertEquals(dbPublishTime, result.getPublishTime(),
             "publishTime should be from database, not from DSL for DeepResearch");
+    }
+
+    @Test
+    void isExportFileV2ShouldDetectV2WhenFirstLineIsBlank() throws Exception {
+        ReflectionTestUtils.setField(agentCommonService, "jacksonObjectMapper", new ObjectMapper());
+        String jsonl = "\n{\"schema_version\":\"V2.0\"}\n";
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.getInputStream()).thenReturn(
+                new ByteArrayInputStream(jsonl.getBytes(StandardCharsets.UTF_8)));
+//        System.out.println(agentCommonService.isExportFileV2(file));
+        assertTrue(agentCommonService.isExportFileV2(file));
     }
 }

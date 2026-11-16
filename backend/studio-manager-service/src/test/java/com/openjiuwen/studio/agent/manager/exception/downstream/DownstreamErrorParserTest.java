@@ -149,15 +149,83 @@ class DownstreamErrorParserTest {
         assertNull(f.getDownstreamErrorCode());
     }
 
-    // ---- Runtime 不识别（初始）----
+    // ---- Runtime 码形信任（2026-11-02 修订：码形门取代"初始不识别"）----
 
     @Test
-    void parseHttp_runtime_code_not_trusted_initially() {
+    void parseHttp_runtime_canonical_shape_now_trusted() {
+        // 契约修订前提：121007 落在引擎码形族（100000~129999），RUNTIME 侧应被信任
         byte[] body = body("{\"error_code\":\"openjiuwen.121007\"}");
         DownstreamFailure f = parser.parseHttp(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
             500, null, body, null);
-        assertNull(f.getDownstreamErrorCode());
+        assertEquals("openjiuwen.121007", f.getDownstreamErrorCode());
         assertEquals(DownstreamService.RUNTIME, f.getService());
+    }
+
+    @Test
+    void parseHttp_runtime_builder_family_code_not_trusted() {
+        // Builder canonical 13 头码族到 RUNTIME 身份不跨服务误信
+        byte[] body = body("{\"error_code\":\"openjiuwen.13100006\"}");
+        DownstreamFailure f = parser.parseHttp(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
+            500, null, body, null);
+        assertNull(f.getDownstreamErrorCode());
+    }
+
+    // ---- SSE：RUNTIME 错误帧受管三段文案提取（契约修订 2026-11-02）----
+
+    @Test
+    void parseSseError_runtime_error_frame_extracts_code_and_managed_text() {
+        // Runtime 实际错误帧 data 子对象形态：code/error_code + 受管三段文案
+        byte[] data = body("{\"code\":101003,\"message\":\"[101003] component llm_invoke call failed\","
+            + "\"error_code\":\"openjiuwen.101003\","
+            + "\"error_msg\":\"LLM调用失败：LLM stream failed: Connection error.\","
+            + "\"error_reason\":\"LLM组件调用模型服务失败\","
+            + "\"error_suggestion\":\"请检查模型服务状态\"}");
+        var opt = parser.parseSseError(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
+            "error", data, null);
+        assertTrue(opt.isPresent());
+        DownstreamFailure f = opt.get();
+        assertEquals("openjiuwen.101003", f.getDownstreamErrorCode());
+        assertEquals("LLM调用失败：LLM stream failed: Connection error.", f.getDownstreamMessage());
+        assertEquals("LLM组件调用模型服务失败", f.getDownstreamReason());
+        assertEquals("请检查模型服务状态", f.getDownstreamSuggestion());
+    }
+
+    @Test
+    void parseSseError_builder_event_extracts_no_managed_text() {
+        // 三段文案仅对 RUNTIME 提取；Builder 桥接路径行为不变
+        byte[] data = body("{\"error_code\":\"openjiuwen.13100009\",\"error_msg\":\"x\"}");
+        var opt = parser.parseSseError(DownstreamService.BUILDER, Transport.WEBCLIENT,
+            "error", data, null);
+        assertTrue(opt.isPresent());
+        DownstreamFailure f = opt.get();
+        assertEquals("openjiuwen.13100009", f.getDownstreamErrorCode());
+        assertNull(f.getDownstreamMessage());
+        assertNull(f.getDownstreamReason());
+        assertNull(f.getDownstreamSuggestion());
+    }
+
+    @Test
+    void parseSseError_runtime_managed_text_truncated_at_limit() {
+        String longText = "x".repeat(DownstreamErrorParser.MAX_TEXT_FIELD_CHARS + 100);
+        byte[] data = body("{\"error_code\":\"openjiuwen.101003\",\"error_msg\":\"" + longText + "\"}");
+        var opt = parser.parseSseError(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
+            "error", data, null);
+        assertTrue(opt.isPresent());
+        assertEquals(DownstreamErrorParser.MAX_TEXT_FIELD_CHARS,
+            opt.get().getDownstreamMessage().length());
+    }
+
+    @Test
+    void parseSseError_runtime_non_string_text_fields_ignored() {
+        byte[] data = body("{\"error_code\":\"openjiuwen.101003\","
+            + "\"error_msg\":123,\"error_reason\":null,\"error_suggestion\":true}");
+        var opt = parser.parseSseError(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
+            "error", data, null);
+        assertTrue(opt.isPresent());
+        DownstreamFailure f = opt.get();
+        assertNull(f.getDownstreamMessage());
+        assertNull(f.getDownstreamReason());
+        assertNull(f.getDownstreamSuggestion());
     }
 
     // ---- SSE ----

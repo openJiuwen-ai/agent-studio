@@ -15,6 +15,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployResp;
@@ -568,5 +569,51 @@ import java.util.Map;
         String workspaceId,
         @NotNull @ApiParam(value = "工具鉴权方式，分为用户级、服务级和IAM方式", required = true) @Valid @RequestBody
         AuthInfo body);
+
+@ApiOperation(value = "将已部署的MCP服务实例上架到资产广场", nickname = "publishServer",
+        notes = "将已部署的MCP服务实例转换为服务目录条目并上架到资产广场（平台精选，跨租户可见）。"
+            + "仅OWNER/ADMIN或平台运营方可操作；实例须处于部署成功状态；鉴权信息不随目录下发；"
+            + "同一实例重复上架返回既有目录条目并刷新快照。", response = String.class,
+        tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "服务目录条目ID", response = String.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/server/on-shelf", produces = {"application/json"},
+        consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<String> publishServer(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "上架请求参数", required = true) @Valid @RequestBody McpServerShelfReq body);
+
+    @ApiOperation(value = "将MCP服务目录条目从资产广场下架", nickname = "unpublishServer",
+        notes = "将指定的MCP服务目录条目从资产广场下架（软删目录条目，不影响已安装实例）。"
+            + "仅OWNER/ADMIN或平台运营方可操作；重复下架幂等返回成功。", response = String.class,
+        tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "服务目录条目ID", response = String.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/server/off-shelf/{id}", produces = {"application/json"},
+        method = RequestMethod.POST)
+    ResponseEntity<String> unpublishServer(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "服务目录条目id", required = true, schema = @Schema())
+        @PathVariable("id") String id);
 
 }

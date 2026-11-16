@@ -1596,12 +1596,26 @@ export class CreateToolComponent implements OnInit {
     this.responseArgs = mapTreeAddKeyIndex(args, 0);
   }
 
-  private args2JSONSchemaStr(args: IRequestArgsView[], space?: number): string {
+  /**
+   * 请求参数为空时返回 null（无入参），避免序列化成
+   * {"type":"object","properties":{}} 触发后端 02401002。
+   */
+  private args2JSONSchemaStr(args: IRequestArgsView[], space?: number): string | null {
+    if (!args?.length) {
+      return null;
+    }
     const schema = view2Schema(args);
     return JSON.stringify(schema, null, space) as string;
   }
 
-  private res2JSONSchemaStr(res: IResponseArgsView[], space?: number): string {
+  /**
+   * 响应参数为空时返回 null（无出参），避免序列化成
+   * {"type":"object","properties":{}} 触发后端 02401003。
+   */
+  private res2JSONSchemaStr(res: IResponseArgsView[], space?: number): string | null {
+    if (!res?.length) {
+      return null;
+    }
     const schema = resView2Schema(res);
     return JSON.stringify(schema, null, space) as string;
   }

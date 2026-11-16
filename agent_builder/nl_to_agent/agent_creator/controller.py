@@ -172,7 +172,7 @@ class Controller:
         self.task_id = task_id
         self.workflow_state = 0
         self._history_size = 0
-        self.resource_config = {"plugin": [], "knowledge": [], "workflow": []}
+        self.resource_config = {"plugin": [], "knowledge": [], "workflow": [], "skill": []}
         self.plugin_dict = {}
         self.workflow_dict = {}
         if not self.load_session():
@@ -283,6 +283,8 @@ class Controller:
                 self.workflow_state = int(state)
             if resource_config:
                 self.resource_config = json.loads(resource_config)
+                # 兼容技能支持上线前保存的旧会话：补齐缺失的 skill 键
+                self.resource_config.setdefault("skill", [])
             if plugin_dict:
                 self.plugin_dict = json.loads(plugin_dict)
             if workflow_dict:
@@ -347,6 +349,8 @@ class Controller:
                 self.workflow_state = int(state)
             if resource_config:
                 self.resource_config = json.loads(resource_config)
+                # 兼容技能支持上线前保存的旧会话：补齐缺失的 skill 键
+                self.resource_config.setdefault("skill", [])
             if plugin_dict:
                 self.plugin_dict = json.loads(plugin_dict)
             if workflow_dict:

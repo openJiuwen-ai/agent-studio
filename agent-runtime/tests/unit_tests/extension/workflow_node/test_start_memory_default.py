@@ -7,10 +7,13 @@
 boolean/number/array 转换分别存在 "false" 反转、tuple 不可调用、
 list() 拆字符问题。
 
-2026-09-10 检视意见修复(方案 D):空默认统一为 key 保留 + 值 None ——
+2026-09-10 检视意见修复(方案 D):空默认统一为 key 保留 ——
 values_define 的成员资格是 Redis 会话变量存取与 SetVariable 持久化的
 门控依据,key 缺失会导致跨轮丢值(空默认 array 的 SetVariable 赋值
-跨轮丢失已在本地实测复现);渲染层引用解析对 None 与 key 缺失等价。
+跨轮丢失已在本地实测复现)。
+
+2026-11:空 array 默认改为 [](仍保留 key),避免下游对 memory.a[0].b
+一类下标引用时对 None 做 `x in ...` 抛 TypeError;空 object 仍为 None。
 同时:嵌套 object 自身 default_value 优先(检视意见1)、schema 为
 None/非 list 容错不再抛 TypeError(检视意见3)、空容器 '[]'/'{}'
 归一为空默认(检视意见4)。
@@ -120,9 +123,10 @@ class TestExtractAssignmentValues:
         assert result["v_arrobj"] == [{"cityname": "南京"}]
         assert result["v_obj"] == {"cityname": "北京", "level": 1}
         assert result["v_obj_children"] == {"c1": "cv1", "c2": 2}
-        # 空默认归一为 None(key 保留在 values_define 注册表,
-        # 门控 Redis 存取与 SetVariable 持久化;渲染层 None ≡ key 缺失)
-        assert result["v_arr_empty"] is None
+        # 空默认归一为 [](key 保留在 values_define 注册表,
+        # 门控 Redis 存取与 SetVariable 持久化;容器用 [] 避免下游
+        # 对 memory.a[0].b 下标引用时碰到 None)
+        assert result["v_arr_empty"] == []
         # 子字段不泄漏到顶层
         assert "cityname" not in result
         assert "c1" not in result
@@ -171,8 +175,8 @@ class TestExtractAssignmentValues:
         assert result["v_obj"] is None
 
     @staticmethod
-    def test_empty_container_defaults_normalized_to_none():
-        """空容器默认('[]'/'{}' 及各空写法)归一为 None,key 保留(检视意见4)。"""
+    def test_empty_container_defaults_normalized():
+        """空 array 默认归一为 [];空 object 仍为 None(key 保留)。"""
         fields = [
             _var("a1", "array", "[]", schema={"id": "", "type": "string"}),
             _var("a2", "array", [], schema={"id": "", "type": "string"}),
@@ -185,10 +189,10 @@ class TestExtractAssignmentValues:
 
         result = Start._extract_assignment_values(_memory_inputs(*fields), "session")
 
-        assert result["a1"] is None
-        assert result["a2"] is None
-        assert result["a3"] is None
-        assert result["a4"] is None
+        assert result["a1"] == []
+        assert result["a2"] == []
+        assert result["a3"] == []
+        assert result["a4"] == []
         # '{}' 视为无整体默认,回落子字段组装
         assert result["o1"] == {"x": "xv"}
         assert result["o2"] is None

@@ -1337,11 +1337,12 @@ public class AgentImportExportService {
         if (CollectionUtils.isEmpty(skills)) {
             return;
         }
-        List<String> skillsNames = skills.stream().map(SkillDetails::getName).toList();
+        List<String> skillsNames = skills.stream().map(SkillDetails::getName).distinct().toList();
         Map<String, SkillDetails> skillMap = skills.stream()
             .collect(Collectors.toMap(
                 SkillDetails::getName,
-                skill -> skill
+                skill -> skill,
+                (existing, replacement) -> existing
             ));
         // 先删除引用关系
         mappingMapper.deleteBatchByAppIdAndResourceType(agent.getAgentId(), CommonConstant.SKILL_TYPE);

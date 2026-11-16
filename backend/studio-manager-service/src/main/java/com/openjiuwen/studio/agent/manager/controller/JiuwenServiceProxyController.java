@@ -23,6 +23,8 @@ import com.openjiuwen.studio.agent.manager.dto.nl.NLChatReq;
 import com.openjiuwen.studio.agent.manager.dto.nl.NLResource;
 import com.openjiuwen.studio.agent.manager.dto.nl.PluginList;
 import com.openjiuwen.studio.agent.manager.dto.nl.PluginResource;
+import com.openjiuwen.studio.agent.manager.dto.nl.SkillList;
+import com.openjiuwen.studio.agent.manager.dto.nl.SkillResource;
 import com.openjiuwen.studio.agent.manager.dto.nl.WorkflowList;
 import com.openjiuwen.studio.agent.manager.dto.nl.mapper.NLResourecModelMapper;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
@@ -31,6 +33,7 @@ import com.openjiuwen.studio.agent.manager.enums.ToolType;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
 import com.openjiuwen.studio.agent.manager.rce.service.JiuWenService;
 import com.openjiuwen.studio.agent.manager.service.JiuwenRuntimeI18nService;
+import com.openjiuwen.studio.agent.manager.service.SkillManagementService;
 import com.openjiuwen.studio.agent.manager.service.WorkflowManagementService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.plugin.PluginService;
@@ -79,6 +82,8 @@ public class JiuwenServiceProxyController {
 
     private final WorkflowManagementService workflowManagementService;
 
+    private final SkillManagementService skillManagementService;
+
     private final JiuwenRuntimeI18nService jiuwenRuntimeI18nService;
 
     @ApiOperation(value = "run agent", nickname = "generatorAgentOrWorkflow", notes = "运行知识型Agent",
@@ -103,14 +108,14 @@ public class JiuwenServiceProxyController {
         String token = RequestContextUtils.getRequestAuthToken();
         checkPermission(body, projectId, workspaceId);
 
-        NLResource resource = assembleBodyResource(projectId, workspaceId);
+        NLResource resource = assembleBodyResource(projectId, workspaceId, agentType);
         body.setResource(resource);
 
         Flux<Object> flux = jiuWenService.generatorAgentOrWorkflow(token, projectId, agentType, cid, workspaceId, body).cast(Object.class);
         return wrapToSse(flux);
     }
 
-    private NLResource assembleBodyResource(String projectId, String workspaceId) {
+    private NLResource assembleBodyResource(String projectId, String workspaceId, String agentType) {
         NLResource resource = new NLResource();
 
         try {
@@ -160,6 +165,15 @@ public class JiuwenServiceProxyController {
                 workflowList.setWorkflowList(Collections.emptyList());
             }
             resource.setWorkflows(workflowList);
+
+            // 技能资源仅注入智能体（agents）生成链路；无可用技能时保持空列表，行为与现状一致
+            if ("agents".equals(agentType)) {
+                List<SkillResource> skillResources = skillManagementService.listSkillResources(
+                    projectId, workspaceId, 200);
+                SkillList skillList = new SkillList();
+                skillList.setSkillList(skillResources != null ? skillResources : Collections.emptyList());
+                resource.setSkills(skillList);
+            }
         } catch (Exception e) {
             log.error("Assembel body resource failed.", e);
         }

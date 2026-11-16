@@ -116,7 +116,7 @@ class LlmAgentBuilder:
     def update_resources(self, query: str, inputs: OperatorInput):
         """更新可用的外部资源信息。
 
-        根据用户查询调用输入适配器，检索插件、知识和子工作流资源，
+        根据用户查询调用输入适配器，检索插件、知识、子工作流和技能资源，
         并将结果与已有资源合并去重，更新到输入对象中。
 
         Args:
@@ -137,10 +137,15 @@ class LlmAgentBuilder:
             self.controller.resource_config["workflow"],
             retrieved_resource.sub_workflow_info,
         )
+        self.controller.resource_config["skill"] = self.add_batch_unique(
+            self.controller.resource_config["skill"],
+            retrieved_resource.skill_info,
+        )
 
         inputs.plugin_info = self.controller.resource_config["plugin"]
         inputs.knowledge_info = self.controller.resource_config["knowledge"]
         inputs.sub_workflow_info = self.controller.resource_config["workflow"]
+        inputs.skill_info = self.controller.resource_config["skill"]
 
     def invoke(self, inputs: OperatorInput, for_workflow=False):
         """执行 LLM Agent 的构建过程。
@@ -215,6 +220,7 @@ class LlmAgentBuilder:
         query = self.eval_and_parse_query(inputs.query)
         # 1. 根据用户query检索外部资源，更新可用外部资源
         self.update_resources(query, inputs)
+
         # 2. 意图澄清
         clarifier_output = await self.agent_clarifier.arun(
             inputs, for_workflow=for_workflow
@@ -232,6 +238,7 @@ class LlmAgentBuilder:
                 ("正在生成提示词", "PROMPT_GENERATING"),
                 ("正在查询插件", "TOOL_CALLING"),
                 ("正在查询知识库", "KNOWLEDGE_RETRIEVAL"),
+                ("正在查询技能", "SKILL_RETRIEVAL"),
             ]
             for status in status_steps:
                 yield status_msg(status[0], AGENT_HD4, status[1])

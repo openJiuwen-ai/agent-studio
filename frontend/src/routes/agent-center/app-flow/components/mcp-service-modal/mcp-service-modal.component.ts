@@ -265,7 +265,6 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
             config: config,
           };
         });
-        console.log('toolList loaded:', this.toolList);
         this.getToolInfo(this.toolName);
         this.buildEnvVarRefNames();
         if (res.server_config) {

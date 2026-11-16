@@ -1188,6 +1188,7 @@ CREATE TABLE IF NOT EXISTS t_skill (
     project_id      VARCHAR(64)   NULL COMMENT '项目ID',
     tag_id          VARCHAR(64)   NULL COMMENT '资产分类',
     published_asset VARCHAR(64)   NOT NULL DEFAULT '0' COMMENT '资产是否已上架，1为上架',
+    plaza_source    VARCHAR(32)   NULL COMMENT '资产广场上架来源（PRESET=官方预置，USER=用户上架）',
     PRIMARY KEY (skill_id),
     KEY idx_t_skill_domain_id (domain_id)
     );
@@ -1938,8 +1939,12 @@ CREATE TABLE ws_mcp_server_def
     url                     varchar(255)      null COMMENT '服务的url地址',
     install_times           bigint  default 0 null COMMENT '部署次数',
     view_times              bigint  default 0 null COMMENT '访问次数',
-    category                VARCHAR(36)  NULL COMMENT '行业分类ID，关联 t_pe_industry.id (UUID)'
+    category                VARCHAR(36)  NULL COMMENT '行业分类ID，关联 t_pe_industry.id (UUID)',
+    platform_published      TINYINT      NOT NULL DEFAULT 0 COMMENT '用户上架到资产广场（1=是，0=否）',
+    source_instance_id      VARCHAR(64)  NULL COMMENT '上架来源的MCP服务实例ID（ws_mcp_service_def.id）'
 );
+
+CREATE UNIQUE INDEX uk_ws_mcp_server_source_instance ON ws_mcp_server_def (source_instance_id);
 
 CREATE TABLE ws_mcp_service_def
 (
@@ -2033,6 +2038,8 @@ CREATE TABLE IF NOT EXISTS t_tool (
     label             VARCHAR(32)   NULL DEFAULT 'normal' COMMENT '插件类型，用于区分是否用在deepsearch',
     is_share          TINYINT(1)       NOT NULL DEFAULT 0 COMMENT '是否已共享（0=否，1=是)',
     category          VARCHAR(36)   NULL COMMENT '分类',
+    platform_published TINYINT      NOT NULL DEFAULT 0 COMMENT '用户插件上架到资产广场（1=是，0=否）',
+    plaza_version_id  VARCHAR(64)   NULL COMMENT '上架锚定的发布版本ID（t_release_version.version_id）',
     PRIMARY KEY (tool_id)
     );
 

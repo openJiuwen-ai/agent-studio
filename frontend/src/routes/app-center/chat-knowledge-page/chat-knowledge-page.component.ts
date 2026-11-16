@@ -671,7 +671,10 @@ export class ChatKnowledgePageComponent implements OnInit {
   /** 点击底部的清空对话，开启新聊天 */
   public clearChat() {
     this.uuid = uuidV4();
-    this.sseInstance.close(); // 作用：上一轮对话中，断开 (cancel) 最后一个问题的流式接口
+    // 作用：上一轮对话中，断开 (cancel) 最后一个问题的流式接口；未发过消息时 sseInstance 尚未初始化，无需断开，跳过即可
+    if (this.sseInstance != null) {
+      this.sseInstance.close();
+    }
     this.isShowStopIcon = false; // 隐藏"停止生成"按钮
     this.questionInputed = ''; // 置空textarea中的问题
 

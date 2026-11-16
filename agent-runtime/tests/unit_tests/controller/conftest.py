@@ -14,7 +14,7 @@ _REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 )
 
-for _pkg in ("common_utils", "storage", "model_service", "redis_spi", "redis_native"):
+for _pkg in ("common_utils", "storage", "model_service"):
     _pkg_path = os.path.join(_REPO_ROOT, "packages", _pkg)
     if os.path.isdir(_pkg_path) and _pkg_path not in sys.path:
         sys.path.insert(0, _pkg_path)

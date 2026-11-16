@@ -97,11 +97,11 @@ class ManagerFailClosedTest {
         assertTrue(body instanceof ErrorRsp);
         ErrorRsp rsp = (ErrorRsp) body;
         assertEquals(CODE, rsp.getErrorCode());
-        // 五字段全部非空
-        assertNotNull(rsp.getErrorMsg());
-        assertTrue(rsp.getErrorMsg().contains("Internal server error"));
-        assertNotNull(rsp.getErrorReason());
-        assertTrue(!rsp.getErrorReason().isBlank(), "error_reason must be non-empty");
+        // 统一族格式（COM-04 §5.2 修订二期）：resolver 失效时按语种字面量兜底，
+        // 三段文案仍恒非空（按构造满足 fail-closed 的"不返回空文案"约束）
+        assertEquals("Downstream dependency access failed.", rsp.getErrorMsg());
+        assertTrue(rsp.getErrorReason().startsWith("component runtime: "),
+            "error_reason must be unified family format, got: " + rsp.getErrorReason());
         assertNotNull(rsp.getErrorSuggestion());
         assertTrue(!rsp.getErrorSuggestion().isBlank(), "error_suggestion must be non-empty");
         assertEquals(RID, rsp.getRequestId());
@@ -143,8 +143,10 @@ class ManagerFailClosedTest {
         assertNotNull(resp);
         ErrorRsp rsp = (ErrorRsp) resp.getBody();
         assertEquals(CODE, rsp.getErrorCode());
+        // 统一族格式：msg=族前缀(i18n 命中)；reason="component runtime: {族 reason 文案}"
         assertTrue(rsp.getErrorMsg().startsWith("msg:"));
-        assertTrue(rsp.getErrorReason().startsWith("msg:"));
+        assertTrue(rsp.getErrorReason().startsWith("component runtime: msg:"),
+            "error_reason must be unified family format, got: " + rsp.getErrorReason());
         assertTrue(rsp.getErrorSuggestion().startsWith("msg:"));
         assertEquals(RID, rsp.getRequestId());
         // Content-Type 和 X-Request-Id 一致

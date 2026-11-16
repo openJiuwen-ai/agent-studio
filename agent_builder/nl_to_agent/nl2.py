@@ -25,6 +25,8 @@ class N2LResource(BaseModel):
     plugins: Optional[Dict[str, Any]] = None
     workflows: Optional[Dict[str, Any]] = None
     knowledge_base: Optional[Dict[str, Any]] = None
+    # 技能资源（skill_list），仅 agents 类型注入；为空时全链路退化为现状行为
+    skills: Optional[Dict[str, Any]] = None
 
 
 class N2LModel(BaseModel):

@@ -175,6 +175,11 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
 
   public clickNodeY = 0;
 
+  /** 拖拽期间在 document 级跟踪的最后已知鼠标坐标（client 系）；null = 本次拖拽尚未跟踪到位置 */
+  public lastDragX: number | null = null;
+
+  public lastDragY: number | null = null;
+
   public addedNum = 0;
 
   constructor(
@@ -267,21 +272,90 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
     return '';
   }
 
-  public onDragStart(e: MouseEvent) {
+  public onDragStart(e: DragEvent) {
     if (this.isFlowReadonly) {
       return;
     }
 
     this.clickNodeX = e.offsetX;
     this.clickNodeY = e.offsetY;
+    // 重置回退坐标：避免 Firefox"未移动即释放"（不触发 dragover）时
+    // 误用上一次拖拽残留的陈旧坐标
+    this.lastDragX = null;
+    this.lastDragY = null;
+    // Firefox 的 dragend 事件不携带有效坐标（clientX/Y 为 0），
+    // 拖拽期间在 document 上持续跟踪最后已知鼠标位置作为回退
+    this.trackLastDragPosition();
   }
 
-  public onDragEnd(e: MouseEvent, node: NodeInfo) {
+  /** document 级拖拽监听的清理函数；null = 当前无活跃监听 */
+  private removeDragListeners: (() => void) | null = null;
+
+  /** 拖拽期间在 document 级跟踪最后已知鼠标坐标（client 系），供 dragend 坐标缺失时回退 */
+  private trackLastDragPosition() {
+    this.removeDragTrackListeners();
+    const onDragOver = (ev: DragEvent) => {
+      this.lastDragX = ev.clientX;
+      this.lastDragY = ev.clientY;
+    };
+    const onDragEndCleanup = () => {
+      this.removeDragTrackListeners();
+    };
+    this.removeDragListeners = () => {
+      document.removeEventListener('dragover', onDragOver);
+      document.removeEventListener('dragend', onDragEndCleanup);
+      document.removeEventListener('drop', onDragEndCleanup);
+    };
+    document.addEventListener('dragover', onDragOver);
+    document.addEventListener('dragend', onDragEndCleanup);
+    document.addEventListener('drop', onDragEndCleanup);
+  }
+
+  private removeDragTrackListeners() {
+    this.removeDragListeners?.();
+    this.removeDragListeners = null;
+  }
+
+  ngOnDestroy() {
+    // 兜底清理 document 级监听：组件销毁、浏览器失焦等场景
+    // dragend/drop 可能不触发，避免监听器残留持有组件引用
+    this.removeDragTrackListeners();
+  }
+
+  public onDragEnd(e: DragEvent, node: NodeInfo) {
     if (this.isFlowReadonly) {
       return;
     }
 
-    const ptl = this.graph.pageToLocal(e.pageX, e.pageY);
+    // 用户按 Esc 取消或拖出窗口等无效拖放时 dropEffect 为 none，
+    // 此时释放点即使落在画布内也不应创建节点
+    if (e.dataTransfer && e.dataTransfer.dropEffect === 'none') {
+      return;
+    }
+
+    // Chrome/Edge 的 dragend 携带准确坐标，优先使用；Firefox 的 dragend
+    // 不携带有效坐标（clientX/Y 为 0），回退到拖拽期间跟踪的最后已知位置；
+    // 两者均无（未移动即释放）→ 无有效落点，取消创建
+    const dragendValid = e.clientX !== 0 || e.clientY !== 0;
+    const clientX = dragendValid ? e.clientX : this.lastDragX;
+    const clientY = dragendValid ? e.clientY : this.lastDragY;
+    if (clientX === null || clientY === null) {
+      return;
+    }
+
+    // 仅当释放点的实际顶层元素位于画布容器内才创建节点。
+    // 节点面板 absolute 定位覆盖在画布之上，拖回面板释放时坐标仍会落在画布
+    // 矩形范围内，仅凭矩形判断无法区分，需穿透层叠取真实元素判定；
+    // 面板内 / 画布外 / 坐标无效（elementFromPoint 返回 null）均视为取消拖拽
+    const hitElement = document.elementFromPoint(clientX, clientY);
+    if (!hitElement || !this.graph.container.contains(hitElement)) {
+      return;
+    }
+
+    // pageToLocal 期望页面坐标（含滚动偏移），由 client 坐标换算
+    const pageX = clientX + window.scrollX;
+    const pageY = clientY + window.scrollY;
+    const ptl = this.graph.pageToLocal(pageX, pageY);
     const x =
       ptl.x < this.clickNodeX && ptl.x > 0 ? 0 : ptl.x - this.clickNodeX;
     const y =
