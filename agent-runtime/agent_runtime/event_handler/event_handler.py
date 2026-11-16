@@ -3,7 +3,7 @@
 """EventHandler — 流式数据封装处理主入口.
 
 Key adaptations for open-source:
-- Input: StreamingResponse.body_iterator from ir_execute (SSE bytes), not Java execution_response
+- Input: private structured events from app_run, with legacy SSE body_iterator compatibility
 - Handler type determined from IR mode or endpoint path
 """
 
@@ -12,6 +12,7 @@ import time
 import traceback
 from typing import Dict, Type, AsyncGenerator, Any, Optional
 
+import anyio
 from pydantic import BaseModel
 from fastapi import Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -31,6 +32,7 @@ from agent_runtime.event_handler.base.trace import Trace
 from agent_runtime.event_handler.base.enums import EventMapping
 from agent_runtime.event_handler.base.field_processor import FieldDataProcessor
 from agent_runtime.event_handler.base.conversation import ConversationManager
+from agent_runtime.serve.execution_events import ExecutionEventStream
 
 # workflow 流式模式的终态帧原始事件名：workflow_end 由引擎发出（process_workflow_end
 # 置位 dialogue_end/end_time），done 由 stream_response R-20 保证唯一且末尾。
@@ -148,6 +150,39 @@ class EventHandler:
         for item in items:
             yield cls.serialize_sse(item)
 
+    def _input_event(self, data):
+        # Structured events were already isolated/validated by the execution entry.
+        return data if isinstance(data, dict) else self.parse_sse_line(data)
+
+    def _process_event(self, processor, data: dict, *, streaming: bool):
+        # self.trace 可为 None（未调 init_trace 的调用方）——is_debug 访问须防。
+        # 分步布尔（G.CTL.03：条件表达式 ≤3 个）：
+        # ① streaming + workflow processor ② trace 非 None 且非 debug
+        is_stream_workflow = (
+            streaming and isinstance(processor, WorkflowEventsProcessor)
+        )
+        trace_ready = bool(self.trace and not self.trace.is_debug)
+        if is_stream_workflow and trace_ready:
+            # Node messages are only returned by non-stream responses. History and
+            # outputs have separate owners and must still be collected.
+            return processor.process_event(data, self.trace, collect_node_messages=False)
+        return processor.process_event(data, self.trace)
+
+    @staticmethod
+    async def _close_body_iterator(body_iterator):
+        close = getattr(body_iterator, "aclose", None)
+        if close is not None:
+            try:
+                # Disconnect cancellation stays active at every await in AnyIO.
+                # Shield only finalization; the request cancellation still propagates.
+                with anyio.CancelScope(shield=True):
+                    await close()
+            except anyio.get_cancelled_exc_class():
+                workflow_logger.warning("Event body iterator close was cancelled", exc_info=True)
+                raise
+            except Exception:
+                workflow_logger.warning("Failed to close an event body iterator", exc_info=True)
+
     async def _persist_conversation(self, payload=None):
         """Persist conversation history and dialogue count.
 
@@ -206,17 +241,20 @@ class EventHandler:
             return False
 
     async def get_handler_body_iterator(self, handler_type: str, body_iterator: AsyncGenerator) -> AsyncGenerator:
-        """Process SSE stream from ir_execute, apply event transformation, yield transformed SSE bytes."""
-        # 落库任务是否已登记：loop 内前置登记（workflow 终态帧）与 loop 后兜底互斥，防双重登记
+        """Transform private events or legacy SSE into the public SSE byte stream.
+
+        落库任务是否已登记：loop 内前置登记（workflow 终态帧）与 loop 后兜底互斥，防双重登记
+        """
         persist_registered = False
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self.parse_sse_line(data)
+                data_dict = self._input_event(data)
                 if data_dict is None:
                     continue
 
-                output_event = event_handler.process_event(data_dict, self.trace)
+                output_event = self._process_event(event_handler, data_dict, streaming=True)
+
 
                 # workflow 流式模式的终态帧（workflow_end/done）在 loop 内转发给客户端，
                 # 而租约登记若留在 loop 后，存在「客户端已见终态、租约尚不可见」的窗口
@@ -273,6 +311,8 @@ class EventHandler:
             workflow_logger.error("".join(traceback.format_exception(e)))
             error_event = FieldDataProcessor.generate_error_event_field(self.trace)
             yield self.serialize_sse(error_event.model_dump(by_alias=True, exclude_none=True))
+        finally:
+            await self._close_body_iterator(body_iterator)
 
     async def get_stream_result(self, handler_type: str, body_iterator: AsyncGenerator) -> StreamingResponse:
         transformed_iterator = self.get_handler_body_iterator(
@@ -286,16 +326,17 @@ class EventHandler:
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self.parse_sse_line(data)
+                data_dict = self._input_event(data)
                 if data_dict is None:
                     continue
-                output_event = event_handler.process_event(data_dict, self.trace)
-                async for _ in self.generate_output_data(output_event):
-                    continue
+                # Only process_event mutates Trace; its output is not sent as SSE.
+                self._process_event(event_handler, data_dict, streaming=False)
             await self._persist_conversation()
         except Exception as e:
             workflow_logger.error("encapsulate non stream response failed.")
             workflow_logger.error("".join(traceback.format_exception(e)))
+        finally:
+            await self._close_body_iterator(body_iterator)
 
         # 对齐旧 Java runAgent：始终输出 end_time。事件流未显式设置时兜底取当前时间。
         if self.trace.end_time is None:
@@ -317,7 +358,7 @@ class EventHandler:
     @classmethod
     async def encapsulate_stream_response(
         cls,
-        response: StreamingResponse,
+        response: StreamingResponse | ExecutionEventStream,
         handler_type: str,
         request: Request,
         ir_path: str,
@@ -339,7 +380,7 @@ class EventHandler:
     @classmethod
     async def encapsulate_non_stream_response(
         cls,
-        response: StreamingResponse,
+        response: StreamingResponse | ExecutionEventStream,
         handler_type: str,
         request: Request,
         ir_path: str,
