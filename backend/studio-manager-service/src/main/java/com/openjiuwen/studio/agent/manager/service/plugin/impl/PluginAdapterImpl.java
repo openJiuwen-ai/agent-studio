@@ -92,6 +92,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
+
 @Slf4j
 @Service
 public class PluginAdapterImpl implements IPlugin {
@@ -952,6 +954,15 @@ public class PluginAdapterImpl implements IPlugin {
                     continue;
                 }
                 String name = authKey.getTargetName();
+                // 头名 token 校验（RFC 7230）：导入/存量 DYNAMIC 插件可能未经过
+                // 登记侧校验（validPluginDynamicAuthInfo 只拦新增/修改），
+                // 调测路径不校验名即把非法头名直接放进站 headers
+                if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(name).matches()
+                        || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                    log.warn("[runTool] dynamic auth debug header '{}' rejected: invalid or reserved header name, "
+                        + "pluginId {}", name, pluginId);
+                    continue;
+                }
                 String value = requestBody.getString(name);
                 if (StringUtils.isEmpty(value)) {
                     continue;

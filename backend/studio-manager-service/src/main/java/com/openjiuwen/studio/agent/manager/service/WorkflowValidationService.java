@@ -899,20 +899,21 @@ public class WorkflowValidationService {
     /**
      * FEAT-093 判定字段是否走 HTTP 请求头通道（不适用标识符命名规则）。
      * location=Headers（前端保存的 DSL）或描述=动态鉴权追加标记
-     * （历史 DSL 未带 location 的兜底）。
+     * （历史 DSL 未带 location 的兜底）。两分支同约束：字段名须为合法
+     * HTTP 头名（RFC 7230 token）——Headers 位置与标记描述都是用户可
+     * 自由设置的值，不叠加头名校验即形成发布校验绕过面（任意非法名
+     * 设 location=Headers 即跳过 isNameValid）；标识符非法但头名合法的
+     * （456/3-pwa 等动态头人群）仍豁免，头名非法的由 isNameValid 拦截。
      */
     private boolean isHeaderChannelField(WorkflowFieldVO field) {
         if (field == null) {
             return false;
         }
         if ("Headers".equalsIgnoreCase(field.getLocation())) {
-            return true;
+            return McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(
+                StringUtils.defaultString(field.getName())).matches();
         }
-        // 兜底叠加头名合法性约束：description 是用户可自由编辑的字段，单独
-        // 作为豁免开关等于任意参数填标记串即可绕过 isNameValid（发布校验
-        // 防线被可伪造内容击穿）；叠加 RFC 7230 头名 token 校验后，可豁免的
-        // 只剩「标识符非法但头名合法」的名字（456/3-pwa 等动态头人群），
-        // 头名也非法的（含空格/控制字符）仍被 isNameValid 拦截
+        // 历史兜底分支：标记描述命中 + 头名 token 合法
         return IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(field.getDescription())
             && McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(
                 StringUtils.defaultString(field.getName())).matches();

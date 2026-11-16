@@ -1358,6 +1358,14 @@ public class PluginService implements IPluginService {
             throw new AgentStudioException(StudioError.TOOL_NOT_EXIST);
         }
 
+        // FEAT-093 插件动态鉴权：父插件动态头 vs 工具固定 headers/Headers 参数
+        // 同名拒绝 + 回环条目剥离（与 createPluginTool 路径对齐——modifyTool
+        // 直改工具同样会保存 body 的 requestInfo/inputSchema，漏校验即后端
+        // 可被绕过保存冲突配置并持久化回显条目）
+        pluginBase.validPluginDynamicAuthInfo(pluginEntity.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            pluginEntity.getAuthInfo(), body.getInputSchema()));
+
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
 
         updateTool(body, pluginDTO, toolId);

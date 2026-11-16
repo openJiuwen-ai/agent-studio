@@ -476,6 +476,14 @@ public class McpBaseImpl implements IMcpBase {
 
         String mcpId = agentMcp.getResourceId();
         McpServiceEntity mcpService = serviceDao.selectById(mcpId, CommonUtil.getTenantId(), CommonUtil.getDeptCode(), null);
+        // FEAT-093 回填判空：映射仍 valid 但底层 MCP 服务已删除/不可见时
+        // selectById 返回 null——历史"[]"形态此场景会提前返回（非空列表
+        // 挡在上方），空列表回填放行后此处若不判空，parseMcpInput2ResourceParameter
+        // 直接 NPE 使详情加载整体失败。保持"查不到即不回填"的既有语义
+        if (Objects.isNull(mcpService)) {
+            log.warn("Skip extend info fill: mcp service {} not found (deleted or invisible)", mcpId);
+            return;
+        }
         String parameter = parseMcpInput2ResourceParameter(mcpService);
         // 新生成仍为空列表时不回写，避免每次详情加载都触发无意义落库
         if (isEmptyResourceParamList(parameter)) {

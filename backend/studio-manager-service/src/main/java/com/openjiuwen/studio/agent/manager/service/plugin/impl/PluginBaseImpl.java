@@ -1322,6 +1322,13 @@ public class PluginBaseImpl implements IPluginBase {
         PluginEntity pluginEntity = new PluginEntity();
         BeanUtils.copyProperties(pluginDTO, pluginEntity);
         pluginEntity.setDomainId(RequestContextUtils.getRequestUserDomainId());
+        // FEAT-093 回环条目防持久化：transformEntityToDTO 读侧追加了仅回显用
+        // 的动态鉴权 Headers 条目（编排侧可见可绑定），写路径（详情→改→落库）
+        // 会把它们带回 DB——在 DTO→实体写边界统一剥离（标记识别：
+        // location=Headers 且描述=动态鉴权追加标记，与 auth_info 现值无关），
+        // 保持 auth_info 单一事实源，防 IR 生成/发布把回环条目当普通 Headers
+        // 参数（空值/重复，与动态鉴权运行语义冲突）
+        stripDynamicAuthRoundtripFromToolSchemas(pluginDTO.getToolInputSchemaList());
         try {
             pluginEntity.setRequestInfo(JsonUtils.JSON_MAPPER.writeValueAsString(pluginDTO.getToolRequestInfo()));
             pluginEntity.setInputSchema(JsonUtils.JSON_MAPPER.writeValueAsString(pluginDTO.getToolInputSchemaList()));
@@ -1336,6 +1343,40 @@ public class PluginBaseImpl implements IPluginBase {
         }
 
         return pluginEntity;
+    }
+
+    /**
+     * 剥离 DTO 工具 schema 中仅回显用的动态鉴权条目（写边界统一防御，
+     * transformEntityToDTO 读侧追加的镜像）：识别标记=location=Headers 且
+     * description=DYNAMIC_AUTH_PARAM_DESC，与 auth_info 当前值无关（读改写
+     * 往返可能换了鉴权形态）。内层单条畸形仅告警跳过（不阻断写路径）。
+     */
+    private void stripDynamicAuthRoundtripFromToolSchemas(List<ToolInputSchema> toolInputSchemaList) {
+        if (CollectionUtils.isEmpty(toolInputSchemaList)) {
+            return;
+        }
+        for (ToolInputSchema toolSchema : toolInputSchemaList) {
+            if (Objects.isNull(toolSchema) || StringUtils.isBlank(toolSchema.getInputSchema())) {
+                continue;
+            }
+            try {
+                SchemaConfig schema = JSON.parseObject(toolSchema.getInputSchema(), SchemaConfig.class);
+                if (Objects.isNull(schema) || Objects.isNull(schema.getProperties())
+                        || schema.getProperties().isEmpty()) {
+                    continue;
+                }
+                boolean removed = schema.getProperties().entrySet().removeIf(entry ->
+                        Objects.nonNull(entry.getValue())
+                                && HEADER_PARAM_LOCATION.equalsIgnoreCase(entry.getValue().getLocation())
+                                && IrAdapterService.DYNAMIC_AUTH_PARAM_DESC.equals(entry.getValue().getDescription()));
+                if (removed) {
+                    toolSchema.setInputSchema(JSON.toJSONString(schema));
+                }
+            } catch (Exception e) {
+                log.warn("Skip dynamic auth roundtrip strip for tool {}: {}",
+                        toolSchema.getToolId(), e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -1628,26 +1669,33 @@ public class PluginBaseImpl implements IPluginBase {
             return Collections.emptyList();
         }
         String trimmed = inputSchemaStr.trim();
-        if (trimmed.startsWith("[")) {
-            List<SchemaConfig> schemas = new ArrayList<>();
-            List<ToolInputSchema> toolInputs = JSON.parseArray(trimmed, ToolInputSchema.class);
-            for (ToolInputSchema toolInput : toolInputs) {
-                if (Objects.isNull(toolInput) || StringUtils.isBlank(toolInput.getInputSchema())) {
-                    continue;
-                }
-                try {
-                    SchemaConfig inner = JSON.parseObject(toolInput.getInputSchema(), SchemaConfig.class);
-                    if (Objects.nonNull(inner)) {
-                        schemas.add(inner);
+        try {
+            if (trimmed.startsWith("[")) {
+                List<SchemaConfig> schemas = new ArrayList<>();
+                List<ToolInputSchema> toolInputs = JSON.parseArray(trimmed, ToolInputSchema.class);
+                for (ToolInputSchema toolInput : toolInputs) {
+                    if (Objects.isNull(toolInput) || StringUtils.isBlank(toolInput.getInputSchema())) {
+                        continue;
                     }
-                } catch (Exception e) {
-                    log.warn("Skip malformed tool input_schema while validating dynamic auth: {}", e.getMessage());
+                    try {
+                        SchemaConfig inner = JSON.parseObject(toolInput.getInputSchema(), SchemaConfig.class);
+                        if (Objects.nonNull(inner)) {
+                            schemas.add(inner);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Skip malformed tool input_schema while validating dynamic auth: {}", e.getMessage());
+                    }
                 }
+                return schemas;
             }
-            return schemas;
+            SchemaConfig single = JSON.parseObject(trimmed, SchemaConfig.class);
+            return Objects.isNull(single) ? Collections.emptyList() : Collections.singletonList(single);
+        } catch (Exception e) {
+            // 外层形态畸形（数组/对象解析失败）：按入参非法报可控业务错误，
+            // 不放原始 JSONException 漏成 500（与注释声明一致）
+            throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
+                "dynamic auth input schema is malformed: " + e.getMessage());
         }
-        SchemaConfig single = JSON.parseObject(trimmed, SchemaConfig.class);
-        return Objects.isNull(single) ? Collections.emptyList() : Collections.singletonList(single);
     }
 
     @Override
