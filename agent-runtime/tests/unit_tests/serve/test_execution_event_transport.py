@@ -22,6 +22,17 @@ from agent_runtime.serve.apis import orchestration
 from agent_runtime.serve.execution_events import ExecutionEventStream, copy_json_event
 
 
+@pytest.fixture(autouse=True)
+def _sync_persist(monkeypatch):
+    """studio-2.0-dev 默认 backgrounding_enabled()=True,落库走
+    run_in_background_tracked 异步包裹——mock 的 assert_awaited_once
+    在后台任务中不可同步观测;关后台化使 _persist_conversation 走同步路径。"""
+    monkeypatch.setattr(
+        "agent_runtime.event_handler.event_handler.backgrounding_enabled",
+        lambda: False,
+    )
+
+
 @pytest.fixture
 def registry(monkeypatch):
     instance = SimpleNamespace(register=AsyncMock(), unregister=AsyncMock(), clear_suspension=AsyncMock())
@@ -45,7 +56,13 @@ class Runner:
 def handler(debug=False):
     result = EventHandler()
     result.trace = Trace(handler_type="workflow", instance_id="wf", is_debug=debug, start_time=1000)
+    # conv_manager 须为真值 + backgrounding 关闭：studio-2.0-dev 的落库路径
+    # 以 conv_manager 为门控且默认走 run_in_background_tracked 异步包裹
+    # （原分支无条件同步调用 _persist_conversation）——关闭后台化使
+    # mock 的 assert_awaited_once 在同步路径上可观测
+    result.conv_manager = AsyncMock()
     result._persist_conversation = AsyncMock()
+    result._register_tracked_persist = AsyncMock(return_value=False)
     return result
 
 
