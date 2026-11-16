@@ -212,12 +212,22 @@ export class ImportRequestModalComponent implements OnInit {
       return [];
     }
 
+    // OpenAPI 的 in 取值（query/header/path/cookie）映射为工具 schema 的
+    // location 枚举（Query/Headers/Path/Body），首字母大写会得到 Header，
+    // 不在合法枚举内，保存时报"missing required field [location]"
+    const locationMap = {
+      query: 'Query',
+      header: 'Headers',
+      path: 'Path',
+      cookie: 'Body',
+    };
+
     return parameters.map((item) => ({
       name: item.name,
       default: item.schema.default,
       type: item.schema.type,
       schema: item.schema,
-      location: this.capitalizeFirstLetter(item.in),
+      location: locationMap[item.in] || this.capitalizeFirstLetter(item.in),
     }));
   }
 
