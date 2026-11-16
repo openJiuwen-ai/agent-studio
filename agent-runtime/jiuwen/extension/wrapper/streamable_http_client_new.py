@@ -253,6 +253,7 @@ class StreamableHttpClientNew(McpClient):
             api_cert=self._cert,
             plugin_dependency=self._plugin_dependency,
         )
+        inputs = inputs or {}
         request_params = request_params_creator.create(inputs, **kwargs)
 
         # FEAT-093 动态凭证：FlowMcp 把 method=Headers 参数值经独立通道
@@ -267,12 +268,14 @@ class StreamableHttpClientNew(McpClient):
         self._replace_mcp_headers_extra(request_params, **kwargs)
 
         # FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}} 绑定
-        # 注入出站头（头不存在时新增；值源=请求上下文，工作流链路不写）
-        existing_lower = {str(k).lower() for k in request_params.headers}
+        # 注入出站头。强制覆盖（检视修复：LLM 同名参数覆盖）——IrAdapter 会把
+        # 动态头名追加为 method=Headers 工具入参下发给 LLM，LLM 可能编造同名
+        # 值经 RequestParamsCreator 先写入 headers；绑定值是权威配置，
+        # 必须胜出（与插件链路 test_bound_value_overwrites_llm_given 同语义。
+        # server_config 固定头与动态头的同名冲突在保存侧
+        # validDynamicAuthHeaderConflict 已拒绝，此处的覆盖对象实际只有 LLM 值）
         for name, value in self._resolve_dynamic_credential_headers().items():
-            if name.lower() not in existing_lower:
-                request_params.headers[name] = value
-                existing_lower.add(name.lower())
+            request_params.headers[name] = value
 
         self._execute_auth_hook(request_params, kwargs.get("name"))
 

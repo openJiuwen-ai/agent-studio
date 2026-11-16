@@ -10,6 +10,7 @@ headers（sse/streamable 两实现同构）。session 级 runtime_auth 的唯一
 """
 # pylint: disable=protected-access  # 单测需注入/调用内部属性与方法（仓库既有惯例，见同目录 test_single_component_http_debug_inputs.py）
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from jiuwen.extension.wrapper.sse_client_new import SSEClientNew
@@ -488,21 +489,29 @@ class TestResolveDynamicCredentialHeaders:
                 assert "Authorization" not in request_params.headers, (scope, cls.__name__)
 
     @staticmethod
-    def test_existing_header_not_overwritten():
-        """头已存在（server_config 头/已并入的鉴权头）时不覆盖。"""
+    def test_existing_header_force_overwritten():
+        """动态凭证绑定值强制覆盖已存在的同名头（检视修复：LLM 覆盖防护）。
+
+        IrAdapter 会把动态头名追加为 method=Headers 工具入参下发给 LLM，
+        LLM 编造值经 RequestParamsCreator 先写入 headers——绑定值必须胜出
+        （保存侧 validDynamicAuthHeaderConflict 已拒绝 server_config 固定头
+        与动态头的同名冲突，此处的覆盖对象实际只有 LLM 编造值）。
+        """
         for cls in (StreamableHttpClientNew, SSEClientNew):
             client = _create_client(cls)
             client._auth = {"scope": "DYNAMIC"}
-            client._auth_headers = {"Authorization": "server-hdr"}
+            # 模拟 LLM 值已先写入 headers（RequestParamsCreator 或 auth_headers 路径）
+            client._auth_headers = {"Authorization": "llm-or-server-hdr"}
             restore = TestResolveDynamicCredentialHeaders._bind(
-                {"userToken": "bound-value"},
+                {"userToken": "bound-credential"},
                 mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
             )
             try:
                 request_params = client._prepare_request_params(inputs={}, name="t")
             finally:
                 restore()
-            assert request_params.headers.get("Authorization") == "server-hdr", cls.__name__
+            # 绑定值强制胜出
+            assert request_params.headers.get("Authorization") == "bound-credential", cls.__name__
 
     @staticmethod
     def test_missing_or_blank_value_skipped():
@@ -651,3 +660,28 @@ class TestResolveDynamicCredentialHeaders:
             finally:
                 restore()
             assert "Authorization" not in request_params.headers, cls.__name__
+
+    @staticmethod
+    def test_bound_value_overwrites_llm_generated():
+        """LLM 同名参数值必须被请求级绑定值覆盖（检视修复回归）。
+
+        IrAdapterService 会把动态鉴权头名追加为 method=Headers 工具入参
+        下发给 LLM——LLM 可能编造同名参数值。绑定值必须强制覆盖——
+        与插件链路 test_bound_value_overwrites_llm_given 语义一致。
+        用 _auth_headers 模拟 LLM 值已先写入出站 headers 的场景。
+        """
+        for cls in (StreamableHttpClientNew, SSEClientNew):
+            client = _create_client(cls)
+            client._auth = {"scope": "DYNAMIC"}
+            # 模拟 LLM 值已先写入 headers（RequestParamsCreator 路径）
+            client._auth_headers = {"Authorization": "llm-hallucinated-value"}
+            restore = TestResolveDynamicCredentialHeaders._bind(
+                {"userToken": "bound-credential-value"},
+                mcp_input_parameters={"test-server": {"Authorization": "{{inputs.userToken}}"}},
+            )
+            try:
+                request_params = client._prepare_request_params(inputs={}, name="t")
+            finally:
+                restore()
+            # 绑定值胜出——LLM 编造值被覆盖
+            assert request_params.headers.get("Authorization") == "bound-credential-value", cls.__name__

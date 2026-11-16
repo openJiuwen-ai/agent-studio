@@ -956,9 +956,12 @@ public class PluginAdapterImpl implements IPlugin {
                 String name = authKey.getTargetName();
                 // 头名 token 校验（RFC 7230）：导入/存量 DYNAMIC 插件可能未经过
                 // 登记侧校验（validPluginDynamicAuthInfo 只拦新增/修改），
-                // 调测路径不校验名即把非法头名直接放进站 headers
+                // 调测路径不校验名即把非法头名直接放进站 headers。
+                // 平台保留关联头（x-request-id/x-execution-id/traceparent）统一拦截——
+                // 新增/修改入口会拦，但存量/导入数据可能绕过，调测时伪造关联头
                 if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(name).matches()
-                        || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                        || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(name.toLowerCase(Locale.ROOT))
+                        || McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
                     log.warn("[runTool] dynamic auth debug header '{}' rejected: invalid or reserved header name, "
                         + "pluginId {}", name, pluginId);
                     continue;
