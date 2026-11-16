@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """用 Kerby 自身 API 构造带真实 principal 的 keytab(零格式猜测)。
 
-运行: java -cp kerb-util.jar:kerb-core.jar:kerby-util.jar:kerby-asn1.jar:kerb-crypto.jar GenKeytab
+运行: python gen_keytab_java.py(自动用 target/lib 的 Kerby jar 编译执行)
 """
+import logging
+import os
+import shutil
 import subprocess
 import sys
-import os
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 JAVA_SRC = r'''
 import org.apache.kerby.kerberos.kerb.keytab.Keytab;
@@ -66,6 +71,7 @@ public class GenKeytab {
 }
 '''
 
+
 def main():
     lib = r"D:\project\openjiuwen\agent-studio\backend\studio-manager\target\lib"
     cp = ";".join([
@@ -82,19 +88,26 @@ def main():
     with open(java_file, "w", encoding="utf-8") as f:
         f.write(JAVA_SRC)
 
+    # G.EDV.05: 用绝对路径调外部可执行程序(不依赖 PATH 环境变量)
+    javac = shutil.which("javac")
+    java = shutil.which("java")
+    if not javac or not java:
+        logger.error("javac/java not found in PATH")
+        sys.exit(1)
+
     # Compile
-    r = subprocess.run(["javac", "-cp", cp, "-d", outdir, java_file],
-                      capture_output=True, text=True)
+    r = subprocess.run([javac, "-cp", cp, "-d", outdir, java_file],
+                       capture_output=True, text=True)
     if r.returncode != 0:
-        print("COMPILE FAILED:", r.stderr)
+        logger.error("COMPILE FAILED: %s", r.stderr)
         sys.exit(1)
 
     # Run
-    r = subprocess.run(["java", "-cp", cp + ";" + outdir, "GenKeytab"],
-                      capture_output=True, text=True, cwd=outdir)
-    print(r.stdout)
+    r = subprocess.run([java, "-cp", cp + ";" + outdir, "GenKeytab"],
+                       capture_output=True, text=True, cwd=outdir)
+    logger.info("%s", r.stdout)
     if r.returncode != 0:
-        print("RUN FAILED:", r.stderr)
+        logger.error("RUN FAILED: %s", r.stderr)
         sys.exit(1)
 
     # Cleanup
@@ -102,6 +115,7 @@ def main():
         p = os.path.join(outdir, f)
         if os.path.exists(p):
             os.remove(p)
+
 
 if __name__ == "__main__":
     main()
