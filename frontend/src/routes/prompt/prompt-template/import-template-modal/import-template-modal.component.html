@@ -32,5 +32,14 @@
 </div>
 <div *nzModalFooter>
   <button (click)="dismiss()" nz-button type="button">{{ 'cancel' | i18nextEager }}</button>
-  <button (click)="confirm()" nz-button type="button" nzType="primary">{{ 'import' | i18nextEager }}</button>
+  <button
+    (click)="confirm()"
+    nz-button
+    type="button"
+    nzType="primary"
+    [disabled]="!selectedFile || importing"
+    [nzLoading]="importing"
+  >
+    {{ 'import' | i18nextEager }}
+  </button>
 </div>
