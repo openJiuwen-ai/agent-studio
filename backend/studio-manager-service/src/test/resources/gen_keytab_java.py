@@ -109,8 +109,9 @@ def main():
         logger.error("COMPILE FAILED: %s", r.stderr)
         sys.exit(1)
 
-    # Run
-    r = subprocess.run([java, "-cp", cp + ";" + outdir, "GenKeytab"],
+    # Run（classpath 拼接用 sep 与上方一致——检视修复：硬编码 ";" 在
+    # Linux/macOS 上不是有效分隔符）
+    r = subprocess.run([java, "-cp", cp + sep + outdir, "GenKeytab"],
                        capture_output=True, text=True, cwd=outdir)
     logger.info("%s", r.stdout)
     if r.returncode != 0:

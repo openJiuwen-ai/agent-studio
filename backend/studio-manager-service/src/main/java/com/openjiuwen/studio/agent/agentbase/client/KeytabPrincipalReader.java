@@ -53,8 +53,14 @@ public final class KeytabPrincipalReader {
             // （如 lakesearch\host@REALM）——原 Hadoop KerberosUtil 输出是
             // / 分隔（lakesearch/host@REALM）；Krb5LoginModule 的 principal
             // 选项须与 keytab 条目名逐字匹配，反斜杠形态会 login 失败。
-            // 归一化 \→/ 并保留 @REALM 后缀（name 为完整 principal 名）
+            // 归一化 \→/；防御 realm 丢失（检视修复：某些 Kerby 版本/构造
+            // 路径下 getName() 仅含组件段不含 @REALM——真实 keytab 测试
+            // 证明 2.0.3 的 loadKeytab 路径 getName() 已含 realm，此处
+            // 加防御分支不改变已验证行为，仅补齐不含时的形态）
             String name = principal.getName().replace("\\", "/");
+            if (!name.contains("@") && principal.getRealm() != null && !principal.getRealm().isEmpty()) {
+                name = name + "@" + principal.getRealm();
+            }
             if (pattern == null || pattern.matcher(name).matches()) {
                 names.add(name);
             }
