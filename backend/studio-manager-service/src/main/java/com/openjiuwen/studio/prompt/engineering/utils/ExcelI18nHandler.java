@@ -10,7 +10,7 @@ import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.C
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.LANGUAGE_EN;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.LANGUAGE_ZH;
 
-import cn.afterturn.easypoi.handler.inter.II18nHandler;
+import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.MessageSource;
