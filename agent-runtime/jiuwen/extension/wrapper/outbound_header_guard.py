@@ -28,3 +28,18 @@ def is_valid_outbound_header_name(name: str) -> bool:
     if lower in RESERVED_CORRELATION_HEADERS or lower in FORBIDDEN_HEADER_NAMES:
         return False
     return bool(_VALID_HEADER_NAME_RE.match(name))
+
+
+def is_valid_outbound_header_value(value: str) -> bool:
+    """Latin-1 可编码且无控制字符（0x20~0xFF，禁 0x7F）。
+
+    与 Java 调测侧 isLatin1HeaderValue 同语义；保护 wrapper 直接信任
+    独立通道内容的出站注入/请求走私面（防上游校验被绕过后直达 HTTP 客户端）。
+    """
+    if not isinstance(value, str):
+        return False
+    for ch in value:
+        code = ord(ch)
+        if code < 0x20 or code == 0x7F or code > 0xFF:
+            return False
+    return True

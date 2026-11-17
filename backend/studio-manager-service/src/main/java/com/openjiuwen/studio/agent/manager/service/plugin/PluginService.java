@@ -49,6 +49,9 @@ import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.SearchCriteria;
+import com.openjiuwen.studio.agent.manager.service.IrAdapterService;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.plugin.BasicInfo;
@@ -140,13 +143,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -314,6 +317,9 @@ public class PluginService implements IPluginService {
         log.info("operation log {}: start to create plugin", projectId);
         PluginDTO pluginDTO = buildPluginEntity(projectId, workspaceId, body);
 
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝
+        pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+
         log.info("Checking for duplicate display name - DisplayName: {}, WorkspaceId: {}",
             pluginDTO.getPluginDisplayName(), workspaceId);
         int existDisplayName = pluginMapper.selectByDisplayNameAndWorkspaceId(pluginDTO.getPluginDisplayName(),
@@ -355,6 +361,12 @@ public class PluginService implements IPluginService {
             throw new AgentStudioException(StudioError.TOOL_NOT_EXIST);
         }
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
+
+        // FEAT-093 插件动态鉴权：父插件动态头 vs 新建工具的固定 headers/Headers 参数同名拒绝
+        pluginBase.validPluginDynamicAuthInfo(pluginEntity.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+        // 列表接口追加的动态头回环条目不持久化进工具 schema（单一事实源=auth_info）
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            pluginEntity.getAuthInfo(), body.getInputSchema()));
 
         String toolId = addTool(body, pluginDTO);
 
@@ -1290,6 +1302,17 @@ public class PluginService implements IPluginService {
             log.error("callMode can not modify, pluginId:{}", pluginId);
             throw new AgentStudioException(StudioError.PLUGIN_CALL_MODE_CANNOT_MODIFFY);
         }
+        // FEAT-093 插件动态鉴权：登记侧校验 + 工具请求头同名拒绝。
+        // body 的 requestInfo 仅承载 basicInfo/url（ConvertPluginFromModifyBody
+        // 不落库其 headers）；存量固定头与 Headers 参数冲突面在 oldPlugin 行
+        // 数据——Convert 从 oldPlugin 出发重建，tool_info[*].headers 与
+        // inputSchema 原样持续到新实体，须按存量双形态（新版多工具
+        // requestInfo=ToolRequestInfo、inputSchema=数组）校验，复用
+        // updatePluginAuthInfo 的同一套解析
+        pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(), body.getRequestInfo(), null);
+        pluginBase.validPluginDynamicAuthInfo(body.getAuthInfo(),
+            parseEntityRequestInfoForValidation(oldPlugin.getRequestInfo()),
+            oldPlugin.getInputSchema());
         if (Strings.CS.equals(body.getCallMode(), PluginCallModeEnum.API.getCode())) {
             // 预置插件支持修改auth描述
             if (ToolType.INNER.type.equals(oldPlugin.getType()) && Boolean.TRUE.equals(oldPlugin.getAuthRequired())) {
@@ -1373,6 +1396,14 @@ public class PluginService implements IPluginService {
             log.error("Fail to modify tool for plugin [{}] not exist under tenant [{}]", body.getPluginId(), projectId);
             throw new AgentStudioException(StudioError.TOOL_NOT_EXIST);
         }
+
+        // FEAT-093 插件动态鉴权：父插件动态头 vs 工具固定 headers/Headers 参数
+        // 同名拒绝 + 回环条目剥离（与 createPluginTool 路径对齐——modifyTool
+        // 直改工具同样会保存 body 的 requestInfo/inputSchema，漏校验即后端
+        // 可被绕过保存冲突配置并持久化回显条目）
+        pluginBase.validPluginDynamicAuthInfo(pluginEntity.getAuthInfo(), body.getRequestInfo(), body.getInputSchema());
+        body.setInputSchema(pluginBase.stripDynamicAuthRoundtripParams(
+            pluginEntity.getAuthInfo(), body.getInputSchema()));
 
         PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
 
@@ -2238,6 +2269,7 @@ public class PluginService implements IPluginService {
         urlCheckUtils.checkUrl(projectId, requestInfo.getUrl());
     }
 
+
     /**
      * 生成16位唯一ID（基于UUID截取）
      *
@@ -2314,6 +2346,12 @@ public class PluginService implements IPluginService {
             throw new AgentStudioException(StudioError.PLUGIN_AUTH_KEY_DOMAIN_NOT_NULL);
         }
 
+        // FEAT-093 插件动态鉴权：登记侧校验 + 存量工具请求头（插件行上的
+        // requestInfo/inputSchema JSON 串）同名拒绝
+        pluginBase.validPluginDynamicAuthInfo(authInfoReq,
+            parseEntityRequestInfoForValidation(pluginEntity.getRequestInfo()),
+            pluginEntity.getInputSchema());
+
         // 2. 复用现有的加密逻辑，对最新的鉴权信息进行加密
         AuthInfo encryptedAuth = encryptedAuthInfo(authInfoReq);
         log.info("updatePluginAuthInfo log {}: auth info id encrypt, pluginId: {}", projectId, pluginId);
@@ -2347,6 +2385,44 @@ public class PluginService implements IPluginService {
         }
 
         return response;
+    }
+
+    /**
+     * 插件实体行 requestInfo 双形态解析（updatePluginAuthInfo 校验用）：
+     * 旧版单工具=RequestInfo（顶层 headers 即固定头）；新版多工具=
+     * ToolRequestInfo（basic_info + tool_info[*].headers）——同名拒绝校验
+     * 须取全部工具的 headers 并集，按旧形态解析会漏检新结构的工具头。
+     * 两种形态均解析失败时返回 null（不阻断，豁免面随行缩小并告警）。
+     */
+    private RequestInfo parseEntityRequestInfoForValidation(String requestInfoStr) {
+        if (StringUtils.isBlank(requestInfoStr)) {
+            return null;
+        }
+        try {
+            ToolRequestInfo toolRequestInfo = JSON.parseObject(requestInfoStr, ToolRequestInfo.class);
+            if (Objects.nonNull(toolRequestInfo)
+                    && CollectionUtils.isNotEmpty(toolRequestInfo.getToolsInfoList())) {
+                Map<String, String> mergedHeaders = new HashMap<>();
+                for (ToolInfo tool : toolRequestInfo.getToolsInfoList()) {
+                    if (Objects.nonNull(tool) && MapUtils.isNotEmpty(tool.getHeaders())) {
+                        mergedHeaders.putAll(tool.getHeaders());
+                    }
+                }
+                RequestInfo merged = new RequestInfo();
+                merged.setHeaders(mergedHeaders);
+                return merged;
+            }
+        } catch (Exception e) {
+            log.warn("Parse plugin requestInfo as ToolRequestInfo failed, fallback to RequestInfo: {}",
+                e.getMessage());
+        }
+        try {
+            return JSON.parseObject(requestInfoStr, RequestInfo.class);
+        } catch (Exception e) {
+            log.warn("Parse plugin requestInfo as RequestInfo failed, skip header conflict check: {}",
+                e.getMessage());
+            return null;
+        }
     }
 
     @Override

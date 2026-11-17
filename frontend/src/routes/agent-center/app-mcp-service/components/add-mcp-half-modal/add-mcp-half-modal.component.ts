@@ -150,6 +150,8 @@ export class AddMcpHalfModalComponent implements OnInit {
   public isCollapseMcpConfig: boolean = false;
   public fgGrantPermissionTip = '';
   public isDisabledConfirmBtn: boolean = false;
+  /** FEAT-093 动态鉴权头 vs 固定请求头同名冲突（冲突头名，空=无冲突；确认按钮置灰 + 红字提示） */
+  public dynamicAuthHeaderConflict: string = '';
 
   appMcpTabs: AssertSquareTagType[] = [
     {
@@ -740,6 +742,18 @@ export class AddMcpHalfModalComponent implements OnInit {
       MessageComponent.showError(this.i18n.transform('MCPJSONData'));
       return;
     }
+    // FEAT-093 最终门：动态鉴权头 vs 固定请求头同名拒绝（后端同款约定，
+    // 前端在此兜底报错——JSON 模式直接编辑 editor 时无法前置监听）
+    if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+      const conflict = this.validateDynamicAuthHeaderConflict();
+      if (conflict) {
+        MessageComponent.showError(
+          this.i18n.transform('mcp_dynamic_auth_header_conflict', { header: conflict }));
+        this.isDisabledConfirmBtn = true;
+        this.cdr.detectChanges();
+        return;
+      }
+    }
     const data = {
       description: this.mcpModalSelected.description,
       description_en: this.mcpModalSelected.description_en,
@@ -1272,8 +1286,79 @@ export class AddMcpHalfModalComponent implements OnInit {
       return;
     }
     const names = params.map(param => (param.name || '').trim()).filter(Boolean);
-    this.isDisabledConfirmBtn = params.some(param => !(param.name || '').trim())
+    let hasError = params.some(param => !(param.name || '').trim())
       || new Set(names.map(name => name.toLowerCase())).size !== names.length;
+    // FEAT-093 同名拒绝：动态鉴权头 vs 固定请求头（大小写不敏感）——
+    // 固定头先注入、动态凭证头按绑定值注入，同名互相覆盖（后端
+    // validDynamicAuthHeaderConflict 同款约定，前端前置拦截）
+    if (this.validateDynamicAuthHeaderConflict()) {
+      hasError = true;
+    }
+    this.isDisabledConfirmBtn = hasError;
+  }
+
+  /**
+   * FEAT-093 动态鉴权头 vs 固定请求头同名冲突（返回冲突头名，无冲突返回空串）。
+   * 固定头来源两形态：form 模式的 mcpModalData.headers 行 + JSON 模式
+   * editor 里的 headers 键（递归提取，与后端 parseMcpConfigHeaderInfo 同构）。
+   */
+  private validateDynamicAuthHeaderConflict(): string {
+    this.dynamicAuthHeaderConflict = '';
+    if (this.mcpAuthConfigData.selectedAuthType !== 'DYNAMIC') {
+      return '';
+    }
+    const dynamicNames = this.mcpAuthConfigData.dynamicAuthParams
+      .map(param => (param.name || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (dynamicNames.length <= 0) {
+      return '';
+    }
+    // form 模式的固定头（mode 切换时与 editor 双向同步，两处都查）
+    for (const header of this.mcpModalData.headers) {
+      const key = (header.key || '').trim().toLowerCase();
+      if (key && dynamicNames.includes(key)) {
+        this.dynamicAuthHeaderConflict = header.key;
+        return header.key;
+      }
+    }
+    // JSON 模式 editor 里的 headers（递归提取嵌套层）
+    try {
+      const config = JSON.parse(this.mcpModalData.editor);
+      const jsonHeaders = this.extractHeadersFromConfig(config);
+      for (const name of Object.keys(jsonHeaders)) {
+        if (dynamicNames.includes(name.toLowerCase())) {
+          this.dynamicAuthHeaderConflict = name;
+          return name;
+        }
+      }
+    } catch {
+      // JSON 未成形（用户编辑中）——不在此处报格式错（已有 JSON 校验）
+    }
+    return '';
+  }
+
+  /** 递归提取 JSON 配置里的 headers 键（限深 10 层，与后端一致） */
+  private extractHeadersFromConfig(config: any, depth = 0): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (depth >= 10 || !config || typeof config !== 'object' || Array.isArray(config)) {
+      return headers;
+    }
+    for (const key of Object.keys(config)) {
+      if (key === 'headers' && typeof config[key] === 'object' && !Array.isArray(config[key])) {
+        Object.assign(headers, config[key]);
+        continue;
+      }
+      Object.assign(headers, this.extractHeadersFromConfig(config[key], depth + 1));
+    }
+    return headers;
+  }
+
+  /** FEAT-093 请求头 key 变更时触发同名冲突校验（禁用确认按钮 + 显示冲突提示） */
+  handleChangeHeaderKey() {
+    this.validateDynamicAuthHeaderConflict();
+    if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+      this.isDisabledConfirmBtn = !!this.dynamicAuthHeaderConflict;
+    }
   }
 
   /** 是否展示密钥位置 **/

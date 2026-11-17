@@ -538,6 +538,128 @@ def _arm_reaches_join_without_lane(
     return any(head in can_reach and head not in lane_starts for head in heads)
 
 
+def _augmented_arm_graph(connections: list[dict]):
+    """带分支臂语义的增广控制流图，返回 (succs, roots)。
+
+    每条带 branchId 的边 (s --bid--> t) 拆成两跳 ``s -> (s, bid) -> t``：
+    只有执行 s 且选中 bid 臂，这条边才可能被走到；臂顶点 (s, bid) 的
+    唯一前驱是 s 本身。普通边保持一跳；``@@`` 错误分支同样运行时可走，
+    按普通边保守处理（错误路径可达即可破坏「必经某臂」结论，方向安全）。
+
+    除自环外纳入全部真实连接边，不过滤 loop 边界（``_input``/``_output``）
+    边：互斥证明是可达性判定，遗漏任何真实边都可能把「非必经臂」误判成
+    「必经臂」，生成不安全的补偿 skip（评审 P2 取边口径问题）；多纳入
+    的边只会让可达集变大、让证明更保守，方向安全。
+
+    roots 为无入边顶点（真实起点集合；loop 边界边纳入后，loop 体在根图
+    中同样从真实起点可达，无需可达性分析里额外合成的 loop→input 边——
+    该合成边不是真实连接边，省略不会制造虚假的臂可达路径）。
+    """
+    succs: dict[object, set] = defaultdict(set)
+    in_degree: dict[object, int] = defaultdict(int)
+    vertices: set = set()
+
+    def _add_edge(src: object, dst: object) -> None:
+        if src == dst:
+            return
+        if dst not in succs[src]:
+            succs[src].add(dst)
+            in_degree[dst] += 1
+        vertices.add(src)
+        vertices.add(dst)
+
+    for connection in connections:
+        source_info = connection.get("source") or {}
+        if not isinstance(source_info, dict):
+            continue
+        source = _endpoint_id(source_info)
+        target = _endpoint_id(connection.get("target"))
+        if not source or not target:
+            continue
+        branch_id = (source_info.get("branchId") or "").strip()
+        if branch_id and "@@" not in branch_id:
+            arm = (source, branch_id)
+            _add_edge(source, arm)
+            _add_edge(arm, target)
+        else:
+            _add_edge(source, target)
+
+    roots = [v for v in vertices if not in_degree.get(v)]
+    return succs, roots
+
+
+def _reachable_in_arm_graph(
+    succs: dict[object, set],
+    sources,
+    target: object,
+    *,
+    blocked_arm_node: str | None = None,
+) -> bool:
+    """增广图 BFS：sources 是否可达 target。
+
+    blocked_arm_node 非空时不进入该分支节点的任何臂顶点
+    (blocked_arm_node, *)，等价于「删掉 bn 的全部臂后是否仍可达」。
+    """
+    visited: set = set()
+    queue = deque(sources)
+    while queue:
+        vertex = queue.popleft()
+        if vertex == target:
+            return True
+        if vertex in visited:
+            continue
+        visited.add(vertex)
+        for nxt in succs.get(vertex, ()):
+            if (
+                blocked_arm_node is not None
+                and isinstance(nxt, tuple)
+                and nxt[0] == blocked_arm_node
+            ):
+                continue
+            if nxt not in visited:
+                queue.append(nxt)
+    return False
+
+
+def _branch_exclusive_with_full_lane_arm(
+    succs: dict[object, set],
+    roots,
+    branch_node: str,
+    other_bn: str,
+    other_id: str,
+) -> bool:
+    """链式互斥证明（臂割可达性版）：branch_node 与全 lane fork 臂
+    (other_bn, other_id) 运行时互斥，当且仅当：
+
+    A. 删掉 other_bn 的全部臂后，branch_node 从任何起点均不可达 ——
+       branch_node 的每条起点路径都必经 other_bn 的某条臂（多条臂并进
+       同样成立，只要「至少必经一条」即可）；
+    B. 从臂顶点 (other_bn, other_id) 出发不可达 branch_node —— 不存在
+       「other_bn 选中 fork 臂之后仍走到 branch_node」的路径。
+
+    A∧B ⟹ branch_node 执行时 other_bn 选中的臂必不是 other_id；同节点
+    臂两两互斥 ⟹ fork 臂未触发 ⟹ (branch_node, branch_id) 与全 lane
+    fork 臂运行时互斥。该证明沿「分支 -> 分支 -> ... -> lane」任意深度
+    嵌套成立。
+
+    此前的单臂支配（dominator）版本要求 branch_node 存在**唯一**必经臂：
+    当内层分支节点可从外层多条非全 lane 兄弟臂到达时（B.if 与 B.elseIf
+    都直接指向 I），支配交集丢掉全部臂、证明被误拒，skip 不生成，join
+    的 AND 屏障静默死锁（评审 High 回归）。臂割可达性版按「至少必经一
+    条互斥臂」聚合，正确覆盖该拓扑；且只需两次 O(V+E) BFS，无支配集
+    迭代的 O(V²) 集合开销（评审 Low 性能问题）。
+    """
+    # A: 不进入 other_bn 的任何臂顶点后仍可达，则存在绕开全部臂的路径
+    if _reachable_in_arm_graph(
+        succs, roots, branch_node, blocked_arm_node=other_bn
+    ):
+        return False
+    # B: fork 臂领地内可达 branch_node，则两路径可并存，不互斥
+    if _reachable_in_arm_graph(succs, [(other_bn, other_id)], branch_node):
+        return False
+    return True
+
+
 def _dead_start_covered_by_other_arm(
     dead_start: str,
     *,
@@ -547,7 +669,8 @@ def _dead_start_covered_by_other_arm(
     join_target: str,
     arm_reach: dict[str, dict[str, set[str]]],
     parallel_id: str,
-    fork_arm_parallel_ids: dict[tuple[str, str], frozenset[str]],
+    fork_arm_parallel_ids: dict[tuple[str, str], set[str]],
+    arm_graph: tuple[dict[object, set], list],
 ) -> bool:
     """Guard 2: dead lane ``dead_start`` is covered by a mutually-exclusive arm
     whose branch reaches both the dead start and the join.
@@ -561,9 +684,15 @@ def _dead_start_covered_by_other_arm(
         full-lane fork arm carrying the *current* parallel_id marker: such an
         arm structurally fans out to every lane without routing through the
         inner decision, so coverage is strongest and cannot over-compensate.
-        The current inner decision node must live only on some sibling arm of
-        that outer decision and never inside the full-lane arm's reach, which
-        proves the two paths are mutually exclusive.
+        The current inner decision node must be provably exclusive with that
+        full-lane arm, via *arm-cut reachability proof* (see
+        _branch_exclusive_with_full_lane_arm): every start-to-node path must
+        pass through some arm of the outer decision (multi-arm entries
+        included), and the inner node must be unreachable from the full-lane
+        arm itself. The proof holds across any depth of ``branch -> branch ->
+        ... -> lane`` nesting; the previous single-hop ``on_sibling_arm``
+        plain-reach check broke for nesting deeper than one level and
+        silently rejected compensation, deadlocking the join AND barrier.
     """
 
     # (a) same-node sibling arms
@@ -583,19 +712,20 @@ def _dead_start_covered_by_other_arm(
                 continue
             if not (dead_start in other_reach and join_target in other_reach):
                 continue
-            # Mutual exclusion: the current decision node branch_node must live
-            # only on some non-other_id sibling arm of other_bn -- it must appear
-            # in a sibling reach and never in the other_id full-lane reach (else
-            # the two paths could both hold, are not exclusive, and we must not
-            # compensate).
+            # 互斥前提：内层分支节点绝不能出现在全 lane fork 臂的领地内
+            #（否则两条路径可能同时成立，不互斥，绝不能补偿）。
             if branch_node in other_reach:
                 continue
-            on_sibling_arm = False
-            for sibling_id, sibling_reach in other_arms.items():
-                if sibling_id != other_id and branch_node in sibling_reach:
-                    on_sibling_arm = True
-                    break
-            if on_sibling_arm:
+            # 链式互斥证明（臂割可达性，见 _branch_exclusive_with_full_lane_arm）：
+            # A. branch_node 的每条起点路径必经 other_bn 的某条臂（多臂并进
+            #    同样成立）；B. fork 臂 (other_bn, other_id) 领地内不可达
+            # branch_node。A∧B ⟹ branch_node 只能在 other_bn 选中非 fork 臂
+            # 后执行；同节点臂两两互斥 ⟹ (branch_node, branch_id) 与全 lane
+            # fork 臂运行时互斥，补偿安全。证明沿任意嵌套深度成立。
+            arm_succs, arm_roots = arm_graph
+            if _branch_exclusive_with_full_lane_arm(
+                arm_succs, arm_roots, branch_node, other_bn, other_id
+            ):
                 return True
     return False
 
@@ -631,6 +761,10 @@ def build_dead_lane_skip_plan(
         return DeadLaneSkipPlan()
 
     plain_adj = _plain_adjacency(connections)
+    # 增广臂图：Guard 2(b) 的跨分支互斥证明在其上做臂割可达性判定，
+    # 任意嵌套深度均成立（详见 _branch_exclusive_with_full_lane_arm /
+    # _dead_start_covered_by_other_arm）。
+    arm_graph = _augmented_arm_graph(connections)
 
     # (fork_source, branch_id) -> {parallel_id}：锚点并行 fork 臂及其所属的并行
     # 组。fork_source 自己有两类臂：
@@ -748,6 +882,7 @@ def build_dead_lane_skip_plan(
                         arm_reach=arm_reach,
                         parallel_id=join_spec.parallel_id,
                         fork_arm_parallel_ids=fork_arm_parallel_ids,
+                        arm_graph=arm_graph,
                     )
                     for dead_start in dead
                 )

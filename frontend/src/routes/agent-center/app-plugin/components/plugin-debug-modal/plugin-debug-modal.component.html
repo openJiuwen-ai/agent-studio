@@ -20,6 +20,25 @@
           {{ missing.paramName }} → {{ missing.varName }}
         </div>
       </ng-template>
+      <!-- FEAT-093 动态鉴权：调测调试值输入（值随调测请求即发即弃，不落库） -->
+      <div *ngIf="dynamicAuthHeaders.length" class="mb-4 flex flex-col gap-2">
+        <div class="flex items-center gap-1">
+          <span class="text-xs font-bold">{{ 'mcp_test_debug_headers' | i18nextEager }}</span>
+          <span nz-tooltip [nzTooltipTitle]="'mcp_test_debug_headers_tip' | i18nextEager" class="cursor-pointer text-xs text-[#999]">
+            <nz-icon nzType="question-circle" nzTheme="outline" />
+          </span>
+        </div>
+        <div *ngFor="let header of dynamicAuthHeaders; let i = index" class="flex items-center gap-2">
+          <div class="w-[38%] truncate text-xs text-[#595959]" nz-tooltip [nzTooltipTitle]="header.name">{{ header.name }}</div>
+          <input
+            class="flex-1"
+            nz-input
+            [name]="'dynamicAuthHeaderValue' + i"
+            [(ngModel)]="header.value"
+            [placeholder]="'mcp_test_debug_headers_placeholder' | i18nextEager"
+          />
+        </div>
+      </div>
       <dynamic-node-params *ngIf="requestArgToDynamicForm.length" #dynamicFormIns [inputList]="requestArgToDynamicForm"></dynamic-node-params>
     </div>
     <div class="cutline"></div>
