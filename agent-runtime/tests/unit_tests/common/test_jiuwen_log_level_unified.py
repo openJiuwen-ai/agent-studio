@@ -140,5 +140,5 @@ def test_cli_log_level_syncs_env(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     # 子进程 import 链会在 stdout 打启动日志，取最后一个非空行
-    last_line = [l for l in result.stdout.splitlines() if l.strip()][-1]
+    last_line = [line for line in result.stdout.splitlines() if line.strip()][-1]
     assert last_line == "WARNING"
