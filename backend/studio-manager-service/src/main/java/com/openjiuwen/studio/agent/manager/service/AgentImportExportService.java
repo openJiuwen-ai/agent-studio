@@ -4005,12 +4005,13 @@ public class AgentImportExportService {
     }
 
     public boolean hasModelServiceExist(ModelServiceBase modelServiceBase, String projectId, String workspaceId) {
-        // 是否属于预置的或者空间下自创建的
+        // 是否属于预置的或者空间下自创建的，或者是公开共享的模型（IS_PUBLIC=1）
         return !Objects.isNull(modelServiceBase)
-            && (projectId.equals(modelServiceBase.getProjectId())
-                || CommonConstant.SYSTEM_DEFAULT.equals(modelServiceBase.getProjectId()))
-            && (workspaceId.equals(modelServiceBase.getWorkspaceId())
-                || CommonConstant.SYSTEM_DEFAULT.equals(modelServiceBase.getWorkspaceId()));
+            && (modelServiceBase.isPublic()
+                || (projectId.equals(modelServiceBase.getProjectId())
+                    || CommonConstant.SYSTEM_DEFAULT.equals(modelServiceBase.getProjectId()))
+                    && (workspaceId.equals(modelServiceBase.getWorkspaceId())
+                        || CommonConstant.SYSTEM_DEFAULT.equals(modelServiceBase.getWorkspaceId())));
     }
 
     public void createModel(String projectId, String workspaceId, Map<String, String> modeConfig, String providerId) {
