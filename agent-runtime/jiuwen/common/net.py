@@ -18,7 +18,7 @@ from jiuwen.common.utils.utils import safe_json_loads
 def _is_legacy_renegotiation_enabled() -> bool:
     """是否允许 unsafe legacy renegotiation。"""
     return os.environ.get(
-        PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "true"
+        PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "false"
     ).lower() == "true"
 
 

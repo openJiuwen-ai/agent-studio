@@ -39,7 +39,8 @@ class _FakeCtx:
 
 
 class _FakePostResponse:
-    async def json(self):
+    @staticmethod
+    async def json():
         return {"task_id": "task-1"}
 
     async def __aenter__(self):
@@ -169,7 +170,8 @@ class TestAsyncCheckRequestSsl:
         fake_session = _FakeSession()
 
         class _FakeConnector:
-            def get_tcp_connector(self):
+            @staticmethod
+            def get_tcp_connector():
                 return None
 
         monkeypatch.setattr(api_module, "Connector", _FakeConnector)
@@ -206,14 +208,12 @@ class TestNetSslConfig:
     """net._get_ssl_config 默认值与显式开关"""
 
     @staticmethod
-    def test_unset_defaults_to_legacy_enabled(monkeypatch):
+    def test_unset_defaults_to_legacy_disabled(monkeypatch):
         monkeypatch.delenv(PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, raising=False)
-        assert net_module._is_legacy_renegotiation_enabled() is True
+        assert net_module._is_legacy_renegotiation_enabled() is False
 
         monkeypatch.delenv(PLUGIN_SSL_API_CERT_KEY, raising=False)
-        result = net_module._get_ssl_config()
-        assert isinstance(result, ssl.SSLContext)
-        assert result.verify_mode == ssl.CERT_REQUIRED
+        assert net_module._get_ssl_config() is True
 
     @staticmethod
     @pytest.mark.parametrize("raw", ["true", "True", "TRUE"])
@@ -234,7 +234,7 @@ class TestNetSslConfig:
 
     @staticmethod
     def test_legacy_enabled_with_api_cert_false_disables_verify(monkeypatch):
-        monkeypatch.delenv(PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, raising=False)
+        monkeypatch.setenv(PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "true")
         monkeypatch.setenv(PLUGIN_SSL_API_CERT_KEY, "false")
         result = net_module._get_ssl_config()
         assert isinstance(result, ssl.SSLContext)

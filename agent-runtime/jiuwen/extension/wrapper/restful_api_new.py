@@ -73,7 +73,7 @@ _is_cert_loaded = False
 
 # 是否允许 unsafe legacy renegotiation（对接老 TLS 服务器时开启）
 _allow_legacy_renegotiation = os.environ.get(
-    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "true"
+    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "false"
 ).lower() == "true"
 
 # 允许 legacy renegotiation 时使用的 SSLContext（不复用 _ssl_context，因为它带了 OP_NO_RENEGOTIATION）

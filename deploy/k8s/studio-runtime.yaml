@@ -157,7 +157,7 @@ spec:
             - name: PLUGIN_SSL_API_CERT
               value: 'false'
             - name: PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION
-              value: 'true'
+              value: 'false'
             - name: WORKFLOW_EXECUTE_TIMEOUT
               value: '900'
             - name: IR_LLM_API_KEY
