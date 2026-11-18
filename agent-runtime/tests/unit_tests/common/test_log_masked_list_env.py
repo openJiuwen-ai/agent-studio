@@ -59,4 +59,4 @@ def test_formatter_patch_fails_fast_when_mask_rule_missing(monkeypatch):
     monkeypatch.setenv(_WORDS, "")
 
     with pytest.raises(ValueError):
-        logging_context._get_sensitive_patterns()
+        logging_context.get_sensitive_patterns()

@@ -44,8 +44,11 @@ def test_missing_outputs_default_to_console(tmp_path):
 
 
 def test_low_level_log_env_vars_removed():
-    """三个底层日志环境变量已删除：legacy logger 只认 config.yaml 的
-    log_path / max_bytes / backup_count（字符串字面量形式不得再出现）。"""
+    """三个底层日志环境变量已删除。
+
+    legacy logger 只认 config.yaml 的 log_path / max_bytes / backup_count
+    （字符串字面量形式不得再出现）。
+    """
     src = inspect.getsource(legacy_base)
     for name in (
         "JIUWEN_LOG_PATH",

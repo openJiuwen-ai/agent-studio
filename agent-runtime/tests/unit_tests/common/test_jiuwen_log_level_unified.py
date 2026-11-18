@@ -16,7 +16,7 @@ _PROBE_LOG_TYPE = "jiuwen_level_probe"
 
 
 def _get_probe_logger(tmp_path):
-    return SingletonLogger._get_logger(
+    return SingletonLogger.build_logger(
         _PROBE_LOG_TYPE,
         {"level": "WARNING"},
         "console",
@@ -49,4 +49,4 @@ def test_falls_back_to_config_level_when_env_absent(tmp_path):
 
 def test_perf_buffer_follows_log_level(monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "warning")
-    assert PerformanceLogBuffer()._log_level == logging.WARNING
+    assert PerformanceLogBuffer().log_level == logging.WARNING

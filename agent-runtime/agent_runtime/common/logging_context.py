@@ -167,12 +167,14 @@ def _is_masking_enabled():
     return os.getenv("LOG_MASKED_ENABLED", "false").lower() == "true"
 
 
-def _get_sensitive_patterns():
+def get_sensitive_patterns():
+    """读取 LOG_MASKED_PATTERNS 的 JSON 列表（空串/非法 JSON 走 fail-fast）。"""
     from jiuwen.common.log.base import get_list_from_env
     return get_list_from_env("LOG_MASKED_PATTERNS")
 
 
-def _get_sensitive_words():
+def get_sensitive_words():
+    """读取 LOG_MASKED_SENS_WORDS 的 JSON 列表（空串/非法 JSON 走 fail-fast）。"""
     from jiuwen.common.log.base import get_list_from_env
     return get_list_from_env("LOG_MASKED_SENS_WORDS")
 
@@ -187,8 +189,8 @@ def install_log_formatter_patch() -> None:
     from openjiuwen.core.common.logging.default.default_impl import DefaultLogger
 
     if _is_masking_enabled():
-        sensitive_words = _get_sensitive_words()
-        sensitive_patterns = _get_sensitive_patterns()
+        sensitive_words = get_sensitive_words()
+        sensitive_patterns = get_sensitive_patterns()
     else:
         sensitive_words = None
         sensitive_patterns = None

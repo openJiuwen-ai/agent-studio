@@ -42,6 +42,11 @@ class PerformanceLogBuffer:
             perf_log_level = logging.INFO
         self._log_level: int = perf_log_level
 
+    @property
+    def log_level(self) -> int:
+        """当前性能埋点生效级别（只读，诊断/测试用）。"""
+        return self._log_level
+
     def init(self, uid: str, extra: List[str] = None):
         """create perf record queue"""
         with self._lock:

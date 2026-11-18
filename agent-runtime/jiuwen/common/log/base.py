@@ -353,6 +353,11 @@ class SingletonLogger:
         )
 
     @classmethod
+    def build_logger(cls, log_type, log_config, output, log_file):
+        """构造指定 log_type 的 logger（标准四类之外的扩展/测试入口）。"""
+        return cls._get_logger(log_type, log_config, output, log_file)
+
+    @classmethod
     def _get_logger(cls, log_type, log_config, output, log_file):
         # 统一日志级别：所有 legacy 日志器（含 performance）都跟随 LOG_LEVEL /
         # logging.level，不再按 log_type 单独取 performance_level，避免同一进程内出现
