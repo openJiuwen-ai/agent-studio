@@ -34,6 +34,11 @@ def test_build_log_config_has_no_logger_overrides():
     assert "loggers" not in cfg
 
 
+def test_jiuwen_log_level_counted_as_deprecated():
+    """legacy 栈已改为直接读 LOG_LEVEL，旧名必须进废弃体名单（设了要告警）。"""
+    assert "JIUWEN_LOG_LEVEL" in _DEPRECATED_LOG_ENV_VARS
+
+
 def test_warn_deprecated_env_vars_reports_configured_ones(monkeypatch):
     from agent_runtime.serve import server
 

@@ -78,12 +78,12 @@ The following are default deployment log paths; actual paths depend on deploymen
 | Service | Log directory | Main log file | Description |
 |---------|--------------|--------------|-------------|
 | Manager | `/opt/cloud/studio-manager/logs/` | `studio-agent-manager.log` | Configured by `log4j2.xml`; path can be changed via `LOG_PATH` environment variable |
-| Runtime | `./logs/` | `run/jiuwen.log` | Configured by `jiuwen/config.yaml`; `log_path` can be overridden via `JIUWEN_LOG_PATH` env var; `log_file` / `output` etc. can also be customized in config file |
+| Runtime | `/opt/cloud/logs/` (`LOGGING_LOG_PATH`) | `common.log` | Single unified log: `agent_runtime`, `agent-core` and `jiuwen` loggers plus uvicorn all write to the same file; level controlled by `LOG_LEVEL` |
 
-> **Runtime log notes:** Runtime has two log outputs:
-> - `agent_runtime` module logs (`workflow_logger`, `performance_logger`) default to **stdout**
-> - `jiuwen` module logs are controlled by `jiuwen/config.yaml`, default `output: console`; in deployment usually changed to `output: log` to write to file
-> - In actual deployment, log file names may be customized (e.g. `common.log`); refer to the actual `log_file` config in `config.yaml`
+> **Runtime log notes:** All Runtime logs are aggregated into `${LOGGING_LOG_PATH}/common.log`; there are no per-module log files:
+> - `LOGGING_LOG_PATH` is the only log path variable for Runtime (defaults to `/opt/cloud/logs` in containers)
+> - The level is driven by `LOG_LEVEL` (default `INFO`); legacy variables such as `JIUWEN_LOG_PATH` / `JIUWEN_LOG_FILE` / `TGF_LOG_DIR` are deprecated and no longer take effect
+> - Lines longer than `LOG_MSG_MAX_LENGTH` (default 4000 characters) are truncated with a trailing `...` to stay under downstream log platform per-line limits
 
 ### 3.3 Search ERROR Logs First
 
@@ -266,11 +266,12 @@ written to `${LOGGING_LOG_PATH}/common.log`.
 | Environment variable | Default | Debug value | Purpose |
 |---------------------|---------|-------------|---------|
 | `LOG_LEVEL` | INFO | **DEBUG** | Process-wide level: execution flow + request body + performance instrumentation + graph engine + LLM call details |
+| `LOG_MSG_MAX_LENGTH` | 4000 | **40000** | Max characters per log line (whole line, console output only, i.e. common.log); raise it to see full model request bodies |
 | `LOG_VERBOSE` | false | **true** | Print full exception stack traces |
 | `PERFORMANCE_LOG_ENABLED` | true | **false** | Disable performance instrumentation only, leaving the level untouched |
 | `MODEL_CALL_LOGGING_ENABLED` | false | **true** | Enable LLM call details only (still gated by `LOG_LEVEL<=INFO`) |
 
-> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL`
+> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL` / `JIUWEN_LOG_LEVEL`
 > are deprecated: setting them has no effect and logs one startup WARNING — use `LOG_LEVEL`.
 
 K8s environment variable configuration reference:

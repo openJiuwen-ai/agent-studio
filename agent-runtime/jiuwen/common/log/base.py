@@ -10,7 +10,6 @@ __all__ = (
     "set_thread_session",
 )
 
-import ast
 import json
 import logging
 import os
@@ -24,10 +23,7 @@ from typing import Callable, Any
 from jiuwen.common.configs.base import config
 from jiuwen.common.configs.env_constants import (
     JIUWEN_GRAY_DEBUG_KEY,
-    JIUWEN_LOG_BACKUP_COUNT_KEY,
-    JIUWEN_LOG_MAX_BYTES_KEY,
-    JIUWEN_LOG_LEVEL_KEY,
-    JIUWEN_LOG_PATH_KEY,
+    LOG_LEVEL_KEY,
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
@@ -67,8 +63,6 @@ REQUEST_ID = "x-request-id"
 
 GRAY_DEBUG_ENABLED = "gray_debug_enabled"
 
-ENV_BACKUP_COUNT = os.environ.get(JIUWEN_LOG_BACKUP_COUNT_KEY)
-ENV_MAX_BYTES = os.environ.get(JIUWEN_LOG_MAX_BYTES_KEY)
 # COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy.from_env()
 # (jiuwen/common/log/diagnostics.py)，不再在本模块读取环境变量。
 
@@ -85,22 +79,26 @@ DEFAULT_LOG_FORMAT = "%(asctime)s|%(log_type)s|%(trace_id)s|%(levelname)s|%(mess
 # 使用方式，在需要注入session_id的参数地方，使用：thread_local_data.trace_id = trace_id
 _thread_log_instance = threading.local()
 
-JIUWEN_LOG_MSG_MAX_LENGTH_KEY = "JIUWEN_LOG_MSG_MAX_LENGTH"
+LOG_MSG_MAX_LENGTH_KEY = "LOG_MSG_MAX_LENGTH"
 
-DEFAULT_MSG_MAX_LENGTH = 1000
+# console 单行日志的最大字符数（整行，含时间戳/ID 前缀）。默认 4000：
+# 归一化后 common.log 是唯一副本，1000 字符会砍掉模型请求体等排查必需内容；
+# 但也不能不设上限——长上下文请求会产出几十到几百 KB 的单行，超过下游
+# 日志平台（VictoriaLogs 的 -insert.maxLineSizeBytes）上限会被拒收。
+DEFAULT_LOG_MSG_MAX_LENGTH = 4000
 
 
 def get_msg_max_length() -> int:
-    """获取日志消息最大长度配置"""
+    """获取日志消息最大长度配置（仅对 console 输出生效）。"""
     try:
         max_length = int(
-            os.environ.get(JIUWEN_LOG_MSG_MAX_LENGTH_KEY, DEFAULT_MSG_MAX_LENGTH)
+            os.environ.get(LOG_MSG_MAX_LENGTH_KEY, DEFAULT_LOG_MSG_MAX_LENGTH)
         )
         if max_length <= 0:
-            return DEFAULT_MSG_MAX_LENGTH
+            return DEFAULT_LOG_MSG_MAX_LENGTH
         return max_length
     except (ValueError, TypeError):
-        return DEFAULT_MSG_MAX_LENGTH
+        return DEFAULT_LOG_MSG_MAX_LENGTH
 
 
 def replace_crlf(message):
@@ -291,9 +289,7 @@ class SingletonLogger:
         log_config = config["logging"]
         if log_config is None:
             return
-        jiuwen_log_path = os.environ.get(
-            JIUWEN_LOG_PATH_KEY, log_config.get("log_path")
-        )
+        jiuwen_log_path = log_config.get("log_path")
         # 仅当某个通道确实落文件时才预建日志目录：默认（全 console）配置下不应在
         # 工作目录里凭空留下一个空的 logs/ 目录。真正写文件时 _get_logger 也会兜底创建。
         _ensure_log_dir(log_config, jiuwen_log_path)
@@ -359,15 +355,14 @@ class SingletonLogger:
 
     @classmethod
     def _get_logger(cls, log_type, log_config, output, log_file):
-        # 统一日志级别：所有 legacy 日志器（含 performance）都跟随 JIUWEN_LOG_LEVEL /
+        # 统一日志级别：所有 legacy 日志器（含 performance）都跟随 LOG_LEVEL /
         # logging.level，不再按 log_type 单独取 performance_level，避免同一进程内出现
         # "全局 LOG_LEVEL=INFO 但性能埋点仍静默" 这类级别分叉。
-        level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
-        max_bytes = (
-            get_log_max_bytes(ast.literal_eval(ENV_MAX_BYTES))
-            if ENV_MAX_BYTES
-            else get_log_max_bytes(log_config.get("max_bytes", CONFIG_LOG_MAX_BYTES))
-        )
+        # env 可能写成小写（debug），stdlib setLevel 只认大写，故统一转大写。
+        level = (os.environ.get(LOG_LEVEL_KEY) or log_config.get("level", "WARNING")).upper()
+        # 轮转参数只取 config.yaml（JIUWEN_LOG_MAX_BYTES / JIUWEN_LOG_BACKUP_COUNT
+        # 两个环境变量已删除：归一化后不再落文件，保留配置文件键以备改回 file 输出）
+        max_bytes = get_log_max_bytes(log_config.get("max_bytes", CONFIG_LOG_MAX_BYTES))
         if log_type == "common":
             log_format = log_config.get("format", COMMON_LOG_FORMAT)
         elif log_type == "performance":
@@ -433,9 +428,7 @@ class SingletonLogger:
             file_handler = SafeRotatingFileHandler(
                 filename=log_file,
                 maxBytes=max_bytes,
-                backupCount=ast.literal_eval(ENV_BACKUP_COUNT)
-                if ENV_BACKUP_COUNT
-                else log_config.get("backup_count", DEFAULT_BACKUP_COUNT),
+                backupCount=log_config.get("backup_count", DEFAULT_BACKUP_COUNT),
                 encoding="utf-8",
             )
             if TRACE_ID in log_format:

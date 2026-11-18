@@ -4,6 +4,9 @@
 common.log），因此不应在进程工作目录里凭空留下空的 logs/ 目录。
 """
 
+import inspect
+
+import jiuwen.common.log.base as legacy_base
 from jiuwen.common.log.base import _ensure_log_dir
 
 
@@ -38,3 +41,15 @@ def test_missing_outputs_default_to_console(tmp_path):
     """配置里没有 output 键（或值为 null）时按 console 处理，不建目录。"""
     _ensure_log_dir({"output": None}, _log_path(tmp_path))
     assert not (tmp_path / "logs").exists()
+
+
+def test_low_level_log_env_vars_removed():
+    """三个底层日志环境变量已删除：legacy logger 只认 config.yaml 的
+    log_path / max_bytes / backup_count（字符串字面量形式不得再出现）。"""
+    src = inspect.getsource(legacy_base)
+    for name in (
+        "JIUWEN_LOG_PATH",
+        "JIUWEN_LOG_MAX_BYTES",
+        "JIUWEN_LOG_BACKUP_COUNT",
+    ):
+        assert f'"{name}"' not in src, f"底层日志环境变量 {name} 仍被读取"

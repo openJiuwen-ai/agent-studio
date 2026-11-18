@@ -78,12 +78,12 @@
 | 服务 | 日志目录 | 主日志文件 | 说明 |
 |------|----------|-----------|------|
 | Manager | `/opt/cloud/studio-manager/logs/` | `studio-agent-manager.log` | 由 `log4j2.xml` 配置，路径可通过 `LOG_PATH` 环境变量修改 |
-| Runtime | `./logs/` | `run/jiuwen.log` | 由 `jiuwen/config.yaml` 配置；`log_path` 可通过 `JIUWEN_LOG_PATH` 环境变量覆盖，`log_file` / `output` 等也可在配置文件中自定义 |
+| Runtime | `/opt/cloud/logs/`（`LOGGING_LOG_PATH`） | `common.log` | 全进程统一日志：`agent_runtime`、`agent-core`、`jiuwen` 三套 logger 与 uvicorn 均写入同一文件，级别由 `LOG_LEVEL` 统一控制 |
 
-> **Runtime 日志补充说明：** Runtime 有两套日志输出：
-> - `agent_runtime` 模块的日志（`workflow_logger`、`performance_logger`）默认输出到 **stdout**
-> - `jiuwen` 模块的日志由 `jiuwen/config.yaml` 控制，默认 `output: console`，部署时通常改为 `output: log` 写入文件
-> - 实际部署中日志文件名可能被定制（如 `common.log`），以实际 `config.yaml` 中的 `log_file` 配置为准
+> **Runtime 日志补充说明：** 日志统一汇聚到 `${LOGGING_LOG_PATH}/common.log`，不再按模块拆分文件：
+> - `LOGGING_LOG_PATH` 是 Runtime 唯一的日志路径变量（容器内默认 `/opt/cloud/logs`）
+> - 级别由 `LOG_LEVEL` 统一驱动（默认 `INFO`）；`JIUWEN_LOG_PATH` / `JIUWEN_LOG_FILE` / `TGF_LOG_DIR` 等旧变量已废弃，设置不再生效
+> - 单行日志超过 `LOG_MSG_MAX_LENGTH`（默认 4000 字符）会被截断并追加 `...`，避免超长请求体触发下游日志平台单行上限
 
 ### 3.3 先搜 ERROR 日志
 
@@ -264,11 +264,12 @@ agent_group_stream|{ms}
 | 环境变量 | 默认值 | 调试值 | 作用 |
 |----------|--------|--------|------|
 | `LOG_LEVEL` | INFO | **DEBUG** | 全进程日志级别：执行全流程 + 请求体 + 性能埋点 + 图执行 + LLM 调用详情 |
+| `LOG_MSG_MAX_LENGTH` | 4000 | **40000** | 单条日志的字符上限（整行，仅 console 输出即 common.log）；看完整模型请求体时调大 |
 | `LOG_VERBOSE` | false | **true** | 打印完整异常堆栈 |
 | `PERFORMANCE_LOG_ENABLED` | true | **false** | 只关性能埋点（保留其它日志级别不变） |
 | `MODEL_CALL_LOGGING_ENABLED` | false | **true** | 只开模型调用详情（仍需 `LOG_LEVEL<=INFO`） |
 
-> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL`
+> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL` / `JIUWEN_LOG_LEVEL`
 > 已废弃，设置后不生效，启动时会打印一条 WARNING 提示——请改用 `LOG_LEVEL`。
 
 K8s 环境变量配置参考：

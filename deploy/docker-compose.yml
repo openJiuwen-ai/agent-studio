@@ -330,11 +330,7 @@ services:
       MEMORY_DB_USER: ${MEMORY_DB_USER:-}
       MEMORY_DB_PASSWORD: ${MEMORY_DB_PASSWORD:-}
       MEMORY_DB_NAME: ${MEMORY_DB_NAME:-agent-memory}
-      JIUWEN_LOG_FILE: /opt/cloud/logs/tgf_python.log
-      JIUWEN_LOG_PATH: /opt/cloud/logs/jiuwen.log
-      JIUWEN_LOGGING_LOG_FILE: /opt/cloud/logs/jiuwen_python.log
       LOGGING_LOG_PATH: /opt/cloud/logs/
-      TGF_LOG_DIR: /opt/cloud/logs/
       PORT: ${SERVER_PORT:-31014}
       PLUGIN_SSL_API_CERT: ${PLUGIN_SSL_API_CERT:-false}
       WORKFLOW_EXECUTE_TIMEOUT: ${WORKFLOW_EXECUTE_TIMEOUT:-900}
@@ -381,6 +377,8 @@ services:
       # 进程内唯一日志级别：同时驱动 uvicorn、agent-core 与 legacy logger，
       # 所有日志统一写入 ${LOGGING_LOG_PATH}/common.log
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # 单条日志最大字符数（整行），只对 console 输出（common.log）生效
+      LOG_MSG_MAX_LENGTH: ${LOG_MSG_MAX_LENGTH:-4000}
       ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
       EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
       INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}

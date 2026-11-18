@@ -28,8 +28,7 @@ function env_init(){
   # 创建容器中服务的日志目录，用于容器启动时将服务日志挂载到宿主机
   chmod -R 700 ${LOGGING_LOG_PATH}
 
-  # 统一日志级别：legacy jiuwen logger 也跟随 LOG_LEVEL（转大写，避免级别解析失败）
-  export JIUWEN_LOG_LEVEL=$(echo "${LOG_LEVEL:-INFO}" | tr '[:lower:]' '[:upper:]')
+  # 日志级别由 LOG_LEVEL 统一驱动（uvicorn / agent-core / legacy jiuwen 共用）
   server_path=${SERVICE_HOME}/app/agent_runtime/EIStart.py
 
   hosts=`hostname -I`

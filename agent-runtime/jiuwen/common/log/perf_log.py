@@ -7,7 +7,7 @@ import threading
 from typing import Dict, Any, List
 
 from jiuwen.common.configs.base import config
-from jiuwen.common.configs.env_constants import JIUWEN_LOG_LEVEL_KEY
+from jiuwen.common.configs.env_constants import LOG_LEVEL_KEY
 from jiuwen.common.log.base import performance_logger, get_thread_session
 
 TOTAL_LOG_TAG = "total"
@@ -34,8 +34,9 @@ class PerformanceLogBuffer:
         self._perf_records: Dict[str, PerformanceLogBuffer.Records] = dict()
         self._lock = threading.Lock()
         log_config = config.get("logging", {})
+        # 统一级别：与 agent-core / uvicorn 共用 LOG_LEVEL；env 可能是小写，需先转大写
         perf_log_level = logging.getLevelName(
-            os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "INFO"))
+            (os.environ.get(LOG_LEVEL_KEY) or log_config.get("level", "INFO")).upper()
         )
         if not isinstance(perf_log_level, int):
             perf_log_level = logging.INFO

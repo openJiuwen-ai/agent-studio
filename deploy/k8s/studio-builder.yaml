@@ -83,15 +83,7 @@ spec:
             - name: STORE_DB_SSLMODE
               value: 'disable'
             # ======== [选填] 日志 ========
-            - name: JIUWEN_LOG_FILE
-              value: '/opt/cloud/logs/tgf_python.log'
-            - name: JIUWEN_LOG_PATH
-              value: '/opt/cloud/logs/jiuwen.log'
-            - name: JIUWEN_LOGGING_LOG_FILE
-              value: '/opt/cloud/logs/jiuwen_python.log'
             - name: LOGGING_LOG_PATH
-              value: '/opt/cloud/logs/'
-            - name: TGF_LOG_DIR
               value: '/opt/cloud/logs/'
             # 日志详细模式，设为true时显示完整错误信息
             - name: LOG_VERBOSE
