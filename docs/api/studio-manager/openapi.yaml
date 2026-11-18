@@ -5912,6 +5912,9 @@ paths:
         required: true
         schema:
           type: string
+          maxLength: 128
+          minLength: 1
+          pattern: "^[a-zA-Z0-9._:-]{1,128}$"
       - name: workspace_id
         in: query
         required: true
@@ -15457,7 +15460,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: workflow_id
         in: path
         description: 工作流id
@@ -15466,7 +15469,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: execution_id
         in: path
         description: 执行id
@@ -15475,7 +15478,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: offset
         in: query
         required: false
@@ -15520,7 +15523,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: workflow_id
         in: path
         description: 工作流id
@@ -15529,7 +15532,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: offset
         in: query
         required: false
@@ -15586,7 +15589,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: workflow_id
         in: path
         description: 工作流id
@@ -15595,7 +15598,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: conversation_id
         in: path
         description: 会话id
@@ -15604,7 +15607,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 1
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: offset
         in: query
         required: false
@@ -18569,7 +18572,8 @@ paths:
       tags:
       - agent-management-api-controller
       summary: 获取指定角色的权限列表
-      description: 根据角色名称返回该角色对应的权限列表。
+      description: "根据角色名称返回该角色对应的权限列表。响应 Map 的 key 为角色名(如 DEVELOPER)，另有特殊 key: creatorCheckPermissions(需\
+        创建人校验的 METHOD#URI 列表)、currentUserId(当前用户 userId)、currentUserName(当前用户 userName)。"
       operationId: getPermissionsByRole
       parameters:
       - name: project_id
@@ -19872,7 +19876,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: agent_id
         in: path
         description: workflow/agent id
@@ -19881,7 +19885,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: conversation_id
         in: path
         description: conversation_id
@@ -19890,7 +19894,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: version_id
         in: query
         required: false
@@ -19930,7 +19934,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: agent_id
         in: path
         description: workflow/agent id
@@ -19939,7 +19943,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: conversation_id
         in: path
         description: conversation_id
@@ -19948,7 +19952,7 @@ paths:
           type: string
           maxLength: 64
           minLength: 0
-          pattern: "^[a-zA-Z0-9_-]+$"
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: version_id
         in: query
         description: 版本号
@@ -21600,6 +21604,10 @@ components:
           example: []
           items:
             $ref: "#/components/schemas/ErrorDetail"
+        request_id:
+          type: string
+          description: 请求追踪ID
+          example: a1b2c3d4
     PePromptTemplateNewVo:
       type: object
       properties:
@@ -23759,12 +23767,12 @@ components:
         recall_threshold:
           type: number
           format: float
-          description: 语义检索召回阈值，取值范围 0~1，低于此阈值的结果将被过滤
+          description: 语义检索召回阈值，取值范围由环境变量 KNOWLEDGE_RECALL_THRESHOLD_MIN/MAX 配置，低于此阈值的结果将被过滤
           example: 0.5
         faq_threshold:
           type: number
           format: float
-          description: FAQ 检索匹配阈值，取值范围 0~1
+          description: FAQ 检索匹配阈值，取值范围由环境变量 KNOWLEDGE_RECALL_THRESHOLD_MIN/MAX 配置
           example: 0.9
         need_extras_faq_search:
           type: boolean
