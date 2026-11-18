@@ -18,7 +18,7 @@ from jiuwen.common.utils.utils import safe_json_loads
 def _is_legacy_renegotiation_enabled() -> bool:
     """是否允许 unsafe legacy renegotiation。"""
     return os.environ.get(
-        PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, ""
+        PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "true"
     ).lower() == "true"
 
 
@@ -26,10 +26,10 @@ def _build_legacy_ssl_context() -> ssl.SSLContext:
     """构建允许 unsafe legacy renegotiation 的 SSLContext。
 
     使用 create_default_context 保留默认信任库与校验默认值，
-    再叠加 OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION。
+    再叠加 OP_LEGACY_SERVER_CONNECT。
     """
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-    ctx.options |= getattr(ssl, "OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION", 0x4)
+    ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
     return ctx
 
 

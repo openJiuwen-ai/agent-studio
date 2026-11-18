@@ -73,7 +73,7 @@ _is_cert_loaded = False
 
 # 是否允许 unsafe legacy renegotiation（对接老 TLS 服务器时开启）
 _allow_legacy_renegotiation = os.environ.get(
-    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, ""
+    PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION_KEY, "true"
 ).lower() == "true"
 
 # 允许 legacy renegotiation 时使用的 SSLContext（不复用 _ssl_context，因为它带了 OP_NO_RENEGOTIATION）
@@ -85,10 +85,10 @@ def _build_legacy_ssl_context() -> ssl.SSLContext:
     """构建允许 unsafe legacy renegotiation 的 SSLContext。
 
     使用 create_default_context 保留默认信任库与校验默认值，
-    再叠加 OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION。
+    再叠加 OP_LEGACY_SERVER_CONNECT。
     """
     ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-    ctx.options |= getattr(ssl, "OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION", 0x4)
+    ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
     return ctx
 
 
@@ -640,7 +640,7 @@ class RestfulApiToolNew(Tool):
 
                 check_request = dict(
                     url=status_get_url,
-                    ssl=request_params.api_cert,
+                    ssl=self._get_aiohttp_ssl(request_params.api_cert),
                     timeout=timeout,
                     allow_redirects=False,
                 )
@@ -918,12 +918,14 @@ class RestfulApiToolNew(Tool):
     def _load_cert(self, request_params: RequestParams):
         """加载证书。
 
+        仅将证书链加载到对应的 SSLContext 单例中，不修改 api_cert 原值，
+        避免 SSLContext 被传入 requests 的 verify 参数导致 TypeError。
+
         - api_cert 为字符串（证书路径）：加载到 SSLContext
         - api_cert 为 False（不校验证书）：使用默认行为
         - 开启 PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION 时：
-          仅对字符串证书路径构造 legacy SSLContext；
-          bool 类型保持不变，由 aiohttp 请求层按需附加 legacy SSLContext，
-          避免破坏 requests 路径的 verify 参数
+          仅对字符串证书路径加载到 legacy SSLContext；
+          bool 类型保持不变，由 aiohttp 请求层按需附加 legacy SSLContext
         """
         global _is_cert_loaded, _legacy_ssl_context_cert_loaded
 
@@ -935,31 +937,35 @@ class RestfulApiToolNew(Tool):
                 if not _legacy_ssl_context_cert_loaded:
                     legacy_ctx.load_cert_chain(certfile=request_params.api_cert)
                     _legacy_ssl_context_cert_loaded = True
-                request_params.api_cert = legacy_ctx
-            # bool 类型不替换为 SSLContext，由 _get_aiohttp_ssl 按需构造
+            # 不修改 api_cert 原值，由 _get_aiohttp_ssl 按需返回 SSLContext
             return
 
-        # 原有逻辑
+        # 原有逻辑：加载证书链但不替换原值
         if isinstance(request_params.api_cert, str):
             if not _is_cert_loaded:
                 _ssl_context.load_cert_chain(certfile=request_params.api_cert)
                 _is_cert_loaded = True
-            request_params.api_cert = _ssl_context
 
     def _get_aiohttp_ssl(self, api_cert):
         """获取 aiohttp 请求的 ssl 参数。
 
         在 legacy renegotiation 模式下，为 bool 类型的 api_cert 构造独立的
         legacy SSLContext，避免就地修改共享单例导致后续请求校验被永久关闭。
+        字符串证书路径返回已加载证书链的 SSLContext（由 _load_cert 预加载）。
         """
         if isinstance(api_cert, ssl.SSLContext):
             return api_cert
-        if _allow_legacy_renegotiation and isinstance(api_cert, bool):
-            ctx = _build_legacy_ssl_context()
-            if api_cert is False:
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-            return ctx
+        if _allow_legacy_renegotiation:
+            if isinstance(api_cert, str):
+                return _get_legacy_ssl_context()
+            if isinstance(api_cert, bool):
+                ctx = _build_legacy_ssl_context()
+                if api_cert is False:
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                return ctx
+        if isinstance(api_cert, str):
+            return _ssl_context
         return api_cert
 
     def _check_url_validate(self, url: str):
