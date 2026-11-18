@@ -77,7 +77,7 @@ The following are default deployment log paths; actual paths depend on deploymen
 
 | Service | Log directory | Main log file | Description |
 |---------|--------------|--------------|-------------|
-| Manager | `/opt/cloud/studio-manager/logs/` | `studio-agent-manager.log` | Configured by `log4j2.xml`; path can be changed via `LOG_PATH` environment variable |
+| Manager | `/opt/cloud/studio-manager/logs/` | `studio-agent-manager.log` | Configured by the `log4j2.xml` loaded at deployment: the directory is fixed by its `LOG_PATH` property (**not an env var** — edit the file and restart to change it); rollover size/count/retention are overridden by `LOG_FILE_*` / `PERFORM_FILE_*` / `TRACE_FILE_*` env vars (e.g. `LOG_FILE_MAX_AGE`, default 7d) |
 | Runtime | `/opt/cloud/logs/` (`LOGGING_LOG_PATH`) | `common.log` | Single unified log: `agent_runtime`, `agent-core` and `jiuwen` loggers plus uvicorn all write to the same file; level controlled by `LOG_LEVEL` |
 
 > **Runtime log notes:** All Runtime logs are aggregated into `${LOGGING_LOG_PATH}/common.log`; there are no per-module log files:

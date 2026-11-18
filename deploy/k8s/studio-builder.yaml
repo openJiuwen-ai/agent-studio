@@ -85,9 +85,6 @@ spec:
             # ======== [选填] 日志 ========
             - name: LOGGING_LOG_PATH
               value: '/opt/cloud/logs/'
-            # 日志详细模式，设为true时显示完整错误信息
-            - name: LOG_VERBOSE
-              value: 'true'
             # ======== [必填] 对象存储 ========
             - name: DATASOURCE_OBS_SERVER
               value: ''

@@ -447,7 +447,6 @@ services:
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
-      LOG_VERBOSE: ${LOG_VERBOSE:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       STORAGE_TYPE: ${STORAGE_TYPE:-OBS}
       STORAGE_CUSTOM_MODULE: ${RUNTIME_STORAGE_CUSTOM_MODULE:-}

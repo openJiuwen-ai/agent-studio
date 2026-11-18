@@ -77,7 +77,7 @@
 
 | 服务 | 日志目录 | 主日志文件 | 说明 |
 |------|----------|-----------|------|
-| Manager | `/opt/cloud/studio-manager/logs/` | `studio-agent-manager.log` | 由 `log4j2.xml` 配置，路径可通过 `LOG_PATH` 环境变量修改 |
+| Manager | `/opt/cloud/studio-manager/logs/` | `studio-agent-manager.log` | 由部署时加载的 `log4j2.xml` 配置：目录由其中 `LOG_PATH` 属性固定（**不是环境变量**，改路径需改该文件后重启）；滚动大小/份数/保留期等由 `LOG_FILE_*` / `PERFORM_FILE_*` / `TRACE_FILE_*` 环境变量覆盖（如 `LOG_FILE_MAX_AGE`，默认 7d） |
 | Runtime | `/opt/cloud/logs/`（`LOGGING_LOG_PATH`） | `common.log` | 全进程统一日志：`agent_runtime`、`agent-core`、`jiuwen` 三套 logger 与 uvicorn 均写入同一文件，级别由 `LOG_LEVEL` 统一控制 |
 
 > **Runtime 日志补充说明：** 日志统一汇聚到 `${LOGGING_LOG_PATH}/common.log`，不再按模块拆分文件：
