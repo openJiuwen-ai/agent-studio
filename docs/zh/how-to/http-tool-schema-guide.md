@@ -48,7 +48,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `url` | string | **必填** | 完整 HTTP(S) URL，长度约 8–256。启用 URL 检查时（`tool.url.enable-check`，默认开启），`UrlCheckUtils` 可能拒绝内网/私网地址。v2 下常拼在插件 `basic_info`（protocol/host/path）之后，服务端再拆出工具 `path` |
+| `url` | string | **必填** | 完整 HTTP(S) URL，长度约 8–256。URL 检查由 `tool.url.enable-check` 开关控制：应用默认配置为 `false`（`application-manager.yml`），Docker Compose / Kubernetes 部署模板中设为 `true`。开启时 `UrlCheckUtils` 可能拒绝内网/私网地址。v2 下常拼在插件 `basic_info`（protocol/host/path）之后，服务端再拆出工具 `path` |
 | `method` | enum | **必填** | 当前 `RequestInfo.MethodEnum` 仅 **`GET`** / **`POST`** |
 | `headers` | object\<string,string\> | 否 | 静态请求头，如 `{"Content-Type":"application/json"}` |
 | `path_params` | string | 否 | 路径参数补充，最长约 2000 |

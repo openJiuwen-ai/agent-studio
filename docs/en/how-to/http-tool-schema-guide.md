@@ -48,7 +48,7 @@ Both endpoints require the `workspace_id` query parameter.
 
 | Field | Type | Required | Description |
 |------|------|------|------|
-| `url` | string | **Required** | Full HTTP(S) URL, length ~8–256. When URL checking is enabled (`tool.url.enable-check`, enabled by default), `UrlCheckUtils` may reject intranet/private IPs. In v2 it is usually appended after the plugin's `basic_info` (protocol/host/path), then the server splits out the tool `path` |
+| `url` | string | **Required** | Full HTTP(S) URL, length ~8–256. The URL check runs under the `tool.url.enable-check` switch: `false` in the application default config (`application-manager.yml`), while the Docker Compose / Kubernetes deployment templates set it to `true`. When enabled, `UrlCheckUtils` may reject intranet/private IPs. In v2 it is usually appended after the plugin's `basic_info` (protocol/host/path), then the server splits out the tool `path` |
 | `method` | enum | **Required** | `RequestInfo.MethodEnum` currently only supports **`GET`** / **`POST`** |
 | `headers` | object\<string,string\> | No | Static request headers, e.g. `{"Content-Type":"application/json"}` |
 | `path_params` | string | No | Path parameter supplement, max ~2000 |
