@@ -50,3 +50,48 @@ def test_falls_back_to_config_level_when_env_absent(tmp_path):
 def test_perf_buffer_follows_log_level(monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "warning")
     assert PerformanceLogBuffer().log_level == logging.WARNING
+
+
+def test_invalid_level_name_falls_back_to_warning(monkeypatch, tmp_path):
+    """非法级别名回退 WARNING：导入期不抛 ValueError（真实进程由 uvicorn 先行拦截）。"""
+    monkeypatch.setenv("LOG_LEVEL", "FOO")
+    probe = _get_probe_logger(tmp_path)
+    try:
+        assert probe.level == logging.WARNING
+    finally:
+        probe.handlers.clear()
+
+
+def test_config_level_none_falls_back_to_warning(monkeypatch, tmp_path):
+    """config.yaml 写出 level: null（键在值为 None）时回退 WARNING，不再 AttributeError。"""
+    probe = SingletonLogger.build_logger(
+        _PROBE_LOG_TYPE, {"level": None}, "console", str(tmp_path / "probe.log")
+    )
+    try:
+        assert probe.level == logging.WARNING
+    finally:
+        probe.handlers.clear()
+
+
+def test_config_level_numeric_falls_back_to_warning(monkeypatch, tmp_path):
+    """数值级别（YAML level: 20）按非法名处理回退 WARNING，不再 AttributeError。"""
+    probe = SingletonLogger.build_logger(
+        _PROBE_LOG_TYPE, {"level": 20}, "console", str(tmp_path / "probe.log")
+    )
+    try:
+        assert probe.level == logging.WARNING
+    finally:
+        probe.handlers.clear()
+
+
+def test_perf_buffer_config_level_none_falls_back(monkeypatch):
+    """配置 level 为 None 时 perf buffer 回退 INFO，不在构造期崩。"""
+    monkeypatch.setattr("jiuwen.common.log.perf_log.config", {"logging": {"level": None}})
+    assert PerformanceLogBuffer().log_level == logging.INFO
+
+
+def test_perf_buffer_invalid_level_falls_back(monkeypatch):
+    """非法级别名走 getLevelName 字符串路径 → 回退 INFO。"""
+    monkeypatch.setenv("LOG_LEVEL", "FOO")
+    monkeypatch.setattr("jiuwen.common.log.perf_log.config", {"logging": {}})
+    assert PerformanceLogBuffer().log_level == logging.INFO

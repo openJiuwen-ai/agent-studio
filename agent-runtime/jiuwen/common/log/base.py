@@ -362,8 +362,13 @@ class SingletonLogger:
         # 统一日志级别：所有 legacy 日志器（含 performance）都跟随 LOG_LEVEL /
         # logging.level，不再按 log_type 单独取 performance_level，避免同一进程内出现
         # "全局 LOG_LEVEL=INFO 但性能埋点仍静默" 这类级别分叉。
-        # env 可能写成小写（debug），stdlib setLevel 只认大写，故统一转大写。
-        level = (os.environ.get(LOG_LEVEL_KEY) or log_config.get("level", "WARNING")).upper()
+        # env 可能写成小写（debug），配置可能写出 null/数值；本处在模块导入期执行，
+        # 必须容错：先字符串化再转大写，非法级别名回退 WARNING（env 非法值在真实
+        # 进程里由 uvicorn 启动期 fail-fast 拦截，见 e2e-log-env-vars 矩阵 C9）。
+        raw_level = os.environ.get(LOG_LEVEL_KEY) or log_config.get("level") or "WARNING"
+        level = str(raw_level).strip().upper()
+        if level not in name_to_level:
+            level = "WARNING"
         # 轮转参数只取 config.yaml（JIUWEN_LOG_MAX_BYTES / JIUWEN_LOG_BACKUP_COUNT
         # 两个环境变量已删除：归一化后不再落文件，保留配置文件键以备改回 file 输出）
         max_bytes = get_log_max_bytes(log_config.get("max_bytes", CONFIG_LOG_MAX_BYTES))
