@@ -4,7 +4,7 @@
 Config bridge: full replica of agent_runtime.common.config.
 
 Provides identical classes: ServerSettings, LLMSettings,
-ObjectStorageSettings, HealthCheckSettings, SecuritySandboxSettings, WorkflowLogSettings,
+ObjectStorageSettings, HealthCheckSettings, SecuritySandboxSettings,
 OtelSettings, CacheSettings, SkillStorageSettings, OpenSearchSettings, MemorySettings,
 CheckpointerSettings, CodeExecutionSettings, DataBaseSettings, Settings, settings.
 
@@ -162,18 +162,6 @@ class SecuritySandboxSettings(BaseSettings):
         default="aio", validation_alias="SECURITY_SANDBOX_TYPE"
     )
     scope: str = Field(default="system", validation_alias="SECURITY_SANDBOX_SCOPE")
-
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
-
-
-class WorkflowLogSettings(BaseSettings):
-    """Workflow logger configuration."""
-
-    level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
-    graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
-    llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -411,7 +399,6 @@ class Settings:
     object_storage = ObjectStorageSettings()
     health_check = HealthCheckSettings()
     security_sandbox = SecuritySandboxSettings()
-    workflow_log = WorkflowLogSettings()
     cache = CacheSettings()
     skill_storage = SkillStorageSettings()
     opensearch = OpenSearchSettings()

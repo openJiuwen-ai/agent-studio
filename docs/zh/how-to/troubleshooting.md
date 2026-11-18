@@ -269,9 +269,6 @@ agent_group_stream|{ms}
 | `PERFORMANCE_LOG_ENABLED` | true | **false** | 只关性能埋点（保留其它日志级别不变） |
 | `MODEL_CALL_LOGGING_ENABLED` | false | **true** | 只开模型调用详情（仍需 `LOG_LEVEL<=INFO`） |
 
-> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL` / `JIUWEN_LOG_LEVEL`
-> 已废弃，设置后不生效，启动时会打印一条 WARNING 提示——请改用 `LOG_LEVEL`。
-
 K8s 环境变量配置参考：
 
 ```yaml

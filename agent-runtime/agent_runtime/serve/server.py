@@ -13,15 +13,6 @@ from agent_runtime.common.log_bootstrap import install_request_context_log_recor
 from agent_runtime.common.log_format import COMMON_LOG_FORMAT
 from openjiuwen.core.common.logging.log_config import configure_log_config
 
-# 已废弃的日志级别变量 —— 统一改用 LOG_LEVEL。仅用于启动时提示，不驱动任何行为。
-_DEPRECATED_LOG_ENV_VARS = (
-    "WORKFLOW_LOG_LEVEL",
-    "GRAPH_LOG_LEVEL",
-    "LLM_LOG_LEVEL",
-    "PERFORMANCE_LOG_LEVEL",
-    "JIUWEN_LOG_LEVEL",
-)
-
 
 def _build_log_config(level: str) -> dict:
     """装配 runtime 日志配置（供 configure_log_config 使用）。
@@ -38,16 +29,6 @@ def _build_log_config(level: str) -> dict:
         "interface_output": ["console"],
         "performance_output": ["console"],
     }
-
-
-def _warn_deprecated_log_env_vars() -> None:
-    """提示仍在配置已废弃级别变量的部署（这些变量已被静默忽略）。"""
-    stale = [name for name in _DEPRECATED_LOG_ENV_VARS if os.getenv(name)]
-    if stale:
-        logger.warning(
-            "Deprecated log level env vars are ignored, use LOG_LEVEL instead: %s",
-            ", ".join(stale),
-        )
 
 
 # 尽早装配日志：必须在任何会打日志的 agent-core / jiuwen 模块导入之前执行，否则
@@ -216,7 +197,6 @@ async def lifespan(_app: FastAPI):
     # 日志配置：全局唯一级别（LOG_LEVEL，与 uvicorn 共用）+ 仅 console 输出
     log_level = settings.server.log_level.upper()
     configure_log_config(_build_log_config(log_level))
-    _warn_deprecated_log_env_vars()
     logger.info(
         f"Logger configured - level: {log_level}, output: console "
         f"(stdout -> ${{LOGGING_LOG_PATH}}/common.log)"

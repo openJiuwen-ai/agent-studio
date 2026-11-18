@@ -2,8 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """legacy jiuwen logger 的唯一级别开关是 LOG_LEVEL。
 
-归一化后进程内只有一个级别变量；JIUWEN_LOG_LEVEL 只是历史遗留名，已废弃。
-这里钉住：LOG_LEVEL 生效（含小写值）、未配置时回退 config.yaml、旧名不再生效。
+这里钉住：LOG_LEVEL 生效（含小写值）、未配置时回退 config.yaml。
 """
 
 import logging
@@ -28,7 +27,6 @@ def _get_probe_logger(tmp_path):
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     monkeypatch.delenv("LOG_LEVEL", raising=False)
-    monkeypatch.delenv("JIUWEN_LOG_LEVEL", raising=False)
 
 
 def test_env_level_is_applied_and_uppercased(monkeypatch, tmp_path):
@@ -42,15 +40,6 @@ def test_env_level_is_applied_and_uppercased(monkeypatch, tmp_path):
 
 
 def test_falls_back_to_config_level_when_env_absent(tmp_path):
-    probe = _get_probe_logger(tmp_path)
-    try:
-        assert probe.level == logging.WARNING
-    finally:
-        probe.handlers.clear()
-
-
-def test_legacy_env_name_no_longer_drives_level(monkeypatch, tmp_path):
-    monkeypatch.setenv("JIUWEN_LOG_LEVEL", "DEBUG")
     probe = _get_probe_logger(tmp_path)
     try:
         assert probe.level == logging.WARNING

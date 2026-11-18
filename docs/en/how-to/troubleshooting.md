@@ -271,9 +271,6 @@ written to `${LOGGING_LOG_PATH}/common.log`.
 | `PERFORMANCE_LOG_ENABLED` | true | **false** | Disable performance instrumentation only, leaving the level untouched |
 | `MODEL_CALL_LOGGING_ENABLED` | false | **true** | Enable LLM call details only (still gated by `LOG_LEVEL<=INFO`) |
 
-> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL` / `JIUWEN_LOG_LEVEL`
-> are deprecated: setting them has no effect and logs one startup WARNING — use `LOG_LEVEL`.
-
 K8s environment variable configuration reference:
 
 ```yaml

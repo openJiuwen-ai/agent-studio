@@ -5,13 +5,7 @@
 输出，也不应有 per-namespace 的级别覆盖。
 """
 
-from unittest.mock import patch
-
-from agent_runtime.serve.server import (
-    _DEPRECATED_LOG_ENV_VARS,
-    _build_log_config,
-    _warn_deprecated_log_env_vars,
-)
+from agent_runtime.serve.server import _build_log_config
 
 
 def test_build_log_config_uses_given_level():
@@ -32,40 +26,3 @@ def test_build_log_config_has_no_logger_overrides():
     """统一级别下不再下发 loggers.*.level，避免命名空间级别与 LOG_LEVEL 分叉。"""
     cfg = _build_log_config("INFO")
     assert "loggers" not in cfg
-
-
-def test_jiuwen_log_level_counted_as_deprecated():
-    """legacy 栈已改为直接读 LOG_LEVEL，旧名必须进废弃体名单（设了要告警）。"""
-    assert "JIUWEN_LOG_LEVEL" in _DEPRECATED_LOG_ENV_VARS
-
-
-def test_warn_deprecated_env_vars_reports_configured_ones(monkeypatch):
-    from agent_runtime.serve import server
-
-    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "DEBUG")
-    monkeypatch.setenv("PERFORMANCE_LOG_LEVEL", "INFO")
-    monkeypatch.delenv("GRAPH_LOG_LEVEL", raising=False)
-    monkeypatch.delenv("LLM_LOG_LEVEL", raising=False)
-
-    with patch.object(server, "logger") as mock_logger:
-        _warn_deprecated_log_env_vars()
-
-    mock_logger.warning.assert_called_once()
-    reported = mock_logger.warning.call_args[0][1]
-    assert "WORKFLOW_LOG_LEVEL" in reported
-    assert "PERFORMANCE_LOG_LEVEL" in reported
-    assert "GRAPH_LOG_LEVEL" not in reported
-
-
-def test_warn_deprecated_env_vars_silent_when_unset(monkeypatch):
-    from agent_runtime.serve import server
-
-    for name in _DEPRECATED_LOG_ENV_VARS:
-        monkeypatch.delenv(name, raising=False)
-    # 空字符串在部署模板里等同于未配置，同样不该告警
-    monkeypatch.setenv("LLM_LOG_LEVEL", "")
-
-    with patch.object(server, "logger") as mock_logger:
-        _warn_deprecated_log_env_vars()
-
-    mock_logger.warning.assert_not_called()
