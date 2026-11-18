@@ -365,7 +365,12 @@ class SingletonLogger:
         # env 可能写成小写（debug），配置可能写出 null/数值；本处在模块导入期执行，
         # 必须容错：先字符串化再转大写，非法级别名回退 WARNING（env 非法值在真实
         # 进程里由 uvicorn 启动期 fail-fast 拦截，见 e2e-log-env-vars 矩阵 C9）。
-        raw_level = os.environ.get(LOG_LEVEL_KEY) or log_config.get("level") or "WARNING"
+        # 空白值（K8s value: ' '）等价未设置，与 ServerSettings 空值归一口径一致：
+        # 回退 config 级别，而不是让 strip 后的空串走进白名单回退。
+        env_level = os.environ.get(LOG_LEVEL_KEY)
+        if env_level is not None and env_level.strip() == "":
+            env_level = None
+        raw_level = env_level or log_config.get("level") or "WARNING"
         level = str(raw_level).strip().upper()
         if level not in name_to_level:
             level = "WARNING"

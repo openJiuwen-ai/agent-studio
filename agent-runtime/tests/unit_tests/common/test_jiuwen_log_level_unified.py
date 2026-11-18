@@ -95,3 +95,50 @@ def test_perf_buffer_invalid_level_falls_back(monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "FOO")
     monkeypatch.setattr("jiuwen.common.log.perf_log.config", {"logging": {}})
     assert PerformanceLogBuffer().log_level == logging.INFO
+
+
+def test_whitespace_log_level_treated_as_unset(monkeypatch, tmp_path):
+    """LOG_LEVEL 仅空白（K8s value: ' '）等价未设置：回退 config 级别，与 ServerSettings 归一口径一致。"""
+    monkeypatch.setenv("LOG_LEVEL", "   ")
+    probe = SingletonLogger.build_logger(
+        _PROBE_LOG_TYPE, {"level": "INFO"}, "console", str(tmp_path / "probe.log")
+    )
+    try:
+        assert probe.level == logging.INFO
+    finally:
+        probe.handlers.clear()
+
+
+def test_perf_buffer_whitespace_level_falls_back(monkeypatch):
+    """perf 路径空白级别回退 INFO（getLevelName 字符串兜底），不与 settings 分叉。"""
+    monkeypatch.setenv("LOG_LEVEL", "   ")
+    monkeypatch.setattr("jiuwen.common.log.perf_log.config", {"logging": {}})
+    assert PerformanceLogBuffer().log_level == logging.INFO
+
+
+def test_cli_log_level_syncs_env(tmp_path):
+    """--log-level 必须同步写回 os.environ['LOG_LEVEL']：legacy base.py 直读 env，否则级别分叉。"""
+    import os
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, types, os\n"
+        "sys.path.insert(0, '.')\n"
+        "fake = types.ModuleType('EIStart_base')\n"
+        "fake.main = lambda: None\n"
+        "sys.modules['EIStart_base'] = fake\n"
+        "sys.argv = ['EIStart.py', '--log-level', 'WARNING']\n"
+        "from agent_runtime.EIStart import main\n"
+        "main()\n"
+        "print(os.environ.get('LOG_LEVEL'))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    # 子进程 import 链会在 stdout 打启动日志，取最后一个非空行
+    last_line = [l for l in result.stdout.splitlines() if l.strip()][-1]
+    assert last_line == "WARNING"
