@@ -60,3 +60,36 @@ def test_formatter_patch_fails_fast_when_mask_rule_missing(monkeypatch):
 
     with pytest.raises(ValueError):
         logging_context.get_sensitive_patterns()
+
+
+def test_masking_formatter_fails_fast_on_invalid_regex():
+    """非法正则与空串同口径 fail-fast：构造期抛 ValueError，不再静默降级关闭脱敏。"""
+    from jiuwen.common.log.base import MaskingFormatter
+
+    with pytest.raises(ValueError, match="LOG_MASKED_PATTERNS"):
+        MaskingFormatter(
+            fmt="%(message)s",
+            sensitive_patterns=["sk-[A-Za-z0-9{8,}"],  # 缺右括号，re.error
+            truncate_for_console=True,
+        )
+
+
+def test_get_logger_fails_fast_on_invalid_regex(monkeypatch, tmp_path):
+    """base 的 SingletonLogger 构造路径（= 模块导入期形态）对非法正则同样 fail-fast。
+
+    真实启动顺序：install_log_formatter_patch 先 import base（触发本路径，
+    _OPENJIUWEN_LOGGING_MANAGED 尚为 False、会构造 handler），import 完成后才
+    置位该标志。测试进程里标志已被早前 import 置位，须压回 False 复现导入期形态。
+    """
+    from jiuwen.common.log.base import SingletonLogger
+
+    monkeypatch.setattr(
+        "agent_runtime.common.logging_context._OPENJIUWEN_LOGGING_MANAGED", False
+    )
+    monkeypatch.setenv("LOG_MASKED_ENABLED", "true")
+    monkeypatch.setenv(_PATTERNS, '["("]')
+
+    with pytest.raises(ValueError, match="LOG_MASKED_PATTERNS"):
+        SingletonLogger.build_logger(
+            "probe_invalid_regex", {"level": "INFO"}, "console", str(tmp_path / "p.log")
+        )

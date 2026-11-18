@@ -540,9 +540,13 @@ class MaskingFormatter(logging.Formatter):
             try:
                 self.pattern_regex = re.compile("|".join(f"({p})" for p in wrapped))
             except re.error as e:
-                import warnings
-                warnings.warn(f"Invalid LOG_MASKED_PATTERNS regex, masking disabled: {e}")
-                self.pattern_regex = None
+                # 与列表空值同口径 fail-fast（用户裁定 2026-11-18）：非法正则
+                # 静默关闭 pattern 脱敏，与"打开开关却没配规则"是同一类风险——
+                # 用户以为在脱敏。本构造发生在 install_log_formatter_patch /
+                # SingletonLogger 初始化（模块导入期），抛错即启动失败。
+                raise ValueError(
+                    f"Invalid regex in environment variable LOG_MASKED_PATTERNS: {e}"
+                ) from e
         else:
             self.pattern_regex = None
         self.truncate_for_console = truncate_for_console
