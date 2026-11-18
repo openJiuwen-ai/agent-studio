@@ -211,6 +211,9 @@ def get_log_max_bytes(max_bytes_config):
 def get_list_from_env(env_var_name, default="[]"):
     """
     从环境变量中解析出list
+
+    刻意对空值/非法值快速失败：LOG_MASKED_ENABLED=true 却没给出任何脱敏规则
+    属于自相矛盾的配置，宁可启动期报错，也不让用户以为已经在脱敏。
     """
     env_var = os.getenv(env_var_name, default)
     try:
