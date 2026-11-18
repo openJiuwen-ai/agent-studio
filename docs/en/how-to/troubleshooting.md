@@ -90,7 +90,7 @@ The following are default deployment log paths; actual paths depend on deploymen
 After finding the log file, **search for ERROR by time range first** — this often directly locates the cause:
 
 - **Java services** (Manager / Service): search for `ERROR` in logs; stack traces follow immediately
-- **Runtime** (Python): search for `ERROR` in logs; with `LOG_VERBOSE=true` enabled, full stack traces are output
+- **Runtime** (Python): search for `ERROR` in logs; the stack trace follows immediately (tracebacks are always emitted with ERROR)
 
 When searching, use `conversationId` or `request-id` to narrow the scope and avoid interference from unrelated errors. How to obtain these two IDs:
 
@@ -267,7 +267,6 @@ written to `${LOGGING_LOG_PATH}/common.log`.
 |---------------------|---------|-------------|---------|
 | `LOG_LEVEL` | INFO | **DEBUG** | Process-wide level: execution flow + request body + performance instrumentation + graph engine + LLM call details |
 | `LOG_MSG_MAX_LENGTH` | 4000 | **40000** | Max characters per log line (whole line, console output only, i.e. common.log); raise it to see full model request bodies |
-| `LOG_VERBOSE` | false | **true** | Print full exception stack traces |
 | `PERFORMANCE_LOG_ENABLED` | true | **false** | Disable performance instrumentation only, leaving the level untouched |
 | `MODEL_CALL_LOGGING_ENABLED` | false | **true** | Enable LLM call details only (still gated by `LOG_LEVEL<=INFO`) |
 
@@ -277,8 +276,6 @@ K8s environment variable configuration reference:
 env:
   - name: LOG_LEVEL
     value: "DEBUG"
-  - name: LOG_VERBOSE
-    value: "true"
 ```
 
 > **Note:** DEBUG level produces a large amount of logs (especially LLM request/response bodies); be sure to restore to INFO after troubleshooting.

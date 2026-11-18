@@ -90,7 +90,7 @@
 找到日志文件后，**优先按时间范围搜索 ERROR**，往往能直接定位原因：
 
 - **Java 服务**（Manager / Service）：日志中搜索 `ERROR`，堆栈紧跟其后
-- **Runtime**（Python）：日志中搜索 `ERROR`，开启 `LOG_VERBOSE=true` 后会输出完整堆栈
+- **Runtime**（Python）：日志中搜索 `ERROR`，堆栈紧随其后（traceback 随 ERROR 始终输出）
 
 搜索时结合 `conversationId` 或 `request-id` 缩小范围，避免被无关错误干扰。这两个 ID 的获取方式：
 
@@ -265,7 +265,6 @@ agent_group_stream|{ms}
 |----------|--------|--------|------|
 | `LOG_LEVEL` | INFO | **DEBUG** | 全进程日志级别：执行全流程 + 请求体 + 性能埋点 + 图执行 + LLM 调用详情 |
 | `LOG_MSG_MAX_LENGTH` | 4000 | **40000** | 单条日志的字符上限（整行，仅 console 输出即 common.log）；看完整模型请求体时调大 |
-| `LOG_VERBOSE` | false | **true** | 打印完整异常堆栈 |
 | `PERFORMANCE_LOG_ENABLED` | true | **false** | 只关性能埋点（保留其它日志级别不变） |
 | `MODEL_CALL_LOGGING_ENABLED` | false | **true** | 只开模型调用详情（仍需 `LOG_LEVEL<=INFO`） |
 
@@ -275,8 +274,6 @@ K8s 环境变量配置参考：
 env:
   - name: LOG_LEVEL
     value: "DEBUG"
-  - name: LOG_VERBOSE
-    value: "true"
 ```
 
 > **注意：** DEBUG 级别会产生大量日志（特别是 LLM 请求/响应体），排查完毕后务必恢复为 INFO。

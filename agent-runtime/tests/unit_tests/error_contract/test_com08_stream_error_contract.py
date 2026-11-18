@@ -1,11 +1,14 @@
-"""COM-08 §6/§8: LOG_VERBOSE 双配置不变性 + 敏感哨兵 + 双路径排除证据。
+"""COM-08 §4.7/§6: SSE 错误出口与安全文案（敏感哨兵 + 双路径排除证据）。
 
 覆盖：
 - §6.3 SSE 矩阵：_handle_error_response (#1) 与 _process_streaming_output (#2)
-  两种 LOG_VERBOSE 配置 wire 精确一致；不含 "test error message"；不含敏感哨兵。
+  wire 不含 "test error message"、不含敏感哨兵，含稳定错误码与安全文案。
 - §4.7C async_execution #6/#7：e.message / item.data.message 不进公开文案。
-- §4.7C WorkflowAbortException :729+:843 双路径排除证据（canonical message + data 分离）。
-- §6.5 静态治理：error_contract 零开关读取；生产无 "test error message"；无 LOG_VERBOSE 用法。
+- §4.7C WorkflowAbortException 双路径排除证据（canonical message + data 分离）。
+- §6.5 静态治理：生产无 "test error message"。
+
+注：LOG_VERBOSE 已于日志归一化中删除（唯一消费点在新架构下无调用方），
+相关“双配置一致”用例随之移除；错误文案与日志行为不再存在开关维度。
 """
 
 from __future__ import annotations
@@ -19,7 +22,6 @@ from pathlib import Path
 
 from jiuwen.common.exception.base import JiuWenBaseException, WorkflowAbortException
 from jiuwen.common.exception.status_code import StatusCode
-from jiuwen.common.log.diagnostics import DiagnosticPolicy, set_default_policy
 from jiuwen.orchestration.flow.stream.base import StreamCode
 from jiuwen.orchestration.flow.workflow import Workflow
 from jiuwen.serve.controllers.execution import utils as exec_utils
@@ -94,7 +96,7 @@ _SENTINEL = "SECRET-TOKEN-abc-123-sensitivedetail"
 _CREATEDTIME_RE = re.compile(r'"createdTime":\d+')
 
 
-# ---------------- §6.3 #1: _handle_error_response 双配置不变 ----------------
+# ---------------- §6.3 #1: _handle_error_response ---------------------------
 
 
 def _make_jiuwen_exc(message: str = "boom", error_code: str = "120001") -> JiuWenBaseException:
@@ -117,7 +119,7 @@ def _wire_json(wire: bytes) -> dict:
 
 
 def _wire_list_json(wires: list[bytes]) -> list[dict]:
-    """从多条 SSE wire 提取 JSON 列表，排除非确定字段。"""
+    """从多条 SSE wire 提取 JSON 列表，排除非确定字段（createdTime）。"""
     out = []
     for w in wires:
         text = w.decode("utf-8")
@@ -131,15 +133,6 @@ def _wire_list_json(wires: list[bytes]) -> list[dict]:
                 obj["data"].pop("createdTime", None)
             out.append(obj)
     return out
-
-
-def test_handle_error_response_two_configs_identical(monkeypatch):
-    item = _make_jiuwen_exc(message=_SENTINEL)
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    wire_false = _handle_error_bytes(item)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    wire_true = _handle_error_bytes(item)
-    assert _wire_json(wire_false) == _wire_json(wire_true)
 
 
 def test_handle_error_response_no_test_error_message():
@@ -161,7 +154,7 @@ def test_handle_error_response_contains_code_and_safe_message():
 
 
 def test_handle_error_response_logger_no_raw_message(caplog):
-    """§4.7B: logger.error 不再以 item.message 作为日志 message；exc_info 保留。
+    """§4.7B: logger.error 不以 item.message 作为日志 message；exc_info 保留。
 
     traceback（exc_info）含 str(exception) 是 Python 本质且 §3.2 允许——
     生产中 §4.5 已保证异常 message 安全（非 str(e)）；本断言只校验日志
@@ -170,35 +163,17 @@ def test_handle_error_response_logger_no_raw_message(caplog):
     import logging
 
     caplog.set_level(logging.ERROR)
-    set_default_policy(DiagnosticPolicy(verbose=False))
-    try:
-        item = _make_jiuwen_exc(message=_SENTINEL)
-        _handle_error_bytes(item)
-    finally:
-        set_default_policy(None)
+    item = _make_jiuwen_exc(message=_SENTINEL)
+    _handle_error_bytes(item)
     rec = caplog.records[-1]
     # 日志 message 是固定基础事件，不含 item.message 哨兵
     assert rec.getMessage() == "workflow execution failed"
     assert _SENTINEL not in rec.getMessage()
-    # exc_info 保留（traceback 两种配置都到达底层 logger）
+    # exc_info 保留（traceback 始终到达底层 logger）
     assert rec.exc_info is not None
 
 
-def test_handle_error_response_logger_verbose_adds_allowlist_field(caplog):
-    import logging
-
-    caplog.set_level(logging.ERROR)
-    set_default_policy(DiagnosticPolicy(verbose=True))
-    try:
-        _handle_error_bytes(_make_jiuwen_exc(error_code="120007"))
-    finally:
-        set_default_policy(None)
-    rec = caplog.records[-1]
-    assert "120007" in rec.getMessage()  # error_code 进 allowlist 字段
-    assert _SENTINEL not in rec.getMessage()
-
-
-# ---------------- §6.3 #2: _process_streaming_output ERROR 双配置不变 -------
+# ---------------- §6.3 #2: _process_streaming_output ERROR ------------------
 
 
 def _make_error_item(message: str = _SENTINEL, code: str = "120002") -> SimpleNamespace:
@@ -224,14 +199,6 @@ def _drive_process_streaming_output(item) -> list[bytes]:
     return asyncio.run(collect())
 
 
-def test_process_streaming_output_two_configs_identical(monkeypatch):
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    wire_false = _drive_process_streaming_output(_make_error_item())
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    wire_true = _drive_process_streaming_output(_make_error_item())
-    assert _wire_list_json(wire_false) == _wire_list_json(wire_true)
-
-
 def test_process_streaming_output_no_test_error_message():
     wire = _drive_process_streaming_output(_make_error_item())
     joined = b"".join(wire)
@@ -252,10 +219,7 @@ def test_process_streaming_output_contains_code_and_safe_message():
     assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
-# ---------------- §4.7C #6/#7: async_execution 不透传 e.message ------------
-
-
-# ---------------- §4.7C #3/#4/#5/#6: 真实生产函数驱动 + 哨兵反例 --------
+# ---------------- §4.7C: 其余流式出口哨兵不泄漏 -----------------------------
 
 
 async def _async_noop(*a, **kw):
@@ -316,7 +280,6 @@ def _drive_post_process_workflow_streaming_output(item, monkeypatch):
     return asyncio.run(collect())
 
 
-# #3 _format_component_output
 def test_format_component_output_no_sensitive_sentinel(monkeypatch):
     wire = _drive_format_component_output(_make_error_item(), monkeypatch)
     joined = b"".join(wire)
@@ -325,15 +288,6 @@ def test_format_component_output_no_sensitive_sentinel(monkeypatch):
     assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
-def test_format_component_output_two_configs_identical(monkeypatch):
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    w_false = _drive_format_component_output(_make_error_item(), monkeypatch)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    w_true = _drive_format_component_output(_make_error_item(), monkeypatch)
-    assert _wire_list_json(w_false) == _wire_list_json(w_true)
-
-
-# #4 post_process_workflow_streaming_output
 def test_post_process_workflow_streaming_output_no_sentinel(monkeypatch):
     wire = _drive_post_process_workflow_streaming_output(_make_error_item(), monkeypatch)
     joined = b"".join(wire)
@@ -341,21 +295,7 @@ def test_post_process_workflow_streaming_output_no_sentinel(monkeypatch):
     assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
-def test_post_process_workflow_streaming_output_two_configs_identical(monkeypatch):
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    w_false = _drive_post_process_workflow_streaming_output(_make_error_item(), monkeypatch)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    w_true = _drive_post_process_workflow_streaming_output(_make_error_item(), monkeypatch)
-    assert _wire_list_json(w_false) == _wire_list_json(w_true)
-
-
-# #5/#6/#7（post_process_workflow_streaming_output_async ×2、handle_init_exceptions、
-# 及 async_execution/utils 的 SAFE 常量测试）随 Phase 4 第五批 async_execution
-# 拓扑下线一并删除：它们的被测函数属于 worker 投递链的 Web 侧配套
-# （新架构无分发入口，引用封闭性核实为死簇）。
-
-
-# ---------------- §4.7C: WorkflowAbortException :729+:843 双路径排除证据 ---
+# ---------------- §4.7C: WorkflowAbortException 双路径排除证据 -------------
 
 
 def _abort_exception(user_data: dict | None = None) -> WorkflowAbortException:
@@ -405,7 +345,7 @@ def _get_output_stub(abort_exc):
 
 
 def test_arun_except_workflow_abort_real_path():
-    """§4.7C: 真实经过 Workflow._arun() 的 :729 except 分支。"""
+    """§4.7C: 真实经过 Workflow._arun() 的 except 分支。"""
     exc = _abort_exception({"user_field": "user-value"})
     stub = _arun_stub(exc)
     result = asyncio.run(Workflow._arun(stub, "query", False, {}))  # pylint: disable=protected-access
@@ -416,7 +356,7 @@ def test_arun_except_workflow_abort_real_path():
 
 
 def test_get_output_isinstance_workflow_abort_real_path():
-    """§4.7C: 真实经过 Workflow._get_output() 的 :843 isinstance 分支。"""
+    """§4.7C: 真实经过 Workflow._get_output() 的 isinstance 分支。"""
     exc = _abort_exception({"user_field": "user-value"})
     stub = _get_output_stub(exc)
     result = asyncio.run(Workflow._get_output(stub))  # pylint: disable=protected-access
@@ -434,24 +374,6 @@ def test_abort_two_real_paths_identical_and_safe():
     assert arun_result["message"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.errmsg
 
 
-def test_abort_two_real_paths_no_log_verbose_dependency(monkeypatch):
-    """§4.7C §6.3 §8: 四格双配置矩阵——_arun 与 _get_output 分别在 false/true 下精确一致。"""
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    exc_f = _abort_exception({"user_field": "v"})
-    arun_false = asyncio.run(Workflow._arun(_arun_stub(exc_f), "q", False, {}))  # pylint: disable=protected-access
-    getout_false = asyncio.run(Workflow._get_output(_get_output_stub(exc_f)))  # pylint: disable=protected-access
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    exc_t = _abort_exception({"user_field": "v"})
-    arun_true = asyncio.run(Workflow._arun(_arun_stub(exc_t), "q", False, {}))  # pylint: disable=protected-access
-    getout_true = asyncio.run(Workflow._get_output(_get_output_stub(exc_t)))  # pylint: disable=protected-access
-    # 四格矩阵
-    assert arun_false == arun_true          # _arun(false) == _arun(true)
-    assert getout_false == getout_true      # _get_output(false) == _get_output(true)
-    assert arun_false == getout_false       # _arun(false) == _get_output(false)
-    assert arun_true == getout_true         # _arun(true) == _get_output(true)
-    assert arun_false["message"] == StatusCode.WORKFLOW_EXCEPTION_END_ERROR.errmsg
-
-
 def test_abort_message_not_user_custom_text():
     """排除项证据：message 是 canonical，不是用户塞入的文案。"""
     exc = _abort_exception({"custom_msg": "attacker-controlled text"})
@@ -459,7 +381,7 @@ def test_abort_message_not_user_custom_text():
     assert "attacker-controlled text" not in exc.message
 
 
-# ---------------- §4.7C #8/#9: 上游生产点→下游消费者真实链路 ------------
+# ---------------- §4.7C #8/#9: 上游生产点→下游消费者真实链路 -------------
 
 
 def test_8_task_done_callback_wraps_non_jiuwen_with_canonical(monkeypatch):  # pylint: disable=function-docstring-indents-four
@@ -513,7 +435,7 @@ def test_9_get_output_jiuwen_branch_chain_to_downstream_no_sentinel(monkeypatch)
     _process_streaming_output → 最终 wire 不含哨兵、含 _SAFE。"""
     upstream_exc = JiuWenBaseException(error_code="120099", message=_SENTINEL)
     stub = _get_output_stub(upstream_exc)
-    # 真实 #9：_get_output 的 JiuWenBaseException 分支（:855）
+    # 真实 #9：_get_output 的 JiuWenBaseException 分支
     produced = asyncio.run(Workflow._get_output(stub))  # pylint: disable=protected-access
     assert produced["code"] == "120099"
     # #9 的 message 含上游哨兵（#9 本身透传 output.message）——证明需要下游兜底
@@ -532,24 +454,7 @@ def test_9_get_output_jiuwen_branch_chain_to_downstream_no_sentinel(monkeypatch)
     assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE.encode() in joined  # pylint: disable=protected-access
 
 
-def test_8_9_chain_two_configs_identical(monkeypatch):
-    """#8/#9 上游生产 false/true 下产出一致（不读 LOG_VERBOSE）。"""
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    exc = JiuWenBaseException(error_code="120099", message="stable upstream")
-    produced_false = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # pylint: disable=protected-access
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    produced_true = asyncio.run(Workflow._get_output(_get_output_stub(exc)))  # pylint: disable=protected-access
-    assert produced_false == produced_true
-
-
-# ---------------- §6.5 静态治理 ----------------
-
-
-def test_error_contract_zero_log_verbose_read():
-    """§6.5: error_contract 模块不读取 LOG_VERBOSE。"""
-    root = "agent_runtime/error_contract"
-    r = _run_grep("-rn", "LOG_VERBOSE", root)
-    assert r.stdout == "", f"error_contract 读取了 LOG_VERBOSE:\n{r.stdout}"
+# ---------------- §6.5 静态治理 ---------------------------------------------
 
 
 def test_no_test_error_message_in_production():
@@ -564,27 +469,7 @@ def test_no_test_error_message_in_production():
         )
 
 
-def test_no_log_verbose_mode_usage_in_production():
-    """§6.5: 生产代码不再有 LOG_VERBOSE_MODE 用法（仅 diagnostics 读 env）。"""
-    r = _run_grep("-rn", "LOG_VERBOSE_MODE", "jiuwen")
-    for line in r.stdout.splitlines():
-        parts = line.split(":", 2)
-        content = parts[2] if len(parts) >= 3 else line
-        assert content.lstrip().startswith("#"), (
-            f"生产代码残留 LOG_VERBOSE_MODE: {line}"
-        )
-
-
-def test_only_diagnostics_reads_log_verbose_env():
-    """§6.5: 生产代码仅 diagnostics.py 调用 os.getenv('LOG_VERBOSE')。"""
-    r = _run_grep("-rn", 'getenv("LOG_VERBOSE"', "jiuwen")
-    hits = [line for line in r.stdout.splitlines() if line]
-    # 仅 diagnostics.py 应出现
-    for line in hits:
-        assert "common/log/diagnostics.py" in line, f"非法 LOG_VERBOSE 读取点: {line}"
-
-
-# ---------------- §5.3 取消/断连与正常结束 ----------------
+# ---------------- §5.3 取消/断连与正常结束 ----------------------------------
 
 
 def _drive_normal_end_item(item):
@@ -604,9 +489,9 @@ def _events_of(wire):
     return [obj.get("event") for obj in _wire_list_json(wire)]
 
 
-def test_normal_end_no_error_frame_two_configs(monkeypatch, caplog):  # pylint: disable=function-docstring-indents-four
+def test_normal_end_no_error_frame(caplog):  # pylint: disable=function-docstring-indents-four
     """§4.8/§6.3: 正常结束（FINISH）经 #2 精确产生 start+唯一 done 终态，
-    无 error/额外 END；两配置 wire 一致；无 ERROR 日志。"""
+    无 error/额外 END；无 ERROR 日志。"""
     import logging
 
     caplog.set_level(logging.ERROR)
@@ -617,24 +502,19 @@ def test_normal_end_no_error_frame_two_configs(monkeypatch, caplog):  # pylint: 
         execution_id="exec-1",
         is_struct_message=False,
     )
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    w_false = _drive_normal_end_item(finish_item)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    w_true = _drive_normal_end_item(finish_item)
-    for wire in (w_false, w_true):
-        # 精确终态：start + 唯一 done，无 error
-        assert _events_of(wire) == ["start", "done"], _events_of(wire)
-        assert b'"event":"error"' not in b"".join(wire)
-        # 关联 executionId 保持
-        assert b'"executionId":"exec-1"' in b"".join(wire)
-    assert _wire_list_json(w_false) == _wire_list_json(w_true)
+    wire = _drive_normal_end_item(finish_item)
+    # 精确终态：start + 唯一 done，无 error
+    assert _events_of(wire) == ["start", "done"], _events_of(wire)
+    assert b'"event":"error"' not in b"".join(wire)
+    # 关联 executionId 保持
+    assert b'"executionId":"exec-1"' in b"".join(wire)
     # 正常结束不产生 ERROR 日志
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
-def test_message_end_no_error_frame_two_configs(monkeypatch, caplog):  # pylint: disable=function-docstring-indents-four
+def test_message_end_no_error_frame(caplog):  # pylint: disable=function-docstring-indents-four
     """§4.8/§6.3: MESSAGE_END 经 #2 精确产生 start+唯一 message_end 终态，
-    无 error；两配置一致；无 ERROR 日志。"""
+    无 error；无 ERROR 日志。"""
     import logging
 
     caplog.set_level(logging.ERROR)
@@ -645,24 +525,18 @@ def test_message_end_no_error_frame_two_configs(monkeypatch, caplog):  # pylint:
         execution_id="exec-1",
         is_struct_message=False,
     )
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    w_false = _drive_normal_end_item(end_item)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    w_true = _drive_normal_end_item(end_item)
-    for wire in (w_false, w_true):
-        assert _events_of(wire) == ["start", "message_end"], _events_of(wire)
-        assert b'"event":"error"' not in b"".join(wire)
-        assert b'"executionId":"exec-1"' in b"".join(wire)
-    assert _wire_list_json(w_false) == _wire_list_json(w_true)
+    wire = _drive_normal_end_item(end_item)
+    assert _events_of(wire) == ["start", "message_end"], _events_of(wire)
+    assert b'"event":"error"' not in b"".join(wire)
+    assert b'"executionId":"exec-1"' in b"".join(wire)
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
-def test_cancel_propagates_no_synthetic_error_two_configs(monkeypatch, caplog):  # pylint: disable=function-docstring-indents-four
+def test_cancel_propagates_no_synthetic_error(caplog):  # pylint: disable=function-docstring-indents-four
     """§4.8/§6.3: 取消（CancelledError）经 #2：
     - CancelledError 传播（不被吞成 error 帧）；
     - 已产生的 wire 不含 error、无 done/END（取消后无终态帧）；
-    - 两配置已产生的 wire 精确一致；
-    - 两配置均无新增 ERROR 日志。
+    - 无新增 ERROR 日志。
     取消资源清理属 ASGI 层 COM-07A；本测试证 COM-08 不在取消路径发伪 error。"""
     import logging
 
@@ -678,38 +552,25 @@ def test_cancel_propagates_no_synthetic_error_two_configs(monkeypatch, caplog): 
         )
         raise asyncio.CancelledError()
 
-    def _run():
-        holder = []
+    holder = []
 
-        async def collect():
-            async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # pylint: disable=protected-access
-                holder.append(chunk)
+    async def collect():
+        async for chunk in exec_utils._process_streaming_output(origin(), collector=None):  # pylint: disable=protected-access
+            holder.append(chunk)
 
-        try:
-            asyncio.run(collect())
-            return holder, False
-        except asyncio.CancelledError:
-            return holder, True
-
-    for verbose in (False, True):
-        set_default_policy(DiagnosticPolicy(verbose=verbose))
-        try:
-            caplog.clear()
-            wire, raised = _run()
-            assert raised, f"verbose={verbose}: CancelledError 应被传播"
-            joined = b"".join(wire)
-            # 已产生 wire：含 start 与 partial message，无 error、无 done/message_end
-            assert b'"event":"error"' not in joined
-            assert b'"event":"done"' not in joined
-            assert b'"event":"message_end"' not in joined
-            assert b'"event":"start"' in joined
-            # 无 ERROR 日志
-            assert not [r for r in caplog.records if r.levelno >= logging.ERROR], (
-                f"verbose={verbose}: 取消不应产生 ERROR"
-            )
-            if verbose is False:
-                wire_false = wire
-            else:
-                assert _wire_list_json(wire_false) == _wire_list_json(wire)
-        finally:
-            set_default_policy(None)
+    try:
+        asyncio.run(collect())
+        raised = False
+    except asyncio.CancelledError:
+        raised = True
+    assert raised, "CancelledError 应被传播"
+    joined = b"".join(holder)
+    # 已产生 wire：含 start 与 partial message，无 error、无 done/message_end
+    assert b'"event":"error"' not in joined
+    assert b'"event":"done"' not in joined
+    assert b'"event":"message_end"' not in joined
+    assert b'"event":"start"' in joined
+    # 无 ERROR 日志
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR], (
+        "取消不应产生 ERROR"
+    )

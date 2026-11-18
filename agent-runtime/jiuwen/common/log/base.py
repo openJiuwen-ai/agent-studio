@@ -27,7 +27,6 @@ from jiuwen.common.configs.env_constants import (
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
-from jiuwen.common.log.diagnostics import DiagnosticPolicy, get_default_policy
 from jiuwen.serve.common.context import request_json, request_ctx
 
 CRITICAL = 50
@@ -62,9 +61,6 @@ EXECUTION_ID = "x-execution-id"
 REQUEST_ID = "x-request-id"
 
 GRAY_DEBUG_ENABLED = "gray_debug_enabled"
-
-# COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy.from_env()
-# (jiuwen/common/log/diagnostics.py)，不再在本模块读取环境变量。
 
 COMMON_LOG_FORMAT = (
     "%(asctime)s|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
@@ -571,8 +567,6 @@ class MaskingFormatter(logging.Formatter):
 
 
 class LogRouter:
-    # COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy，不再在此读取环境变量。
-
     @staticmethod
     def route_log(original_method: Callable) -> Callable:
         """route log."""
@@ -582,18 +576,8 @@ class LogRouter:
             has_simple_log = "simple_log" in kwargs
             simple_log = kwargs.pop("simple_log", msg)
             # COM-08: always use safe (simple_log) as base message;
-            # exc_info 不再因 verbose=False 删除，始终到达底层 logger。
+            # exc_info 始终到达底层 logger。
             processed_msg = simple_log
-
-            # COM-08 §4.3条5: verbose 仅追加 allowlist 治理字段（opt-in）。
-            event = kwargs.pop("event", None)
-            verbose_fields = kwargs.pop("verbose_fields", None)
-            if event is not None and verbose_fields:
-                policy = get_default_policy()
-                if policy.verbose:
-                    extra = policy.build_verbose_fields(event, verbose_fields)
-                    if extra:
-                        processed_msg = f"{processed_msg} | {extra}"
 
             kwargs.setdefault("stacklevel", 2)
             if has_simple_log:
