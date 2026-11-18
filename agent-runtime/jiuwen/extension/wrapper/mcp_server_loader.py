@@ -169,7 +169,40 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
 
 
 def extend_heads(mcp_headers, ir_data, **kwargs):
-    """mcp header扩展"""
+    """mcp header扩展
+
+    当 headers 配置包含 crypt_method + scope=SERVICE 时，
+    对 header 值进行解密（与 model_service resolver._decrypt_auth_value 逻辑一致）。
+    IR 中 headers.headers 的 Authorization 等值是加密存储的，
+    不解密直接发送会导致 MCP server 鉴权失败。
+
+    使用 common_utils.crypto_tool.decrypt：客户注册自定义加解密实现后
+    自动走客户解密逻辑；未注册时默认 PlainCrypt 透传（明文兼容）。
+    解密异常时返回原文（与 CryptTool.decrypt 的明文容错策略一致）。
+    """
+    headers_config = ir_data.get(HEADERS, {})
+    if not isinstance(headers_config, dict):
+        return mcp_headers
+    crypt_method = headers_config.get("crypt_method")
+    scope = headers_config.get("scope")
+    if not crypt_method or scope != "SERVICE":
+        return mcp_headers
+    try:
+        from common_utils.crypto_tool import decrypt
+
+        decrypted = {}
+        for k, v in mcp_headers.items():
+            if isinstance(v, str) and v:
+                decrypted[k] = decrypt(v)
+            else:
+                decrypted[k] = v
+        logger.info(
+            f"MCP headers decrypted (crypt_method={crypt_method}, "
+            f"keys={list(decrypted.keys())})"
+        )
+        return decrypted
+    except Exception as e:
+        logger.error(f"MCP headers decryption failed: {e}")
     return mcp_headers
 
 
