@@ -122,7 +122,7 @@ Element schemas inside `items` are **not required** to have `description` / `loc
 | `type` | Required | See Section 2 |
 | `description` | **Required and non-empty** | Parameter description; missing yields error `02401002` |
 | `location` | **Required** | Only allowed: `Body` / `Headers` / `Query` / `Path` (case-sensitive, first letter capitalized) |
-| `default` | Optional | When present it must match the type: format checks apply to `number` / `integer` / `boolean`; `file/*` defaults are accepted as strings |
+| `default` | Optional | When present the **content** must match the type: format checks apply to `number` / `integer` / `boolean` via the value's text representation (`asText()`), so a JSON string `"1"` also passes `integer` validation; `file/*` defaults are accepted as strings |
 | `properties` | Required when `type=object` | Must contain at least 1 property; `additionalProperties` cannot substitute |
 | `items` | Required when `type=array` | Element type may be scalar, `object`, or `file/*`; **must not** be an `array` |
 | `required` | Optional | Array of strings listing the required property names at this level |
