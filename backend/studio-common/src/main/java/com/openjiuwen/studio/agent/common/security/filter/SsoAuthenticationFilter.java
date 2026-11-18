@@ -9,6 +9,7 @@ import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.security.properties.AuthProperties;
 import com.openjiuwen.studio.agent.common.security.service.SsoAuthenticationService;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.simple.ServletUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -117,6 +118,17 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
                 userInfo.setToken(accessToken);
                 request.setAttribute("CURRENT_USER", userInfo);
                 RequestContextUtils.setContext(userInfo);
+
+                // SSO 模式下 FilterConfig 不加载，不再有组件写 AGENT_SID；此处回写（userId|projectId），
+                // 供前端切分拼接 URL 的 projectId 与 runtime 解析身份，避免前端兜底到 project_mock。
+                // projectId 为空时不回写：否则会写出 "userId|"，把前端 URL 的 projectId 污染为空值。
+                if (StringUtils.isNotEmpty(userInfo.getProjectId())) {
+                    ServletUtils.setSidToCookie(response,
+                        userInfo.getUserId() + "|" + userInfo.getProjectId());
+                } else {
+                    log.warn("Skip AGENT_SID write-back: projectId is blank, "
+                        + "check user_info_defaults_project_id config");
+                }
 
                 if (authProperties.getSystemUser().isSystemUser(userInfo.getUserId())) {
                     request.setAttribute(Constants.SYSTEM_USER_SKIP_ATTR, Boolean.TRUE);
