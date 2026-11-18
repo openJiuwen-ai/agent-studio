@@ -226,11 +226,13 @@ spec:
             - name: MODEL_CALL_LOGGING_ENABLED
               value: 'false'
             # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
+            # （级别跟随 LOG_LEVEL，不再有独立的性能日志级别变量）
             - name: PERFORMANCE_LOG_ENABLED
               value: 'true'
-            # 性能日志级别：默认 WARNING（不打印）；设为 INFO 打开性能指标
-            - name: PERFORMANCE_LOG_LEVEL
-              value: 'WARNING'
+            # 进程内唯一日志级别：同时驱动 uvicorn、agent-core 与 legacy logger，
+            # 所有日志统一写入 ${LOGGING_LOG_PATH}/common.log
+            - name: LOG_LEVEL
+              value: 'INFO'
             # 意图识别工作流开关
             - name: ENABLE_INTENT_WORKFLOW
               value: 'true'

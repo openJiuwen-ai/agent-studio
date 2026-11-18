@@ -28,7 +28,6 @@ from jiuwen.common.configs.env_constants import (
     JIUWEN_LOG_MAX_BYTES_KEY,
     JIUWEN_LOG_LEVEL_KEY,
     JIUWEN_LOG_PATH_KEY,
-    JIUWEN_PERF_LOG_LEVEL_KEY,
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
@@ -59,6 +58,8 @@ name_to_level = {
 }
 # Log output method, output to the console
 CONSOLE = "console"
+# Log output method, write to log file
+FILE_OUTPUT = "log"
 # Unique identifier of the session, user tag log
 TRACE_ID = "trace_id"
 EXECUTION_ID = "x-execution-id"
@@ -245,6 +246,27 @@ class SafeRotatingFileHandler(RotatingFileHandler):
         os.chmod(self.baseFilename, 0o640)
 
 
+def _ensure_log_dir(log_config, jiuwen_log_path: str) -> None:
+    """所有通道都不落文件时不预建日志目录。
+
+    默认配置（output / interface_output / performance_output 全为 console）下，
+    提前 makedirs 会在进程工作目录里凭空留下一个空的 logs/ 目录。真正写文件时
+    _get_logger 里仍会兜底创建。
+    """
+    outputs = (
+        log_config.get("output", CONSOLE) or CONSOLE,
+        log_config.get("interface_output", CONSOLE) or CONSOLE,
+        log_config.get("performance_output", CONSOLE) or CONSOLE,
+    )
+    if not any(FILE_OUTPUT in output for output in outputs):
+        return
+
+    log_dir = os.path.dirname(jiuwen_log_path)
+    if log_dir and not os.path.exists(log_dir):
+        # 日志文件目录权限为750
+        os.makedirs(log_dir, mode=0o750)
+
+
 class SingletonLogger:
     """
     logger Singleton.
@@ -272,9 +294,9 @@ class SingletonLogger:
         jiuwen_log_path = os.environ.get(
             JIUWEN_LOG_PATH_KEY, log_config.get("log_path")
         )
-        if not os.path.exists(os.path.dirname(jiuwen_log_path)):
-            # 日志文件目录权限为750
-            os.makedirs(os.path.dirname(jiuwen_log_path), mode=0o750)
+        # 仅当某个通道确实落文件时才预建日志目录：默认（全 console）配置下不应在
+        # 工作目录里凭空留下一个空的 logs/ 目录。真正写文件时 _get_logger 也会兜底创建。
+        _ensure_log_dir(log_config, jiuwen_log_path)
         log_file = os.path.join(jiuwen_log_path, log_config.get("log_file"))
         performance_log_file = os.path.join(
             jiuwen_log_path, log_config.get("performance_log_file")
@@ -337,10 +359,10 @@ class SingletonLogger:
 
     @classmethod
     def _get_logger(cls, log_type, log_config, output, log_file):
-        if log_type == "performance":
-            level = os.environ.get(JIUWEN_PERF_LOG_LEVEL_KEY, log_config.get("performance_level", "WARNING"))
-        else:
-            level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
+        # 统一日志级别：所有 legacy 日志器（含 performance）都跟随 JIUWEN_LOG_LEVEL /
+        # logging.level，不再按 log_type 单独取 performance_level，避免同一进程内出现
+        # "全局 LOG_LEVEL=INFO 但性能埋点仍静默" 这类级别分叉。
+        level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
         max_bytes = (
             get_log_max_bytes(ast.literal_eval(ENV_MAX_BYTES))
             if ENV_MAX_BYTES
@@ -404,7 +426,7 @@ class SingletonLogger:
             )
             common_logger.addHandler(stream_handler)
 
-        if "log" in output:
+        if FILE_OUTPUT in output:
             if not os.path.exists(os.path.dirname(log_file)):
                 # 日志文件目录权限为750
                 os.makedirs(os.path.dirname(log_file), mode=0o750)

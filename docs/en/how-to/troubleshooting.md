@@ -170,7 +170,7 @@ Fail to run agent because [{}]
 
 Focus on the detailed process and errors of the underlying execution engine:
 
-**Performance phase logs** (`performance_logger`, enabled by setting `PERFORMANCE_LOG_LEVEL=INFO`, silent by default):
+**Performance phase logs** (`performance_logger`, follows the global `LOG_LEVEL`; emitted at the default INFO):
 
 ```
 ir_convert|{ms}              # IR conversion duration
@@ -186,11 +186,11 @@ total_chunks|{count}         # Total output chunks
 workflow_cache|hit|miss|downgrade   # Workflow instance cache outcome
 ```
 
-> Performance instrumentation is off by default to avoid inflating normal-run
-> log volume. Set `PERFORMANCE_LOG_LEVEL=INFO` when diagnosing performance
-> issues (e.g. whether the workflow cache is hit, graph build cost).
+> Performance instrumentation shares `LOG_LEVEL` with every other log. To silence
+> it, raise `LOG_LEVEL` to WARNING, or set `PERFORMANCE_LOG_ENABLED=false` to
+> turn off the performance instrumentation alone.
 
-**Request body logs** (requires `WORKFLOW_LOG_LEVEL=DEBUG`):
+**Request body logs** (requires `LOG_LEVEL=DEBUG`):
 
 ```
 IR Execute Request - URL: {method} {url}
@@ -199,7 +199,7 @@ IR Execute Request - Query Params: {params}
 IR Execute Request - Body: {body}           # Complete request body received by Runtime
 ```
 
-**Error logs** (requires `WORKFLOW_LOG_LEVEL >= WARNING`):
+**Error logs** (ERROR/WARNING are always visible, consistent with `LOG_LEVEL`):
 
 ```
 # Initialization phase
@@ -223,7 +223,7 @@ Failed to register tools: {e}
 Agent group streaming failed with exception: {e}
 ```
 
-**LLM call logs** (requires `LLM_LOG_LEVEL=DEBUG`):
+**LLM call logs** (requires `LOG_LEVEL=DEBUG` and `MODEL_CALL_LOGGING_ENABLED=true`):
 
 ```
 model call request data: {...}     # LLM request body
@@ -234,7 +234,7 @@ model call tool_calls: [...]       # Tool call info
 model call error: {...}            # Call error
 ```
 
-**Multi-agent task scheduling logs** (requires `JIUWEN_LOG_LEVEL=DEBUG`):
+**Multi-agent task scheduling logs** (requires `LOG_LEVEL=DEBUG`):
 
 ```
 Planning task for message type {type}
@@ -259,34 +259,31 @@ When the first three steps still cannot locate the issue, enable debug logging a
 
 Adjust via environment variables; restart the service after changes:
 
+`LOG_LEVEL` is the **only** log level switch for the runtime process — it drives
+uvicorn, agent-core and the legacy jiuwen logger alike, and every log line is
+written to `${LOGGING_LOG_PATH}/common.log`.
+
 | Environment variable | Default | Debug value | Purpose |
 |---------------------|---------|-------------|---------|
-| `WORKFLOW_LOG_LEVEL` | WARNING | **DEBUG** | Workflow/single-agent full execution flow logs + request body |
-| `PERFORMANCE_LOG_LEVEL` | WARNING | **INFO** | Performance phase logs (IR load/stage durations/first-token latency, etc.) |
-| `GRAPH_LOG_LEVEL` | WARNING | **DEBUG** | Graph execution engine logs |
-| `LLM_LOG_LEVEL` | WARNING | **DEBUG** | LLM call details (request/response/token/latency) |
+| `LOG_LEVEL` | INFO | **DEBUG** | Process-wide level: execution flow + request body + performance instrumentation + graph engine + LLM call details |
 | `LOG_VERBOSE` | false | **true** | Print full exception stack traces |
-| `JIUWEN_LOG_LEVEL` | INFO | **DEBUG** | jiuwen module (multi-agent/TaskPlanner) logs |
+| `PERFORMANCE_LOG_ENABLED` | true | **false** | Disable performance instrumentation only, leaving the level untouched |
+| `MODEL_CALL_LOGGING_ENABLED` | false | **true** | Enable LLM call details only (still gated by `LOG_LEVEL<=INFO`) |
+
+> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL`
+> are deprecated: setting them has no effect and logs one startup WARNING — use `LOG_LEVEL`.
 
 K8s environment variable configuration reference:
 
 ```yaml
 env:
-  - name: WORKFLOW_LOG_LEVEL
-    value: "DEBUG"
-  - name: PERFORMANCE_LOG_LEVEL
-    value: "INFO"
-  - name: GRAPH_LOG_LEVEL
-    value: "DEBUG"
-  - name: LLM_LOG_LEVEL
+  - name: LOG_LEVEL
     value: "DEBUG"
   - name: LOG_VERBOSE
     value: "true"
-  - name: JIUWEN_LOG_LEVEL
-    value: "DEBUG"
 ```
 
-> **Note:** DEBUG level produces a large amount of logs (especially LLM request/response bodies); be sure to restore to WARNING after troubleshooting.
+> **Note:** DEBUG level produces a large amount of logs (especially LLM request/response bodies); be sure to restore to INFO after troubleshooting.
 
 #### Manager / Service (Java)
 
@@ -333,7 +330,7 @@ Tracing method:
 3. [Step 3] Service logs → search "Start run plugin" / "End run plugin" to check tool execution
 4. [Step 3] Service logs → search "JiuWen request param" to confirm plugin config in request body
 5. [Step 4] Runtime logs → search "Failed to register plugin" / "Failed to register MCP server"
-6. [Step 4] Set LLM_LOG_LEVEL=DEBUG → check "model call tool_calls" to confirm LLM returned tool calls
+6. [Step 4] Set LOG_LEVEL=DEBUG and MODEL_CALL_LOGGING_ENABLED=true → check "model call tool_calls" to confirm LLM returned tool calls
 ```
 
 ### Multi-agent Intent Recognition Error / Sub-agent Not Executing
@@ -342,7 +339,7 @@ Tracing method:
 1. [Step 1] Multi-agent run records → check intent recognition results and sub-agent call chain
 2. [Step 2] F12 → check controller_intermediate events in SSE event stream
 3. [Step 3] Service logs → search "Request jiuwen body" to confirm request body
-4. [Step 4] Set JIUWEN_LOG_LEVEL=DEBUG → check "Planning task" / "Detected Task" task planning
+4. [Step 4] Set LOG_LEVEL=DEBUG → check "Planning task" / "Detected Task" task planning
 5. [Step 4] Runtime logs → search "Task execution failed" / "Agent group streaming failed"
 ```
 
@@ -352,7 +349,7 @@ Tracing method:
 1. [Step 1] Single-agent run records → check errors in LLM call info
 2. [Step 2] F12 → check model-related errors in response
 3. [Step 3] Service logs → search "Model chat completion exception"
-4. [Step 4] Set LLM_LOG_LEVEL=DEBUG → check "model call request data" / "model call error"
+4. [Step 4] Set LOG_LEVEL=DEBUG and MODEL_CALL_LOGGING_ENABLED=true → check "model call request data" / "model call error"
 5. [Step 4] Runtime logs → search "API_KEY is not configured"
 ```
 
@@ -361,5 +358,5 @@ Tracing method:
 ```
 1. [Step 2] F12 → directly view request Payload
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
-3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
+3. [Step 4] Set LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```

@@ -170,7 +170,7 @@ Fail to run agent because [{}]
 
 关注底层执行引擎的详细过程和错误：
 
-**性能阶段日志**（`performance_logger`，设置 `PERFORMANCE_LOG_LEVEL=INFO` 开启，默认静默）：
+**性能阶段日志**（`performance_logger`，级别跟随全局 `LOG_LEVEL`；默认 INFO 即输出）：
 
 ```
 ir_convert|{ms}              # IR转换耗时
@@ -186,10 +186,10 @@ total_chunks|{count}         # 总输出块数
 workflow_cache|hit|miss|downgrade   # 工作流实例缓存命中情况
 ```
 
-> 性能埋点默认关闭以避免放大正常运行时日志量；排查性能问题（如工作流
-> 缓存是否命中、建图耗时）时设 `PERFORMANCE_LOG_LEVEL=INFO` 打开。
+> 性能埋点与其它日志共用 `LOG_LEVEL`：需要静默时把 `LOG_LEVEL` 调到 WARNING，
+> 或单独设 `PERFORMANCE_LOG_ENABLED=false` 关掉性能埋点。
 
-**请求体日志**（需 `WORKFLOW_LOG_LEVEL=DEBUG`）：
+**请求体日志**（需 `LOG_LEVEL=DEBUG`）：
 
 ```
 IR Execute Request - URL: {method} {url}
@@ -198,7 +198,7 @@ IR Execute Request - Query Params: {params}
 IR Execute Request - Body: {body}           # Runtime收到的完整请求体
 ```
 
-**错误日志**（需 `WORKFLOW_LOG_LEVEL >= WARNING`）：
+**错误日志**（ERROR/WARNING 级别恒可见，与 `LOG_LEVEL` 一致）：
 
 ```
 # 初始化阶段
@@ -222,7 +222,7 @@ Failed to register tools: {e}
 Agent group streaming failed with exception: {e}
 ```
 
-**LLM调用日志**（需 `LLM_LOG_LEVEL=DEBUG`）：
+**LLM调用日志**（需 `LOG_LEVEL=DEBUG` 且 `MODEL_CALL_LOGGING_ENABLED=true`）：
 
 ```
 model call request data: {...}     # LLM请求体
@@ -233,7 +233,7 @@ model call tool_calls: [...]       # 工具调用信息
 model call error: {...}            # 调用错误
 ```
 
-**多智能体任务调度日志**（需 `JIUWEN_LOG_LEVEL=DEBUG`）：
+**多智能体任务调度日志**（需 `LOG_LEVEL=DEBUG`）：
 
 ```
 Planning task for message type {type}
@@ -258,34 +258,30 @@ agent_group_stream|{ms}
 
 通过环境变量调整，修改后重启服务生效：
 
+`LOG_LEVEL` 是 runtime 进程内**唯一**的日志级别开关——它同时驱动 uvicorn、agent-core
+与 legacy jiuwen logger，且所有日志统一写入 `${LOGGING_LOG_PATH}/common.log`。
+
 | 环境变量 | 默认值 | 调试值 | 作用 |
 |----------|--------|--------|------|
-| `WORKFLOW_LOG_LEVEL` | WARNING | **DEBUG** | 工作流/单智能体执行全流程日志 + 请求体 |
-| `PERFORMANCE_LOG_LEVEL` | WARNING | **INFO** | 性能阶段日志（IR加载/阶段耗时/首Token延迟等） |
-| `GRAPH_LOG_LEVEL` | WARNING | **DEBUG** | 图执行引擎日志 |
-| `LLM_LOG_LEVEL` | WARNING | **DEBUG** | LLM 调用详情（请求/响应/Token/耗时） |
+| `LOG_LEVEL` | INFO | **DEBUG** | 全进程日志级别：执行全流程 + 请求体 + 性能埋点 + 图执行 + LLM 调用详情 |
 | `LOG_VERBOSE` | false | **true** | 打印完整异常堆栈 |
-| `JIUWEN_LOG_LEVEL` | INFO | **DEBUG** | jiuwen 模块（多智能体/TaskPlanner）日志 |
+| `PERFORMANCE_LOG_ENABLED` | true | **false** | 只关性能埋点（保留其它日志级别不变） |
+| `MODEL_CALL_LOGGING_ENABLED` | false | **true** | 只开模型调用详情（仍需 `LOG_LEVEL<=INFO`） |
+
+> `WORKFLOW_LOG_LEVEL` / `GRAPH_LOG_LEVEL` / `LLM_LOG_LEVEL` / `PERFORMANCE_LOG_LEVEL`
+> 已废弃，设置后不生效，启动时会打印一条 WARNING 提示——请改用 `LOG_LEVEL`。
 
 K8s 环境变量配置参考：
 
 ```yaml
 env:
-  - name: WORKFLOW_LOG_LEVEL
-    value: "DEBUG"
-  - name: PERFORMANCE_LOG_LEVEL
-    value: "INFO"
-  - name: GRAPH_LOG_LEVEL
-    value: "DEBUG"
-  - name: LLM_LOG_LEVEL
+  - name: LOG_LEVEL
     value: "DEBUG"
   - name: LOG_VERBOSE
     value: "true"
-  - name: JIUWEN_LOG_LEVEL
-    value: "DEBUG"
 ```
 
-> **注意：** DEBUG 级别会产生大量日志（特别是 LLM 请求/响应体），排查完毕后务必恢复为 WARNING。
+> **注意：** DEBUG 级别会产生大量日志（特别是 LLM 请求/响应体），排查完毕后务必恢复为 INFO。
 
 #### Manager / Service (Java)
 
@@ -332,7 +328,7 @@ env:
 3. [第三步] Service日志 → 搜 "Start run plugin" / "End run plugin" 查看工具执行
 4. [第三步] Service日志 → 搜 "JiuWen request param" 确认请求体中插件配置是否正确
 5. [第四步] Runtime日志 → 搜 "Failed to register plugin" / "Failed to register MCP server"
-6. [第四步] 设置 LLM_LOG_LEVEL=DEBUG → 查看 "model call tool_calls" 确认LLM是否返回工具调用
+6. [第四步] 设置 LOG_LEVEL=DEBUG 且 MODEL_CALL_LOGGING_ENABLED=true → 查看 "model call tool_calls" 确认LLM是否返回工具调用
 ```
 
 ### 多智能体（Multi-agent）意图识别错误/子智能体不执行
@@ -341,7 +337,7 @@ env:
 1. [第一步] 多智能体运行记录 → 查看意图识别结果和子智能体调用链路
 2. [第二步] F12 → 查看SSE事件流中 controller_intermediate 事件
 3. [第三步] Service日志 → 搜 "Request jiuwen body" 确认请求体是否正确
-4. [第四步] 设置 JIUWEN_LOG_LEVEL=DEBUG → 查看 "Planning task" / "Detected Task" 任务规划
+4. [第四步] 设置 LOG_LEVEL=DEBUG → 查看 "Planning task" / "Detected Task" 任务规划
 5. [第四步] Runtime日志 → 搜 "Task execution failed" / "Agent group streaming failed"
 ```
 
@@ -351,7 +347,7 @@ env:
 1. [第一步] 单智能体运行记录 → 查看大模型调用信息中的错误
 2. [第二步] F12 → 查看响应中模型相关错误
 3. [第三步] Service日志 → 搜 "Model chat completion exception"
-4. [第四步] 设置 LLM_LOG_LEVEL=DEBUG → 查看 "model call request data" / "model call error"
+4. [第四步] 设置 LOG_LEVEL=DEBUG 且 MODEL_CALL_LOGGING_ENABLED=true → 查看 "model call request data" / "model call error"
 5. [第四步] Runtime日志 → 搜 "API_KEY is not configured"
 ```
 
@@ -360,5 +356,5 @@ env:
 ```
 1. [第二步] F12 → 直接查看请求 Payload
 2. [第三步] Service日志 → 搜 "JiuWen request param" 查看转发给 Runtime 的请求体
-3. [第四步] 设置 WORKFLOW_LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
+3. [第四步] 设置 LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
 ```

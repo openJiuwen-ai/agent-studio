@@ -8,6 +8,53 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
+from agent_runtime.common import settings
+from agent_runtime.common.log_bootstrap import install_request_context_log_record_factory
+from agent_runtime.common.log_format import COMMON_LOG_FORMAT
+from openjiuwen.core.common.logging.log_config import configure_log_config
+
+# 已废弃的日志级别变量 —— 统一改用 LOG_LEVEL。仅用于启动时提示，不驱动任何行为。
+_DEPRECATED_LOG_ENV_VARS = (
+    "WORKFLOW_LOG_LEVEL",
+    "GRAPH_LOG_LEVEL",
+    "LLM_LOG_LEVEL",
+    "PERFORMANCE_LOG_LEVEL",
+)
+
+
+def _build_log_config(level: str) -> dict:
+    """装配 runtime 日志配置（供 configure_log_config 使用）。
+
+    统一策略：单一全局级别 + 仅 console 输出。console handler 写 stdout，由启动
+    脚本重定向进 ${LOGGING_LOG_PATH}/common.log，即进程内唯一的日志文件；不再按
+    命名空间拆分文件，也不再按命名空间覆盖级别。
+    """
+    return {
+        "backend": "default",
+        "level": level,
+        "format": COMMON_LOG_FORMAT,
+        "output": ["console"],
+        "interface_output": ["console"],
+        "performance_output": ["console"],
+    }
+
+
+def _warn_deprecated_log_env_vars() -> None:
+    """提示仍在配置已废弃级别变量的部署（这些变量已被静默忽略）。"""
+    stale = [name for name in _DEPRECATED_LOG_ENV_VARS if os.getenv(name)]
+    if stale:
+        logger.warning(
+            "Deprecated log level env vars are ignored, use LOG_LEVEL instead: %s",
+            ", ".join(stale),
+        )
+
+
+# 尽早装配日志：必须在任何会打日志的 agent-core / jiuwen 模块导入之前执行，否则
+# agent-core 的默认配置（console + file，路径 ./logs/）会为启动期日志额外落下文件。
+# 完整格式依赖 request_id / execution_id，需先装上 LogRecord 工厂。
+install_request_context_log_record_factory()
+configure_log_config(_build_log_config(settings.server.log_level.upper()))
+
 import opentelemetry.context as _otel_context
 _otel_runtime_ctx = getattr(_otel_context, '_RUNTIME_CONTEXT')
 
@@ -30,6 +77,11 @@ from agent_runtime.common.logging_context import (
 install_request_id_log_record_factory()
 install_log_formatter_patch()
 
+# 上面这组 import 会连带初始化 jiuwen 的 SingletonLogger，而它会给同名的 stdlib logger
+# 追加自己的 console handler（接管标志此时还来不及生效）。再装配一次（configure 会先
+# 清空现有 handler），保证每个 logger 只有一套输出，不会每行日志打印两遍。
+configure_log_config(_build_log_config(settings.server.log_level.upper()))
+
 # 在任何 jiuwen OBS 操作之前，补丁 Crypt 类使用明文解密
 # agent_runtime 本地调试环境 SK 为明文存储，而 jiuwen Crypt 默认实现抛异常
 from jiuwen.common.security.cryptor import Crypt as JiuWenCrypt
@@ -50,13 +102,12 @@ JiuWenCrypt.decrypt = staticmethod(_plain_decrypt)
 
 from storage import S3StorageProvider
 
-from agent_runtime.common import settings
 from agent_runtime.common.checkpointer_config import build_redis_checkpointer_config
 from agent_runtime.common.exception.errors import AgentBuilderError
 from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
 from agent_runtime.error_contract import factory as error_factory
 from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
-from agent_runtime.common.logging_context import COMMON_LOG_FORMAT
+
 from common_utils.redis_manager import RedisClientManager
 from agent_runtime.serve.execution_registry import get_execution_registry
 from agent_runtime.serve.redis_bootstrap import init_redis_provider
@@ -82,7 +133,6 @@ from agent_runtime.serve.error_rsp import build_error_response
 # 初始化 prompt 模板
 from jiuwen.common.init import init_prompt
 from openjiuwen.core.common.logging import workflow_logger as logger
-from openjiuwen.core.common.logging.log_config import configure_log_config
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerFactory
 from openjiuwen.core.sys_operation import SysOperationCard, OperationMode
@@ -159,44 +209,16 @@ def _register_customer_header_provider() -> None:
     ports.set_request_customer_headers(_get_customer_headers)
 
 
-def _build_log_config(
-    workflow_level: str,
-    graph_level: str,
-    llm_level: str,
-    performance_level: str,
-) -> dict:
-    """装配 runtime 各日志器级别配置（供 configure_log_config 使用）。"""
-    return {
-        "backend": "default",
-        "level": "INFO",  # 全局默认级别保持 INFO
-        "format": COMMON_LOG_FORMAT,
-        "loggers": {
-            "workflow": {"level": workflow_level},
-            "graph": {"level": graph_level},
-            "llm": {"level": llm_level},
-            "performance": {"level": performance_level},
-            "sys_operation": {
-                "level": "WARNING"
-            },  # 关闭 sys_operation 的 INFO 日志
-        },
-    }
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """define startup and shutdown logic here"""
-    # 初始化 workflow_logger 日志级别（从环境变量 WORKFLOW_LOG_LEVEL 读取）
-    workflow_log_level = settings.workflow_log.level.upper()
-    graph_log_level = settings.workflow_log.graph_level.upper()
-    llm_log_level = settings.workflow_log.llm_level.upper()
-    performance_log_level = settings.server.performance_log_level.upper()
-
-    configure_log_config(
-        _build_log_config(workflow_log_level, graph_log_level, llm_log_level, performance_log_level)
-    )
+    # 日志配置：全局唯一级别（LOG_LEVEL，与 uvicorn 共用）+ 仅 console 输出
+    log_level = settings.server.log_level.upper()
+    configure_log_config(_build_log_config(log_level))
+    _warn_deprecated_log_env_vars()
     logger.info(
-        f"Logger level set - workflow: {workflow_log_level}, graph: {graph_log_level}, "
-        f"llm: {llm_log_level}, performance: {performance_log_level}"
+        f"Logger configured - level: {log_level}, output: console "
+        f"(stdout -> ${{LOGGING_LOG_PATH}}/common.log)"
     )
 
     # 初始化 OpenTelemetry tracer（当 OTEL_ENABLED=true 时生效）

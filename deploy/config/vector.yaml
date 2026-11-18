@@ -42,10 +42,9 @@ sources:
   runtime_other:
     type: file
     include:
-      - /logs/studio-runtime/agent-runtime/run/*.log
-      - /logs/studio-runtime/jiuwen.log/**/*.log*
-    exclude:
-      - /logs/studio-runtime/jiuwen.log
+      # Python 日志已全部汇聚进 common.log（runtime_common）；此处只收 runtime 容器内
+      # nginx 负载均衡进程自己的日志（NGINX_LOAD_BALANCING=true 时的 ${LOGGING_LOG_PATH}/nginx）
+      - /logs/studio-runtime/nginx/*.log
     read_from: beginning
     fingerprint: {strategy: checksum, lines: 1}
 
