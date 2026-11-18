@@ -78,6 +78,7 @@ _allow_legacy_renegotiation = os.environ.get(
 
 # 允许 legacy renegotiation 时使用的 SSLContext（不复用 _ssl_context，因为它带了 OP_NO_RENEGOTIATION）
 _legacy_ssl_context: Optional[ssl.SSLContext] = None
+_legacy_ssl_context_no_verify: Optional[ssl.SSLContext] = None
 _legacy_ssl_context_cert_loaded = False
 
 
@@ -93,11 +94,22 @@ def _build_legacy_ssl_context() -> ssl.SSLContext:
 
 
 def _get_legacy_ssl_context() -> ssl.SSLContext:
-    """获取允许 legacy renegotiation 的 SSLContext（单例）。"""
+    """获取允许 legacy renegotiation 的 SSLContext（单例，校验开启）。"""
     global _legacy_ssl_context
     if _legacy_ssl_context is None:
         _legacy_ssl_context = _build_legacy_ssl_context()
     return _legacy_ssl_context
+
+
+def _get_legacy_ssl_context_no_verify() -> ssl.SSLContext:
+    """获取允许 legacy renegotiation 且不校验证书的 SSLContext（单例）。"""
+    global _legacy_ssl_context_no_verify
+    if _legacy_ssl_context_no_verify is None:
+        ctx = _build_legacy_ssl_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        _legacy_ssl_context_no_verify = ctx
+    return _legacy_ssl_context_no_verify
 
 
 DEFAULT_STREAM_PLUGIN_BUFSIZE = 64 * 1024
@@ -949,8 +961,8 @@ class RestfulApiToolNew(Tool):
     def _get_aiohttp_ssl(self, api_cert):
         """获取 aiohttp 请求的 ssl 参数。
 
-        在 legacy renegotiation 模式下，为 bool 类型的 api_cert 构造独立的
-        legacy SSLContext，避免就地修改共享单例导致后续请求校验被永久关闭。
+        legacy renegotiation 模式下使用缓存单例，避免每次请求重复构建
+        SSLContext（ssl.create_default_context 会重新读取系统 CA 信任库）。
         字符串证书路径返回已加载证书链的 SSLContext（由 _load_cert 预加载）。
         """
         if isinstance(api_cert, ssl.SSLContext):
@@ -959,11 +971,9 @@ class RestfulApiToolNew(Tool):
             if isinstance(api_cert, str):
                 return _get_legacy_ssl_context()
             if isinstance(api_cert, bool):
-                ctx = _build_legacy_ssl_context()
                 if api_cert is False:
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                return ctx
+                    return _get_legacy_ssl_context_no_verify()
+                return _get_legacy_ssl_context()
         if isinstance(api_cert, str):
             return _ssl_context
         return api_cert
