@@ -235,8 +235,10 @@ class Agent(BaseAgent):
             inputs, self.query_key_word, self.plan_prompt_key_word
         )
 
-        # 根据模式处理特定逻辑
-        trace_manager = await self._handle_mode_specific_logic(runtime_context, kwargs)
+        # 根据模式处理特定逻辑（inputs 为显式形参，需显式透传，不写入 kwargs）
+        trace_manager = await self._handle_mode_specific_logic(
+            runtime_context, kwargs, inputs
+        )
 
         return query, prompt_info, runtime_context, trace_manager
 
@@ -344,6 +346,10 @@ class Agent(BaseAgent):
         Returns:
             流式输出迭代器
         """
+        # 每次 astream 是一次独立执行：清理上一轮 ReAct/ToolUse 写入的 self.result，
+        # 避免 Controller/default 分支把旧结果当作本轮链级输出上报。
+        self.result = None
+
         # 准备执行环境
         (
             query,
@@ -498,14 +504,14 @@ class Agent(BaseAgent):
         ).get_all_messages()
         self.context_manager.engine.add_messages(chat_history)
 
-    async def _handle_mode_specific_logic(self, runtime_context, kwargs):
+    async def _handle_mode_specific_logic(self, runtime_context, kwargs, inputs):
         """根据计划模式处理特定逻辑"""
         if self._is_controller_mode():
             self.update_controller_global_variables(runtime_context)
         # React 模式的特定处理
         if self._is_react_mode():
             await self._handle_react_mode_variables(runtime_context)
-        return await self._setup_trace_manager(kwargs)
+        return await self._setup_trace_manager(kwargs, inputs)
 
     async def _handle_react_mode_variables(self, runtime_context):
         """
@@ -606,8 +612,12 @@ class Agent(BaseAgent):
         """检查是否为 ToolUse 模式"""
         return self.control_mode.plan_config.plan_mode == "ToolUse"
 
-    async def _setup_trace_manager(self, kwargs):
-        """设置并初始化追踪管理器"""
+    async def _setup_trace_manager(self, kwargs, inputs):
+        """设置并初始化追踪管理器
+
+        inputs 由 astream 显式透传（不写 kwargs，避免污染下游共享参数）；
+        链级 span 的业务输入必须取该形参，不能从 kwargs 中查找。
+        """
         trace_manager = TraceManager.generate_manager(
             kwargs.pop("trace_handlers", None),
             get_instance_info(
@@ -627,8 +637,35 @@ class Agent(BaseAgent):
             # 传哨兵（终态），防止成员根 manager 被 controller 链身份继承补齐
             agent_identity=get_agent_identity(self) or NO_AGENT_IDENTITY,
         )
-        await trace_manager.on_chain_start(kwargs.get("inputs"))  # 使用原始inputs
+        await trace_manager.on_chain_start(inputs)  # 使用原始inputs
         return trace_manager
+
+    def _collect_chain_output(self):
+        """采集链级业务输出：优先 self.result（ReAct/ToolUse），
+        否则取上下文的最终结果/最新 assistant 消息。
+
+        仅用于 OTel 链级 span 属性，异常不得影响业务流程或掩盖 finally 中的
+        原始异常。
+        """
+        try:
+            if self.result is not None:
+                return self.result
+            message = self.context_manager.get_result_message()
+            if message is None:
+                message = self.context_manager.get_latest_assistant_message()
+            if message is None:
+                return None
+            content = getattr(message, "content", message)
+            if content is None or (
+                isinstance(content, str) and not content.strip()
+            ):
+                return None
+            # 统一成字符串：redact() 会对入参做 str()，这里提前归一化，
+            # 避免多模态分段(list/dict)以 repr 形态落库。
+            return content if isinstance(content, str) else str(content)
+        except Exception as exc:  # noqa: BLE001 - 观测降级不影响业务
+            logger.warning("collect chain output for trace failed: %s", exc)
+            return None
 
     def _build_stream_params(
         self,
@@ -689,7 +726,11 @@ class Agent(BaseAgent):
                 yield item
         finally:
             if trace_manager:
-                await trace_manager.on_chain_end(None)
+                # 观测上报失败不得掩盖业务异常（finally 中抛错会替换原异常）
+                try:
+                    await trace_manager.on_chain_end(self._collect_chain_output())
+                except Exception as exc:  # noqa: BLE001 - 观测失败不掩盖业务异常
+                    logger.warning("otel chain end report failed: %s", exc)
 
         if self.result is not None:
             yield self.result
@@ -717,7 +758,11 @@ class Agent(BaseAgent):
                 yield item
         finally:
             if trace_manager:
-                await trace_manager.on_chain_end(None)
+                # 观测上报失败不得掩盖业务异常（finally 中抛错会替换原异常）
+                try:
+                    await trace_manager.on_chain_end(self._collect_chain_output())
+                except Exception as exc:  # noqa: BLE001 - 观测失败不掩盖业务异常
+                    logger.warning("otel chain end report failed: %s", exc)
 
         if self.result is not None:
             yield self.result

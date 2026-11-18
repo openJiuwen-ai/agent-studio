@@ -12,6 +12,9 @@ business_error 标记（组件正常返回但该次调用失败，如 HTTP 4xx/5
 实现要点：
 - on_invoke（非异常分支）：识别 business_error 标记 → span 置 ERROR 并记录
   错误信息（只标故障事实轴，不改 openjiuwen.status 业务状态）；
+- 错误语义三层落地：status.description 写白名单安全摘要（不含 body/url/headers/
+  入参，description 不走内容脱敏）、http.response.status_code 与 error.type 写
+  结构化字段供下游筛选聚合、error_message/business_error 保持 redact 脱敏；
 - on_call_done：span 已处于 ERROR（business_error 标记或 trace_error 异常路径）
   时保留标红，不为 OK；正常完成（UNSET）才置 OK。
 
@@ -28,8 +31,7 @@ test_tracer_otel_studio.py 全量回归兜底；符号缺失时 tracer_otel.setu
 """
 
 import json
-
-from opentelemetry.trace import Status, StatusCode
+import re
 
 from openjiuwen.core.common.logging import session_logger
 from openjiuwen.core.session.tracer.data import NodeStatus
@@ -45,9 +47,21 @@ from openjiuwen.extensions.tracer_otel.semconv import (
     OJ_WORKFLOW_ERROR_MESSAGE,
     OJ_WORKFLOW_OUTPUTS,
 )
+from opentelemetry.trace import Status, StatusCode
 
 # 业务失败标记使用的 span 属性键（与 HTTP 业务失败上报方约定的键名一致）
 OJ_BUSINESS_ERROR = "openjiuwen.workflow.business_error"
+
+# 结构化错误字段（OTel 语义约定，供下游按状态码筛选/聚合；不含业务内容，不参与脱敏）
+HTTP_RESPONSE_STATUS_CODE = "http.response.status_code"
+OJ_ERROR_TYPE = "error.type"
+
+# status.description 不参与内容脱敏，摘要必须白名单拼装并限长：
+# 只允许状态码/错误类别，body、url、headers、业务入参一律不得进入。
+_SUMMARY_MAX_LEN = 256
+# 用 fullmatch 匹配（等价 \Z）：避免 '$' 放行末尾换行，把内容带进不脱敏的 description
+_SAFE_CODE_PATTERN = re.compile(r"[A-Za-z0-9_.\-]{1,32}")
+_SAFE_REASON_PATTERN = re.compile(r"[A-Za-z0-9 ._\-]{1,64}")
 
 
 class StudioOtelWorkflowHandler(OtelWorkflowHandler):
@@ -121,15 +135,46 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
 
         仅改故障事实轴（span.status=ERROR），不改变 openjiuwen.status 等
         业务状态属性（仍由引擎按正常完成记为 finish），流程与输出不受影响。
+
+        错误语义分三层落地：
+        - status.description：安全可读摘要，只由状态码/错误类别白名单拼装；
+        - http.response.status_code / error.type：结构化字段，错误码不混入文本；
+        - error_message / business_error：既有属性，继续走 redact 脱敏。
         """
         state = self._span_manager.get(invoke_id)
         if state is None or not state.recorded:
             return
-        message = str(business_error)
+
+        code = None
+        reason = None
+        body = None
         if isinstance(business_error, dict):
             code = business_error.get("status_code") or business_error.get("error_code")
             reason = business_error.get("reason")
             body = business_error.get("body")
+
+        safe_code = self._safe_code(code)
+        safe_reason = self._safe_reason(reason)
+
+        # description 不走内容脱敏，因此只能用白名单字段拼装，绝不能复用含 body
+        # 的 message，否则等于把响应体/业务入参明文写进标准错误位。
+        summary = "HTTP request failed"
+        if safe_code is not None:
+            summary = f"{summary}: status code {safe_code}"
+        if safe_reason is not None:
+            summary = f"{summary}, {safe_reason}"
+        state.span.set_status(
+            Status(StatusCode.ERROR, description=summary[:_SUMMARY_MAX_LEN])
+        )
+
+        # 结构化字段：状态码保持整数类型，下游可做等值/区间筛选，不必解析文本。
+        if isinstance(code, int) and not isinstance(code, bool):
+            state.span.set_attribute(HTTP_RESPONSE_STATUS_CODE, code)
+        if safe_code is not None:
+            state.span.set_attribute(OJ_ERROR_TYPE, safe_code)
+
+        message = str(business_error)
+        if isinstance(business_error, dict):
             parts = []
             if code is not None:
                 parts.append(f"status code {code}")
@@ -139,7 +184,6 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
                 parts.append(str(body)[:300])
             if parts:
                 message = "HTTP request failed: " + ", ".join(parts)
-        state.span.set_status(Status(StatusCode.ERROR))
         # 与 on_call_done 对 outputs 的处理对齐：经 redact 脱敏（开启时哈希）并
         # 受 max_attr_length 限制，避免 body/url 等敏感信息明文落库。
         state.span.set_attribute(OJ_WORKFLOW_ERROR_MESSAGE, redact(message, self._config))
@@ -152,3 +196,19 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
             OJ_BUSINESS_ERROR,
             redact(safe_business_error, self._config),
         )
+
+    @staticmethod
+    def _safe_code(code) -> str | None:
+        """把状态码/错误码收敛成白名单短字符串；不合法一律丢弃。"""
+        if code is None or isinstance(code, bool):
+            return None
+        text = str(code)
+        return text if _SAFE_CODE_PATTERN.fullmatch(text) else None
+
+    @staticmethod
+    def _safe_reason(reason) -> str | None:
+        """reason 由对端控制，只接受短英文短语，防止把内容注入不脱敏的 description。"""
+        if not isinstance(reason, str):
+            return None
+        text = reason.strip()
+        return text if _SAFE_REASON_PATTERN.fullmatch(text) else None

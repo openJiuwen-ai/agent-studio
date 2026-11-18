@@ -197,6 +197,29 @@ spec:
             # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
             - name: PERFORMANCE_LOG_ENABLED
               value: 'true'
+            # ======== [选填] OTel trace 上报与实例标识 ========
+            # 开启上报需另设 OTEL_ENABLED=true 与 OTEL_EXPORTER_ENDPOINT（如 otel-collector:4317），
+            # 此处不显式声明 OTEL_ENABLED，避免覆盖现场已有的开启配置
+            # 逻辑服务名：同一部署的多个副本保持同名；需要区分环境时可改为 agent-runtime-prod 等
+            - name: OTEL_SERVICE_NAME
+              value: 'agent-runtime'
+            # 以下 POD_* 由 Downward API 注入，仅供 OTEL_RESOURCE_ATTRIBUTES 展开使用，本身不上报
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # 实例级资源属性：由 OTel SDK 读取并随每条 span 上报，用于多副本下区分 trace 归属；
+            # 变量展开顺序依赖上方 POD_* 先定义，请勿调整到其前面
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: 'k8s.pod.name=$(POD_NAME),k8s.pod.ip=$(POD_IP),k8s.namespace.name=$(POD_NAMESPACE)'
             # 意图识别工作流开关
             - name: ENABLE_INTENT_WORKFLOW
               value: 'true'
