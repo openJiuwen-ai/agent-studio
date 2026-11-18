@@ -428,14 +428,33 @@ async def _query_auth_v1(project_id, provider_id, workspace_id, model_workspace,
     return _auth_from_data(data)
 
 
+def _decrypt_auth_value(value: str) -> str:
+    """解密 auth 字段值（明文兼容）。
+
+    Java 侧 ``ApiKeyAuthInfo.convertToEncryptStr()`` / ``CustomApiKeyAuthInfo.convertToEncryptStr()``
+    写入 OBS 时通过 ``CryptoUtils.encrypt()`` 加密；Python 侧读取时需对等解密。
+
+    使用 ``common_utils.crypto_tool.decrypt``：未注册自定义加解密实现时默认为 ``PlainCrypt``
+    （直接返回原文），加密未开启时自适应透传；客户注册自定义实现后自动走客户解密逻辑。
+    解密异常时返回原文（与 ``CryptTool.decrypt`` 的明文容错策略一致）。
+    """
+    if not value:
+        return value
+    try:
+        from common_utils.crypto_tool import decrypt
+        return decrypt(value)
+    except Exception:
+        return value
+
+
 def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     """由 auth JSON 构造 ``ProviderAuth``（对应 Java ``getProviderAuth``）。
 
     字段名兼容 camelCase（Java ``ProviderAuthData`` 实际写入格式）与 snake_case
     （ref-commit 测试 fixture 格式）两种，避免与 OBS 真实数据格式漂移。
 
-    - ``API_KEY``：取 ``auth_info["API Key"]`` 作为 api_key。
-    - ``CUSTOM_APIKEY``：``auth_info`` 各项作为自定义 header，**原样保留键**（含 ``cust-`` 前缀）；
+    - ``API_KEY``：取 ``auth_info["API Key"]`` 解密后作为 api_key。
+    - ``CUSTOM_APIKEY``：``auth_info`` 各项解密后作为自定义 header，**原样保留键**（含 ``cust-`` 前缀）；
       ``cust-`` 前缀剥离 + request-over-config 由调用点 ``resolve_outbound_headers`` 处理，非此处。
     """
     def _get(snake: str, camel: str):
@@ -444,12 +463,13 @@ def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     auth_id = str(auth_data.get("id", ""))
     auth_type = _get("auth_type", "authType") or ""
     raw = _get("auth_info", "authInfo") or ""
+    _logger.info("[decrypt] _auth_from_data: auth_id=%s, auth_type=%s, raw_len=%d", auth_id, auth_type, len(raw))
     if auth_type == "API_KEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="API_KEY",
-                            auth_info={"api_key": info.get("API Key", "")})
+                            auth_info={"api_key": _decrypt_auth_value(info.get("API Key", ""))})
     if auth_type == "CUSTOM_APIKEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="CUSTOM_APIKEY",
-                            auth_info={k: v for k, v in info.items()})
+                            auth_info={k: _decrypt_auth_value(v) for k, v in info.items()})
     return ProviderAuth(auth_id=auth_id, auth_type=auth_type, auth_info={})

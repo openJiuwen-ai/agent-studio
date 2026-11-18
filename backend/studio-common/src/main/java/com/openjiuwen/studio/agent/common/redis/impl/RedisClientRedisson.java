@@ -80,9 +80,13 @@ public class RedisClientRedisson implements RedisClient {
             return new DnsAddressResolverGroup(dnsResolverBuilder);
         });
 
-        if (StringUtils.isNotBlank(redisClientConfig.getClusterNodeList())) {
+        String mode = redisClientConfig.getRedisMode();
+        log.info("Redis mode declared: {}", mode);
+        if ("cluster".equalsIgnoreCase(mode)
+            || (StringUtils.isBlank(mode) && StringUtils.isNotBlank(redisClientConfig.getClusterNodeList()))) {
             initClusterServer(config, redisClientConfig);
-        } else if (StringUtils.isNotBlank(redisClientConfig.getNodeAddrList())) {
+        } else if ("sentinel".equalsIgnoreCase(mode)
+            || (StringUtils.isBlank(mode) && StringUtils.isNotBlank(redisClientConfig.getNodeAddrList()))) {
             initSentinelServer(config, redisClientConfig);
         } else {
             initSingleServer(config, redisClientConfig);

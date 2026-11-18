@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @Data
 public class RedisClientConfig {
+
     @Value("${redis.host}")
     private String redisHost;
 
