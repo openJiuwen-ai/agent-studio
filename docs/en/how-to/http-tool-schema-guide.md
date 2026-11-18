@@ -48,7 +48,7 @@ Both endpoints require the `workspace_id` query parameter.
 
 | Field | Type | Required | Description |
 |------|------|------|------|
-| `url` | string | **Required** | Full HTTP(S) URL, length ~8–256; intranet addresses are rejected per `UrlCheckUtils`. In v2 it is usually appended after the plugin's `basic_info` (protocol/host/path), then the server splits out the tool `path` |
+| `url` | string | **Required** | Full HTTP(S) URL, length ~8–256. When URL checking is enabled (`tool.url.enable-check`, enabled by default), `UrlCheckUtils` may reject intranet/private IPs. In v2 it is usually appended after the plugin's `basic_info` (protocol/host/path), then the server splits out the tool `path` |
 | `method` | enum | **Required** | `RequestInfo.MethodEnum` currently only supports **`GET`** / **`POST`** |
 | `headers` | object\<string,string\> | No | Static request headers, e.g. `{"Content-Type":"application/json"}` |
 | `path_params` | string | No | Path parameter supplement, max ~2000 |
@@ -264,7 +264,7 @@ Configuration items (`studio-manager`):
 | `tool.jsonschema.max-prop-num` | `tool_jsonschema_max_prop_num` | `1000` | Max property count per `properties` level |
 | `tool.jsonschema.max-prop-depth` | `tool_jsonschema_max_prop_depth` | `4` | Max nesting depth |
 
-Exceeding the limits raises an error during validation (error codes in the next section).
+Exceeding the limits raises an error during validation (see Section 7 for error codes).
 
 ---
 

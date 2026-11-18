@@ -48,7 +48,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `url` | string | **必填** | 完整 HTTP(S) URL，长度约 8–256；禁止内网地址等受 `UrlCheckUtils` 约束。v2 下常拼在插件 `basic_info`（protocol/host/path）之后，服务端再拆出工具 `path` |
+| `url` | string | **必填** | 完整 HTTP(S) URL，长度约 8–256。启用 URL 检查时（`tool.url.enable-check`，默认开启），`UrlCheckUtils` 可能拒绝内网/私网地址。v2 下常拼在插件 `basic_info`（protocol/host/path）之后，服务端再拆出工具 `path` |
 | `method` | enum | **必填** | 当前 `RequestInfo.MethodEnum` 仅 **`GET`** / **`POST`** |
 | `headers` | object\<string,string\> | 否 | 静态请求头，如 `{"Content-Type":"application/json"}` |
 | `path_params` | string | 否 | 路径参数补充，最长约 2000 |
@@ -262,7 +262,7 @@ UI 中常见的 `array<string>`、`array<object>` 等是界面扁平写法，**�
 | `tool.jsonschema.max-prop-num` | `tool_jsonschema_max_prop_num` | `1000` | 每一层 `properties` 的属性个数上限 |
 | `tool.jsonschema.max-prop-depth` | `tool_jsonschema_max_prop_depth` | `4` | 最大嵌套深度 |
 
-超限会在校验阶段抛错（错误码见下节）。
+超限会在校验阶段抛错（错误码见第七节）。
 
 ---
 
