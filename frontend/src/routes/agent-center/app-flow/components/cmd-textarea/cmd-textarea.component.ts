@@ -352,26 +352,6 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     return Math.max(content.length, 0);
   }
 
-  /**
-   * 计算当前选区内容的长度，口径与 getLength() 一致：
-   * 克隆选区内容到离屏容器后取 innerText（<br> 计为换行），去除零宽字符与末尾换行
-   */
-  private getSelectionLength(): number {
-    if (!this.range) {
-      return 0;
-    }
-    const tempDiv = document.createElement('div');
-    // 离屏但保持渲染：脱离文档时 innerText 会退化为 textContent，丢失 <br> 换行；
-    // white-space 与 .editor 保持一致（pre-wrap），避免空格折叠导致计数偏差
-    tempDiv.style.cssText =
-      'position:absolute; visibility:hidden; left:-9999px; top:0; white-space:pre-wrap;';
-    tempDiv.appendChild(this.range.cloneContents());
-    document.body.appendChild(tempDiv);
-    let content = tempDiv.innerText.replaceAll('\u200B', '');
-    tempDiv.remove();
-    content = content.replace(/\n$/, '');
-    return Math.max(content.length, 0);
-  }
 
   handlePaste(event: ClipboardEvent) {
     event.preventDefault();
@@ -384,16 +364,31 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     clipboardContent = clipboardContent
       .replaceAll('\r\n', '\n')
       .replaceAll('\r', '\n');
-    // 获取当前选区和光标位置
-    this.updateSelection();
-    if (!this.selection || !this.range) {
-      return;
+    // 选区优先：非折叠选区（如 Ctrl+A 全选）按 [start, end) 在纯文本模型中
+    // 整体替换；折叠光标按 offset 插入。此前基于 live Range 的
+    // deleteContents/insertNode 在全选+粘贴时因选区边界节点被重渲染移出
+    // 文档而失效，表现为"内容未被覆盖、粘贴文本追加在开头"
+    const sel = this.getCleanSelection();
+    const { text: current, offset } = this.getCleanTextAndOffset();
+
+    // 计算替换起点/终点：有有效非折叠选区用选区边界，否则用光标 offset
+    let start = offset;
+    let end = offset;
+    if (sel) {
+      start = sel.start;
+      end = sel.end;
     }
 
-    // 超过最大长度截断（粘贴会替换选区内容，需补回选区长度）
+    // 超过最大长度截断（粘贴会替换选区内容，需补回被替换长度）。
+    // 被替换长度按可见字符计算：选区终点可能计入渲染末尾 <br> 的幻影
+    // 换行（全选时 end = 可见长度 + 1），需钳制到可见长度内，否则预算
+    // 多算 1 导致粘贴可超限；渲染拼接仍用原始 start/end（删除幻影换行）
     if (this.maxLength) {
+      const visibleLength = current.replace(/\n$/, '').length;
+      const replacedLength =
+        Math.min(end, visibleLength) - Math.min(start, visibleLength);
       const leaveLength = Math.max(
-        this.maxLength - this.getLength() + this.getSelectionLength(),
+        this.maxLength - (visibleLength - replacedLength),
         0,
       );
       if (clipboardContent.length > leaveLength) {
@@ -401,18 +396,12 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       }
     }
 
-    // 创建文本节点
-    const textNode = document.createTextNode(clipboardContent);
-
-    // 先删除选区内容再插入（光标处粘贴时选区为空，删除无影响）
-    this.range.deleteContents();
-    // 插入文本到光标位置
-    this.range.insertNode(textNode);
-    // 移动光标到插入内容之后
-    this.range.setStartAfter(textNode);
-    this.range.collapse(true);
-
-    // 触发内容更新
+    // 纯文本模型拼接 + 一次权威渲染，光标落在粘贴内容之后（与 FB-4 的
+    // insertSelectedTemplate 修复同路径，避开 highlight 包裹导致的
+    // Range 边界容器失效问题）
+    const merged =
+      current.slice(0, start) + clipboardContent + current.slice(end);
+    this.renderFromText(merged, start + clipboardContent.length);
     this.emit();
   }
 

@@ -865,11 +865,12 @@ public class McpServiceManager implements IMcpServiceManagerService {
             throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
         }
         // 同一实例重复上架：去重并刷新快照（并发由 source_instance_id 唯一索引兜底）；
-        // readme 未重新填写时保留既有目录 readme（避免二次上架被服务说明覆盖清空）
+        // readme/category 未重新填写时保留既有目录值（避免二次上架把已填内容覆盖清空）
         McpServerEntity existing = serverDao.selectBySourceInstanceId(req.getServiceId());
         if (existing != null) {
             String refreshReadme = StringUtils.isBlank(req.getReadme()) ? existing.getReadme() : req.getReadme();
-            McpServerEntity refresh = buildShelfServerEntity(service, existing.getId(), req.getCategory(),
+            String refreshCategory = StringUtils.isBlank(req.getCategory()) ? existing.getCategory() : req.getCategory();
+            McpServerEntity refresh = buildShelfServerEntity(service, existing.getId(), refreshCategory,
                 refreshReadme, tenantId);
             serverDao.updateContentById(refresh);
             return existing.getId();
