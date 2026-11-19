@@ -27,7 +27,38 @@ from jiuwen.serve.controllers.execution.utils import (
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
+from opentelemetry import context as otel_context
+from opentelemetry import trace as otel_trace
+from opentelemetry.trace import Status, StatusCode
 from agent_runtime.common.trace_compat import create_agent_session_with_trace
+
+
+def _bind_request_span(span, ir_json: dict) -> None:
+    """把 IR 的智能体身份写到请求级根 span 上（span 名随后更新）。"""
+    if span is None or not isinstance(ir_json, dict):
+        return
+    agent_name = str(ir_json.get("agentName") or "")
+    agent_id = str(ir_json.get("agentId") or "")
+    try:
+        if agent_name:
+            span.update_name(f"invoke_agent {agent_name}")
+            span.set_attribute("gen_ai.agent.name", agent_name)
+        if agent_id:
+            span.set_attribute("gen_ai.agent.id", agent_id)
+    except Exception as exc:
+        workflow_logger.debug("Failed to bind request span: %s", exc)
+
+
+def _mark_span_error(span, message: str, error_state: dict | None = None) -> None:
+    """按调用方实际收到的错误标记根 span（早退分支也覆盖）。"""
+    if error_state is not None:
+        error_state["has_error"] = True
+    if span is None:
+        return
+    try:
+        span.set_status(Status(StatusCode.ERROR, str(message)[:256]))
+    except Exception as exc:
+        workflow_logger.debug("Failed to mark span error: %s", exc)
 
 
 def _parse_controller_stream_chunk(chunk) -> dict | None:
@@ -71,7 +102,13 @@ class ControllerRunner:
         req: ExecutionRequest,
         execution_id: str | None = None,
     ) -> AsyncGenerator[Any]:
-        """Execute Controller mode IR and yield SSE bytes.
+        """Execute Controller mode IR and yield SSE bytes (request-root span).
+
+        请求级根 span 必须在 ``_run_streaming`` 之前创建并 attach：多智能体的
+        后台消息循环在 ``IRConverter.ir_to_agent_group`` 内 ``create_task``，
+        只继承创建时的上下文；没有活动 span 时成员会各自成为新 trace 的根。
+        上游带 traceparent 时（middleware 已 attach），这里创建的 span 自动
+        挂在上游下；不带时它就是本次调用的真实根 span。
 
         Args:
             req: Execution request with conversation_id, query, ir_path, params, headers
@@ -80,6 +117,53 @@ class ControllerRunner:
         Yields:
             SSE event dictionaries in the format expected by the API
         """
+        try:
+            tracer = setup_otel_tracer()
+        except Exception as exc:
+            # OTel 初始化失败不得中断请求流：降级为不建根 span，
+            # 保持调用方仍能收到 adapt_error 错误帧。
+            workflow_logger.debug("Failed to setup OTel tracer: %s", exc)
+            tracer = None
+        span = None
+        token = None
+        # 早退错误分支通过 yield 错误帧后 return，不抛异常；用显式标志避免
+        # 生成器正常退出时把 ERROR 终态覆盖成 OK。
+        error_state = {"has_error": False}
+        if tracer is not None:
+            try:
+                span = tracer.start_span("invoke_agent")
+                span.set_attribute("gen_ai.operation.name", "invoke_agent")
+                span.set_attribute(
+                    "openjiuwen.session.id", str(req.conversation_id or "")
+                )
+                token = otel_context.attach(otel_trace.set_span_in_context(span))
+            except Exception as exc:
+                workflow_logger.debug("Failed to start request root span: %s", exc)
+                span = None
+                token = None
+        try:
+            async for chunk in self._run_streaming(
+                req, execution_id, span, error_state
+            ):
+                yield chunk
+            if span is not None and not error_state["has_error"]:
+                span.set_status(Status(StatusCode.OK))
+        except Exception as exc:
+            _mark_span_error(span, f"{type(exc).__name__}: {exc}", error_state)
+            raise
+        finally:
+            if token is not None:
+                otel_context.detach(token)
+            if span is not None:
+                span.end()
+
+    async def _run_streaming(
+        self,
+        req: ExecutionRequest,
+        execution_id: str | None = None,
+        span=None,
+        error_state: dict | None = None,
+    ) -> AsyncGenerator[Any]:
         session_id = req.conversation_id
         exec_id = execution_id or session_id or str(uuid.uuid4())
         adapter = ControllerStreamDataAdapter(execution_id=exec_id)
@@ -87,10 +171,12 @@ class ControllerRunner:
         # 1. Load IR from storage
         try:
             ir_json = await async_ir_load(req.ir_path)
+            _bind_request_span(span, ir_json)
         except Exception as e:
             workflow_logger.error(
                 f"Failed to load IR from {req.ir_path}: {e}", exc_info=True
             )
+            _mark_span_error(span, f"IR load failed: {e}", error_state)
             yield adapter.adapt_error(
                 f"Failed to load workflow configuration: {e}", exec_id
             )
@@ -153,6 +239,7 @@ class ControllerRunner:
                 ] = req_params
         except Exception as e:
             workflow_logger.error(f"Failed to build agent input: {e}", exc_info=True)
+            _mark_span_error(span, f"build_agent_input failed: {e}", error_state)
             yield adapter.adapt_error(f"Failed to build runtime context: {e}", exec_id)
             return
 
@@ -174,6 +261,7 @@ class ControllerRunner:
             workflow_logger.error(
                 f"Failed to create agent group from IR: {e}", exc_info=True
             )
+            _mark_span_error(span, f"agent group creation failed: {e}", error_state)
             yield adapter.adapt_error(f"Failed to create agent group: {e}", exec_id)
             return
 
@@ -205,7 +293,6 @@ class ControllerRunner:
                 "conversation_id": req.conversation_id,
                 "user_id": req.user_id,
             }
-            setup_otel_tracer()
             session = create_agent_session_with_trace(session_id=session_id, card=agent_group.card)
             await session.pre_run(inputs=session_inputs)
 
@@ -266,6 +353,7 @@ class ControllerRunner:
 
             tb_str = traceback.format_exc()
             workflow_logger.error(f"Exception traceback: {tb_str}")
+            _mark_span_error(span, f"agent execution failed: {e}", error_state)
             yield adapter.adapt_error(f"Agent execution failed: {e}\n{tb_str}", exec_id)
             await AsyncStateManager().delete_state(session_id)
             return

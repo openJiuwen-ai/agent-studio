@@ -3,27 +3,46 @@
 
 from __future__ import annotations
 
+import threading
+from typing import Any, Optional
+
 from agent_runtime.common.config import settings
 from openjiuwen.core.common.logging import workflow_logger as logger
 
+# Core 的 init_otel_tracer 故意不设置全局 TracerProvider（handler 持有 tracer 引用），
+# 因此请求级根 span 必须复用同一个 tracer 实例，否则拿到 NoOp tracer 导致 span 不导出。
+_otel_tracer: Optional[Any] = None
+_setup_lock = threading.Lock()
 
 
-def setup_otel_tracer() -> None:
-    """Initialize OpenTelemetry tracer handlers and register them globally.
+def setup_otel_tracer() -> Optional[Any]:
+    """Return the process-wide OTel tracer, initializing it once on first use.
 
     Reads configuration from ``settings.otel``.  When ``OTEL_ENABLED`` is
     ``True`` and the ``openjiuwen[tracer-otel]`` extension is installed,
-    creates an OTel TracerProvider + OTLP exporter and registers
+    creates an OTel TracerProvider + exporter and registers
     ``OtelAgentHandler`` / ``OtelWorkflowHandler`` into
     ``TracerHandlerRegistry`` so that all subsequent ``Tracer`` instances
     automatically emit OTel spans.
 
-    This function is idempotent; calling it more than once is safe (the
-    second call is a no-op if handlers are already registered).
+    This function is idempotent and thread-safe; repeated calls return the
+    tracer created by the first successful call.  Returns ``None`` when OTel
+    is disabled or the extension is unavailable, so callers can skip creating
+    their own spans.
     """
+    if _otel_tracer is not None:
+        return _otel_tracer
+    with _setup_lock:
+        if _otel_tracer is not None:
+            return _otel_tracer
+        return _create_otel_tracer()
+
+
+def _create_otel_tracer() -> Optional[Any]:
+    global _otel_tracer
     if not settings.otel.enabled:
         logger.info("OpenTelemetry tracer is disabled (OTEL_ENABLED=false)")
-        return
+        return None
 
     try:
         from openjiuwen.core.session.tracer import TracerHandlerRegistry
@@ -38,7 +57,7 @@ def setup_otel_tracer() -> None:
             "OpenTelemetry tracer extension not installed. "
             "Install with: pip install openjiuwen[tracer-otel]"
         )
-        return
+        return None
 
     try:
         # 本仓子类依赖上游扩展的私有符号（升级可能缺失/改名），与上游导入隔离，
@@ -58,7 +77,7 @@ def setup_otel_tracer() -> None:
 
     if _handlers_already_registered():
         logger.info("OpenTelemetry tracer handlers already registered, skipping")
-        return
+        return _otel_tracer
 
     otel_settings = settings.otel
 
@@ -88,6 +107,10 @@ def setup_otel_tracer() -> None:
         "otel_workflow", _workflow_handler_cls(otel_tracer, config)
     )
 
+    # 注册全部成功后再写入单例：否则注册抛异常会留下半初始化缓存，
+    # 后续调用直接返回 tracer 而跳过注册，agent/workflow span 静默不再导出。
+    _otel_tracer = otel_tracer
+
     logger.info(
         f"OpenTelemetry tracer initialized: "
         f"exporter_type={config.exporter_type}, "
@@ -96,6 +119,12 @@ def setup_otel_tracer() -> None:
         f"service_name={config.service_name}, "
         f"sample_rate={config.sample_rate}"
     )
+    return _otel_tracer
+
+
+def get_otel_tracer() -> Optional[Any]:
+    """Return the tracer singleton created by :func:`setup_otel_tracer`."""
+    return _otel_tracer
 
 
 def _handlers_already_registered() -> bool:
